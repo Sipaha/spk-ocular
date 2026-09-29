@@ -49,9 +49,12 @@ Go + Wails v3 + React. Спецификация: `docs/specs/2026-09-29-spk-ocul
   `TestTargetsNeverCarryCredentials`, e2e «lists contexts…» (`SECRET` не на странице).
 - `Discover` читает только локальные файлы, без сети: он на пути старта. — старт окна ~0,2 с.
 - Источники kubeconfig: `KUBECONFIG` (иначе `~/.kube/config`) с merge first-wins как у kubectl,
-  плюс остальные kubeconfig-файлы прямо в `~/.kube` (не-kubeconfig молча пропускаются, дубликат
-  имени → id `<имя> (<файл>)`). Битый основной файл — `Problem`, остальные contexts видны. —
-  `internal/providers/kubernetes/kubeconfig_test.go`.
+  плюс остальные kubeconfig-файлы прямо в `~/.kube` (не-kubeconfig молча пропускаются). Битый
+  основной файл — `Problem`, остальные contexts видны. — `internal/providers/kubernetes/kubeconfig_test.go`.
+- Id target-а стабилен и не зависит от остальной конфигурации: `kubeconfig:<имя>` для contexts
+  kubectl, `file:<путь>:<имя>` для доп. файлов; показывается `Title` (имя), у доп. файлов в
+  подзаголовке — имя файла. Иначе запомненный выбор молча «переезжал» бы на другой кластер. —
+  `TestExtraContextIDIsStableWhenPrimaryGainsSameName`.
 - Запомненный выбор target не стирается, пока target временно пропал из kubeconfig: вернётся —
   выбор тоже. — `TestSelectionIsRememberedAndHiddenWhileTargetIsAbsent`, e2e.
 - Browser-режим отвечает только на loopback-`Host` (защита от DNS rebinding: `/` отдаёт токен). —

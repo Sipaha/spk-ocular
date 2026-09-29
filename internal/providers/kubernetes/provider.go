@@ -5,6 +5,8 @@ package kubernetes
 import (
 	"context"
 	"os"
+	"path/filepath"
+	"strings"
 	"sync"
 
 	"github.com/spk/spk-ocular/internal/core"
@@ -58,7 +60,7 @@ func target(kc kubeContext) core.Target {
 	t := core.Target{
 		Provider: ProviderID,
 		ID:       kc.ID,
-		Title:    kc.ID,
+		Title:    kc.Name,
 		Subtitle: kc.Cluster,
 		Current:  kc.Current,
 	}
@@ -74,5 +76,10 @@ func target(kc kubeContext) core.Target {
 	add("auth", kc.Auth)
 	add("namespace", kc.Namespace)
 	add("file", kc.DefinedIn)
+	if kc.Extra {
+		// Contexts from standalone files in ~/.kube are not what kubectl
+		// sees; the file name tells them apart (and from same-named ones).
+		t.Subtitle = strings.TrimPrefix(t.Subtitle+" · "+filepath.Base(kc.DefinedIn), " · ")
+	}
 	return t
 }

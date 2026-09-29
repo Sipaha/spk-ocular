@@ -2,7 +2,6 @@ package kubernetes
 
 import (
 	"errors"
-	"fmt"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -115,10 +114,11 @@ func samePrimary(p string, primary []string) bool {
 // client for it later (Files + Name), and display-safe facts. It never holds
 // credentials.
 type kubeContext struct {
-	ID        string   // unique target id
+	ID        string   // stable opaque target id (see primaryID/extraID)
 	Name      string   // context name inside Files
 	Files     []string // loading precedence for this context
 	DefinedIn string   // the file that defines the context (first wins)
+	Extra     bool     // from a standalone file in ~/.kube, not kubectl's config
 	Cluster   string
 	Server    string
 	User      string
@@ -165,14 +165,12 @@ func load(src Sources) loaded {
 			currentSet = true
 		}
 	}
-	taken := map[string]bool{}
 	for _, name := range sortedKeys(merged.Contexts) {
 		kc := describe(name, merged)
-		kc.ID = name
+		kc.ID = primaryID(name)
 		kc.Files = primaryFiles
 		kc.DefinedIn = definedIn[name]
 		kc.Current = name == merged.CurrentContext
-		taken[kc.ID] = true
 		out.Contexts = append(out.Contexts, kc)
 	}
 	for _, f := range src.Extra {
@@ -186,29 +184,33 @@ func load(src Sources) loaded {
 		}
 		for _, name := range sortedKeys(cfg.Contexts) {
 			kc := describe(name, cfg)
-			kc.ID = uniqueID(name, filepath.Base(f), taken)
+			kc.ID = extraID(f, name)
 			kc.Files = []string{f}
 			kc.DefinedIn = f
-			taken[kc.ID] = true
+			kc.Extra = true
 			out.Contexts = append(out.Contexts, kc)
 		}
 	}
 	sort.SliceStable(out.Contexts, func(i, j int) bool {
-		return strings.ToLower(out.Contexts[i].ID) < strings.ToLower(out.Contexts[j].ID)
+		a, b := strings.ToLower(out.Contexts[i].Name), strings.ToLower(out.Contexts[j].Name)
+		if a != b {
+			return a < b
+		}
+		if out.Contexts[i].Extra != out.Contexts[j].Extra {
+			return !out.Contexts[i].Extra // kubectl's own context before same-named extras
+		}
+		return out.Contexts[i].ID < out.Contexts[j].ID
 	})
 	return out
 }
 
-func uniqueID(name, file string, taken map[string]bool) string {
-	if !taken[name] {
-		return name
-	}
-	id := fmt.Sprintf("%s (%s)", name, file)
-	for i := 2; taken[id]; i++ {
-		id = fmt.Sprintf("%s (%s #%d)", name, file, i)
-	}
-	return id
-}
+// Target ids are stable and never depend on what else is configured: a
+// context keeps its id when another file gains a context with the same name
+// (a remembered selection must not silently move to another cluster). The
+// two domains are disjoint by prefix. Ids are opaque; the UI shows Title.
+func primaryID(name string) string { return "kubeconfig:" + name }
+
+func extraID(file, name string) string { return "file:" + file + ":" + name }
 
 // mergeFirstWins adds src's entries missing from dst — kubectl's rule for
 // the KUBECONFIG list: the first file to define a name wins.

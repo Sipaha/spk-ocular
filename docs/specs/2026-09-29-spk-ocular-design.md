@@ -49,7 +49,7 @@ read-only/protected-пометка contexts, трей, несколько акт
 - Contexts из kubeconfig сразу при старте: `KUBECONFIG` с merge first-wins (иначе
   `~/.kube/config`) — как kubectl, плюс остальные kubeconfig-файлы прямо в `~/.kube` (как
   Lens/outwall: у пользователя там лежат kubeconfig-и, не подключённые через `KUBECONFIG`);
-  дубликат имени из доп. файла получает id `<имя> (<файл>)`. Живое обновление при изменении
+  id стабилен: `kubeconfig:<имя>` / `file:<путь>:<имя>` (доп. файлы показывают имя файла). Живое обновление при изменении
   файлов (inotify). Сделано в P0. Переключение context и namespace
   (включая «все namespaces»).
 - Виды: Pods, Deployments, StatefulSets, DaemonSets, Services, Ingresses, ConfigMaps, Secrets,

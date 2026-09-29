@@ -40,7 +40,7 @@ func TestWatchSeesAtomicRenameWriteOnce(t *testing.T) {
 	assert.Equal(t, int32(1), n.Load(), "one burst, one callback")
 
 	ts, _ := discover(t, p)
-	assert.Equal(t, []string{"a", "b"}, ids(ts))
+	assert.Equal(t, []string{"a", "b"}, titles(ts))
 }
 
 func TestWatchPicksUpKubeDirCreatedLater(t *testing.T) {
@@ -60,5 +60,5 @@ func TestWatchPicksUpKubeDirCreatedLater(t *testing.T) {
 	write(t, filepath.Join(home, ".kube", "config"), kubeconfig("", "late"))
 	require.Eventually(t, func() bool { return n.Load() > before }, 3*time.Second, 20*time.Millisecond)
 	ts, _ := discover(t, p)
-	assert.Equal(t, []string{"late"}, ids(ts))
+	assert.Equal(t, []string{"late"}, titles(ts))
 }
