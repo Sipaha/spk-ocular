@@ -176,8 +176,9 @@ const maxCounted = 500
 
 // podsOf counts the pods a workload owns now: a Deployment's through its
 // ReplicaSets, the others' directly (controller references, not labels: an
-// unrelated pod with the same labels is not deleted with it). Counting is
-// bounded; a partial count is said as "at least".
+// unrelated pod with the same labels is not deleted with it); pods already
+// being deleted are not counted. Counting is bounded; a partial count is
+// said as "at least".
 func (s *session) podsOf(ctx context.Context, def *kindDef, u *unstructured.Unstructured) []string {
 	const unknown = "Its pods are deleted too."
 	sel, err := metav1.LabelSelectorAsSelector(labelSelectorOf(u.Object))
@@ -213,7 +214,7 @@ func (s *session) podsOf(ctx context.Context, def *kindDef, u *unstructured.Unst
 	partial = partial || more
 	n := 0
 	for i := range pods {
-		if c := metav1.GetControllerOf(&pods[i]); c != nil && owners[c.UID] {
+		if c := metav1.GetControllerOf(&pods[i]); c != nil && owners[c.UID] && pods[i].GetDeletionTimestamp() == nil {
 			n++
 		}
 	}

@@ -355,3 +355,11 @@ func TestKindActionViewerRightsAreDeniedInThePlan(t *testing.T) {
 	assert.Equal(t, core.RightsDenied, plan.Rights.State)
 	assert.True(t, strings.HasPrefix(plan.Rights.Reason, "you may not delete pods in ocular-demo"), plan.Rights.Reason)
 }
+
+func TestKindActionDeleteOfADeploymentCountsThePodsItOwns(t *testing.T) {
+	c := kindActionCluster(t)
+	ref := c.deployment("web", 2)
+	c.kubectlNS("run", "stray", "--image=nginx:1.27-alpine", "--restart=Never", "--labels=app=web")
+	plan := c.prepare(ref, "delete", core.ActionParams{})
+	assert.Contains(t, strings.Join(plan.Effects, "\n"), "Its pods are deleted too (2 now).", "the stray pod has its labels, not its owner")
+}

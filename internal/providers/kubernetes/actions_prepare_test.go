@@ -204,6 +204,11 @@ func labelledWeb(u *unstructured.Unstructured) *unstructured.Unstructured {
 	return u
 }
 
+func terminating(u *unstructured.Unstructured) *unstructured.Unstructured {
+	u.Object["metadata"].(map[string]any)["deletionTimestamp"] = "2026-09-30T00:00:00Z"
+	return u
+}
+
 func TestDeletingAWorkloadCountsThePodsItOwnsNow(t *testing.T) {
 	sel := map[string]any{"matchLabels": map[string]any{"app": "web"}}
 	webPod := func(name string) *unstructured.Unstructured { return labelledWeb(pod("ns", name, "p-"+name)) }
@@ -216,9 +221,9 @@ func TestDeletingAWorkloadCountsThePodsItOwnsNow(t *testing.T) {
 			owned(labelledWeb(workload("ReplicaSet", "web-1", "rs-1", "1", map[string]any{"selector": sel})), "Deployment", "web", "uid-web"),
 			owned(labelledWeb(workload("ReplicaSet", "web-0", "rs-0", "1", map[string]any{"selector": sel})), "Deployment", "web", "uid-web"),
 			owned(webPod("a"), "ReplicaSet", "web-1", "rs-1"), owned(webPod("b"), "ReplicaSet", "web-1", "rs-1"),
-			owned(webPod("old"), "ReplicaSet", "web-0", "rs-0")}, strangers...)
+			owned(webPod("old"), "ReplicaSet", "web-0", "rs-0"), terminating(owned(webPod("going"), "ReplicaSet", "web-0", "rs-0"))}, strangers...)
 		s, _ := actionSession(t, objs...)
-		assert.Contains(t, text(prepare(t, s, deployWebRef, "delete", core.ActionParams{})), "its pods are deleted too (3 now)")
+		assert.Contains(t, text(prepare(t, s, deployWebRef, "delete", core.ActionParams{})), "its pods are deleted too (3 now)", "a pod already being deleted is not counted")
 	})
 	t.Run("statefulset: its own pods", func(t *testing.T) {
 		sts := workload("StatefulSet", "web", "uid-sts", "1", map[string]any{"replicas": int64(1), "selector": sel})
