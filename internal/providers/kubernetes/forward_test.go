@@ -10,6 +10,7 @@ import (
 	"runtime"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -606,4 +607,100 @@ func TestARefusedPortKeepsTheUpstream(t *testing.T) {
 	require.Eventually(t, func() bool { return m.List()[0].Failed == 1 }, 10*time.Second, 20*time.Millisecond)
 	assert.Equal(t, forwards.StateReady, m.List()[0].State)
 	assert.Len(t, srv.forwarded(), 1)
+}
+
+// refusedUpstream is an upstream to pod p whose port 1234 nobody listens
+// on: every connection ends with a report, which triggers the pod check.
+func refusedUpstream(t *testing.T, srv *pfServer) *pfUpstream {
+	t.Helper()
+	c := newConn(&rest.Config{Host: srv.srv.URL}, pfClient(), "t", "t", "h")
+	d := &forwardDialer{c: c, deadAfter: pfDeadAfter, ws: true}
+	cn, _, err := d.dial(context.Background(), "ns", "p")
+	require.NoError(t, err)
+	u := newPFUpstream(cn, "p:1234", 1234)
+	t.Cleanup(u.Close)
+	return u
+}
+
+// Closing an upstream (a tunnel's Stop) cancels the pod check a failed
+// connection started: Result returns at once, not after the GET.
+func TestClosingTheUpstreamCancelsTheFailureCheck(t *testing.T) {
+	u := refusedUpstream(t, newPFServer(t))
+	entered := make(chan struct{})
+	u.alive = func(ctx context.Context) error {
+		close(entered)
+		<-ctx.Done()
+		return ctx.Err()
+	}
+	st, err := u.Open(context.Background())
+	require.NoError(t, err)
+	defer st.Close()
+	_, _ = io.ReadAll(st)
+	done := make(chan error, 1)
+	go func() { done <- st.Result() }()
+	<-entered
+	u.Close()
+	select {
+	case err := <-done:
+		assert.ErrorContains(t, err, "connection refused")
+	case <-time.After(2 * time.Second):
+		t.Fatal("Result waits for the pod check of a closed upstream")
+	}
+}
+
+// Failures at once share one pod check: a burst of refused connections
+// is not a burst of GETs.
+func TestConcurrentFailuresShareOnePodCheck(t *testing.T) {
+	u := refusedUpstream(t, newPFServer(t))
+	var calls atomic.Int32
+	release := make(chan struct{})
+	u.alive = func(ctx context.Context) error {
+		calls.Add(1)
+		<-release
+		return nil
+	}
+	var wg sync.WaitGroup
+	for range 5 {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			st, err := u.Open(context.Background())
+			if !assert.NoError(t, err) {
+				return
+			}
+			defer st.Close()
+			_, _ = io.ReadAll(st)
+			assert.Error(t, st.Result())
+		}()
+	}
+	require.Eventually(t, func() bool { return calls.Load() == 1 }, 5*time.Second, 10*time.Millisecond)
+	close(release)
+	wg.Wait()
+	assert.EqualValues(t, 1, calls.Load())
+}
+
+// An error stream that never answers ends Result after resultWait with a
+// timeout, not a silent success.
+func TestASilentErrorStreamIsATimeout(t *testing.T) {
+	old := resultWait
+	resultWait = 200 * time.Millisecond
+	defer func() { resultWait = old }()
+	srv := newPFServer(t)
+	srv.backend(80, echoBackend(t))
+	srv.holdErrs = make(chan struct{})
+	defer close(srv.holdErrs)
+	u := refusedUpstream(t, srv)
+	u.port = 80
+	st, err := u.Open(context.Background())
+	require.NoError(t, err)
+	defer st.Close()
+	require.NoError(t, st.CloseWrite())
+	_, _ = io.ReadAll(st)
+	begin := time.Now()
+	err = st.Result()
+	var pe *provider.Error
+	require.ErrorAs(t, err, &pe)
+	assert.Equal(t, provider.ClassUnavailable, pe.Class)
+	assert.Contains(t, pe.Message, "no report")
+	assert.Less(t, time.Since(begin), 2*time.Second)
 }

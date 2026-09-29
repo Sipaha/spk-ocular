@@ -45,9 +45,11 @@ const (
 	pfDeadAfter  = 3 * pfPingPeriod
 	// maxErrorReport bounds what the error stream may say.
 	maxErrorReport = 4 << 10
-	// resultWait bounds waiting for the error stream once the data ended.
-	resultWait = 5 * time.Second
 )
+
+// resultWait bounds waiting for the error stream once the data ended
+// (a var: tests shorten it).
+var resultWait = 5 * time.Second
 
 // forwardDialer opens port-forward connections to a pod (tests replace
 // the pieces).
@@ -217,8 +219,14 @@ type pfUpstream struct {
 	// alive, after a connection failed, checks the pod is still the one
 	// this upstream serves: kubelet keeps the connection of a deleted pod
 	// open and fails every stream, so without it a Service tunnel would
-	// never move on to another pod. One GET per failure, never polling.
+	// never move on to another pod. One GET per failure (failures during
+	// a check share it), never polling.
 	alive func(ctx context.Context) error
+	// life ends with the upstream: a check in progress is abandoned then
+	// (a Stop must not wait for it).
+	life    context.Context
+	stop    context.CancelFunc
+	probing atomic.Bool
 
 	mu     sync.Mutex
 	err    error
@@ -227,8 +235,10 @@ type pfUpstream struct {
 
 func newPFUpstream(c streamhttp.Connection, label string, port int) *pfUpstream {
 	u := &pfUpstream{conn: c, label: label, port: port, done: make(chan struct{})}
+	u.life, u.stop = context.WithCancel(context.Background())
 	go func() {
 		<-c.CloseChan()
+		u.stop()
 		u.mu.Lock()
 		if !u.closed {
 			u.err = &provider.Error{Class: provider.ClassUnavailable, Message: "the connection to " + label + " was lost"}
@@ -255,6 +265,7 @@ func (u *pfUpstream) Close() {
 	}
 	u.closed = true
 	u.mu.Unlock()
+	u.stop()
 	_ = u.conn.Close()
 }
 
@@ -267,16 +278,21 @@ func (u *pfUpstream) retire(why error) {
 	}
 	u.closed, u.err = true, why
 	u.mu.Unlock()
+	u.stop()
 	_ = u.conn.Close()
 }
 
 // checkAfterFailure retires the upstream if its pod is no longer usable.
-func (u *pfUpstream) checkAfterFailure() {
-	if u.alive == nil || isClosed(u.done) {
+// The check lasts while the upstream and the caller's ctx do; a failure
+// during another check leaves it to that one.
+func (u *pfUpstream) checkAfterFailure(caller context.Context) {
+	if u.alive == nil || isClosed(u.done) || !u.probing.CompareAndSwap(false, true) {
 		return
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), getTimeout)
+	defer u.probing.Store(false)
+	ctx, cancel := context.WithTimeout(u.life, getTimeout)
 	defer cancel()
+	defer context.AfterFunc(caller, cancel)()
 	if err := u.alive(ctx); err != nil {
 		var pe *provider.Error
 		if errors.As(err, &pe) && pe.Class == provider.ClassGone { // not a transient API error
@@ -355,7 +371,7 @@ func (u *pfUpstream) Open(ctx context.Context) (provider.Stream, error) {
 	if err != nil {
 		s.reset()
 		if ctx.Err() == nil {
-			u.checkAfterFailure()
+			u.checkAfterFailure(ctx)
 		}
 		return nil, fmt.Errorf("cannot open a stream to %s: %w", u.label, err)
 	}
@@ -389,7 +405,8 @@ func (s *pfStream) Write(p []byte) (int, error) { return s.data.Write(p) }
 func (s *pfStream) CloseWrite() error           { return s.data.Close() }
 
 // Result: the data is reset first (unsent data must not hold the error
-// stream back, as client-go notes), then the report is awaited briefly.
+// stream back, as client-go notes), then the report is awaited briefly;
+// kubelet always ends the error stream, so silence is a failure too.
 func (s *pfStream) Result() error {
 	_ = s.data.Reset()
 	t := time.NewTimer(resultWait)
@@ -398,10 +415,12 @@ func (s *pfStream) Result() error {
 	select {
 	case err = <-s.report:
 	case <-s.u.done:
+		return nil // the upstream's end is reported by the upstream
 	case <-t.C:
+		err = &provider.Error{Class: provider.ClassUnavailable, Message: fmt.Sprintf("no report from %s within %s", s.u.label, resultWait)}
 	}
 	if err != nil {
-		s.u.checkAfterFailure()
+		s.u.checkAfterFailure(context.Background())
 	}
 	return err
 }

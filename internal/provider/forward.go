@@ -63,7 +63,7 @@ type Stream interface {
 	// Result is this connection's error reported by the remote side (k8s:
 	// the error stream, "connection refused" for a port nobody listens on),
 	// nil if none. Call it after reading ended: it waits a bounded time for
-	// the report and returns promptly once the stream or the upstream is
-	// closed.
+	// the report (no report within it is an error) and returns promptly
+	// once the stream or the upstream is closed.
 	Result() error
 }

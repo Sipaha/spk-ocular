@@ -43,6 +43,9 @@ type pfServer struct {
 	ids      map[string]bool // request ids seen per connection
 	dupIDs   int
 	conns    []streamhttp.Connection
+	// holdErrs, when set, keeps each error stream open (no report, no
+	// end) until it is closed.
+	holdErrs chan struct{}
 }
 
 func newPFServer(t *testing.T) *pfServer {
@@ -168,11 +171,16 @@ func (s *pfServer) pairs(pod string) streamhttp.NewStreamHandler {
 
 // forward is kubelet's side of one connection.
 func (s *pfServer) forward(pod string, port int, errs, data streamhttp.Stream) {
-	defer func() { _ = errs.Close() }()
-	defer func() { _ = data.Close() }()
 	s.mu.Lock()
-	addr, dead := s.backends[port], s.dead[pod]
+	addr, dead, hold := s.backends[port], s.dead[pod], s.holdErrs
 	s.mu.Unlock()
+	defer func() {
+		if hold != nil {
+			<-hold
+		}
+		_ = errs.Close()
+	}()
+	defer func() { _ = data.Close() }()
 	if dead { // kubelet keeps the connection and fails the streams
 		_, _ = fmt.Fprintf(errs, "failed to find sandbox for pod %q", pod)
 		return
