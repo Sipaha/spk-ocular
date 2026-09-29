@@ -243,6 +243,30 @@ describe('ActionDialog', () => {
     expect(await within(dialog).findByRole('button', { name: 'Restart' })).toBeEnabled()
   })
 
+  it('the outcome of a run whose dialog went away (another target) is still told', async () => {
+    const f = fakeClient([k8s('prod')])
+    f.client.prepareAction = vi.fn(async (_r: Ref, _a: string, p: ActionParams) => planOf(restart, p))
+    const run = deferred<{ message: string }>()
+    f.client.runAction = vi.fn(() => run.promise)
+    const { unmount } = render(<ActionDialog client={f.client} req={{ ref, action: restart, kindTitle: 'Deployments' }} onClose={() => {}} />)
+    await userEvent.click(await screen.findByRole('button', { name: 'Restart' }))
+    unmount()
+    await act(async () => run.resolve({ message: 'deployment api: restart requested' }))
+    expect(useStore.getState().notice).toBe('deployment api: restart requested')
+  })
+
+  it('a failure of a run whose dialog went away is told too', async () => {
+    const f = fakeClient([k8s('prod')])
+    f.client.prepareAction = vi.fn(async (_r: Ref, _a: string, p: ActionParams) => planOf(restart, p))
+    const run = deferred<{ message: string }>()
+    f.client.runAction = vi.fn(() => run.promise)
+    const { unmount } = render(<ActionDialog client={f.client} req={{ ref, action: restart, kindTitle: 'Deployments' }} onClose={() => {}} />)
+    await userEvent.click(await screen.findByRole('button', { name: 'Restart' }))
+    unmount()
+    await act(async () => run.reject(new ApiError('forbidden', 'nope')))
+    expect(useStore.getState().notice).toBe('Restart api: Failed · access denied: nope')
+  })
+
   it('Tab stays in the dialog', async () => {
     const { dialog } = setup(restart)
     await within(dialog).findByRole('button', { name: 'Restart' })

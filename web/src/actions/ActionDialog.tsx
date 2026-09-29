@@ -146,16 +146,24 @@ export function ActionDialog({ client, req, onClose, runTimeoutMs = RUN_TIMEOUT_
           timer = setTimeout(() => reject(new RunTimeout()), runTimeoutMs)
         }),
       ])
-      if (!live.current) return
+      // Told even when the dialog is gone (another target was chosen meanwhile).
       showNotice(res.message)
-      onClose()
+      if (live.current) onClose()
     } catch (e) {
-      if (!live.current) return
       const code = codeOf(e)
-      if (e instanceof RunTimeout) setOutcome({ type: 'unknown', text: t('action.timeout', { sec: Math.round(runTimeoutMs / 1000) }) })
-      else if (code === 'unknown') setOutcome({ type: 'unknown', text: `${t('action.unknown')} ${detailOf(e)}` })
-      else if (code === 'conflict') setOutcome({ type: 'conflict', text: t('action.conflict', { detail: detailOf(e) }) })
-      else setOutcome({ type: 'failed', text: t('action.failed', { class: classLabel(code), detail: detailOf(e) }) })
+      const out: Outcome =
+        e instanceof RunTimeout
+          ? { type: 'unknown', text: t('action.timeout', { sec: Math.round(runTimeoutMs / 1000) }) }
+          : code === 'unknown'
+            ? { type: 'unknown', text: `${t('action.unknown')} ${detailOf(e)}` }
+            : code === 'conflict'
+              ? { type: 'conflict', text: t('action.conflict', { detail: detailOf(e) }) }
+              : { type: 'failed', text: t('action.failed', { class: classLabel(code), detail: detailOf(e) }) }
+      if (!live.current) {
+        showNotice(`${actionLabel(action)} ${plan.where.ref.name}: ${out.text}`, 10_000)
+        return
+      }
+      setOutcome(out)
       setBusy(null)
     } finally {
       clearTimeout(timer)
