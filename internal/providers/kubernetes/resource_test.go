@@ -188,7 +188,7 @@ func pagingReactor(pages [][]*unstructured.Unstructured) k8stesting.ReactionFunc
 		cont := a.(k8stesting.ListActionImpl).GetListOptions().Continue
 		i := 0
 		if cont != "" {
-			fmt.Sscanf(cont, "page-%d", &i)
+			_, _ = fmt.Sscanf(cont, "page-%d", &i)
 		}
 		l := &unstructured.UnstructuredList{Object: map[string]any{"apiVersion": "v1", "kind": "PodList"}}
 		for _, p := range pages[i] {
