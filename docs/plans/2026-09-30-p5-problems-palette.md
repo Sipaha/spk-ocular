@@ -324,11 +324,16 @@ Problems показывает два рода строк, и UI их разли�
   «Не видно: …» над таблицей (отступ снизу добавлен после снимка).
 
 ### Task 5. Недавние и палитра
-- [ ] Миграция `0002_recent_objects.sql`, store + API, лимиты, отбрасывание ответов чужого
-  target-а.
-- [ ] `KindDescriptor.Aliases`, алиасы scope/target провайдера; скорер (порядок, кириллица,
+- [x] Миграция `0002_recent_objects.sql`, store + API, лимиты, отбрасывание ответов чужого
+  target-а (cb50437).
+- [x] `KindDescriptor.Aliases`, алиасы scope/target провайдера; скорер (порядок, кириллица,
   пустой запрос); грамматика (приоритет, `*`, неоднозначность — список); палитра; vitest +
-  synth e2e.
+  synth e2e (3f19cde). Алиасы scope/target — не отдельный `ProviderInfo`, а
+  `TargetGroup.aliases` (опциональный `provider.CommandAliaser`; k8s: `ns`/`namespace`,
+  `ctx`/`context`); алиасы видов — короткие и единственные имена kubectl. Кнопка «Ctrl+K» в
+  шапке боковой панели. e2e нашёл `ListScopes` → `null` у провайдера без scopes (крах
+  Workspace) — API отдаёт `[]`, UI терпит `null`. Desktop (WebKitGTK, русская раскладка):
+  Ctrl+K открывает, `:ns ocular` — список без выбора, `:ns ocular-demo` + Enter — переход.
 
 ### Task 6. Клавиатура
 - [ ] Реестр и маршрутизация (терминал/CodeMirror/модальные), `?`, `F6`, навигация видов,

@@ -86,7 +86,7 @@ describe('Palette', () => {
 
     const dlg = await openPalette()
     await userEvent.keyboard(':ctx d')
-    expect(within(dlg).getByRole('status')).toHaveTextContent('Several match')
+    expect(within(dlg).getByRole('status')).toHaveTextContent('Nothing chosen')
     await userEvent.keyboard('{Enter}') // nothing chosen: nothing happens
     expect(screen.getByRole('dialog', { name: 'Go to' })).toBeInTheDocument()
     await userEvent.keyboard('{ArrowDown}{Enter}')
