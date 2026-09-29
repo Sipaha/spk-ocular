@@ -64,10 +64,19 @@ export class ViewSync {
   }
 
   async open(): Promise<void> {
+    // A new generation: in-flight pulls and retries of the previous view are
+    // stale and must not block this one (their finally checks generation).
     const gen = ++this.generation
+    this.pulling = false
+    if (this.retryTimer) this.timers.clearTimeout(this.retryTimer)
+    this.retryTimer = null
+    this.retries = 0
     this.viewId = null
     this.cursor = 0
     this.desired = 0
+    this.force = false
+    // No id while reopening: metrics must not poll the previous view.
+    if (this.state.viewId !== null) this.emit({ viewId: null })
     try {
       const info = await this.client.openView(this.provider, this.target, this.query)
       if (this.disposed || gen !== this.generation) {
@@ -128,7 +137,7 @@ export class ViewSync {
         const delay = 250 * 2 ** this.retries++
         this.retryTimer = this.timers.setTimeout(() => {
           this.retryTimer = null
-          void this.pull()
+          if (gen === this.generation) void this.pull()
         }, delay)
       } else {
         this.emit({ status: { state: 'error', class: codeOf(e), message: errText(e) } })

@@ -93,6 +93,57 @@ describe('ViewSync', () => {
     expect(s.snapshot().rows.map((r) => r.id)).toEqual(['v2'])
   })
 
+  // Review 2026-09-29: gone arriving while a pull is in flight used to leave
+  // pulling=true forever (the stale pull's finally skipped the reset).
+  for (const outcome of ['success', 'failure'] as const) {
+    it(`gone during an in-flight pull (${outcome}) does not freeze the reopened view`, async () => {
+      let n = 0
+      const openView = vi.fn(async () => ({ viewId: `v${++n}`, kind: { id: 'pods', title: 'Pods', group: 'W', columns: [], scoped: true } }))
+      const slow = deferred<Page>()
+      const getRows = vi.fn(async (id: string, since: number) => {
+        if (id === 'v1' && since > 0) return slow.p
+        return page({ viewId: id, reset: since === 0, version: since + 1, upserts: [row(`${id}-${since}`)] })
+      })
+      const s = new ViewSync(client({ openView, getRows }), 'kubernetes', 't', q)
+      await s.open()
+      await flush()
+      s.onChanged({ version: 5 }) // v1 pull in flight
+      s.onChanged({ gone: true }) // v1 closed meanwhile → reopen as v2
+      await flush()
+      expect(s.id).toBe('v2')
+      expect(s.snapshot().viewId).toBe('v2')
+      if (outcome === 'success') slow.resolve(page({ viewId: 'v1', version: 6 }))
+      else slow.p.catch(() => {}) // never settles: the old pull stays hung forever
+      await flush()
+      s.onChanged({ version: 3 })
+      await flush()
+      await flush()
+      expect(getRows).toHaveBeenLastCalledWith('v2', expect.any(Number))
+      expect(s.snapshot().rows.some((r) => r.id.startsWith('v2'))).toBe(true)
+      expect(s.snapshot().rows.some((r) => r.id.startsWith('v1'))).toBe(false)
+    })
+  }
+
+  it('gone while already reopening ends on the newest view', async () => {
+    let n = 0
+    const first = deferred<{ viewId: string; kind: never }>()
+    const openView = vi.fn(async () => {
+      n++
+      if (n === 2) return first.p
+      return { viewId: `v${n}`, kind: { id: 'pods', title: 'Pods', group: 'W', columns: [], scoped: true } as never }
+    })
+    const s = new ViewSync(client({ openView: openView as unknown as Client['openView'] }), 'kubernetes', 't', q)
+    await s.open()
+    const c = (s as unknown as { client: Client }).client
+    s.onChanged({ gone: true }) // reopen #2 hangs
+    const again = s.open() // another reopen (#3) supersedes it
+    await again
+    first.resolve({ viewId: 'v2', kind: undefined as never })
+    await flush()
+    expect(s.id).toBe('v3')
+    expect(c.closeView).toHaveBeenCalledWith('v2') // the late one is closed, not adopted
+  })
+
   it('a gone notice reopens even without a pending pull', async () => {
     const openView = vi.fn(async () => ({ viewId: 'vX', kind: { id: 'pods', title: 'Pods', group: 'W', columns: [], scoped: true } }))
     const s = new ViewSync(client({ openView }), 'kubernetes', 't', q)
