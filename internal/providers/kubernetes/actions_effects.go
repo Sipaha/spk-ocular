@@ -47,8 +47,9 @@ func effects(def *kindDef, action string, p core.ActionParams, u *unstructured.U
 			fx.effects = append(fx.effects, fmt.Sprintf("%d → %d: %s added.", n, m, pods(m-n)))
 		}
 		if def == statefulSetsKind && m < n && len(slice(o, "spec", "volumeClaimTemplates")) > 0 {
+			start := int(i64(o, "spec", "ordinals", "start")) // pods are named from it
 			if str(o, "spec", "persistentVolumeClaimRetentionPolicy", "whenScaled") == "Delete" {
-				fx.effects = append(fx.effects, fmt.Sprintf("The PersistentVolumeClaims of %s are deleted%s.", ordinals(m, n-1), reclaimNote))
+				fx.effects = append(fx.effects, fmt.Sprintf("The PersistentVolumeClaims of %s are deleted%s.", ordinals(start+m, start+n-1), reclaimNote))
 				fx.destructive = true
 			} else if str(o, "spec", "persistentVolumeClaimRetentionPolicy", "whenDeleted") == "Delete" {
 				fx.effects = append(fx.effects, "The PersistentVolumeClaims of removed pods are kept until the StatefulSet is deleted: then they are deleted with it"+reclaimNote+".")

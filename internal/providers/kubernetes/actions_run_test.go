@@ -289,3 +289,16 @@ func TestVersionRetriesAreBounded(t *testing.T) {
 	assertClass(t, err, provider.ClassConflict)
 	assert.Equal(t, maxVersionRetries+1, *calls)
 }
+
+// Only a failed precondition may be retried: a 409, or a 422 of a scale's
+// JSON Patch test. A validation refusal of a merge patch is kept even when
+// the version moved meanwhile.
+func TestAValidationRefusalIsNotRetriedEvenWhenTheVersionMoved(t *testing.T) {
+	s, cl := actionSession(t, workload("Deployment", "web", "uid-web", "7", map[string]any{"replicas": int64(2)}))
+	calls := failWrite(cl, "patch", 5, bumpVersion(t, cl, deployGVR, "web", "8", func(u *unstructured.Unstructured) {
+		_ = unstructured.SetNestedField(u.Object, int64(1), "status", "readyReplicas")
+	}), invalid422)
+	_, err := s.RunAction(context.Background(), provider.ActionRun{Ref: deployWebRef, Action: "restart", Expect: expectNow(t, s, deployWebRef, "restart", core.ActionParams{})})
+	assertClass(t, err, provider.ClassInvalid)
+	assert.Equal(t, 1, *calls)
+}

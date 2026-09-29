@@ -111,6 +111,38 @@ func TestStatefulSetClaimsFollowTheRetentionPolicy(t *testing.T) {
 	}
 }
 
+// A scale's promise about claims depends on both policies and on the
+// first ordinal: a change of any of them while the dialog is open refuses
+// the run.
+func TestAScaleClaimsChangeAfterThePlanIsAConflict(t *testing.T) {
+	for name, change := range map[string]func(u *unstructured.Unstructured){
+		"whenDeleted": func(u *unstructured.Unstructured) {
+			_ = unstructured.SetNestedField(u.Object, "Delete", "spec", "persistentVolumeClaimRetentionPolicy", "whenDeleted")
+		},
+		"start ordinal": func(u *unstructured.Unstructured) {
+			_ = unstructured.SetNestedField(u.Object, int64(10), "spec", "ordinals", "start")
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			s, c := actionSession(t, workload("StatefulSet", "db", "u", "1", claims("Retain", "Retain")))
+			ref := refOf("apps/statefulsets", "db", "u")
+			plan := prepare(t, s, ref, "scale", count(1))
+			bumpVersion(t, c, stsGVR, "db", "2", change)()
+			_, err := s.RunAction(context.Background(), provider.ActionRun{Ref: plan.Where.Ref, Action: "scale", Params: count(1), Expect: plan.Expect})
+			assertClass(t, err, provider.ClassConflict)
+			assert.Empty(t, writes(c))
+		})
+	}
+}
+
+func TestClaimOrdinalsCountFromTheStartOrdinal(t *testing.T) {
+	spec := claims("Retain", "Delete")
+	spec["ordinals"] = map[string]any{"start": int64(10)}
+	s, _ := actionSession(t, workload("StatefulSet", "db", "u", "1", spec))
+	plan := prepare(t, s, refOf("apps/statefulsets", "db", "u"), "scale", count(1))
+	assert.Contains(t, text(plan), "claims of pods 11–12 are deleted")
+}
+
 // The retention policy changes while the dialog is open: the run is
 // refused (the shown promise about the claims no longer holds).
 func TestARetentionPolicyChangeAfterThePlanIsAConflict(t *testing.T) {

@@ -104,7 +104,11 @@ func effectState(def *kindDef, action string, u *unstructured.Unstructured) map[
 	case actScale.ID:
 		st["replicas"] = replicas(o)
 		if sts {
+			// Everything the scale effects read: both policies (claims kept at
+			// scale down go with a whenDeleted=Delete StatefulSet) and the
+			// first ordinal (the named pods).
 			st["claims"], st["whenScaled"] = len(slice(o, "spec", "volumeClaimTemplates")), str(o, "spec", "persistentVolumeClaimRetentionPolicy", "whenScaled")
+			st["whenDeleted"], st["start"] = str(o, "spec", "persistentVolumeClaimRetentionPolicy", "whenDeleted"), i64(o, "spec", "ordinals", "start")
 		}
 	case actDelete.ID:
 		if sts {
@@ -269,7 +273,9 @@ func (s *session) failedWrite(ctx context.Context, def *kindDef, run provider.Ac
 		return false, gerr
 	case actionExpect(def, run.Action, run.Params, now) != run.Expect:
 		return false, &provider.Error{Class: provider.ClassConflict, Message: fmt.Sprintf("%s %s changed since the action was reviewed; review it again", singular(def), was.GetName())}
-	case now.GetResourceVersion() != was.GetResourceVersion():
+	case now.GetResourceVersion() != was.GetResourceVersion() && (apierrors.IsConflict(err) || run.Action == actScale.ID):
+		// A failed precondition (409; a scale's failed JSON Patch test is
+		// 422) at a moved version: retry. Other refusals stay refusals.
 		return true, &provider.Error{Class: provider.ClassConflict, Message: fmt.Sprintf("%s %s keeps changing; try again", singular(def), was.GetName())}
 	case apierrors.IsConflict(err):
 		return false, &provider.Error{Class: provider.ClassConflict, Message: statusMessage(err)}
