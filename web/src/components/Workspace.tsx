@@ -65,6 +65,7 @@ export function Workspace({ client, hub, target }: { client: Client; hub: ViewHu
   )
   const hasLogs = useCallback((kindId: string) => !!kinds?.find((k) => k.id === kindId)?.logs, [kinds])
   const hasExec = useCallback((kindId: string) => !!kinds?.find((k) => k.id === kindId)?.exec, [kinds])
+  const hasForward = useCallback((kindId: string) => !!kinds?.find((k) => k.id === kindId)?.forward, [kinds])
 
   useEffect(() => {
     // Workspace is keyed by target: state starts fresh for each one.
@@ -133,6 +134,7 @@ export function Workspace({ client, hub, target }: { client: Client; hub: ViewHu
             onLogs={openLogs}
             hasExec={hasExec}
             onTerminal={openTerminal}
+            hasForward={hasForward}
           />
         )}
         </div>
@@ -176,8 +178,9 @@ function ResourcePage(props: {
   onLogs: (ref: Ref) => void
   hasExec: (kindId: string) => boolean
   onTerminal: (ref: Ref, dialog: boolean) => void
+  hasForward: (kindId: string) => boolean
 }) {
-  const { client, hub, target, kind, scope, scopes, onScope, hasLogs, onLogs, hasExec, onTerminal } = props
+  const { client, hub, target, kind, scope, scopes, onScope, hasLogs, onLogs, hasExec, onTerminal, hasForward } = props
   const scopeKey = JSON.stringify(scope)
   const query = useMemo(() => ({ kind: kind.id, scope: JSON.parse(scopeKey) as ScopeSel }), [kind.id, scopeKey])
   const view = useView(hub, target.provider, target.id, query)
@@ -247,6 +250,7 @@ function ResourcePage(props: {
             onLogs={onLogs}
             hasExec={hasExec}
             onTerminal={onTerminal}
+            hasForward={hasForward}
           />
         )}
       </div>

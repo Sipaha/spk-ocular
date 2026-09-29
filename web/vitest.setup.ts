@@ -8,6 +8,7 @@ vi.mock('@wailsio/runtime', () => ({
   Call: { ByName: vi.fn() },
   Events: { On: vi.fn(() => () => {}) },
   Clipboard: { SetText: vi.fn(async () => {}), Text: vi.fn(async () => '') },
+  Browser: { OpenURL: vi.fn(async () => {}) },
 }))
 
 // RTL drains microtasks with setTimeout(0) and only advances fake timers when

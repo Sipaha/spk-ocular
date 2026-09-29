@@ -3,6 +3,7 @@ import type { Client } from '../api/client'
 import type { Relation, Ref, Resource } from '../api/types'
 import { classLabel, detailLabel, relationLabel, t } from '../i18n'
 import { inTerminal } from '../keyboard'
+import { PortsSection } from '../tunnels/Ports'
 import { useView } from '../views/useView'
 import type { ViewHub } from '../views/viewSync'
 import { HealthDot, ResourceTable, healthText } from './ResourceTable'
@@ -20,12 +21,13 @@ interface Props {
   hasLogs?: (kindId: string) => boolean
   onLogs?: (ref: Ref) => void
   hasExec?: (kindId: string) => boolean
+  hasForward?: (kindId: string) => boolean
   onTerminal?: (ref: Ref, dialog: boolean) => void
 }
 
 type Tab = 'details' | 'yaml'
 
-export function ResourceDrawer({ client, hub, target, subject, onClose, hasLogs, onLogs, hasExec, onTerminal }: Props) {
+export function ResourceDrawer({ client, hub, target, subject, onClose, hasLogs, onLogs, hasExec, onTerminal, hasForward }: Props) {
   const [stack, setStack] = useState<Ref[]>([subject])
   const [tab, setTab] = useState<Tab>('details')
   const [res, setRes] = useState<{ key: string; r?: Resource; error?: string } | null>(null)
@@ -130,6 +132,9 @@ export function ResourceDrawer({ client, hub, target, subject, onClose, hasLogs,
           </div>
         )}
         {r && tab === 'details' && <Details client={client} hub={hub} target={target} r={r} onGo={go} />}
+        {r && tab === 'details' && hasForward?.(current.kind) && (
+          <PortsSection key={key} client={client} subject={{ ...r.ref, provider: target.provider, target: target.id }} />
+        )}
       </div>
     </aside>
   )

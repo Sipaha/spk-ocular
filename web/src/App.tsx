@@ -9,10 +9,13 @@ import { StatusBar } from './components/StatusBar'
 import { TargetDetails } from './components/TargetDetails'
 import { Dock } from './dock/Dock'
 import { dock } from './dock/store'
+import { TunnelsPanel } from './tunnels/TunnelsPanel'
+import { tunnelLoader } from './tunnels/store'
 
 export function App({ client }: { client: Client }) {
   const act = useMemo(() => actions(client), [client])
   const hub = useMemo(() => new ViewHub(client), [client])
+  const loadTunnels = useMemo(() => tunnelLoader(client), [client])
   const info = useStore((s) => s.info)
   const view = useStore((s) => s.view)
   const target = useStore((s) => selectedTarget(s.view))
@@ -43,10 +46,12 @@ export function App({ client }: { client: Client }) {
       if (e.type === 'view_changed') hub.onViewChanged(e.payload)
       if (e.type === 'resync') hub.resyncAll()
       if (e.type === 'targets_changed' || e.type === 'resync') void act.reload()
+      if (e.type === 'forwards_changed' || e.type === 'resync') void loadTunnels()
     })
     void act.init()
+    void loadTunnels()
     return off
-  }, [client, act, hub])
+  }, [client, act, hub, loadTunnels])
 
   // Language before the first paint of real content: the app renders the
   // loading state until AppInfo arrives.
@@ -70,7 +75,7 @@ export function App({ client }: { client: Client }) {
   }
 
   return (
-    <div className="flex h-full flex-col">
+    <div className="relative flex h-full flex-col">
       <div className="flex min-h-0 flex-1">
         <Sidebar act={act} />
         <div className="flex min-w-0 flex-1 flex-col">
@@ -91,6 +96,7 @@ export function App({ client }: { client: Client }) {
           />
         </div>
       </div>
+      <TunnelsPanel client={client} mode={info?.mode === 'desktop' ? 'desktop' : 'browser'} />
       <StatusBar />
     </div>
   )
