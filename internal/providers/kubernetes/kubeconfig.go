@@ -119,6 +119,7 @@ type kubeContext struct {
 	Files     []string // loading precedence for this context
 	DefinedIn string   // the file that defines the context (first wins)
 	Extra     bool     // from a standalone file in ~/.kube, not kubectl's config
+	Hash      string   // configHash: what the context resolves to
 	Cluster   string
 	Server    string
 	User      string
@@ -170,6 +171,7 @@ func load(src Sources) loaded {
 		kc.ID = primaryID(name)
 		kc.Files = primaryFiles
 		kc.DefinedIn = definedIn[name]
+		kc.Hash = configHash(name, merged, primaryFiles)
 		kc.Current = name == merged.CurrentContext
 		out.Contexts = append(out.Contexts, kc)
 	}
@@ -188,6 +190,7 @@ func load(src Sources) loaded {
 			kc.Files = []string{f}
 			kc.DefinedIn = f
 			kc.Extra = true
+			kc.Hash = configHash(name, cfg, kc.Files)
 			out.Contexts = append(out.Contexts, kc)
 		}
 	}

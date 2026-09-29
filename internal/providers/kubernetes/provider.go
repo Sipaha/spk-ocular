@@ -18,8 +18,9 @@ const ProviderID = "kubernetes"
 // Provider discovers kube contexts. Sources are re-resolved on every
 // Discover, so a file added to ~/.kube later shows up.
 type Provider struct {
-	getenv func(string) string
-	home   string
+	getenv   func(string) string
+	home     string
+	shimPath string // this binary, run as a bounded exec credential plugin
 
 	mu   sync.Mutex
 	last loaded // latest Discover result; P1 builds clients from it
@@ -29,6 +30,13 @@ type Provider struct {
 func New() *Provider {
 	home, _ := os.UserHomeDir()
 	return NewWith(os.Getenv, home)
+}
+
+// WithExecShim makes sessions run kubeconfig exec plugins through the shim
+// at path (internal/execshim); "" disables it.
+func (p *Provider) WithExecShim(path string) *Provider {
+	p.shimPath = path
+	return p
 }
 
 // NewWith is New with an injected environment (tests).
@@ -58,11 +66,12 @@ func (p *Provider) Discover(context.Context) (provider.Discovery, error) {
 
 func target(kc kubeContext) core.Target {
 	t := core.Target{
-		Provider: ProviderID,
-		ID:       kc.ID,
-		Title:    kc.Name,
-		Subtitle: kc.Cluster,
-		Current:  kc.Current,
+		Provider:   ProviderID,
+		ID:         kc.ID,
+		Title:      kc.Name,
+		Subtitle:   kc.Cluster,
+		Current:    kc.Current,
+		ConfigHash: kc.Hash,
 	}
 	add := func(key, value string) {
 		if value != "" {

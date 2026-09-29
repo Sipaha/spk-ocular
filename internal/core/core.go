@@ -15,6 +15,9 @@ type Target struct {
 	Current bool `json:"current,omitempty"`
 	// Details are human-readable, non-secret facts in display order.
 	Details []Detail `json:"details,omitempty"`
+	// ConfigHash identifies the configuration the target resolves to; an
+	// open session built from another hash is stale. Never sent to the UI.
+	ConfigHash string `json:"-"`
 }
 
 // Detail is one labelled fact. Key is stable (for UI translation and tests),

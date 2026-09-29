@@ -56,7 +56,7 @@ func Main(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	}
 	rest := fs.Args()
 	if len(rest) == 0 {
-		fmt.Fprintln(stderr, "exec-credential-shim: no plugin command")
+		_, _ = fmt.Fprintln(stderr, "exec-credential-shim: no plugin command")
 		return 2
 	}
 	dieWithParent()
@@ -66,7 +66,7 @@ func Main(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	cmd.Stdin, cmd.Stdout, cmd.Stderr = stdin, stdout, stderr
 	setChildAttrs(cmd)
 	if err := cmd.Start(); err != nil {
-		fmt.Fprintf(stderr, "exec-credential-shim: %v\n", err)
+		_, _ = fmt.Fprintf(stderr, "exec-credential-shim: %v\n", err)
 		return 1
 	}
 	done := make(chan error, 1)
@@ -78,14 +78,14 @@ func Main(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 			return ee.ExitCode()
 		}
 		if err != nil {
-			fmt.Fprintf(stderr, "exec-credential-shim: %v\n", err)
+			_, _ = fmt.Fprintf(stderr, "exec-credential-shim: %v\n", err)
 			return 1
 		}
 		return 0
 	case <-time.After(*timeout):
 		killTree(cmd)
 		<-done
-		fmt.Fprintf(stderr, "exec credential plugin %q did not answer within %s (a login it waits for, or no network); run it in a terminal to see why\n",
+		_, _ = fmt.Fprintf(stderr, "exec credential plugin %q did not answer within %s (a login it waits for, or no network); run it in a terminal to see why\n",
 			strings.Join(rest, " "), *timeout)
 		return 1
 	}

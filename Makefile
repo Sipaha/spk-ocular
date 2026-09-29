@@ -1,4 +1,4 @@
-.PHONY: build build-web build-go build-desktop release run run-browser test test-go test-web test-e2e lint lint-go lint-web check fmt tidy clean pss
+.PHONY: kind-up kind-down test-kind build build-web build-go build-desktop release run run-browser test test-go test-web test-e2e lint lint-go lint-web check fmt tidy clean pss
 
 BIN_DIR := build/bin
 BIN     := $(BIN_DIR)/spk-ocular
@@ -81,3 +81,24 @@ clean:
 
 pss:
 	bash scripts/pss.sh $(PID)
+
+# Disposable test cluster (kind, in Docker). The kubeconfig goes to build/,
+# never into ~/.kube. KIND=path/to/kind if it is not on PATH.
+KIND ?= kind
+KIND_CLUSTER ?= ocular-dev
+KIND_KUBECONFIG ?= $(CURDIR)/build/kind-$(KIND_CLUSTER).kubeconfig
+
+kind-up:
+	mkdir -p build
+	$(KIND) get clusters | grep -qx '$(KIND_CLUSTER)' || $(KIND) create cluster --name $(KIND_CLUSTER) --kubeconfig $(KIND_KUBECONFIG) --wait 120s
+	$(KIND) get kubeconfig --name $(KIND_CLUSTER) > $(KIND_KUBECONFIG)
+
+kind-down:
+	$(KIND) delete cluster --name $(KIND_CLUSTER)
+	rm -f $(KIND_KUBECONFIG)
+
+# Real-cluster tests. Fails (not skips) when the cluster is not there.
+test-kind:
+	@test -s $(KIND_KUBECONFIG) || { echo "no kind kubeconfig at $(KIND_KUBECONFIG): run make kind-up"; exit 1; }
+	@kubectl --kubeconfig $(KIND_KUBECONFIG) get --raw /readyz >/dev/null || { echo "kind cluster $(KIND_CLUSTER) is not reachable: run make kind-up"; exit 1; }
+	OCULAR_KIND_KUBECONFIG=$(KIND_KUBECONFIG) go test -race -count=1 -run Kind ./...
