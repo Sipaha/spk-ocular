@@ -7,6 +7,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/cache"
@@ -149,3 +150,20 @@ func TestSupersededTimerIsANoop(t *testing.T) {
 }
 
 func typesUID(s string) types.UID { return types.UID(s) }
+
+func TestSlimDeepCopyDoesNotAlias(t *testing.T) {
+	now := metav1.Now()
+	o := &slimObject{ObjectMeta: metav1.ObjectMeta{
+		Labels:            map[string]string{"a": "before"},
+		OwnerReferences:   []metav1.OwnerReference{{Name: "rs"}},
+		DeletionTimestamp: &now,
+	}, body: []byte(`{"x":1}`)}
+	cp := o.DeepCopyObject().(*slimObject)
+	cp.Labels["a"] = "after"
+	cp.OwnerReferences[0].Name = "other"
+	cp.body[2] = 'y'
+	assert.Equal(t, "before", o.Labels["a"])
+	assert.Equal(t, "rs", o.OwnerReferences[0].Name)
+	assert.Equal(t, `{"x":1}`, string(o.body))
+	assert.NotSame(t, o.DeletionTimestamp, cp.DeletionTimestamp)
+}

@@ -21,10 +21,14 @@ type slimObject struct {
 
 var _ runtime.Object = (*slimObject)(nil)
 
-// DeepCopyObject: slim objects are immutable once stored; a shallow copy is a copy.
+// DeepCopyObject is a real deep copy (runtime.Object contract; the cache
+// mutation detector compares copies). Stored objects are still never
+// mutated, so hot paths do not call it.
 func (o *slimObject) DeepCopyObject() runtime.Object {
-	c := *o
-	return &c
+	c := &slimObject{TypeMeta: o.TypeMeta}
+	o.ObjectMeta.DeepCopyInto(&c.ObjectMeta)
+	c.body = append([]byte(nil), o.body...)
+	return c
 }
 
 // slim converts a trimmed unstructured object.
