@@ -16,6 +16,12 @@ import (
 	"github.com/spk/spk-ocular/internal/views"
 )
 
+func kindKubeconfig(t *testing.T) string {
+	t.Helper()
+	p, _ := filepath.Abs(os.Getenv("OCULAR_KIND_KUBECONFIG"))
+	return p
+}
+
 // kindProvider returns a provider reading only the test cluster's kubeconfig
 // (OCULAR_KIND_KUBECONFIG, set by `make test-kind`), or skips.
 func kindProvider(t *testing.T) (*Provider, string) {

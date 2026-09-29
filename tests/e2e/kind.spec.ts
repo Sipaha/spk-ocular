@@ -33,14 +33,18 @@ test('pods show health from the real cluster', async ({ page }) => {
 test('scaling a deployment updates the table live', async ({ page }) => {
   await openTarget(page, 'kind-ocular-dev')
   const grid = await kindPage(page, 'Pods')
-  await expect(row(grid, /^web-/)).toHaveCount(3)
+  // Live = not terminating: a scaled-down pod shows "Terminating" for up to
+  // its grace period before its row goes.
+  const live = () => row(grid, /^web-/).filter({ hasNotText: 'Terminating' })
+  await expect(live()).toHaveCount(3)
   kubectl('-n', 'ocular-demo', 'scale', 'deploy/web', '--replicas=4')
   try {
-    await expect(row(grid, /^web-/)).toHaveCount(4)
+    await expect(live()).toHaveCount(4)
   } finally {
     kubectl('-n', 'ocular-demo', 'scale', 'deploy/web', '--replicas=3')
   }
-  await expect(row(grid, /^web-/)).toHaveCount(3)
+  await expect(live()).toHaveCount(3)
+  await expect(row(grid, /^web-/)).toHaveCount(3, { timeout: 45_000 }) // and the row is removed
 })
 
 test('details: relations, events and yaml of a deployment', async ({ page }) => {
@@ -49,7 +53,7 @@ test('details: relations, events and yaml of a deployment', async ({ page }) => 
   await row(grid, 'web').click()
   const drawer = page.getByRole('dialog', { name: 'apps/deployments web' })
   await expect(drawer.getByText('Owns')).toBeVisible()
-  await expect(drawer.getByRole('button', { name: /^pods\/web-/ })).toHaveCount(3)
+  await expect(drawer.getByRole('button', { name: /^pods\/web-/ })).toHaveCount(3, { timeout: 45_000 })
   await expect(drawer.getByRole('region', { name: 'Events' }).getByText('ScalingReplicaSet').first()).toBeVisible()
   await drawer.getByRole('tab', { name: 'YAML' }).click()
   await expect(drawer.locator('.cm-editor')).toContainText('kind: Deployment')
