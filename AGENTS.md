@@ -224,11 +224,24 @@ Go + Wails v3 + React. Спецификация: `docs/specs/2026-09-29-spk-ocul
   `Expect` — `conflict` без записи; запись — с предусловиями UID + `resourceVersion`. —
   `internal/api/actions_test.go`, `TestKindActionOnAnObjectReplacedBetweenReadAndWrite`,
   `TestKindActionReplicasChangedAfterThePlanIsAConflict`.
-- Повтор записи — только когда перечитывание доказало, что её не было (тот же UID и `Expect`,
-  другая версия), ≤ 3; ответ без HTTP-статуса — `unknown`, без повторов. —
-  `TestKindActionStatusChurnIsRetried`, `actions_run_test.go`.
+- Повтор записи — только при отказе предусловия (409; у scale — 422 провала `test`) и только
+  когда перечитывание доказало, что записи не было (тот же UID и `Expect`, другая версия), ≤ 3.
+  Запись действия — ровно один HTTP-запрос: `restWriter` (`actions_writer.go`) с
+  `MaxRetries(0)`, не dynamic client (client-go сам переотправляет ответы 5xx/429 с
+  `Retry-After`, и применённый restart ушёл бы дважды). Неоднозначные ответы (5xx, таймауты,
+  шлюз) и ответ без HTTP-статуса — `unknown`, без повторов; в UI транспортный сбой `RunAction`
+  (обрыв, некодированный HTTP-ответ, ошибка рантайма Wails) — тоже «результат неизвестен». —
+  `TestKindActionStatusChurnIsRetried`, `actions_run_test.go`, `actions_wire_test.go`,
+  `ActionDialog.test.tsx`, `client.test.ts`.
+- `Expect` связывает всё, что читают последствия плана (у scale StatefulSet — число
+  `volumeClaimTemplates`, `whenScaled`, `whenDeleted`, `ordinals.start`): изменившийся после плана
+  вход — `conflict`, а не выполнение под устаревшим обещанием. — `actions_prepare_test.go`.
 - Последствия — только известное, «запрошено»/«может», по стратегии; судьба данных PVC — по
-  reclaim policy тома; права «не удалось проверить» ≠ «разрешено». — `actions_prepare_test.go`,
+  reclaim policy тома; pod-ы удаляемого workload-а считаются по цепочке контроллеров (у
+  Deployment — через его ReplicaSet-ы), не по селектору, без уже удаляемых; права «не удалось
+  проверить» (ошибка SSAR или `evaluationError` без `denied`) ≠ «разрешено»; опоздавшие к дедлайну
+  проверки не ждутся (права — «неизвестно», HPA — предупреждение, счёт pod-ов опускается). —
+  `actions_prepare_test.go`, `TestKindActionDeleteOfADeploymentCountsThePodsItOwns`,
   `TestKindActionStatefulSetClaimsFollowTheRetentionPolicy`, `ActionDialog.test.tsx`.
 - Подтверждение (все contexts RW — это только UX): видны context, сервер, namespace, вид, имя;
   опасный план — красная кнопка и фокус на «Отмена»; удержанный Enter не подтверждает; Enter в
@@ -270,7 +283,14 @@ Go + Wails v3 + React. Спецификация: `docs/specs/2026-09-29-spk-ocul
 - **Неявная отправка формы**: Enter в поле не отправляет форму, если её кнопка по умолчанию
   `disabled` — поэтому «Просмотреть» не отключается на время подготовки.
 - **Фейковый dynamic client**: reactor-ы вызываются под его блокировкой — менять объекты только
-  через `c.Tracker()`, вызов клиента из reactor-а — дедлок.
+  через `c.Tracker()`, вызов клиента из reactor-а — дедлок; «зависший» reactor блокирует и все
+  остальные вызовы, поэтому зависание моделируется обёрткой `dynamic.Interface` вне fake
+  (`stallingDyn` в `actions_prepare_test.go`).
+- **client-go переотправляет запрос**, получивший 5xx/429 с `Retry-After` (`rest.Request`,
+  по умолчанию до 10 раз) — для неидемпотентной записи это второе применение; запись действий —
+  через REST-клиент с `MaxRetries(0)`.
+- **После `kubectl rollout status` pod-ы старого ReplicaSet ещё Terminating** — всё, что считает
+  pod-ы «сейчас», пропускает объекты с `deletionTimestamp`.
 - **PVC, оставленные StatefulSet-ом при scale down** (`whenScaled=Retain`), сохраняют
   ownerReference на него и удаляются вместе с ним при `whenDeleted=Delete` (проверено на kind).
 - **kubelet отвечает 200 с текстом «unable to retrieve container logs for containerd://…»**, если
