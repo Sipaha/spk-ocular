@@ -39,12 +39,14 @@ type ReopenTerminalRequest struct {
 }
 
 // maxTermProtos bounds remembered terminals (a tab that never said
-// ForgetTerminal); the oldest is forgotten first.
+// ForgetTerminal); the oldest is forgotten first (its run goes on, only
+// reconnecting it is no longer possible).
 const maxTermProtos = 64
 
 // termProtos remembers each terminal's prepared handle: a reconnect runs
 // again with the same connection snapshot, pod and container (never
-// silently a new target configuration).
+// silently a new target configuration). Handles are closed outside the
+// lock.
 type termProtos struct {
 	mu     sync.Mutex
 	seq    uint64
@@ -53,11 +55,15 @@ type termProtos struct {
 	closed bool
 }
 
+// add remembers h under a new terminal id; "" when the app is closing (h
+// is closed then).
 func (p *termProtos) add(h provider.ExecHandle) string {
+	var evicted []provider.ExecHandle
+	defer func() { closeHandles(evicted) }()
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	if p.closed { // the app is closing: nothing will reopen it
-		h.Close()
+		evicted = append(evicted, h)
 		return ""
 	}
 	if p.byID == nil {
@@ -72,18 +78,25 @@ func (p *termProtos) add(h provider.ExecHandle) string {
 		p.order = p.order[1:]
 		if h := p.byID[old]; h != nil {
 			delete(p.byID, old)
-			h.Close()
+			evicted = append(evicted, h)
 		}
 	}
 	return id
 }
 
-func (p *termProtos) get(id string) provider.ExecHandle {
+// run starts a run of terminal id under the lock forget takes: a run
+// either exists before forget (which then ends it) or is refused.
+func (p *termProtos) run(id string, start func(proto provider.ExecHandle) (TerminalInfo, error)) (TerminalInfo, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	return p.byID[id]
+	proto := p.byID[id]
+	if proto == nil {
+		return TerminalInfo{}, coded(CodeGone, errors.New("this terminal is no longer known; open a new one"))
+	}
+	return start(proto)
 }
 
+// forget drops terminal id; the caller ends its runs.
 func (p *termProtos) forget(id string) {
 	p.mu.Lock()
 	h := p.byID[id]
@@ -96,6 +109,12 @@ func (p *termProtos) forget(id string) {
 	}
 	p.mu.Unlock()
 	if h != nil {
+		h.Close()
+	}
+}
+
+func closeHandles(hs []provider.ExecHandle) {
+	for _, h := range hs {
 		h.Close()
 	}
 }
@@ -182,12 +201,15 @@ func (s *Service) OpenTerminal(ctx context.Context, req TerminalRequest) (Termin
 	if err != nil {
 		return TerminalInfo{}, fromProvider(err)
 	}
-	info, err := s.startTerminal(proto, req.Cols, req.Rows)
+	id := s.terms.add(proto)
+	if id == "" {
+		return TerminalInfo{}, coded(CodeGone, errors.New("the app is closing"))
+	}
+	info, err := s.startTerminal(id, req.Cols, req.Rows)
 	if err != nil {
-		proto.Close()
+		s.terms.forget(id)
 		return TerminalInfo{}, err
 	}
-	info.TerminalID = s.terms.add(proto)
 	return info, nil
 }
 
@@ -197,38 +219,36 @@ func (s *Service) ReopenTerminal(_ context.Context, req ReopenTerminalRequest) (
 	if err := validSize(req.Cols, req.Rows); err != nil {
 		return TerminalInfo{}, coded(CodeBadRequest, err)
 	}
-	proto := s.terms.get(req.TerminalID)
-	if proto == nil {
-		return TerminalInfo{}, coded(CodeGone, errors.New("this terminal is no longer known; open a new one"))
-	}
-	info, err := s.startTerminal(proto, req.Cols, req.Rows)
-	if err != nil {
-		return TerminalInfo{}, err
-	}
-	info.TerminalID = req.TerminalID
-	return info, nil
+	return s.startTerminal(req.TerminalID, req.Cols, req.Rows)
 }
 
-// ForgetTerminal: the terminal's tab is gone; it cannot be reopened.
+// ForgetTerminal: the terminal's tab is gone; it cannot be reopened, and
+// its run (connected or not yet) ends.
 func (s *Service) ForgetTerminal(_ context.Context, terminalID string) error {
 	s.terms.forget(terminalID)
+	s.streams.CloseOwner(termOwner(terminalID))
 	return nil
 }
 
-// startTerminal registers a fresh run of proto with the stream registry
-// (which closes that run's handle on any failure, including the app
-// closing meanwhile).
-func (s *Service) startTerminal(proto provider.ExecHandle, cols, rows int) (TerminalInfo, error) {
-	h, err := proto.Again()
-	if err != nil {
-		return TerminalInfo{}, fromProvider(err)
-	}
-	id, err := s.streams.AddTerm(h, provider.TermSize{Cols: uint16(cols), Rows: uint16(rows)})
-	switch {
-	case errors.Is(err, streams.ErrLimit):
-		return TerminalInfo{}, &CodedError{Code: CodeLimit, Detail: err.Error()}
-	case err != nil:
-		return TerminalInfo{}, coded(CodeGone, err)
-	}
-	return TerminalInfo{StreamID: id, Target: s.live(proto.Describe())}, nil
+// termOwner names a terminal's runs in the stream registry.
+func termOwner(terminalID string) string { return "term:" + terminalID }
+
+// startTerminal registers a fresh run of terminal id with the stream
+// registry (which closes that run's handle on any failure, including the
+// app closing meanwhile).
+func (s *Service) startTerminal(id string, cols, rows int) (TerminalInfo, error) {
+	return s.terms.run(id, func(proto provider.ExecHandle) (TerminalInfo, error) {
+		h, err := proto.Again()
+		if err != nil {
+			return TerminalInfo{}, fromProvider(err)
+		}
+		sid, err := s.streams.AddTerm(termOwner(id), h, provider.TermSize{Cols: uint16(cols), Rows: uint16(rows)})
+		switch {
+		case errors.Is(err, streams.ErrLimit):
+			return TerminalInfo{}, &CodedError{Code: CodeLimit, Detail: err.Error()}
+		case err != nil:
+			return TerminalInfo{}, coded(CodeGone, err)
+		}
+		return TerminalInfo{TerminalID: id, StreamID: sid, Target: s.live(proto.Describe())}, nil
+	})
 }

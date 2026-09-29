@@ -183,7 +183,7 @@ func echoRun(ctx context.Context, term provider.Terminal) (provider.ExitStatus, 
 func TestTermGuardsDoNotConsumeTheID(t *testing.T) {
 	f := newTermFixture(t, fastTimings)
 	ft := &fakeTerm{run: echoRun}
-	id, err := f.reg.AddTerm(ft, provider.TermSize{Cols: 80, Rows: 24})
+	id, err := f.reg.AddTerm("term", ft, provider.TermSize{Cols: 80, Rows: 24})
 	require.NoError(t, err)
 	logID, err := f.reg.Add("o", lines(1))
 	require.NoError(t, err)
@@ -218,7 +218,7 @@ func TestTermGuardsDoNotConsumeTheID(t *testing.T) {
 func TestTermEchoesThenExitsInOrder(t *testing.T) {
 	f := newTermFixture(t, fastTimings)
 	ft := &fakeTerm{run: echoRun}
-	id, err := f.reg.AddTerm(ft, provider.TermSize{Cols: 80, Rows: 24})
+	id, err := f.reg.AddTerm("term", ft, provider.TermSize{Cols: 80, Rows: 24})
 	require.NoError(t, err)
 	cl := newClient(f.dial(t, id))
 	cl.send(t, websocket.MessageBinary, []byte("hello "))
@@ -250,7 +250,7 @@ func TestTermResizeIsLatestWinsAndNeverBlocksTheReader(t *testing.T) {
 		assert.Nil(t, term.Sizes.Next(), "nil once the terminal is gone")
 		return provider.ExitStatus{}, ctx.Err()
 	}}
-	id, err := f.reg.AddTerm(ft, provider.TermSize{Cols: 80, Rows: 24})
+	id, err := f.reg.AddTerm("term", ft, provider.TermSize{Cols: 80, Rows: 24})
 	require.NoError(t, err)
 	cl := newClient(f.dial(t, id))
 	assert.Equal(t, provider.TermSize{Cols: 80, Rows: 24}, <-sizes)
@@ -285,7 +285,7 @@ func TestTermOutputStopsAtTheWindowUntilAcked(t *testing.T) {
 	f := newTermFixture(t, fastTimings)
 	var written atomic.Int64
 	ft := &fakeTerm{run: flooder(3<<20, &written)}
-	id, err := f.reg.AddTerm(ft, provider.TermSize{Cols: 80, Rows: 24})
+	id, err := f.reg.AddTerm("term", ft, provider.TermSize{Cols: 80, Rows: 24})
 	require.NoError(t, err)
 	cl := newClient(f.dial(t, id))
 	require.Eventually(t, func() bool { return cl.outLen() == termOutWindow }, 5*time.Second, 10*time.Millisecond)
@@ -312,7 +312,7 @@ func TestTermImpossibleAcksAreProtocolErrors(t *testing.T) {
 			f := newTermFixture(t, fastTimings)
 			var written atomic.Int64
 			ft := &fakeTerm{run: flooder(2<<20, &written)}
-			id, err := f.reg.AddTerm(ft, provider.TermSize{Cols: 80, Rows: 24})
+			id, err := f.reg.AddTerm("term", ft, provider.TermSize{Cols: 80, Rows: 24})
 			require.NoError(t, err)
 			cl := newClient(f.dial(t, id))
 			require.Eventually(t, func() bool { return cl.outLen() == termOutWindow }, 5*time.Second, 10*time.Millisecond)
@@ -324,7 +324,7 @@ func TestTermImpossibleAcksAreProtocolErrors(t *testing.T) {
 		f := newTermFixture(t, fastTimings)
 		var written atomic.Int64
 		ft := &fakeTerm{run: flooder(3<<20, &written)}
-		id, err := f.reg.AddTerm(ft, provider.TermSize{Cols: 80, Rows: 24})
+		id, err := f.reg.AddTerm("term", ft, provider.TermSize{Cols: 80, Rows: 24})
 		require.NoError(t, err)
 		cl := newClient(f.dial(t, id))
 		require.Eventually(t, func() bool { return cl.outLen() == termOutWindow }, 5*time.Second, 10*time.Millisecond)
@@ -353,7 +353,7 @@ func TestTermCommandNotReadingStdinKeepsControlAlive(t *testing.T) {
 		<-ctx.Done()
 		return provider.ExitStatus{}, ctx.Err()
 	}}
-	id, err := f.reg.AddTerm(ft, provider.TermSize{Cols: 80, Rows: 24})
+	id, err := f.reg.AddTerm("term", ft, provider.TermSize{Cols: 80, Rows: 24})
 	require.NoError(t, err)
 	cl := newClient(f.dial(t, id))
 	<-resized
@@ -388,7 +388,7 @@ func TestTermPageThatStopsAckingIsDisconnected(t *testing.T) {
 			}
 		}
 	}}
-	id, err := f.reg.AddTerm(ft, provider.TermSize{Cols: 80, Rows: 24})
+	id, err := f.reg.AddTerm("term", ft, provider.TermSize{Cols: 80, Rows: 24})
 	require.NoError(t, err)
 	cl := newClient(f.dial(t, id))
 	assert.Equal(t, statusNotReading, cl.waitClosed(t))
@@ -406,7 +406,7 @@ func TestTermUndeliveredOutputAfterExitIsReported(t *testing.T) {
 		time.Sleep(100 * time.Millisecond)
 		return provider.ExitStatus{Code: 0, Known: true}, nil
 	}}
-	id, err := f.reg.AddTerm(ft, provider.TermSize{Cols: 80, Rows: 24})
+	id, err := f.reg.AddTerm("term", ft, provider.TermSize{Cols: 80, Rows: 24})
 	require.NoError(t, err)
 	cl := newClient(f.dial(t, id))
 	assert.Equal(t, statusNotReading, cl.waitClosed(t))
@@ -428,7 +428,7 @@ func TestTermRunErrorsEndWithoutExit(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			f := newTermFixture(t, fastTimings)
 			ft := &fakeTerm{run: func(context.Context, provider.Terminal) (provider.ExitStatus, error) { return tc.st, tc.err }}
-			id, err := f.reg.AddTerm(ft, provider.TermSize{Cols: 80, Rows: 24})
+			id, err := f.reg.AddTerm("term", ft, provider.TermSize{Cols: 80, Rows: 24})
 			require.NoError(t, err)
 			cl := newClient(f.dial(t, id))
 			assert.Equal(t, websocket.StatusNormalClosure, cl.waitClosed(t))
@@ -451,7 +451,7 @@ func TestTermPageClosingCancelsTheCommand(t *testing.T) {
 		close(cancelled)
 		return provider.ExitStatus{}, ctx.Err()
 	}}
-	id, err := f.reg.AddTerm(ft, provider.TermSize{Cols: 80, Rows: 24})
+	id, err := f.reg.AddTerm("term", ft, provider.TermSize{Cols: 80, Rows: 24})
 	require.NoError(t, err)
 	c := f.dial(t, id)
 	_ = c.Close(websocket.StatusNormalClosure, "tab closed")
@@ -478,13 +478,13 @@ func TestTermRegistryCloseEndsTerminalsGoneAndJoins(t *testing.T) {
 			<-ctx.Done()
 			return provider.ExitStatus{}, ctx.Err()
 		}}
-		id, err := reg.AddTerm(fts[i], provider.TermSize{Cols: 80, Rows: 24})
+		id, err := reg.AddTerm("term", fts[i], provider.TermSize{Cols: 80, Rows: 24})
 		require.NoError(t, err)
 		cls[i] = newClient(f.dial(t, id))
 		cls[i].send(t, websocket.MessageBinary, []byte("x"))
 	}
 	pending := &fakeTerm{run: echoRun}
-	_, err := reg.AddTerm(pending, provider.TermSize{Cols: 80, Rows: 24})
+	_, err := reg.AddTerm("term", pending, provider.TermSize{Cols: 80, Rows: 24})
 	require.NoError(t, err)
 	for _, cl := range cls {
 		require.Eventually(t, func() bool { return len(cl.controls("iack")) == 1 }, 5*time.Second, 10*time.Millisecond)
@@ -499,7 +499,7 @@ func TestTermRegistryCloseEndsTerminalsGoneAndJoins(t *testing.T) {
 		assert.Equal(t, int32(1), fts[i].closed.Load(), "Close waited for the terminal")
 	}
 	assert.Equal(t, int32(1), pending.closed.Load(), "a pending terminal is released")
-	_, err = reg.AddTerm(&fakeTerm{}, provider.TermSize{Cols: 1, Rows: 1})
+	_, err = reg.AddTerm("term", &fakeTerm{}, provider.TermSize{Cols: 1, Rows: 1})
 	assert.ErrorIs(t, err, ErrGone)
 	srv.Close()
 	require.Eventually(t, func() bool { return runtime.NumGoroutine() <= before+2 }, 5*time.Second, 20*time.Millisecond,
@@ -514,16 +514,16 @@ func TestTermLimitsCountPendingAndReleaseExpired(t *testing.T) {
 	for range MaxTerms {
 		ft := &fakeTerm{}
 		fts = append(fts, ft)
-		_, err := reg.AddTerm(ft, provider.TermSize{Cols: 80, Rows: 24})
+		_, err := reg.AddTerm("term", ft, provider.TermSize{Cols: 80, Rows: 24})
 		require.NoError(t, err)
 	}
 	over := &fakeTerm{}
-	_, err := reg.AddTerm(over, provider.TermSize{Cols: 80, Rows: 24})
+	_, err := reg.AddTerm("term", over, provider.TermSize{Cols: 80, Rows: 24})
 	assert.ErrorIs(t, err, ErrLimit)
 	assert.Equal(t, int32(1), over.closed.Load(), "a refused terminal is released")
 	_, err = reg.Add("o", nil)
 	assert.NoError(t, err, "log streams have their own limit")
-	assert.Equal(t, map[string]int{AppOwner: MaxTerms, "o": 1}, reg.Owners())
+	assert.Equal(t, map[string]int{"term": MaxTerms, "o": 1}, reg.Owners())
 
 	now = now.Add(connectTTL + time.Second)
 	assert.Equal(t, 0, reg.Count(KindTerm))
@@ -550,7 +550,7 @@ func TestTermDeadPageIsDetectedByPing(t *testing.T) {
 		close(cancelled)
 		return provider.ExitStatus{}, ctx.Err()
 	}}
-	id, err := f.reg.AddTerm(ft, provider.TermSize{Cols: 80, Rows: 24})
+	id, err := f.reg.AddTerm("term", ft, provider.TermSize{Cols: 80, Rows: 24})
 	require.NoError(t, err)
 	_ = f.dial(t, id) // never reads: pings go unanswered
 	select {
@@ -591,7 +591,7 @@ func TestTermClosingThePageHangsUpInBand(t *testing.T) {
 	seen := make(chan []byte, 1)
 	var cancelled atomic.Bool
 	ft := &fakeTerm{run: ttyShell(seen, &cancelled)}
-	id, err := f.reg.AddTerm(ft, provider.TermSize{Cols: 80, Rows: 24})
+	id, err := f.reg.AddTerm("term", ft, provider.TermSize{Cols: 80, Rows: 24})
 	require.NoError(t, err)
 	cl := newClient(f.dial(t, id))
 	cl.send(t, websocket.MessageBinary, []byte("sleep 99\r"))
@@ -618,7 +618,7 @@ func TestTermCommandIgnoringTheHangupIsCancelled(t *testing.T) {
 		ended <- time.Now()
 		return provider.ExitStatus{}, ctx.Err()
 	}}
-	id, err := f.reg.AddTerm(ft, provider.TermSize{Cols: 80, Rows: 24})
+	id, err := f.reg.AddTerm("term", ft, provider.TermSize{Cols: 80, Rows: 24})
 	require.NoError(t, err)
 	cl := newClient(f.dial(t, id))
 	require.Eventually(t, func() bool { return cl.output() == "vim" }, 5*time.Second, 10*time.Millisecond)
@@ -678,7 +678,7 @@ func TestTermClosingDropsQueuedInputAndHangsUpAfterIt(t *testing.T) {
 			}
 		},
 		func(all []byte) bool { return bytes.HasSuffix(all, []byte{3, 4}) })}
-	id, err := f.reg.AddTerm(ft, provider.TermSize{Cols: 80, Rows: 24})
+	id, err := f.reg.AddTerm("term", ft, provider.TermSize{Cols: 80, Rows: 24})
 	require.NoError(t, err)
 	cl := newClient(f.dial(t, id))
 	require.Eventually(t, func() bool { return cl.output() == "ready" }, 5*time.Second, 10*time.Millisecond)
@@ -703,7 +703,7 @@ func TestTermInterruptDropsQueuedInputAndGoesFirst(t *testing.T) {
 	seen, applied := make(chan []byte, 1), make(chan struct{})
 	ft := &fakeTerm{run: blockedReader(seen, applied, func(provider.TermSizes) {},
 		func(all []byte) bool { return bytes.HasSuffix(all, []byte("four\r")) })}
-	id, err := f.reg.AddTerm(ft, provider.TermSize{Cols: 80, Rows: 24})
+	id, err := f.reg.AddTerm("term", ft, provider.TermSize{Cols: 80, Rows: 24})
 	require.NoError(t, err)
 	cl := newClient(f.dial(t, id))
 	require.Eventually(t, func() bool { return cl.output() == "ready" }, 5*time.Second, 10*time.Millisecond)

@@ -190,6 +190,72 @@ func TestTerminalsOutliveTheirSession(t *testing.T) {
 	assert.True(t, IsCoded(err, CodeGone), "%v", err)
 }
 
+// Forgetting a terminal (its tab closed) ends its runs: the connected one
+// and one registered but not connected yet; other terminals go on.
+func TestForgettingATerminalEndsItsRuns(t *testing.T) {
+	ctx := context.Background()
+	s, k, base := newExecService(t)
+	a, err := s.OpenTerminal(ctx, termReq)
+	require.NoError(t, err)
+	b, err := s.OpenTerminal(ctx, termReq)
+	require.NoError(t, err)
+	ca, cb := dialTerm(t, base, a.StreamID), dialTerm(t, base, b.StreamID)
+	echo(t, ca, "a")
+	echo(t, cb, "b")
+	pending, err := s.ReopenTerminal(ctx, ReopenTerminalRequest{TerminalID: a.TerminalID, Cols: 80, Rows: 24})
+	require.NoError(t, err)
+	require.Equal(t, 2, s.Streams().Owners()[termOwner(a.TerminalID)])
+
+	require.NoError(t, s.ForgetTerminal(ctx, a.TerminalID))
+	rctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	for {
+		if _, _, err := ca.Read(rctx); err != nil {
+			assert.Equal(t, websocket.StatusGoingAway, websocket.CloseStatus(err), "%v", err) // revoked: "gone"
+			break
+		}
+	}
+	require.Eventually(t, func() bool { return s.Streams().Owners()[termOwner(a.TerminalID)] == 0 }, 5*time.Second, 10*time.Millisecond)
+	es := k.sessions[0]
+	require.Eventually(t, func() bool {
+		es.mu.Lock()
+		defer es.mu.Unlock()
+		return es.runs[0].closed.Load() == 1 && es.runs[2].closed.Load() == 1
+	}, 5*time.Second, 10*time.Millisecond, "the run and the pending one are released")
+	dctx, dcancel := context.WithTimeout(ctx, 5*time.Second)
+	defer dcancel()
+	_, resp, err := websocket.Dial(dctx, base+"/term/"+pending.StreamID, &websocket.DialOptions{HTTPHeader: http.Header{"Origin": {"wails://localhost"}}})
+	require.Error(t, err, "the pending run can no longer connect")
+	require.NotNil(t, resp)
+	assert.Equal(t, http.StatusGone, resp.StatusCode)
+	if resp.Body != nil {
+		_ = resp.Body.Close()
+	}
+	echo(t, cb, "b goes on")
+}
+
+// A reconnect racing the tab's closing never leaves a run behind.
+func TestAReopenRacingForgetLeavesNoRun(t *testing.T) {
+	ctx := context.Background()
+	s, _, _ := newExecService(t)
+	for range 200 {
+		live, err := s.OpenTerminal(ctx, termReq)
+		require.NoError(t, err)
+		var wg sync.WaitGroup
+		wg.Add(2)
+		go func() {
+			defer wg.Done()
+			_, _ = s.ReopenTerminal(ctx, ReopenTerminalRequest{TerminalID: live.TerminalID, Cols: 80, Rows: 24})
+		}()
+		go func() {
+			defer wg.Done()
+			_ = s.ForgetTerminal(ctx, live.TerminalID)
+		}()
+		wg.Wait()
+		require.Zero(t, s.Streams().Owners()[termOwner(live.TerminalID)])
+	}
+}
+
 func TestOpenTerminalValidatesBeforePreparing(t *testing.T) {
 	ctx := context.Background()
 	s, k, _ := newExecService(t)

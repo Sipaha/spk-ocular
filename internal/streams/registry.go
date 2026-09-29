@@ -41,10 +41,6 @@ const (
 	KindTerm Kind = "term"
 )
 
-// AppOwner owns streams that outlive sessions (terminals): nothing but
-// Registry.Close ends them.
-const AppOwner = "app"
-
 const (
 	// connectTTL: a registered stream the page did not connect to within
 	// this long is dropped (the page went away between the two steps).
@@ -112,11 +108,13 @@ func (r *Registry) Add(owner string, run Func) (string, error) {
 	return r.add(&stream{kind: KindLogs, owner: owner, run: run})
 }
 
-// AddTerm registers a terminal owned by the app, starting at size. The
-// registry owns t from now on: it is closed if the page never connects,
-// the app closes, or it has run. On error t is closed too.
-func (r *Registry) AddTerm(t TermSession, size provider.TermSize) (string, error) {
-	id, err := r.add(&stream{kind: KindTerm, owner: AppOwner, term: t, size: size})
+// AddTerm registers a run of a terminal, starting at size. owner names the
+// terminal, not a session (terminals outlive sessions): CloseOwner(owner)
+// ends its runs when its tab is gone. The registry owns t from now on: it
+// is closed if the page never connects, the app closes, or it has run. On
+// error t is closed too.
+func (r *Registry) AddTerm(owner string, t TermSession, size provider.TermSize) (string, error) {
+	id, err := r.add(&stream{kind: KindTerm, owner: owner, term: t, size: size})
 	if err != nil {
 		t.Close()
 	}
