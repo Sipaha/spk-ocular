@@ -6,8 +6,10 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"runtime"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/spk/spk-ocular/internal/core"
 	"github.com/spk/spk-ocular/internal/events"
@@ -35,6 +37,8 @@ type Service struct {
 
 	sessMu   sync.Mutex
 	sessions map[string]*sessionEntry // by ownerKey
+	reaper   *time.Timer
+	now      func() time.Time
 
 	cancel context.CancelFunc
 	wg     sync.WaitGroup
@@ -43,7 +47,7 @@ type Service struct {
 var _ API = (*Service)(nil)
 
 func NewService(reg *provider.Registry, st *store.Store, em *events.Emitter, o Options) *Service {
-	return &Service{reg: reg, store: st, em: em, opts: o, views: views.NewManager(em), sessions: map[string]*sessionEntry{}}
+	return &Service{reg: reg, store: st, em: em, opts: o, views: views.NewManager(em), sessions: map[string]*sessionEntry{}, now: time.Now}
 }
 
 // Start begins watching local configuration of providers that support it.
@@ -77,6 +81,9 @@ func (s *Service) Close() {
 	s.wg.Wait()
 	s.views.CloseAll()
 	s.sessMu.Lock()
+	if s.reaper != nil {
+		s.reaper.Stop()
+	}
 	for key := range s.sessions {
 		s.closeSessionLocked(key)
 	}
@@ -199,4 +206,35 @@ func (s *Service) SetTargetState(ctx context.Context, providerID, target, key, v
 		return coded(CodeInternal, err)
 	}
 	return nil
+}
+
+// Stats is a snapshot for leak checks and measurements (test API only).
+func (s *Service) Stats() map[string]any {
+	var ms runtime.MemStats
+	runtime.ReadMemStats(&ms)
+	views := 0
+	for _, n := range s.views.Owners() {
+		views += n
+	}
+	out := map[string]any{
+		"views":      views,
+		"goroutines": runtime.NumGoroutine(),
+		"heap_inuse": ms.HeapInuse,
+		"heap_alloc": ms.HeapAlloc,
+		"sys":        ms.Sys,
+	}
+	s.sessMu.Lock()
+	out["sessions"] = len(s.sessions)
+	for _, e := range s.sessions {
+		if st, ok := e.sess.(interface{ Stats() map[string]int }); ok {
+			for k, v := range st.Stats() {
+				if prev, ok := out[k].(int); ok {
+					v += prev
+				}
+				out[k] = v
+			}
+		}
+	}
+	s.sessMu.Unlock()
+	return out
 }

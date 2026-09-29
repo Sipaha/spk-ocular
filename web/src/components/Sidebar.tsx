@@ -67,7 +67,7 @@ export function Sidebar({ act }: { act: Actions }) {
   }
 
   return (
-    <aside className="flex h-full w-72 shrink-0 flex-col border-r border-line bg-sidebar">
+    <aside className="flex h-full w-60 shrink-0 flex-col border-r border-line bg-sidebar">
       <div className="flex items-center gap-2 px-4 pt-4 pb-3">
         <EyeIcon className="h-5 w-5 text-accent" />
         <span className="text-[15px] font-semibold tracking-tight">SPK Ocular</span>

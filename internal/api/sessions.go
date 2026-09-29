@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"strings"
+	"time"
 
 	"github.com/spk/spk-ocular/internal/core"
 	"github.com/spk/spk-ocular/internal/provider"
@@ -13,9 +14,14 @@ import (
 )
 
 type sessionEntry struct {
-	sess provider.Session
-	hash string
+	sess     provider.Session
+	hash     string
+	lastUsed time.Time
 }
+
+// sessionIdle: a session without views is closed after this long (a page
+// that went away, a target left behind). A local timer, not cluster polling.
+const sessionIdle = 60 * time.Second
 
 func ownerKey(providerID, target string) string { return providerID + "\x00" + target }
 
@@ -43,6 +49,7 @@ func (s *Service) session(ctx context.Context, providerID, target string) (provi
 	defer s.sessMu.Unlock()
 	if e := s.sessions[key]; e != nil {
 		if e.hash == hash {
+			e.lastUsed = s.now()
 			return e.sess, nil
 		}
 		s.closeSessionLocked(key) // configuration changed under it
@@ -51,7 +58,8 @@ func (s *Service) session(ctx context.Context, providerID, target string) (provi
 	if err != nil {
 		return nil, fromProvider(err)
 	}
-	s.sessions[key] = &sessionEntry{sess: sess, hash: sess.ConfigHash()}
+	s.sessions[key] = &sessionEntry{sess: sess, hash: sess.ConfigHash(), lastUsed: s.now()}
+	s.armReaperLocked()
 	return sess, nil
 }
 
@@ -230,4 +238,35 @@ func (s *Service) GetMetrics(ctx context.Context, viewID string) (MetricsView, e
 		}
 	}
 	return out, nil
+}
+
+// armReaperLocked schedules one idle-session check while sessions exist.
+func (s *Service) armReaperLocked() {
+	if s.reaper != nil || len(s.sessions) == 0 {
+		return
+	}
+	s.reaper = time.AfterFunc(sessionIdle/2, func() {
+		s.reapIdleSessions()
+		s.sessMu.Lock()
+		s.reaper = nil
+		s.armReaperLocked()
+		s.sessMu.Unlock()
+	})
+}
+
+// reapIdleSessions closes sessions that have had no views for sessionIdle.
+func (s *Service) reapIdleSessions() {
+	owners := s.views.Owners()
+	now := s.now()
+	s.sessMu.Lock()
+	defer s.sessMu.Unlock()
+	for key, e := range s.sessions {
+		if owners[key] > 0 {
+			e.lastUsed = now
+			continue
+		}
+		if now.Sub(e.lastUsed) >= sessionIdle {
+			s.closeSessionLocked(key)
+		}
+	}
 }

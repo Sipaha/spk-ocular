@@ -93,7 +93,13 @@ export function actions(client: Client) {
     },
     reload,
     async select(ref: TargetRef) {
-      useStore.setState({ cursor: targetKey(ref), actionError: null })
+      // Optimistic: the old target's pages unmount now instead of reacting
+      // to their session being closed (and reopening it) meanwhile.
+      useStore.setState((st) => ({
+        cursor: targetKey(ref),
+        actionError: null,
+        view: st.view ? { ...st.view, selected: { provider: ref.provider, id: ref.id } } : st.view,
+      }))
       nextSelect = { provider: ref.provider, id: ref.id }
       if (selecting) return
       selecting = true

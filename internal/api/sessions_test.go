@@ -219,3 +219,27 @@ func TestGetMetricsJoinsCurrentRowsAndReportsStatus(t *testing.T) {
 	_, err = s.GetMetrics(ctx, "v-unknown")
 	assert.True(t, IsCoded(err, CodeGone))
 }
+
+func TestIdleSessionsAreReaped(t *testing.T) {
+	ctx := context.Background()
+	k := newOpenable("a", "b")
+	s, _ := newService(t, k)
+	now := time.Unix(1000, 0)
+	s.now = func() time.Time { return now }
+	infoA, err := s.OpenView(ctx, OpenViewRequest{Provider: "k", Target: "a", Query: provider.Query{Kind: "pods", Scope: allScopes}})
+	require.NoError(t, err)
+	_, err = s.ListKinds(ctx, "k", "b") // a session nobody opens views on
+	require.NoError(t, err)
+
+	now = now.Add(sessionIdle + time.Second)
+	s.reapIdleSessions()
+	assert.False(t, k.opened[0].isClosed(), "a session with a view stays")
+	assert.True(t, k.opened[1].isClosed(), "an unused session goes")
+
+	require.NoError(t, s.CloseView(ctx, infoA.ViewID))
+	s.reapIdleSessions() // was in use a moment ago: kept
+	assert.False(t, k.opened[0].isClosed())
+	now = now.Add(sessionIdle + time.Second)
+	s.reapIdleSessions()
+	assert.True(t, k.opened[0].isClosed())
+}

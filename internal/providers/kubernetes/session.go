@@ -176,3 +176,9 @@ func (s *session) detach(c *informerCache, w *viewWatch) {
 	c.mu.Unlock()
 	s.caches.release(c)
 }
+
+// Stats reports cache counts for leak checks (/api/_test/stats).
+func (s *session) Stats() map[string]int {
+	active, idle := s.caches.stats()
+	return map[string]int{"caches_active": active, "caches_idle": idle}
+}
