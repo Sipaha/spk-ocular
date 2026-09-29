@@ -44,6 +44,11 @@ type API interface {
 	// kind and scope) as opaque JSON strings by key.
 	GetTargetState(ctx context.Context, provider, target string) (map[string]string, error)
 	SetTargetState(ctx context.Context, provider, target, key, value string) error
+	// RecentObjects: the target's objects whose details were opened, newest
+	// first (at most 50 per target).
+	RecentObjects(ctx context.Context, provider, target string) ([]RecentObject, error)
+	// TouchRecent records a successful open of an object's details.
+	TouchRecent(ctx context.Context, req TouchRecentRequest) error
 	// GetMetrics: usage for the rows of an open view. Status is "ok" or an
 	// error class (unsupported = no metrics API) — never an empty success.
 	GetMetrics(ctx context.Context, viewID string) (MetricsView, error)
@@ -130,6 +135,8 @@ type TargetGroup struct {
 	Problems []core.Problem `json:"problems"`
 	// Error is set when the provider could not discover at all.
 	Error string `json:"error,omitempty"`
+	// Aliases name the provider's scopes and targets in palette commands.
+	Aliases provider.CommandAliases `json:"aliases"`
 }
 
 type TargetRef struct {

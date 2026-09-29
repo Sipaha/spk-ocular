@@ -1,5 +1,5 @@
 import { Call, Events } from '@wailsio/runtime'
-import type { ActionParams, ActionPlan, ActionResult, ApiEvent, AppInfo, EventType, ExecInfo, KindDescriptor, LogInfo, LogQuery, LogStreamInfo, MetricsView, Page, Query, Ref, Resource, ScopesView, TargetsView, TerminalInfo, TerminalRequest, ViewInfo, ForwardInfo, StartForwardRequest, Tunnel } from './types'
+import type { ActionParams, ActionPlan, ActionResult, ApiEvent, AppInfo, EventType, ExecInfo, KindDescriptor, LogInfo, LogQuery, LogStreamInfo, MetricsView, Page, Query, RecentObject, Ref, Resource, ScopesView, TargetsView, TerminalInfo, TerminalRequest, ViewInfo, ForwardInfo, StartForwardRequest, Tunnel } from './types'
 
 export class ApiError extends Error {
   constructor(
@@ -32,6 +32,10 @@ export interface Client {
   getMetrics(viewId: string): Promise<MetricsView>
   getTargetState(provider: string, target: string): Promise<Record<string, string>>
   setTargetState(provider: string, target: string, key: string, value: string): Promise<void>
+  /** The target's objects whose details were opened, newest first. */
+  recentObjects(provider: string, target: string): Promise<RecentObject[]>
+  /** Records a successful open of an object's details. */
+  touchRecent(ref: Ref, title: string): Promise<void>
   logInfo(ref: Ref): Promise<LogInfo>
   /** Registers a log stream; read it from streamBase() + '/logs/' + streamId. */
   openLogStream(ref: Ref, query: LogQuery): Promise<LogStreamInfo>
@@ -107,6 +111,8 @@ export const httpClient: Client = {
   getMetrics: (viewId) => post('GetMetrics', { viewId }),
   getTargetState: (provider, target) => post('GetTargetState', { provider, target }),
   setTargetState: (provider, target, key, value) => done(post('SetTargetState', { provider, target, key, value })),
+  recentObjects: (provider, target) => post('RecentObjects', { provider, target }),
+  touchRecent: (ref, title) => done(post('TouchRecent', { ref, title })),
   logInfo: (ref) => post('LogInfo', ref),
   openLogStream: (ref, query) => post('OpenLogStream', { ref, query }),
   execInfo: (ref) => post('ExecInfo', ref),
@@ -169,6 +175,8 @@ export const wailsClient: Client = {
   getMetrics: (viewId) => wcall('GetMetrics', viewId),
   getTargetState: (provider, target) => wcall('GetTargetState', provider, target),
   setTargetState: (provider, target, key, value) => wcall('SetTargetState', provider, target, key, value),
+  recentObjects: (provider, target) => wcall('RecentObjects', provider, target),
+  touchRecent: (ref, title) => wcall('TouchRecent', { ref, title }),
   logInfo: (ref) => wcall('LogInfo', ref),
   openLogStream: (ref, query) => wcall('OpenLogStream', { ref, query }),
   execInfo: (ref) => wcall('ExecInfo', ref),

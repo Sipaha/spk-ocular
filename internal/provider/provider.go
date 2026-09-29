@@ -32,6 +32,17 @@ type TargetWatcher interface {
 	Watch(ctx context.Context, onChange func()) error
 }
 
+// CommandAliaser is implemented by providers whose scopes and targets have
+// short names in palette commands (Kubernetes: ":ns demo", ":ctx prod").
+type CommandAliaser interface {
+	CommandAliases() CommandAliases
+}
+
+type CommandAliases struct {
+	Scope  []string `json:"scope,omitempty"`
+	Target []string `json:"target,omitempty"`
+}
+
 // Registry is the ordered set of providers; order is the UI order.
 type Registry struct {
 	list []Provider

@@ -10,6 +10,7 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 
 	"github.com/spk/spk-ocular/internal/core"
+	"github.com/spk/spk-ocular/internal/provider"
 )
 
 func obj(created time.Duration, o map[string]any) *unstructured.Unstructured {
@@ -322,4 +323,21 @@ func TestKindIDsAreUniqueAndQualified(t *testing.T) {
 		}
 		assert.Equal(t, d.namespaced, d.desc.Scoped, d.desc.ID)
 	}
+}
+
+// Palette commands (":po", ":deploy web") name a kind by an alias, kubectl's
+// short names: one alias names one kind.
+func TestKindAliasesAreKubectlShortNamesAndUnique(t *testing.T) {
+	byAlias := map[string]string{}
+	for _, d := range allKinds.descriptors() {
+		for _, a := range d.Aliases {
+			assert.Empty(t, byAlias[a], "alias %q of %s is taken by %s", a, d.ID, byAlias[a])
+			byAlias[a] = d.ID
+		}
+	}
+	for alias, id := range map[string]string{"po": "pods", "deploy": "apps/deployments", "sts": "apps/statefulsets", "ds": "apps/daemonsets", "rs": "apps/replicasets", "svc": "services", "ing": "networking.k8s.io/ingresses", "cm": "configmaps", "no": "nodes", "ns": "namespaces", "ev": "events"} {
+		assert.Equal(t, id, byAlias[alias], alias)
+	}
+	p := NewWith(func(string) string { return "" }, t.TempDir())
+	assert.Equal(t, provider.CommandAliases{Scope: []string{"ns", "namespace"}, Target: []string{"ctx", "context"}}, p.CommandAliases())
 }

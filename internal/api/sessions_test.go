@@ -47,6 +47,7 @@ type fakeSession struct {
 	mu        sync.Mutex
 	closed    bool
 	scopesErr error
+	noScopes  bool
 }
 
 func (f *fakeSession) ConfigHash() string { return f.hash }
@@ -57,6 +58,9 @@ func (f *fakeSession) Kinds() []core.KindDescriptor {
 func (f *fakeSession) Scopes(context.Context) ([]core.Scope, error) {
 	if f.scopesErr != nil {
 		return nil, f.scopesErr
+	}
+	if f.noScopes {
+		return nil, nil
 	}
 	return []core.Scope{{Name: "default"}}, nil
 }
@@ -157,6 +161,18 @@ func TestScopesForbiddenIsDataNotFailure(t *testing.T) {
 	require.NotNil(t, v.Error)
 	assert.Equal(t, "forbidden", v.Error.Code)
 	assert.NotNil(t, v.Scopes)
+}
+
+func TestNoScopesIsAnEmptyListNotNull(t *testing.T) {
+	ctx := context.Background()
+	k := newOpenable("a")
+	s, _ := newService(t, k)
+	_, err := s.ListKinds(ctx, "k", "a")
+	require.NoError(t, err)
+	k.opened[0].noScopes = true // a provider without scopes answers nil
+	v, err := s.ListScopes(ctx, "k", "a")
+	require.NoError(t, err)
+	assert.NotNil(t, v.Scopes, "an empty list, not null, for the UI")
 }
 
 func TestOpenViewValidation(t *testing.T) {

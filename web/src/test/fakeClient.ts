@@ -1,6 +1,6 @@
 import { vi } from 'vitest'
 import type { Client } from '../api/client'
-import type { ApiEvent, KindDescriptor, Query, Ref, Row, Target, TargetsView, TerminalRequest, ViewStatus } from '../api/types'
+import type { ApiEvent, KindDescriptor, Query, RecentObject, Ref, Row, Target, TargetsView, TerminalRequest, ViewStatus } from '../api/types'
 
 export const k8s = (id: string, extra: Partial<Target> = {}): Target => ({
   provider: 'kubernetes',
@@ -24,6 +24,7 @@ export function fakeClient(targets: Target[]) {
     kinds: {} as Record<string, KindDescriptor>,
     statusByKind: {} as Record<string, ViewStatus>,
     version: 0,
+    recents: [] as RecentObject[],
     view: { groups: [{ provider: 'kubernetes', title: 'Kubernetes', targets, problems: [] }], selected: null } as TargetsView,
   }
   const client: Client = {
@@ -56,6 +57,8 @@ export function fakeClient(targets: Target[]) {
     getMetrics: vi.fn(async () => ({ status: 'unsupported', values: {} })),
     getTargetState: vi.fn(async () => ({})),
     setTargetState: vi.fn(async () => {}),
+    recentObjects: vi.fn(async (provider: string, target: string) => state.recents.filter((r) => r.ref.provider === provider && r.ref.target === target)),
+    touchRecent: vi.fn(async () => {}),
     logInfo: vi.fn(async () => ({ channels: [{ id: 'app', title: 'app' }], defaultChannel: 'app', aggregate: false, previous: true })),
     openLogStream: vi.fn(async () => ({ streamId: 's1' })),
     execInfo: vi.fn(async (ref: Ref) => ({

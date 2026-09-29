@@ -27,6 +27,16 @@ export interface TargetGroup {
   targets: Target[]
   problems: Problem[]
   error?: string
+  /** Names of the provider's scopes and targets in palette commands (":ns demo", ":ctx prod"). */
+  aliases?: { scope?: string[]; target?: string[] }
+}
+
+/** An object whose details were opened (its UID as of then). */
+export interface RecentObject {
+  ref: Ref
+  title: string
+  /** Unix milliseconds. */
+  openedAt: number
 }
 
 export interface TargetRef {
@@ -124,6 +134,8 @@ export interface KindDescriptor {
   scoped: boolean
   /** Not in the navigation (reached through relations). */
   hidden?: boolean
+  /** Short names in palette commands (":po"), besides the id and title. */
+  aliases?: string[]
   /** Objects of this kind have logs. */
   logs?: boolean
   /** A command (terminal) can run in objects of this kind. */

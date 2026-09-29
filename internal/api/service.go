@@ -145,6 +145,9 @@ func (s *Service) ListTargets(ctx context.Context) (TargetsView, error) {
 	}
 	for _, p := range s.reg.All() {
 		g := TargetGroup{Provider: p.ID(), Title: p.Title(), Targets: []core.Target{}, Problems: []core.Problem{}}
+		if a, ok := p.(provider.CommandAliaser); ok {
+			g.Aliases = a.CommandAliases()
+		}
 		d, err := p.Discover(ctx)
 		if err != nil {
 			g.Error = err.Error()

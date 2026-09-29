@@ -56,6 +56,12 @@ func (w *API) GetTargetState(provider, target string) (map[string]string, error)
 func (w *API) SetTargetState(provider, target, key, value string) error {
 	return w.a.SetTargetState(context.Background(), provider, target, key, value)
 }
+func (w *API) RecentObjects(provider, target string) ([]api.RecentObject, error) {
+	return w.a.RecentObjects(context.Background(), provider, target)
+}
+func (w *API) TouchRecent(req api.TouchRecentRequest) error {
+	return w.a.TouchRecent(context.Background(), req)
+}
 
 func (w *API) LogInfo(ref core.Ref) (core.LogInfo, error) {
 	return w.a.LogInfo(context.Background(), ref)

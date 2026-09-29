@@ -64,6 +64,9 @@ type KindDescriptor struct {
 	Forward bool `json:"forward,omitempty"`
 	// Actions objects of this kind offer (the session is an Actioner).
 	Actions []ActionDescriptor `json:"actions,omitempty"`
+	// Aliases are short names of the kind in palette commands (":po"),
+	// besides its id and title.
+	Aliases []string `json:"aliases,omitempty"`
 	// Sort is how a table of this kind is first sorted (nil: by the first
 	// column).
 	Sort *SortSpec `json:"sort,omitempty"`

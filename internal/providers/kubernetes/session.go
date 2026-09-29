@@ -36,6 +36,23 @@ var allKinds = newKindRegistry(
 	nodesKind, namespacesKind, eventsKind,
 )
 
+// kindAliases: kubectl's short and singular names, for palette commands.
+var kindAliases = map[*kindDef][]string{
+	podsKind:         {"po", "pod"},
+	deploymentsKind:  {"deploy", "deployment"},
+	statefulSetsKind: {"sts", "statefulset"},
+	daemonSetsKind:   {"ds", "daemonset"},
+	replicaSetsKind:  {"rs", "replicaset"},
+	servicesKind:     {"svc", "service"},
+	ingressesKind:    {"ing", "ingress"},
+	configMapsKind:   {"cm", "configmap"},
+	secretsKind:      {"secret"},
+	nodesKind:        {"no", "node"},
+	namespacesKind:   {"ns", "namespace"},
+	eventsKind:       {"ev", "event"},
+	problemsKind:     {"problem"},
+}
+
 var _ provider.Opener = (*Provider)(nil)
 
 // Open builds a session for a context from the current kubeconfig. No

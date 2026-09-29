@@ -172,6 +172,9 @@ func (s *Service) ListScopes(ctx context.Context, providerID, target string) (Sc
 	if err != nil {
 		return ScopesView{Scopes: []core.Scope{}, Error: fromProvider(err)}, nil
 	}
+	if scopes == nil {
+		scopes = []core.Scope{}
+	}
 	return ScopesView{Scopes: scopes, Kind: sess.ScopeKind()}, nil
 }
 

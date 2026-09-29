@@ -132,6 +132,7 @@ func (r *kindRegistry) descriptors() []core.KindDescriptor {
 	for _, d := range r.list {
 		desc := d.desc
 		desc.Actions = kindActions[d]
+		desc.Aliases = kindAliases[d]
 		out = append(out, desc)
 	}
 	return out

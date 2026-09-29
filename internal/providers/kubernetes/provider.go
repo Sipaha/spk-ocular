@@ -49,6 +49,12 @@ func NewWith(getenv func(string) string, home string) *Provider {
 func (p *Provider) ID() string    { return ProviderID }
 func (p *Provider) Title() string { return "Kubernetes" }
 
+var _ provider.CommandAliaser = (*Provider)(nil)
+
+func (p *Provider) CommandAliases() provider.CommandAliases {
+	return provider.CommandAliases{Scope: []string{"ns", "namespace"}, Target: []string{"ctx", "context"}}
+}
+
 func (p *Provider) sources() Sources { return ResolveSources(p.getenv, p.home) }
 
 func (p *Provider) Discover(context.Context) (provider.Discovery, error) {

@@ -134,6 +134,12 @@ func (h *HTTP) routes() {
 	}) (any, error) {
 		return nil, h.api.SetTargetState(ctx, r.Provider, r.Target, r.Key, r.Value)
 	}))
+	h.mux.HandleFunc("POST /api/RecentObjects", handle(func(ctx context.Context, r *targetReq) (any, error) {
+		return h.api.RecentObjects(ctx, r.Provider, r.Target)
+	}))
+	h.mux.HandleFunc("POST /api/TouchRecent", handle(func(ctx context.Context, r *api.TouchRecentRequest) (any, error) {
+		return nil, h.api.TouchRecent(ctx, *r)
+	}))
 	h.mux.HandleFunc("POST /api/GetResource", handle(func(ctx context.Context, r *core.Ref) (any, error) {
 		return h.api.GetResource(ctx, *r)
 	}))

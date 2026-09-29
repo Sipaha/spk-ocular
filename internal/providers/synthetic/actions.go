@@ -24,7 +24,7 @@ var (
 )
 
 var workloadKind = core.KindDescriptor{
-	ID: WorkloadKind, Title: "Workloads", Group: "Synthetic",
+	ID: WorkloadKind, Title: "Workloads", Group: "Synthetic", Aliases: []string{"wl"},
 	Columns: []core.Column{
 		{ID: "name", Title: "Name", Type: core.ColText},
 		{ID: "replicas", Title: "Replicas", Type: core.ColNumber},
