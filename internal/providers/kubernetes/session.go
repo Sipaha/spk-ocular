@@ -58,7 +58,11 @@ func (p *Provider) Open(_ context.Context, target string) (provider.Session, err
 	if err != nil {
 		return nil, &provider.Error{Class: provider.ClassInternal, Message: err.Error()}
 	}
-	return newSession(target, kc.Hash, dyn, true), nil
+	sess := newSession(target, kc.Hash, dyn, true)
+	if sess.logs, err = httpLogFetcher(cfg); err != nil {
+		return nil, &provider.Error{Class: provider.ClassInternal, Message: err.Error()}
+	}
+	return sess, nil
 }
 
 // restConfig resolves a context exactly like kubectl --context would with
@@ -104,6 +108,7 @@ type session struct {
 	kinds   *kindRegistry
 	now     func() time.Time
 	metrics metricsCache
+	logs    logFetcher // nil: no logs (tests without a server)
 }
 
 func newSession(target, hash string, dyn dynamic.Interface, watchList bool) *session {

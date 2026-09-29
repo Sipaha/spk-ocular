@@ -29,10 +29,11 @@ var podFatalWaiting = map[string]bool{
 var containerStateKeep = fields{
 	"waiting":    fields{"reason": true, "message": true},
 	"running":    fields{"startedAt": true},
-	"terminated": fields{"reason": true, "exitCode": true, "signal": true, "startedAt": true, "finishedAt": true},
+	"terminated": fields{"reason": true, "exitCode": true, "signal": true, "startedAt": true, "finishedAt": true, "containerID": true},
 }
 
-var containerStatusKeep = fields{"name": true, "ready": true, "restartCount": true, "state": containerStateKeep, "lastState": containerStateKeep}
+// containerID tells container instances apart (log sources follow restarts).
+var containerStatusKeep = fields{"name": true, "ready": true, "restartCount": true, "containerID": true, "state": containerStateKeep, "lastState": containerStateKeep}
 
 var conditionKeep = fields{"type": true, "status": true, "reason": true, "message": true, "lastTransitionTime": true}
 
@@ -56,15 +57,18 @@ var podsKind = &kindDef{
 	keep: fields{
 		// Images, ports, env etc. are read from the full object in details.
 		"spec": fields{
-			"nodeName":       true,
-			"containers":     fields{"name": true},
-			"initContainers": fields{"name": true},
+			"nodeName":            true,
+			"restartPolicy":       true, // logs: will an exited container restart?
+			"containers":          fields{"name": true},
+			"initContainers":      fields{"name": true, "restartPolicy": true}, // Always = sidecar
+			"ephemeralContainers": fields{"name": true},
 		},
 		"status": fields{
 			"phase": true, "reason": true, "message": true, "podIP": true, "startTime": true,
-			"conditions":            conditionKeep,
-			"containerStatuses":     containerStatusKeep,
-			"initContainerStatuses": containerStatusKeep,
+			"conditions":                 conditionKeep,
+			"containerStatuses":          containerStatusKeep,
+			"initContainerStatuses":      containerStatusKeep,
+			"ephemeralContainerStatuses": containerStatusKeep,
 		},
 	},
 	project: projectPod,
