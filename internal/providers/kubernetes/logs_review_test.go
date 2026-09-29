@@ -284,3 +284,30 @@ func TestGroupPartialBacklogIsNotReplayed(t *testing.T) {
 	assert.Equal(t, at(2).Truncate(time.Second), req.SinceTime.UTC())
 	require.NotNil(t, sk)
 }
+
+// Review P2-10: finished keys of pods that left the inventory are
+// forgotten (no growth over rollouts); a one-pod group ends with its pod.
+func TestGroupForgetsFinishedPodsAndEndsWithItsPod(t *testing.T) {
+	tr := &groupTracker{members: map[string]*memberPod{}, changed: make(chan struct{}), synced: true}
+	add := func(uid string) {
+		tr.mu.Lock()
+		tr.members[uid] = &memberPod{uid: uid, name: "p-" + uid, ctrs: []string{"app"}, box: syncedBox(runningObs(uid, "c"))}
+		tr.mu.Unlock()
+	}
+	add("a")
+	s := newSession("ctx", "h", fakeClient(), false)
+	t.Cleanup(s.Close)
+	g := &logGroup{s: s, ns: "ns", tr: tr, sink: &lockedSink{sink: newLogRecorder()}, channel: channelsFor(provider.ChannelAll, ""),
+		onePod: true, active: map[string]*groupSrc{}, finished: map[string]bool{"old/app": true, "a/app": true}}
+	_, _, err := g.admit(true)
+	require.NoError(t, err)
+	assert.Equal(t, map[string]bool{"a/app": true}, g.finished, "the key of a pod that is gone is dropped")
+	assert.False(t, g.over(), "its pod is still there")
+	tr.mu.Lock()
+	delete(tr.members, "a")
+	tr.mu.Unlock()
+	_, _, err = g.admit(true)
+	require.NoError(t, err)
+	assert.Empty(t, g.finished)
+	assert.True(t, g.over(), "all containers of a pod that is gone: the stream is complete")
+}
