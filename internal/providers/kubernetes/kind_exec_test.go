@@ -229,7 +229,7 @@ func TestKindTerminalClosingTheTabEndsTheShellAndItsChild(t *testing.T) {
 
 	eh, err := s.PrepareExec(context.Background(), ref, provider.ExecRequest{})
 	require.NoError(t, err)
-	id, err := reg.AddTerm(eh, provider.TermSize{Cols: 80, Rows: 24})
+	id, err := reg.AddTerm("term", eh, provider.TermSize{Cols: 80, Rows: 24})
 	require.NoError(t, err)
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
