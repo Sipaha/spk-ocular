@@ -5,7 +5,8 @@
 Go + Wails v3 + React. Спецификация: `docs/specs/2026-09-29-spk-ocular-design.md`.
 Планы: `docs/plans/`. Бэклог: `docs/backlog.md`.
 
-Статус: P0 (каркас) и P1 (ресурсы, детали, метрики) готовы — `docs/plans/`. Следующий — P2 (логи).
+Статус: P0 (каркас), P1 (ресурсы, детали, метрики) и P2 (логи) готовы — `docs/plans/`.
+Следующий — P3 (exec, port-forward).
 
 ## Сборка и тесты
 
@@ -16,7 +17,9 @@ Go + Wails v3 + React. Спецификация: `docs/specs/2026-09-29-spk-ocul
 - `make run` — `build-desktop` + запуск. `make run-browser` — UI на http://127.0.0.1:5190 (`PORT=`)
   с настоящим kubeconfig и `~/.spk/ocular`.
 - `make test` = `test-go` (`go test -race`) + `test-web` (vitest) + `test-e2e` (Playwright против
-  browser-режима с фикстурным `KUBECONFIG`/`HOME`/`SPK_OCULAR_HOME` в `tests/e2e/.run/`).
+  browser-режима с фикстурным `KUBECONFIG`/`HOME`/`SPK_OCULAR_HOME` в `tests/e2e/.run/`: два
+  конфига — `playwright.config.ts` и `playwright.logs.config.ts`, последний запускает
+  `--test-api --test-synthetic`: синтетический провайдер с логами, `POST /api/_test/logs/emit`).
 - `make lint` — go vet и golangci-lint (с тегами desktop и без) + eslint + tsc.
 - **`make check`** — гейт перед каждым коммитом: lint, все тесты, обе сборки.
 - `make pss PID=<pid>` — Private_Dirty/PSS процесса и его WebKit-детей (бюджет ~150 МБ Private_Dirty).
@@ -29,8 +32,10 @@ Go + Wails v3 + React. Спецификация: `docs/specs/2026-09-29-spk-ocul
   и Private_Dirty). Синтетика памяти кэша: `OCULAR_SYNTH=1 go test -run Synthetic -v ./internal/providers/kubernetes/`.
 - `SPK_OCULAR_KLOG=1` — вернуть логи client-go (klog) в stderr для отладки.
 - `E2E_BIN=<путь> E2E_PORT=<порт>` — e2e против другой browser-сборки.
-- Проверка desktop без экрана пользователя: `xvfb-run -a -s "-screen 0 1400x900x24" <скрипт>`,
-  окно ищется `xwininfo -root -tree | grep '"SPK Ocular"'`, снимок — `import -window root`.
+- Проверка desktop без экрана пользователя: `xvfb-run -a -s "-screen 0 1400x900x24" <скрипт>`
+  (или `Xvfb :77 &` + `DISPLAY=:77`), окно ищется `xwininfo -root -tree | grep '"SPK Ocular"'`,
+  снимок — `import -window root`, ввод — `scripts/xinput.py click X Y key l ctrl+s type TEXT`
+  (XTest через ctypes; xdotool в окружении нет). Окно без WM стоит в (60,40).
 
 ## Устройство (коротко)
 
@@ -49,6 +54,17 @@ Go + Wails v3 + React. Спецификация: `docs/specs/2026-09-29-spk-ocul
   (`watch.go`), сессия (`session.go`), кэши informers (`cache.go`, `slim.go`, `listwatch.go`),
   вид поверх кэша (`view_watch.go`), kinds (`kinds.go`, `kind_*.go`), детали и связи
   (`resource.go`), метрики (`metrics.go`).
+- `internal/streams` — потоки для UI (логи): реестр одноразовых id с owner-ом сессии, NDJSON-
+  писатель (коалесцирование, «толчок», heartbeat, дедлайн записи), обработчик с guard-ами
+  (токен в пути, Host, Origin), loopback-сервер desktop, сохранение файлов (`save`).
+  Клиентская половина — `web/src/logs/` (`useLogStream`, `ndjson`, `ansi`, `buffer`,
+  `useLogFilter` + `search.worker`, `LogViewport`/`logSelection` из SPK-launcher, `LogsDock`).
+- Логи Kubernetes: `logs.go` (LogInfo, StreamLogs, наблюдение pod-а), `logs_fetch.go` (`pods/log`
+  своим HTTP через транспорт client-go), `logs_reader.go` (ограниченный построчный читатель),
+  `logs_source.go` (источник: курсор, инкарнации, решения на EOF), `logs_members.go` (живой набор
+  pods группы), `logs_group.go` (агрегация, backlog-merge, лимиты); тесты — на фейковом kubelet-е
+  `logs_fake_test.go`.
+- `internal/providers/synthetic` — тестовый провайдер (`--test-api --test-synthetic`).
 - `internal/execshim` — shim для exec-плагинов kubeconfig (таймаут, смерть вместе с приложением).
 - `internal/store` — SQLite, миграции `migrations/NNNN_*.sql`, `ui_prefs`, `target_state`.
 - `internal/desktop` — Wails-окно, D-Bus probe, GPU policy. `cmd/spk-ocular` — cobra, режимы.
@@ -109,6 +125,24 @@ Go + Wails v3 + React. Спецификация: `docs/specs/2026-09-29-spk-ocul
 - Browser-режим отвечает только на loopback-`Host` (защита от DNS rebinding: `/` отдаёт токен). —
   `TestNonLoopbackHostIsRejected`.
 - `/api/_test/*` — только с `--test-api` и токеном. — `TestTestAPIOnlyWithFlagAndToken`.
+- Потоки к UI — только через `internal/streams` (loopback с токеном), никогда через `wails://`;
+  поток регистрируется под блокировкой сессий и завершается с ней (`gone` терминален, без
+  автопереоткрытия); reaper считает потоки использованием. — `TestLogStreamOfAClosedIncarnationIsGone`,
+  `TestSessionClosingEndsItsLogStreamsGone`, `TestSessionWithOnlyALogTabIsNotReaped`.
+- Origin/токен/метод проверяются до потребления id или записи файла; `save` требует Origin. —
+  `TestRejectionsDoNotConsumeTheStream`, `TestSaveNeedsAnAllowedOriginAndWritesUnique`.
+- Писатель потока после сброса, за которым тишина, шлёт `ping` через 100 мс (WebKitGTK иначе
+  придерживает хвост пачки). — `TestQuietStreamIsNudgedThenHeartbeats`, спайк.
+- Все слои логов ограничены по байтам и строкам (строка ≤ 256 КиБ, backlog вкладки 16 МиБ,
+  UI ≤ 50k строк и 16 М символов), срабатывание лимита видно пользователю. —
+  `TestLineReaderBounds`, `buffer.test.ts`.
+- Источник логов решает на EOF по **последнему** наблюдению pod-а (не ждёт «следующего события»),
+  продолжение той же инкарнации — `sinceTime` (секунды) + пропуск повтора по счёту строк с
+  проверкой меток; расхождение — `gap` (повтор лучше потери); новая инкарнация — с начала файла.
+  — `TestLogResumeSkipsTheReplayExactly`, `TestLogRestartSeenBeforeEOFOpensAtOnce`,
+  `TestLogFirstRequestBeforeTheCacheSynced`, kind `TestKindLogsFollowARestartingContainer`.
+- Regex-поиск в UI — только в Worker с бюджетом времени; plain и фильтр `*` — линейные. —
+  `match.test.ts` (`(a|aa)+$` убивает воркер).
 - Destructive-действия — только с подтверждением, в котором виден context/namespace/объект.
 - Версии `github.com/wailsapp/wails/v3` и `@wailsio/runtime` совпадают (сейчас `3.0.0-beta.26`).
 - `go build ./...` без тега `wails` обязан проходить: desktop-код за тегом.
@@ -161,6 +195,19 @@ Go + Wails v3 + React. Спецификация: `docs/specs/2026-09-29-spk-ocul
 - **Мёртвая/зависшая D-Bus**: GLib подключается без таймаута и окно не появляется. Probe 2 с и
   подмена `DBUS_SESSION_BUS_ADDRESS` (`internal/desktop/busprobe_linux.go`); проверено: окно за
   0,2 с при недоступной шине.
-- Кандидаты из соседей, ещё не встреченные здесь (spk-mm-client AGENTS.md): fetch с `Blob`/
-  `FormData`-телом через `wails://` роняет WebKitGTK; скрытое окно WebKitGTK копит rAF — потоки
-  (логи, exec) пойдут через loopback-сервер с токеном, не через `wails://`.
+- **WebKitGTK придерживает хвост пачки** стрима (20–60 КБ), пока не придут новые байты — и на
+  loopback HTTP, недетерминированно (~1 из 4). Лечится маленьким кадром через 100 мс.
+- **Origin desktop-страницы — `wails://localhost`** (не `wails://wails`); fetch к loopback без
+  точного `Access-Control-Allow-Origin` — `TypeError: Load failed`.
+- **`pods/log`**: `sinceTime` с долями секунды обрезается до секунды; `limitBytes` режет посреди
+  строки и считается от начала окна tail (не гарантирует свежие строки); `tailLines=0` — «ничего»;
+  метка — одна на логическую строку (продолжения частичных CRI-записей без неё).
+- **Числа в slim-кэше — `float64`** (JSON): `unstructured.NestedInt64` вернёт 0 — читать через `i64`.
+- **LIST разрешён, WATCH нет**: informer «синхронизируется» списком, но изменений не будет — судить
+  о здоровье кэша по транспорту, а не только по `HasSynced`.
+- **Логи группы**: тесты на kind меняют число реплик `chatter` — выбирать самый старый pod
+  (scale down удаляет новые).
+- **Hook окружения блокирует `pkill -f`/`pgrep -f` с шаблоном из той же команды** — останавливать
+  фоновые процессы по PID-файлу или через TaskStop.
+- Кандидат из соседей, ещё не встреченный здесь: fetch с `Blob`/`FormData`-телом через `wails://`
+  роняет WebKitGTK (сохранение логов в desktop — строковым телом на loopback).

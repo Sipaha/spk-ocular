@@ -1,7 +1,8 @@
 # SPK Ocular — лёгкий локальный просмотрщик инфраструктуры
 
-Дата: 2026-09-29. Статус: план утверждён пользователем 2026-09-29; P0 (каркас) и P1 (ресурсы,
-детали, метрики) реализованы и проверены на kind 2026-09-29 (`docs/plans/`); следующий — P2 (логи).
+Дата: 2026-09-29. Статус: план утверждён пользователем 2026-09-29; P0 (каркас), P1 (ресурсы,
+детали, метрики) и P2 (логи) реализованы и проверены на kind 2026-09-29 (`docs/plans/`);
+следующий — P3 (exec и port-forward).
 Решения приняты пользователем в переписке; документ фиксирует итог, а не варианты.
 
 ## Зачем
@@ -178,15 +179,28 @@ Wails-вызова (там `context.Background`); у каждой операци
 
 ### Потоки
 
-Логи и exec идут через loopback HTTP-сервер с токеном, а не через `wails://`: WebKitGTK
-падает на fetch с `Blob`-телом через `wails://`, WebView2 буферизует стримы (опыт
-spk-mm-client и SPK-launcher). Логи — chunked fetch, exec — WebSocket. В browser-режиме
-это тот же сервер.
+Логи (и в P3 — exec) идут через loopback HTTP-сервер с токеном, а не через `wails://`:
+WebKitGTK падает на fetch с `Blob`-телом через `wails://`, WebView2 буферизует стримы (опыт
+spk-mm-client и SPK-launcher). Реализовано в P2 (`internal/streams`):
+
+- Поток открывается в два шага: API `OpenLogStream(ref, query)` проверяет запрос и регистрирует
+  его под одноразовым id, привязанным к инкарнации сессии (TTL подключения 30 с, работа — только
+  после подключения); страница делает `GET <StreamBase>/logs/<id>`. Закрытие сессии завершает её
+  потоки кадром `end{gone}` (терминально: продолжение — явное «Открыть заново»); reaper сессий
+  считает открытые потоки использованием.
+- Desktop: `http://127.0.0.1:<случайный порт>/<токен>` (ленивый старт, точная проверка `Host`,
+  Origin страницы — ровно `wails://localhost`, ACAO только ему); browser-режим: тот же
+  обработчик под `/streams/<токен>/` основного сервера.
+- Кадры NDJSON (`source`, `lines`, `state`, `ready`, `ping`, `end`), коалесцирующий сброс
+  (50 мс / 32 КБ), дедлайн записи 60 с (не читающая страница отключается), «толчок» `ping`
+  через 100 мс после сброса и heartbeat 20 с: WebKitGTK иногда придерживает хвост пачки, пока
+  не придут новые байты (спайк `docs/spikes/2026-09-29-log-stream-desktop.md`).
+- Лимиты: ≤ 8 потоков на приложение, ≤ 64 одновременных запросов `pods/log`, ≤ 20
+  потоков-контейнеров на вкладку.
 
 ### Provider API
 
-Эскиз; окончательные сигнатуры фиксирует план P1. В P0 реализованы `Provider{ID, Title,
-Discover}` (возвращает `Discovery{Targets, Problems}`), `TargetWatcher`, `core.Target`.
+Сигнатуры реализованы в P0–P2 (`internal/provider`, `internal/core`); ниже — суть.
 
 ```go
 // Идентичность объекта. Kind квалифицирован (k8s: "apps/deployments", "pods"), чтобы CRD
@@ -199,48 +213,42 @@ type Ref struct {
 type ScopeSel struct { Mode ScopeMode; Name string } // ScopeAll | ScopeOne | ScopeNone
 
 type Health struct {                 // сводка = проблема с наивысшим приоритетом
-    State  HealthState               // OK|Progressing|Warning|Error|Terminating|Unknown
+    State  HealthState               // ok|progressing|warning|error|terminating|unknown
     Reason, Message string
-    Issues []Issue                   // упорядоченный список, внутренний источник для Problems
+    Issues []Issue
 }
 
-type Row struct {                    // компактная проекция для таблиц
+type Row struct {                    // неизменяемая проекция для таблиц
+    ID, Rev string                   // ID = UID (замена = delete+add); Rev = resourceVersion
     Ref    Ref
-    Cells  []Cell                    // типизированные значения по колонкам, null/unknown различимы
+    Cells  []Cell
     Health Health
-    Owners []Ref                     // навигация вверх
 }
 
-type Provider interface {
-    ID() string
-    Title() string
-    Discover(ctx context.Context) (Discovery, error)
-    Open(ctx context.Context, target string) (Session, error)
-}
+type Provider interface { ID() string; Title() string; Discover(ctx) (Discovery, error) }
+type Opener   interface { Open(ctx, target string) (Session, error) } // без сети
 
 type Session interface {
-    Kinds() []KindDescriptor
-    Scopes(ctx context.Context) ([]Scope, error)
-    // Watch отдаёт управляющие сообщения наравне с данными: Snapshot/Ready, Upsert,
-    // Delete, Status(stale|error+class), Closed. Асинхронные 403/обрывы — через Status.
-    Watch(ctx context.Context, q Query) (<-chan Delta, error)
-    Get(ctx context.Context, ref Ref) (*Resource, error) // полный объект; проверяет UID
-    Relations(ctx context.Context, ref Ref) ([]Relation, error) // {тип связи, Ref}, many-to-many
-    Close() error
+    ConfigHash() string
+    Kinds() []KindDescriptor          // KindDescriptor.Logs — у объектов kind-а есть логи
+    Scopes(ctx) ([]Scope, error)
+    ScopeKind() string                // kind, чьи строки — scopes (живой список)
+    // Watch: синхронный неблокирующий Sink; начальное состояние завершается
+    // Status{Ready}, дальше изменения; сбои — статусы stale/error с классом.
+    Watch(q Query, sink Sink) (stop func(), err error)
+    Get(ctx, ref Ref) (*Resource, error) // полный объект; UID сверяется
+    Close()
 }
 
-// Опциональные возможности — type assertion; но наличие интерфейса ≠ доступность для
-// конкретного объекта и прав: действия описываются дескрипторами на объект
-// (supported/available/unknown + причина), ошибка выполнения — авторитетна.
-type EventSource   interface { Events(ctx context.Context, ref Ref) (<-chan Event, error) }
-type LogSource     interface { Logs(ctx context.Context, t LogTarget, o LogOpts) (io.ReadCloser, error) }
-type Execer        interface { Exec(ctx context.Context, t ExecTarget, tty TTY) error }
-type PortForwarder interface { Forward(ctx context.Context, t ForwardTarget, local int) (Forward, error) }
-type MetricsSource interface { Metrics(ctx context.Context, q Query) (map[string]Usage, error) }
-type Actioner      interface {
-    Actions(ref Ref) []ActionDescriptor // id, title, params, Destructive, Availability
-    Do(ctx context.Context, ref Ref, action string, params map[string]any) error
+// Опциональные возможности — type assertion.
+type MetricsSource interface { Metrics(ctx, q Query) (Metrics, error) }
+type LogSource interface {
+    LogInfo(ctx, ref Ref) (LogInfo, error)   // каналы (контейнеры), default, агрегат, previous
+    // StreamLogs пишет в LogSink (Source/Lines/State/Ready; может блокировать —
+    // обратное давление) до ctx или конца; проблемы источников — состояния.
+    StreamLogs(ctx, ref Ref, q LogQuery, sink LogSink) error
 }
+// Впереди (P3/P4): Execer, PortForwarder, Actioner (дескрипторы действий на объект).
 ```
 
 Структурированные ошибки API: `forbidden`, `unavailable`, `gone`, `conflict`,
@@ -391,7 +399,14 @@ relist); медленные inspect — в ограниченном пуле с 
   ConfigMaps, после 13 быстрых переходов 30 МБ (2 активных + 8 неактивных кэшей), после смены
   context и простоя — 11 МБ; desktop с открытой таблицей 3k pods — 148 МБ Private_Dirty всех
   процессов (Go 53, WebProcess 95, Network 7), окно 0,21 с.
-- **P2** — логи.
+- **P2** ✅ — логи: pod (контейнер/все, previous, since, tail), агрегат workload-а (живой набор
+  pods по UID контроллера, merge backlog-а по времени, ≤ 20 потоков-контейнеров), переживает
+  рестарты контейнера (курсор на инкарнацию, пропуск повтора по счёту строк) и rollout; вьюер —
+  порт SPK-launcher (виртуализация, follow, выделение) + ANSI, уровни, поиск (regex в Worker
+  с бюджетом времени), префиксы источников, сохранение; нижняя панель вкладок. Проверено на
+  kind (рестарт без дублей, scale up/down, RBAC без `pods/log` и без watch pods) и в desktop
+  под Xvfb: 50 000 строк — 143 МБ Private_Dirty всех процессов, 5 циклов открыть/закрыть —
+  плато ~140 МБ (Go ~41, WebProcess ~90).
 - **P3** — exec и port-forward.
 - **P4** — действия restart/scale/delete с подтверждениями.
 - **P5** — Problems, палитра, клавиатурная навигация, полировка, soak-замер памяти.
