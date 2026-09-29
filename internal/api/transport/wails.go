@@ -7,6 +7,7 @@ import (
 
 	"github.com/spk/spk-ocular/internal/api"
 	"github.com/spk/spk-ocular/internal/core"
+	"github.com/spk/spk-ocular/internal/forwards"
 	"github.com/spk/spk-ocular/internal/views"
 )
 
@@ -73,5 +74,15 @@ func (w *API) ReopenTerminal(req api.ReopenTerminalRequest) (api.TerminalInfo, e
 }
 func (w *API) ForgetTerminal(terminalID string) error {
 	return w.a.ForgetTerminal(context.Background(), terminalID)
+}
+func (w *API) ForwardInfo(ref core.Ref) (core.ForwardInfo, error) {
+	return w.a.ForwardInfo(context.Background(), ref)
+}
+func (w *API) StartForward(req api.StartForwardRequest) (forwards.Info, error) {
+	return w.a.StartForward(context.Background(), req)
+}
+func (w *API) StopForward(id string) error { return w.a.StopForward(context.Background(), id) }
+func (w *API) ListForwards() ([]forwards.Info, error) {
+	return w.a.ListForwards(context.Background())
 }
 func (w *API) StreamBase() (string, error) { return w.a.StreamBase(context.Background()) }

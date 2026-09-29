@@ -1,5 +1,5 @@
 import { Call, Events } from '@wailsio/runtime'
-import type { ApiEvent, AppInfo, EventType, ExecInfo, KindDescriptor, LogInfo, LogQuery, LogStreamInfo, MetricsView, Page, Query, Ref, Resource, ScopesView, TargetsView, TerminalInfo, TerminalRequest, ViewInfo } from './types'
+import type { ApiEvent, AppInfo, EventType, ExecInfo, KindDescriptor, LogInfo, LogQuery, LogStreamInfo, MetricsView, Page, Query, Ref, Resource, ScopesView, TargetsView, TerminalInfo, TerminalRequest, ViewInfo, ForwardInfo, StartForwardRequest, Tunnel } from './types'
 
 export class ApiError extends Error {
   constructor(
@@ -40,6 +40,12 @@ export interface Client {
   reopenTerminal(terminalId: string, cols: number, rows: number): Promise<TerminalInfo>
   /** The terminal's tab closed. */
   forgetTerminal(terminalId: string): Promise<void>
+  forwardInfo(ref: Ref): Promise<ForwardInfo>
+  /** Listens on loopback and connects once; a failed first connect rejects (conflict: the local port is taken). */
+  startForward(req: StartForwardRequest): Promise<Tunnel>
+  stopForward(id: string): Promise<void>
+  /** Reload on 'forwards_changed'. */
+  listForwards(): Promise<Tunnel[]>
   /** Desktop: a loopback URL with a token; browser: a path on this server. */
   streamBase(): Promise<string>
   subscribeEvents(onEvent: (e: ApiEvent) => void): () => void
@@ -87,6 +93,10 @@ export const httpClient: Client = {
   openTerminal: (req) => post('OpenTerminal', req),
   reopenTerminal: (terminalId, cols, rows) => post('ReopenTerminal', { terminalId, cols, rows }),
   forgetTerminal: (terminalId) => done(post('ForgetTerminal', { terminalId })),
+  forwardInfo: (ref) => post('ForwardInfo', ref),
+  startForward: (req) => post('StartForward', req),
+  stopForward: (id) => done(post('StopForward', { id })),
+  listForwards: () => post('ListForwards', {}),
   streamBase: () => post('StreamBase', {}),
   subscribeEvents(onEvent) {
     const es = new EventSource(`/api/events?token=${encodeURIComponent(tokenMeta())}`)
@@ -115,7 +125,7 @@ async function wcall<T>(method: string, ...args: unknown[]): Promise<T> {
   }
 }
 
-const EVENT_TYPES: EventType[] = ['targets_changed', 'resync', 'view_changed']
+const EVENT_TYPES: EventType[] = ['targets_changed', 'resync', 'view_changed', 'forwards_changed']
 
 export const wailsClient: Client = {
   appInfo: () => wcall('AppInfo'),
@@ -137,6 +147,10 @@ export const wailsClient: Client = {
   openTerminal: (req) => wcall('OpenTerminal', req),
   reopenTerminal: (terminalId, cols, rows) => wcall('ReopenTerminal', { terminalId, cols, rows }),
   forgetTerminal: (terminalId) => wcall('ForgetTerminal', terminalId),
+  forwardInfo: (ref) => wcall('ForwardInfo', ref),
+  startForward: (req) => wcall('StartForward', req),
+  stopForward: (id) => wcall('StopForward', id),
+  listForwards: () => wcall('ListForwards'),
   streamBase: () => wcall('StreamBase'),
   subscribeEvents(onEvent) {
     const offs = EVENT_TYPES.map((type) =>

@@ -13,6 +13,7 @@ import (
 
 	"github.com/spk/spk-ocular/internal/core"
 	"github.com/spk/spk-ocular/internal/events"
+	"github.com/spk/spk-ocular/internal/forwards"
 	"github.com/spk/spk-ocular/internal/provider"
 	"github.com/spk/spk-ocular/internal/store"
 	"github.com/spk/spk-ocular/internal/streams"
@@ -38,6 +39,7 @@ type Service struct {
 	streams    *streams.Registry
 	streamBase func() (string, error)
 	terms      termProtos
+	fwd        *forwards.Manager
 
 	sessMu   sync.Mutex
 	sessions map[string]*sessionEntry // by ownerKey
@@ -52,7 +54,7 @@ type Service struct {
 var _ API = (*Service)(nil)
 
 func NewService(reg *provider.Registry, st *store.Store, em *events.Emitter, o Options) *Service {
-	return &Service{reg: reg, store: st, em: em, opts: o, views: views.NewManager(em), streams: streams.NewRegistry(), sessions: map[string]*sessionEntry{}, now: time.Now}
+	return &Service{reg: reg, store: st, em: em, opts: o, views: views.NewManager(em), streams: streams.NewRegistry(), fwd: newForwards(em), sessions: map[string]*sessionEntry{}, now: time.Now}
 }
 
 // Start begins watching local configuration of providers that support it.
@@ -87,6 +89,7 @@ func (s *Service) Close() {
 	s.views.CloseAll()
 	s.streams.Close()
 	s.terms.closeAll()
+	s.fwd.Close()
 	s.sessMu.Lock()
 	if s.reaper != nil {
 		s.reaper.Stop()
@@ -227,6 +230,8 @@ func (s *Service) Stats() map[string]any {
 		"views":      views,
 		"streams":    s.streams.Count(streams.KindLogs),
 		"terminals":  s.streams.Count(streams.KindTerm),
+		"forwards":   s.fwd.Len(),
+		"fwd_conns":  s.fwd.Conns(),
 		"goroutines": runtime.NumGoroutine(),
 		"heap_inuse": ms.HeapInuse,
 		"heap_alloc": ms.HeapAlloc,

@@ -162,6 +162,20 @@ func (h *HTTP) routes() {
 	}) (any, error) {
 		return nil, h.api.ForgetTerminal(ctx, r.TerminalID)
 	}))
+	h.mux.HandleFunc("POST /api/ForwardInfo", handle(func(ctx context.Context, r *core.Ref) (any, error) {
+		return h.api.ForwardInfo(ctx, *r)
+	}))
+	h.mux.HandleFunc("POST /api/StartForward", handle(func(ctx context.Context, r *api.StartForwardRequest) (any, error) {
+		return h.api.StartForward(ctx, *r)
+	}))
+	h.mux.HandleFunc("POST /api/StopForward", handle(func(ctx context.Context, r *struct {
+		ID string `json:"id"`
+	}) (any, error) {
+		return nil, h.api.StopForward(ctx, r.ID)
+	}))
+	h.mux.HandleFunc("POST /api/ListForwards", handle(func(ctx context.Context, _ *struct{}) (any, error) {
+		return h.api.ListForwards(ctx)
+	}))
 	h.mux.HandleFunc("POST /api/StreamBase", handle(func(ctx context.Context, _ *struct{}) (any, error) {
 		return h.api.StreamBase(ctx)
 	}))

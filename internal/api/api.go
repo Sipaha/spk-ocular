@@ -10,6 +10,7 @@ import (
 
 	"github.com/spk/spk-ocular/internal/core"
 	"github.com/spk/spk-ocular/internal/events"
+	"github.com/spk/spk-ocular/internal/forwards"
 	"github.com/spk/spk-ocular/internal/provider"
 	"github.com/spk/spk-ocular/internal/views"
 )
@@ -64,6 +65,15 @@ type API interface {
 	ReopenTerminal(ctx context.Context, req ReopenTerminalRequest) (TerminalInfo, error)
 	// ForgetTerminal: the terminal's tab closed.
 	ForgetTerminal(ctx context.Context, terminalID string) error
+	// ForwardInfo: the ports of an object that can be forwarded.
+	ForwardInfo(ctx context.Context, ref core.Ref) (core.ForwardInfo, error)
+	// StartForward starts a tunnel (owned by the app, not the session):
+	// listens on loopback and connects once; a failed first connect is the
+	// call's error.
+	StartForward(ctx context.Context, req StartForwardRequest) (forwards.Info, error)
+	StopForward(ctx context.Context, id string) error
+	// ListForwards: the tunnels (EventForwardsChanged says when to reload).
+	ListForwards(ctx context.Context) ([]forwards.Info, error)
 	// StreamBase: where streams are served (desktop: a loopback URL with a
 	// token; browser: a path on this server).
 	StreamBase(ctx context.Context) (string, error)
@@ -146,7 +156,7 @@ const (
 	CodeNotFound    = "not_found"
 	CodeGone        = "gone"
 	CodeUnsupported = "unsupported"
-	// CodeLimit: too many open streams.
+	// CodeLimit: too many open streams or tunnels.
 	CodeLimit = "limit"
 )
 

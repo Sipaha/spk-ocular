@@ -47,8 +47,9 @@ export interface AppInfo {
 /**
  * resync: the UI fell behind the backend's events; reload all state.
  * view_changed: {viewId, version} — pull; {viewId, gone: true} — reopen.
+ * forwards_changed: the tunnels changed (counters at most once a second); call listForwards.
  */
-export type EventType = 'targets_changed' | 'resync' | 'view_changed'
+export type EventType = 'targets_changed' | 'resync' | 'view_changed' | 'forwards_changed'
 
 export interface ApiEvent {
   type: EventType
@@ -270,6 +271,8 @@ export interface LiveTarget {
   ref: Ref
   instance?: string
   channel?: string
+  /** the remote port of a tunnel */
+  port?: number
   command?: string[]
 }
 
@@ -289,4 +292,57 @@ export interface TerminalInfo {
   /** WebSocket to <streamBase as ws:>/term/<streamId> once, within 30 s. */
   streamId: string
   target: LiveTarget
+}
+
+// ---- tunnels (internal/core ForwardInfo, internal/forwards Info)
+
+export interface ForwardPort {
+  port: number
+  name?: string
+  protocol: string
+  /** where it leads, human-readable */
+  note?: string
+  /** 'http' | 'https' when the port is known to speak it: offer "Open" */
+  scheme?: string
+  supported: boolean
+  reason?: string
+}
+
+export interface ForwardInfo {
+  ports: ForwardPort[]
+  /** a port that is not listed can be forwarded too (a Pod) */
+  anyPort?: boolean
+  /** nothing can be forwarded, and why */
+  unsupported?: string
+}
+
+export interface StartForwardRequest {
+  ref: Ref
+  port: number
+  /** 0/absent: the remote port when ≥ 1024 and free, otherwise any */
+  localPort?: number
+  scheme?: string
+}
+
+export type ForwardState = 'connecting' | 'ready' | 'idle' | 'error'
+
+export interface Tunnel {
+  id: string
+  target: LiveTarget
+  localPort: number
+  /** actual addresses: 127.0.0.1:<port> and [::1]:<port> when ours */
+  addresses: string[]
+  ipv6: 'ok' | 'busy' | 'unavailable'
+  ipv6Detail?: string
+  scheme?: string
+  state: ForwardState
+  upstream?: string
+  conns: number
+  served: number
+  rejected: number
+  failed: number
+  bytesIn: number
+  bytesOut: number
+  lastError?: { class: string; message: string; at: string }
+  started: string
 }
