@@ -56,6 +56,10 @@ const errText = (e: unknown) => (e instanceof Error ? e.message : String(e))
 export function actions(client: Client) {
   let inFlight = false
   let again = false
+  // Selection writes are serialized, collapsing to the latest choice: two
+  // quick clicks must not persist A after B because A's request was slower.
+  let selecting = false
+  let nextSelect: TargetRef | null = null
 
   async function reload() {
     if (inFlight) {
@@ -90,10 +94,21 @@ export function actions(client: Client) {
     reload,
     async select(ref: TargetRef) {
       useStore.setState({ cursor: targetKey(ref), actionError: null })
+      nextSelect = { provider: ref.provider, id: ref.id }
+      if (selecting) return
+      selecting = true
       try {
-        await client.selectTarget(ref.provider, ref.id)
-      } catch (e) {
-        useStore.setState({ actionError: errText(e) })
+        while (nextSelect) {
+          const r = nextSelect
+          nextSelect = null
+          try {
+            await client.selectTarget(r.provider, r.id)
+          } catch (e) {
+            useStore.setState({ actionError: errText(e) })
+          }
+        }
+      } finally {
+        selecting = false
       }
       await reload()
     },

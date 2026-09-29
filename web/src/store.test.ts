@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { actions, initialState, useStore, visibleTargets } from './store'
 import { fakeClient, k8s } from './test/fakeClient'
 
@@ -15,6 +15,30 @@ describe('store', () => {
     expect(useStore.getState().cursor).toBe('kubernetes/b')
   })
 
+  it('serializes selection writes, the last click wins', async () => {
+    const f = fakeClient([k8s('a'), k8s('b'), k8s('c')])
+    const act = actions(f.client)
+    await act.init()
+    const order: string[] = []
+    let releaseFirst!: () => void
+    const firstDone = new Promise<void>((r) => (releaseFirst = r))
+    const sel = f.client.selectTarget as ReturnType<typeof vi.fn>
+    const real = sel.getMockImplementation() as (p: string, id: string) => Promise<void>
+    sel.mockImplementation(async (p: string, id: string) => {
+      order.push(`start ${id}`)
+      if (id === 'a') await firstDone // the first write is slow
+      await real(p, id)
+      order.push(`end ${id}`)
+    })
+    const pa = act.select({ provider: 'kubernetes', id: 'a' })
+    void act.select({ provider: 'kubernetes', id: 'b' })
+    void act.select({ provider: 'kubernetes', id: 'c' })
+    releaseFirst()
+    await pa
+    expect(order).toEqual(['start a', 'end a', 'start c', 'end c'])
+    expect(useStore.getState().view?.selected).toEqual({ provider: 'kubernetes', id: 'c' })
+  })
+
   it('reports a failed selection without losing the list', async () => {
     const f = fakeClient([k8s('a')])
     const act = actions(f.client)
@@ -28,12 +52,12 @@ describe('store', () => {
     const f = fakeClient([k8s('a')])
     const act = actions(f.client)
     await act.init()
-    const calls = (f.client.listTargets as ReturnType<typeof import('vitest').vi.fn>).mock.calls.length
+    const calls = (f.client.listTargets as ReturnType<typeof vi.fn>).mock.calls.length
     const p = act.reload()
     void act.reload()
     void act.reload()
     await p
-    expect((f.client.listTargets as ReturnType<typeof import('vitest').vi.fn>).mock.calls.length - calls).toBe(2)
+    expect((f.client.listTargets as ReturnType<typeof vi.fn>).mock.calls.length - calls).toBe(2)
   })
 
   it('filters by title and subtitle, moving the cursor into the result', async () => {
