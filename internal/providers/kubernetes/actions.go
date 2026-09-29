@@ -222,14 +222,16 @@ func (s *session) write(ctx context.Context, def *kindDef, run provider.ActionRu
 		err := wr.patch(ctx, def.gvr, ns, u.GetName(), types.MergePatchType, patch, "")
 		return name + ": restart requested", err
 	case actScale.ID:
+		// The count shown was checked by Expect on this read; its version
+		// pins it: a stale version or another UID is a 409 (kind). Not a
+		// JSON Patch test: its failure is a bare 422, indistinguishable
+		// from a validation refusal.
 		m := *run.Params.Count
-		patch, _ := json.Marshal([]map[string]any{
-			{"op": "test", "path": "/metadata/uid", "value": u.GetUID()},
-			{"op": "test", "path": "/metadata/resourceVersion", "value": u.GetResourceVersion()},
-			{"op": "test", "path": "/spec/replicas", "value": replicas(u.Object)},
-			{"op": "replace", "path": "/spec/replicas", "value": m},
+		patch, _ := json.Marshal(map[string]any{
+			"metadata": map[string]any{"uid": u.GetUID(), "resourceVersion": u.GetResourceVersion()},
+			"spec":     map[string]any{"replicas": m},
 		})
-		err := wr.patch(ctx, def.gvr, ns, u.GetName(), types.JSONPatchType, patch, "scale")
+		err := wr.patch(ctx, def.gvr, ns, u.GetName(), types.MergePatchType, patch, "scale")
 		return fmt.Sprintf("%s: scale %d → %d requested", name, replicas(u.Object), m), err
 	case actDelete.ID:
 		uid, rv, bg := u.GetUID(), u.GetResourceVersion(), metav1.DeletePropagationBackground
@@ -261,8 +263,8 @@ func (s *session) failedWrite(ctx context.Context, def *kindDef, run provider.Ac
 		class, msg := classify(err)
 		return false, &provider.Error{Class: class, Message: msg}
 	}
-	// 409 (a precondition) or 422 (a failed JSON Patch test, an immutable
-	// UID, or plain validation): look again to tell which.
+	// 409 (a failed precondition) or 422 (an immutable UID, validation,
+	// admission): look again to tell which.
 	now, gerr := s.getConfirmed(ctx, run.Ref)
 	switch {
 	case gerr != nil:
@@ -273,9 +275,9 @@ func (s *session) failedWrite(ctx context.Context, def *kindDef, run provider.Ac
 		return false, gerr
 	case actionExpect(def, run.Action, run.Params, now) != run.Expect:
 		return false, &provider.Error{Class: provider.ClassConflict, Message: fmt.Sprintf("%s %s changed since the action was reviewed; review it again", singular(def), was.GetName())}
-	case now.GetResourceVersion() != was.GetResourceVersion() && (apierrors.IsConflict(err) || run.Action == actScale.ID):
-		// A failed precondition (409; a scale's failed JSON Patch test is
-		// 422) at a moved version: retry. Other refusals stay refusals.
+	case now.GetResourceVersion() != was.GetResourceVersion() && apierrors.IsConflict(err):
+		// A failed precondition at a moved version: retry. Other refusals
+		// stay refusals.
 		return true, &provider.Error{Class: provider.ClassConflict, Message: fmt.Sprintf("%s %s keeps changing; try again", singular(def), was.GetName())}
 	case apierrors.IsConflict(err):
 		return false, &provider.Error{Class: provider.ClassConflict, Message: statusMessage(err)}

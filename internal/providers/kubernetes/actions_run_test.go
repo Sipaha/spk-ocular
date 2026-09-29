@@ -109,17 +109,19 @@ func TestRestartPatchesTheTemplateOfThatObjectOnly(t *testing.T) {
 	assert.Len(t, body.Spec.Template.Metadata.Annotations, 1, "a merge patch: other annotations are left alone")
 }
 
-func TestScaleTestsIdentityVersionAndTheCountItWasShown(t *testing.T) {
+// A merge patch of /scale with the object's UID and version: a stale version
+// or another UID is a 409 (kind), which alone is retried — a failed JSON Patch
+// test is a bare 422 that cannot be told from a validation refusal.
+func TestScaleIsAMergePatchWithIdentityAndVersion(t *testing.T) {
 	s, c := actionSession(t, workload("Deployment", "web", "uid-web", "7", map[string]any{"replicas": int64(2)}))
 	_, err := s.RunAction(context.Background(), provider.ActionRun{Ref: deployWebRef, Action: "scale", Params: count(5), Expect: expectNow(t, s, deployWebRef, "scale", count(5))})
 	require.NoError(t, err)
 	w := writes(c)
 	require.Len(t, w, 1)
 	p := w[0].(k8stesting.PatchAction)
-	assert.Equal(t, types.JSONPatchType, p.GetPatchType())
+	assert.Equal(t, types.MergePatchType, p.GetPatchType())
 	assert.Equal(t, "scale", p.GetSubresource())
-	assert.JSONEq(t, `[{"op":"test","path":"/metadata/uid","value":"uid-web"},{"op":"test","path":"/metadata/resourceVersion","value":"7"},
-		{"op":"test","path":"/spec/replicas","value":2},{"op":"replace","path":"/spec/replicas","value":5}]`, string(p.GetPatch()))
+	assert.JSONEq(t, `{"metadata":{"uid":"uid-web","resourceVersion":"7"},"spec":{"replicas":5}}`, string(p.GetPatch()))
 }
 
 func TestDeleteHasUIDAndVersionPreconditionsAndCascadesInTheBackground(t *testing.T) {
@@ -226,7 +228,7 @@ func TestAVersionOnlyChangeIsRetried(t *testing.T) {
 	}{
 		{"delete", "delete", conflict409, core.ActionParams{}},
 		{"restart", "patch", conflict409, core.ActionParams{}},
-		{"scale", "patch", invalid422, count(4)}, // a failed JSON Patch test
+		{"scale", "patch", conflict409, count(4)},
 	} {
 		t.Run(c.action, func(t *testing.T) {
 			s, cl := actionSession(t, workload("Deployment", "web", "uid-web", "7", map[string]any{"replicas": int64(2)}))
@@ -246,14 +248,14 @@ func TestAFailedWriteIsClassifiedByLookingAgain(t *testing.T) {
 		mutate func(t *testing.T, c *dynamicfake.FakeDynamicClient) func()
 		class  provider.ErrorClass
 	}{
-		"replaced between read and write": {invalid422, func(t *testing.T, c *dynamicfake.FakeDynamicClient) func() {
+		"replaced between read and write": {conflict409, func(t *testing.T, c *dynamicfake.FakeDynamicClient) func() {
 			return func() {
 				require.NoError(t, c.Tracker().Delete(deployGVR, "ns", "web"))
 				require.NoError(t, c.Tracker().Create(deployGVR, workload("Deployment", "web", "uid-new", "1", map[string]any{"replicas": int64(2)}), "ns"))
 			}
 		}, provider.ClassGone},
 		"deleted between read and write": {apierrors.NewNotFound(schema.GroupResource{Group: "apps", Resource: "deployments"}, "web"), nil, provider.ClassGone},
-		"replicas changed between read and write": {invalid422, func(t *testing.T, c *dynamicfake.FakeDynamicClient) func() {
+		"replicas changed between read and write": {conflict409, func(t *testing.T, c *dynamicfake.FakeDynamicClient) func() {
 			return bumpVersion(t, c, deployGVR, "web", "8", func(u *unstructured.Unstructured) {
 				_ = unstructured.SetNestedField(u.Object, int64(6), "spec", "replicas")
 			})
@@ -290,15 +292,21 @@ func TestVersionRetriesAreBounded(t *testing.T) {
 	assert.Equal(t, maxVersionRetries+1, *calls)
 }
 
-// Only a failed precondition may be retried: a 409, or a 422 of a scale's
-// JSON Patch test. A validation refusal of a merge patch is kept even when
-// the version moved meanwhile.
+// Only a failed precondition (409) may be retried. A validation or
+// admission refusal (422) is kept even when the version moved meanwhile.
 func TestAValidationRefusalIsNotRetriedEvenWhenTheVersionMoved(t *testing.T) {
-	s, cl := actionSession(t, workload("Deployment", "web", "uid-web", "7", map[string]any{"replicas": int64(2)}))
-	calls := failWrite(cl, "patch", 5, bumpVersion(t, cl, deployGVR, "web", "8", func(u *unstructured.Unstructured) {
-		_ = unstructured.SetNestedField(u.Object, int64(1), "status", "readyReplicas")
-	}), invalid422)
-	_, err := s.RunAction(context.Background(), provider.ActionRun{Ref: deployWebRef, Action: "restart", Expect: expectNow(t, s, deployWebRef, "restart", core.ActionParams{})})
-	assertClass(t, err, provider.ClassInvalid)
-	assert.Equal(t, 1, *calls)
+	for _, c := range []struct {
+		action string
+		params core.ActionParams
+	}{{"restart", core.ActionParams{}}, {"scale", count(4)}} {
+		t.Run(c.action, func(t *testing.T) {
+			s, cl := actionSession(t, workload("Deployment", "web", "uid-web", "7", map[string]any{"replicas": int64(2)}))
+			calls := failWrite(cl, "patch", 5, bumpVersion(t, cl, deployGVR, "web", "8", func(u *unstructured.Unstructured) {
+				_ = unstructured.SetNestedField(u.Object, int64(1), "status", "readyReplicas")
+			}), invalid422)
+			_, err := s.RunAction(context.Background(), provider.ActionRun{Ref: deployWebRef, Action: c.action, Params: c.params, Expect: expectNow(t, s, deployWebRef, c.action, c.params)})
+			assertClass(t, err, provider.ClassInvalid)
+			assert.Equal(t, 1, *calls)
+		})
+	}
 }

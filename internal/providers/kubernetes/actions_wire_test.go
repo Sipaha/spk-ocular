@@ -142,3 +142,29 @@ func TestAProvenVersionOnlyConflictIsStillRetriedOnTheWire(t *testing.T) {
 	assert.Equal(t, 2, ws.writes)
 	assert.Equal(t, 1, ws.applied)
 }
+
+// A validation or admission refusal (422) stays a refusal even when the
+// version moved meanwhile (unrelated status churn): no second write.
+func TestARefusalIsNotRetriedOnTheWireEvenWhenTheVersionMoved(t *testing.T) {
+	for _, a := range []struct {
+		action string
+		p      core.ActionParams
+	}{{"restart", core.ActionParams{}}, {"scale", count(3)}} {
+		t.Run(a.action, func(t *testing.T) {
+			ws := &wireServer{obj: workload("Deployment", "web", "uid-web", "1", map[string]any{"replicas": int64(2)})}
+			ws.reply = func(n int, w http.ResponseWriter) (bool, bool) {
+				if n == 1 {
+					ws.obj.SetResourceVersion("2") // status churn
+					statusReply(w, http.StatusUnprocessableEntity, "Invalid", false)
+					return false, true
+				}
+				return true, false
+			}
+			s := wireSession(t, ws)
+			_, err := s.RunAction(context.Background(), provider.ActionRun{Ref: deployWebRef, Action: a.action, Params: a.p, Expect: actionExpect(deploymentsKind, a.action, a.p, ws.obj)})
+			assertClass(t, err, provider.ClassInvalid)
+			assert.Equal(t, 1, ws.writes)
+			assert.Equal(t, 0, ws.applied)
+		})
+	}
+}

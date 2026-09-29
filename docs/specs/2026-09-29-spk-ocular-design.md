@@ -389,8 +389,8 @@ relist); медленные inspect — в ограниченном пуле с 
    после подтверждения отправляет план обратно с `ConfigRev` target-а. `RunAction` перечитывает
    объект строго по UID, сверяет `Expect` (изменились replicas/политика PVC/пауза — `conflict`,
    «Проверить заново») и пишет с предусловиями UID + `resourceVersion`: restart — merge patch
-   `kubectl.kubernetes.io/restartedAt` (RFC3339Nano), scale — JSON Patch subresource `scale` с
-   `test`, delete — `Preconditions{UID, RV}` + фоновый каскад. Повтор (≤ 3) — только когда
+   `kubectl.kubernetes.io/restartedAt` (RFC3339Nano), scale — merge patch subresource `scale` с
+   UID + `resourceVersion`, delete — `Preconditions{UID, RV}` + фоновый каскад. Повтор (≤ 3) — только когда
    перечитывание доказывает, что записи не было (тот же UID и `Expect`, другая версия), и
    только отказ предусловия; запись — один HTTP-запрос без встроенных повторов client-go.
    Неоднозначный ответ (5xx, таймаут, шлюз, обрыв, в т. ч. транспорта UI) — `unknown`

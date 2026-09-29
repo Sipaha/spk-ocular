@@ -224,7 +224,8 @@ Go + Wails v3 + React. Спецификация: `docs/specs/2026-09-29-spk-ocul
   `Expect` — `conflict` без записи; запись — с предусловиями UID + `resourceVersion`. —
   `internal/api/actions_test.go`, `TestKindActionOnAnObjectReplacedBetweenReadAndWrite`,
   `TestKindActionReplicasChangedAfterThePlanIsAConflict`.
-- Повтор записи — только при отказе предусловия (409; у scale — 422 провала `test`) и только
+- Повтор записи — только при отказе предусловия (409 — не 422: провал JSON Patch `test` не
+  отличим от отказа валидации, поэтому scale — merge patch `/scale` с uid+RV) и только
   когда перечитывание доказало, что записи не было (тот же UID и `Expect`, другая версия), ≤ 3.
   Запись действия — ровно один HTTP-запрос: `restWriter` (`actions_writer.go`) с
   `MaxRetries(0)`, не dynamic client (client-go сам переотправляет ответы 5xx/429 с
