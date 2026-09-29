@@ -4,6 +4,7 @@ import { t } from '../i18n'
 import { inTerminal, isShortcut } from '../keyboard'
 import { type Actions, matchesFilter, targetKey, useStore } from '../store'
 import { EyeIcon, HelmWheelIcon, SearchIcon, WarningIcon } from './icons'
+import { openPalette } from '../palette/store'
 
 /**
  * "/" by the physical key (on a Russian layout it types "."), or by the
@@ -71,6 +72,14 @@ export function Sidebar({ act }: { act: Actions }) {
       <div className="flex items-center gap-2 px-4 pt-4 pb-3">
         <EyeIcon className="h-5 w-5 text-accent" />
         <span className="text-[15px] font-semibold tracking-tight">SPK Ocular</span>
+        <button
+          className="ml-auto rounded border border-line px-1.5 py-0.5 text-[11px] text-fg-subtle hover:bg-hover hover:text-fg"
+          onClick={openPalette}
+          title={t('palette.label')}
+          aria-label={`${t('palette.label')} (Ctrl+K)`}
+        >
+          Ctrl+K
+        </button>
       </div>
       <label className="mx-3 mb-2 flex items-center gap-2 rounded-md border border-line bg-app px-2 py-1.5 focus-within:border-accent">
         <SearchIcon className="h-3.5 w-3.5 text-fg-subtle" />

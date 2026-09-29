@@ -13,8 +13,15 @@ import { TargetDetails } from './TargetDetails'
 import { SearchIcon, WarningIcon } from './icons'
 import { dock } from '../dock/store'
 import { TerminalDialog } from '../term/TerminalDialog'
+import { lend, type PaletteHost } from '../palette/store'
 
 const OVERVIEW = '__overview'
+
+/** A request from the palette to the page: applied once, by seq. */
+interface PageReq<T> {
+  value: T
+  seq: number
+}
 
 interface UIState {
   kind: string
@@ -49,12 +56,20 @@ export function Workspace({ client, hub, target }: { client: Client; hub: ViewHu
   const kind = ui?.kind ?? 'pods'
   const scope: ScopeSel = ui?.scope ?? { mode: 'all' }
   const remember = (next: UIState) => {
+    // Navigation drops the palette's requests: they were for the page it opened.
+    setFilterReq(null)
+    setOpenReq(null)
     setUI(next)
     void client.setTargetState(target.provider, target.id, 'kind', JSON.stringify(next.kind)).catch(() => {})
     void client.setTargetState(target.provider, target.id, 'scope', JSON.stringify(next.scope)).catch(() => {})
   }
   const setKind = (k: string) => remember({ kind: k, scope })
   const setScope = (s: ScopeSel) => remember({ kind, scope: s })
+  // Palette requests to the page (a filter for its table, an object to open);
+  // the page applies each once (by seq).
+  const [filterReq, setFilterReq] = useState<PageReq<string> | null>(null)
+  const [openReq, setOpenReq] = useState<PageReq<Ref> | null>(null)
+  const reqSeq = useRef(0)
 
   // Tabs live in the dock above this (keyed) Workspace: log tabs close when
   // another target is selected, terminals stay.
@@ -108,6 +123,37 @@ export function Workspace({ client, hub, target }: { client: Client; hub: ViewHu
   }, [kinds])
   const current = kinds?.find((k) => k.id === kind)
 
+  // The palette acts through the latest state of this workspace.
+  const paletteActs = useRef<Pick<PaletteHost, 'openKind' | 'setScope' | 'openObject'> | null>(null)
+  useEffect(() => {
+    paletteActs.current = {
+      openKind: (k, filter) => {
+        if (k !== kind) setKind(k)
+        setFilterReq({ value: filter, seq: ++reqSeq.current })
+      },
+      setScope,
+      openObject: (ref) => {
+        // The overview has no table to open details over: the object's kind's table.
+        if (kind === OVERVIEW || !current) setKind(kinds?.some((k) => k.id === ref.kind) ? ref.kind : (kinds?.find((k) => !k.hidden)?.id ?? kind))
+        setOpenReq({ value: ref, seq: ++reqSeq.current })
+      },
+    }
+  })
+  // null: scopes cannot be listed (the palette takes a typed one as is).
+  const scopeNames = useMemo(() => (scopes?.error ? null : (scopes?.scopes ?? []).map((s) => s.name)), [scopes])
+  useEffect(
+    () =>
+      lend('host', {
+        target: targetRef,
+        kinds: kinds ?? [],
+        scopes: scopeNames,
+        openKind: (k, f) => paletteActs.current?.openKind(k, f),
+        setScope: (s) => paletteActs.current?.setScope(s),
+        openObject: (r) => paletteActs.current?.openObject(r),
+      }),
+    [targetRef, kinds, scopeNames],
+  )
+
   return (
     <div className="flex min-h-0 flex-1">
       <nav aria-label="resources" className="w-40 shrink-0 overflow-y-auto border-r border-line bg-sidebar/60 px-2 py-3">
@@ -147,6 +193,8 @@ export function Workspace({ client, hub, target }: { client: Client; hub: ViewHu
             hasForward={hasForward}
             actionsOf={actionsOf}
             onAction={openAction}
+            filterReq={filterReq}
+            openReq={openReq}
           />
         )}
         </div>
@@ -202,14 +250,25 @@ function ResourcePage(props: {
   hasForward: (kindId: string) => boolean
   actionsOf: (kindId: string) => ActionDescriptor[]
   onAction: (ref: Ref, action: ActionDescriptor) => void
+  filterReq?: PageReq<string> | null
+  openReq?: PageReq<Ref> | null
 }) {
-  const { client, hub, target, kind, scope, scopes, onScope, hasLogs, onLogs, hasExec, onTerminal, hasForward, actionsOf, onAction } = props
+  const { client, hub, target, kind, scope, scopes, onScope, hasLogs, onLogs, hasExec, onTerminal, hasForward, actionsOf, onAction, filterReq, openReq } = props
   const scopeKey = JSON.stringify(scope)
   const query = useMemo(() => ({ kind: kind.id, scope: JSON.parse(scopeKey) as ScopeSel }), [kind.id, scopeKey])
   const view = useView(hub, target.provider, target.id, query)
-  const [filter, setFilter] = useState('')
+  const [filter, setFilter] = useState(filterReq?.value ?? '')
   const [selected, setSelected] = useState<string | null>(null)
-  const [open, setOpen] = useState<Ref | null>(null)
+  const [open, setOpen] = useState<Ref | null>(openReq?.value ?? null)
+  // A palette request applies once, also to a page already open.
+  const [applied, setApplied] = useState({ filter: filterReq?.seq ?? 0, open: openReq?.seq ?? 0 })
+  if ((filterReq && filterReq.seq !== applied.filter) || (openReq && openReq.seq !== applied.open)) {
+    if (filterReq && filterReq.seq !== applied.filter) setFilter(filterReq.value)
+    if (openReq && openReq.seq !== applied.open) setOpen(openReq.value)
+    setApplied({ filter: filterReq?.seq ?? applied.filter, open: openReq?.seq ?? applied.open })
+  }
+  // The palette offers this table's rows.
+  useEffect(() => lend('rows', view.rows), [view.rows])
   const columns = view.kind?.columns ?? kind.columns
   const metrics = useMetrics(client, view.viewId, columns.some((c) => c.metric))
   // What a row offers is its object's kind's (a Problems row is a pod, a
@@ -319,6 +378,8 @@ function LiveScopePicker(props: {
     () => (view.status.state === 'ready' || view.status.state === 'stale' ? { scopes: view.rows.map((r) => ({ name: r.ref.name })).sort((a, b) => a.name.localeCompare(b.name)) } : scopes),
     [view.rows, view.status.state, scopes],
   )
+  const liveNames = useMemo(() => (live === scopes ? null : live?.scopes.map((s) => s.name)) ?? null, [live, scopes])
+  useEffect(() => (liveNames ? lend('liveScopes', liveNames) : undefined), [liveNames])
   return <ScopePicker scope={scope} scopes={live} onScope={onScope} />
 }
 
@@ -346,7 +407,7 @@ function ScopePicker({ scope, scopes, onScope }: { scope: ScopeSel; scopes: Scop
     )
   }
   const value = scope.mode === 'one' ? (scope.name ?? '') : ''
-  const names = scopes?.scopes.map((s) => s.name) ?? []
+  const names = (scopes?.scopes ?? []).map((s) => s.name)
   if (value && !names.includes(value)) names.unshift(value)
   return (
     <select

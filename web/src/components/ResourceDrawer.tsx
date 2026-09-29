@@ -40,11 +40,20 @@ export function ResourceDrawer({ client, hub, target, subject, onClose, hasLogs,
   const current = stack[stack.length - 1]
   const key = `${current.kind}/${current.scope ?? ''}/${current.name}/${current.uid ?? ''}`
   const revision = useObjectRevision(hub, target, current)
+  // The last object recorded as recently opened (once per object shown).
+  const touched = useRef<string | null>(null)
 
   useEffect(() => {
     let live = true
     client.getResource(current).then(
-      (r) => live && setRes({ key, r }),
+      (r) => {
+        if (!live) return
+        setRes({ key, r })
+        if (touched.current !== key) {
+          touched.current = key
+          void client.touchRecent({ ...r.ref, provider: target.provider, target: target.id }, r.ref.name).catch(() => {})
+        }
+      },
       (e) =>
         live &&
         setRes({ key, error: e instanceof Error ? e.message : String(e), gone: e instanceof ApiError && (e.code === 'not_found' || e.code === 'gone') }),
@@ -53,7 +62,7 @@ export function ResourceDrawer({ client, hub, target, subject, onClose, hasLogs,
       live = false
     }
     // revision: refetch when the object changes (any field, not only table cells)
-  }, [client, current, key, revision])
+  }, [client, current, key, revision, target.provider, target.id])
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {

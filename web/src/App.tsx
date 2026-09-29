@@ -11,6 +11,9 @@ import { Dock } from './dock/Dock'
 import { dock } from './dock/store'
 import { TunnelsPanel } from './tunnels/TunnelsPanel'
 import { tunnelLoader } from './tunnels/store'
+import { inTerminal, isShortcut } from './keyboard'
+import { Palette } from './palette/Palette'
+import { openPalette } from './palette/store'
 
 export function App({ client }: { client: Client }) {
   const act = useMemo(() => actions(client), [client])
@@ -52,6 +55,19 @@ export function App({ client }: { client: Client }) {
     void loadTunnels()
     return off
   }, [client, act, hub, loadTunnels])
+
+  // Ctrl+K opens the palette from anywhere but a terminal (there it is the
+  // program's) and another modal dialog.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.isComposing || e.altKey || !isShortcut(e, 'KeyK', { ctrl: true, shift: false })) return
+      if (inTerminal(e.target) || document.querySelector('[aria-modal="true"]')) return
+      e.preventDefault()
+      openPalette()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [])
 
   // Language before the first paint of real content: the app renders the
   // loading state until AppInfo arrives.
@@ -97,6 +113,7 @@ export function App({ client }: { client: Client }) {
         </div>
       </div>
       <TunnelsPanel client={client} mode={info?.mode === 'desktop' ? 'desktop' : 'browser'} />
+      <Palette client={client} act={act} />
       <StatusBar />
     </div>
   )
