@@ -116,9 +116,16 @@ test('logs of a pod from its details; previous of a crash-looping one', async ({
   await page.keyboard.press('Enter')
   await page.getByRole('dialog').getByRole('button', { name: 'Logs' }).click()
   await expect(logRows(page).first()).toHaveText('starting', { timeout: 30_000 })
-  await logPanel(page).getByRole('button', { name: 'Previous' }).click()
-  await expect(logPanel(page).getByLabel('stream state')).toHaveText('Complete', { timeout: 30_000 })
-  await expect(logRows(page).first()).toHaveText('starting')
+  // Read while the crash-looping container restarts, the kubelet answers
+  // "unable to retrieve container logs for containerd://…" (the previous
+  // container was just replaced): read it again then.
+  const previous = logPanel(page).getByRole('button', { name: 'Previous' })
+  await expect(async () => {
+    if ((await previous.getAttribute('aria-pressed')) === 'true') await previous.click()
+    await previous.click()
+    await expect(logPanel(page).getByLabel('stream state')).toHaveText('Complete', { timeout: 30_000 })
+    await expect(logRows(page).first()).toHaveText('starting', { timeout: 2_000 })
+  }).toPass({ timeout: 90_000 })
 })
 
 test('logs of a deployment: every pod in one stream, live', async ({ page }) => {
@@ -217,4 +224,98 @@ test('a narrow window scrolls the table sideways, never the page', async ({ page
       }),
     )
     .toEqual([0, 0, true])
+})
+
+// Actions (P4) act on objects of the test's own; the fixture stays as it is.
+function ownDeployment(name: string, replicas: number) {
+  kubectl('-n', 'ocular-demo', 'create', 'deployment', name, '--image=nginx:1.27-alpine', `--replicas=${replicas}`)
+  kubectl('-n', 'ocular-demo', 'rollout', 'status', `deployment/${name}`, '--timeout=120s')
+  return () => kubectl('-n', 'ocular-demo', 'delete', 'deployment', name, '--ignore-not-found', '--wait=false')
+}
+
+test('restart a deployment from its details: it rolls out and settles', async ({ page }) => {
+  const cleanup = ownDeployment('act-restart', 2)
+  try {
+    await openTarget(page, 'kind-ocular-dev')
+    const grid = await kindPage(page, 'Deployments')
+    await row(grid, 'act-restart').click()
+    const drawer = page.getByRole('dialog', { name: 'apps/deployments act-restart' })
+    await drawer.getByRole('button', { name: /Actions/ }).click()
+    await page.getByRole('menu', { name: 'Actions' }).getByRole('menuitem', { name: 'Restart' }).click()
+    const dialog = page.getByRole('dialog', { name: 'Restart act-restart' })
+    await expect(dialog.getByLabel('where')).toContainText('Contextkind-ocular-dev')
+    await expect(dialog.getByLabel('where')).toContainText('Namespaceocular-demo')
+    await expect(dialog).toContainText('Pods are replaced gradually (rolling update: max unavailable 25%, max surge 25%).')
+    await expect(dialog).toContainText('Permission: checked: allowed')
+    await dialog.getByRole('button', { name: 'Restart' }).click()
+    await expect(page.getByRole('status')).toHaveText('deployment act-restart: restart requested')
+    // The row goes through the rollout and comes back healthy.
+    await expect(row(grid, 'act-restart')).toHaveAttribute('title', /^RollingOut/, { timeout: 30_000 })
+    await expect(row(grid, 'act-restart')).not.toHaveAttribute('title', /^RollingOut/, { timeout: 90_000 })
+    expect(kubectl('-n', 'ocular-demo', 'get', 'deployment', 'act-restart', '-o', 'jsonpath={.spec.template.metadata.annotations}')).toContain('kubectl.kubernetes.io/restartedAt')
+  } finally {
+    cleanup()
+  }
+})
+
+test('scale a deployment 2 → 1 in two steps', async ({ page }) => {
+  const cleanup = ownDeployment('act-scale', 2)
+  try {
+    await openTarget(page, 'kind-ocular-dev')
+    const grid = await kindPage(page, 'Deployments')
+    await row(grid, 'act-scale').click({ button: 'right' })
+    await page.getByRole('menu', { name: 'Row actions' }).getByRole('menuitem', { name: 'Scale…' }).click()
+    const dialog = page.getByRole('dialog', { name: 'Scale act-scale' })
+    const count = dialog.getByRole('textbox')
+    await expect(count).toHaveValue('2')
+    await count.fill('1')
+    await count.press('Enter')
+    await expect(dialog).toContainText('2 → 1: 1 pod is removed.')
+    expect(kubectl('-n', 'ocular-demo', 'get', 'deployment', 'act-scale', '-o', 'jsonpath={.spec.replicas}')).toBe('2') // reviewed only
+    await dialog.getByRole('button', { name: 'Scale' }).click()
+    await expect(page.getByRole('status')).toHaveText('deployment act-scale: scale 2 → 1 requested')
+    await expect(row(grid, 'act-scale')).toContainText('1/1', { timeout: 60_000 })
+    expect(kubectl('-n', 'ocular-demo', 'get', 'deployment', 'act-scale', '-o', 'jsonpath={.spec.replicas}')).toBe('1')
+  } finally {
+    cleanup()
+  }
+})
+
+test('Delete on a pod row: the ReplicaSet creates a new one', async ({ page }) => {
+  const cleanup = ownDeployment('act-del', 1)
+  try {
+    const old = kubectl('-n', 'ocular-demo', 'get', 'pods', '-l', 'app=act-del', '-o', 'jsonpath={.items[0].metadata.name}').trim()
+    await openTarget(page, 'kind-ocular-dev')
+    const grid = await kindPage(page, 'Pods')
+    const filter = page.getByRole('textbox', { name: 'Filter rows' })
+    await filter.fill('act-del')
+    await expect(row(grid, old)).toBeVisible()
+    await filter.press('ArrowDown') // into the table
+    await page.keyboard.press('ArrowDown')
+    await page.keyboard.press('Delete')
+    const dialog = page.getByRole('dialog', { name: `Delete ${old}` })
+    await expect(dialog).toContainText(/ReplicaSet act-del-\w+ normally creates a replacement\./)
+    await expect(dialog).toContainText('This is not an eviction')
+    await expect(dialog.getByRole('button', { name: 'Cancel' })).toBeFocused()
+    await dialog.getByRole('button', { name: 'Delete' }).click()
+    await expect(page.getByRole('status')).toHaveText(`pod ${old}: deletion requested`)
+    await expect(row(grid, /^act-del-/).filter({ hasNotText: old })).toHaveCount(1, { timeout: 60_000 })
+    await expect(row(grid, old)).toHaveCount(0, { timeout: 60_000 })
+  } finally {
+    cleanup()
+  }
+})
+
+test('a user without the right sees it in the review', async ({ page }) => {
+  await openTarget(page, 'ocular-viewer')
+  const grid = page.getByRole('grid', { name: 'resources' })
+  const pod = row(grid, /^web-/).first()
+  const name = (await pod.getByRole('gridcell').first().textContent())!.trim()
+  await pod.click({ button: 'right' })
+  await page.getByRole('menu', { name: 'Row actions' }).getByRole('menuitem', { name: 'Delete' }).click()
+  const dialog = page.getByRole('dialog', { name: `Delete ${name}` })
+  await expect(dialog).toContainText('Permission: not allowed: you may not delete pods in ocular-demo')
+  await expect(dialog.getByRole('button', { name: 'Delete' })).toBeDisabled()
+  await dialog.getByRole('button', { name: 'Cancel' }).click()
+  expect(kubectl('-n', 'ocular-demo', 'get', 'pod', name, '-o', 'jsonpath={.metadata.name}')).toBe(name)
 })
