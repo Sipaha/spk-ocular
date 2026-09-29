@@ -14,19 +14,18 @@ interface Props {
   target: { provider: string; id: string }
   /** The object shown; history is kept for relation navigation. */
   subject: Ref
-  /** Changes when the object's row changes (live refresh). */
-  revision?: unknown
   onClose: () => void
 }
 
 type Tab = 'details' | 'yaml'
 
-export function ResourceDrawer({ client, hub, target, subject, revision, onClose }: Props) {
+export function ResourceDrawer({ client, hub, target, subject, onClose }: Props) {
   const [stack, setStack] = useState<Ref[]>([subject])
   const [tab, setTab] = useState<Tab>('details')
   const [res, setRes] = useState<{ key: string; r?: Resource; error?: string } | null>(null)
   const current = stack[stack.length - 1]
   const key = `${current.kind}/${current.scope ?? ''}/${current.name}/${current.uid ?? ''}`
+  const revision = useObjectRevision(hub, target, current)
 
   useEffect(() => {
     let live = true
@@ -37,7 +36,7 @@ export function ResourceDrawer({ client, hub, target, subject, revision, onClose
     return () => {
       live = false
     }
-    // revision: refetch when the row changes in the table
+    // revision: refetch when the object changes (any field, not only table cells)
   }, [client, current, key, revision])
 
   useEffect(() => {
@@ -152,6 +151,28 @@ function Details({ hub, target, r, onGo }: { client: Client; hub: ViewHub; targe
       {r.ref.uid && r.ref.kind !== 'events' && <ObjectEvents hub={hub} subject={r.ref} />}
     </div>
   )
+}
+
+/**
+ * The shown object's revision, from a live view narrowed to its name: the
+ * details refetch when it changes — also for fields the table does not show
+ * and after navigating to a related object. Debounced: a burst of updates
+ * is one refetch.
+ */
+function useObjectRevision(hub: ViewHub, target: { provider: string; id: string }, ref: Ref): string | undefined {
+  const query = useMemo(
+    () => ({ kind: ref.kind, scope: ref.scope ? { mode: 'one' as const, name: ref.scope } : { mode: 'none' as const }, name: ref.name }),
+    [ref.kind, ref.scope, ref.name],
+  )
+  const view = useView(hub, target.provider, target.id, query)
+  const row = view.rows.find((r) => !ref.uid || r.ref.uid === ref.uid)
+  const rev = row?.rev
+  const [debounced, setDebounced] = useState(rev)
+  useEffect(() => {
+    const t = setTimeout(() => setDebounced(rev), 400)
+    return () => clearTimeout(t)
+  }, [rev])
+  return debounced
 }
 
 /** Events about one object: a normal live view narrowed by Subject. */

@@ -91,6 +91,8 @@ export interface Cell {
 
 export interface Row {
   id: string
+  /** Provider revision: changes with any change of the object. */
+  rev?: string
   ref: Ref
   cells: Cell[]
   health: Health
@@ -128,6 +130,8 @@ export interface Query {
   kind: string
   scope: ScopeSel
   subject?: Ref
+  /** One object by name (details follow their object). */
+  name?: string
 }
 
 export interface CodedErrorDTO {

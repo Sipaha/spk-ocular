@@ -138,6 +138,12 @@ func (s *session) Watch(q provider.Query, sink provider.Sink) (func(), error) {
 	if def.namespaced && q.Scope.Mode == core.ScopeOne {
 		key.namespace = q.Scope.Name
 	}
+	if q.Name != "" {
+		if q.Subject != nil {
+			return nil, &provider.Error{Class: provider.ClassUnsupported, Message: "name and subject cannot be combined"}
+		}
+		key.selector = "metadata.name=" + q.Name
+	}
 	if q.Subject != nil {
 		// Only events can be narrowed to an object: core/v1 involvedObject.uid,
 		// in the object's namespace (cluster-scoped objects: all namespaces).

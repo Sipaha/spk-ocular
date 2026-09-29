@@ -101,6 +101,9 @@ export function Workspace({ client, hub, target }: { client: Client; hub: ViewHu
           </div>
         ) : (
           <ResourcePage
+            // A new kind or scope is a new page: selection, filter and an open
+            // drawer belong to the table they were made in.
+            key={`${current.id}/${JSON.stringify(current.scoped ? scope : { mode: 'none' })}`}
             client={client}
             hub={hub}
             target={target}
@@ -145,8 +148,6 @@ function ResourcePage(props: {
   const [open, setOpen] = useState<Ref | null>(null)
   const columns = view.kind?.columns ?? kind.columns
   const metrics = useMetrics(client, view.viewId, columns.some((c) => c.metric))
-  // The open object's current row: its changes refresh the drawer.
-  const openRow = open ? view.rows.find((r) => r.ref.uid === open.uid && r.ref.name === open.name) : undefined
 
   return (
     <>
@@ -201,7 +202,6 @@ function ResourcePage(props: {
             hub={hub}
             target={{ provider: target.provider, id: target.id }}
             subject={open}
-            revision={openRow}
             onClose={() => setOpen(null)}
           />
         )}

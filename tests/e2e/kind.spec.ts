@@ -84,3 +84,20 @@ test('a namespace-limited user: denied is explained, own namespace works', async
   await input.press('Enter')
   await expect(row(grid, 'crashloop')).toBeVisible()
 })
+
+// Review 2026-09-29: a ConfigMap value change does not change its table row;
+// the open YAML must still refresh.
+test('open details follow changes the table does not show', async ({ page }) => {
+  await openTarget(page, 'kind-ocular-dev')
+  const grid = await kindPage(page, 'ConfigMaps')
+  await row(grid, 'web-config').click()
+  const drawer = page.getByRole('dialog', { name: 'configmaps web-config' })
+  await drawer.getByRole('tab', { name: 'YAML' }).click()
+  await expect(drawer.locator('.cm-editor')).toContainText('LOG_LEVEL: debug')
+  kubectl('-n', 'ocular-demo', 'patch', 'configmap', 'web-config', '--type=merge', '-p', '{"data":{"LOG_LEVEL":"info"}}')
+  try {
+    await expect(drawer.locator('.cm-editor')).toContainText('LOG_LEVEL: info')
+  } finally {
+    kubectl('-n', 'ocular-demo', 'patch', 'configmap', 'web-config', '--type=merge', '-p', '{"data":{"LOG_LEVEL":"debug"}}')
+  }
+})

@@ -45,6 +45,8 @@ type Query struct {
 	// Subject narrows the kind to objects about one object (events of a pod).
 	// Providers translate it (k8s: involvedObject.uid); nil = no narrowing.
 	Subject *core.Ref `json:"subject,omitempty"`
+	// Name narrows to one object by name (an open details panel follows it).
+	Name string `json:"name,omitempty"`
 }
 
 // Sink receives a watch's deliveries. Apply is called synchronously from the

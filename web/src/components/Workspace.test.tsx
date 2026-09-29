@@ -27,11 +27,12 @@ describe('Workspace', () => {
 
   it('switching to all namespaces reopens the view and shows the namespace column', async () => {
     const f = fakeClient([k8s('prod', { details: [{ key: 'defaultNamespace', value: 'web' }] })])
-    const grid = await openProd(f)
+    await openProd(f)
     await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Namespace' }), '')
     expect(f.client.openView).toHaveBeenLastCalledWith('kubernetes', 'prod', { kind: 'pods', scope: { mode: 'all' } })
     expect(f.client.closeView).toHaveBeenCalled()
-    expect(within(grid).getByText('Namespace')).toBeInTheDocument()
+    // a new scope is a new page (and a new grid)
+    expect(within(await screen.findByRole('grid', { name: 'resources' })).getByText('Namespace')).toBeInTheDocument()
   })
 
   it('filters rows with "/" and pulls again on view_changed', async () => {
@@ -142,5 +143,24 @@ describe('live scopes', () => {
     await act(async () => f.emit({ type: 'view_changed', payload: { viewId: 'v-namespaces', version: 99 } }))
     expect(await within(picker).findByRole('option', { name: 'new-team' })).toBeInTheDocument()
     expect(f.client.openView).toHaveBeenCalledWith('kubernetes', 'prod', { kind: 'namespaces', scope: { mode: 'none' } })
+  })
+})
+
+describe('drawer follows its object', () => {
+  it('refetches details when the object revision changes, even if the table row does not', async () => {
+    const f = fakeClient([k8s('prod')])
+    const cm = { ...podRow('api-1', 'web'), rev: '1' }
+    f.state.rows = [cm]
+    f.state.rowsByKind.pods = [cm]
+    const grid = await openProd(f)
+    await userEvent.click(await within(grid).findByText('api-1'))
+    await screen.findByRole('dialog', { name: 'pods api-1' })
+    const calls = (f.client.getResource as ReturnType<typeof vi.fn>).mock.calls.length
+    // Only the revision changes (e.g. a ConfigMap value the table does not show).
+    f.state.rowsByKind.pods = [{ ...cm, rev: '2' }]
+    f.state.rows = f.state.rowsByKind.pods
+    await act(async () => f.emit({ type: 'view_changed', payload: { viewId: 'v-pods', version: 999 } }))
+    await vi.waitFor(() => expect((f.client.getResource as ReturnType<typeof vi.fn>).mock.calls.length).toBeGreaterThan(calls), { timeout: 2000 })
+    expect(f.client.openView).toHaveBeenCalledWith('kubernetes', 'prod', expect.objectContaining({ kind: 'pods', name: 'api-1' }))
   })
 })

@@ -87,7 +87,11 @@ func HealthFrom(issues []Issue) Health {
 // so a same-named replacement is a delete + add. Providers must not mutate a
 // Row (or its Cells) after handing it over.
 type Row struct {
-	ID     string `json:"id"`
+	ID string `json:"id"`
+	// Rev is the provider's revision of the object (k8s resourceVersion):
+	// it changes with any change, including fields the table does not show,
+	// so an open details panel knows to refresh.
+	Rev    string `json:"rev,omitempty"`
 	Ref    Ref    `json:"ref"`
 	Cells  []Cell `json:"cells"`
 	Health Health `json:"health"`

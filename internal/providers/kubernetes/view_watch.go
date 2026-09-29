@@ -58,7 +58,8 @@ func (w *viewWatch) row(u *unstructured.Unstructured) (core.Row, time.Time) {
 		id = u.GetNamespace() + "/" + u.GetName()
 	}
 	return core.Row{
-		ID: id,
+		ID:  id,
+		Rev: u.GetResourceVersion(),
 		Ref: core.Ref{
 			Provider: ProviderID, Target: w.target, Scope: u.GetNamespace(),
 			Kind: w.def.desc.ID, Name: u.GetName(), UID: string(u.GetUID()),
