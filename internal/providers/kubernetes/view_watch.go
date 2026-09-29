@@ -32,11 +32,23 @@ type viewWatch struct {
 	reg  cache.ResourceEventHandlerRegistration
 	done chan struct{}
 
+	// order serializes everything that projects an observation and applies
+	// it to the sink: the informer's handler calls and deadline
+	// re-evaluations. Without it a timer could read an object, lose the CPU,
+	// and apply it after the delete handler removed the row (resurrection).
+	order sync.Mutex
+
 	mu        sync.Mutex
 	synced    bool
 	stopped   bool
-	deadlines map[string]time.Time // object key -> when to re-project
+	deadlines map[string]deadline // object key -> when to re-project which incarnation
 	timer     *time.Timer
+	timerGen  uint64
+}
+
+type deadline struct {
+	uid string
+	at  time.Time
 }
 
 func (w *viewWatch) row(u *unstructured.Unstructured) (core.Row, time.Time) {
@@ -59,13 +71,23 @@ func (w *viewWatch) row(u *unstructured.Unstructured) (core.Row, time.Time) {
 func (w *viewWatch) handlers() cache.ResourceEventHandlerFuncs {
 	return cache.ResourceEventHandlerFuncs{
 		AddFunc: func(obj any) {
+			w.order.Lock()
+			defer w.order.Unlock()
+			if w.isStopped() {
+				return
+			}
 			if u, ok := asUnstructured(obj); ok {
 				r, next := w.row(u)
 				w.sink.Apply(provider.Delta{Upserts: []core.Row{r}})
-				w.schedule(objKey(u), next)
+				w.schedule(objKey(u), string(u.GetUID()), next)
 			}
 		},
 		UpdateFunc: func(oldObj, newObj any) {
+			w.order.Lock()
+			defer w.order.Unlock()
+			if w.isStopped() {
+				return
+			}
 			u, ok := asUnstructured(newObj)
 			if !ok {
 				return
@@ -78,9 +100,14 @@ func (w *viewWatch) handlers() cache.ResourceEventHandlerFuncs {
 				d.Deletes = []string{string(old.GetUID())}
 			}
 			w.sink.Apply(d)
-			w.schedule(objKey(u), next)
+			w.schedule(objKey(u), string(u.GetUID()), next)
 		},
 		DeleteFunc: func(obj any) {
+			w.order.Lock()
+			defer w.order.Unlock()
+			if w.isStopped() {
+				return
+			}
 			if tomb, ok := obj.(cache.DeletedFinalStateUnknown); ok {
 				obj = tomb.Obj
 			}
@@ -90,10 +117,16 @@ func (w *viewWatch) handlers() cache.ResourceEventHandlerFuncs {
 					id = u.GetNamespace() + "/" + u.GetName()
 				}
 				w.sink.Apply(provider.Delta{Deletes: []string{id}})
-				w.schedule(metaKey(u), time.Time{})
+				w.unschedule(metaKey(u), string(u.GetUID()))
 			}
 		},
 	}
+}
+
+func (w *viewWatch) isStopped() bool {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return w.stopped
 }
 
 func objKey(u *unstructured.Unstructured) string { return metaKey(u) }
@@ -154,20 +187,26 @@ func (w *viewWatch) waitSynced() {
 
 // schedule re-projects the object at next (time-based health: "Pending for
 // more than 5m" must turn into a warning without any API change). One local
-// timer per view — not cluster polling.
-func (w *viewWatch) schedule(key string, next time.Time) {
+// timer per view — not cluster polling. The deadline belongs to one
+// incarnation (UID): a same-named replacement has its own.
+func (w *viewWatch) schedule(key, uid string, next time.Time) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	if w.stopped {
 		return
 	}
 	if next.IsZero() {
-		delete(w.deadlines, key)
+		if d, ok := w.deadlines[key]; ok && d.uid == uid {
+			delete(w.deadlines, key)
+		}
 	} else {
-		w.deadlines[key] = next
+		w.deadlines[key] = deadline{uid: uid, at: next}
 	}
 	w.armLocked()
 }
+
+// unschedule drops a deleted incarnation's deadline — not a replacement's.
+func (w *viewWatch) unschedule(key, uid string) { w.schedule(key, uid, time.Time{}) }
 
 func (w *viewWatch) armLocked() {
 	if w.timer != nil {
@@ -175,55 +214,70 @@ func (w *viewWatch) armLocked() {
 		w.timer = nil
 	}
 	var soonest time.Time
-	for _, t := range w.deadlines {
-		soonest = earliest(soonest, t)
+	for _, d := range w.deadlines {
+		soonest = earliest(soonest, d.at)
 	}
 	if soonest.IsZero() {
 		return
 	}
-	d := soonest.Sub(w.now())
-	if d < 0 {
-		d = 0
+	delay := soonest.Sub(w.now())
+	if delay < 0 {
+		delay = 0
 	}
-	w.timer = time.AfterFunc(d, w.fire)
+	w.timerGen++
+	gen := w.timerGen
+	w.timer = time.AfterFunc(delay, func() { w.fire(gen) })
 }
 
-func (w *viewWatch) fire() {
+func (w *viewWatch) fire(gen uint64) {
 	now := w.now()
 	w.mu.Lock()
-	if w.stopped {
+	if w.stopped || gen != w.timerGen {
 		w.mu.Unlock()
-		return
+		return // stopped, or superseded by a newer timer
 	}
-	var due []string
-	for k, t := range w.deadlines {
-		if !t.After(now) {
-			due = append(due, k)
+	w.timer = nil
+	due := map[string]deadline{}
+	for k, d := range w.deadlines {
+		if !d.at.After(now) {
+			due[k] = d
 			delete(w.deadlines, k)
 		}
 	}
 	w.mu.Unlock()
-	for _, k := range due {
-		obj, ok, _ := w.c.inf.GetStore().GetByKey(k)
-		if !ok {
-			continue
-		}
-		if u, ok := asUnstructured(obj); ok {
-			r, next := w.row(u)
-			w.sink.Apply(provider.Delta{Upserts: []core.Row{r}})
-			if !next.IsZero() && next.After(now) {
-				w.mu.Lock()
-				w.deadlines[k] = next
-				w.mu.Unlock()
-			}
-		}
+	for k, d := range due {
+		w.reevaluate(k, d.uid)
 	}
 	w.mu.Lock()
-	w.timer = nil
-	if !w.stopped {
+	if !w.stopped && w.timer == nil {
 		w.armLocked()
 	}
 	w.mu.Unlock()
+}
+
+// reevaluate re-projects the current cached object under the order gate:
+// the informer updates its store before calling handlers, so under the gate
+// the store is at least as new as anything applied — a deleted object is
+// gone from it, and a replacement (other UID) is left to its handler.
+func (w *viewWatch) reevaluate(key, uid string) {
+	w.order.Lock()
+	defer w.order.Unlock()
+	if w.isStopped() {
+		return
+	}
+	obj, ok, _ := w.c.inf.GetStore().GetByKey(key)
+	if !ok {
+		return
+	}
+	u, ok := asUnstructured(obj)
+	if !ok || string(u.GetUID()) != uid {
+		return
+	}
+	r, next := w.row(u)
+	w.sink.Apply(provider.Delta{Upserts: []core.Row{r}})
+	if !next.IsZero() {
+		w.schedule(key, uid, next)
+	}
 }
 
 func (w *viewWatch) stop() {
@@ -233,6 +287,7 @@ func (w *viewWatch) stop() {
 		return
 	}
 	w.stopped = true
+	w.timerGen++ // a timer already firing becomes a no-op
 	if w.timer != nil {
 		w.timer.Stop()
 	}

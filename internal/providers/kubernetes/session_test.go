@@ -193,7 +193,7 @@ func TestTimeBasedHealthChangesWithoutAPIEvents(t *testing.T) {
 
 func TestReplacementUnderSameNameDropsOldRow(t *testing.T) {
 	rec := &recordingSink{}
-	w := &viewWatch{def: podsKind, sink: rec, target: "t", now: time.Now, done: make(chan struct{}), deadlines: map[string]time.Time{}}
+	w := &viewWatch{def: podsKind, sink: rec, target: "t", now: time.Now, done: make(chan struct{}), deadlines: map[string]deadline{}}
 	w.handlers().UpdateFunc(pod("web", "web-0", "old"), pod("web", "web-0", "new"))
 	require.Len(t, rec.d, 1)
 	assert.Equal(t, []string{"old"}, rec.d[0].Deletes)

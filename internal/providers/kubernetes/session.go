@@ -151,7 +151,7 @@ func (s *session) Watch(q provider.Query, sink provider.Sink) (func(), error) {
 	if !ok {
 		return nil, &provider.Error{Class: provider.ClassGone, Message: "session closed"}
 	}
-	w := &viewWatch{c: c, def: def, sink: sink, target: s.target, now: s.now, done: make(chan struct{}), deadlines: map[string]time.Time{}}
+	w := &viewWatch{c: c, def: def, sink: sink, target: s.target, now: s.now, done: make(chan struct{}), deadlines: map[string]deadline{}}
 	c.mu.Lock()
 	c.watchers[w] = struct{}{}
 	c.mu.Unlock()
