@@ -1,7 +1,7 @@
 // The page half of the terminal WebSocket (internal/streams/term.go).
 //
 // Binary messages are terminal bytes; text messages are JSON control:
-//   page→server  {"k":"resize","cols","rows"}  {"k":"ack","n"}
+//   page→server  {"k":"resize","cols","rows"}  {"k":"ack","n"}  {"k":"intr"}
 //   server→page  {"k":"state","state"}  {"k":"iack","n"}  {"k":"exit","code"}  {"k":"end",...}
 //
 // Output credit: "ack" carries the cumulative number of output bytes the
@@ -9,6 +9,9 @@
 // keep up slows the command down instead of buffering without bound.
 // Input credit: at most IN_WINDOW bytes are sent and not yet confirmed by
 // "iack"; a paste waits in a bounded local queue meanwhile.
+// Ctrl+C is "intr", outside the window: the server drops input it still
+// queues (iack counts it) and writes ^C next, so it gets through even when
+// the command does not read and the window is exhausted.
 
 export const IN_WINDOW = 256 << 10
 export const IN_CHUNK = 16 << 10
@@ -140,10 +143,12 @@ export class TermConnection {
         if (m.state === 'connecting' || m.state === 'running') this.sink.phase(m.state)
         break
       case 'iack':
-        if (typeof m.n === 'number' && m.n >= this.confirmed && m.n <= this.sent) {
-          this.confirmed = m.n
-          this.pump()
+        if (!Number.isInteger(m.n) || m.n! < this.confirmed || m.n! > this.sent) {
+          this.finish({ reason: 'error', class: 'internal', message: 'terminal protocol violation (input counter)' })
+          return
         }
+        this.confirmed = m.n!
+        this.pump()
         break
       case 'exit':
         if (typeof m.code === 'number') this.exitCode = m.code
@@ -206,10 +211,21 @@ export class TermConnection {
     }
   }
 
-  /** Drops input not yet sent (Ctrl+C during a big paste, closing). */
+  /** Drops input not yet sent (closing). */
   cancelInput() {
     this.queue = []
     this.queued = 0
+  }
+
+  /**
+   * Ctrl+C: drops the local queue (a paste in progress) and sends "intr":
+   * the server drops what it still queues and writes ^C first. Bytes already
+   * written to the command's stdin cannot be recalled.
+   */
+  interrupt() {
+    if (this.closed) return
+    this.cancelInput()
+    if (this.ws.readyState === OPEN) this.ws.send(JSON.stringify({ k: 'intr' }))
   }
 
   resize(cols: number, rows: number) {

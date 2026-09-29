@@ -160,7 +160,10 @@ export default function TerminalView({ client, tab, active, mode }: Props) {
     term.onData((d) => {
       const c = connRef.current
       if (!c) return
-      if (d === '\x03') c.cancelInput() // Ctrl+C drops a paste still waiting to be sent
+      if (d === '\x03') {
+        c.interrupt() // drops a paste still waiting, and gets through a full input window
+        return
+      }
       try {
         c.input(d)
       } catch (e) {

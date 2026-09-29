@@ -19,7 +19,7 @@ import (
 // portforward.md). Binary messages are terminal bytes: page→server input,
 // server→page output. Text messages are JSON control:
 //
-//	page→server  {"k":"resize","cols":N,"rows":N}  {"k":"ack","n":N}
+//	page→server  {"k":"resize","cols":N,"rows":N}  {"k":"ack","n":N}  {"k":"intr"}
 //	server→page  {"k":"state","state":"connecting|running"}  {"k":"iack","n":N}
 //	             {"k":"exit","code":N}  {"k":"end",...}  then close 1000
 //
@@ -29,7 +29,13 @@ import (
 // processed), and the page keeps at most termInWindow input bytes not yet
 // confirmed by "iack" (bytes written to the command's stdin). A page that
 // breaks the input window or sends an impossible counter is closed with
-// statusProtocol.
+// statusProtocol. "iack" counts input written to stdin or dropped.
+//
+// "intr" is Ctrl+C: input still queued here is dropped (a pending paste; a
+// TTY flushes its input on ^C too) and ^C is the next byte written to
+// stdin, outside the input window — so it gets through even when the
+// window is exhausted by a command that does not read. Bytes already
+// being written cannot be recalled.
 const (
 	termOutWindow  = 1 << 20
 	termInWindow   = 256 << 10
@@ -106,6 +112,7 @@ type termBridge struct {
 	inBytes  int   // received, not yet written to stdin
 	inDone   int64 // written to stdin
 	inSig    chan struct{}
+	intr     bool // ^C is due before any queued input
 	running  sync.Once
 	attached atomic.Bool // the command side started reading input or writing output
 
@@ -164,7 +171,7 @@ func (b *termBridge) run(parent context.Context, sess TermSession, revoked func(
 	writerDone := make(chan struct{})
 	go func() { defer close(writerDone); b.writeLoop() }()
 	start(b.readLoop)
-	start(func() { b.stdinLoop(inW) })
+	start(func() { b.stdinLoop(inW, runCtx) })
 	start(b.pingLoop)
 	outDone := make(chan struct{})
 	go func() { defer close(outDone); b.outputLoop(outR) }()
@@ -183,7 +190,7 @@ func (b *termBridge) run(parent context.Context, sess TermSession, revoked func(
 	select {
 	case res = <-runDone:
 	case <-ctx.Done():
-		res = b.hangup(inW, runDone, runCancel)
+		res = b.hangup(runDone, runCancel)
 	}
 	st, runErr := res.st, res.err
 	_ = outW.Close() // the output loop sees EOF after what is buffered
@@ -249,22 +256,12 @@ func (b *termBridge) run(parent context.Context, sess TermSession, revoked func(
 	wg.Wait()
 }
 
-// hangup ends a command whose terminal is going away: ^C ^D in-band (the
-// output keeps being read and dropped meanwhile, so the command is not
-// stuck writing), then, if it has not ended within the hang-up time,
-// cancellation.
-func (b *termBridge) hangup(inW io.Writer, runDone <-chan runResult, runCancel context.CancelFunc) runResult {
+// hangup ends a command whose terminal is going away: the stdin loop
+// drops queued input and types ^C ^D (hangupInput; the output keeps being
+// read and dropped meanwhile, so the command is not stuck writing), then,
+// if it has not ended within the hang-up time, cancellation.
+func (b *termBridge) hangup(runDone <-chan runResult, runCancel context.CancelFunc) runResult {
 	if b.attached.Load() {
-		go func() {
-			for i, k := range hangupKeys {
-				if i > 0 {
-					time.Sleep(hangupKeyGap)
-				}
-				if _, err := inW.Write(k); err != nil {
-					return
-				}
-			}
-		}()
 		t := time.NewTimer(b.tm.hangup)
 		defer t.Stop()
 		select {
@@ -399,6 +396,8 @@ func (b *termBridge) control(data []byte) string {
 			return "bad terminal size"
 		}
 		b.sizes.set(provider.TermSize{Cols: c, Rows: r})
+	case "intr":
+		b.interrupt()
 	case "ack":
 		if m.N == nil || *m.N != math.Trunc(*m.N) || *m.N < 0 || *m.N > 1<<53 {
 			return "bad ack"
@@ -447,13 +446,43 @@ func (b *termBridge) pushInput(p []byte) bool {
 	return true
 }
 
-// stdinLoop copies queued input to the command; each written chunk is
-// confirmed to the page ("iack"), which frees its input window.
-func (b *termBridge) stdinLoop(w *io.PipeWriter) {
+// interrupt drops the queued input and puts ^C first (one at a time: a
+// page repeating Ctrl+C cannot grow the queue).
+func (b *termBridge) interrupt() {
+	b.mu.Lock()
+	b.dropInputLocked()
+	b.intr = true
+	b.mu.Unlock()
+	signal(b.inSig)
+}
+
+// dropInputLocked forgets the queued input; it counts as done for the
+// page's window.
+func (b *termBridge) dropInputLocked() {
+	for _, c := range b.inQ {
+		b.inDone += int64(len(c))
+	}
+	b.inQ, b.inBytes = nil, 0
+}
+
+// stdinLoop is the only writer of the command's stdin: queued input, ^C
+// on "intr", and — once the terminal is ending — the hang-up keys, in that
+// order and never interleaved. Each written or dropped chunk is confirmed
+// to the page ("iack"), which frees its input window.
+func (b *termBridge) stdinLoop(w *io.PipeWriter, runCtx context.Context) {
 	for {
+		if b.ctx.Err() != nil {
+			b.hangupInput(w, runCtx)
+			return
+		}
 		b.mu.Lock()
 		var chunk []byte
-		if len(b.inQ) > 0 {
+		intr := b.intr
+		switch {
+		case intr:
+			b.intr = false
+			chunk = hangupKeys[0]
+		case len(b.inQ) > 0:
 			chunk = b.inQ[0]
 			b.inQ[0] = nil
 			b.inQ = b.inQ[1:]
@@ -462,20 +491,46 @@ func (b *termBridge) stdinLoop(w *io.PipeWriter) {
 		if chunk == nil {
 			select {
 			case <-b.inSig:
-				continue
 			case <-b.ctx.Done():
-				return
 			}
+			continue
 		}
 		if _, err := w.Write(chunk); err != nil {
 			return
 		}
 		b.mu.Lock()
-		b.inBytes -= len(chunk)
-		b.inDone += int64(len(chunk))
+		if !intr {
+			b.inBytes -= len(chunk)
+			b.inDone += int64(len(chunk))
+		}
 		n := b.inDone
 		b.mu.Unlock()
-		if !b.send(websocket.MessageText, mustJSON(map[string]any{"k": "iack", "n": n})) {
+		b.send(websocket.MessageText, mustJSON(map[string]any{"k": "iack", "n": n})) // false: ending, see the top
+	}
+}
+
+// hangupInput drops what is still queued and, if the command is attached,
+// types ^C, then ^D after a short gap. A write the command does not take
+// ends when its run is cancelled (the pipe closes).
+func (b *termBridge) hangupInput(w io.Writer, runCtx context.Context) {
+	b.mu.Lock()
+	b.dropInputLocked()
+	b.intr = false
+	b.mu.Unlock()
+	if !b.attached.Load() {
+		return
+	}
+	for i, k := range hangupKeys {
+		if i > 0 {
+			t := time.NewTimer(hangupKeyGap)
+			select {
+			case <-t.C:
+			case <-runCtx.Done():
+				t.Stop()
+				return
+			}
+		}
+		if _, err := w.Write(k); err != nil {
 			return
 		}
 	}

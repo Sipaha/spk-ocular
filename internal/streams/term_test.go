@@ -642,3 +642,89 @@ func TestSizeBoxSkipsTheSizeTheCommandHas(t *testing.T) {
 	close(done)
 	assert.Nil(t, b.Next(), "no repeated size before the end")
 }
+
+// blockedReader is a command that prints "ready" and reads nothing until
+// the page's resize to 100x30 has been applied (so every input message the
+// page sent before it is queued in the bridge); then until until(ctx)
+// returns it reads its stdin, which it reports.
+func blockedReader(seen chan<- []byte, applied chan<- struct{}, until func(sizes provider.TermSizes), done func(all []byte) bool) func(ctx context.Context, term provider.Terminal) (provider.ExitStatus, error) {
+	return func(ctx context.Context, term provider.Terminal) (provider.ExitStatus, error) {
+		_, _ = term.Stdout.Write([]byte("ready"))
+		for s := term.Sizes.Next(); s != nil && s.Cols != 100; s = term.Sizes.Next() {
+		}
+		close(applied)
+		until(term.Sizes)
+		var all []byte
+		buf := make([]byte, 64)
+		for {
+			n, err := term.Stdin.Read(buf)
+			all = append(all, buf[:n]...)
+			if err != nil || done(all) {
+				seen <- all
+				return provider.ExitStatus{Known: err == nil}, nil
+			}
+		}
+	}
+}
+
+func TestTermClosingDropsQueuedInputAndHangsUpAfterIt(t *testing.T) {
+	f := newTermFixture(t, fastTimings)
+	seen, applied := make(chan []byte, 1), make(chan struct{})
+	ft := &fakeTerm{run: blockedReader(seen, applied,
+		func(sizes provider.TermSizes) { // the terminal is gone before the command reads
+			for sizes.Next() != nil {
+			}
+		},
+		func(all []byte) bool { return bytes.HasSuffix(all, []byte{3, 4}) })}
+	id, err := f.reg.AddTerm(ft, provider.TermSize{Cols: 80, Rows: 24})
+	require.NoError(t, err)
+	cl := newClient(f.dial(t, id))
+	require.Eventually(t, func() bool { return cl.output() == "ready" }, 5*time.Second, 10*time.Millisecond)
+	for _, s := range []string{"one\r", "two\r", "three\r"} {
+		cl.send(t, websocket.MessageBinary, []byte(s))
+	}
+	cl.send(t, websocket.MessageText, []byte(`{"k":"resize","cols":100,"rows":30}`))
+	<-applied // everything sent before the resize is queued
+	_ = cl.c.Close(websocket.StatusNormalClosure, "tab closed")
+	select {
+	case got := <-seen:
+		// "one\r" may already be on its way (a write cannot be recalled);
+		// the queued rest is dropped, and the hang-up keys come last.
+		assert.Contains(t, []string{"one\r\x03\x04", "\x03\x04"}, string(got))
+	case <-time.After(5 * time.Second):
+		t.Fatal("the command was not hung up")
+	}
+}
+
+func TestTermInterruptDropsQueuedInputAndGoesFirst(t *testing.T) {
+	f := newTermFixture(t, fastTimings)
+	seen, applied := make(chan []byte, 1), make(chan struct{})
+	ft := &fakeTerm{run: blockedReader(seen, applied, func(provider.TermSizes) {},
+		func(all []byte) bool { return bytes.HasSuffix(all, []byte("four\r")) })}
+	id, err := f.reg.AddTerm(ft, provider.TermSize{Cols: 80, Rows: 24})
+	require.NoError(t, err)
+	cl := newClient(f.dial(t, id))
+	require.Eventually(t, func() bool { return cl.output() == "ready" }, 5*time.Second, 10*time.Millisecond)
+	for _, s := range []string{"one\r", "two\r", "three\r"} {
+		cl.send(t, websocket.MessageBinary, []byte(s))
+	}
+	cl.send(t, websocket.MessageText, []byte(`{"k":"intr"}`))
+	cl.send(t, websocket.MessageText, []byte(`{"k":"intr"}`)) // repeated: still one ^C
+	cl.send(t, websocket.MessageText, []byte(`{"k":"resize","cols":100,"rows":30}`))
+	// the dropped input frees the page's window: iack covers all 14 bytes
+	require.Eventually(t, func() bool {
+		for _, m := range cl.controls("iack") {
+			if m["n"] == float64(14) {
+				return true
+			}
+		}
+		return false
+	}, 5*time.Second, 10*time.Millisecond)
+	cl.send(t, websocket.MessageBinary, []byte("four\r"))
+	select {
+	case got := <-seen:
+		assert.Contains(t, []string{"one\r\x03four\r", "\x03four\r"}, string(got), "queued input dropped, ^C first")
+	case <-time.After(5 * time.Second):
+		t.Fatal("the command did not get the interrupt")
+	}
+}

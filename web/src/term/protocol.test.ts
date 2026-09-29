@@ -92,8 +92,32 @@ describe('TermConnection', () => {
     ws.ctl({ k: 'iack', n: 2 * IN_CHUNK })
     expect(conn.pending).toBe(IN_CHUNK)
     ws.ctl({ k: 'iack', n: 2 * IN_CHUNK }) // repeated: harmless
-    ws.ctl({ k: 'iack', n: 10 * IN_WINDOW }) // impossible: ignored
     expect(conn.inFlight).toBe(IN_WINDOW)
+  })
+
+  it('an impossible or fractional input counter is a protocol violation', () => {
+    for (const n of [10 * IN_WINDOW, 1.5, -1]) {
+      const { conn, ws, ends } = setup()
+      ws.open()
+      conn.input(new Uint8Array(10))
+      ws.ctl({ k: 'iack', n })
+      expect(ends).toEqual([{ reason: 'error', class: 'internal', message: 'terminal protocol violation (input counter)' }])
+      expect(ws.closed).toBe(1000)
+    }
+  })
+
+  it('Ctrl+C gets through an exhausted input window and drops the local queue', () => {
+    const { conn, ws } = setup()
+    ws.open()
+    conn.input(new Uint8Array(IN_WINDOW + IN_CHUNK)) // the command does not read
+    expect(conn.inFlight).toBe(IN_WINDOW)
+    const frames = ws.sent.length
+    conn.interrupt()
+    expect(ws.sent.slice(frames)).toEqual([JSON.stringify({ k: 'intr' })]) // a control, not a window byte
+    expect(conn.pending).toBe(0)
+    ws.ctl({ k: 'iack', n: IN_WINDOW }) // the server dropped its queue: the window is free
+    conn.input('x')
+    expect(ws.bytes().at(-1)).toEqual(new Uint8Array([120]))
   })
 
   it('refuses a paste beyond the local queue and drops nothing already queued', () => {
