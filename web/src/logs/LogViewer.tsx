@@ -191,6 +191,7 @@ function Stream({ client, subject, active, query, toolbar, view }: { client: Cli
       f.setMatchIndex(f.current + (e.shiftKey ? -1 : 1))
       f.bumpNav()
     } else if (e.key === 'Escape' && inSearch) {
+      e.preventDefault()
       f.setSearch('')
       parentRef.current?.focus()
     } else if (inInput) {

@@ -60,10 +60,22 @@ export function isTyping(target: EventTarget | null): boolean {
   return target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement || target instanceof HTMLSelectElement || target.isContentEditable || target.contentEditable === 'true'
 }
 
+/** A modal dialog or a menu is open: it owns the keyboard (menus consume only
+ * their own keys — the rest must not act behind them). */
+export function overlayOpen(): boolean {
+  return !!document.querySelector('[aria-modal="true"], [role="menu"]')
+}
+
+/** The key was already handled by whom it was meant for (CodeMirror closing
+ * its search, a field clearing itself) or is part of a composition. */
+export function consumed(e: KeyboardEvent): boolean {
+  return e.defaultPrevented || e.isComposing
+}
+
 /** The app-wide key e is, or null (it belongs to someone else or to nobody). */
 export function globalShortcut(e: KeyboardEvent): GlobalId | null {
-  if (e.isComposing || e.repeat || e.getModifierState?.('AltGraph')) return null
-  if (inTerminal(e.target) || document.querySelector('[aria-modal="true"]')) return null
+  if (consumed(e) || e.repeat || e.getModifierState?.('AltGraph')) return null
+  if (inTerminal(e.target) || overlayOpen()) return null
   const typing = isTyping(e.target)
   for (const k of KEYS) {
     if (k.scope === 'global' && k.match?.(e) && (!typing || k.inFields)) return k.id as GlobalId

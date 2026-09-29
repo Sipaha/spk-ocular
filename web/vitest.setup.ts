@@ -27,6 +27,9 @@ Element.prototype.getBoundingClientRect = function () {
 }
 Object.defineProperty(HTMLElement.prototype, 'offsetHeight', { configurable: true, get: () => 800 })
 Object.defineProperty(HTMLElement.prototype, 'offsetWidth', { configurable: true, get: () => 1000 })
+// CodeMirror measures text through Ranges, which jsdom cannot lay out either.
+if (!Range.prototype.getClientRects) Range.prototype.getClientRects = () => [] as unknown as DOMRectList
+if (!Range.prototype.getBoundingClientRect) Range.prototype.getBoundingClientRect = () => new DOMRect()
 
 // The dock's tabs are app-wide state: every test starts with none.
 import { beforeEach } from 'vitest'

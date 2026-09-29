@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { App } from '../App'
@@ -116,6 +116,68 @@ describe('keyboard', () => {
     await userEvent.keyboard('{Escape}')
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'pods p-00' })).not.toBeInTheDocument())
     expect(scroll).toHaveFocus()
+  })
+
+  // Review 2026-09-30 (Codex, P5): Esc that CodeMirror consumed (closing its
+  // search) also closed the whole drawer.
+  it('Esc closing the YAML search leaves details open; the next Esc closes them', async () => {
+    const { scroll } = await openProd(1)
+    scroll.focus()
+    await userEvent.keyboard('{ArrowDown}{Enter}')
+    const drawer = await screen.findByRole('dialog', { name: 'pods p-00' })
+    await userEvent.click(within(drawer).getByRole('tab', { name: 'YAML' }))
+    await waitFor(() => expect(drawer.querySelector('.cm-content')).not.toBeNull())
+    const content = drawer.querySelector<HTMLElement>('.cm-content')!
+    content.focus()
+    fireEvent.keyDown(content, { key: 'f', code: 'KeyF', ctrlKey: true, keyCode: 70 })
+    await waitFor(() => expect(drawer.querySelector('.cm-search')).not.toBeNull())
+    const field = drawer.querySelector<HTMLElement>('.cm-search input')!
+    fireEvent.keyDown(field, { key: 'Escape', code: 'Escape', keyCode: 27 }) // from the search field
+    await waitFor(() => expect(drawer.querySelector('.cm-search')).toBeNull())
+    expect(screen.getByRole('dialog', { name: 'pods p-00' })).toBeInTheDocument()
+
+    content.focus()
+    fireEvent.keyDown(content, { key: 'f', code: 'KeyF', ctrlKey: true, keyCode: 70 })
+    await waitFor(() => expect(drawer.querySelector('.cm-search')).not.toBeNull())
+    content.focus()
+    fireEvent.keyDown(content, { key: 'Escape', code: 'Escape', keyCode: 27 }) // from the editor, search open
+    await waitFor(() => expect(drawer.querySelector('.cm-search')).toBeNull())
+    expect(screen.getByRole('dialog', { name: 'pods p-00' })).toBeInTheDocument()
+
+    fireEvent.keyDown(content, { key: 'Escape', code: 'Escape', keyCode: 27 }) // nothing of CodeMirror's open
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'pods p-00' })).not.toBeInTheDocument())
+  })
+
+  it('Esc clearing the table filter does not also close details', async () => {
+    const { scroll } = await openProd(1)
+    scroll.focus()
+    await userEvent.keyboard('{ArrowDown}{Enter}')
+    await screen.findByRole('dialog', { name: 'pods p-00' })
+    const filter = screen.getByRole('textbox', { name: 'Filter rows' })
+    await userEvent.type(filter, 'p')
+    await userEvent.keyboard('{Escape}')
+    expect(filter).toHaveValue('')
+    expect(screen.getByRole('dialog', { name: 'pods p-00' })).toBeInTheDocument()
+  })
+
+  // Review 2026-09-30 (Codex, P5): an open menu owns the keyboard — F6,
+  // Ctrl+K, ? and / used to act behind it.
+  it('an open row menu keeps F6, Ctrl+K, ? and / to itself', async () => {
+    const { grid } = await openProd(1)
+    fireEvent.contextMenu(await within(grid).findByText('p-00'))
+    const menu = screen.getByRole('menu', { name: 'Row actions' })
+    expect(menu.contains(document.activeElement)).toBe(true)
+    await userEvent.keyboard('{F6}')
+    expect(menu.contains(document.activeElement)).toBe(true)
+    await userEvent.keyboard('{Control>}k{/Control}')
+    expect(screen.queryByRole('dialog', { name: 'Go to' })).not.toBeInTheDocument()
+    await userEvent.keyboard('{Shift>}{Slash}{/Shift}/')
+    expect(screen.queryByRole('dialog', { name: 'Keyboard' })).not.toBeInTheDocument()
+    expect(menu.contains(document.activeElement)).toBe(true)
+    await userEvent.keyboard('{Escape}')
+    expect(screen.queryByRole('menu')).not.toBeInTheDocument()
+    await userEvent.keyboard('{F6}')
+    expect(screen.getByRole('listbox', { name: 'targets' })).toHaveFocus()
   })
 
   it('the bottom panel has a palette button (in a terminal Ctrl+K is the program\'s)', async () => {

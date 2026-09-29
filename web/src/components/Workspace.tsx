@@ -318,6 +318,7 @@ function ResourcePage(props: {
             onChange={(e) => setFilter(e.target.value)}
             onKeyDown={(e) => {
               if (e.key === 'Escape') {
+                e.preventDefault() // one Esc, one effect: not also closing details
                 if (filter) setFilter('')
                 else e.currentTarget.blur()
               } else if (e.key === 'ArrowDown') {

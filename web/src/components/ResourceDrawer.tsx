@@ -4,7 +4,7 @@ import type { ActionDescriptor, Relation, Ref, Resource } from '../api/types'
 import { Menu } from '../actions/Menu'
 import { actionLabel, classLabel, detailLabel, relationLabel, t } from '../i18n'
 import { inTerminal } from '../keyboard'
-import { focusMark, isTyping, restoreFocus } from '../shortcuts'
+import { consumed, focusMark, isTyping, overlayOpen, restoreFocus } from '../shortcuts'
 import { PortsSection } from '../tunnels/Ports'
 import { useView } from '../views/useView'
 import type { ViewHub } from '../views/viewSync'
@@ -77,7 +77,7 @@ export function ResourceDrawer({ client, hub, target, subject, onClose, hasLogs,
   })
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (inTerminal(e.target) || document.querySelector('[aria-modal="true"]')) return
+      if (consumed(e) || inTerminal(e.target) || overlayOpen()) return
       if (e.key === 'Escape' && !(e.target instanceof HTMLElement && e.target.closest('.cm-panels'))) keys.current.close()
       else if (e.key === 'ArrowLeft' && e.altKey && !e.ctrlKey && !e.shiftKey && !e.metaKey && !isTyping(e.target)) {
         // Alt+←: back along the relations (never Backspace: it edits text);
