@@ -88,7 +88,9 @@ func TestStatefulSetClaimsFollowTheRetentionPolicy(t *testing.T) {
 		{"delete, delete", sts(claims("Delete", "Retain")), "delete", core.ActionParams{}, "claims of its pods are deleted", true},
 		{"delete, no templates", sts(map[string]any{"replicas": int64(3)}), "delete", core.ActionParams{}, "", true},
 		{"scale down, delete", sts(claims("Retain", "Delete")), "scale", count(1), "claims of pods 1–2 are deleted", true},
-		{"scale down, retain", sts(claims("Delete", "Retain")), "scale", count(1), "claims of removed pods are kept", false},
+		{"scale down by one, delete", sts(claims("Retain", "Delete")), "scale", count(2), "claims of pod 2 are deleted", true},
+		{"scale down, retain", sts(claims("Retain", "Retain")), "scale", count(1), "claims of removed pods are kept.", false},
+		{"scale down, retain, deleted with it", sts(claims("Delete", "Retain")), "scale", count(1), "kept until the StatefulSet is deleted", false},
 		{"scale up, delete", sts(claims("Retain", "Delete")), "scale", count(5), "3 → 5", false},
 		{"scale to zero", sts(claims("", "")), "scale", count(0), "all pods stop", true},
 	}

@@ -212,3 +212,146 @@ func TestKindActionWithoutTheRightIsForbidden(t *testing.T) {
 	assertClass(t, err, provider.ClassForbidden)
 	assert.Equal(t, pod, c.kubectl("-n", "ocular-demo", "get", "pod", pod, "-o", "jsonpath={.metadata.name}"))
 }
+
+// apply creates objects from a manifest in the test namespace.
+func (c *actionCluster) apply(manifest string) {
+	c.t.Helper()
+	cmd := exec.Command("kubectl", "--kubeconfig", kindKubeconfig(c.t), "--context", "kind-ocular-dev", "-n", c.ns, "apply", "-f", "-")
+	cmd.Stdin = strings.NewReader(manifest)
+	out, err := cmd.CombinedOutput()
+	require.NoError(c.t, err, string(out))
+}
+
+// statefulSet runs two pods, each with a claim data-<name>-<ordinal>, under
+// the given claim retention policy.
+func (c *actionCluster) statefulSet(name, whenDeleted, whenScaled string) core.Ref {
+	c.t.Helper()
+	c.apply(fmt.Sprintf(`apiVersion: apps/v1
+kind: StatefulSet
+metadata: {name: %[1]s}
+spec:
+  replicas: 2
+  serviceName: %[1]s
+  podManagementPolicy: Parallel
+  persistentVolumeClaimRetentionPolicy: {whenDeleted: %[2]s, whenScaled: %[3]s}
+  selector: {matchLabels: {app: %[1]s}}
+  template:
+    metadata: {labels: {app: %[1]s}}
+    spec:
+      terminationGracePeriodSeconds: 0
+      containers:
+      - name: web
+        image: nginx:1.27-alpine
+        volumeMounts: [{name: data, mountPath: /data}]
+  volumeClaimTemplates:
+  - metadata: {name: data}
+    spec:
+      accessModes: [ReadWriteOnce]
+      resources: {requests: {storage: 16Mi}}
+`, name, whenDeleted, whenScaled))
+	c.kubectlNS("rollout", "status", "statefulset/"+name, "--timeout=180s")
+	return c.ref("apps/statefulsets", name)
+}
+
+func (c *actionCluster) claims() string {
+	c.t.Helper()
+	return c.kubectlNS("get", "pvc", "-o", "jsonpath={.items[*].metadata.name}")
+}
+
+// prepare returns the plan as the UI would show it.
+func (c *actionCluster) prepare(ref core.Ref, action string, p core.ActionParams) core.ActionPlan {
+	c.t.Helper()
+	plan, err := c.sess.PrepareAction(context.Background(), ref, action, p)
+	require.NoError(c.t, err)
+	return plan
+}
+
+func (c *actionCluster) runPlan(plan core.ActionPlan) {
+	c.t.Helper()
+	_, err := c.sess.RunAction(context.Background(), provider.ActionRun{Ref: plan.Where.Ref, Action: plan.Action.ID, Params: plan.Params, Expect: plan.Expect})
+	require.NoError(c.t, err)
+}
+
+func TestKindActionStatefulSetClaimsFollowTheRetentionPolicy(t *testing.T) {
+	t.Run("scaled Delete, deleted Retain", func(t *testing.T) {
+		c := kindActionCluster(t)
+		ref := c.statefulSet("db", "Retain", "Delete")
+		require.Equal(t, "data-db-0 data-db-1", c.claims())
+
+		plan := c.prepare(ref, "scale", count(1))
+		assert.True(t, plan.Destructive)
+		assert.Contains(t, strings.Join(plan.Effects, "\n"), "The PersistentVolumeClaims of pod 1 are deleted")
+		c.runPlan(plan)
+		require.Eventually(t, func() bool { return c.claims() == "data-db-0" }, 120*time.Second, time.Second, "the claim of the removed pod is deleted")
+
+		plan = c.prepare(ref, "delete", core.ActionParams{})
+		assert.Contains(t, plan.Effects, "Its PersistentVolumeClaims are kept.")
+		c.runPlan(plan)
+		require.Eventually(t, func() bool {
+			_, err := c.run("-n", c.ns, "get", "statefulset", "db")
+			return err != nil
+		}, 120*time.Second, time.Second)
+		require.Never(t, func() bool { return c.claims() != "data-db-0" }, 5*time.Second, time.Second, "the remaining claim is kept")
+	})
+	t.Run("scaled Retain, deleted Delete", func(t *testing.T) {
+		c := kindActionCluster(t)
+		ref := c.statefulSet("db", "Delete", "Retain")
+
+		plan := c.prepare(ref, "scale", count(1))
+		assert.False(t, plan.Destructive, "scaling down keeps the claims")
+		assert.Contains(t, strings.Join(plan.Effects, "\n"), "The PersistentVolumeClaims of removed pods are kept until the StatefulSet is deleted")
+		c.runPlan(plan)
+		require.Eventually(t, func() bool {
+			_, err := c.run("-n", c.ns, "get", "pod", "db-1")
+			return err != nil
+		}, 120*time.Second, time.Second)
+		assert.Equal(t, "data-db-0 data-db-1", c.claims(), "the claim of the removed pod is kept")
+
+		plan = c.prepare(ref, "delete", core.ActionParams{})
+		assert.Contains(t, strings.Join(plan.Effects, "\n"), "The PersistentVolumeClaims of its pods are deleted")
+		c.runPlan(plan)
+		require.Eventually(t, func() bool { return c.claims() == "" }, 120*time.Second, time.Second,
+			"every claim of its pods goes with it, the one kept at scale down too")
+	})
+}
+
+func TestKindActionRestartOfAPausedDeploymentIsUnavailable(t *testing.T) {
+	c := kindActionCluster(t)
+	ref := c.deployment("web", 1)
+	c.kubectlNS("rollout", "pause", "deployment/web")
+	plan := c.prepare(ref, "restart", core.ActionParams{})
+	assert.Equal(t, "deployment web is paused: resume its rollout first", plan.Unavailable)
+	_, err := c.sess.RunAction(context.Background(), provider.ActionRun{Ref: plan.Where.Ref, Action: "restart", Expect: plan.Expect})
+	assertClass(t, err, provider.ClassConflict)
+	assert.Empty(t, c.jsonpath("deployment", "web", `{.spec.template.metadata.annotations.kubectl\.kubernetes\.io/restartedAt}`))
+
+	c.kubectlNS("rollout", "resume", "deployment/web")
+	plan = c.prepare(ref, "restart", core.ActionParams{})
+	assert.Empty(t, plan.Unavailable)
+	c.runPlan(plan)
+}
+
+func TestKindActionScaleWarnsOfAnAutoscaler(t *testing.T) {
+	c := kindActionCluster(t)
+	ref := c.deployment("web", 1)
+	c.deployment("other", 1)
+	plan := c.prepare(ref, "scale", count(2))
+	assert.Empty(t, plan.Warnings)
+	assert.Equal(t, core.RightsAllowed, plan.Rights.State)
+
+	c.kubectlNS("autoscale", "deployment", "other", "--min=1", "--max=3")
+	c.kubectlNS("autoscale", "deployment", "web", "--min=2", "--max=5")
+	plan = c.prepare(ref, "scale", count(2))
+	assert.Equal(t, []string{"HorizontalPodAutoscaler web may override the count (2–5)."}, plan.Warnings)
+}
+
+func TestKindActionViewerRightsAreDeniedInThePlan(t *testing.T) {
+	s := rbacSession(t, "viewer").(*session)
+	c := &actionCluster{t: t, ns: "ocular-demo"}
+	pod := c.kubectl("-n", "ocular-demo", "get", "pods", "-l", "app=web", "-o", "jsonpath={.items[0].metadata.name}")
+	ref := core.Ref{Provider: ProviderID, Target: s.target, Scope: "ocular-demo", Kind: "pods", Name: pod}
+	plan, err := s.PrepareAction(context.Background(), ref, "delete", core.ActionParams{})
+	require.NoError(t, err)
+	assert.Equal(t, core.RightsDenied, plan.Rights.State)
+	assert.True(t, strings.HasPrefix(plan.Rights.Reason, "you may not delete pods in ocular-demo"), plan.Rights.Reason)
+}

@@ -48,8 +48,10 @@ func effects(def *kindDef, action string, p core.ActionParams, u *unstructured.U
 		}
 		if def == statefulSetsKind && m < n && len(slice(o, "spec", "volumeClaimTemplates")) > 0 {
 			if str(o, "spec", "persistentVolumeClaimRetentionPolicy", "whenScaled") == "Delete" {
-				fx.effects = append(fx.effects, fmt.Sprintf("The PersistentVolumeClaims of pods %d–%d are deleted%s.", m, n-1, reclaimNote))
+				fx.effects = append(fx.effects, fmt.Sprintf("The PersistentVolumeClaims of %s are deleted%s.", ordinals(m, n-1), reclaimNote))
 				fx.destructive = true
+			} else if str(o, "spec", "persistentVolumeClaimRetentionPolicy", "whenDeleted") == "Delete" {
+				fx.effects = append(fx.effects, "The PersistentVolumeClaims of removed pods are kept until the StatefulSet is deleted: then they are deleted with it"+reclaimNote+".")
 			} else {
 				fx.effects = append(fx.effects, "The PersistentVolumeClaims of removed pods are kept.")
 			}
@@ -73,6 +75,14 @@ func effects(def *kindDef, action string, p core.ActionParams, u *unstructured.U
 		fx.effects = append(fx.effects, "Deletion is requested: finalizers and grace periods may keep it for a while.")
 	}
 	return fx
+}
+
+// ordinals names the pods from..to of a StatefulSet.
+func ordinals(from, to int) string {
+	if from == to {
+		return fmt.Sprintf("pod %d", from)
+	}
+	return fmt.Sprintf("pods %d–%d", from, to)
 }
 
 func pods(n int) string {
