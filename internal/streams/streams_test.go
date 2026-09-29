@@ -184,7 +184,7 @@ func TestConnectRacingCloseOwnerNeverRunsAfterIt(t *testing.T) {
 		id, err := reg.Add("o", nil)
 		require.NoError(t, err)
 		go func() { defer ran.Done(); reg.CloseOwner("o") }()
-		s, ctx, done, err := reg.connect(context.Background(), id)
+		s, ctx, done, err := reg.connect(context.Background(), id, KindLogs)
 		ran.Wait()
 		if err == nil {
 			assert.Error(t, ctx.Err(), "connected before the close: canceled by it")

@@ -3,6 +3,7 @@ module github.com/spk/spk-ocular
 go 1.26.1
 
 require (
+	github.com/coder/websocket v1.8.14
 	github.com/fsnotify/fsnotify v1.10.1
 	github.com/godbus/dbus/v5 v5.2.2
 	github.com/spf13/cobra v1.10.2
@@ -13,11 +14,11 @@ require (
 	k8s.io/client-go v0.37.1
 	k8s.io/klog/v2 v2.140.0
 	modernc.org/sqlite v1.60.0
+	sigs.k8s.io/yaml v1.6.0
 )
 
 require (
 	github.com/adrg/xdg v0.5.3 // indirect
-	github.com/coder/websocket v1.8.14 // indirect
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
 	github.com/fxamacker/cbor/v2 v2.9.1 // indirect
@@ -69,5 +70,4 @@ require (
 	sigs.k8s.io/json v0.0.0-20250730193827-2d320260d730 // indirect
 	sigs.k8s.io/randfill v1.0.0 // indirect
 	sigs.k8s.io/structured-merge-diff/v6 v6.4.2 // indirect
-	sigs.k8s.io/yaml v1.6.0 // indirect
 )

@@ -1,11 +1,12 @@
-// Package streams serves long-lived streams (container logs; later exec)
-// to the UI over plain HTTP: in desktop mode from a token-protected loopback
-// server (never wails://: WebKitGTK buffers and truncates streams there), in
-// browser mode from the main server under /streams/. A stream is opened in
-// two steps: the API validates the request and registers a Func under a
-// single-use id (Registry.Add), then the page GETs <base>/logs/<id> and the
-// Func writes NDJSON frames to the response until it ends, the page goes
-// away, or its owner (a provider session incarnation) is closed.
+// Package streams serves long-lived streams to the UI: container logs
+// (NDJSON over a GET) and terminals (a WebSocket). In desktop mode they come
+// from a token-protected loopback server (never wails://: WebKitGTK buffers
+// and truncates streams there), in browser mode from the main server under
+// /streams/. A stream is opened in two steps: the API validates the request
+// and registers it under a single-use id (Registry.Add / AddTerm), then the
+// page connects to <base>/logs/<id> or <base>/term/<id> and the stream runs
+// until it ends, the page goes away, or its owner is closed (a provider
+// session incarnation for logs; terminals belong to the app).
 package streams
 
 import (
@@ -16,6 +17,8 @@ import (
 	"fmt"
 	"sync"
 	"time"
+
+	"github.com/spk/spk-ocular/internal/provider"
 )
 
 // Func runs one stream: it writes frames to out until ctx ends (the page
@@ -23,28 +26,63 @@ import (
 // the final "end" frame.
 type Func func(ctx context.Context, out *Writer) error
 
+// TermSession is a prepared terminal (provider.ExecHandle satisfies it).
+// Close releases it whether or not it ran.
+type TermSession interface {
+	Run(ctx context.Context, t provider.Terminal) (provider.ExitStatus, error)
+	Close()
+}
+
+// Kind of a stream: the route it is served on and its own limit.
+type Kind string
+
+const (
+	KindLogs Kind = "logs"
+	KindTerm Kind = "term"
+)
+
+// AppOwner owns streams that outlive sessions (terminals): nothing but
+// Registry.Close ends them.
+const AppOwner = "app"
+
 const (
 	// connectTTL: a registered stream the page did not connect to within
 	// this long is dropped (the page went away between the two steps).
 	connectTTL = 30 * time.Second
-	// MaxStreams bounds registered + connected streams of the whole app.
+	// MaxStreams bounds registered + connected log streams of the whole app.
 	MaxStreams = 8
+	// MaxTerms bounds registered + connected terminals.
+	MaxTerms = 16
+	// closeWait bounds how long Close waits for connected streams to end.
+	closeWait = 5 * time.Second
 )
+
+var limits = map[Kind]int{KindLogs: MaxStreams, KindTerm: MaxTerms}
 
 var (
 	// ErrGone: unknown, already used, expired or revoked stream id / owner.
 	ErrGone = errors.New("stream is gone")
-	// ErrLimit: too many open streams.
-	ErrLimit = fmt.Errorf("too many open streams (max %d)", MaxStreams)
+	// ErrLimit: too many open streams of a kind.
+	ErrLimit = errors.New("too many open streams")
 )
 
 type stream struct {
+	kind      Kind
 	owner     string
-	run       Func
+	run       Func        // logs
+	term      TermSession // terminals
+	size      provider.TermSize
 	created   time.Time
 	connected bool
 	cancel    context.CancelFunc // set on connect
 	gone      bool               // owner closed: the end frame says so
+}
+
+// release frees what a stream holds when it is dropped without running.
+func (s *stream) release() {
+	if s.term != nil {
+		s.term.Close()
+	}
 }
 
 // Registry holds registered and connected streams. Ids are opaque and never
@@ -57,6 +95,7 @@ type Registry struct {
 	seq     uint64
 	streams map[string]*stream
 	closed  bool
+	running sync.WaitGroup // connected streams
 }
 
 func NewRegistry() *Registry {
@@ -65,53 +104,93 @@ func NewRegistry() *Registry {
 	return &Registry{epoch: hex.EncodeToString(b), now: time.Now, streams: map[string]*stream{}}
 }
 
-// Add registers run for owner and returns the id the page connects with.
-// The caller must make sure owner is alive at this moment (the API calls it
-// under the lock that also guards closing the owner), so a stream can never
-// outlive a closed owner.
+// Add registers a log stream run for owner and returns the id the page
+// connects with. The caller must make sure owner is alive at this moment
+// (the API calls it under the lock that also guards closing the owner), so
+// a stream can never outlive a closed owner.
 func (r *Registry) Add(owner string, run Func) (string, error) {
+	return r.add(&stream{kind: KindLogs, owner: owner, run: run})
+}
+
+// AddTerm registers a terminal owned by the app, starting at size. The
+// registry owns t from now on: it is closed if the page never connects,
+// the app closes, or it has run. On error t is closed too.
+func (r *Registry) AddTerm(t TermSession, size provider.TermSize) (string, error) {
+	id, err := r.add(&stream{kind: KindTerm, owner: AppOwner, term: t, size: size})
+	if err != nil {
+		t.Close()
+	}
+	return id, err
+}
+
+func (r *Registry) add(s *stream) (string, error) {
+	var dropped []*stream
+	defer func() { releaseAll(dropped) }()
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if r.closed {
 		return "", ErrGone
 	}
-	r.dropExpiredLocked()
-	if len(r.streams) >= MaxStreams {
-		return "", ErrLimit
+	dropped = r.dropExpiredLocked()
+	n := 0
+	for _, o := range r.streams {
+		if o.kind == s.kind {
+			n++
+		}
+	}
+	if n >= limits[s.kind] {
+		return "", fmt.Errorf("%w (max %d %s)", ErrLimit, limits[s.kind], s.kind)
 	}
 	r.seq++
 	id := fmt.Sprintf("s%s-%d", r.epoch, r.seq)
-	r.streams[id] = &stream{owner: owner, run: run, created: r.now()}
+	s.created = r.now()
+	r.streams[id] = s
 	return id, nil
 }
 
-// dropExpiredLocked removes registered streams nobody connected to in time.
-func (r *Registry) dropExpiredLocked() {
-	for id, s := range r.streams {
-		if !s.connected && r.now().Sub(s.created) > connectTTL {
-			delete(r.streams, id)
-		}
+func releaseAll(ss []*stream) {
+	for _, s := range ss {
+		s.release()
 	}
 }
 
-// connect takes a registered stream (once) and gives it a context that the
-// owner's closing cancels. done must be called when the stream has ended.
-func (r *Registry) connect(parent context.Context, id string) (s *stream, ctx context.Context, done func(), err error) {
+// dropExpiredLocked removes registered streams nobody connected to in time;
+// the caller releases them outside the lock.
+func (r *Registry) dropExpiredLocked() []*stream {
+	var out []*stream
+	for id, s := range r.streams {
+		if !s.connected && r.now().Sub(s.created) > connectTTL {
+			delete(r.streams, id)
+			out = append(out, s)
+		}
+	}
+	return out
+}
+
+// connect takes a registered stream of kind (once) and gives it a context
+// that the owner's closing cancels. done must be called when the stream has
+// ended. An id of another kind is not consumed.
+func (r *Registry) connect(parent context.Context, id string, kind Kind) (s *stream, ctx context.Context, done func(), err error) {
+	var dropped []*stream
+	defer func() { releaseAll(dropped) }()
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	r.dropExpiredLocked()
+	dropped = r.dropExpiredLocked()
 	s = r.streams[id]
-	if r.closed || s == nil || s.connected {
+	if r.closed || s == nil || s.connected || s.kind != kind {
 		return nil, nil, nil, ErrGone
 	}
 	s.connected = true
 	ctx, s.cancel = context.WithCancel(parent)
 	cancel := s.cancel
+	r.running.Add(1)
 	return s, ctx, func() {
 		cancel()
+		s.release()
 		r.mu.Lock()
 		delete(r.streams, id)
 		r.mu.Unlock()
+		r.running.Done()
 	}, nil
 }
 
@@ -126,6 +205,8 @@ func (r *Registry) wasRevoked(s *stream) bool {
 // ones finish with an end frame "gone", registered ones can no longer
 // connect.
 func (r *Registry) CloseOwner(owner string) {
+	var dropped []*stream
+	defer func() { releaseAll(dropped) }()
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	for id, s := range r.streams {
@@ -137,6 +218,7 @@ func (r *Registry) CloseOwner(owner string) {
 			s.cancel()
 		} else {
 			delete(r.streams, id)
+			dropped = append(dropped, s)
 		}
 	}
 }
@@ -144,9 +226,11 @@ func (r *Registry) CloseOwner(owner string) {
 // Owners counts live (registered or connected) streams per owner: a session
 // with an open log tab is in use even without table views.
 func (r *Registry) Owners() map[string]int {
+	var dropped []*stream
+	defer func() { releaseAll(dropped) }()
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	r.dropExpiredLocked()
+	dropped = r.dropExpiredLocked()
 	out := map[string]int{}
 	for _, s := range r.streams {
 		out[s.owner]++
@@ -154,24 +238,46 @@ func (r *Registry) Owners() map[string]int {
 	return out
 }
 
-// Len is the number of live streams (for /api/_test/stats).
-func (r *Registry) Len() int {
+// Len is the number of live streams of every kind.
+func (r *Registry) Len() int { return r.Count(KindLogs) + r.Count(KindTerm) }
+
+// Count is the number of live streams of kind (for /api/_test/stats).
+func (r *Registry) Count(kind Kind) int {
+	var dropped []*stream
+	defer func() { releaseAll(dropped) }()
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	r.dropExpiredLocked()
-	return len(r.streams)
+	dropped = r.dropExpiredLocked()
+	n := 0
+	for _, s := range r.streams {
+		if s.kind == kind {
+			n++
+		}
+	}
+	return n
 }
 
-// Close ends every stream; Add fails afterwards.
+// Close ends every stream (connected ones as "gone") and waits a bounded
+// time for them to finish; Add fails afterwards.
 func (r *Registry) Close() {
+	var dropped []*stream
 	r.mu.Lock()
-	defer r.mu.Unlock()
 	r.closed = true
 	for id, s := range r.streams {
 		if s.connected {
+			s.gone = true
 			s.cancel()
 		} else {
 			delete(r.streams, id)
+			dropped = append(dropped, s)
 		}
+	}
+	r.mu.Unlock()
+	releaseAll(dropped)
+	done := make(chan struct{})
+	go func() { r.running.Wait(); close(done) }()
+	select {
+	case <-done:
+	case <-time.After(closeWait):
 	}
 }

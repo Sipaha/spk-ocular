@@ -10,6 +10,8 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/coder/websocket"
 )
 
 // End is the last frame of every stream.
@@ -41,6 +43,7 @@ type Handler struct {
 	// writer timings (tests shorten them)
 	writeTimeout, nudge, beat time.Duration
 	saveReadTimeout           time.Duration
+	term                      termTimings
 }
 
 type HandlerOptions struct {
@@ -62,6 +65,7 @@ func NewHandler(reg *Registry, o HandlerOptions) *Handler {
 		reg: reg, token: []byte(base64.RawURLEncoding.EncodeToString(raw[:])), classify: cl,
 		allowOrigin: o.AllowOrigin, saveDir: o.SaveDir,
 		writeTimeout: writeTimeout, nudge: nudgeDelay, beat: heartbeat, saveReadTimeout: 60 * time.Second,
+		term: defaultTermTimings,
 	}
 }
 
@@ -89,6 +93,19 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	switch {
 	case strings.HasPrefix(rest, "logs/") && r.Method == http.MethodGet:
 		h.serveStream(w, r, strings.TrimPrefix(rest, "logs/"))
+	case strings.HasPrefix(rest, "term/") && r.Method == http.MethodGet:
+		// Browsers always send Origin with a WebSocket handshake; without
+		// it the request is not from our page (cross-site WebSocket
+		// hijacking is exactly a foreign page opening this socket).
+		if r.Header.Get("Origin") == "" {
+			h.reject(w, http.StatusForbidden, "origin")
+			return
+		}
+		if !isWebSocketUpgrade(r) {
+			h.reject(w, http.StatusBadRequest, "upgrade")
+			return
+		}
+		h.serveTerm(w, r, strings.TrimPrefix(rest, "term/"))
 	case rest == "save" && r.Method == http.MethodPost && h.saveDir != nil:
 		// A cross-site page can send a "simple" POST; CORS would only hide
 		// the answer. The side effect needs an allowed Origin.
@@ -113,7 +130,7 @@ func (h *Handler) reject(w http.ResponseWriter, status int, reason string) {
 }
 
 func (h *Handler) serveStream(w http.ResponseWriter, r *http.Request, id string) {
-	s, ctx, done, err := h.reg.connect(r.Context(), id)
+	s, ctx, done, err := h.reg.connect(r.Context(), id, KindLogs)
 	if err != nil {
 		h.reject(w, http.StatusGone, "stream")
 		return
@@ -141,4 +158,52 @@ func (h *Handler) serveStream(w http.ResponseWriter, r *http.Request, id string)
 	}
 	_ = out.Frame(end)
 	out.close()
+}
+
+// isWebSocketUpgrade checks the handshake before the stream id is used, so
+// a malformed request cannot burn it.
+func isWebSocketUpgrade(r *http.Request) bool {
+	if !headerHasToken(r.Header, "Connection", "upgrade") || !headerHasToken(r.Header, "Upgrade", "websocket") {
+		return false
+	}
+	if r.Header.Get("Sec-WebSocket-Version") != "13" {
+		return false
+	}
+	key, err := base64.StdEncoding.DecodeString(r.Header.Get("Sec-WebSocket-Key"))
+	return err == nil && len(key) == 16
+}
+
+func headerHasToken(h http.Header, name, token string) bool {
+	for _, v := range h.Values(name) {
+		for t := range strings.SplitSeq(v, ",") {
+			if strings.EqualFold(strings.TrimSpace(t), token) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func (h *Handler) serveTerm(w http.ResponseWriter, r *http.Request, id string) {
+	s, ctx, done, err := h.reg.connect(r.Context(), id, KindTerm)
+	if err != nil {
+		h.reject(w, http.StatusGone, "stream")
+		return
+	}
+	defer done() // also closes the session (it ran or failed to start)
+	rc := http.NewResponseController(w)
+	_ = rc.SetReadDeadline(time.Time{})
+	_ = rc.SetWriteDeadline(time.Time{})
+	// Origin was checked above (exactly ours); the library's own check
+	// knows nothing about wails://.
+	conn, err := websocket.Accept(w, r, &websocket.AcceptOptions{
+		InsecureSkipVerify: true,
+		CompressionMode:    websocket.CompressionDisabled,
+	})
+	if err != nil {
+		slog.Debug("terminal upgrade failed", "err", err)
+		return
+	}
+	b := newTermBridge(conn, h.term, h.classify, s.size)
+	b.run(ctx, s.term, func() bool { return h.reg.wasRevoked(s) })
 }

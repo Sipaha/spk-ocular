@@ -288,12 +288,12 @@ type Stream interface {
 транспортные вопросы спайк закрыл, остальное — свойства реализации.
 
 ### Task 2. Ядро терминала: хэндлы, реестр видов, WS-мост с кредитами
-- [ ] `internal/provider`: `Execer`, `ExecHandle`, `Terminal`, `TermSizes`, `ExitStatus`;
+- [x] `internal/provider`: `Execer`, `ExecHandle`, `Terminal`, `TermSizes`, `ExitStatus`;
   `internal/core`: `ExecInfo`, `LiveTarget`, `KindDescriptor.Exec/Forward`.
-- [ ] `internal/streams`: виды в реестре (маршрут ↔ вид, лимиты с ожидающими), владелец-приложение,
+- [x] `internal/streams`: виды в реестре (маршрут ↔ вид, лимиты с ожидающими), владелец-приложение,
   резерв → Accept → commit; `term.go`: мост (читатель, очередь ввода, копировщик stdin, кредиты,
   упорядоченный писатель, ping, таймауты, завершение), закрытие всех при выходе с ожиданием.
-- [ ] Тесты (фейковый `ExecHandle`): guard-ы не тратят id (нет/чужой Origin, токен, Host, не-WS
+- [x] Тесты (фейковый `ExecHandle`): guard-ы не тратят id (нет/чужой Origin, токен, Host, не-WS
   запрос, logs-id на `/term` и наоборот); эхо; resize «последний побеждает» без блокировки
   читателя; без `ack` вывод останавливается, `ack` возобновляет; повторный `ack` с тем же n —
   ничего не делает; меньший n, больший отправленного, нецелый/отрицательный → 4002; процесс не читает stdin + большая вставка: `ack`/resize/close
