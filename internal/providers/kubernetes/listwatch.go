@@ -3,9 +3,11 @@ package kubernetes
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net"
 	"strings"
 	"sync"
+	"time"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -15,6 +17,16 @@ import (
 	"k8s.io/client-go/tools/cache"
 
 	"github.com/spk/spk-ocular/internal/provider"
+)
+
+// Client-side bounds for the reflector's requests (package vars for tests).
+// A server-side TimeoutSeconds is not a client deadline, and a Watch that
+// never gets response headers would otherwise hang silently.
+var (
+	listTimeout = 90 * time.Second // one initial LIST, including big ones
+	// watchEstablishTimeout bounds getting a watch stream's headers only;
+	// a healthy stream then lives as long as the server keeps it.
+	watchEstablishTimeout = 30 * time.Second
 )
 
 // transportReport receives the outcome of every list/watch request the
@@ -30,7 +42,8 @@ type statusListWatch struct {
 	res       dynamic.ResourceInterface
 	selector  string // field selector, "" = none
 	report    transportReport
-	watchList bool // the client supports WatchList semantics (real clients do)
+	ended     func() // a watch stream ended (renewal or a dropped connection)
+	watchList bool   // the client supports WatchList semantics (real clients do)
 }
 
 var (
@@ -46,19 +59,34 @@ func (lw *statusListWatch) opts(o metav1.ListOptions) metav1.ListOptions {
 }
 
 func (lw *statusListWatch) ListWithContext(ctx context.Context, o metav1.ListOptions) (runtime.Object, error) {
+	ctx, cancel := context.WithTimeout(ctx, listTimeout)
+	defer cancel()
 	obj, err := lw.res.List(ctx, lw.opts(o))
 	lw.report(err)
 	return obj, err
 }
 
 func (lw *statusListWatch) WatchWithContext(ctx context.Context, o metav1.ListOptions) (watch.Interface, error) {
+	// Cancel only if the stream does not start in time; once it has, the
+	// context lives until the stream ends or is stopped.
+	ctx, cancel := context.WithCancel(ctx)
+	timer := time.AfterFunc(watchEstablishTimeout, cancel)
 	w, err := lw.res.Watch(ctx, lw.opts(o))
+	if !timer.Stop() && err == nil {
+		// Established exactly as the timer fired: the stream is cancelled.
+		w.Stop()
+		err = context.DeadlineExceeded
+	}
 	if err != nil {
+		cancel()
+		if errors.Is(err, context.Canceled) && ctx.Err() != nil {
+			err = fmt.Errorf("watch did not start within %s: %w", watchEstablishTimeout, context.DeadlineExceeded)
+		}
 		lw.report(err)
 		return nil, err
 	}
 	lw.report(nil)
-	return newReportingWatch(w, lw.report), nil
+	return newReportingWatch(w, lw.report, lw.ended, cancel), nil
 }
 
 func (lw *statusListWatch) List(o metav1.ListOptions) (runtime.Object, error) {
@@ -82,16 +110,19 @@ type reportingWatch struct {
 	stop   chan struct{}
 	once   sync.Once
 	report transportReport
+	ended  func()
+	cancel context.CancelFunc
 }
 
-func newReportingWatch(inner watch.Interface, report transportReport) *reportingWatch {
-	w := &reportingWatch{inner: inner, out: make(chan watch.Event), stop: make(chan struct{}), report: report}
+func newReportingWatch(inner watch.Interface, report transportReport, ended func(), cancel context.CancelFunc) *reportingWatch {
+	w := &reportingWatch{inner: inner, out: make(chan watch.Event), stop: make(chan struct{}), report: report, ended: ended, cancel: cancel}
 	go w.run()
 	return w
 }
 
 func (w *reportingWatch) run() {
 	defer close(w.out)
+	defer w.cancel()
 	in := w.inner.ResultChan()
 	for {
 		select {
@@ -99,7 +130,13 @@ func (w *reportingWatch) run() {
 			return
 		case ev, ok := <-in:
 			if !ok {
-				return // normal end (timeout renewal) or server close: the reflector re-watches
+				// Renewal by the server's timeout, or a dropped connection:
+				// the reflector re-watches; if that does not succeed soon the
+				// cache reports it (informerCache.streamEnded).
+				if w.ended != nil {
+					w.ended()
+				}
+				return
 			}
 			if ev.Type == watch.Error {
 				w.report(apierrors.FromObject(ev.Object))
@@ -119,6 +156,7 @@ func (w *reportingWatch) Stop() {
 	w.once.Do(func() {
 		close(w.stop)
 		w.inner.Stop()
+		w.cancel()
 	})
 }
 

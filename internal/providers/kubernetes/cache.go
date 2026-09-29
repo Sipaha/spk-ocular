@@ -1,6 +1,7 @@
 package kubernetes
 
 import (
+	"errors"
 	"sync"
 	"time"
 
@@ -44,7 +45,30 @@ type informerCache struct {
 	leases   int
 	idleAt   time.Time
 	tr       transport
+	okGen    uint64 // bumped by every successful request
 	watchers map[*viewWatch]struct{}
+}
+
+// reconnectGrace: a watch stream that ended is fine if a new request
+// succeeds within this; otherwise the views go stale ("reconnecting").
+var reconnectGrace = 5 * time.Second
+
+var errReconnecting = errors.New("the connection to the cluster was lost; reconnecting")
+
+// streamEnded is called when a watch stream closes (normal renewal or a
+// dropped connection). Renewals re-watch at once and bump okGen.
+func (c *informerCache) streamEnded() {
+	c.mu.Lock()
+	gen := c.okGen
+	c.mu.Unlock()
+	time.AfterFunc(reconnectGrace, func() {
+		c.mu.Lock()
+		stuck := c.okGen == gen
+		c.mu.Unlock()
+		if stuck {
+			c.setTransport(errReconnecting)
+		}
+	})
 }
 
 func (c *informerCache) setTransport(err error) {
@@ -54,6 +78,9 @@ func (c *informerCache) setTransport(err error) {
 	}
 	tr := transport{failing: err != nil, class: class, message: msg}
 	c.mu.Lock()
+	if err == nil {
+		c.okGen++
+	}
 	if c.tr == tr {
 		c.mu.Unlock()
 		return
@@ -121,7 +148,7 @@ func (m *cacheManager) start(key cacheKey, def *kindDef) *informerCache {
 	if key.namespace != "" {
 		ri = res.Namespace(key.namespace)
 	}
-	lw := &statusListWatch{res: ri, selector: key.selector, report: c.setTransport, watchList: m.watchList}
+	lw := &statusListWatch{res: ri, selector: key.selector, report: c.setTransport, ended: c.streamEnded, watchList: m.watchList}
 	c.inf = cache.NewSharedIndexInformerWithOptions(lw, &unstructured.Unstructured{}, cache.SharedIndexInformerOptions{
 		ObjectDescription: key.gvr.String(),
 	})
