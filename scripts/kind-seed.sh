@@ -76,6 +76,36 @@ spec:
       paths:
       - {path: /, pathType: Prefix, backend: {service: {name: web, port: {number: 80}}}}
 ---
+# Logs: two pods printing a counter with levels and ANSI colours.
+apiVersion: apps/v1
+kind: Deployment
+metadata: {name: chatter, namespace: ocular-demo}
+spec:
+  replicas: 2
+  selector: {matchLabels: {app: chatter}}
+  template:
+    metadata: {labels: {app: chatter}}
+    spec:
+      terminationGracePeriodSeconds: 1
+      containers:
+      - name: app
+        image: "busybox:1.36"
+        command:
+        - sh
+        - -c
+        - |
+          i=0
+          while true; do
+            i=$((i+1))
+            case $((i % 4)) in
+              0) printf '\033[31mERROR\033[0m %s tick %d\n' "$(hostname)" "$i" ;;
+              1) printf 'INFO %s tick %d\n' "$(hostname)" "$i" ;;
+              2) printf '\033[33mWARN\033[0m %s tick %d\n' "$(hostname)" "$i" ;;
+              3) printf 'DEBUG %s tick %d\n' "$(hostname)" "$i" ;;
+            esac
+            sleep 0.5
+          done
+---
 apiVersion: v1
 kind: ConfigMap
 metadata: {name: web-config, namespace: ocular-demo}
@@ -88,3 +118,4 @@ stringData: {username: admin, password: not-a-real-password}
 YAML
 k -n ocular-demo rollout status deploy/web --timeout=180s
 k -n ocular-demo rollout status sts/db --timeout=180s
+k -n ocular-demo rollout status deploy/chatter --timeout=180s

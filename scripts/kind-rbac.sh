@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Namespace-limited users for the disposable kind cluster. Writes
 #   <outdir>/viewer.kubeconfig   get/list/watch pods in ocular-demo only
-#   <outdir>/nowatch.kubeconfig  get/list pods in ocular-demo, no watch
+#   <outdir>/nowatch.kubeconfig  get/list pods and read pods/log in ocular-demo, no watch
 # with fresh short-lived ServiceAccount tokens and ocular-demo as default namespace.
 set -euo pipefail
 KC="${1:?usage: kind-rbac.sh <kind kubeconfig> <outdir>}"
@@ -31,6 +31,7 @@ kind: Role
 metadata: {name: pods-nowatch, namespace: ocular-demo}
 rules:
 - {apiGroups: [""], resources: [pods], verbs: [get, list]}
+- {apiGroups: [""], resources: [pods/log], verbs: [get]}
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
@@ -65,4 +66,6 @@ kv() { kubectl --kubeconfig "$OUT/viewer.kubeconfig" "$@"; }
 [ "$(kv auth can-i list pods -A 2>/dev/null || true)" = no ]
 [ "$(kv auth can-i list namespaces 2>/dev/null || true)" = no ]
 [ "$(kubectl --kubeconfig "$OUT/nowatch.kubeconfig" auth can-i watch pods -n ocular-demo 2>/dev/null || true)" = no ]
+[ "$(kv auth can-i get pods --subresource=log -n ocular-demo 2>/dev/null || true)" = no ]
+[ "$(kubectl --kubeconfig "$OUT/nowatch.kubeconfig" auth can-i get pods --subresource=log -n ocular-demo)" = yes ]
 echo "rbac kubeconfigs in $OUT"
