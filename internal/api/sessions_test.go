@@ -197,8 +197,8 @@ func (o *metricOpenable) Open(ctx context.Context, target string) (provider.Sess
 func TestGetMetricsJoinsCurrentRowsAndReportsStatus(t *testing.T) {
 	ctx := context.Background()
 	ms := &metricSession{m: provider.Metrics{Values: map[string]provider.Usage{
-		"/p":         {CPU: 0.1, Memory: 1024}, // fakeSession's row: Ref{Name: "p"}, no scope
-		"ns/deleted": {CPU: 9},
+		"1":       {CPU: 0.1, Memory: 1024}, // fakeSession's row id
+		"deleted": {CPU: 9},
 	}}}
 	k := &metricOpenable{openable: newOpenable("a"), ms: ms}
 	s, _ := newService(t, k)
@@ -246,7 +246,7 @@ func TestIdleSessionsAreReaped(t *testing.T) {
 
 func TestViewsBelongToOneSessionIncarnation(t *testing.T) {
 	ctx := context.Background()
-	ms := &metricSession{m: provider.Metrics{Values: map[string]provider.Usage{"/p": {CPU: 1}}}}
+	ms := &metricSession{m: provider.Metrics{Values: map[string]provider.Usage{"1": {CPU: 1}}}}
 	k := &metricOpenable{openable: newOpenable("a"), ms: ms}
 	s, _ := newService(t, k)
 	old, err := s.OpenView(ctx, OpenViewRequest{Provider: "k", Target: "a", Query: provider.Query{Kind: "pods", Scope: allScopes}})

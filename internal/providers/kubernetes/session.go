@@ -92,6 +92,11 @@ func configHash(name string, cfg *clientcmdapi.Config, files []string) string {
 }
 
 type session struct {
+	// ctx lives as long as the session: shared background requests
+	// (metrics) end with it.
+	ctx    context.Context
+	cancel context.CancelFunc
+
 	target  string
 	hash    string
 	dyn     dynamic.Interface
@@ -102,13 +107,17 @@ type session struct {
 }
 
 func newSession(target, hash string, dyn dynamic.Interface, watchList bool) *session {
-	return &session{target: target, hash: hash, dyn: dyn, caches: newCacheManager(dyn, watchList), kinds: allKinds, now: time.Now}
+	ctx, cancel := context.WithCancel(context.Background())
+	return &session{ctx: ctx, cancel: cancel, target: target, hash: hash, dyn: dyn, caches: newCacheManager(dyn, watchList), kinds: allKinds, now: time.Now}
 }
 
 func (s *session) ConfigHash() string           { return s.hash }
 func (s *session) ScopeKind() string            { return namespacesKind.desc.ID }
 func (s *session) Kinds() []core.KindDescriptor { return s.kinds.descriptors() }
-func (s *session) Close()                       { s.caches.closeAll() }
+func (s *session) Close() {
+	s.cancel()
+	s.caches.closeAll()
+}
 
 func (s *session) Scopes(ctx context.Context) ([]core.Scope, error) {
 	ctx, cancel := context.WithTimeout(ctx, scopesTimeout)

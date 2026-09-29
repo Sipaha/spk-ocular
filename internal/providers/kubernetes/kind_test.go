@@ -243,20 +243,27 @@ func TestKindMetrics(t *testing.T) {
 	require.NoError(t, err)
 	defer sess.Close()
 	src := sess.(provider.MetricsSource)
+	// Metrics are attributed to incarnations the open views observe.
+	vm := views.NewManager(events.NewEmitter())
+	defer vm.CloseAll()
+	for _, q := range []provider.Query{
+		{Kind: "pods", Scope: core.ScopeSel{Mode: core.ScopeOne, Name: "ocular-demo"}},
+		{Kind: "nodes", Scope: core.ScopeSel{Mode: core.ScopeNone}},
+	} {
+		id, err := vm.Open("s", sess, q)
+		require.NoError(t, err)
+		waitStatus(t, vm, id, func(p views.Page) bool { return p.Status.State == provider.StatusReady })
+	}
 	var m provider.Metrics
 	require.Eventually(t, func() bool {
 		m, err = src.Metrics(context.Background(), provider.Query{Kind: "pods", Scope: core.ScopeSel{Mode: core.ScopeOne, Name: "ocular-demo"}})
 		return err == nil && len(m.Values) > 0
 	}, 90*time.Second, 5*time.Second, "err: %v", err)
-	var sawWeb bool
-	for k, u := range m.Values {
-		if len(k) > len("ocular-demo/web-") && k[:len("ocular-demo/web-")] == "ocular-demo/web-" {
-			sawWeb = true
-			assert.Greater(t, u.Memory, 1024.0*1024, "an nginx pod uses more than 1Mi")
-		}
+	for _, u := range m.Values {
+		assert.Greater(t, u.Memory, 0.0)
+		assert.False(t, u.At.IsZero())
 	}
-	assert.True(t, sawWeb)
 	nodes, err := src.Metrics(context.Background(), provider.Query{Kind: "nodes", Scope: core.ScopeSel{Mode: core.ScopeNone}})
 	require.NoError(t, err)
-	assert.Contains(t, nodes.Values, "/ocular-dev-control-plane")
+	assert.Len(t, nodes.Values, 1, "the control-plane node, keyed by its UID")
 }

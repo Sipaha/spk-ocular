@@ -5,6 +5,7 @@ import (
 	"sync"
 	"time"
 
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/dynamic"
@@ -218,6 +219,31 @@ func (m *cacheManager) evictLocked() {
 			m.evictLocked()
 		})
 	}
+}
+
+// lookup finds an object by name in any cache of gvr that covers ns (a
+// namespace cache or an all-namespaces one).
+func (m *cacheManager) lookup(gvr schema.GroupVersionResource, ns, name string) (metav1.Object, bool) {
+	m.mu.Lock()
+	var cs []*informerCache
+	for k, c := range m.caches {
+		if k.gvr == gvr && k.selector == "" && (k.namespace == "" || k.namespace == ns) {
+			cs = append(cs, c)
+		}
+	}
+	m.mu.Unlock()
+	key := name
+	if ns != "" {
+		key = ns + "/" + name
+	}
+	for _, c := range cs {
+		if obj, ok, _ := c.inf.GetStore().GetByKey(key); ok {
+			if o, ok := obj.(metav1.Object); ok {
+				return o, true
+			}
+		}
+	}
+	return nil, false
 }
 
 // stats reports cache counts for leak checks.

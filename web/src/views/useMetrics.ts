@@ -3,6 +3,7 @@ import type { Client } from '../api/client'
 import type { MetricsView } from '../api/types'
 
 export const METRICS_INTERVAL_MS = 15_000
+export const METRICS_ABSENT_RETRY_MS = 120_000
 
 /**
  * Usage for the visible table, refreshed every 15 s after the previous
@@ -29,8 +30,10 @@ export function useMetrics(client: Client, viewId: string | null, enabled: boole
         if (!live) return
         setState({ viewId, m })
         if (m.status === 'unsupported') {
+          // No metrics API (yet): ask rarely, metrics-server may be installed.
           busy = false
-          return // no metrics API: stop asking for this view
+          if (live) timer = setTimeout(tick, METRICS_ABSENT_RETRY_MS)
+          return
         }
       } catch {
         // gone/unavailable: the view reopens with a new id and a new effect

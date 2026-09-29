@@ -40,23 +40,28 @@ type metricsEntry struct {
 type metricsCache struct {
 	mu      sync.Mutex
 	entries map[string]*metricsEntry
-	absent  time.Time // when the API was last found missing
+	absent  map[string]time.Time // per metrics resource (pods/nodes): when found missing
 }
 
-// Metrics returns CPU (cores) and memory (bytes) per "scope/name" for pods
-// or nodes. Missing API → unsupported; denied → forbidden; nothing is ever
+var errNoMetricsAPI = &provider.Error{Class: provider.ClassUnsupported, Message: "metrics.k8s.io is not installed"}
+
+// Metrics returns CPU (cores) and memory (bytes) keyed by row id (the
+// object's UID) for pods or nodes. A sample is attributed to the object the
+// informer cache holds under that name only if that object existed when the
+// sample was taken — a same-named replacement gets nothing until the next
+// sample. Missing API → unsupported; denied → forbidden; nothing is ever
 // reported as a zero it did not measure.
 func (s *session) Metrics(ctx context.Context, q provider.Query) (provider.Metrics, error) {
-	var gvr schema.GroupVersionResource
+	var gvr, objGVR schema.GroupVersionResource
 	ns := ""
 	switch q.Kind {
 	case podsKind.desc.ID:
-		gvr = podMetricsGVR
+		gvr, objGVR = podMetricsGVR, podsKind.gvr
 		if q.Scope.Mode == core.ScopeOne {
 			ns = q.Scope.Name
 		}
 	case nodesKind.desc.ID:
-		gvr = nodeMetricsGVR
+		gvr, objGVR = nodeMetricsGVR, nodesKind.gvr
 	default:
 		return provider.Metrics{}, &provider.Error{Class: provider.ClassUnsupported, Message: "no metrics for " + q.Kind}
 	}
@@ -67,47 +72,62 @@ func (s *session) Metrics(ctx context.Context, q provider.Query) (provider.Metri
 	m.mu.Lock()
 	if m.entries == nil {
 		m.entries = map[string]*metricsEntry{}
+		m.absent = map[string]time.Time{}
 	}
-	if !m.absent.IsZero() && now.Sub(m.absent) < metricsAbsentTTL {
-		m.mu.Unlock()
-		return provider.Metrics{}, &provider.Error{Class: provider.ClassUnsupported, Message: "metrics.k8s.io is not installed"}
-	}
-	if e := m.entries[key]; e != nil && (e.wait != nil || now.Sub(e.at) < metricsTTL) {
-		wait := e.wait
-		m.mu.Unlock()
-		if wait != nil {
-			select {
-			case <-wait:
-			case <-ctx.Done():
-				return provider.Metrics{}, ctx.Err()
-			}
+	for k, e := range m.entries { // bounded: only recently used queries stay
+		if e.wait == nil && now.Sub(e.at) >= metricsTTL {
+			delete(m.entries, k)
 		}
-		return e.res, e.err
 	}
-	e := &metricsEntry{wait: make(chan struct{})}
-	m.entries[key] = e
+	if at, ok := m.absent[gvr.Resource]; ok && now.Sub(at) < metricsAbsentTTL {
+		m.mu.Unlock()
+		return provider.Metrics{}, errNoMetricsAPI
+	}
+	e := m.entries[key]
+	if e == nil {
+		e = &metricsEntry{wait: make(chan struct{})}
+		m.entries[key] = e
+		// The shared request lives with the session, not with one caller.
+		go s.fetchInto(e, gvr, objGVR, ns)
+	}
+	wait := e.wait
 	m.mu.Unlock()
+	if wait != nil {
+		select {
+		case <-wait:
+		case <-ctx.Done():
+			return provider.Metrics{}, ctx.Err()
+		}
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return e.res, e.err
+}
 
-	res, err := s.fetchMetrics(gvr, ns)
+func (s *session) fetchInto(e *metricsEntry, gvr, objGVR schema.GroupVersionResource, ns string) {
+	res, err := s.fetchMetrics(gvr, objGVR, ns)
+	m := &s.metrics
 	m.mu.Lock()
 	e.at, e.res, e.err = s.now(), res, err
 	close(e.wait)
 	e.wait = nil
-	var pe *provider.Error
-	if errors.As(err, &pe) && pe.Class == provider.ClassUnsupported {
-		m.absent = s.now()
+	if errors.Is(err, errNoMetricsAPI) {
+		m.absent[gvr.Resource] = s.now()
+	} else if err == nil {
+		delete(m.absent, gvr.Resource)
 	}
 	m.mu.Unlock()
-	return res, err
 }
 
-func (s *session) fetchMetrics(gvr schema.GroupVersionResource, ns string) (provider.Metrics, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), metricsTimeout)
+func (s *session) fetchMetrics(gvr, objGVR schema.GroupVersionResource, ns string) (provider.Metrics, error) {
+	ctx, cancel := context.WithTimeout(s.ctx, metricsTimeout)
 	defer cancel()
 	list, err := s.dyn.Resource(gvr).Namespace(ns).List(ctx, metav1.ListOptions{})
 	if err != nil {
+		// A 404 on the list itself means the metrics resource is not served
+		// (a missing namespace lists empty, it is not a 404).
 		if apierrors.IsNotFound(err) {
-			return provider.Metrics{}, &provider.Error{Class: provider.ClassUnsupported, Message: "metrics.k8s.io is not installed"}
+			return provider.Metrics{}, errNoMetricsAPI
 		}
 		class, msg := classify(err)
 		return provider.Metrics{}, &provider.Error{Class: class, Message: msg}
@@ -137,11 +157,19 @@ func (s *session) fetchMetrics(gvr schema.GroupVersionResource, ns string) (prov
 		if !have {
 			continue // no sample: unknown, not zero
 		}
-		if t := timeAt(it.Object, "timestamp"); t.After(out.Timestamp) {
-			out.Timestamp = t
+		at := timeAt(it.Object, "timestamp")
+		obj, ok := s.caches.lookup(objGVR, it.GetNamespace(), it.GetName())
+		if !ok {
+			continue // not observed by any open view: cannot name its incarnation
+		}
+		if !at.IsZero() && obj.GetCreationTimestamp().After(at.Add(time.Second)) {
+			continue // the sample predates this object: an earlier incarnation's
+		}
+		if at.After(out.Timestamp) {
+			out.Timestamp = at
 		}
 		out.Window = str(it.Object, "window")
-		out.Values[it.GetNamespace()+"/"+it.GetName()] = provider.Usage{CPU: cpu, Memory: mem}
+		out.Values[string(obj.GetUID())] = provider.Usage{CPU: cpu, Memory: mem, At: at}
 	}
 	return out, nil
 }

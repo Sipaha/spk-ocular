@@ -188,6 +188,8 @@ export interface Resource {
 export interface Usage {
   cpu: number
   memory: number
+  /** When the sample was taken. */
+  at?: string
 }
 
 export interface MetricsView {

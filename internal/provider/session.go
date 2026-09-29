@@ -107,9 +107,10 @@ func (e *Error) Error() string { return string(e.Class) + ": " + e.Message }
 // MetricsSource is implemented by sessions that can report resource usage
 // for a query's rows (k8s: metrics.k8s.io for pods and nodes).
 type MetricsSource interface {
-	// Metrics returns usage keyed by "scope/name" (scope "" for unscoped).
-	// A missing metrics API is *Error{ClassUnsupported}; objects without a
-	// sample are absent from Values (unknown, never zero).
+	// Metrics returns usage keyed by row id. Samples are attributed only
+	// when the provider can tell which incarnation they belong to. A missing
+	// metrics API is *Error{ClassUnsupported}; objects without a sample are
+	// absent from Values (unknown, never zero).
 	Metrics(ctx context.Context, q Query) (Metrics, error)
 }
 
@@ -121,6 +122,7 @@ type Metrics struct {
 
 // Usage: CPU in cores, Memory in bytes.
 type Usage struct {
-	CPU    float64 `json:"cpu"`
-	Memory float64 `json:"memory"`
+	CPU    float64   `json:"cpu"`
+	Memory float64   `json:"memory"`
+	At     time.Time `json:"at,omitzero"` // when the sample was taken
 }

@@ -254,9 +254,9 @@ func (s *Service) GetMetrics(ctx context.Context, viewID string) (MetricsView, e
 		return MetricsView{Status: ce.Code, Message: ce.Detail, Values: map[string]provider.Usage{}}, nil
 	}
 	out := MetricsView{Status: "ok", Timestamp: m.Timestamp, Window: m.Window, Values: map[string]provider.Usage{}}
-	// Join by the current rows: a deleted or replaced object gets nothing.
+	// Values are keyed by row id (incarnation); keep the view's current rows.
 	for _, r := range rows {
-		if u, ok := m.Values[r.Ref.Scope+"/"+r.Ref.Name]; ok {
+		if u, ok := m.Values[r.ID]; ok {
 			out.Values[r.ID] = u
 		}
 	}

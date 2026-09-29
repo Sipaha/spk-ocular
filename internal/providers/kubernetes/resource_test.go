@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -131,55 +132,117 @@ func TestSelectorlessServiceSelectsNothing(t *testing.T) {
 	assert.Empty(t, r.Relations)
 }
 
-func TestMetricsParseCacheAndAbsence(t *testing.T) {
-	pm := mk("metrics.k8s.io/v1beta1", "PodMetrics", "web", "a", "", map[string]any{
-		"timestamp": "2026-09-29T11:59:30Z", "window": "15s",
+func podMetricsList(items ...*unstructured.Unstructured) *unstructured.UnstructuredList {
+	l := &unstructured.UnstructuredList{Object: map[string]any{"apiVersion": "metrics.k8s.io/v1beta1", "kind": "PodMetricsList"}}
+	for _, it := range items {
+		l.Items = append(l.Items, *it)
+	}
+	return l
+}
+
+func podMetric(ns, name, at string) *unstructured.Unstructured {
+	return mk("metrics.k8s.io/v1beta1", "PodMetrics", ns, name, "", map[string]any{
+		"timestamp": at, "window": "15s",
 		"containers": []any{
 			map[string]any{"name": "app", "usage": map[string]any{"cpu": "250m", "memory": "64Mi"}},
 			map[string]any{"name": "side", "usage": map[string]any{"cpu": "50m", "memory": "16Mi"}},
 		}})
-	// The fake tracker cannot map PodMetrics to the "pods" resource of
-	// metrics.k8s.io; serve the list from a reactor instead.
-	client := fullFake()
+}
+
+// metricsHarness: a session with a live pods view (so the cache knows the
+// pods' incarnations) and a metrics list served from a reactor.
+func metricsHarness(t *testing.T, objs []runtime.Object, samples func() *unstructured.UnstructuredList) (*session, *int) {
+	t.Helper()
+	client := fullFake(objs...)
 	calls := 0
 	client.PrependReactor("list", "pods", func(a k8stesting.Action) (bool, runtime.Object, error) {
 		if a.GetResource().Group != "metrics.k8s.io" {
 			return false, nil, nil
 		}
 		calls++
-		return true, &unstructured.UnstructuredList{Object: map[string]any{"apiVersion": "metrics.k8s.io/v1beta1", "kind": "PodMetricsList"},
-			Items: []unstructured.Unstructured{*pm}}, nil
+		return true, samples(), nil
 	})
-	s := newSession("t", "h", client, false)
-	defer s.Close()
+	h := newHarness(t, client)
+	h.until(h.open("pods", core.ScopeSel{Mode: core.ScopeOne, Name: "web"}), isReady)
+	return h.sess, &calls
+}
+
+func TestMetricsAreKeyedByIncarnationAndCached(t *testing.T) {
+	p := pod("web", "a", "uid-a") // created an hour ago
+	s, calls := metricsHarness(t, []runtime.Object{p}, func() *unstructured.UnstructuredList {
+		return podMetricsList(podMetric("web", "a", time.Now().UTC().Format(time.RFC3339)), podMetric("web", "unknown", time.Now().UTC().Format(time.RFC3339)))
+	})
 	q := provider.Query{Kind: "pods", Scope: core.ScopeSel{Mode: core.ScopeOne, Name: "web"}}
 	m, err := s.Metrics(context.Background(), q)
 	require.NoError(t, err)
-	u := m.Values["web/a"]
+	require.Len(t, m.Values, 1, "a sample for an object no view observes is unknown")
+	u := m.Values["uid-a"]
 	assert.InDelta(t, 0.3, u.CPU, 1e-9)
 	assert.InDelta(t, 80*1024*1024, u.Memory, 1)
+	assert.False(t, u.At.IsZero())
 	assert.Equal(t, "15s", m.Window)
-
 	_, _ = s.Metrics(context.Background(), q)
-	assert.Equal(t, 1, calls, "reused within the TTL")
+	assert.Equal(t, 1, *calls, "reused within the TTL")
+}
 
-	_, err = s.Metrics(context.Background(), provider.Query{Kind: "services", Scope: core.ScopeSel{Mode: core.ScopeAll}})
+// Review 2026-09-29: a name-keyed sample of a deleted pod went to its
+// same-named replacement.
+func TestMetricsSampleOlderThanTheObjectIsNotAttributed(t *testing.T) {
+	fresh := pod("web", "a", "uid-new", func(o map[string]any) {
+		o["metadata"].(map[string]any)["creationTimestamp"] = time.Now().UTC().Format(time.RFC3339)
+	})
+	s, _ := metricsHarness(t, []runtime.Object{fresh}, func() *unstructured.UnstructuredList {
+		return podMetricsList(podMetric("web", "a", time.Now().Add(-time.Minute).UTC().Format(time.RFC3339)))
+	})
+	m, err := s.Metrics(context.Background(), provider.Query{Kind: "pods", Scope: core.ScopeSel{Mode: core.ScopeOne, Name: "web"}})
+	require.NoError(t, err)
+	assert.Empty(t, m.Values, "the sample belongs to the previous incarnation")
+}
+
+func TestMetricsAbsenceIsPerResource(t *testing.T) {
 	var pe *provider.Error
+	_, err := newSession("t", "h", fullFake(), false).Metrics(context.Background(), provider.Query{Kind: "services", Scope: core.ScopeSel{Mode: core.ScopeAll}})
 	require.ErrorAs(t, err, &pe)
 	assert.Equal(t, provider.ClassUnsupported, pe.Class)
 
-	noAPI := fullFake()
-	noAPI.PrependReactor("list", "nodes", func(a k8stesting.Action) (bool, runtime.Object, error) {
+	noNodes := fullFake()
+	noNodes.PrependReactor("list", "nodes", func(a k8stesting.Action) (bool, runtime.Object, error) {
 		if a.GetResource().Group == "metrics.k8s.io" {
 			return true, nil, apierrors.NewNotFound(schema.GroupResource{Group: "metrics.k8s.io", Resource: "nodes"}, "")
 		}
 		return false, nil, nil
 	})
-	s2 := newSession("t", "h", noAPI, false)
-	defer s2.Close()
-	_, err = s2.Metrics(context.Background(), provider.Query{Kind: "nodes", Scope: core.ScopeSel{Mode: core.ScopeNone}})
+	noNodes.PrependReactor("list", "pods", func(a k8stesting.Action) (bool, runtime.Object, error) {
+		if a.GetResource().Group == "metrics.k8s.io" {
+			return true, podMetricsList(), nil
+		}
+		return false, nil, nil
+	})
+	s := newSession("t", "h", noNodes, false)
+	defer s.Close()
+	_, err = s.Metrics(context.Background(), provider.Query{Kind: "nodes", Scope: core.ScopeSel{Mode: core.ScopeNone}})
 	require.ErrorAs(t, err, &pe)
 	assert.Equal(t, provider.ClassUnsupported, pe.Class)
+	_, err = s.Metrics(context.Background(), provider.Query{Kind: "pods", Scope: core.ScopeSel{Mode: core.ScopeAll}})
+	assert.NoError(t, err, "a missing nodes resource says nothing about pods")
+}
+
+func TestMetricsCallerCanStopWaiting(t *testing.T) {
+	block := make(chan struct{})
+	client := fullFake()
+	client.PrependReactor("list", "pods", func(a k8stesting.Action) (bool, runtime.Object, error) {
+		if a.GetResource().Group == "metrics.k8s.io" {
+			<-block
+			return true, podMetricsList(), nil
+		}
+		return false, nil, nil
+	})
+	s := newSession("t", "h", client, false)
+	defer func() { close(block); s.Close() }()
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+	_, err := s.Metrics(ctx, provider.Query{Kind: "pods", Scope: core.ScopeSel{Mode: core.ScopeAll}})
+	assert.ErrorIs(t, err, context.DeadlineExceeded)
 }
 
 // pagingReactor serves pods in pages (continue tokens), like the apiserver.
