@@ -26,7 +26,7 @@ var _ runtime.Object = (*slimObject)(nil)
 // mutated, so hot paths do not call it.
 func (o *slimObject) DeepCopyObject() runtime.Object {
 	c := &slimObject{TypeMeta: o.TypeMeta}
-	o.ObjectMeta.DeepCopyInto(&c.ObjectMeta)
+	o.DeepCopyInto(&c.ObjectMeta)
 	c.body = append([]byte(nil), o.body...)
 	return c
 }
