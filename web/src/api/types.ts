@@ -12,6 +12,8 @@ export interface Target {
   subtitle?: string
   current?: boolean
   details?: Detail[]
+  /** opaque revision of the configuration: equal = the same */
+  configRev?: string
 }
 
 export interface Problem {
@@ -267,7 +269,8 @@ export interface LiveTarget {
   target: string
   targetTitle: string
   endpoint?: string
-  configHash?: string
+  /** the target's configRev when opened: another now = reconfigured since */
+  configRev?: string
   ref: Ref
   instance?: string
   channel?: string

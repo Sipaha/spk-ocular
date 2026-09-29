@@ -79,6 +79,7 @@ func (s *Service) StartForward(ctx context.Context, req StartForwardRequest) (fo
 	if err != nil {
 		return forwards.Info{}, forwardError(err)
 	}
+	info.Target = s.live(info.Target)
 	return info, nil
 }
 
@@ -90,7 +91,11 @@ func (s *Service) StopForward(_ context.Context, id string) error {
 }
 
 func (s *Service) ListForwards(context.Context) ([]forwards.Info, error) {
-	return s.fwd.List(), nil
+	list := s.fwd.List()
+	for i := range list {
+		list[i].Target = s.live(list[i].Target)
+	}
+	return list, nil
 }
 
 func forwardError(err error) *CodedError {

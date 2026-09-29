@@ -31,6 +31,8 @@ export interface TermTab extends TabBase {
   open: TermOpen
   /** a tooltip: context, server, command */
   hint?: string
+  /** the target's configRev the terminal was opened with */
+  rev?: string
 }
 
 export type DockTab = LogsTab | TermTab
@@ -64,7 +66,7 @@ export const dock = {
     termSeq++
     activate({ kind: 'term', id: `term:${targetKey(target)}:${refKey(open.ref)}:${termSeq}`, target, targetTitle, open, title: open.ref.name })
   },
-  update(id: string, patch: Partial<Pick<TermTab, 'title' | 'hint'>>) {
+  update(id: string, patch: Partial<Pick<TermTab, 'title' | 'hint' | 'rev'>>) {
     useDock.setState((s) => ({ tabs: s.tabs.map((t) => (t.id === id ? { ...t, ...patch } : t)) }))
   },
   activate(id: string) {

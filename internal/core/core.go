@@ -16,8 +16,12 @@ type Target struct {
 	// Details are human-readable, non-secret facts in display order.
 	Details []Detail `json:"details,omitempty"`
 	// ConfigHash identifies the configuration the target resolves to; an
-	// open session built from another hash is stale. Never sent to the UI.
+	// open session built from another hash is stale. Never sent to the UI:
+	// it covers credentials.
 	ConfigHash string `json:"-"`
+	// ConfigRev is the UI's opaque stand-in for ConfigHash (set by the API,
+	// keyed per process): equal revisions = the same configuration.
+	ConfigRev string `json:"configRev,omitempty"`
 }
 
 // Detail is one labelled fact. Key is stable (for UI translation and tests),

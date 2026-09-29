@@ -4,6 +4,8 @@ import type { Tunnel } from '../api/types'
 import { classLabel, t } from '../i18n'
 import { formatBytes } from '../format'
 import { copyText } from '../term/clipboard'
+import { Reconfigured } from '../dock/Dock'
+import { reconfigured, useStore } from '../store'
 import { openURL } from './open'
 import { tunnels, tunnelURL, useTunnels } from './store'
 
@@ -71,6 +73,7 @@ function TunnelRow({ tn, client, mode }: { tn: Tunnel; client: Client; mode: 'de
   const [copied, setCopied] = useState(false)
   const [stopError, setStopError] = useState<string | null>(null)
   const ref = tn.target.ref
+  const stale = useStore((s) => reconfigured(s.view, tn.target.provider, tn.target.target, tn.target.configRev))
   const what = `${ref.kind.split('/').pop()}/${ref.name}:${tn.target.port}`
   const addr = tn.addresses[0]
   return (
@@ -85,6 +88,7 @@ function TunnelRow({ tn, client, mode }: { tn: Tunnel; client: Client; mode: 'de
           {what}
         </span>
         <span className="shrink-0 rounded bg-hover px-1 text-[10px] text-fg-muted">{tn.target.targetTitle}</span>
+        {stale && <Reconfigured />}
         <span className="ml-auto flex shrink-0 gap-1">
           <button
             className="rounded-md border border-line px-2 py-0.5 hover:bg-hover"

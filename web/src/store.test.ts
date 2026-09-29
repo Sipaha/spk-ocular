@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { actions, initialState, useStore, visibleTargets } from './store'
+import { actions, initialState, reconfigured, useStore, visibleTargets } from './store'
+import type { TargetsView } from './api/types'
 import { fakeClient, k8s } from './test/fakeClient'
 
 beforeEach(() => useStore.setState({ ...initialState }))
@@ -80,5 +81,22 @@ describe('store', () => {
     expect(useStore.getState().cursor).toBe('kubernetes/c')
     act.moveCursor(-1)
     expect(useStore.getState().cursor).toBe('kubernetes/b')
+  })
+})
+
+describe('reconfigured', () => {
+  const view: TargetsView = {
+    selected: null,
+    groups: [{ provider: 'k', title: 'K', targets: [{ provider: 'k', id: 'a', title: 'a', configRev: 'r2' }, { provider: 'k', id: 'b', title: 'b' }], problems: [] }],
+  }
+  it('is set when the target now has another revision', () => {
+    expect(reconfigured(view, 'k', 'a', 'r1')).toBe(true)
+    expect(reconfigured(view, 'k', 'a', 'r2')).toBe(false)
+  })
+  it('is not guessed without both revisions or the target', () => {
+    expect(reconfigured(view, 'k', 'a', undefined)).toBe(false)
+    expect(reconfigured(view, 'k', 'b', 'r1')).toBe(false)
+    expect(reconfigured(view, 'k', 'gone', 'r1')).toBe(false)
+    expect(reconfigured(null, 'k', 'a', 'r1')).toBe(false)
   })
 })

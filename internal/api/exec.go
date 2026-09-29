@@ -230,5 +230,5 @@ func (s *Service) startTerminal(proto provider.ExecHandle, cols, rows int) (Term
 	case err != nil:
 		return TerminalInfo{}, coded(CodeGone, err)
 	}
-	return TerminalInfo{StreamID: id, Target: proto.Describe()}, nil
+	return TerminalInfo{StreamID: id, Target: s.live(proto.Describe())}, nil
 }

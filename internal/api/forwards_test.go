@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"encoding/json"
 	"io"
 	"net"
 	"sync"
@@ -160,6 +161,11 @@ func TestTunnelsOutliveTheirSessionAndEndWithTheApp(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, list, 1)
 	assert.Equal(t, "h1", list[0].Target.ConfigHash, "the snapshot it was opened with")
+	assert.Equal(t, f.Target.ConfigRev, list[0].Target.ConfigRev)
+	assert.NotEmpty(t, f.Target.ConfigRev)
+	assert.NotEqual(t, targetRev(t, s, "a"), list[0].Target.ConfigRev, "reconfigured since")
+	b, _ := json.Marshal(list)
+	assert.NotContains(t, string(b), `"h1"`)
 	assert.EqualValues(t, 2, list[0].Served)
 	h := k.sessions[0].handles[0]
 	assert.EqualValues(t, 0, h.closed.Load())

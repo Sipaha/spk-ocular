@@ -2,6 +2,7 @@ import { lazy, Suspense, useRef } from 'react'
 import type { Client } from '../api/client'
 import type { TargetRef } from '../api/types'
 import { t } from '../i18n'
+import { reconfigured, useStore } from '../store'
 import { dock, MIN_DOCK, useDock, type DockTab } from './store'
 
 // Heavy parts are lazy chunks: the log viewer (virtual list, ANSI, search
@@ -26,6 +27,7 @@ const sameTarget = (a: TargetRef, b: TargetRef | null) => !!b && a.provider === 
  */
 export function Dock({ client, current, mode, onHeightDone }: Props) {
   const { tabs, active, height } = useDock()
+  const targets = useStore((s) => s.view)
   const drag = useRef<{ y: number; h: number } | null>(null)
   if (!tabs.length) return null
   return (
@@ -56,7 +58,13 @@ export function Dock({ client, current, mode, onHeightDone }: Props) {
       />
       <div role="tablist" className="flex shrink-0 items-end gap-0.5 overflow-x-auto border-b border-line bg-sidebar/60 px-2 pt-1">
         {tabs.map((tb) => (
-          <TabHandle key={tb.id} tab={tb} active={tb.id === active} foreign={!sameTarget(tb.target, current)} />
+          <TabHandle
+            key={tb.id}
+            tab={tb}
+            active={tb.id === active}
+            foreign={!sameTarget(tb.target, current)}
+            stale={tb.kind === 'term' && reconfigured(targets, tb.target.provider, tb.target.id, tb.rev)}
+          />
         ))}
       </div>
       <div className="relative min-h-0 flex-1">
@@ -76,7 +84,7 @@ export function Dock({ client, current, mode, onHeightDone }: Props) {
   )
 }
 
-function TabHandle({ tab, active, foreign }: { tab: DockTab; active: boolean; foreign: boolean }) {
+function TabHandle({ tab, active, foreign, stale }: { tab: DockTab; active: boolean; foreign: boolean; stale: boolean }) {
   const tip = [tab.kind === 'term' ? tab.hint : undefined, tab.title].filter(Boolean).join('\n')
   return (
     <div
@@ -95,9 +103,19 @@ function TabHandle({ tab, active, foreign }: { tab: DockTab; active: boolean; fo
           {tab.targetTitle}
         </span>
       )}
+      {stale && <Reconfigured />}
       <button className="rounded px-1 text-fg-subtle hover:bg-hover hover:text-fg" onClick={() => dock.close(tab.id)} aria-label={t('logs.closeTab')}>
         ×
       </button>
     </div>
+  )
+}
+
+/** A live resource still using the configuration it was opened with. */
+export function Reconfigured() {
+  return (
+    <span className="shrink-0 rounded bg-warning/15 px-1 text-[10px] text-warning" title={t('live.reconfiguredHint')}>
+      {t('live.reconfigured')}
+    </span>
   )
 }

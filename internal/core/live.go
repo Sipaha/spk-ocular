@@ -36,12 +36,15 @@ type LiveTarget struct {
 	// Endpoint is where the connection goes (k8s: the API server host),
 	// never credentials.
 	Endpoint string `json:"endpoint,omitempty"`
-	// ConfigHash of the target configuration the snapshot came from: the UI
-	// marks a resource whose target has been reconfigured since.
-	ConfigHash string `json:"configHash,omitempty"`
-	Ref        Ref    `json:"ref"`
-	Instance   string `json:"instance,omitempty"` // title of the pinned instance
-	Channel    string `json:"channel,omitempty"`
+	// ConfigHash of the target configuration the snapshot came from (never
+	// sent to the UI, like Target.ConfigHash).
+	ConfigHash string `json:"-"`
+	// ConfigRev is its opaque stand-in (set by the API): the UI marks a
+	// resource whose target's ConfigRev differs — reconfigured since.
+	ConfigRev string `json:"configRev,omitempty"`
+	Ref       Ref    `json:"ref"`
+	Instance  string `json:"instance,omitempty"` // title of the pinned instance
+	Channel   string `json:"channel,omitempty"`
 	// Port: the remote port of a tunnel.
 	Port int `json:"port,omitempty"`
 	// Command: argv as run (empty = the interactive shell).

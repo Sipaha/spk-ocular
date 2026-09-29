@@ -116,7 +116,7 @@ export default function TerminalView({ client, tab, active, mode }: Props) {
       if (gen !== genRef.current) return
       idRef.current = info.terminalId
       const tg = info.target
-      dock.update(tab.id, { title: tg.channel && tg.instance ? `${tg.channel} · ${tg.instance}` : tab.title, hint: describe(info) })
+      dock.update(tab.id, { title: tg.channel && tg.instance ? `${tg.channel} · ${tg.instance}` : tab.title, hint: describe(info), rev: tg.configRev })
       let base: string
       try {
         base = wsBase(await client.streamBase())

@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -137,6 +138,8 @@ func TestTerminalsOutliveTheirSession(t *testing.T) {
 
 	live, err := s.OpenTerminal(ctx, termReq)
 	require.NoError(t, err)
+	revH1 := targetRev(t, s, "a")
+	assert.Equal(t, revH1, live.Target.ConfigRev, "the target's revision when opened")
 	assert.Equal(t, "a", live.Target.Target)
 	pending, err := s.OpenTerminal(ctx, termReq)
 	require.NoError(t, err)
@@ -170,6 +173,10 @@ func TestTerminalsOutliveTheirSession(t *testing.T) {
 	assert.Equal(t, live.TerminalID, again.TerminalID)
 	assert.NotEqual(t, live.StreamID, again.StreamID)
 	assert.Equal(t, "h1", again.Target.ConfigHash, "the snapshot it was opened with")
+	assert.Equal(t, revH1, again.Target.ConfigRev)
+	assert.NotEqual(t, targetRev(t, s, "a"), again.Target.ConfigRev, "the UI sees the target reconfigured since")
+	b, _ := json.Marshal(again)
+	assert.NotContains(t, string(b), `"h1"`, "hashes cover credentials: only revisions reach the UI")
 	echo(t, dialTerm(t, base, again.StreamID), "reconnected")
 	total := 0
 	for _, es := range k.sessions {
@@ -231,4 +238,21 @@ func TestTerminalsNeedAnExecer(t *testing.T) {
 	assert.True(t, IsCoded(err, CodeUnsupported), "%v", err)
 	_, err = s.ExecInfo(context.Background(), podRef)
 	assert.True(t, IsCoded(err, CodeUnsupported), "%v", err)
+}
+
+// targetRev is the ConfigRev ListTargets shows for target id of provider "k".
+func targetRev(t *testing.T, s *Service, id string) string {
+	t.Helper()
+	v, err := s.ListTargets(context.Background())
+	require.NoError(t, err)
+	for _, g := range v.Groups {
+		for _, tg := range g.Targets {
+			if tg.Provider == "k" && tg.ID == id {
+				require.NotEmpty(t, tg.ConfigRev)
+				return tg.ConfigRev
+			}
+		}
+	}
+	t.Fatalf("no target %s", id)
+	return ""
 }

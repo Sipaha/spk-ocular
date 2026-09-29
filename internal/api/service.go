@@ -2,6 +2,10 @@ package api
 
 import (
 	"context"
+	"crypto/hmac"
+	"crypto/rand"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -49,12 +53,36 @@ type Service struct {
 
 	cancel context.CancelFunc
 	wg     sync.WaitGroup
+
+	// revKey keys ConfigRev: configuration hashes cover credentials, so the
+	// page gets only a keyed digest it cannot test guesses against.
+	revKey []byte
 }
 
 var _ API = (*Service)(nil)
 
 func NewService(reg *provider.Registry, st *store.Store, em *events.Emitter, o Options) *Service {
-	return &Service{reg: reg, store: st, em: em, opts: o, views: views.NewManager(em), streams: streams.NewRegistry(), fwd: newForwards(em), sessions: map[string]*sessionEntry{}, now: time.Now}
+	key := make([]byte, 32)
+	if _, err := rand.Read(key); err != nil {
+		panic(err) // crypto/rand does not fail on supported platforms
+	}
+	return &Service{reg: reg, store: st, em: em, opts: o, views: views.NewManager(em), streams: streams.NewRegistry(), fwd: newForwards(em), sessions: map[string]*sessionEntry{}, now: time.Now, revKey: key}
+}
+
+// configRev is the opaque revision of a configuration hash ("" for none).
+func (s *Service) configRev(hash string) string {
+	if hash == "" {
+		return ""
+	}
+	m := hmac.New(sha256.New, s.revKey)
+	m.Write([]byte(hash))
+	return hex.EncodeToString(m.Sum(nil)[:8])
+}
+
+// live is t as the UI sees it: with its revision.
+func (s *Service) live(t core.LiveTarget) core.LiveTarget {
+	t.ConfigRev = s.configRev(t.ConfigHash)
+	return t
 }
 
 // Start begins watching local configuration of providers that support it.
@@ -123,6 +151,9 @@ func (s *Service) ListTargets(ctx context.Context) (TargetsView, error) {
 		} else {
 			g.Targets = append(g.Targets, d.Targets...)
 			g.Problems = append(g.Problems, d.Problems...)
+		}
+		for i := range g.Targets {
+			g.Targets[i].ConfigRev = s.configRev(g.Targets[i].ConfigHash)
 		}
 		for _, t := range g.Targets {
 			if sel != nil && sel.Provider == t.Provider && sel.ID == t.ID {

@@ -47,6 +47,19 @@ export function selectedTarget(view: TargetsView | null): Target | null {
   return null
 }
 
+/**
+ * A live resource (terminal, tunnel) opened with configuration revision rev
+ * whose target now has another one: it still talks to the old configuration.
+ */
+export function reconfigured(view: TargetsView | null, provider: string, id: string, rev: string | undefined): boolean {
+  if (!view || !rev) return false
+  for (const g of view.groups) {
+    const t = g.targets.find((x) => x.provider === provider && x.id === id)
+    if (t) return !!t.configRev && t.configRev !== rev
+  }
+  return false
+}
+
 const errText = (e: unknown) => (e instanceof Error ? e.message : String(e))
 
 /**
