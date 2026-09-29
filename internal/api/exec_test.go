@@ -322,3 +322,45 @@ func targetRev(t *testing.T, s *Service, id string) string {
 	t.Fatalf("no target %s", id)
 	return ""
 }
+
+// lockProbe is a handle whose Close records whether the prototypes' lock
+// was held (TryLock: the test cannot hang on it).
+type lockProbe struct {
+	p          *termProtos
+	underLock  *atomic.Bool
+	closedRuns *atomic.Int32
+}
+
+func (h *lockProbe) Describe() core.LiveTarget { return core.LiveTarget{} }
+func (h *lockProbe) Run(context.Context, provider.Terminal) (provider.ExitStatus, error) {
+	return provider.ExitStatus{}, nil
+}
+func (h *lockProbe) Again() (provider.ExecHandle, error) {
+	return &lockProbe{p: h.p, underLock: h.underLock, closedRuns: h.closedRuns}, nil
+}
+func (h *lockProbe) Close() {
+	if h.p.mu.TryLock() {
+		h.p.mu.Unlock()
+	} else {
+		h.underLock.Store(true)
+	}
+	h.closedRuns.Add(1)
+}
+
+// A run the registry refuses (the terminal limit) is closed after the
+// prototypes' lock is released: provider cleanup may block or call back.
+func TestARefusedRunIsClosedOutsideThePrototypesLock(t *testing.T) {
+	s := &Service{streams: streams.NewRegistry()}
+	defer s.streams.Close()
+	var underLock atomic.Bool
+	var closed atomic.Int32
+	id := s.terms.add(&lockProbe{p: &s.terms, underLock: &underLock, closedRuns: &closed})
+	for range streams.MaxTerms {
+		_, err := s.streams.AddTerm("other", &lockProbe{p: &s.terms, underLock: &underLock, closedRuns: &closed}, provider.TermSize{Cols: 80, Rows: 24})
+		require.NoError(t, err)
+	}
+	_, err := s.startTerminal(id, 80, 24)
+	assert.True(t, IsCoded(err, CodeLimit), "%v", err)
+	assert.EqualValues(t, 1, closed.Load(), "the refused run is released")
+	assert.False(t, underLock.Load(), "and not under the prototypes' lock")
+}

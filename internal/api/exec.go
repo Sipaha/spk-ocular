@@ -85,13 +85,22 @@ func (p *termProtos) add(h provider.ExecHandle) string {
 }
 
 // run starts a run of terminal id under the lock forget takes: a run
-// either exists before forget (which then ends it) or is refused.
-func (p *termProtos) run(id string, start func(proto provider.ExecHandle) (TerminalInfo, error)) (TerminalInfo, error) {
+// either exists before forget (which then ends it) or is refused. start's
+// cleanup (closing handles) runs after the lock is released.
+func (p *termProtos) run(id string, start func(proto provider.ExecHandle) (TerminalInfo, func(), error)) (TerminalInfo, error) {
+	info, cleanup, err := p.runLocked(id, start)
+	if cleanup != nil {
+		cleanup()
+	}
+	return info, err
+}
+
+func (p *termProtos) runLocked(id string, start func(proto provider.ExecHandle) (TerminalInfo, func(), error)) (TerminalInfo, func(), error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	proto := p.byID[id]
 	if proto == nil {
-		return TerminalInfo{}, coded(CodeGone, errors.New("this terminal is no longer known; open a new one"))
+		return TerminalInfo{}, nil, coded(CodeGone, errors.New("this terminal is no longer known; open a new one"))
 	}
 	return start(proto)
 }
@@ -237,18 +246,18 @@ func termOwner(terminalID string) string { return "term:" + terminalID }
 // registry (which closes that run's handle on any failure, including the
 // app closing meanwhile).
 func (s *Service) startTerminal(id string, cols, rows int) (TerminalInfo, error) {
-	return s.terms.run(id, func(proto provider.ExecHandle) (TerminalInfo, error) {
+	return s.terms.run(id, func(proto provider.ExecHandle) (TerminalInfo, func(), error) {
 		h, err := proto.Again()
 		if err != nil {
-			return TerminalInfo{}, fromProvider(err)
+			return TerminalInfo{}, nil, fromProvider(err)
 		}
-		sid, err := s.streams.AddTerm(termOwner(id), h, provider.TermSize{Cols: uint16(cols), Rows: uint16(rows)})
+		sid, release, err := s.streams.RegisterTerm(termOwner(id), h, provider.TermSize{Cols: uint16(cols), Rows: uint16(rows)})
 		switch {
 		case errors.Is(err, streams.ErrLimit):
-			return TerminalInfo{}, &CodedError{Code: CodeLimit, Detail: err.Error()}
+			return TerminalInfo{}, release, &CodedError{Code: CodeLimit, Detail: err.Error()}
 		case err != nil:
-			return TerminalInfo{}, coded(CodeGone, err)
+			return TerminalInfo{}, release, coded(CodeGone, err)
 		}
-		return TerminalInfo{TerminalID: id, StreamID: sid, Target: s.live(proto.Describe())}, nil
+		return TerminalInfo{TerminalID: id, StreamID: sid, Target: s.live(proto.Describe())}, release, nil
 	})
 }

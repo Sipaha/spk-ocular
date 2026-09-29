@@ -789,3 +789,34 @@ func TestTermInterruptKeepsTheChunkBeingWrittenCounted(t *testing.T) {
 	_ = w.Close()
 	<-done
 }
+
+// Register/RegisterTerm leave closing to the caller's release (it holds
+// its own lock meanwhile): expired and refused terminals are closed only
+// then.
+func TestRegisteringLeavesClosingToRelease(t *testing.T) {
+	reg := NewRegistry()
+	defer reg.Close()
+	now := time.Unix(1000, 0)
+	reg.now = func() time.Time { return now }
+	expired := &fakeTerm{}
+	_, err := reg.AddTerm("term", expired, provider.TermSize{Cols: 80, Rows: 24})
+	require.NoError(t, err)
+	now = now.Add(connectTTL + time.Second)
+
+	_, release, err := reg.Register("o", nil)
+	require.NoError(t, err)
+	assert.Zero(t, expired.closed.Load(), "not before release")
+	release()
+	assert.EqualValues(t, 1, expired.closed.Load())
+
+	for range MaxTerms {
+		_, err := reg.AddTerm("term", &fakeTerm{}, provider.TermSize{Cols: 80, Rows: 24})
+		require.NoError(t, err)
+	}
+	refused := &fakeTerm{}
+	_, release, err = reg.RegisterTerm("term", refused, provider.TermSize{Cols: 80, Rows: 24})
+	require.ErrorIs(t, err, ErrLimit)
+	assert.Zero(t, refused.closed.Load(), "not before release")
+	release()
+	assert.EqualValues(t, 1, refused.closed.Load())
+}

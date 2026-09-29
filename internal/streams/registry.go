@@ -105,6 +105,15 @@ func NewRegistry() *Registry {
 // (the API calls it under the lock that also guards closing the owner), so
 // a stream can never outlive a closed owner.
 func (r *Registry) Add(owner string, run Func) (string, error) {
+	id, release, err := r.Register(owner, run)
+	release()
+	return id, err
+}
+
+// Register is Add for a caller holding its own lock: release closes the
+// streams that expired meanwhile (terminal handles among them) and runs
+// once the caller holds no lock.
+func (r *Registry) Register(owner string, run Func) (id string, release func(), err error) {
 	return r.add(&stream{kind: KindLogs, owner: owner, run: run})
 }
 
@@ -114,22 +123,36 @@ func (r *Registry) Add(owner string, run Func) (string, error) {
 // is closed if the page never connects, the app closes, or it has run. On
 // error t is closed too.
 func (r *Registry) AddTerm(owner string, t TermSession, size provider.TermSize) (string, error) {
-	id, err := r.add(&stream{kind: KindTerm, owner: owner, term: t, size: size})
-	if err != nil {
-		t.Close()
-	}
+	id, release, err := r.RegisterTerm(owner, t, size)
+	release()
 	return id, err
 }
 
-func (r *Registry) add(s *stream) (string, error) {
-	var dropped []*stream
-	defer func() { releaseAll(dropped) }()
+// RegisterTerm is AddTerm for a caller holding its own lock: what has to
+// be closed (t when refused, streams that expired meanwhile) is closed by
+// release, which the caller runs once it holds no lock (provider cleanup
+// may block or call back).
+func (r *Registry) RegisterTerm(owner string, t TermSession, size provider.TermSize) (id string, release func(), err error) {
+	id, release, err = r.add(&stream{kind: KindTerm, owner: owner, term: t, size: size})
+	if err != nil {
+		expired := release
+		release = func() {
+			expired()
+			t.Close()
+		}
+	}
+	return id, release, err
+}
+
+// add registers s; release closes the expired streams it dropped.
+func (r *Registry) add(s *stream) (string, func(), error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	if r.closed {
-		return "", ErrGone
+		return "", func() {}, ErrGone
 	}
-	dropped = r.dropExpiredLocked()
+	dropped := r.dropExpiredLocked()
+	release := func() { releaseAll(dropped) }
 	n := 0
 	for _, o := range r.streams {
 		if o.kind == s.kind {
@@ -137,13 +160,13 @@ func (r *Registry) add(s *stream) (string, error) {
 		}
 	}
 	if n >= limits[s.kind] {
-		return "", fmt.Errorf("%w (max %d %s)", ErrLimit, limits[s.kind], s.kind)
+		return "", release, fmt.Errorf("%w (max %d %s)", ErrLimit, limits[s.kind], s.kind)
 	}
 	r.seq++
 	id := fmt.Sprintf("s%s-%d", r.epoch, r.seq)
 	s.created = r.now()
 	r.streams[id] = s
-	return id, nil
+	return id, release, nil
 }
 
 func releaseAll(ss []*stream) {
