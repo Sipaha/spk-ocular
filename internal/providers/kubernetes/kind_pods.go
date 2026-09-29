@@ -175,6 +175,12 @@ func podHealth(u *unstructured.Unstructured, status string, now time.Time) (core
 			issues = append(issues, core.Issue{State: core.HealthError, Reason: r,
 				Message: containerMsg(cs, str(cs, "state", "waiting", "message"))})
 		}
+		// A container that exited with a failure and has not been restarted
+		// yet (the moment before CrashLoopBackOff): a failure, not "starting".
+		if hasKey(cs, "state", "terminated") && i64(cs, "state", "terminated", "exitCode") != 0 {
+			issues = append(issues, core.Issue{State: core.HealthError, Reason: nonEmpty(str(cs, "state", "terminated", "reason"), "Error"),
+				Message: containerMsg(cs, fmt.Sprintf("exited with code %d", i64(cs, "state", "terminated", "exitCode")))})
+		}
 		if str(cs, "lastState", "terminated", "reason") == "OOMKilled" {
 			at := timeAt(cs, "lastState", "terminated", "finishedAt")
 			if !at.IsZero() && now.Sub(at) < podRecentOOM {
