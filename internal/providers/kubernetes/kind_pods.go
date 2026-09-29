@@ -196,7 +196,8 @@ func podHealth(u *unstructured.Unstructured, status string, now time.Time) (core
 		// yet (the moment before CrashLoopBackOff): a failure, not "starting".
 		if hasKey(cs, "state", "terminated") && i64(cs, "state", "terminated", "exitCode") != 0 {
 			issues = append(issues, core.Issue{State: core.HealthError, Reason: nonEmpty(str(cs, "state", "terminated", "reason"), "Error"),
-				Message: containerMsg(cs, fmt.Sprintf("exited with code %d", i64(cs, "state", "terminated", "exitCode")))})
+				Message: containerMsg(cs, fmt.Sprintf("exited with code %d", i64(cs, "state", "terminated", "exitCode"))),
+				Since:   unixMs(timeAt(cs, "state", "terminated", "finishedAt"))})
 		}
 		is, at, ok := recentRestart(cs, now)
 		if ok {
@@ -210,9 +211,10 @@ func podHealth(u *unstructured.Unstructured, status string, now time.Time) (core
 	switch phase {
 	case "Pending", "":
 		if c, ok := cond["PodScheduled"]; ok && c.status == "False" {
-			issues = append(issues, core.Issue{State: core.HealthWarning, Reason: nonEmpty(c.reason, "Unschedulable"), Message: c.message})
+			issues = append(issues, core.Issue{State: core.HealthWarning, Reason: nonEmpty(c.reason, "Unschedulable"), Message: c.message, Since: unixMs(c.at)})
 		} else if now.Sub(created) >= podPendingWarnAfter {
-			issues = append(issues, core.Issue{State: core.HealthWarning, Reason: "Pending", Message: "pending for " + dur(now.Sub(created))})
+			// Pending since it was created: that is the onset, not a stand-in.
+			issues = append(issues, core.Issue{State: core.HealthWarning, Reason: "Pending", Message: "pending for " + dur(now.Sub(created)), Since: unixMs(created)})
 		} else {
 			issues = append(issues, core.Issue{State: core.HealthProgressing, Reason: nonEmpty(status, "Pending")})
 			next = earliest(next, created.Add(podPendingWarnAfter))
@@ -224,7 +226,7 @@ func podHealth(u *unstructured.Unstructured, status string, now time.Time) (core
 				since = created
 			}
 			if now.Sub(since) >= podNotReadyWarnAfter {
-				issues = append(issues, core.Issue{State: core.HealthWarning, Reason: "NotReady", Message: nonEmpty(c.message, "not ready for "+dur(now.Sub(since)))})
+				issues = append(issues, core.Issue{State: core.HealthWarning, Reason: "NotReady", Message: nonEmpty(c.message, "not ready for "+dur(now.Sub(since))), Since: unixMs(c.at)})
 			} else {
 				issues = append(issues, core.Issue{State: core.HealthProgressing, Reason: "Starting"})
 				next = earliest(next, since.Add(podNotReadyWarnAfter))
@@ -267,6 +269,14 @@ func recentRestart(cs map[string]any, now time.Time) (is core.Issue, next time.T
 		is.Message = containerMsg(cs, fmt.Sprintf("the previous instance ended with exit code %d (%s); %s", i64(cs, "lastState", "terminated", "exitCode"), nonEmpty(r, "no reason given"), total))
 	}
 	return is, at.Add(podRecentRestart), true
+}
+
+// unixMs is t for Issue.Since; an unknown time stays unknown (0).
+func unixMs(t time.Time) int64 {
+	if t.IsZero() {
+		return 0
+	}
+	return t.UnixMilli()
 }
 
 type condition struct {

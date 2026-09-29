@@ -117,15 +117,15 @@ func projectNode(u *unstructured.Unstructured, _ time.Time) ([]core.Cell, core.H
 	var issues []core.Issue
 	switch ready.status {
 	case "False":
-		issues = append(issues, core.Issue{State: core.HealthError, Reason: "NotReady", Message: ready.message})
+		issues = append(issues, core.Issue{State: core.HealthError, Reason: "NotReady", Message: ready.message, Since: unixMs(ready.at)})
 	case "True":
 	default:
 		// The kubelet stopped reporting: not a confirmed failure.
-		issues = append(issues, core.Issue{State: core.HealthUnknown, Reason: "Unknown", Message: nonEmpty(ready.message, "the node stopped reporting")})
+		issues = append(issues, core.Issue{State: core.HealthUnknown, Reason: "Unknown", Message: nonEmpty(ready.message, "the node stopped reporting"), Since: unixMs(ready.at)})
 	}
 	for _, p := range nodePressure {
 		if cond[p].status == "True" {
-			issues = append(issues, core.Issue{State: core.HealthWarning, Reason: p, Message: cond[p].message})
+			issues = append(issues, core.Issue{State: core.HealthWarning, Reason: p, Message: cond[p].message, Since: unixMs(cond[p].at)})
 		}
 	}
 	if u.GetDeletionTimestamp() != nil {

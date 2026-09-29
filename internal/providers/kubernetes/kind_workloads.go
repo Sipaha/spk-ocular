@@ -75,7 +75,7 @@ func deploymentHealth(u *unstructured.Unstructured, desired, updated, avail int6
 	}
 	cond := podConditions(o)
 	if c := cond["Progressing"]; c.reason == "ProgressDeadlineExceeded" {
-		return core.HealthFrom([]core.Issue{{State: core.HealthError, Reason: "ProgressDeadlineExceeded", Message: c.message}})
+		return core.HealthFrom([]core.Issue{{State: core.HealthError, Reason: "ProgressDeadlineExceeded", Message: c.message, Since: unixMs(c.at)}})
 	}
 	if desired == 0 {
 		return core.Health{State: core.HealthOK, Reason: "ScaledToZero"}
@@ -88,14 +88,16 @@ func deploymentHealth(u *unstructured.Unstructured, desired, updated, avail int6
 	}
 	if avail < desired {
 		msg := fmt.Sprintf("%d of %d replicas available", avail, desired)
-		if c, ok := cond["Available"]; ok && c.status == "False" && c.message != "" {
-			msg = c.message
+		var since int64 // from the counts alone the onset is unknown
+		if c, ok := cond["Available"]; ok && c.status == "False" {
+			msg = nonEmpty(c.message, msg)
+			since = unixMs(c.at)
 		}
 		state := core.HealthWarning
 		if avail == 0 {
 			state = core.HealthError
 		}
-		return core.HealthFrom([]core.Issue{{State: state, Reason: "Unavailable", Message: msg}})
+		return core.HealthFrom([]core.Issue{{State: state, Reason: "Unavailable", Message: msg, Since: since}})
 	}
 	if paused {
 		return core.Health{State: core.HealthOK, Reason: "Paused"}
