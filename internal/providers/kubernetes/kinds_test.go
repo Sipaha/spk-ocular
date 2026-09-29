@@ -83,6 +83,62 @@ func TestStatefulSetAndDaemonSetHealth(t *testing.T) {
 	assert.Equal(t, "Misscheduled", h.Reason)
 }
 
+// Rolling out must not hide that nothing runs (StatefulSets and DaemonSets
+// have no progress deadline); an intended difference of revisions (OnDelete,
+// a partition) or a paused rollout is not a fault by itself.
+func TestWorkloadHealthAudit(t *testing.T) {
+	sts := func(strategy map[string]any, replicas, ready, updated int64, cur, upd string) *unstructured.Unstructured {
+		spec := map[string]any{"replicas": replicas}
+		if strategy != nil {
+			spec["updateStrategy"] = strategy
+		}
+		return obj(time.Hour, map[string]any{"spec": spec, "status": map[string]any{"replicas": replicas, "readyReplicas": ready,
+			"updatedReplicas": updated, "observedGeneration": int64(2), "currentRevision": cur, "updateRevision": upd}})
+	}
+	ds := func(strategy map[string]any, desired, ready, updated, avail int64) *unstructured.Unstructured {
+		spec := map[string]any{}
+		if strategy != nil {
+			spec["updateStrategy"] = strategy
+		}
+		return obj(time.Hour, map[string]any{"spec": spec, "status": map[string]any{"desiredNumberScheduled": desired, "currentNumberScheduled": desired,
+			"numberReady": ready, "updatedNumberScheduled": updated, "numberAvailable": avail, "observedGeneration": int64(2)}})
+	}
+	paused := func(replicas, updated, avail int64) *unstructured.Unstructured {
+		u := deploy(replicas, avail, updated, avail, 2)
+		u.Object["spec"].(map[string]any)["paused"] = true
+		return u
+	}
+	onDelete := map[string]any{"type": "OnDelete"}
+	partition := func(p int64) map[string]any {
+		return map[string]any{"type": "RollingUpdate", "rollingUpdate": map[string]any{"partition": p}}
+	}
+	cases := []struct {
+		name   string
+		def    *kindDef
+		u      *unstructured.Unstructured
+		state  core.HealthState
+		reason string
+	}{
+		{"sts rolling, some ready", statefulSetsKind, sts(nil, 3, 2, 1, "a", "b"), core.HealthProgressing, "RollingOut"},
+		{"sts rolling, none ready", statefulSetsKind, sts(nil, 3, 0, 1, "a", "b"), core.HealthError, "NotReady"},
+		{"sts OnDelete, revisions differ, all ready", statefulSetsKind, sts(onDelete, 3, 3, 0, "a", "b"), core.HealthOK, "UpdatePending"},
+		{"sts OnDelete, revisions differ, one not ready", statefulSetsKind, sts(onDelete, 3, 2, 0, "a", "b"), core.HealthWarning, "NotReady"},
+		{"sts partition reached", statefulSetsKind, sts(partition(2), 3, 3, 1, "a", "b"), core.HealthOK, "UpdatePending"},
+		{"sts partition not reached", statefulSetsKind, sts(partition(1), 3, 3, 1, "a", "b"), core.HealthProgressing, "RollingOut"},
+		{"ds rolling, none available", daemonSetsKind, ds(nil, 3, 0, 1, 0), core.HealthError, "Unavailable"},
+		{"ds OnDelete, not updated, all available", daemonSetsKind, ds(onDelete, 3, 3, 1, 3), core.HealthOK, "UpdatePending"},
+		{"deployment paused, available", deploymentsKind, paused(3, 1, 3), core.HealthOK, "Paused"},
+		{"deployment paused, unavailable", deploymentsKind, paused(3, 3, 1), core.HealthWarning, "Unavailable"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			_, h, _ := project(t, c.def, c.u)
+			assert.Equal(t, c.state, h.State, "%+v", h)
+			assert.Equal(t, c.reason, h.Reason)
+		})
+	}
+}
+
 func TestServiceColumnsAndPendingLoadBalancer(t *testing.T) {
 	svc := obj(time.Minute, map[string]any{"spec": map[string]any{"type": "LoadBalancer", "clusterIP": "10.0.0.5",
 		"ports": []any{map[string]any{"port": int64(443), "nodePort": int64(30443), "protocol": "TCP"}, map[string]any{"port": int64(53), "protocol": "UDP"}}}})

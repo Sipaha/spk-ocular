@@ -238,7 +238,7 @@ Problems показывает два рода строк, и UI их разли�
 ## Задачи
 
 ### Task 0. Аудит health workload-ов
-- [ ] Таблицы тестов проекций: StatefulSet 0 ready при rollout → error; OnDelete
+- [x] Таблицы тестов проекций: StatefulSet 0 ready при rollout → error; OnDelete
   (StatefulSet, DaemonSet) и partition → не RollingOut; paused Deployment → не Warning,
   доступность проверяется. Реализация, `make check`.
 

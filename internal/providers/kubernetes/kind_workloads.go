@@ -80,10 +80,9 @@ func deploymentHealth(u *unstructured.Unstructured, desired, updated, avail int6
 	if desired == 0 {
 		return core.Health{State: core.HealthOK, Reason: "ScaledToZero"}
 	}
-	if b, _, _ := unstructured.NestedBool(o, "spec", "paused"); b {
-		return core.HealthFrom([]core.Issue{{State: core.HealthWarning, Reason: "Paused", Message: "rollout is paused"}})
-	}
-	if rolloutPending(u) || updated < desired || i64(o, "status", "replicas") > updated {
+	// Paused on purpose: no rollout to judge, but availability still counts.
+	paused, _, _ := unstructured.NestedBool(o, "spec", "paused")
+	if !paused && (rolloutPending(u) || updated < desired || i64(o, "status", "replicas") > updated) {
 		return core.HealthFrom([]core.Issue{{State: core.HealthProgressing, Reason: "RollingOut",
 			Message: fmt.Sprintf("%d of %d replicas updated", updated, desired)}})
 	}
@@ -98,8 +97,15 @@ func deploymentHealth(u *unstructured.Unstructured, desired, updated, avail int6
 		}
 		return core.HealthFrom([]core.Issue{{State: state, Reason: "Unavailable", Message: msg}})
 	}
+	if paused {
+		return core.Health{State: core.HealthOK, Reason: "Paused"}
+	}
 	return core.Health{State: core.HealthOK}
 }
+
+// onDelete: the controller replaces pods only when they are deleted, so an
+// old revision may run on purpose.
+func onDelete(o map[string]any) bool { return str(o, "spec", "updateStrategy", "type") == "OnDelete" }
 
 var statefulSetsKind = &kindDef{
 	desc: core.KindDescriptor{
@@ -108,26 +114,32 @@ var statefulSetsKind = &kindDef{
 	},
 	gvr:        schema.GroupVersionResource{Group: "apps", Version: "v1", Resource: "statefulsets"},
 	namespaced: true,
-	keep:       fields{"spec": fields{"replicas": true, "selector": true}, "status": workloadStatusKeep},
+	keep: fields{"spec": fields{"replicas": true, "selector": true, "updateStrategy": fields{"type": true, "rollingUpdate": fields{"partition": true}}},
+		"status": workloadStatusKeep},
 	project: func(u *unstructured.Unstructured, _ time.Time) ([]core.Cell, core.Health, time.Time) {
 		o := u.Object
 		desired := desiredReplicas(o)
 		ready := i64(o, "status", "readyReplicas")
 		cells := []core.Cell{core.TextCell(u.GetName()), core.TextCell(u.GetNamespace()), ratio(ready, desired), createdCell(u)}
+		// Revisions differ: a rollout, unless the strategy keeps old pods on
+		// purpose (OnDelete; below a partition once the rest is updated).
+		behind := str(o, "status", "updateRevision") != "" && str(o, "status", "currentRevision") != str(o, "status", "updateRevision")
+		intended := behind && (onDelete(o) || i64(o, "status", "updatedReplicas") >= desired-i64(o, "spec", "updateStrategy", "rollingUpdate", "partition"))
 		var issues []core.Issue
 		switch {
 		case u.GetDeletionTimestamp() != nil:
 			issues = append(issues, core.Issue{State: core.HealthTerminating, Reason: "Terminating"})
 		case desired == 0:
 			return cells, core.Health{State: core.HealthOK, Reason: "ScaledToZero"}, time.Time{}
-		case rolloutPending(u) || (str(o, "status", "updateRevision") != "" && str(o, "status", "currentRevision") != str(o, "status", "updateRevision")):
+		case ready == 0:
+			// Nothing runs: no rollout excuses that (no progress deadline here).
+			issues = append(issues, core.Issue{State: core.HealthError, Reason: "NotReady", Message: fmt.Sprintf("0 of %d replicas ready", desired)})
+		case rolloutPending(u) || (behind && !intended):
 			issues = append(issues, core.Issue{State: core.HealthProgressing, Reason: "RollingOut"})
 		case ready < desired:
-			state := core.HealthWarning
-			if ready == 0 {
-				state = core.HealthError
-			}
-			issues = append(issues, core.Issue{State: state, Reason: "NotReady", Message: fmt.Sprintf("%d of %d replicas ready", ready, desired)})
+			issues = append(issues, core.Issue{State: core.HealthWarning, Reason: "NotReady", Message: fmt.Sprintf("%d of %d replicas ready", ready, desired)})
+		case intended:
+			return cells, core.Health{State: core.HealthOK, Reason: "UpdatePending"}, time.Time{}
 		}
 		return cells, core.HealthFrom(issues), time.Time{}
 	},
@@ -146,7 +158,7 @@ var daemonSetsKind = &kindDef{
 	},
 	gvr:        schema.GroupVersionResource{Group: "apps", Version: "v1", Resource: "daemonsets"},
 	namespaced: true,
-	keep: fields{"spec": fields{"selector": true}, "status": fields{
+	keep: fields{"spec": fields{"selector": true, "updateStrategy": fields{"type": true}}, "status": fields{
 		"desiredNumberScheduled": true, "currentNumberScheduled": true, "numberReady": true,
 		"updatedNumberScheduled": true, "numberAvailable": true, "numberUnavailable": true,
 		"numberMisscheduled": true, "observedGeneration": true,
@@ -157,16 +169,25 @@ var daemonSetsKind = &kindDef{
 		ready, updated, avail := i64(o, "status", "numberReady"), i64(o, "status", "updatedNumberScheduled"), i64(o, "status", "numberAvailable")
 		cells := []core.Cell{core.TextCell(u.GetName()), core.TextCell(u.GetNamespace()), num(desired), num(current), ratio(ready, desired), num(updated), num(avail), createdCell(u)}
 		var issues []core.Issue
+		pending := false
 		switch {
 		case u.GetDeletionTimestamp() != nil:
 			issues = append(issues, core.Issue{State: core.HealthTerminating, Reason: "Terminating"})
-		case rolloutPending(u) || updated < desired:
+		case desired > 0 && avail == 0:
+			// Nothing available: no rollout excuses that (no progress deadline here).
+			issues = append(issues, core.Issue{State: core.HealthError, Reason: "Unavailable", Message: fmt.Sprintf("0 of %d available", desired)})
+		case rolloutPending(u) || (updated < desired && !onDelete(o)):
 			issues = append(issues, core.Issue{State: core.HealthProgressing, Reason: "RollingOut", Message: fmt.Sprintf("%d of %d nodes updated", updated, desired)})
 		case avail < desired:
 			issues = append(issues, core.Issue{State: core.HealthWarning, Reason: "Unavailable", Message: fmt.Sprintf("%d of %d available", avail, desired)})
+		case updated < desired:
+			pending = true // OnDelete: old pods stay until deleted
 		}
 		if mis := i64(o, "status", "numberMisscheduled"); mis > 0 {
 			issues = append(issues, core.Issue{State: core.HealthWarning, Reason: "Misscheduled", Message: fmt.Sprintf("%d pods on nodes they should not run on", mis)})
+		}
+		if pending && len(issues) == 0 {
+			return cells, core.Health{State: core.HealthOK, Reason: "UpdatePending"}, time.Time{}
 		}
 		return cells, core.HealthFrom(issues), time.Time{}
 	},
