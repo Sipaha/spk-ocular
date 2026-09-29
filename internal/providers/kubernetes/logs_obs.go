@@ -110,6 +110,8 @@ func (o podObs) restartExpected(c ctrObs) bool {
 	switch c.kind {
 	case ctrEphemeral:
 		return false
+	case ctrSidecar:
+		return true // restartPolicy Always on the container, while the pod runs
 	case ctrInit:
 		return c.exitCode != 0 && o.restartPolicy != "Never"
 	}

@@ -17,6 +17,9 @@ import (
 	"k8s.io/client-go/rest"
 )
 
+// errorBodyTimeout bounds reading an error response's body (a var for tests).
+var errorBodyTimeout = 10 * time.Second
+
 // logHeaderTimeout bounds getting a pods/log response's headers; the body
 // then streams without a client deadline (a follow is long-lived).
 const logHeaderTimeout = 30 * time.Second
@@ -107,6 +110,9 @@ func fetchLog(ctx context.Context, hc *http.Client, u, ua string) (io.ReadCloser
 		return nil, err
 	}
 	if resp.StatusCode/100 != 2 {
+		// the error body is small; it must not stall the caller forever
+		body := time.AfterFunc(errorBodyTimeout, cancel)
+		defer body.Stop()
 		defer cancel()
 		defer func() { _ = resp.Body.Close() }()
 		return nil, statusError(resp)

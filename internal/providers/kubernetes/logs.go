@@ -2,6 +2,7 @@ package kubernetes
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -159,13 +160,24 @@ func channelsFor(want, def string) func(memberPod) []string {
 }
 
 func (s *session) streamPod(ctx context.Context, ref core.Ref, q provider.LogQuery, sink provider.LogSink) error {
+	// pods/log is addressed by name: check first that the name is still the
+	// pod the user chose (the UI always sends an explicit channel, so this
+	// cannot hang on the default-channel lookup). Without "get pods" the
+	// check is skipped; the observation (follow) still pins the UID.
 	ctr := q.Channel
-	if ctr == "" {
-		info, err := s.LogInfo(ctx, ref)
-		if err != nil {
+	if ref.UID != "" || ctr == "" {
+		u, err := s.getObject(ctx, ref)
+		var pe *provider.Error
+		switch {
+		case err == nil && ctr == "":
+			info, ierr := logInfoOf(podsKind, u)
+			if ierr != nil {
+				return ierr
+			}
+			ctr = info.DefaultChannel
+		case err != nil && (ctr == "" || !errors.As(err, &pe) || pe.Class != provider.ClassForbidden):
 			return err
 		}
-		ctr = info.DefaultChannel
 	}
 	if ctr == provider.ChannelAll {
 		tr, err := s.trackPod(ref.Scope, ref.Name, types.UID(ref.UID))
@@ -173,7 +185,7 @@ func (s *session) streamPod(ctx context.Context, ref core.Ref, q provider.LogQue
 			return &provider.Error{Class: provider.ClassGone, Message: err.Error()}
 		}
 		defer tr.stop()
-		g := &logGroup{s: s, ns: ref.Scope, q: q, sink: &lockedSink{sink: sink}, tr: tr, channel: channelsFor(ctr, "")}
+		g := &logGroup{s: s, ns: ref.Scope, q: q, sink: &lockedSink{sink: sink}, tr: tr, channel: channelsFor(ctr, ""), onePod: true}
 		return g.run(ctx)
 	}
 	if err := sink.Source(1, ref.UID+"/"+ctr, ref.Name+"/"+ctr, ctr); err != nil {

@@ -11,10 +11,11 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 )
 
-// maxSaveBytes bounds a saved file: the UI's log buffer is at most 64 MB of
-// text, plus the prefixes it adds.
+// maxSaveBytes bounds a saved file: the UI's buffer is at most 16 M
+// characters (≤ 48 MB of UTF-8, 1.2× while frozen), plus the prefixes it adds.
 const maxSaveBytes = 96 << 20
 
 // serveSave writes the request body to <SaveDir>/<name> without replacing
@@ -28,6 +29,8 @@ func (h *Handler) serveSave(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	name := safeFileName(r.URL.Query().Get("name"))
+	// the size is bounded; so is the time a body may take to arrive
+	_ = http.NewResponseController(w).SetReadDeadline(time.Now().Add(h.saveReadTimeout))
 	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, maxSaveBytes))
 	if err != nil {
 		http.Error(w, "body too large or unreadable", http.StatusRequestEntityTooLarge)

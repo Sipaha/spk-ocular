@@ -2,6 +2,7 @@ package kubernetes
 
 import (
 	"fmt"
+	"slices"
 	"sort"
 	"sync"
 	"time"
@@ -220,7 +221,10 @@ func (t *groupTracker) recompute() {
 		}
 		m.rv = o.GetResourceVersion()
 		obs := observePod(u)
-		m.ctrs = ctrOrder(u.Object)
+		if ctrs := ctrOrder(u.Object); !slices.Equal(ctrs, m.ctrs) {
+			m.ctrs = ctrs
+			changed = true // a new channel (an ephemeral container) is a membership change
+		}
 		m.box.set(obs)
 		if synced {
 			m.box.setSynced()

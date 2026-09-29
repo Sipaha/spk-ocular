@@ -70,6 +70,7 @@ type logGroup struct {
 	sink    *lockedSink
 	tr      *groupTracker
 	channel func(m memberPod) []string
+	onePod  bool // all containers of one pod (not a workload)
 
 	nextID   int
 	active   map[string]*groupSrc
@@ -88,12 +89,12 @@ type groupSrc struct {
 	err   error              // the backlog request failed
 }
 
-func (g *logGroup) run(ctx context.Context) error {
+func (g *logGroup) run(ctx context.Context) (err error) {
 	g.active, g.finished, g.done = map[string]*groupSrc{}, map[string]bool{}, make(chan string, maxGroupStreams)
 	if err := g.awaitMembers(ctx); err != nil {
 		return err
 	}
-	initial, err := g.admit(false)
+	initial, _, err := g.admit(false)
 	if err != nil {
 		return err
 	}
@@ -106,11 +107,15 @@ func (g *logGroup) run(ctx context.Context) error {
 	if !g.q.Follow {
 		return nil
 	}
-	// A source whose sink failed (the page stopped reading) ends the group.
+	// Every exit stops the sources first, then joins them (a source blocked
+	// on a quiet pod only returns when cancelled). A source whose sink
+	// failed (the page stopped reading) ends the group.
 	ctx, cancel := context.WithCancelCause(ctx)
-	defer cancel(nil)
 	var wg sync.WaitGroup
-	defer wg.Wait()
+	defer func() {
+		cancel(err)
+		wg.Wait()
+	}()
 	start := func(gs []*groupSrc) {
 		for _, x := range gs {
 			wg.Add(1)
@@ -129,7 +134,17 @@ func (g *logGroup) run(ctx context.Context) error {
 	}
 	start(initial)
 	for {
-		_, _, _, changed := g.tr.snapshot()
+		// Reconcile with the current member set, and wait for changes after
+		// that same snapshot: a pod that came during the backlog (or between
+		// two waits) is never missed.
+		late, changed, err := g.admit(true)
+		if err != nil {
+			return err
+		}
+		start(late)
+		if g.over() {
+			return nil
+		}
 		select {
 		case <-ctx.Done():
 			return context.Cause(ctx)
@@ -138,12 +153,17 @@ func (g *logGroup) run(ctx context.Context) error {
 			g.finished[key] = true
 		case <-changed:
 		}
-		late, err := g.admit(true)
-		if err != nil {
-			return err
-		}
-		start(late)
 	}
+}
+
+// over: the group of one pod ("all containers") ends when the pod is gone
+// and all its sources have finished; a workload waits for future pods.
+func (g *logGroup) over() bool {
+	if !g.onePod || len(g.active) > 0 {
+		return false
+	}
+	members, _, _, _ := g.tr.snapshot()
+	return len(members) == 0
 }
 
 // awaitMembers waits for the group's pod list (both caches of a
@@ -173,8 +193,20 @@ func (g *logGroup) awaitMembers(ctx context.Context) error {
 // admit starts sources for candidates up to the cap: newest pods first,
 // containers in pod order; admitted sources stay until they end, freed
 // slots are refilled. late sources read new instances from their start.
-func (g *logGroup) admit(late bool) ([]*groupSrc, error) {
-	members, _, _, _ := g.tr.snapshot()
+// It returns the change channel of the snapshot it decided from.
+func (g *logGroup) admit(late bool) ([]*groupSrc, <-chan struct{}, error) {
+	members, _, blind, changed := g.tr.snapshot()
+	// A finished source stays finished only while its pod does: the key of
+	// a pod that left the inventory is forgotten (no growth over rollouts).
+	present := map[string]bool{}
+	for _, m := range members {
+		present[m.uid] = true
+	}
+	for key := range g.finished {
+		if uid, _, _ := strings.Cut(key, "/"); !present[uid] {
+			delete(g.finished, key)
+		}
+	}
 	var out []*groupSrc
 	total := 0
 	for _, m := range members {
@@ -192,16 +224,20 @@ func (g *logGroup) admit(late bool) ([]*groupSrc, error) {
 			x.src = newPodSource(g.nextID, g.ns, m.name, m.uid, ctr, g.s.logs, m.box, g.sink, g.q)
 			x.src.slots, x.src.late = g.s.slots, late
 			if err := g.sink.Source(x.src.id, key, m.name+"/"+ctr, ctr); err != nil {
-				return nil, err
+				return nil, nil, err
 			}
 			g.active[key] = x
 			out = append(out, x)
 		}
 	}
-	msg := ""
+	var notes []string
 	if total > len(g.active) {
-		msg = fmt.Sprintf("showing %d of %d container streams (at most %d at once)", len(g.active), total, maxGroupStreams)
+		notes = append(notes, fmt.Sprintf("showing %d of %d container streams (at most %d at once)", len(g.active), total, maxGroupStreams))
 	}
+	if blind != "" {
+		notes = append(notes, "the pod list is not being watched ("+blind+"): new or replaced pods will not appear")
+	}
+	msg := strings.Join(notes, "; ")
 	if msg != g.limited {
 		g.limited = msg
 		st := provider.LogState{State: provider.LogStreaming}
@@ -209,10 +245,10 @@ func (g *logGroup) admit(late bool) ([]*groupSrc, error) {
 			st = provider.LogState{State: provider.LogLimited, Message: msg}
 		}
 		if err := g.sink.State(0, st); err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 	}
-	return out, nil
+	return out, changed, nil
 }
 
 // backlog reads the sources' recent lines in parallel (bounded time and
@@ -249,8 +285,10 @@ func (g *logGroup) backlog(ctx context.Context, srcs []*groupSrc) error {
 	lists := make([][]provider.LogLine, len(srcs))
 	for i, x := range srcs {
 		lists[i] = x.lines
-		x.src.opened = x.err == nil
-		if obs, _, _, _ := x.pod.box.get(); x.err == nil {
+		// What was read is shown, even from an answer that broke off: the
+		// follow resumes after it (the cursor), never replays it.
+		x.src.opened = x.err == nil || len(x.lines) > 0
+		if obs, _, _, _ := x.pod.box.get(); x.src.opened {
 			x.src.incarnation = obs.ctrs[x.ctr].id
 		}
 		for _, l := range x.lines {
@@ -264,8 +302,11 @@ func (g *logGroup) backlog(ctx context.Context, srcs []*groupSrc) error {
 		merged = merged[len(merged)-keep:]
 	}
 	for i := 0; i < len(merged); {
-		j := i
-		for j < len(merged) && merged[j].src == merged[i].src && j-i < batchLines {
+		// runs of one source, bounded by lines and bytes like live batches
+		// (the page refuses oversized frames)
+		j, size := i, 0
+		for j < len(merged) && merged[j].src == merged[i].src && j-i < batchLines && size < batchBytes {
+			size += len(merged[j].line.Text) + len(merged[j].line.TS)
 			j++
 		}
 		batch := make([]provider.LogLine, j-i)
@@ -276,6 +317,10 @@ func (g *logGroup) backlog(ctx context.Context, srcs []*groupSrc) error {
 			return err
 		}
 		i = j
+	}
+	merged = nil
+	for _, x := range srcs {
+		x.lines = nil // emitted: do not keep up to 16 MiB alive while following
 	}
 	for _, x := range srcs {
 		switch {
@@ -299,6 +344,10 @@ func (g *logGroup) backlog(ctx context.Context, srcs []*groupSrc) error {
 // readBacklog: a non-follow request limited to per bytes; complete lines
 // only when the limit was hit (the cut line comes with the follow).
 func (g *logGroup) readBacklog(ctx context.Context, x *groupSrc, per int64) ([]provider.LogLine, bool, error) {
+	// the queue may have waited: never read a replacement by its name
+	if obs, synced, _, _ := x.pod.box.get(); synced && (!obs.exists || obs.uid != x.pod.uid) {
+		return nil, false, errMemberGone
+	}
 	rc, err := x.src.open(ctx, podLogRequest{
 		Namespace: g.ns, Pod: x.pod.name, Container: x.ctr, Previous: g.q.Previous,
 		TailLines: tailOf(g.q), SinceTime: g.q.SinceTime, LimitBytes: per,
@@ -324,6 +373,8 @@ func (g *logGroup) readBacklog(ctx context.Context, x *groupSrc, per int64) ([]p
 		}
 	}
 }
+
+var errMemberGone = &provider.Error{Class: provider.ClassNotFound, Message: "the pod was deleted"}
 
 type countingReader struct {
 	r io.Reader

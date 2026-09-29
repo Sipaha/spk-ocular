@@ -10,6 +10,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strings"
 	"sync"
 	"testing"
@@ -376,4 +377,22 @@ func (s *safeBuffer) String() string {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return s.b.String()
+}
+
+// Review P2-11: a save body that stalls is cut off (size and time bounded).
+func TestSaveBodyThatStallsIsCutOff(t *testing.T) {
+	dir := t.TempDir()
+	f := newFixture(t, HandlerOptions{AllowOrigin: "wails://localhost", SaveDir: func() (string, error) { return dir, nil }})
+	f.h.saveReadTimeout = 200 * time.Millisecond
+	conn, err := net.Dial("tcp", strings.TrimPrefix(f.srv.URL, "http://"))
+	require.NoError(t, err)
+	defer func() { _ = conn.Close() }()
+	_, err = io.WriteString(conn, "POST /"+f.h.Token()+"/save?name=x.log HTTP/1.1\r\nHost: x\r\nOrigin: wails://localhost\r\nContent-Length: 100\r\n\r\nonly a part")
+	require.NoError(t, err)
+	require.NoError(t, conn.SetReadDeadline(time.Now().Add(5*time.Second)))
+	resp, err := http.ReadResponse(bufio.NewReader(conn), nil)
+	require.NoError(t, err, "the server answered instead of waiting forever")
+	assert.NotEqual(t, http.StatusOK, resp.StatusCode)
+	entries, _ := os.ReadDir(dir)
+	assert.Empty(t, entries, "nothing half-written")
 }

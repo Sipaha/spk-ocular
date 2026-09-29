@@ -237,7 +237,11 @@ func tailOf(q provider.LogQuery) int64 {
 
 // once: a complete, non-follow answer (current or previous instance).
 func (s *podSource) once(ctx context.Context) error {
-	rc, err := s.open(ctx, podLogRequest{
+	// A finite answer has a deadline (a follow does not): it must not hang
+	// after its headers.
+	octx, cancel := context.WithTimeout(ctx, onceTimeout)
+	defer cancel()
+	rc, err := s.open(octx, podLogRequest{
 		Namespace: s.ns, Pod: s.pod, Container: s.ctr, Previous: s.q.Previous,
 		TailLines: tailOf(s.q), SinceTime: s.q.SinceTime,
 	})
@@ -245,11 +249,20 @@ func (s *podSource) once(ctx context.Context) error {
 		return s.requestFailed(ctx, err)
 	}
 	defer func() { _ = rc.Close() }()
-	if _, err := s.pump(ctx, rc, nil); err != nil {
+	n, readErr, err := s.pump(octx, rc, nil)
+	switch {
+	case err != nil && ctx.Err() == nil && octx.Err() != nil:
+		return s.finish(provider.LogError, provider.ClassUnavailable, fmt.Sprintf("the answer did not complete within %s; %d lines arrived", onceTimeout, n))
+	case err != nil:
 		return err
+	case readErr != nil && !errors.Is(readErr, io.EOF):
+		return s.finish(provider.LogError, provider.ClassUnavailable, fmt.Sprintf("the answer broke off after %d lines: %v", n, readErr))
 	}
 	return s.finish(provider.LogEnded, "", "")
 }
+
+// onceTimeout bounds a non-follow answer (a var for tests).
+var onceTimeout = 2 * time.Minute
 
 // requestFailed reports a failed request that cannot be retried.
 func (s *podSource) requestFailed(ctx context.Context, err error) error {
@@ -341,7 +354,7 @@ func (s *podSource) follow(ctx context.Context) error {
 			_ = rc.Close()
 			return err
 		}
-		n, err := s.pump(ctx, rc, sk)
+		n, _, err := s.pump(ctx, rc, sk) // any end of a follow: decide below
 		_ = rc.Close()
 		if err != nil {
 			return err
@@ -500,11 +513,12 @@ func (s *podSource) gap() error {
 }
 
 // pump reads one response into the sink. It returns the number of lines
-// delivered and an error only when the sink or ctx failed.
-func (s *podSource) pump(ctx context.Context, rc io.Reader, sk *skipper) (int, error) {
+// delivered, how the response ended (readErr: io.EOF when clean) and an
+// error only when the sink or ctx failed.
+func (s *podSource) pump(ctx context.Context, rc io.Reader, sk *skipper) (n int, readErr, err error) {
 	lr := newLineReader(rc)
 	var batch []provider.LogLine
-	size, n := 0, 0
+	size := 0
 	flush := func() error {
 		if len(batch) == 0 {
 			return nil
@@ -523,13 +537,13 @@ func (s *podSource) pump(ctx context.Context, rc io.Reader, sk *skipper) (int, e
 			if sk != nil && sk.mismatch && !sk.reported {
 				sk.reported = true
 				if err := flush(); err != nil {
-					return n, err
+					return n, nil, err
 				}
 				if err := s.gap(); err != nil {
-					return n, err
+					return n, nil, err
 				}
 				if err := s.state(provider.LogStreaming, "", ""); err != nil {
-					return n, err
+					return n, nil, err
 				}
 			}
 			if !dropped {
@@ -543,16 +557,16 @@ func (s *podSource) pump(ctx context.Context, rc io.Reader, sk *skipper) (int, e
 		}
 		if rerr != nil {
 			if err := flush(); err != nil {
-				return n, err
+				return n, rerr, err
 			}
 			if ctx.Err() != nil {
-				return n, ctx.Err()
+				return n, rerr, ctx.Err()
 			}
-			return n, nil
+			return n, rerr, nil
 		}
 		if len(batch) >= batchLines || size >= batchBytes || lr.buffered() == 0 {
 			if err := flush(); err != nil {
-				return n, err
+				return n, nil, err
 			}
 		}
 	}

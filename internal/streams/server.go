@@ -40,6 +40,7 @@ type Handler struct {
 	saveDir     func() (string, error)
 	// writer timings (tests shorten them)
 	writeTimeout, nudge, beat time.Duration
+	saveReadTimeout           time.Duration
 }
 
 type HandlerOptions struct {
@@ -60,7 +61,7 @@ func NewHandler(reg *Registry, o HandlerOptions) *Handler {
 	return &Handler{
 		reg: reg, token: []byte(base64.RawURLEncoding.EncodeToString(raw[:])), classify: cl,
 		allowOrigin: o.AllowOrigin, saveDir: o.SaveDir,
-		writeTimeout: writeTimeout, nudge: nudgeDelay, beat: heartbeat,
+		writeTimeout: writeTimeout, nudge: nudgeDelay, beat: heartbeat, saveReadTimeout: 60 * time.Second,
 	}
 }
 
