@@ -6,6 +6,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 
 	"github.com/spk/spk-ocular/internal/core"
@@ -240,6 +241,72 @@ func TestEventColumns(t *testing.T) {
 	assert.Equal(t, now.Add(-10*time.Second).UnixMilli(), cells[0].Time)
 	assert.Equal(t, "3", cells[5].Text)
 	assert.Equal(t, core.HealthOK, h.State)
+}
+
+// A Warning event is recent evidence while it was last observed within
+// eventRecent; it expires through the projection's next (no API event
+// needed). The count is the API's cumulative one.
+func TestRecentWarningEvent(t *testing.T) {
+	ev := func(fields map[string]any) *unstructured.Unstructured {
+		o := map[string]any{"involvedObject": map[string]any{"apiVersion": "v1", "kind": "Pod", "name": "web-1", "uid": "p1"},
+			"reason": "BackOff", "message": "Back-off restarting failed container", "type": "Warning"}
+		for k, v := range fields {
+			o[k] = v
+		}
+		return trim(obj(time.Hour, o), eventsKind.keep)
+	}
+	t.Run("recent", func(t *testing.T) {
+		is, next, ok := recentWarning(ev(map[string]any{"count": int64(7), "lastTimestamp": ts(2 * time.Minute)}), now)
+		require.True(t, ok)
+		assert.Equal(t, core.HealthWarning, is.State)
+		assert.Equal(t, "BackOff", is.Reason)
+		assert.Equal(t, "Back-off restarting failed container (7 in total)", is.Message)
+		assert.Equal(t, now.Add(-2*time.Minute).UnixMilli(), is.Since)
+		assert.Equal(t, now.Add(-2*time.Minute).Add(eventRecent), next)
+	})
+	t.Run("series time and count lead", func(t *testing.T) {
+		is, _, ok := recentWarning(ev(map[string]any{"count": int64(2), "lastTimestamp": ts(time.Hour),
+			"series": map[string]any{"count": int64(40), "lastObservedTime": ts(time.Minute)}}), now)
+		require.True(t, ok)
+		assert.Contains(t, is.Message, "(40 in total)")
+		assert.Equal(t, now.Add(-time.Minute).UnixMilli(), is.Since)
+	})
+	t.Run("a single one", func(t *testing.T) {
+		is, _, ok := recentWarning(ev(map[string]any{"eventTime": now.Add(-time.Minute).Format(time.RFC3339Nano)}), now)
+		require.True(t, ok)
+		assert.Equal(t, "Back-off restarting failed container", is.Message)
+	})
+	t.Run("only the creation time: said", func(t *testing.T) {
+		u := ev(nil)
+		u.SetCreationTimestamp(metav1.NewTime(now.Add(-time.Minute)))
+		is, _, ok := recentWarning(u, now)
+		require.True(t, ok)
+		assert.Contains(t, is.Message, "time of creation")
+	})
+	t.Run("old", func(t *testing.T) {
+		_, next, ok := recentWarning(ev(map[string]any{"lastTimestamp": ts(time.Hour)}), now)
+		assert.False(t, ok)
+		assert.True(t, next.IsZero())
+	})
+	t.Run("normal", func(t *testing.T) {
+		u := ev(map[string]any{"lastTimestamp": ts(time.Minute)})
+		u.Object["type"] = "Normal"
+		_, _, ok := recentWarning(u, now)
+		assert.False(t, ok)
+	})
+	t.Run("far ahead: judged when local time catches up", func(t *testing.T) {
+		u := ev(map[string]any{"lastTimestamp": ts(-10 * time.Minute)})
+		_, next, ok := recentWarning(u, now)
+		assert.False(t, ok)
+		assert.Equal(t, now.Add(10*time.Minute-clockSkewTolerance), next)
+		is, _, ok := recentWarning(u, next)
+		require.True(t, ok)
+		assert.Equal(t, next.UnixMilli(), is.Since, "never in the future")
+	})
+	t.Run("the involved object keeps its API group", func(t *testing.T) {
+		u := ev(map[string]any{"lastTimestamp": ts(time.Minute)})
+		assert.Equal(t, "v1", str(u.Object, "involvedObject", "apiVersion"))
+	})
 }
 
 func TestKindIDsAreUniqueAndQualified(t *testing.T) {

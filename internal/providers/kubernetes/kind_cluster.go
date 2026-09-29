@@ -173,7 +173,7 @@ var eventsKind = &kindDef{
 	gvr:        schema.GroupVersionResource{Version: "v1", Resource: "events"},
 	namespaced: true,
 	keep: fields{
-		"involvedObject": fields{"kind": true, "name": true, "namespace": true, "uid": true},
+		"involvedObject": fields{"apiVersion": true, "kind": true, "name": true, "namespace": true, "uid": true},
 		"reason":         true, "message": true, "type": true, "count": true,
 		"firstTimestamp": true, "lastTimestamp": true, "eventTime": true,
 		"series": fields{"count": true, "lastObservedTime": true},
@@ -181,23 +181,8 @@ var eventsKind = &kindDef{
 	},
 	project: func(u *unstructured.Unstructured, _ time.Time) ([]core.Cell, core.Health, time.Time) {
 		o := u.Object
-		last := timeAt(o, "series", "lastObservedTime")
-		if last.IsZero() {
-			last = timeAt(o, "lastTimestamp")
-		}
-		if last.IsZero() {
-			last = timeAtMicro(o, "eventTime")
-		}
-		if last.IsZero() {
-			last = u.GetCreationTimestamp().Time
-		}
-		count := i64(o, "series", "count")
-		if count == 0 {
-			count = i64(o, "count")
-		}
-		if count == 0 {
-			count = 1
-		}
+		last, _ := eventLastSeen(u)
+		count := eventCount(o)
 		typ := nonEmpty(str(o, "type"), "Normal")
 		obj := strings.ToLower(str(o, "involvedObject", "kind")) + "/" + str(o, "involvedObject", "name")
 		cells := []core.Cell{
@@ -210,6 +195,67 @@ var eventsKind = &kindDef{
 		}
 		return cells, h, time.Time{}
 	},
+}
+
+// eventLastSeen is when the event (series) was last observed:
+// series.lastObservedTime, lastTimestamp, eventTime, else the object's
+// creation (created says so).
+func eventLastSeen(u *unstructured.Unstructured) (last time.Time, created bool) {
+	o := u.Object
+	for _, t := range []time.Time{timeAt(o, "series", "lastObservedTime"), timeAt(o, "lastTimestamp"), timeAtMicro(o, "eventTime")} {
+		if !t.IsZero() {
+			return t, false
+		}
+	}
+	return u.GetCreationTimestamp().Time, true
+}
+
+// eventCount is the API's cumulative count of the event (series): one of
+// them, never a sum.
+func eventCount(o map[string]any) int64 {
+	if n := i64(o, "series", "count"); n > 0 {
+		return n
+	}
+	if n := i64(o, "count"); n > 0 {
+		return n
+	}
+	return 1
+}
+
+// eventRecent: a Warning event last observed this recently is evidence in
+// Problems.
+const eventRecent = 15 * time.Minute
+
+// recentWarning is a Warning event as recent evidence: while it was last
+// observed within eventRecent. next is when that changes: the end of the
+// window, or, for a time further ahead than clock skew allows, when local
+// time catches up with it.
+func recentWarning(u *unstructured.Unstructured, now time.Time) (is core.Issue, next time.Time, ok bool) {
+	o := u.Object
+	if str(o, "type") != "Warning" {
+		return core.Issue{}, time.Time{}, false
+	}
+	at, created := eventLastSeen(u)
+	switch {
+	case at.IsZero():
+		return core.Issue{}, time.Time{}, false
+	case at.After(now.Add(clockSkewTolerance)):
+		return core.Issue{}, at.Add(-clockSkewTolerance), false
+	case now.Sub(at) >= eventRecent:
+		return core.Issue{}, time.Time{}, false
+	}
+	since := at
+	if since.After(now) {
+		since = now
+	}
+	msg := str(o, "message")
+	if n := eventCount(o); n > 1 {
+		msg += fmt.Sprintf(" (%d in total)", n)
+	}
+	if created {
+		msg += " (time of creation: the event has no observation time)"
+	}
+	return core.Issue{State: core.HealthWarning, Reason: str(o, "reason"), Message: msg, Since: since.UnixMilli()}, at.Add(eventRecent), true
 }
 
 // timeAtMicro parses MicroTime (RFC3339 with fractional seconds).
