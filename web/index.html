@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="dark" />
+    <!-- Paints before the CSS module loads: no light flash at startup.
+         Must track --color-app in src/index.css. -->
+    <style>
+      :root { color-scheme: dark; }
+      html, body { background: #1e1f22; }
+    </style>
+    <title>SPK Ocular</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

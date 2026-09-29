@@ -1,0 +1,47 @@
+@import "tailwindcss";
+
+/* Darcula / Lens palette, taken from SPK-launcher (dark only for now).
+   Component code never hard-codes a hex: a theme touches only this block
+   and the matching background in index.html. */
+@theme {
+  --color-app: #1e1f22;
+  --color-panel: #2b2d30;
+  --color-sidebar: #232427;
+  --color-hover: #313336;
+  --color-active: #2e436e;
+  --color-line: #393b40;
+  --color-fg: #dfe1e5;
+  --color-fg-muted: #9da0a8;
+  --color-fg-subtle: #6f737a;
+  --color-accent: #4d9cf6;
+  --color-accent-fg: #ffffff;
+  --color-danger: #f75464;
+  --color-success: #5fad65;
+  --color-warning: #e8c44d;
+
+  --font-mono: "JetBrains Mono", "SF Mono", "Cascadia Code", "Fira Code",
+    "Roboto Mono", ui-monospace, "Menlo", "Consolas", monospace;
+}
+
+html, body, #root { height: 100%; }
+
+body {
+  margin: 0;
+  background-color: var(--color-app);
+  color: var(--color-fg);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  font-size: 13px;
+  line-height: 1.4;
+  -webkit-font-smoothing: antialiased;
+  /* Live numbers must not twitch sideways as they update. */
+  font-variant-numeric: tabular-nums;
+}
+
+html { color-scheme: dark; }
+
+:focus-visible {
+  outline: 1.5px solid var(--color-accent);
+  outline-offset: 1px;
+}
+
+::selection { background: color-mix(in srgb, var(--color-accent) 35%, transparent); }

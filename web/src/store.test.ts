@@ -1,0 +1,60 @@
+import { beforeEach, describe, expect, it } from 'vitest'
+import { actions, initialState, useStore, visibleTargets } from './store'
+import { fakeClient, k8s } from './test/fakeClient'
+
+beforeEach(() => useStore.setState({ ...initialState }))
+
+describe('store', () => {
+  it('loads targets and remembers the selection', async () => {
+    const f = fakeClient([k8s('a'), k8s('b')])
+    const act = actions(f.client)
+    await act.init()
+    expect(useStore.getState().view?.groups[0].targets).toHaveLength(2)
+    await act.select({ provider: 'kubernetes', id: 'b' })
+    expect(useStore.getState().view?.selected).toEqual({ provider: 'kubernetes', id: 'b' })
+    expect(useStore.getState().cursor).toBe('kubernetes/b')
+  })
+
+  it('reports a failed selection without losing the list', async () => {
+    const f = fakeClient([k8s('a')])
+    const act = actions(f.client)
+    await act.init()
+    await act.select({ provider: 'kubernetes', id: 'gone' })
+    expect(useStore.getState().actionError).toContain('not_found')
+    expect(useStore.getState().view?.groups[0].targets).toHaveLength(1)
+  })
+
+  it('coalesces overlapping reloads into one follow-up', async () => {
+    const f = fakeClient([k8s('a')])
+    const act = actions(f.client)
+    await act.init()
+    const calls = (f.client.listTargets as ReturnType<typeof import('vitest').vi.fn>).mock.calls.length
+    const p = act.reload()
+    void act.reload()
+    void act.reload()
+    await p
+    expect((f.client.listTargets as ReturnType<typeof import('vitest').vi.fn>).mock.calls.length - calls).toBe(2)
+  })
+
+  it('filters by title and subtitle, moving the cursor into the result', async () => {
+    const f = fakeClient([k8s('prod'), k8s('dev', { subtitle: 'kind-local' })])
+    const act = actions(f.client)
+    await act.init()
+    act.setFilter('KIND')
+    const s = useStore.getState()
+    expect(visibleTargets(s.view, s.filter).map((x) => x.id)).toEqual(['dev'])
+    expect(s.cursor).toBe('kubernetes/dev')
+  })
+
+  it('moves the cursor within bounds', async () => {
+    const f = fakeClient([k8s('a'), k8s('b'), k8s('c')])
+    const act = actions(f.client)
+    await act.init()
+    act.moveCursor(1)
+    expect(useStore.getState().cursor).toBe('kubernetes/a')
+    act.moveCursor(5)
+    expect(useStore.getState().cursor).toBe('kubernetes/c')
+    act.moveCursor(-1)
+    expect(useStore.getState().cursor).toBe('kubernetes/b')
+  })
+})
