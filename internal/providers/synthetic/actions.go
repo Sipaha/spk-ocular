@@ -350,11 +350,11 @@ func (s *session) RunAction(ctx context.Context, run provider.ActionRun) (core.A
 	switch run.Action {
 	case actRestart.ID:
 		o.restarts++
-		msg = "restart of " + o.name + " requested"
+		msg = "workload " + o.name + ": restart requested"
 		w.changed(o, false)
 	case actScale.ID:
+		msg = fmt.Sprintf("workload %s: scale %d → %d requested", o.name, o.replicas, *run.Params.Count)
 		o.replicas = *run.Params.Count
-		msg = fmt.Sprintf("scale of %s to %d requested", o.name, o.replicas)
 		w.changed(o, false)
 	case actDelete.ID:
 		for i, x := range w.objs {
@@ -363,7 +363,7 @@ func (s *session) RunAction(ctx context.Context, run provider.ActionRun) (core.A
 				break
 			}
 		}
-		msg = "deletion of " + o.name + " requested"
+		msg = "workload " + o.name + ": deletion requested"
 		w.changed(o, true)
 	}
 	if c.Fail == provider.ClassUnknown {

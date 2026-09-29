@@ -100,7 +100,7 @@ func TestActionsChangeTheLiveView(t *testing.T) {
 
 	res, err := act(t, s, "web", "restart", core.ActionParams{})
 	require.NoError(t, err)
-	assert.Equal(t, "restart of web requested", res.Message)
+	assert.Equal(t, "workload web: restart requested", res.Message)
 	assert.Equal(t, []string{"web", "2", "1"}, view.cells("web"))
 
 	_, err = act(t, s, "web", "scale", count(5))

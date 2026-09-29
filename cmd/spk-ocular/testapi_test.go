@@ -70,7 +70,7 @@ func TestSyntheticActionsThroughTheAPI(t *testing.T) {
 	assert.Equal(t, 2, *plan.Current)
 	code, body := run(plan)
 	require.Equal(t, http.StatusOK, code, body)
-	assert.Contains(t, body, "scale of web to 3 requested")
+	assert.Contains(t, body, "workload web: scale 2 → 3 requested")
 
 	code, _ = post("/api/_test/synthetic/controls", map[string]any{"rights": "denied"})
 	require.Equal(t, http.StatusNoContent, code)

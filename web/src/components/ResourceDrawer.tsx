@@ -1,7 +1,8 @@
-import { lazy, Suspense, useEffect, useMemo, useState, type ReactNode } from 'react'
-import type { Client } from '../api/client'
-import type { Relation, Ref, Resource } from '../api/types'
-import { classLabel, detailLabel, relationLabel, t } from '../i18n'
+import { lazy, Suspense, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { ApiError, type Client } from '../api/client'
+import type { ActionDescriptor, Relation, Ref, Resource } from '../api/types'
+import { Menu } from '../actions/Menu'
+import { actionLabel, classLabel, detailLabel, relationLabel, t } from '../i18n'
 import { inTerminal } from '../keyboard'
 import { PortsSection } from '../tunnels/Ports'
 import { useView } from '../views/useView'
@@ -23,14 +24,19 @@ interface Props {
   hasExec?: (kindId: string) => boolean
   hasForward?: (kindId: string) => boolean
   onTerminal?: (ref: Ref, dialog: boolean) => void
+  /** The actions of a kind: an Actions menu acts on the object shown now. */
+  actionsOf?: (kindId: string) => ActionDescriptor[]
+  onAction?: (ref: Ref, action: ActionDescriptor) => void
 }
 
 type Tab = 'details' | 'yaml'
 
-export function ResourceDrawer({ client, hub, target, subject, onClose, hasLogs, onLogs, hasExec, onTerminal, hasForward }: Props) {
+export function ResourceDrawer({ client, hub, target, subject, onClose, hasLogs, onLogs, hasExec, onTerminal, hasForward, actionsOf, onAction }: Props) {
   const [stack, setStack] = useState<Ref[]>([subject])
   const [tab, setTab] = useState<Tab>('details')
-  const [res, setRes] = useState<{ key: string; r?: Resource; error?: string } | null>(null)
+  const [res, setRes] = useState<{ key: string; r?: Resource; error?: string; gone?: boolean } | null>(null)
+  const [menuAt, setMenuAt] = useState<{ x: number; y: number } | null>(null)
+  const actionsBtn = useRef<HTMLButtonElement>(null)
   const current = stack[stack.length - 1]
   const key = `${current.kind}/${current.scope ?? ''}/${current.name}/${current.uid ?? ''}`
   const revision = useObjectRevision(hub, target, current)
@@ -39,7 +45,9 @@ export function ResourceDrawer({ client, hub, target, subject, onClose, hasLogs,
     let live = true
     client.getResource(current).then(
       (r) => live && setRes({ key, r }),
-      (e) => live && setRes({ key, error: e instanceof Error ? e.message : String(e) }),
+      (e) =>
+        live &&
+        setRes({ key, error: e instanceof Error ? e.message : String(e), gone: e instanceof ApiError && (e.code === 'not_found' || e.code === 'gone') }),
     )
     return () => {
       live = false
@@ -57,6 +65,9 @@ export function ResourceDrawer({ client, hub, target, subject, onClose, hasLogs,
 
   const shown = res?.key === key ? res : null
   const r = shown?.r
+  const actions = actionsOf?.(current.kind) ?? []
+  // The object shown now (after relation navigation: that one), with the UID read.
+  const shownRef = (): Ref => ({ ...(r?.ref ?? current), provider: target.provider, target: target.id })
   const go = (ref: Ref) => {
     setStack((s) => [...s, ref])
     setTab('details')
@@ -100,6 +111,29 @@ export function ResourceDrawer({ client, hub, target, subject, onClose, hasLogs,
             </button>
           </>
         )}
+        {onAction && actions.length > 0 && (
+          <button
+            ref={actionsBtn}
+            className="rounded-md border border-line px-2 py-0.5 text-xs text-fg-muted hover:bg-hover hover:text-fg"
+            aria-haspopup="menu"
+            aria-expanded={!!menuAt}
+            title={t('action.menuHint')}
+            onClick={() => {
+              const b = actionsBtn.current?.getBoundingClientRect()
+              setMenuAt({ x: b?.left ?? 0, y: (b?.bottom ?? 0) + 2 })
+            }}
+          >
+            {t('action.menu')} ▾
+          </button>
+        )}
+        {menuAt && onAction && (
+          <Menu
+            label={t('action.menu')}
+            at={menuAt}
+            onClose={() => setMenuAt(null)}
+            items={actions.map((a) => ({ id: a.id, label: actionLabel(a) + (a.param ? '…' : ''), danger: a.destructive, onSelect: () => onAction(shownRef(), a) }))}
+          />
+        )}
         <button className="rounded px-2 text-lg leading-none text-fg-muted hover:bg-hover hover:text-fg" onClick={onClose} aria-label={t('drawer.close')}>
           ×
         </button>
@@ -119,11 +153,16 @@ export function ResourceDrawer({ client, hub, target, subject, onClose, hasLogs,
       </nav>
       <div className="min-h-0 flex-1 overflow-y-auto">
         {!shown && <p className="p-4 text-fg-subtle">{t('app.loading')}</p>}
-        {shown?.error && (
-          <p role="alert" className="m-4 rounded-md bg-danger/10 px-3 py-2 text-danger">
-            {shown.error}
-          </p>
-        )}
+        {shown?.error &&
+          (shown.gone ? (
+            <p role="status" className="m-4 rounded-md border border-line px-3 py-2 text-fg-muted">
+              {t('drawer.deleted')}
+            </p>
+          ) : (
+            <p role="alert" className="m-4 rounded-md bg-danger/10 px-3 py-2 text-danger">
+              {shown.error}
+            </p>
+          ))}
         {r && tab === 'yaml' && (
           <div className="h-full">
             <Suspense fallback={<pre className="p-4 font-mono text-xs text-fg-muted">{r.yaml}</pre>}>

@@ -183,6 +183,45 @@ const en = {
   'logs.state.truncated': 'truncated',
   'logs.state.limited': 'limited',
   'logs.moreProblems': 'and {count} more',
+  'class.conflict': 'conflict',
+  'class.unknown': 'outcome unknown',
+  'class.bad_request': 'invalid request',
+  'drawer.deleted': 'This object no longer exists.',
+  'act.restart': 'Restart',
+  'act.scale': 'Scale',
+  'act.delete': 'Delete',
+  'action.menu': 'Actions',
+  'action.menuHint': 'Actions on this object',
+  'row.menu': 'Row actions',
+  'row.details': 'Details',
+  'row.logs': 'Logs',
+  'row.terminal': 'Terminal',
+  'action.context': 'Context',
+  'action.server': 'Server',
+  'action.namespace': 'Namespace',
+  'action.kind': 'Kind',
+  'action.name': 'Name',
+  'action.effects': 'What happens',
+  'action.warnings': 'Warnings',
+  'action.rights': 'Permission',
+  'action.rightsAllowed': 'checked: allowed',
+  'action.rightsDenied': 'not allowed: {reason}',
+  'action.rightsUnknown': 'could not be checked — the request may be refused',
+  'action.count': 'Replicas',
+  'action.countNow': 'now {count}',
+  'action.countRange': '{min}–{max}',
+  'action.review': 'Review',
+  'action.cancel': 'Cancel',
+  'action.close': 'Close',
+  'action.reviewAgain': 'Review again',
+  'action.preparing': 'Reading the current state…',
+  'action.running': 'Requesting…',
+  'action.unavailable': 'Not possible now: {reason}',
+  'action.conflict': 'The object or the context changed since this was reviewed: {detail}',
+  'action.unknown': 'The request was sent, but its outcome is not known. Check the object before repeating.',
+  'action.timeout': 'No answer within {sec} s: the outcome is not known. Check the object before repeating.',
+  'action.failed': 'Failed · {class}: {detail}',
+  'action.prepareFailed': 'Could not read the current state · {class}: {detail}',
 } as const
 
 export type MessageKey = keyof typeof en
@@ -369,6 +408,45 @@ const ru: Record<MessageKey, string> = {
   'logs.state.truncated': 'обрезано',
   'logs.state.limited': 'ограничено',
   'logs.moreProblems': 'и ещё {count}',
+  'class.conflict': 'конфликт',
+  'class.unknown': 'результат неизвестен',
+  'class.bad_request': 'неверный запрос',
+  'drawer.deleted': 'Этого объекта больше нет.',
+  'act.restart': 'Перезапустить',
+  'act.scale': 'Масштабировать',
+  'act.delete': 'Удалить',
+  'action.menu': 'Действия',
+  'action.menuHint': 'Действия с объектом',
+  'row.menu': 'Действия со строкой',
+  'row.details': 'Детали',
+  'row.logs': 'Логи',
+  'row.terminal': 'Терминал',
+  'action.context': 'Контекст',
+  'action.server': 'Сервер',
+  'action.namespace': 'Namespace',
+  'action.kind': 'Вид',
+  'action.name': 'Имя',
+  'action.effects': 'Что произойдёт',
+  'action.warnings': 'Предупреждения',
+  'action.rights': 'Права',
+  'action.rightsAllowed': 'проверены: разрешено',
+  'action.rightsDenied': 'нет права: {reason}',
+  'action.rightsUnknown': 'не удалось проверить — запрос может быть отклонён',
+  'action.count': 'Реплик',
+  'action.countNow': 'сейчас {count}',
+  'action.countRange': '{min}–{max}',
+  'action.review': 'Просмотреть',
+  'action.cancel': 'Отмена',
+  'action.close': 'Закрыть',
+  'action.reviewAgain': 'Проверить заново',
+  'action.preparing': 'Читаю текущее состояние…',
+  'action.running': 'Отправляю запрос…',
+  'action.unavailable': 'Сейчас невозможно: {reason}',
+  'action.conflict': 'Объект или контекст изменились после просмотра: {detail}',
+  'action.unknown': 'Запрос отправлен, но результат неизвестен. Проверьте объект, прежде чем повторять.',
+  'action.timeout': 'Нет ответа за {sec} с: результат неизвестен. Проверьте объект, прежде чем повторять.',
+  'action.failed': 'Не выполнено · {class}: {detail}',
+  'action.prepareFailed': 'Не удалось прочитать текущее состояние · {class}: {detail}',
 }
 
 const dicts = { en, ru }
@@ -399,6 +477,12 @@ export const _dicts = dicts // tests
 export function classLabel(cls: string): string {
   const k = `class.${cls}` as MessageKey
   return k in en ? t(k) : cls
+}
+
+/** An action's label: known IDs are translated, else the provider's title. */
+export function actionLabel(a: { id: string; title: string }): string {
+  const k = `act.${a.id}` as MessageKey
+  return k in en ? t(k) : a.title
 }
 
 /** Relation type label; unknown types show as-is. */

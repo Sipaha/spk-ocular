@@ -1,7 +1,9 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { Client } from '../api/client'
-import type { KindDescriptor, Ref, Row, ScopeSel, ScopesView, Target } from '../api/types'
-import { classLabel, t } from '../i18n'
+import type { ActionDescriptor, KindDescriptor, Ref, Row, ScopeSel, ScopesView, Target } from '../api/types'
+import { actionLabel, classLabel, t } from '../i18n'
+import { ActionDialog, type ActionRequest } from '../actions/ActionDialog'
+import type { MenuItem } from '../actions/Menu'
 import { useMetrics } from '../views/useMetrics'
 import { useView } from '../views/useView'
 import type { ViewHub } from '../views/viewSync'
@@ -66,6 +68,14 @@ export function Workspace({ client, hub, target }: { client: Client; hub: ViewHu
   const hasLogs = useCallback((kindId: string) => !!kinds?.find((k) => k.id === kindId)?.logs, [kinds])
   const hasExec = useCallback((kindId: string) => !!kinds?.find((k) => k.id === kindId)?.exec, [kinds])
   const hasForward = useCallback((kindId: string) => !!kinds?.find((k) => k.id === kindId)?.forward, [kinds])
+  const actionsOf = useCallback((kindId: string) => kinds?.find((k) => k.id === kindId)?.actions ?? [], [kinds])
+  const [actionReq, setActionReq] = useState<(ActionRequest & { seq: number }) | null>(null)
+  const actionSeq = useRef(0)
+  const openAction = useCallback(
+    (ref: Ref, action: ActionDescriptor) =>
+      setActionReq({ ref, action, kindTitle: kinds?.find((k) => k.id === ref.kind)?.title ?? ref.kind, seq: ++actionSeq.current }),
+    [kinds],
+  )
 
   useEffect(() => {
     // Workspace is keyed by target: state starts fresh for each one.
@@ -135,6 +145,8 @@ export function Workspace({ client, hub, target }: { client: Client; hub: ViewHu
             hasExec={hasExec}
             onTerminal={openTerminal}
             hasForward={hasForward}
+            actionsOf={actionsOf}
+            onAction={openAction}
           />
         )}
         </div>
@@ -147,6 +159,15 @@ export function Workspace({ client, hub, target }: { client: Client; hub: ViewHu
               setTermDialog(null)
               dock.openTerminal(targetRef, target.title, open)
             }}
+          />
+        )}
+        {actionReq && (
+          <ActionDialog
+            // A new request is a new dialog: nothing of the last one carries over.
+            key={actionReq.seq}
+            client={client}
+            req={actionReq}
+            onClose={() => setActionReq(null)}
           />
         )}
       </main>
@@ -179,8 +200,10 @@ function ResourcePage(props: {
   hasExec: (kindId: string) => boolean
   onTerminal: (ref: Ref, dialog: boolean) => void
   hasForward: (kindId: string) => boolean
+  actionsOf: (kindId: string) => ActionDescriptor[]
+  onAction: (ref: Ref, action: ActionDescriptor) => void
 }) {
-  const { client, hub, target, kind, scope, scopes, onScope, hasLogs, onLogs, hasExec, onTerminal, hasForward } = props
+  const { client, hub, target, kind, scope, scopes, onScope, hasLogs, onLogs, hasExec, onTerminal, hasForward, actionsOf, onAction } = props
   const scopeKey = JSON.stringify(scope)
   const query = useMemo(() => ({ kind: kind.id, scope: JSON.parse(scopeKey) as ScopeSel }), [kind.id, scopeKey])
   const view = useView(hub, target.provider, target.id, query)
@@ -189,6 +212,18 @@ function ResourcePage(props: {
   const [open, setOpen] = useState<Ref | null>(null)
   const columns = view.kind?.columns ?? kind.columns
   const metrics = useMetrics(client, view.viewId, columns.some((c) => c.metric))
+  const actions = actionsOf(kind.id)
+  const del = actions.find((a) => a.id === 'delete')
+  // The row's menu, for the row it opens on (its ref as of now).
+  const rowMenu = (r: Row): MenuItem[] => {
+    const items: MenuItem[] = [{ id: 'details', label: t('row.details'), onSelect: () => setOpen(r.ref) }]
+    if (kind.logs) items.push({ id: 'logs', label: t('row.logs'), hint: 'L', onSelect: () => onLogs(r.ref) })
+    if (kind.exec) items.push({ id: 'terminal', label: t('row.terminal'), hint: 'S', onSelect: () => onTerminal(r.ref, false) })
+    actions.forEach((a, i) =>
+      items.push({ id: `action-${a.id}`, label: actionLabel(a) + (a.param ? '…' : ''), danger: a.destructive, separator: i === 0, hint: a.id === 'delete' ? 'Delete' : undefined, onSelect: () => onAction(r.ref, a) }),
+    )
+    return items
+  }
 
   return (
     <>
@@ -237,6 +272,8 @@ function ResourcePage(props: {
           onLogs={kind.logs ? (r: Row) => onLogs(r.ref) : undefined}
           onTerminal={kind.exec ? (r: Row, dialog: boolean) => onTerminal(r.ref, dialog) : undefined}
           metrics={metrics}
+          rowMenu={rowMenu}
+          onDelete={del && ((r: Row) => onAction(r.ref, del))}
         />
         {open && (
           <ResourceDrawer
@@ -251,6 +288,8 @@ function ResourcePage(props: {
             hasExec={hasExec}
             onTerminal={onTerminal}
             hasForward={hasForward}
+            actionsOf={actionsOf}
+            onAction={onAction}
           />
         )}
       </div>

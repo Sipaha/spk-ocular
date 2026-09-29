@@ -7,6 +7,8 @@ export interface State {
   view: TargetsView | null
   loadError: string | null
   actionError: string | null
+  /** A short status message ("deployment web: restart requested"). */
+  notice: string | null
   filter: string
   /** Keyboard cursor in the filtered list (target key), separate from the selection. */
   cursor: string | null
@@ -17,11 +19,21 @@ export const initialState: State = {
   view: null,
   loadError: null,
   actionError: null,
+  notice: null,
   filter: '',
   cursor: null,
 }
 
 export const useStore = create<State>(() => ({ ...initialState }))
+
+let noticeTimer: ReturnType<typeof setTimeout> | undefined
+
+/** Shows msg in the status bar for a few seconds. */
+export function showNotice(msg: string, ms = 5000) {
+  clearTimeout(noticeTimer)
+  useStore.setState({ notice: msg })
+  noticeTimer = setTimeout(() => useStore.setState({ notice: null }), ms)
+}
 
 export const targetKey = (r: TargetRef) => `${r.provider}/${r.id}`
 

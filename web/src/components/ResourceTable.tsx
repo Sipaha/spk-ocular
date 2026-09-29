@@ -3,6 +3,8 @@ import { useMemo, useRef, useState } from 'react'
 import type { Cell, Column, HealthState, MetricsView, Row } from '../api/types'
 import { formatAge, formatBytes, formatCPU } from '../format'
 import { isShortcut } from '../keyboard'
+import { Menu, type MenuItem } from '../actions/Menu'
+import { t } from '../i18n'
 import { useNow } from '../views/useView'
 
 const ROW_H = 28
@@ -27,6 +29,13 @@ interface Props {
   onTerminal?: (row: Row, dialog: boolean) => void
   /** Usage for metric columns (CPU/Memory), by row id. */
   metrics?: MetricsView | null
+  /**
+   * The context menu of a row (right click, the Menu key, Shift+F10): built
+   * for that row when it opens.
+   */
+  rowMenu?: (row: Row) => MenuItem[]
+  /** Delete on the focused table: the selected row. */
+  onDelete?: (row: Row) => void
 }
 
 export const healthText: Record<HealthState, string> = {
@@ -66,8 +75,13 @@ export function matchesRow(r: Row, f: string): boolean {
   return r.cells.some((c) => (c.text ?? '').toLowerCase().includes(needle)) || (r.health.reason ?? '').toLowerCase().includes(needle)
 }
 
-export function ResourceTable({ columns, rows, hideScope, filter, selected, onSelect, onOpen, onLogs, onTerminal, metrics }: Props) {
+export function ResourceTable({ columns, rows, hideScope, filter, selected, onSelect, onOpen, onLogs, onTerminal, metrics, rowMenu, onDelete }: Props) {
   const now = useNow(10_000)
+  const [menu, setMenu] = useState<{ items: MenuItem[]; at: { x: number; y: number } } | null>(null)
+  const openMenu = (r: Row, at: { x: number; y: number }) => {
+    const items = rowMenu?.(r) ?? []
+    if (items.length) setMenu({ items, at })
+  }
   const [sort, setSort] = useState<Sort>({ col: 0, desc: false })
   const visibleCols = useMemo(
     () => columns.map((c, i) => ({ c, i })).filter(({ c }) => !(hideScope && c.scopeColumn)),
@@ -130,9 +144,17 @@ export function ResourceTable({ columns, rows, hideScope, filter, selected, onSe
     } else if (onTerminal && i >= 0 && isShortcut(e, 'KeyS', { ctrl: false }) && !e.altKey) {
       e.preventDefault()
       onTerminal(sorted[i], e.shiftKey)
-    } else if (e.key === 'Enter' && i >= 0 && onOpen) {
+    } else if (e.key === 'Enter' && !e.repeat && i >= 0 && onOpen) {
       e.preventDefault()
       onOpen(sorted[i])
+    } else if (e.key === 'Delete' && !e.repeat && i >= 0 && onDelete) {
+      e.preventDefault()
+      onDelete(sorted[i])
+    } else if (rowMenu && i >= 0 && (e.key === 'ContextMenu' || (e.key === 'F10' && e.shiftKey))) {
+      e.preventDefault()
+      const el = [...(scrollRef.current?.querySelectorAll<HTMLElement>('[data-row-id]') ?? [])].find((x) => x.dataset.rowId === sorted[i].id)
+      const box = el?.getBoundingClientRect() ?? scrollRef.current?.getBoundingClientRect()
+      openMenu(sorted[i], { x: (box?.left ?? 0) + 24, y: (box?.bottom ?? 0) })
     }
   }
 
@@ -172,10 +194,20 @@ export function ResourceTable({ columns, rows, hideScope, filter, selected, onSe
                 key={vi.key}
                 role="row"
                 aria-selected={isSel}
+                data-row-id={r.id}
                 onClick={() => {
                   onSelect(r)
                   onOpen?.(r)
                 }}
+                onContextMenu={
+                  rowMenu &&
+                  ((e) => {
+                    e.preventDefault()
+                    onSelect(r)
+                    scrollRef.current?.focus({ preventScroll: true })
+                    openMenu(r, { x: e.clientX, y: e.clientY })
+                  })
+                }
                 title={r.health.message ? `${r.health.reason}: ${r.health.message}` : r.health.reason}
                 className={['absolute left-0 grid w-full cursor-default items-center border-b border-line/40', isSel ? 'bg-active' : 'hover:bg-hover'].join(' ')}
                 style={{ top: vi.start, height: ROW_H, gridTemplateColumns: template, minWidth }}
@@ -200,6 +232,7 @@ export function ResourceTable({ columns, rows, hideScope, filter, selected, onSe
           })}
         </div>
       </div>
+      {menu && <Menu items={menu.items} at={menu.at} label={t('row.menu')} onClose={() => setMenu(null)} />}
     </div>
   )
 }
