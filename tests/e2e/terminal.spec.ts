@@ -102,6 +102,8 @@ test('a terminal survives selecting another target and says whose it is', async 
 
 test('closing the tab ends the command and frees the terminal', async ({ page }) => {
   await page.goto('/')
+  // The last test's terminal hangs up when its page goes: count from after that.
+  await expect.poll(async () => (await stats(page)).syn_execs).toBe(0)
   const base = await stats(page)
   await openShell(page)
   await expect.poll(async () => since(page, base)).toMatchObject({ terminals: 1, syn_execs: 1, syn_handles: 2 }) // the kept prototype + the running copy
