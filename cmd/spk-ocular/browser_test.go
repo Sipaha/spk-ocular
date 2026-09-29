@@ -20,7 +20,7 @@ func newTestCore(t *testing.T) *appCore {
 	t.Setenv(paths.EnvHome, t.TempDir())
 	t.Setenv("HOME", t.TempDir())
 	t.Setenv("KUBECONFIG", "")
-	c, err := newCore(context.Background(), "browser")
+	c, err := newCore(context.Background(), "browser", false)
 	require.NoError(t, err)
 	t.Cleanup(c.Close)
 	return c

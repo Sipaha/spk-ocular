@@ -5,6 +5,8 @@ import (
 	"net/http"
 	"runtime"
 	"runtime/debug"
+
+	"github.com/spk/spk-ocular/internal/providers/synthetic"
 )
 
 // testRoutes are automation hooks for e2e (--test-api only). They carry the
@@ -19,6 +21,21 @@ func testRoutes(c *appCore) http.Handler {
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(c.Service.Stats())
 	})
+	if c.Synthetic != nil {
+		// Push lines/states into the synthetic provider's open log streams.
+		mux.HandleFunc("POST /api/_test/logs/emit", func(w http.ResponseWriter, r *http.Request) {
+			var req struct {
+				Object string          `json:"object"`
+				Event  synthetic.Event `json:"event"`
+			}
+			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+				http.Error(w, err.Error(), http.StatusBadRequest)
+				return
+			}
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(map[string]int{"delivered": c.Synthetic.Emit(req.Object, req.Event)})
+		})
+	}
 	mux.HandleFunc("POST /api/_test/gc", func(w http.ResponseWriter, _ *http.Request) {
 		runtime.GC()
 		debug.FreeOSMemory()

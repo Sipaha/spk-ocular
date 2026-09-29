@@ -29,6 +29,10 @@ func TestRootDispatchesModes(t *testing.T) {
 	require.NoError(t, cmd.Execute())
 	require.NotNil(t, gotBrowser)
 	assert.Equal(t, browserOpts{Port: 6001, TestAPI: true}, *gotBrowser)
+
+	cmd = newRootCmd(r)
+	cmd.SetArgs([]string{"--browser", "--test-synthetic"})
+	assert.ErrorContains(t, cmd.Execute(), "needs --test-api", "the synthetic provider is test-only")
 }
 
 func TestVersionCommand(t *testing.T) {

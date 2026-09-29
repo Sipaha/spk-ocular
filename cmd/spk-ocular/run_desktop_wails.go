@@ -14,7 +14,7 @@ import (
 )
 
 func runDesktop(ctx context.Context) error {
-	c, err := newCore(ctx, "desktop")
+	c, err := newCore(ctx, "desktop", false)
 	if err != nil {
 		return err
 	}

@@ -20,6 +20,9 @@ var version = "dev"
 type browserOpts struct {
 	Port    int
 	TestAPI bool
+	// TestSynthetic adds the synthetic provider (e2e of the log UI); only
+	// with TestAPI.
+	TestSynthetic bool
 }
 
 type runners struct {
@@ -37,6 +40,9 @@ func newRootCmd(run runners) *cobra.Command {
 		SilenceErrors: true,
 		Args:          cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
+			if o.TestSynthetic && !o.TestAPI {
+				return fmt.Errorf("--test-synthetic needs --test-api")
+			}
 			if browser {
 				return run.browser(cmd.Context(), o)
 			}
@@ -46,6 +52,8 @@ func newRootCmd(run runners) *cobra.Command {
 	root.Flags().BoolVar(&browser, "browser", false, "Serve the UI over HTTP on localhost instead of opening a window")
 	root.Flags().IntVar(&o.Port, "port", 5190, "HTTP port for --browser")
 	root.Flags().BoolVar(&o.TestAPI, "test-api", false, "Expose /api/_test/* automation routes (development/e2e only)")
+	root.Flags().BoolVar(&o.TestSynthetic, "test-synthetic", false, "Add a synthetic test provider (e2e only; needs --test-api)")
+	_ = root.Flags().MarkHidden("test-synthetic")
 	root.AddCommand(&cobra.Command{
 		Use:   "version",
 		Short: "Print the version",

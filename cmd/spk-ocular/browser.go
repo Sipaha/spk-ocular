@@ -19,7 +19,7 @@ import (
 const shutdownTimeout = 3 * time.Second
 
 func runBrowser(ctx context.Context, o browserOpts) error {
-	c, err := newCore(ctx, "browser")
+	c, err := newCore(ctx, "browser", o.TestSynthetic)
 	if err != nil {
 		return err
 	}

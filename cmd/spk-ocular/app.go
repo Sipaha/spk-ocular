@@ -13,20 +13,23 @@ import (
 	"github.com/spk/spk-ocular/internal/paths"
 	"github.com/spk/spk-ocular/internal/provider"
 	"github.com/spk/spk-ocular/internal/providers/kubernetes"
+	"github.com/spk/spk-ocular/internal/providers/synthetic"
 	"github.com/spk/spk-ocular/internal/store"
 )
 
 // appCore is what both modes share: data dir, store, providers, the API service.
 type appCore struct {
-	Paths   paths.Paths
-	Store   *store.Store
-	Emitter *events.Emitter
-	Service *api.Service
+	// Synthetic is the test provider (--test-synthetic), else nil.
+	Synthetic *synthetic.Provider
+	Paths     paths.Paths
+	Store     *store.Store
+	Emitter   *events.Emitter
+	Service   *api.Service
 }
 
 // newCore wires everything and starts the service's watchers. Nothing here
 // touches the network: startup stays fast with an unreachable cluster.
-func newCore(ctx context.Context, mode string) (*appCore, error) {
+func newCore(ctx context.Context, mode string, withSynthetic bool) (*appCore, error) {
 	quietClientGo()
 	p, err := paths.Resolve()
 	if err != nil {
@@ -40,7 +43,13 @@ func newCore(ctx context.Context, mode string) (*appCore, error) {
 		return nil, fmt.Errorf("open db: %w", err)
 	}
 	self, _ := os.Executable() // runs kubeconfig exec plugins with a timeout (internal/execshim)
-	reg, err := provider.NewRegistry(kubernetes.New().WithExecShim(self))
+	providers := []provider.Provider{kubernetes.New().WithExecShim(self)}
+	var syn *synthetic.Provider
+	if withSynthetic {
+		syn = synthetic.New()
+		providers = append(providers, syn)
+	}
+	reg, err := provider.NewRegistry(providers...)
 	if err != nil {
 		_ = st.Close()
 		return nil, err
@@ -48,7 +57,7 @@ func newCore(ctx context.Context, mode string) (*appCore, error) {
 	em := events.NewEmitter()
 	svc := api.NewService(reg, st, em, api.Options{Version: version, Mode: mode, Getenv: os.Getenv})
 	svc.Start(ctx)
-	return &appCore{Paths: p, Store: st, Emitter: em, Service: svc}, nil
+	return &appCore{Synthetic: syn, Paths: p, Store: st, Emitter: em, Service: svc}, nil
 }
 
 // Close stops the service before the store it writes to.
