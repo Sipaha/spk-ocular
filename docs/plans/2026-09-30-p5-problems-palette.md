@@ -306,9 +306,15 @@ Problems показывает два рода строк, и UI их разли�
   тогда pod только warning (RecentRestart), в back-off — error.
 
 ### Task 3. Статистика desktop, churn, короткий soak
-- [ ] `--test-api` у desktop, stats со счётчиками дедлайнов; `scripts/kind-churn.sh`
-  (проверки context-а, потолок, trap), сценарий, CSV.
-- [ ] Диагностический прогон 15 мин; находки — исправить до UI.
+- [x] `--test-api` у desktop, stats со счётчиками дедлайнов (710e341); `scripts/kind-churn.sh`
+  (проверки context-а и контейнера, потолок, trap, `pause`/`break`), `scripts/soak-sample.sh`
+  (CSV; отказ при MemAvailable < 8 ГБ), `pss.sh` показывает swap дерева.
+- [ ] Диагностический прогон 15 мин. **Блокер (2026-09-30 05:35):** на хосте занято 58–61 из
+  62 ГБ, swap 10/10 ГБ заполнен (чужие процессы пользователя: rust-analyzer ~12 ГБ, сервисы
+  SPK, LSP), MemAvailable 1–4 ГБ; в kind pod-ы получают SIGKILL (137). Замер в таких
+  условиях недостоверен (вытесненные страницы уходят из Private_Dirty) и опасен для чужих
+  процессов → прогон отложен до MemAvailable ≥ 8 ГБ; `soak-sample.sh` сам откажется раньше.
+  Задачи 4–7 от него не зависят.
 
 ### Task 4. Problems в UI
 - [ ] Пункт навигации, покрытие (перечень непокрытого при «0 проблем»), стиль «recent»,
