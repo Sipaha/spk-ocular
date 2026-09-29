@@ -65,6 +65,13 @@ type API interface {
 	ReopenTerminal(ctx context.Context, req ReopenTerminalRequest) (TerminalInfo, error)
 	// ForgetTerminal: the terminal's tab closed.
 	ForgetTerminal(ctx context.Context, terminalID string) error
+	// PrepareAction reads what an action would do (nothing changes): the
+	// confirmation shows the plan; RunAction carries its Expect and the
+	// target's revision back.
+	PrepareAction(ctx context.Context, req ActionRequest) (core.ActionPlan, error)
+	// RunAction performs a confirmed plan on the confirmed object (its UID)
+	// in the session the target's revision was checked against.
+	RunAction(ctx context.Context, req ActionRunRequest) (core.ActionResult, error)
 	// ForwardInfo: the ports of an object that can be forwarded.
 	ForwardInfo(ctx context.Context, ref core.Ref) (core.ForwardInfo, error)
 	// StartForward starts a tunnel (owned by the app, not the session):
@@ -156,6 +163,9 @@ const (
 	CodeNotFound    = "not_found"
 	CodeGone        = "gone"
 	CodeUnsupported = "unsupported"
+	// CodeConflict: the object or the target's configuration changed since
+	// the user saw it; look again.
+	CodeConflict = "conflict"
 	// CodeLimit: too many open streams or tunnels.
 	CodeLimit = "limit"
 )

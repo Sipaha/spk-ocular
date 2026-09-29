@@ -64,6 +64,10 @@ export function fakeClient(targets: Target[]) {
       target: { provider: 'kubernetes', target: 'ctx', targetTitle: 'ctx', ref: { provider: 'kubernetes', target: 'ctx', kind: 'pods', name: 'p' }, instance: 'p', channel: 'app' },
     })),
     forgetTerminal: vi.fn(async () => {}),
+    prepareAction: vi.fn(async () => {
+      throw new Error('prepareAction not stubbed')
+    }),
+    runAction: vi.fn(async () => ({ message: 'requested' })),
     forwardInfo: vi.fn(async () => ({ ports: [] })),
     startForward: vi.fn(async () => { throw new Error('startForward: not set up') }),
     stopForward: vi.fn(async () => {}),

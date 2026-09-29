@@ -162,6 +162,12 @@ func (h *HTTP) routes() {
 	}) (any, error) {
 		return nil, h.api.ForgetTerminal(ctx, r.TerminalID)
 	}))
+	h.mux.HandleFunc("POST /api/PrepareAction", handle(func(ctx context.Context, r *api.ActionRequest) (any, error) {
+		return h.api.PrepareAction(ctx, *r)
+	}))
+	h.mux.HandleFunc("POST /api/RunAction", handle(func(ctx context.Context, r *api.ActionRunRequest) (any, error) {
+		return h.api.RunAction(ctx, *r)
+	}))
 	h.mux.HandleFunc("POST /api/ForwardInfo", handle(func(ctx context.Context, r *core.Ref) (any, error) {
 		return h.api.ForwardInfo(ctx, *r)
 	}))

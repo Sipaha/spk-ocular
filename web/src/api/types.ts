@@ -126,6 +126,52 @@ export interface KindDescriptor {
   exec?: boolean
   /** Ports of objects of this kind can be forwarded. */
   forward?: boolean
+  /** Actions objects of this kind offer (restart, scale, delete, …). */
+  actions?: ActionDescriptor[]
+}
+
+// ---- actions (internal/core/action.go)
+
+export interface ActionParam {
+  /** 'count': an integer in min..max */
+  kind: string
+  min: number
+  max: number
+}
+
+export interface ActionDescriptor {
+  id: string
+  title: string
+  destructive?: boolean
+  param?: ActionParam
+}
+
+export interface ActionParams {
+  count?: number
+}
+
+export type RightsState = 'allowed' | 'denied' | 'unknown'
+
+/** What an action would do, read without changing anything. */
+export interface ActionPlan {
+  /** the target (title, endpoint, configRev) and the object with its UID as read now */
+  where: LiveTarget
+  action: ActionDescriptor
+  params: ActionParams
+  current?: number
+  /** destructive for these params (delete; scale down deleting claims; scale to 0) */
+  destructive?: boolean
+  effects?: string[]
+  warnings?: string[]
+  rights: { state: RightsState; reason?: string }
+  /** why it cannot run in the object's state */
+  unavailable?: string
+  /** opaque: sent back with the run */
+  expect: string
+}
+
+export interface ActionResult {
+  message: string
 }
 
 export type ScopeMode = 'all' | 'one' | 'none'

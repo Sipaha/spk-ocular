@@ -87,6 +87,9 @@ const (
 	ClassNotFound     ErrorClass = "not_found"
 	ClassUnsupported  ErrorClass = "unsupported"
 	ClassConflict     ErrorClass = "conflict"
+	// ClassUnknown: a change was sent but its outcome is not known (the
+	// connection ended before the answer); never retried automatically.
+	ClassUnknown ErrorClass = "unknown"
 	// ClassInvalid: the request cannot be done as asked (a container that
 	// is not running, a command that does not exist).
 	ClassInvalid  ErrorClass = "bad_request"

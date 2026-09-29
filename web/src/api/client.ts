@@ -1,5 +1,5 @@
 import { Call, Events } from '@wailsio/runtime'
-import type { ApiEvent, AppInfo, EventType, ExecInfo, KindDescriptor, LogInfo, LogQuery, LogStreamInfo, MetricsView, Page, Query, Ref, Resource, ScopesView, TargetsView, TerminalInfo, TerminalRequest, ViewInfo, ForwardInfo, StartForwardRequest, Tunnel } from './types'
+import type { ActionParams, ActionPlan, ActionResult, ApiEvent, AppInfo, EventType, ExecInfo, KindDescriptor, LogInfo, LogQuery, LogStreamInfo, MetricsView, Page, Query, Ref, Resource, ScopesView, TargetsView, TerminalInfo, TerminalRequest, ViewInfo, ForwardInfo, StartForwardRequest, Tunnel } from './types'
 
 export class ApiError extends Error {
   constructor(
@@ -40,6 +40,10 @@ export interface Client {
   reopenTerminal(terminalId: string, cols: number, rows: number): Promise<TerminalInfo>
   /** The terminal's tab closed. */
   forgetTerminal(terminalId: string): Promise<void>
+  /** What an action would do (nothing changes); the confirmation shows it. */
+  prepareAction(ref: Ref, action: string, params: ActionParams): Promise<ActionPlan>
+  /** Runs a confirmed plan: its object, params, expect and target revision. */
+  runAction(plan: ActionPlan): Promise<ActionResult>
   forwardInfo(ref: Ref): Promise<ForwardInfo>
   /** Listens on loopback and connects once; a failed first connect rejects (conflict: the local port is taken). */
   startForward(req: StartForwardRequest): Promise<Tunnel>
@@ -50,6 +54,15 @@ export interface Client {
   streamBase(): Promise<string>
   subscribeEvents(onEvent: (e: ApiEvent) => void): () => void
 }
+
+/** The run of a confirmed plan: exactly what was reviewed goes back. */
+export const runRequest = (plan: ActionPlan) => ({
+  ref: plan.where.ref,
+  action: plan.action.id,
+  params: plan.params,
+  expect: plan.expect,
+  configRev: plan.where.configRev ?? '',
+})
 
 const tokenMeta = () => document.querySelector('meta[name="spk-ocular-api-token"]')?.getAttribute('content') ?? ''
 
@@ -93,6 +106,8 @@ export const httpClient: Client = {
   openTerminal: (req) => post('OpenTerminal', req),
   reopenTerminal: (terminalId, cols, rows) => post('ReopenTerminal', { terminalId, cols, rows }),
   forgetTerminal: (terminalId) => done(post('ForgetTerminal', { terminalId })),
+  prepareAction: (ref, action, params) => post('PrepareAction', { ref, action, params }),
+  runAction: (plan) => post('RunAction', runRequest(plan)),
   forwardInfo: (ref) => post('ForwardInfo', ref),
   startForward: (req) => post('StartForward', req),
   stopForward: (id) => done(post('StopForward', { id })),
@@ -147,6 +162,8 @@ export const wailsClient: Client = {
   openTerminal: (req) => wcall('OpenTerminal', req),
   reopenTerminal: (terminalId, cols, rows) => wcall('ReopenTerminal', { terminalId, cols, rows }),
   forgetTerminal: (terminalId) => wcall('ForgetTerminal', terminalId),
+  prepareAction: (ref, action, params) => wcall('PrepareAction', { ref, action, params }),
+  runAction: (plan) => wcall('RunAction', runRequest(plan)),
   forwardInfo: (ref) => wcall('ForwardInfo', ref),
   startForward: (req) => wcall('StartForward', req),
   stopForward: (id) => wcall('StopForward', id),

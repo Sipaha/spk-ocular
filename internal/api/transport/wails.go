@@ -75,6 +75,12 @@ func (w *API) ReopenTerminal(req api.ReopenTerminalRequest) (api.TerminalInfo, e
 func (w *API) ForgetTerminal(terminalID string) error {
 	return w.a.ForgetTerminal(context.Background(), terminalID)
 }
+func (w *API) PrepareAction(req api.ActionRequest) (core.ActionPlan, error) {
+	return w.a.PrepareAction(context.Background(), req)
+}
+func (w *API) RunAction(req api.ActionRunRequest) (core.ActionResult, error) {
+	return w.a.RunAction(context.Background(), req)
+}
 func (w *API) ForwardInfo(ref core.Ref) (core.ForwardInfo, error) {
 	return w.a.ForwardInfo(context.Background(), ref)
 }

@@ -60,6 +60,8 @@ type KindDescriptor struct {
 	// Forward: ports of objects of this kind can be forwarded (the session
 	// is a PortForwarder).
 	Forward bool `json:"forward,omitempty"`
+	// Actions objects of this kind offer (the session is an Actioner).
+	Actions []ActionDescriptor `json:"actions,omitempty"`
 }
 
 // ScopeMode makes the scope selector explicit instead of overloading "".
