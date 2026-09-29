@@ -5,8 +5,8 @@
 Go + Wails v3 + React. Спецификация: `docs/specs/2026-09-29-spk-ocular-design.md`.
 Планы: `docs/plans/`. Бэклог: `docs/backlog.md`.
 
-Статус: P0 (каркас), P1 (ресурсы, детали, метрики) и P2 (логи) готовы — `docs/plans/`.
-Следующий — P3 (exec, port-forward).
+Статус: P0 (каркас), P1 (ресурсы, детали, метрики), P2 (логи) и P3 (терминалы, туннели) готовы —
+`docs/plans/`. Следующий — P4 (действия restart/scale/delete).
 
 ## Сборка и тесты
 
@@ -37,7 +37,10 @@ Go + Wails v3 + React. Спецификация: `docs/specs/2026-09-29-spk-ocul
 - Проверка desktop без экрана пользователя: `xvfb-run -a -s "-screen 0 1400x900x24" <скрипт>`
   (или `Xvfb :77 &` + `DISPLAY=:77`), окно ищется `xwininfo -root -tree | grep '"SPK Ocular"'`,
   снимок — `import -window root`, ввод — `scripts/xinput.py click X Y key l ctrl+s type TEXT`
-  (XTest через ctypes; xdotool в окружении нет). Окно без WM стоит в (60,40).
+  (XTest через ctypes; xdotool в окружении нет; ещё `drag`, `scroll`, `resize <окно> W H`,
+  `close <окно>` — WM_DELETE_WINDOW как у кнопки закрытия, `group 1` — вторая раскладка после
+  `setxkbmap -layout us,ru`). Окно без WM стоит в (60,40). «Открыть» туннеля в desktop зовёт
+  `xdg-open` — подменяется скриптом первым в `PATH`; буфер обмена — `xclip -selection clipboard`.
 
 ## Устройство (коротко)
 
@@ -60,13 +63,25 @@ Go + Wails v3 + React. Спецификация: `docs/specs/2026-09-29-spk-ocul
   писатель (коалесцирование, «толчок», heartbeat, дедлайн записи), обработчик с guard-ами
   (токен в пути, Host, Origin), loopback-сервер desktop, сохранение файлов (`save`).
   Клиентская половина — `web/src/logs/` (`useLogStream`, `ndjson`, `ansi`, `buffer`,
-  `useLogFilter` + `search.worker`, `LogViewport`/`logSelection` из SPK-launcher, `LogsDock`).
+  `useLogFilter` + `search.worker`, `LogViewport`/`logSelection` из SPK-launcher; вкладки — `web/src/dock/`).
 - Логи Kubernetes: `logs.go` (LogInfo, StreamLogs, наблюдение pod-а), `logs_fetch.go` (`pods/log`
   своим HTTP через транспорт client-go), `logs_reader.go` (ограниченный построчный читатель),
   `logs_source.go` (источник: курсор, инкарнации, решения на EOF), `logs_members.go` (живой набор
   pods группы), `logs_group.go` (агрегация, backlog-merge, лимиты); тесты — на фейковом kubelet-е
   `logs_fake_test.go`.
-- `internal/providers/synthetic` — тестовый провайдер (`--test-api --test-synthetic`).
+- Терминалы: `internal/streams/term.go` (мост WebSocket ↔ `ExecHandle.Run`: кредиты вывода
+  `ack`, подтверждения ввода `iack`, resize «последнее значение», «вешание трубки» `^C ^D` при
+  закрытии), `internal/api/exec.go` (открытие, прототипы для «Подключиться заново»),
+  `internal/providers/kubernetes/exec.go` (снимок соединения `conn`, fallback WS → SPDY,
+  `upgrade.go` — отменяемое рукопожатие). Клиент — `web/src/term/` (`protocol.ts`,
+  `TerminalView.tsx` — ленивый xterm, `TerminalDialog.tsx`, `argv.ts`), вкладки — `web/src/dock/`.
+- Туннели: `internal/forwards` (provider-агностичный менеджер: loopback-listener-ы, лимиты,
+  поколения upstream-а, счётчики, `forwards_changed`), `internal/api/forwards.go`,
+  `internal/providers/kubernetes/forward.go` (порты, выбор pod-а, закрепление UID) и
+  `forward_dial.go` (WS-туннель / SPDY, потоки error+data, сторож живости, уход с мёртвого pod-а).
+  Клиент — `web/src/tunnels/` (индикатор «⇄ N», панель, секция «Ports», диалог).
+- `internal/providers/synthetic` — тестовый провайдер (`--test-api --test-synthetic`): логи,
+  эхо-терминал и порты (`live.go`), переконфигурация (`POST /api/_test/synthetic/reconfigure`).
 - `internal/execshim` — shim для exec-плагинов kubeconfig (таймаут, смерть вместе с приложением).
 - `internal/store` — SQLite, миграции `migrations/NNNN_*.sql`, `ui_prefs`, `target_state`.
 - `internal/desktop` — Wails-окно, D-Bus probe, GPU policy. `cmd/spk-ocular` — cobra, режимы.
@@ -144,12 +159,34 @@ Go + Wails v3 + React. Спецификация: `docs/specs/2026-09-29-spk-ocul
   проверкой меток; расхождение — `gap` (повтор лучше потери); новая инкарнация — с начала файла.
   — `TestLogResumeSkipsTheReplayExactly`, `TestLogRestartSeenBeforeEOFOpensAtOnce`,
   `TestLogFirstRequestBeforeTheCacheSynced`, kind `TestKindLogsFollowARestartingContainer`.
+- Терминалы и туннели принадлежат приложению, а не сессии: переживают выбор другого target-а,
+  reaper и пересоздание сессии из-за kubeconfig; хэндл несёт свой снимок соединения, «Подключиться
+  заново» — тот же снимок и тот же pod. — `TestTerminalsOutliveTheirSession`,
+  `TestTunnelsOutliveTheirSessionAndEndWithTheApp`, e2e «a terminal survives selecting another target».
+- Хеш конфигурации target-а покрывает учётные данные — в UI уходит только `configRev` (HMAC с
+  ключом процесса); по нему вкладка терминала и туннель помечаются «config changed». —
+  `TestTerminalsOutliveTheirSession` (JSON без хеша), e2e «…opened before a reconfiguration say so».
+- Закрытие терминала «вешает трубку» in-band (`^C`, через 100 мс `^D`), отмена — только если
+  команда не кончилась за 2 с: containerd не убивает процессы exec при разрыве. —
+  `TestTermClosingThePageHangsUpInBand`, kind `TestKindTerminalClosingTheTabEndsTheShellAndItsChild`.
+- Вывод терминала — только по кредиту страницы (окно 1 МиБ, `ack`), ввод — окно 256 КиБ (`iack`);
+  читатель WS не блокируется никогда. — `TestTermOutputStopsAtTheWindowUntilAcked`,
+  `TestTermCommandNotReadingStdinKeepsControlAlive`.
+- Ошибка одного соединения туннеля не закрывает общий upstream; после ошибки upstream сверяет
+  свой pod и уходит, если pod исчез. — `TestPortErrorFailsOneConnectionAndTheNeighbourLives`,
+  `TestAServiceTunnelMovesOnWhenItsPodIsDeleted`.
+- Туннель слушает только loopback, показывает фактические адреса (не `localhost`); явный занятый
+  порт — `conflict`, авто — удалённый при ≥ 1024 и свободном, иначе любой. —
+  `TestExplicitPortInUseIsAConflict`, `TestAutoPortTakesTheRemoteOneOrAnyFree`, e2e.
+- Первый `Connect` туннеля синхронный: неудача откатывает туннель и видна в диалоге. —
+  `TestFailedFirstConnectRollsBack`.
+- Вывод терминала — недоверенные данные: без OSC 52, без открытия ссылок, без смены заголовков.
 - Regex-поиск в UI — только в Worker с бюджетом времени; plain и фильтр `*` — линейные. —
   `match.test.ts` (`(a|aa)+$` убивает воркер).
 - Destructive-действия — только с подтверждением, в котором виден context/namespace/объект.
 - Версии `github.com/wailsapp/wails/v3` и `@wailsio/runtime` совпадают (сейчас `3.0.0-beta.26`).
 - `go build ./...` без тега `wails` обязан проходить: desktop-код за тегом.
-- Стартовый JS-чанк < 300 КБ gz (сейчас ~94 КБ), xterm/CodeMirror — только ленивые чанки. — `web/scripts/check-bundle.mjs`
+- Стартовый JS-чанк < 300 КБ gz (сейчас вход 86 КБ + общие ~18 КБ), xterm (~87 КБ gz)/CodeMirror — только ленивые чанки. — `web/scripts/check-bundle.mjs`
   (часть `pnpm build`).
 - Wails `LogLevel` — Warn: Info логирует каждый asset-запрос, Debug — результаты биндингов.
 - Горячие клавиши — по `KeyboardEvent.code` (`web/src/keyboard.ts`), иначе не работают в русской
@@ -212,5 +249,23 @@ Go + Wails v3 + React. Спецификация: `docs/specs/2026-09-29-spk-ocul
   (scale down удаляет новые).
 - **Hook окружения блокирует `pkill -f`/`pgrep -f` с шаблоном из той же команды** — останавливать
   фоновые процессы по PID-файлу или через TaskStop.
+- **containerd не завершает процессы exec при разрыве соединения** (kind, измерено): отмена exec
+  оставляет shell и его foreground-процесс; закрытие stdin до TTY как EOF не доходит — отсюда
+  «вешание трубки» мостом. Убитое `SIGKILL`-ом приложение (или `kubectl exec`) оставляет shell-ы
+  в pod-е; Playwright по умолчанию гасит webServer именно так — в конфигах `gracefulShutdown: SIGTERM`.
+- **Предикат фолбэка exec на SPDY**: client-go v0.37 возвращает `UpgradeFailureError` из
+  `k8s.io/streaming/pkg/httpstream`; одноимённый предикат устаревшего `apimachinery/pkg/util/httpstream`
+  его не узнаёт (фолбэк не сработал бы никогда).
+- **kubelet держит port-forward соединение удалённого pod-а**: соединение живо, каждый поток
+  получает ошибку («failed to find sandbox») — без проверки pod-а туннель к Service не переехал бы.
+- **Пинги spdystream без таймаута** (неудача только в лог): полуоткрытое соединение выглядело бы
+  живым — свой сторож чтения 3 × 10 с.
+- **Рукопожатия WS (gorilla) и SPDY client-go не отменяются контекстом** — свой `upgrade.go`.
+- **busybox ash глотает ввод сразу после приглашения** (гонка с его запросом позиции курсора
+  `ESC[6n`; `kubectl exec -it` теряет так же): e2e на kind сначала «успокаивает» shell пустыми
+  строками.
+- **Xvfb сбрасывает раскладку, когда отключается последний клиент** — `setxkbmap` делать, когда
+  окно приложения уже открыто.
+- **Две сетки `resources`**: список событий в деталях — тоже `ResourceTable`; в e2e брать `.first()`.
 - Кандидат из соседей, ещё не встреченный здесь: fetch с `Blob`/`FormData`-телом через `wails://`
   роняет WebKitGTK (сохранение логов в desktop — строковым телом на loopback).
