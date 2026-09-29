@@ -54,6 +54,12 @@ type KindDescriptor struct {
 	Hidden bool `json:"hidden,omitempty"`
 	// Logs: objects of this kind have logs (the session is a LogSource).
 	Logs bool `json:"logs,omitempty"`
+	// Exec: a command can run in objects of this kind (the session is an
+	// Execer).
+	Exec bool `json:"exec,omitempty"`
+	// Forward: ports of objects of this kind can be forwarded (the session
+	// is a PortForwarder).
+	Forward bool `json:"forward,omitempty"`
 }
 
 // ScopeMode makes the scope selector explicit instead of overloading "".
