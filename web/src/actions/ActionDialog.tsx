@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { ApiError, type Client } from '../api/client'
 import type { ActionDescriptor, ActionParams, ActionPlan, Ref } from '../api/types'
-import { actionLabel, classLabel, t } from '../i18n'
+import { actionLabel, classLabel, messageText, t } from '../i18n'
 import { showNotice } from '../store'
 import { focusMark, restoreFocus } from '../shortcuts'
 
@@ -9,7 +9,7 @@ import { focusMark, restoreFocus } from '../shortcuts'
 export interface ActionRequest {
   ref: Ref
   action: ActionDescriptor
-  /** The kind's title (the provider's). */
+  /** The kind's name for one object (the provider's). */
   kindTitle: string
 }
 
@@ -272,7 +272,7 @@ export function ActionDialog({ client, req, onClose, runTimeoutMs = RUN_TIMEOUT_
           <>
             {plan.unavailable && (
               <p role="alert" className="rounded-md bg-warning/10 px-3 py-2 text-warning">
-                {t('action.unavailable', { reason: plan.unavailable })}
+                {t('action.unavailable', { reason: messageText(plan.unavailable) })}
               </p>
             )}
             {!!plan.effects?.length && (
@@ -280,7 +280,7 @@ export function ActionDialog({ client, req, onClose, runTimeoutMs = RUN_TIMEOUT_
                 <h3 className="mb-1 text-[11px] font-semibold uppercase tracking-wider text-fg-subtle">{t('action.effects')}</h3>
                 <ul className="list-disc space-y-0.5 pl-5">
                   {plan.effects.map((x, i) => (
-                    <li key={i}>{x}</li>
+                    <li key={i}>{messageText(x)}</li>
                   ))}
                 </ul>
               </section>
@@ -290,7 +290,7 @@ export function ActionDialog({ client, req, onClose, runTimeoutMs = RUN_TIMEOUT_
                 <h3 className="mb-1 text-[11px] font-semibold uppercase tracking-wider">{t('action.warnings')}</h3>
                 <ul className="list-disc space-y-0.5 pl-5">
                   {plan.warnings.map((x, i) => (
-                    <li key={i}>{x}</li>
+                    <li key={i}>{messageText(x)}</li>
                   ))}
                 </ul>
               </section>

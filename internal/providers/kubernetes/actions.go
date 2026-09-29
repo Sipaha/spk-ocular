@@ -142,19 +142,22 @@ func replicas(o map[string]any) int {
 	return 1
 }
 
-// actionUnavailable: why action cannot run on u in its state ("" — it can).
-func actionUnavailable(def *kindDef, action string, u *unstructured.Unstructured) string {
+// actionUnavailable: why action cannot run on u in its state (nil — it can).
+func actionUnavailable(def *kindDef, action string, u *unstructured.Unstructured) *core.Message {
 	if u.GetDeletionTimestamp() != nil {
-		return fmt.Sprintf("%s %s is being deleted", singular(def), u.GetName())
+		m := msg("unavailable.deleting", "kind", singular(def), "name", u.GetName())
+		return &m
 	}
 	if action == actRestart.ID && def == deploymentsKind && boolAt(u.Object, "spec", "paused") {
-		return fmt.Sprintf("deployment %s is paused: resume its rollout first", u.GetName())
+		m := msg("unavailable.paused", "name", u.GetName())
+		return &m
 	}
-	return ""
+	return nil
 }
 
+// singular: "deployment", as in sentences.
 func singular(def *kindDef) string {
-	return strings.ToLower(strings.TrimSuffix(def.desc.Title, "s"))
+	return strings.ToLower(kindSingular[def])
 }
 
 // getConfirmed reads the confirmed object: its UID is required and must
@@ -181,8 +184,8 @@ func (s *session) RunAction(ctx context.Context, run provider.ActionRun) (core.A
 		if err != nil {
 			return core.ActionResult{}, err
 		}
-		if why := actionUnavailable(def, run.Action, u); why != "" {
-			return core.ActionResult{}, &provider.Error{Class: provider.ClassConflict, Message: why}
+		if why := actionUnavailable(def, run.Action, u); why != nil {
+			return core.ActionResult{}, &provider.Error{Class: provider.ClassConflict, Message: why.Text}
 		}
 		if actionExpect(def, run.Action, run.Params, u) != run.Expect {
 			return core.ActionResult{}, &provider.Error{Class: provider.ClassConflict, Message: fmt.Sprintf("%s %s changed since the action was reviewed; review it again", singular(def), u.GetName())}
@@ -320,8 +323,8 @@ func (s *session) PrepareAction(ctx context.Context, ref core.Ref, action string
 	ectx, cancel := context.WithTimeout(ctx, prepareExtrasTimeout)
 	defer cancel()
 	rights := make(chan core.Rights, 1)
-	hpas := make(chan []string, 1)
-	podCount := make(chan []string, 1)
+	hpas := make(chan []core.Message, 1)
+	podCount := make(chan []core.Message, 1)
 	go func() { rights <- s.rights(ectx, def, action, u) }()
 	waitHPAs := action == actScale.ID
 	if waitHPAs {
@@ -332,7 +335,7 @@ func (s *session) PrepareAction(ctx context.Context, ref core.Ref, action string
 		go func() { podCount <- s.podsOf(ectx, def, u) }()
 	}
 	waitRights := true
-	var podFx []string
+	var podFx []core.Message
 wait:
 	for waitRights || waitHPAs || waitPods {
 		select {
@@ -351,7 +354,7 @@ wait:
 		plan.Rights = core.Rights{State: core.RightsUnknown, Reason: "the check took too long"}
 	}
 	if waitHPAs {
-		plan.Warnings = append(plan.Warnings, "The count could not be checked against autoscalers (could not check autoscalers in time).")
+		plan.Warnings = append(plan.Warnings, msg("hpa.checkLate"))
 	}
 	plan.Effects = append(plan.Effects, podFx...) // a late pod count is left out
 	if def == podsKind && action == actDelete.ID {

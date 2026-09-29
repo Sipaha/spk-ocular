@@ -146,21 +146,21 @@ func TestPlans(t *testing.T) {
 	plan, err = s.PrepareAction(ctx, wref("web"), "scale", count(0))
 	require.NoError(t, err)
 	assert.True(t, plan.Destructive, "scale to zero")
-	assert.Contains(t, plan.Effects, "2 → 0: all instances stop.")
+	assert.Contains(t, core.Texts(plan.Effects), "2 → 0: all instances stop.")
 
 	plan, err = s.PrepareAction(ctx, wref("db"), "scale", count(2))
 	require.NoError(t, err)
 	assert.False(t, plan.Destructive)
-	assert.Equal(t, []string{"An autoscaler may override the count."}, plan.Warnings)
+	assert.Equal(t, []string{"An autoscaler may override the count."}, core.Texts(plan.Warnings))
 
 	plan, err = s.PrepareAction(ctx, wref("db"), "delete", core.ActionParams{})
 	require.NoError(t, err)
 	assert.True(t, plan.Destructive)
-	assert.Contains(t, plan.Effects, "Its 1 instance is removed too.")
+	assert.Contains(t, core.Texts(plan.Effects), "Its 1 instance is removed too.")
 
 	plan, err = s.PrepareAction(ctx, wref("paused"), "restart", core.ActionParams{})
 	require.NoError(t, err)
-	assert.Equal(t, "paused is paused: resume it first", plan.Unavailable)
+	assert.Equal(t, "paused is paused: resume it first", plan.Unavailable.Text)
 	_, err = s.RunAction(ctx, provider.ActionRun{Ref: plan.Where.Ref, Action: "restart", Expect: plan.Expect})
 	assert.Equal(t, provider.ClassConflict, class(t, err))
 

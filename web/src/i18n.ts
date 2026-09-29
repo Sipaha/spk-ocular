@@ -200,8 +200,9 @@ const en = {
   'term.dialog': 'Terminal…',
   'term.dialogHint': 'Choose the pod, container or command (Shift+S)',
   'term.dialogTitle': 'Open a terminal',
-  'term.instance': 'Pod',
-  'term.channel': 'Container',
+  'term.instance': 'Instance',
+  'term.channel': 'Channel',
+  'term.notReady': 'not ready',
   'term.commandLabel': 'Command',
   'term.commandPlaceholder': 'empty: interactive shell (bash, ash or sh)',
   'term.commandHelp': 'Run as is, without a shell: quotes group, \\ escapes.',
@@ -477,8 +478,9 @@ const ru: Record<MessageKey, string> = {
   'term.dialog': 'Терминал…',
   'term.dialogHint': 'Выбрать pod, контейнер или команду (Shift+S)',
   'term.dialogTitle': 'Открыть терминал',
-  'term.instance': 'Pod',
-  'term.channel': 'Контейнер',
+  'term.instance': 'Экземпляр',
+  'term.channel': 'Канал',
+  'term.notReady': 'не готов',
   'term.commandLabel': 'Команда',
   'term.commandPlaceholder': 'пусто: интерактивный shell (bash, ash или sh)',
   'term.commandHelp': 'Запускается как есть, без shell: кавычки группируют, \\ экранирует.',
@@ -561,6 +563,70 @@ let current: Language = 'en'
 export function setLanguage(lang: Language) {
   current = dicts[lang] ? lang : 'en'
   document.documentElement.lang = current
+}
+
+/**
+ * Providers' sentences (core.Message: a key, params, the provider's English)
+ * in the UI's other languages. English is the provider's own text; a key
+ * missing here is shown in it. Kubernetes keys are checked against the Go
+ * catalog (TestTheUIsTranslationsCoverEveryMessage).
+ */
+const providerTexts: Partial<Record<Language, Record<string, string>>> = {
+  ru: {
+    'kubernetes.level.pod': 'Pod',
+    'kubernetes.level.container': 'Контейнер',
+    'kubernetes.restart.noPods': 'Pod-ов нет: меняется только шаблон pod-а.',
+    'kubernetes.restart.recreate': 'Все pod-ы останавливаются, затем запускаются новые (стратегия Recreate).',
+    'kubernetes.restart.rolling': 'Pod-ы заменяются постепенно (rolling update: max unavailable {maxUnavailable}, max surge {maxSurge}).',
+    'kubernetes.restart.onDelete': 'Текущие pod-ы работают, пока их не удалят (стратегия обновления OnDelete).',
+    'kubernetes.restart.partition': 'Заменяются только pod-ы с номером {partition} и выше, по одному (partition {partition}).',
+    'kubernetes.restart.ordered': 'Pod-ы заменяются по одному, начиная со старшего номера.',
+    'kubernetes.restart.byNode': 'Pod-ы заменяются узел за узлом (max unavailable {maxUnavailable}).',
+    'kubernetes.restart.requested': 'Запрошен перезапуск.',
+    'kubernetes.scale.now': 'Сейчас реплик: {count}.',
+    'kubernetes.scale.same': '{from} → {to}: число не меняется.',
+    'kubernetes.scale.zero': '{from} → 0: все pod-ы останавливаются.',
+    'kubernetes.scale.downOne': '{from} → {to}: удаляется 1 pod.',
+    'kubernetes.scale.down': '{from} → {to}: удаляется pod-ов: {count}.',
+    'kubernetes.scale.upOne': '{from} → {to}: добавляется 1 pod.',
+    'kubernetes.scale.up': '{from} → {to}: добавляется pod-ов: {count}.',
+    'kubernetes.claims.deletedOne': 'PersistentVolumeClaim-ы pod-а {first} удаляются (что станет с данными — по reclaim policy томов).',
+    'kubernetes.claims.deleted': 'PersistentVolumeClaim-ы pod-ов {first}–{last} удаляются (что станет с данными — по reclaim policy томов).',
+    'kubernetes.claims.keptUntil': 'PersistentVolumeClaim-ы убранных pod-ов остаются до удаления StatefulSet-а, затем удаляются вместе с ним (что станет с данными — по reclaim policy томов).',
+    'kubernetes.claims.keptScaled': 'PersistentVolumeClaim-ы убранных pod-ов остаются.',
+    'kubernetes.claims.deletedWith': 'PersistentVolumeClaim-ы его pod-ов удаляются (что станет с данными — по reclaim policy томов).',
+    'kubernetes.claims.kept': 'Его PersistentVolumeClaim-ы остаются.',
+    'kubernetes.delete.recreatedBy': '{ownerKind} {owner} может создать его снова.',
+    'kubernetes.delete.notEviction': 'Это не eviction: PodDisruptionBudget-ы не учитываются.',
+    'kubernetes.delete.requested': 'Запрошено удаление: finalizers и grace period могут задержать его.',
+    'kubernetes.pod.noController': 'У него нет контроллера: никто не создаст его снова.',
+    'kubernetes.pod.job': 'Job {owner} может создать новый pod, если ещё не завершён.',
+    'kubernetes.pod.otherController': 'Он принадлежит {ownerKind} {owner}: пересоздание зависит от этого контроллера.',
+    'kubernetes.pod.ownerGone': 'Его {ownerKind} {owner} больше нет: никто не создаст его снова.',
+    'kubernetes.pod.ownerUnreadable': 'Он принадлежит {ownerKind} {owner}, прочитать который не удалось: замена возможна.',
+    'kubernetes.pod.ownerDeleting': 'Его {ownerKind} {owner} удаляется: замена маловероятна.',
+    'kubernetes.pod.ownerWantsNone': 'Его {ownerKind} {owner} хочет 0 pod-ов: замены не будет.',
+    'kubernetes.pod.ownerRecreates': '{ownerKind} {owner} обычно создаёт замену.',
+    'kubernetes.pods.deleted': 'Его pod-ы тоже удаляются.',
+    'kubernetes.pods.deletedAtLeast': 'Его pod-ы тоже удаляются (сейчас не меньше {count}).',
+    'kubernetes.pods.none': 'Сейчас у него нет pod-ов.',
+    'kubernetes.pods.deletedCount': 'Его pod-ы тоже удаляются (сейчас {count}).',
+    'kubernetes.hpa.checkFailed': 'Не удалось сверить число с автоскейлерами ({error}).',
+    'kubernetes.hpa.checkLate': 'Не удалось вовремя сверить число с автоскейлерами.',
+    'kubernetes.hpa.overrides': 'HorizontalPodAutoscaler {name} может изменить число ({min}–{max}).',
+    'kubernetes.hpa.tooMany': 'Проверены не все автоскейлеры (их слишком много).',
+    'kubernetes.unavailable.deleting': '{kind} {name} удаляется',
+    'kubernetes.unavailable.paused': 'deployment {name} приостановлен: сначала возобновите rollout',
+  },
+}
+
+/** A provider's sentence in the UI's language (its English when not known). */
+export function messageText(m: { key?: string; params?: Record<string, string>; text: string }): string {
+  const tmpl = m.key ? providerTexts[current]?.[m.key] : undefined
+  if (!tmpl) return m.text
+  let s = tmpl
+  for (const [k, v] of Object.entries(m.params ?? {})) s = s.replaceAll(`{${k}}`, v)
+  return s
 }
 
 export function t(key: MessageKey, vars?: Record<string, string | number>): string {

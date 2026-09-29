@@ -46,6 +46,9 @@ func TimeCell(unixMs int64) Cell { return Cell{Time: unixMs} }
 type KindDescriptor struct {
 	ID    string `json:"id"`
 	Title string `json:"title"`
+	// Singular names one object of the kind ("Deployment"; Title is the
+	// plural of the navigation).
+	Singular string `json:"singular,omitempty"`
 	// Group is the navigation group ("Workloads", "Network", ...).
 	Group   string   `json:"group"`
 	Columns []Column `json:"columns"`

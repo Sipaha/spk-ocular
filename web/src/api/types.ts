@@ -134,6 +134,8 @@ export interface KindDescriptor {
   scoped: boolean
   /** Not in the navigation (reached through relations). */
   hidden?: boolean
+  /** One object of the kind ("Deployment"; title is the navigation's plural). */
+  singular?: string
   /** Short names in palette commands (":po"), besides the id and title. */
   aliases?: string[]
   /** Objects of this kind have logs. */
@@ -177,6 +179,13 @@ export interface ActionParams {
 
 export type RightsState = 'allowed' | 'denied' | 'unknown'
 
+/** A provider's sentence: said by key in the UI's language (i18n messageText), else its English text. */
+export interface Message {
+  key?: string
+  params?: Record<string, string>
+  text: string
+}
+
 /** What an action would do, read without changing anything. */
 export interface ActionPlan {
   /** the target (title, endpoint, configRev) and the object with its UID as read now */
@@ -186,11 +195,11 @@ export interface ActionPlan {
   current?: number
   /** destructive for these params (delete; scale down deleting claims; scale to 0) */
   destructive?: boolean
-  effects?: string[]
-  warnings?: string[]
+  effects?: Message[]
+  warnings?: Message[]
   rights: { state: RightsState; reason?: string }
   /** why it cannot run in the object's state */
-  unavailable?: string
+  unavailable?: Message
   /** opaque: sent back with the run */
   expect: string
 }
@@ -343,6 +352,9 @@ export interface ExecInstance {
 export interface ExecInfo {
   instances: ExecInstance[]
   defaultInstance: string
+  /** The provider's names of the levels (Pod, Container); absent: generic words. */
+  instanceLabel?: Message
+  channelLabel?: Message
 }
 
 /** What a live resource (terminal, tunnel) is connected to, as captured when opened. */

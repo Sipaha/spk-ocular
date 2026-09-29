@@ -24,7 +24,7 @@ var (
 )
 
 var workloadKind = core.KindDescriptor{
-	ID: WorkloadKind, Title: "Workloads", Group: "Synthetic", Aliases: []string{"wl"},
+	ID: WorkloadKind, Title: "Workloads", Singular: "Workload", Group: "Synthetic", Aliases: []string{"wl"},
 	Columns: []core.Column{
 		{ID: "name", Title: "Name", Type: core.ColText},
 		{ID: "replicas", Title: "Replicas", Type: core.ColNumber},
@@ -225,11 +225,20 @@ func expect(action string, p core.ActionParams, o *workload) string {
 	return fmt.Sprintf("%s|%d|%s|%d|%t", action, count, o.uid, o.replicas, o.paused)
 }
 
-func unavailable(action string, o *workload) string {
+func unavailable(action string, o *workload) *core.Message {
 	if action == actRestart.ID && o.paused {
-		return o.name + " is paused: resume it first"
+		return &core.Message{Text: o.name + " is paused: resume it first"}
 	}
-	return ""
+	return nil
+}
+
+// texts: messages without keys (the synthetic provider speaks English only).
+func texts(ss ...string) []core.Message {
+	out := make([]core.Message, 0, len(ss))
+	for _, s := range ss {
+		out = append(out, core.Message{Text: s})
+	}
+	return out
 }
 
 func instanceCount(n int) string {
@@ -280,30 +289,30 @@ func (s *session) PrepareAction(_ context.Context, ref core.Ref, action string, 
 	}
 	switch action {
 	case actRestart.ID:
-		plan.Effects = []string{"Its instances are replaced one by one."}
+		plan.Effects = texts("Its instances are replaced one by one.")
 	case actScale.ID:
 		n := o.replicas
 		plan.Current = &n
 		if o.autoscaled {
-			plan.Warnings = []string{"An autoscaler may override the count."}
+			plan.Warnings = texts("An autoscaler may override the count.")
 		}
 		if p.Count == nil {
-			plan.Effects = []string{fmt.Sprintf("It has %d replicas now.", n)}
+			plan.Effects = texts(fmt.Sprintf("It has %d replicas now.", n))
 			break
 		}
 		switch m := *p.Count; {
 		case m == n:
-			plan.Effects = []string{fmt.Sprintf("%d → %d: the count does not change.", n, m)}
+			plan.Effects = texts(fmt.Sprintf("%d → %d: the count does not change.", n, m))
 		case m == 0:
-			plan.Effects = []string{fmt.Sprintf("%d → 0: all instances stop.", n)}
+			plan.Effects = texts(fmt.Sprintf("%d → 0: all instances stop.", n))
 			plan.Destructive = true
 		case m < n:
-			plan.Effects = []string{fmt.Sprintf("%d → %d: %s removed.", n, m, instanceCount(n-m))}
+			plan.Effects = texts(fmt.Sprintf("%d → %d: %s removed.", n, m, instanceCount(n-m)))
 		default:
-			plan.Effects = []string{fmt.Sprintf("%d → %d: %s added.", n, m, instanceCount(m-n))}
+			plan.Effects = texts(fmt.Sprintf("%d → %d: %s added.", n, m, instanceCount(m-n)))
 		}
 	case actDelete.ID:
-		plan.Effects = []string{fmt.Sprintf("Its %s removed too.", instanceCount(o.replicas))}
+		plan.Effects = texts(fmt.Sprintf("Its %s removed too.", instanceCount(o.replicas)))
 	}
 	return plan, nil
 }
@@ -333,8 +342,8 @@ func (s *session) RunAction(ctx context.Context, run provider.ActionRun) (core.A
 	if o == nil || o.uid != run.Ref.UID {
 		return core.ActionResult{}, &provider.Error{Class: provider.ClassGone, Message: "workload " + run.Ref.Name + " was deleted or replaced"}
 	}
-	if why := unavailable(run.Action, o); why != "" {
-		return core.ActionResult{}, &provider.Error{Class: provider.ClassConflict, Message: why}
+	if why := unavailable(run.Action, o); why != nil {
+		return core.ActionResult{}, &provider.Error{Class: provider.ClassConflict, Message: why.Text}
 	}
 	if expect(run.Action, run.Params, o) != run.Expect {
 		return core.ActionResult{}, &provider.Error{Class: provider.ClassConflict, Message: "workload " + o.name + " changed since the action was reviewed; review it again"}

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { Client } from '../api/client'
 import type { ExecInfo, Ref } from '../api/types'
-import { t } from '../i18n'
+import { messageText, t } from '../i18n'
 import { ArgvError, parseArgv } from './argv'
 import type { TermOpen } from '../dock/store'
 
@@ -77,7 +77,7 @@ export function TerminalDialog({ client, subject, onOpen, onClose }: Props) {
           <>
             {info.instances.length > 1 && (
               <label className="flex flex-col gap-1 text-xs text-fg-muted">
-                {t('term.instance')}
+                {info.instanceLabel ? messageText(info.instanceLabel) : t('term.instance')}
                 <select
                   value={instance}
                   onChange={(e) => {
@@ -89,14 +89,14 @@ export function TerminalDialog({ client, subject, onOpen, onClose }: Props) {
                   {info.instances.map((x) => (
                     <option key={x.id} value={x.id}>
                       {x.title}
-                      {x.ready ? '' : ' (not ready)'}
+                      {x.ready ? '' : ` (${t('term.notReady')})`}
                     </option>
                   ))}
                 </select>
               </label>
             )}
             <label className="flex flex-col gap-1 text-xs text-fg-muted">
-              {t('term.channel')}
+              {info.channelLabel ? messageText(info.channelLabel) : t('term.channel')}
               <select value={channel} onChange={(e) => setChannel(e.target.value)} className="rounded-md border border-line bg-app px-2 py-1 text-sm text-fg outline-none focus:border-accent">
                 {inst?.channels.map((c) => (
                   <option key={c.id} value={c.id} disabled={!c.running}>

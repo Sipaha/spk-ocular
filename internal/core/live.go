@@ -24,6 +24,10 @@ type ExecInstance struct {
 type ExecInfo struct {
 	Instances       []ExecInstance `json:"instances"`
 	DefaultInstance string         `json:"defaultInstance"`
+	// InstanceLabel and ChannelLabel name the levels (k8s: Pod, Container);
+	// nil: the UI's generic words.
+	InstanceLabel *Message `json:"instanceLabel,omitempty"`
+	ChannelLabel  *Message `json:"channelLabel,omitempty"`
 }
 
 // LiveTarget describes what a live resource (terminal, tunnel) is

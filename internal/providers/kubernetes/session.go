@@ -53,6 +53,13 @@ var kindAliases = map[*kindDef][]string{
 	problemsKind:     {"problem"},
 }
 
+// kindSingular: one object of a kind (dialogs, sentences).
+var kindSingular = map[*kindDef]string{
+	podsKind: "Pod", deploymentsKind: "Deployment", statefulSetsKind: "StatefulSet", daemonSetsKind: "DaemonSet",
+	replicaSetsKind: "ReplicaSet", servicesKind: "Service", ingressesKind: "Ingress", configMapsKind: "ConfigMap",
+	secretsKind: "Secret", nodesKind: "Node", namespacesKind: "Namespace", eventsKind: "Event", problemsKind: "Problem",
+}
+
 var _ provider.Opener = (*Provider)(nil)
 
 // Open builds a session for a context from the current kubeconfig. No

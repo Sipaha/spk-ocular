@@ -53,6 +53,25 @@ func (d ActionDescriptor) CheckParams(p ActionParams, final bool) error {
 	return nil
 }
 
+// Message is a provider's sentence for the UI: Key (namespaced by the
+// provider: "kubernetes.scale.down") and Params let the UI say it in its
+// language; Text is the provider's English, shown for keys the UI does not
+// know.
+type Message struct {
+	Key    string            `json:"key,omitempty"`
+	Params map[string]string `json:"params,omitempty"`
+	Text   string            `json:"text"`
+}
+
+// Texts are the English texts of ms (logs, tests).
+func Texts(ms []Message) []string {
+	out := make([]string, 0, len(ms))
+	for _, m := range ms {
+		out = append(out, m.Text)
+	}
+	return out
+}
+
 // RightsState: what a permission check said.
 type RightsState string
 
@@ -80,13 +99,13 @@ type ActionPlan struct {
 	// Current: the count now (scale).
 	Current *int `json:"current,omitempty"`
 	// Destructive for these parameters.
-	Destructive bool     `json:"destructive,omitempty"`
-	Effects     []string `json:"effects,omitempty"`
+	Destructive bool      `json:"destructive,omitempty"`
+	Effects     []Message `json:"effects,omitempty"`
 	// Warnings: what may interfere or could not be checked.
-	Warnings []string `json:"warnings,omitempty"`
-	Rights   Rights   `json:"rights"`
+	Warnings []Message `json:"warnings,omitempty"`
+	Rights   Rights    `json:"rights"`
 	// Unavailable: why the action cannot run in the object's state.
-	Unavailable string `json:"unavailable,omitempty"`
+	Unavailable *Message `json:"unavailable,omitempty"`
 	// Expect is the provider's opaque fingerprint of the action, its
 	// parameters and the state the effects depend on; a run whose object
 	// no longer matches it is refused (conflict).

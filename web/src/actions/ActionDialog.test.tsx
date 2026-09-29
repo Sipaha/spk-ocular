@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { ApiError } from '../api/client'
 import type { ActionDescriptor, ActionParams, ActionPlan, Ref } from '../api/types'
 import { initialState, useStore } from '../store'
+import { setLanguage } from '../i18n'
 import { fakeClient, k8s } from '../test/fakeClient'
 import { ActionDialog } from './ActionDialog'
 
@@ -20,7 +21,7 @@ function planOf(action: ActionDescriptor, params: ActionParams = {}, extra: Part
     action,
     params,
     destructive: action.destructive,
-    effects: [`${action.id} effect`],
+    effects: [{ text: `${action.id} effect` }],
     rights: { state: 'allowed' },
     expect: `exp-${action.id}-${params.count ?? ''}`,
     ...extra,
@@ -148,8 +149,27 @@ describe('ActionDialog', () => {
     expect(dialog).not.toHaveTextContent('checked: allowed')
   })
 
+  it('effects are said in the UI\'s language by key; an unknown key in the provider\'s English', async () => {
+    setLanguage('ru')
+    try {
+      const { dialog } = setup(restart, (p) =>
+        planOf(restart, p, {
+          effects: [
+            { key: 'kubernetes.scale.down', params: { from: '5', to: '2', count: '3' }, text: '5 → 2: 3 pods are removed.' },
+            { key: 'other.unknown', text: 'Something only the provider knows.' },
+          ],
+        }),
+      )
+      const effects = await within(dialog).findByRole('region', { name: 'Что произойдёт' })
+      expect(effects).toHaveTextContent('5 → 2: удаляется pod-ов: 3.')
+      expect(effects).toHaveTextContent('Something only the provider knows.')
+    } finally {
+      setLanguage('en')
+    }
+  })
+
   it('unavailable: explained, cannot run', async () => {
-    const { dialog } = setup(restart, (p) => planOf(restart, p, { unavailable: 'deployment api is paused: resume its rollout first' }))
+    const { dialog } = setup(restart, (p) => planOf(restart, p, { unavailable: { text: 'deployment api is paused: resume its rollout first' } }))
     expect(await within(dialog).findByRole('button', { name: 'Restart' })).toBeDisabled()
     expect(within(dialog).getByRole('alert')).toHaveTextContent('paused')
   })
@@ -171,7 +191,7 @@ describe('ActionDialog', () => {
 
   it('a late plan does not replace a later review', async () => {
     const slow = deferred<ActionPlan>()
-    const { dialog } = setup(scale, (p) => (p.count === 3 ? slow.promise : planOf(scale, p, { current: 2, effects: [`to ${p.count ?? '?'}`] })))
+    const { dialog } = setup(scale, (p) => (p.count === 3 ? slow.promise : planOf(scale, p, { current: 2, effects: [{ text: `to ${p.count ?? '?'}` }] })))
     const input = await within(dialog).findByRole('textbox')
     await waitFor(() => expect(input).toHaveValue('2'))
     await userEvent.clear(input)
@@ -179,7 +199,7 @@ describe('ActionDialog', () => {
     await userEvent.clear(input)
     await userEvent.type(input, '4{Enter}')
     await within(dialog).findByText('to 4')
-    await act(async () => slow.resolve(planOf(scale, { count: 3 }, { current: 2, effects: ['to 3'] })))
+    await act(async () => slow.resolve(planOf(scale, { count: 3 }, { current: 2, effects: [{ text: 'to 3' }] })))
     expect(within(dialog).queryByText('to 3')).not.toBeInTheDocument()
     expect(input).toHaveValue('4')
     expect(within(dialog).getByRole('button', { name: 'Scale' })).toBeEnabled()

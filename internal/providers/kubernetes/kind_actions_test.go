@@ -280,12 +280,12 @@ func TestKindActionStatefulSetClaimsFollowTheRetentionPolicy(t *testing.T) {
 
 		plan := c.prepare(ref, "scale", count(1))
 		assert.True(t, plan.Destructive)
-		assert.Contains(t, strings.Join(plan.Effects, "\n"), "The PersistentVolumeClaims of pod 1 are deleted")
+		assert.Contains(t, strings.Join(core.Texts(plan.Effects), "\n"), "The PersistentVolumeClaims of pod 1 are deleted")
 		c.runPlan(plan)
 		require.Eventually(t, func() bool { return c.claims() == "data-db-0" }, 120*time.Second, time.Second, "the claim of the removed pod is deleted")
 
 		plan = c.prepare(ref, "delete", core.ActionParams{})
-		assert.Contains(t, plan.Effects, "Its PersistentVolumeClaims are kept.")
+		assert.Contains(t, core.Texts(plan.Effects), "Its PersistentVolumeClaims are kept.")
 		c.runPlan(plan)
 		require.Eventually(t, func() bool {
 			_, err := c.run("-n", c.ns, "get", "statefulset", "db")
@@ -299,7 +299,7 @@ func TestKindActionStatefulSetClaimsFollowTheRetentionPolicy(t *testing.T) {
 
 		plan := c.prepare(ref, "scale", count(1))
 		assert.False(t, plan.Destructive, "scaling down keeps the claims")
-		assert.Contains(t, strings.Join(plan.Effects, "\n"), "The PersistentVolumeClaims of removed pods are kept until the StatefulSet is deleted")
+		assert.Contains(t, strings.Join(core.Texts(plan.Effects), "\n"), "The PersistentVolumeClaims of removed pods are kept until the StatefulSet is deleted")
 		c.runPlan(plan)
 		require.Eventually(t, func() bool {
 			_, err := c.run("-n", c.ns, "get", "pod", "db-1")
@@ -308,7 +308,7 @@ func TestKindActionStatefulSetClaimsFollowTheRetentionPolicy(t *testing.T) {
 		assert.Equal(t, "data-db-0 data-db-1", c.claims(), "the claim of the removed pod is kept")
 
 		plan = c.prepare(ref, "delete", core.ActionParams{})
-		assert.Contains(t, strings.Join(plan.Effects, "\n"), "The PersistentVolumeClaims of its pods are deleted")
+		assert.Contains(t, strings.Join(core.Texts(plan.Effects), "\n"), "The PersistentVolumeClaims of its pods are deleted")
 		c.runPlan(plan)
 		require.Eventually(t, func() bool { return c.claims() == "" }, 120*time.Second, time.Second,
 			"every claim of its pods goes with it, the one kept at scale down too")
@@ -320,14 +320,15 @@ func TestKindActionRestartOfAPausedDeploymentIsUnavailable(t *testing.T) {
 	ref := c.deployment("web", 1)
 	c.kubectlNS("rollout", "pause", "deployment/web")
 	plan := c.prepare(ref, "restart", core.ActionParams{})
-	assert.Equal(t, "deployment web is paused: resume its rollout first", plan.Unavailable)
+	require.NotNil(t, plan.Unavailable)
+	assert.Equal(t, "deployment web is paused: resume its rollout first", plan.Unavailable.Text)
 	_, err := c.sess.RunAction(context.Background(), provider.ActionRun{Ref: plan.Where.Ref, Action: "restart", Expect: plan.Expect})
 	assertClass(t, err, provider.ClassConflict)
 	assert.Empty(t, c.jsonpath("deployment", "web", `{.spec.template.metadata.annotations.kubectl\.kubernetes\.io/restartedAt}`))
 
 	c.kubectlNS("rollout", "resume", "deployment/web")
 	plan = c.prepare(ref, "restart", core.ActionParams{})
-	assert.Empty(t, plan.Unavailable)
+	assert.Nil(t, plan.Unavailable)
 	c.runPlan(plan)
 }
 
@@ -342,7 +343,7 @@ func TestKindActionScaleWarnsOfAnAutoscaler(t *testing.T) {
 	c.kubectlNS("autoscale", "deployment", "other", "--min=1", "--max=3")
 	c.kubectlNS("autoscale", "deployment", "web", "--min=2", "--max=5")
 	plan = c.prepare(ref, "scale", count(2))
-	assert.Equal(t, []string{"HorizontalPodAutoscaler web may override the count (2–5)."}, plan.Warnings)
+	assert.Equal(t, []string{"HorizontalPodAutoscaler web may override the count (2–5)."}, core.Texts(plan.Warnings))
 }
 
 func TestKindActionViewerRightsAreDeniedInThePlan(t *testing.T) {
@@ -361,5 +362,5 @@ func TestKindActionDeleteOfADeploymentCountsThePodsItOwns(t *testing.T) {
 	ref := c.deployment("web", 2)
 	c.kubectlNS("run", "stray", "--image=nginx:1.27-alpine", "--restart=Never", "--labels=app=web")
 	plan := c.prepare(ref, "delete", core.ActionParams{})
-	assert.Contains(t, strings.Join(plan.Effects, "\n"), "Its pods are deleted too (2 now).", "the stray pod has its labels, not its owner")
+	assert.Contains(t, strings.Join(core.Texts(plan.Effects), "\n"), "Its pods are deleted too (2 now).", "the stray pod has its labels, not its owner")
 }

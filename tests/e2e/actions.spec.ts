@@ -39,7 +39,7 @@ test('restart from the details: where, what, rights; the row and the status bar 
   const where = dialog.getByLabel('where')
   await expect(where).toContainText('Contextdemo')
   await expect(where).toContainText('Serversynthetic.local')
-  await expect(where).toContainText('KindWorkloads')
+  await expect(where).toContainText('KindWorkloadName') // the kind's singular
   await expect(where).toContainText('Nameweb')
   await expect(dialog).toContainText('Its instances are replaced one by one.')
   await expect(dialog).toContainText('Permission: checked: allowed')

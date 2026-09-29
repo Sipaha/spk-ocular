@@ -88,7 +88,7 @@ export function Workspace({ client, hub, target }: { client: Client; hub: ViewHu
   const actionSeq = useRef(0)
   const openAction = useCallback(
     (ref: Ref, action: ActionDescriptor) =>
-      setActionReq({ ref, action, kindTitle: kinds?.find((k) => k.id === ref.kind)?.title ?? ref.kind, seq: ++actionSeq.current }),
+      setActionReq({ ref, action, kindTitle: ((k) => k?.singular ?? k?.title ?? ref.kind)(kinds?.find((k) => k.id === ref.kind)), seq: ++actionSeq.current }),
     [kinds],
   )
 

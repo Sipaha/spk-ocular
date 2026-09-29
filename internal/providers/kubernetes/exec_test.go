@@ -91,6 +91,10 @@ func TestExecInfoOfAPod(t *testing.T) {
 	in := info.Instances[0]
 	assert.Equal(t, "p/uid-1", info.DefaultInstance)
 	assert.Equal(t, "proxy", in.DefaultChannel, "kubectl's default-container annotation")
+	require.NotNil(t, info.InstanceLabel)
+	require.NotNil(t, info.ChannelLabel)
+	assert.Equal(t, core.Message{Key: "kubernetes.level.pod", Text: "Pod"}, *info.InstanceLabel, "the levels are named by the provider")
+	assert.Equal(t, core.Message{Key: "kubernetes.level.container", Text: "Container"}, *info.ChannelLabel)
 	assert.Equal(t, []core.ExecChannel{
 		{ID: "app", Title: "app", Running: true, State: "running"},
 		{ID: "proxy", Title: "proxy", Running: false, State: "waiting: CrashLoopBackOff"},

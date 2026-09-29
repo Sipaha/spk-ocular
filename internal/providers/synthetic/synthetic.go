@@ -132,7 +132,7 @@ type session struct {
 var _ provider.LogSource = (*session)(nil)
 
 var kind = core.KindDescriptor{
-	ID: Kind, Title: "Services", Group: "Synthetic", Logs: true, Exec: true, Forward: true,
+	ID: Kind, Title: "Services", Singular: "Service", Group: "Synthetic", Logs: true, Exec: true, Forward: true,
 	Columns: []core.Column{{ID: "name", Title: "Name", Type: core.ColText}, {ID: "sources", Title: "Sources", Type: core.ColNumber}},
 }
 

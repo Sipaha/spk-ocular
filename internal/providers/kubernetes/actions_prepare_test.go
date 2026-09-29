@@ -3,6 +3,10 @@ package kubernetes
 import (
 	"context"
 	"errors"
+	"os"
+	"regexp"
+	"slices"
+	"sort"
 	"strings"
 	"testing"
 	"time"
@@ -28,7 +32,7 @@ func refOf(kind, name, uid string) core.Ref {
 // text is the plan's effects and warnings, lowercased (the tests match
 // phrases).
 func text(plan core.ActionPlan) string {
-	return strings.ToLower(strings.Join(plan.Effects, "\n") + "\n--\n" + strings.Join(plan.Warnings, "\n"))
+	return strings.ToLower(strings.Join(core.Texts(plan.Effects), "\n") + "\n--\n" + strings.Join(core.Texts(plan.Warnings), "\n"))
 }
 
 func prepare(t *testing.T, s *session, ref core.Ref, action string, p core.ActionParams) core.ActionPlan {
@@ -451,6 +455,48 @@ func TestAPlanNamesItsTargetAndPinsTheObject(t *testing.T) {
 func TestAPausedOrDeletingObjectIsUnavailableInThePlan(t *testing.T) {
 	d := workload("Deployment", "web", "uid-web", "1", map[string]any{"paused": true})
 	s, _ := actionSession(t, d)
-	assert.Contains(t, prepare(t, s, deployWebRef, "restart", core.ActionParams{}).Unavailable, "paused")
-	assert.Empty(t, prepare(t, s, deployWebRef, "delete", core.ActionParams{}).Unavailable)
+	why := prepare(t, s, deployWebRef, "restart", core.ActionParams{}).Unavailable
+	require.NotNil(t, why)
+	assert.Contains(t, why.Text, "paused")
+	assert.Nil(t, prepare(t, s, deployWebRef, "delete", core.ActionParams{}).Unavailable)
+}
+
+// Effects travel as keys with parameters (the UI says them in its
+// language) and the English text with the parameters in place.
+func TestEffectsAreKeysWithParamsAndTheirEnglish(t *testing.T) {
+	m := msg("scale.down", "from", 5, "to", 2, "count", 3)
+	assert.Equal(t, core.Message{Key: "kubernetes.scale.down", Params: map[string]string{"from": "5", "to": "2", "count": "3"}, Text: "5 → 2: 3 pods are removed."}, m)
+	assert.Equal(t, "1 → 0: all pods stop.", msg("scale.zero", "from", 1).Text)
+	assert.Equal(t, "3 → 2: 1 pod is removed.", countMsg("scale.downOne", "scale.down", 1, "from", 3, "to", 2).Text)
+	for key, text := range messageTexts {
+		assert.NotContains(t, text, "%", "%s: parameters are {named}, not printf verbs", key)
+	}
+}
+
+// The UI's Russian of these messages (web/src/i18n.ts providerTexts) has a
+// template for every key, with the same parameters: nothing falls back to
+// English by omission, nothing refers to a key that is gone.
+func TestTheUIsTranslationsCoverEveryMessage(t *testing.T) {
+	src, err := os.ReadFile("../../../web/src/i18n.ts")
+	require.NoError(t, err)
+	entry := regexp.MustCompile(`'kubernetes\.([a-zA-Z.]+)':\s*'([^']*)'`)
+	ui := map[string]string{}
+	for _, m := range entry.FindAllStringSubmatch(string(src), -1) {
+		ui[m[1]] = m[2]
+	}
+	params := func(s string) []string {
+		out := regexp.MustCompile(`\{(\w+)\}`).FindAllString(s, -1)
+		sort.Strings(out)
+		return slices.Compact(out)
+	}
+	for key, en := range messageTexts {
+		ru, ok := ui[key]
+		if assert.True(t, ok, "no translation of %s", key) {
+			assert.Equal(t, params(en), params(ru), key)
+		}
+	}
+	for key := range ui {
+		_, ok := messageTexts[key]
+		assert.True(t, ok, "a translation of an unknown key %s", key)
+	}
 }

@@ -17,11 +17,9 @@ import (
 // "may": a restart or a deletion is requested, the controllers act.
 
 type actionEffects struct {
-	effects, warnings []string
+	effects, warnings []core.Message
 	destructive       bool
 }
-
-const reclaimNote = " (what happens to the data follows the volumes' reclaim policy)"
 
 func effects(def *kindDef, action string, p core.ActionParams, u *unstructured.Unstructured) actionEffects {
 	var fx actionEffects
@@ -32,94 +30,91 @@ func effects(def *kindDef, action string, p core.ActionParams, u *unstructured.U
 	case actScale.ID:
 		n := replicas(o)
 		if p.Count == nil {
-			fx.effects = append(fx.effects, fmt.Sprintf("It has %d replicas now.", n))
+			fx.effects = append(fx.effects, msg("scale.now", "count", n))
 			break
 		}
 		m := *p.Count
 		switch {
 		case m == n:
-			fx.effects = append(fx.effects, fmt.Sprintf("%d → %d: the count does not change.", n, m))
+			fx.effects = append(fx.effects, msg("scale.same", "from", n, "to", m))
 		case m == 0:
-			fx.effects = append(fx.effects, fmt.Sprintf("%d → 0: all pods stop.", n))
+			fx.effects = append(fx.effects, msg("scale.zero", "from", n))
 			fx.destructive = true
 		case m < n:
-			fx.effects = append(fx.effects, fmt.Sprintf("%d → %d: %s removed.", n, m, pods(n-m)))
+			fx.effects = append(fx.effects, countMsg("scale.downOne", "scale.down", n-m, "from", n, "to", m))
 		default:
-			fx.effects = append(fx.effects, fmt.Sprintf("%d → %d: %s added.", n, m, pods(m-n)))
+			fx.effects = append(fx.effects, countMsg("scale.upOne", "scale.up", m-n, "from", n, "to", m))
 		}
 		if def == statefulSetsKind && m < n && len(slice(o, "spec", "volumeClaimTemplates")) > 0 {
 			start := int(i64(o, "spec", "ordinals", "start")) // pods are named from it
 			if str(o, "spec", "persistentVolumeClaimRetentionPolicy", "whenScaled") == "Delete" {
-				fx.effects = append(fx.effects, fmt.Sprintf("The PersistentVolumeClaims of %s are deleted%s.", ordinals(start+m, start+n-1), reclaimNote))
+				if first, last := start+m, start+n-1; first == last {
+					fx.effects = append(fx.effects, msg("claims.deletedOne", "first", first))
+				} else {
+					fx.effects = append(fx.effects, msg("claims.deleted", "first", first, "last", last))
+				}
 				fx.destructive = true
 			} else if str(o, "spec", "persistentVolumeClaimRetentionPolicy", "whenDeleted") == "Delete" {
-				fx.effects = append(fx.effects, "The PersistentVolumeClaims of removed pods are kept until the StatefulSet is deleted: then they are deleted with it"+reclaimNote+".")
+				fx.effects = append(fx.effects, msg("claims.keptUntil"))
 			} else {
-				fx.effects = append(fx.effects, "The PersistentVolumeClaims of removed pods are kept.")
+				fx.effects = append(fx.effects, msg("claims.keptScaled"))
 			}
 		}
 	case actDelete.ID:
 		if def == statefulSetsKind && len(slice(o, "spec", "volumeClaimTemplates")) > 0 {
 			if str(o, "spec", "persistentVolumeClaimRetentionPolicy", "whenDeleted") == "Delete" {
-				fx.effects = append(fx.effects, "The PersistentVolumeClaims of its pods are deleted"+reclaimNote+".")
+				fx.effects = append(fx.effects, msg("claims.deletedWith"))
 			} else {
-				fx.effects = append(fx.effects, "Its PersistentVolumeClaims are kept.")
+				fx.effects = append(fx.effects, msg("claims.kept"))
 			}
 		}
 		if def == replicaSetsKind {
 			if c := metav1.GetControllerOf(u); c != nil {
-				fx.effects = append(fx.effects, fmt.Sprintf("%s %s may create it again.", c.Kind, c.Name))
+				fx.effects = append(fx.effects, msg("delete.recreatedBy", "ownerKind", c.Kind, "owner", c.Name))
 			}
 		}
 		if def == podsKind {
-			fx.warnings = append(fx.warnings, "This is not an eviction: PodDisruptionBudgets are not consulted.")
+			fx.warnings = append(fx.warnings, msg("delete.notEviction"))
 		}
-		fx.effects = append(fx.effects, "Deletion is requested: finalizers and grace periods may keep it for a while.")
+		fx.effects = append(fx.effects, msg("delete.requested"))
 	}
 	return fx
 }
 
-// ordinals names the pods from..to of a StatefulSet.
-func ordinals(from, to int) string {
-	if from == to {
-		return fmt.Sprintf("pod %d", from)
-	}
-	return fmt.Sprintf("pods %d–%d", from, to)
-}
-
-func pods(n int) string {
+// countMsg: one (key1) or several (keyN, with the count).
+func countMsg(key1, keyN string, n int, kv ...any) core.Message {
 	if n == 1 {
-		return "1 pod is"
+		return msg(key1, kv...)
 	}
-	return fmt.Sprintf("%d pods are", n)
+	return msg(keyN, append(kv, "count", n)...)
 }
 
-func restartEffect(def *kindDef, o map[string]any) string {
+func restartEffect(def *kindDef, o map[string]any) core.Message {
 	if def != daemonSetsKind && replicas(o) == 0 {
-		return "It runs no pods: only the pod template changes."
+		return msg("restart.noPods")
 	}
 	switch def {
 	case deploymentsKind:
 		if str(o, "spec", "strategy", "type") == "Recreate" {
-			return "All pods stop, then new ones start (strategy Recreate)."
+			return msg("restart.recreate")
 		}
-		return fmt.Sprintf("Pods are replaced gradually (rolling update: max unavailable %s, max surge %s).",
-			intOrPercent(o, "25%", "spec", "strategy", "rollingUpdate", "maxUnavailable"), intOrPercent(o, "25%", "spec", "strategy", "rollingUpdate", "maxSurge"))
+		return msg("restart.rolling",
+			"maxUnavailable", intOrPercent(o, "25%", "spec", "strategy", "rollingUpdate", "maxUnavailable"), "maxSurge", intOrPercent(o, "25%", "spec", "strategy", "rollingUpdate", "maxSurge"))
 	case statefulSetsKind:
 		if str(o, "spec", "updateStrategy", "type") == "OnDelete" {
-			return "Existing pods keep running until they are deleted (update strategy OnDelete)."
+			return msg("restart.onDelete")
 		}
 		if part := i64(o, "spec", "updateStrategy", "rollingUpdate", "partition"); part > 0 {
-			return fmt.Sprintf("Only pods with ordinal %d and above are replaced, one at a time (partition %d).", part, part)
+			return msg("restart.partition", "partition", part)
 		}
-		return "Pods are replaced one at a time, from the highest ordinal."
+		return msg("restart.ordered")
 	case daemonSetsKind:
 		if str(o, "spec", "updateStrategy", "type") == "OnDelete" {
-			return "Existing pods keep running until they are deleted (update strategy OnDelete)."
+			return msg("restart.onDelete")
 		}
-		return fmt.Sprintf("Pods are replaced node by node (max unavailable %s).", intOrPercent(o, "1", "spec", "updateStrategy", "rollingUpdate", "maxUnavailable"))
+		return msg("restart.byNode", "maxUnavailable", intOrPercent(o, "1", "spec", "updateStrategy", "rollingUpdate", "maxUnavailable"))
 	}
-	return "A restart is requested."
+	return msg("restart.requested")
 }
 
 func intOrPercent(o map[string]any, def string, path ...string) string {
@@ -135,10 +130,10 @@ func intOrPercent(o map[string]any, def string, path ...string) string {
 }
 
 // podController says what may recreate a deleted pod.
-func (s *session) podController(ctx context.Context, p *unstructured.Unstructured) string {
+func (s *session) podController(ctx context.Context, p *unstructured.Unstructured) core.Message {
 	c := metav1.GetControllerOf(p)
 	if c == nil {
-		return "It has no controller: nothing recreates it."
+		return msg("pod.noController")
 	}
 	var def *kindDef
 	switch c.Kind {
@@ -149,24 +144,24 @@ func (s *session) podController(ctx context.Context, p *unstructured.Unstructure
 	case "DaemonSet":
 		def = daemonSetsKind
 	case "Job":
-		return fmt.Sprintf("Job %s may create a new pod if it has not completed.", c.Name)
+		return msg("pod.job", "owner", c.Name)
 	default:
-		return fmt.Sprintf("It belongs to %s %s: whether it is recreated depends on that controller.", c.Kind, c.Name)
+		return msg("pod.otherController", "ownerKind", c.Kind, "owner", c.Name)
 	}
 	ctx, cancel := context.WithTimeout(ctx, prepareExtrasTimeout)
 	defer cancel()
 	owner, err := s.getObject(ctx, core.Ref{Kind: def.desc.ID, Scope: p.GetNamespace(), Name: c.Name, UID: string(c.UID)})
 	switch {
 	case err != nil && strings.Contains(err.Error(), "took its name"), err != nil && isNotFound(err):
-		return fmt.Sprintf("Its %s %s no longer exists: nothing recreates it.", c.Kind, c.Name)
+		return msg("pod.ownerGone", "ownerKind", c.Kind, "owner", c.Name)
 	case err != nil:
-		return fmt.Sprintf("It belongs to %s %s, which could not be read: it may create a replacement.", c.Kind, c.Name)
+		return msg("pod.ownerUnreadable", "ownerKind", c.Kind, "owner", c.Name)
 	case owner.GetDeletionTimestamp() != nil:
-		return fmt.Sprintf("Its %s %s is being deleted: a replacement is unlikely.", c.Kind, c.Name)
+		return msg("pod.ownerDeleting", "ownerKind", c.Kind, "owner", c.Name)
 	case def != daemonSetsKind && replicas(owner.Object) == 0:
-		return fmt.Sprintf("Its %s %s wants 0 pods: no replacement.", c.Kind, c.Name)
+		return msg("pod.ownerWantsNone", "ownerKind", c.Kind, "owner", c.Name)
 	}
-	return fmt.Sprintf("%s %s normally creates a replacement.", c.Kind, c.Name)
+	return msg("pod.ownerRecreates", "ownerKind", c.Kind, "owner", c.Name)
 }
 
 func isNotFound(err error) bool { return strings.Contains(err.Error(), "not found") }
@@ -179,11 +174,11 @@ const maxCounted = 500
 // unrelated pod with the same labels is not deleted with it); pods already
 // being deleted are not counted. Counting is bounded; a partial count is
 // said as "at least".
-func (s *session) podsOf(ctx context.Context, def *kindDef, u *unstructured.Unstructured) []string {
-	const unknown = "Its pods are deleted too."
+func (s *session) podsOf(ctx context.Context, def *kindDef, u *unstructured.Unstructured) []core.Message {
+	unknown := []core.Message{msg("pods.deleted")}
 	sel, err := metav1.LabelSelectorAsSelector(labelSelectorOf(u.Object))
 	if err != nil || sel.Empty() {
-		return []string{unknown}
+		return unknown
 	}
 	list := func(gvr schema.GroupVersionResource) ([]unstructured.Unstructured, bool, error) {
 		l, err := s.dyn.Resource(gvr).Namespace(u.GetNamespace()).List(ctx, metav1.ListOptions{LabelSelector: sel.String(), Limit: maxCounted})
@@ -198,7 +193,7 @@ func (s *session) podsOf(ctx context.Context, def *kindDef, u *unstructured.Unst
 		owners = map[types.UID]bool{}
 		rss, more, err := list(replicaSetsKind.gvr)
 		if err != nil {
-			return []string{unknown}
+			return unknown
 		}
 		partial = more
 		for i := range rss {
@@ -209,7 +204,7 @@ func (s *session) podsOf(ctx context.Context, def *kindDef, u *unstructured.Unst
 	}
 	pods, more, err := list(podsKind.gvr)
 	if err != nil {
-		return []string{unknown}
+		return unknown
 	}
 	partial = partial || more
 	n := 0
@@ -220,13 +215,13 @@ func (s *session) podsOf(ctx context.Context, def *kindDef, u *unstructured.Unst
 	}
 	switch {
 	case partial && n == 0:
-		return []string{unknown}
+		return unknown
 	case partial:
-		return []string{fmt.Sprintf("Its pods are deleted too (at least %d now).", n)}
+		return []core.Message{msg("pods.deletedAtLeast", "count", n)}
 	case n == 0:
-		return []string{"It has no pods now."}
+		return []core.Message{msg("pods.none")}
 	}
-	return []string{fmt.Sprintf("Its pods are deleted too (%d now).", n)}
+	return []core.Message{msg("pods.deletedCount", "count", n)}
 }
 
 func labelSelectorOf(o map[string]any) *metav1.LabelSelector {
@@ -246,31 +241,31 @@ const maxHPAPages = 5
 
 // autoscalers warns when an autoscaler targets u (it may override a
 // manual count); failing to check is said, not taken for "none".
-func (s *session) autoscalers(ctx context.Context, def *kindDef, u *unstructured.Unstructured) []string {
+func (s *session) autoscalers(ctx context.Context, def *kindDef, u *unstructured.Unstructured) []core.Message {
 	kind := u.GetKind()
 	if kind == "" {
 		kind = map[*kindDef]string{deploymentsKind: "Deployment", statefulSetsKind: "StatefulSet"}[def]
 	}
 	res := s.dyn.Resource(hpaGVRs).Namespace(u.GetNamespace())
 	cont := ""
-	var out []string
+	var out []core.Message
 	for page := 0; page < maxHPAPages; page++ {
 		l, err := res.List(ctx, metav1.ListOptions{Limit: 500, Continue: cont})
 		if err != nil {
-			return append(out, fmt.Sprintf("The count could not be checked against autoscalers (could not check autoscalers: %s).", shortErr(err)))
+			return append(out, msg("hpa.checkFailed", "error", shortErr(err)))
 		}
 		for _, h := range l.Items {
 			t := h.Object
 			gv, _ := schema.ParseGroupVersion(str(t, "spec", "scaleTargetRef", "apiVersion"))
 			if gv.Group == def.gvr.Group && str(t, "spec", "scaleTargetRef", "kind") == kind && str(t, "spec", "scaleTargetRef", "name") == u.GetName() {
-				out = append(out, fmt.Sprintf("HorizontalPodAutoscaler %s may override the count (%d–%d).", h.GetName(), max(i64(t, "spec", "minReplicas"), 1), i64(t, "spec", "maxReplicas")))
+				out = append(out, msg("hpa.overrides", "name", h.GetName(), "min", max(i64(t, "spec", "minReplicas"), 1), "max", i64(t, "spec", "maxReplicas")))
 			}
 		}
 		if cont = l.GetContinue(); cont == "" {
 			return out
 		}
 	}
-	return append(out, "Not every autoscaler could be checked (too many).")
+	return append(out, msg("hpa.tooMany"))
 }
 
 func shortErr(err error) string {
