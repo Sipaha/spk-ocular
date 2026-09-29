@@ -7,6 +7,7 @@ import { vi } from 'vitest'
 vi.mock('@wailsio/runtime', () => ({
   Call: { ByName: vi.fn() },
   Events: { On: vi.fn(() => () => {}) },
+  Clipboard: { SetText: vi.fn(async () => {}), Text: vi.fn(async () => '') },
 }))
 
 // RTL drains microtasks with setTimeout(0) and only advances fake timers when
@@ -25,3 +26,8 @@ Element.prototype.getBoundingClientRect = function () {
 }
 Object.defineProperty(HTMLElement.prototype, 'offsetHeight', { configurable: true, get: () => 800 })
 Object.defineProperty(HTMLElement.prototype, 'offsetWidth', { configurable: true, get: () => 1000 })
+
+// The dock's tabs are app-wide state: every test starts with none.
+import { beforeEach } from 'vitest'
+import { useDock } from './src/dock/store'
+beforeEach(() => useDock.setState({ tabs: [], active: null, height: 320 }))

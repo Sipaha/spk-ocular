@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react'
 import type { Target, TargetGroup } from '../api/types'
 import { t } from '../i18n'
-import { isShortcut } from '../keyboard'
+import { inTerminal, isShortcut } from '../keyboard'
 import { type Actions, matchesFilter, targetKey, useStore } from '../store'
 import { EyeIcon, HelmWheelIcon, SearchIcon, WarningIcon } from './icons'
 
@@ -23,7 +23,7 @@ export function Sidebar({ act }: { act: Actions }) {
   // "/" focuses the filter from anywhere except another text field.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      const typing = e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement
+      const typing = e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement || inTerminal(e.target)
       if (!typing && isFilterKey(e)) {
         e.preventDefault()
         // The open table's filter wins over the target filter.

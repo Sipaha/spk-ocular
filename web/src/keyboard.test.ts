@@ -53,3 +53,18 @@ test('Equal matches with or without Shift (covers both "=" and "+")', () => {
   expect(isShortcut(plain, ['Equal', 'NumpadAdd'])).toBe(true)
   expect(isShortcut(shifted, ['Equal', 'NumpadAdd'])).toBe(true)
 })
+
+describe('inTerminal', () => {
+  it('is true inside a terminal only', async () => {
+    const { inTerminal } = await import('./keyboard')
+    const term = document.createElement('div')
+    term.setAttribute('data-terminal', '')
+    const ta = document.createElement('textarea')
+    term.appendChild(ta)
+    document.body.appendChild(term)
+    expect(inTerminal(ta)).toBe(true)
+    expect(inTerminal(document.body)).toBe(false)
+    expect(inTerminal(null)).toBe(false)
+    term.remove()
+  })
+})

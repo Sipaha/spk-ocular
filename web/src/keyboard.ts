@@ -30,3 +30,11 @@ export function isShortcut(
   if (opts.shift === false && e.shiftKey) return false
   return true
 }
+
+/**
+ * Keys typed in a terminal belong to the program in it: app-wide shortcuts
+ * (including capture-phase and window listeners) must ignore them.
+ */
+export function inTerminal(target: EventTarget | null): boolean {
+  return target instanceof Element && !!target.closest('[data-terminal]')
+}

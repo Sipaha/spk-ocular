@@ -23,6 +23,8 @@ interface Props {
   onOpen?: (row: Row) => void
   /** L on a row: its logs (kinds that have them). */
   onLogs?: (row: Row) => void
+  /** S: a terminal in the default container; Shift+S: the dialog */
+  onTerminal?: (row: Row, dialog: boolean) => void
   /** Usage for metric columns (CPU/Memory), by row id. */
   metrics?: MetricsView | null
 }
@@ -64,7 +66,7 @@ export function matchesRow(r: Row, f: string): boolean {
   return r.cells.some((c) => (c.text ?? '').toLowerCase().includes(needle)) || (r.health.reason ?? '').toLowerCase().includes(needle)
 }
 
-export function ResourceTable({ columns, rows, hideScope, filter, selected, onSelect, onOpen, onLogs, metrics }: Props) {
+export function ResourceTable({ columns, rows, hideScope, filter, selected, onSelect, onOpen, onLogs, onTerminal, metrics }: Props) {
   const now = useNow(10_000)
   const [sort, setSort] = useState<Sort>({ col: 0, desc: false })
   const visibleCols = useMemo(
@@ -120,6 +122,9 @@ export function ResourceTable({ columns, rows, hideScope, filter, selected, onSe
     } else if (onLogs && i >= 0 && isShortcut(e, 'KeyL', { ctrl: false, shift: false }) && !e.altKey) {
       e.preventDefault()
       onLogs(sorted[i])
+    } else if (onTerminal && i >= 0 && isShortcut(e, 'KeyS', { ctrl: false }) && !e.altKey) {
+      e.preventDefault()
+      onTerminal(sorted[i], e.shiftKey)
     } else if (e.key === 'Enter' && i >= 0 && onOpen) {
       e.preventDefault()
       onOpen(sorted[i])

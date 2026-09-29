@@ -9,7 +9,8 @@ import { ResourceDrawer } from './ResourceDrawer'
 import { ResourceTable } from './ResourceTable'
 import { TargetDetails } from './TargetDetails'
 import { SearchIcon, WarningIcon } from './icons'
-import { LogsDock, tabId, type LogTab } from '../logs/LogsDock'
+import { dock } from '../dock/store'
+import { TerminalDialog } from '../term/TerminalDialog'
 
 const OVERVIEW = '__overview'
 
@@ -53,25 +54,17 @@ export function Workspace({ client, hub, target }: { client: Client; hub: ViewHu
   const setKind = (k: string) => remember({ kind: k, scope })
   const setScope = (s: ScopeSel) => remember({ kind, scope: s })
 
-  // Log tabs belong to this target (its session): switching the context
-  // closes them with the Workspace.
-  const [tabs, setTabs] = useState<LogTab[]>([])
-  const [activeTab, setActiveTab] = useState<string | null>(null)
-  const [dockHeight, setDockHeight] = useState(320)
-  const openLogs = useCallback((ref: Ref) => {
-    const id = tabId(ref)
-    setTabs((ts) => (ts.some((x) => x.id === id) ? ts : [...ts, { id, ref, title: `${ref.kind.split('/').pop()}/${ref.name}` }]))
-    setActiveTab(id)
-  }, [])
-  const closeTab = (id: string) => {
-    setTabs((ts) => {
-      const i = ts.findIndex((x) => x.id === id)
-      const rest = ts.filter((x) => x.id !== id)
-      if (activeTab === id) setActiveTab(rest[Math.min(i, rest.length - 1)]?.id ?? null)
-      return rest
-    })
-  }
+  // Tabs live in the dock above this (keyed) Workspace: log tabs close when
+  // another target is selected, terminals stay.
+  const targetRef = useMemo(() => ({ provider: target.provider, id: target.id }), [target.provider, target.id])
+  const openLogs = useCallback((ref: Ref) => dock.openLogs(targetRef, target.title, ref), [targetRef, target.title])
+  const [termDialog, setTermDialog] = useState<Ref | null>(null)
+  const openTerminal = useCallback(
+    (ref: Ref, dialog: boolean) => (dialog ? setTermDialog(ref) : dock.openTerminal(targetRef, target.title, { ref })),
+    [targetRef, target.title],
+  )
   const hasLogs = useCallback((kindId: string) => !!kinds?.find((k) => k.id === kindId)?.logs, [kinds])
+  const hasExec = useCallback((kindId: string) => !!kinds?.find((k) => k.id === kindId)?.exec, [kinds])
 
   useEffect(() => {
     // Workspace is keyed by target: state starts fresh for each one.
@@ -81,8 +74,6 @@ export function Workspace({ client, hub, target }: { client: Client; hub: ViewHu
       (st) => {
         if (!live) return
         setUI(parseState(st, fallback))
-        const h = Number(st.logsHeight)
-        if (h > 0) setDockHeight(h)
       },
       () => live && setUI(fallback),
     )
@@ -140,21 +131,22 @@ export function Workspace({ client, hub, target }: { client: Client; hub: ViewHu
             onScope={setScope}
             hasLogs={hasLogs}
             onLogs={openLogs}
+            hasExec={hasExec}
+            onTerminal={openTerminal}
           />
         )}
         </div>
-        <LogsDock
-          client={client}
-          tabs={tabs}
-          active={activeTab}
-          height={dockHeight}
-          onActivate={setActiveTab}
-          onClose={closeTab}
-          onHeight={(h, done) => {
-            setDockHeight(h)
-            if (done) void client.setTargetState(target.provider, target.id, 'logsHeight', String(Math.round(h))).catch(() => {})
-          }}
-        />
+        {termDialog && (
+          <TerminalDialog
+            client={client}
+            subject={termDialog}
+            onClose={() => setTermDialog(null)}
+            onOpen={(open) => {
+              setTermDialog(null)
+              dock.openTerminal(targetRef, target.title, open)
+            }}
+          />
+        )}
       </main>
     </div>
   )
@@ -182,8 +174,10 @@ function ResourcePage(props: {
   onScope: (s: ScopeSel) => void
   hasLogs: (kindId: string) => boolean
   onLogs: (ref: Ref) => void
+  hasExec: (kindId: string) => boolean
+  onTerminal: (ref: Ref, dialog: boolean) => void
 }) {
-  const { client, hub, target, kind, scope, scopes, onScope, hasLogs, onLogs } = props
+  const { client, hub, target, kind, scope, scopes, onScope, hasLogs, onLogs, hasExec, onTerminal } = props
   const scopeKey = JSON.stringify(scope)
   const query = useMemo(() => ({ kind: kind.id, scope: JSON.parse(scopeKey) as ScopeSel }), [kind.id, scopeKey])
   const view = useView(hub, target.provider, target.id, query)
@@ -238,6 +232,7 @@ function ResourcePage(props: {
           onSelect={(r: Row) => setSelected(r.id)}
           onOpen={(r: Row) => setOpen(r.ref)}
           onLogs={kind.logs ? (r: Row) => onLogs(r.ref) : undefined}
+          onTerminal={kind.exec ? (r: Row, dialog: boolean) => onTerminal(r.ref, dialog) : undefined}
           metrics={metrics}
         />
         {open && (
@@ -250,6 +245,8 @@ function ResourcePage(props: {
             onClose={() => setOpen(null)}
             hasLogs={hasLogs}
             onLogs={onLogs}
+            hasExec={hasExec}
+            onTerminal={onTerminal}
           />
         )}
       </div>

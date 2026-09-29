@@ -2,6 +2,7 @@ import { lazy, Suspense, useEffect, useMemo, useState } from 'react'
 import type { Client } from '../api/client'
 import type { Relation, Ref, Resource } from '../api/types'
 import { classLabel, detailLabel, relationLabel, t } from '../i18n'
+import { inTerminal } from '../keyboard'
 import { useView } from '../views/useView'
 import type { ViewHub } from '../views/viewSync'
 import { HealthDot, ResourceTable, healthText } from './ResourceTable'
@@ -18,11 +19,13 @@ interface Props {
   /** Kinds with logs get a Logs button. */
   hasLogs?: (kindId: string) => boolean
   onLogs?: (ref: Ref) => void
+  hasExec?: (kindId: string) => boolean
+  onTerminal?: (ref: Ref, dialog: boolean) => void
 }
 
 type Tab = 'details' | 'yaml'
 
-export function ResourceDrawer({ client, hub, target, subject, onClose, hasLogs, onLogs }: Props) {
+export function ResourceDrawer({ client, hub, target, subject, onClose, hasLogs, onLogs, hasExec, onTerminal }: Props) {
   const [stack, setStack] = useState<Ref[]>([subject])
   const [tab, setTab] = useState<Tab>('details')
   const [res, setRes] = useState<{ key: string; r?: Resource; error?: string } | null>(null)
@@ -44,7 +47,7 @@ export function ResourceDrawer({ client, hub, target, subject, onClose, hasLogs,
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && !(e.target instanceof HTMLElement && e.target.closest('.cm-panels'))) onClose()
+      if (e.key === 'Escape' && !inTerminal(e.target) && !(e.target instanceof HTMLElement && e.target.closest('.cm-panels'))) onClose()
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
@@ -75,6 +78,25 @@ export function ResourceDrawer({ client, hub, target, subject, onClose, hasLogs,
           >
             {t('logs.open')}
           </button>
+        )}
+        {onTerminal && hasExec?.(current.kind) && (
+          <>
+            <button
+              className="rounded-md border border-line px-2 py-0.5 text-xs text-fg-muted hover:bg-hover hover:text-fg"
+              onClick={() => onTerminal({ ...(r?.ref ?? current), provider: target.provider, target: target.id }, false)}
+              title={t('term.openHint')}
+            >
+              {t('term.open')}
+            </button>
+            <button
+              className="rounded-md border border-line px-2 py-0.5 text-xs text-fg-muted hover:bg-hover hover:text-fg"
+              onClick={() => onTerminal({ ...(r?.ref ?? current), provider: target.provider, target: target.id }, true)}
+              title={t('term.dialogHint')}
+              aria-label={t('term.dialog')}
+            >
+              …
+            </button>
+          </>
         )}
         <button className="rounded px-2 text-lg leading-none text-fg-muted hover:bg-hover hover:text-fg" onClick={onClose} aria-label={t('drawer.close')}>
           ×

@@ -7,6 +7,8 @@ import { Workspace } from './components/Workspace'
 import { Sidebar } from './components/Sidebar'
 import { StatusBar } from './components/StatusBar'
 import { TargetDetails } from './components/TargetDetails'
+import { Dock } from './dock/Dock'
+import { dock } from './dock/store'
 
 export function App({ client }: { client: Client }) {
   const act = useMemo(() => actions(client), [client])
@@ -15,6 +17,26 @@ export function App({ client }: { client: Client }) {
   const view = useStore((s) => s.view)
   const target = useStore((s) => selectedTarget(s.view))
   const loadError = useStore((s) => s.loadError)
+  const targetProvider = target?.provider
+  const targetId = target?.id
+
+  // Another target: its log tabs close (their session goes), terminals stay;
+  // the panel height is remembered per target.
+  useEffect(() => {
+    dock.keepLogsOf(targetProvider && targetId ? { provider: targetProvider, id: targetId } : null)
+    if (!targetProvider || !targetId) return
+    let live = true
+    client.getTargetState(targetProvider, targetId).then(
+      (st) => {
+        const h = Number(st.logsHeight)
+        if (live && h > 0) dock.setHeight(h)
+      },
+      () => {},
+    )
+    return () => {
+      live = false
+    }
+  }, [client, targetProvider, targetId])
 
   useEffect(() => {
     const off = client.subscribeEvents((e) => {
@@ -51,13 +73,23 @@ export function App({ client }: { client: Client }) {
     <div className="flex h-full flex-col">
       <div className="flex min-h-0 flex-1">
         <Sidebar act={act} />
-        {target ? (
-          <Workspace key={`${target.provider}/${target.id}`} client={client} hub={hub} target={target} />
-        ) : (
-          <main className="min-w-0 flex-1 overflow-y-auto">
-            <TargetDetails />
-          </main>
-        )}
+        <div className="flex min-w-0 flex-1 flex-col">
+          {target ? (
+            <Workspace key={`${target.provider}/${target.id}`} client={client} hub={hub} target={target} />
+          ) : (
+            <main className="min-h-0 min-w-0 flex-1 overflow-y-auto">
+              <TargetDetails />
+            </main>
+          )}
+          <Dock
+            client={client}
+            current={target ? { provider: target.provider, id: target.id } : null}
+            mode={info?.mode === 'desktop' ? 'desktop' : 'browser'}
+            onHeightDone={(h) => {
+              if (target) void client.setTargetState(target.provider, target.id, 'logsHeight', String(Math.round(h))).catch(() => {})
+            }}
+          />
+        </div>
       </div>
       <StatusBar />
     </div>
