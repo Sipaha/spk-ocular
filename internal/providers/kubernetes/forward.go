@@ -29,25 +29,31 @@ func init() {
 // ForwardInfo: a pod's container ports (and any other port); a Service's
 // ports; a workload's ports from its pod template.
 func (s *session) ForwardInfo(ctx context.Context, ref core.Ref) (core.ForwardInfo, error) {
+	info, _, err := s.forwardInfo(ctx, ref)
+	return info, err
+}
+
+// forwardInfo reads the object once: its ports and the object itself.
+func (s *session) forwardInfo(ctx context.Context, ref core.Ref) (core.ForwardInfo, *unstructured.Unstructured, error) {
 	def := s.kinds.byID[ref.Kind]
 	if def != podsKind && def != servicesKind && !logWorkloads[def] {
-		return core.ForwardInfo{}, &provider.Error{Class: provider.ClassUnsupported, Message: fmt.Sprintf("ports of %s cannot be forwarded", ref.Kind)}
+		return core.ForwardInfo{}, nil, &provider.Error{Class: provider.ClassUnsupported, Message: fmt.Sprintf("ports of %s cannot be forwarded", ref.Kind)}
 	}
 	u, err := s.getObject(ctx, ref)
 	if err != nil {
-		return core.ForwardInfo{}, err
+		return core.ForwardInfo{}, nil, err
 	}
+	return forwardInfoOf(def, u), u, nil
+}
+
+func forwardInfoOf(def *kindDef, u *unstructured.Unstructured) core.ForwardInfo {
 	switch def {
 	case podsKind:
-		return core.ForwardInfo{Ports: containerPorts(u.Object, "spec"), AnyPort: true}, nil
+		return core.ForwardInfo{Ports: containerPorts(u.Object, "spec"), AnyPort: true}
 	case servicesKind:
-		info := core.ForwardInfo{Ports: serviceForwardPorts(u.Object)}
-		if why := serviceUnsupported(u.Object); why != "" {
-			info.Unsupported = why
-		}
-		return info, nil
+		return core.ForwardInfo{Ports: serviceForwardPorts(u.Object), Unsupported: serviceUnsupported(u.Object)}
 	}
-	return core.ForwardInfo{Ports: containerPorts(u.Object, "spec", "template", "spec")}, nil
+	return core.ForwardInfo{Ports: containerPorts(u.Object, "spec", "template", "spec")}
 }
 
 // containerPorts lists the declared ports of a pod spec (at path).
@@ -145,9 +151,10 @@ func targetPortText(p map[string]any) string {
 	return ""
 }
 
-// PrepareForward pins the logical target (its UID) and the port.
+// PrepareForward pins the logical target (its UID, from the snapshot its
+// ports were checked on) and the port.
 func (s *session) PrepareForward(ctx context.Context, ref core.Ref, req provider.ForwardRequest) (provider.ForwardHandle, error) {
-	info, err := s.ForwardInfo(ctx, ref)
+	info, u, err := s.forwardInfo(ctx, ref)
 	if err != nil {
 		return nil, err
 	}
@@ -157,21 +164,27 @@ func (s *session) PrepareForward(ctx context.Context, ref core.Ref, req provider
 	if req.Port < 1 || req.Port > 65535 {
 		return nil, invalid("the port must be 1..65535")
 	}
+	// A number may be declared for several protocols (DNS: TCP and UDP
+	// 53): one supported entry is enough.
+	var refused *core.ForwardPort
 	found := false
-	for _, p := range info.Ports {
-		if p.Port == req.Port {
-			if !p.Supported {
-				return nil, &provider.Error{Class: provider.ClassUnsupported, Message: p.Reason}
-			}
+	for i, p := range info.Ports {
+		if p.Port != req.Port {
+			continue
+		}
+		if p.Supported {
 			found = true
+			break
+		}
+		if refused == nil {
+			refused = &info.Ports[i]
 		}
 	}
-	if !found && !info.AnyPort {
+	switch {
+	case !found && refused != nil:
+		return nil, &provider.Error{Class: provider.ClassUnsupported, Message: refused.Reason}
+	case !found && !info.AnyPort:
 		return nil, invalid("%s has no port %d", ref.Name, req.Port)
-	}
-	u, err := s.getObject(ctx, ref) // ForwardInfo checked it; this pins the UID
-	if err != nil {
-		return nil, err
 	}
 	def := s.kinds.byID[ref.Kind]
 	return &forwardHandle{conn: s.conn, def: def, ref: ref, ns: u.GetNamespace(), name: u.GetName(), uid: u.GetUID(), port: req.Port,

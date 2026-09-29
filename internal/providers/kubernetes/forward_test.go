@@ -179,6 +179,35 @@ func TestPrepareForwardChecksThePort(t *testing.T) {
 	assertClass(t, err, provider.ClassGone)
 }
 
+// A number declared for TCP and UDP (DNS) forwards its TCP entry, in
+// either order; UDP alone stays refused.
+func TestATCPPortSharingItsNumberWithUDPIsAccepted(t *testing.T) {
+	tcp, udp := svcPort("dns-tcp", 53, int64(53)), svcPort("dns", 53, int64(53))
+	udp["protocol"] = "UDP"
+	udpOnly := svcPort("syslog", 514, int64(514))
+	udpOnly["protocol"] = "UDP"
+	ctx := context.Background()
+	for _, order := range []string{"tcp first", "udp first"} {
+		t.Run(order, func(t *testing.T) {
+			svcPorts := []map[string]any{tcp, udp, udpOnly}
+			podPorts := []map[string]any{port("dns-tcp", 53, "TCP"), port("dns", 53, "UDP")}
+			if order == "udp first" {
+				svcPorts = []map[string]any{udp, tcp, udpOnly}
+				podPorts = []map[string]any{port("dns", 53, "UDP"), port("dns-tcp", 53, "TCP")}
+			}
+			s, _ := pfSession(t, "https://cluster.invalid",
+				pod("ns", "p", "uid-1", ports(podPorts...)), service("web", "s-1", map[string]any{"app": "web"}, svcPorts...))
+			h, err := s.PrepareForward(ctx, svcRef, provider.ForwardRequest{Port: 53})
+			require.NoError(t, err, "service")
+			assert.Equal(t, 53, h.Describe().Port)
+			_, err = s.PrepareForward(ctx, podRef1, provider.ForwardRequest{Port: 53})
+			require.NoError(t, err, "pod")
+			_, err = s.PrepareForward(ctx, svcRef, provider.ForwardRequest{Port: 514})
+			assertClass(t, err, provider.ClassUnsupported)
+		})
+	}
+}
+
 // svcPods: web-a (not ready), web-b (ready), a pod of another app and a
 // pod that is being deleted.
 func svcPods(mut ...func(map[string]any)) []kruntime.Object {
