@@ -156,7 +156,7 @@ export function Workspace({ client, hub, target }: { client: Client; hub: ViewHu
 
   return (
     <div className="flex min-h-0 flex-1">
-      <nav aria-label="resources" className="w-40 shrink-0 overflow-y-auto border-r border-line bg-sidebar/60 px-2 py-3">
+      <nav aria-label="resources" data-area="nav" onKeyDown={onNavKey} className="w-40 shrink-0 overflow-y-auto border-r border-line bg-sidebar/60 px-2 py-3">
         <NavItem active={kind === OVERVIEW} onClick={() => setKind(OVERVIEW)} label={t('nav.overview')} />
         {groups.map(([group, list]) => (
           <section key={group} className="mt-3">
@@ -223,10 +223,23 @@ export function Workspace({ client, hub, target }: { client: Client; hub: ViewHu
   )
 }
 
+/** Views by arrows, Home and End (one tab stop: the current view); Enter opens. */
+function onNavKey(e: React.KeyboardEvent<HTMLElement>) {
+  const items = [...e.currentTarget.querySelectorAll<HTMLElement>('[data-nav-item]')]
+  const i = items.indexOf(document.activeElement as HTMLElement)
+  const to = e.key === 'ArrowDown' ? i + 1 : e.key === 'ArrowUp' ? i - 1 : e.key === 'Home' ? 0 : e.key === 'End' ? items.length - 1 : null
+  if (to === null || e.altKey || e.ctrlKey || e.metaKey || !items.length) return
+  e.preventDefault()
+  items[Math.max(0, Math.min(items.length - 1, to))].focus()
+}
+
 function NavItem({ active, onClick, label }: { active: boolean; onClick: () => void; label: string }) {
   return (
     <button
       onClick={onClick}
+      data-nav-item
+      tabIndex={active ? 0 : -1}
+      data-area-focus={active ? '' : undefined}
       aria-current={active ? 'page' : undefined}
       className={['block w-full truncate rounded-md px-2 py-1 text-left', active ? 'bg-active text-fg' : 'text-fg-muted hover:bg-hover hover:text-fg'].join(' ')}
     >
@@ -322,7 +335,9 @@ function ResourcePage(props: {
       <StatusBanner state={view.status.state} cls={view.status.class} message={view.status.message} empty={view.rows.length === 0} coverage={view.status.coverage} />
       {view.status.coverage && <CoverageNote coverage={view.status.coverage} />}
       <div className="relative flex min-h-0 flex-1 flex-col">
+        <div data-area="table" className="flex min-h-0 flex-1 flex-col">
         <ResourceTable
+          areaFocus
           columns={columns}
           rows={view.rows}
           hideScope={scope.mode === 'one'}
@@ -340,6 +355,7 @@ function ResourcePage(props: {
           }}
           defaultSort={view.kind?.sort ?? kind.sort}
         />
+        </div>
         {open && (
           <ResourceDrawer
             key={`${open.kind}/${open.scope}/${open.name}/${open.uid}`}

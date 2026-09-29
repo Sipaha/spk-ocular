@@ -38,6 +38,8 @@ interface Props {
   onDelete?: (row: Row) => void
   /** The kind's first sort (else by the first column). */
   defaultSort?: SortSpec
+  /** The table of its area (F6 focuses it); not a table inside details. */
+  areaFocus?: boolean
 }
 
 export const healthText: Record<HealthState, string> = {
@@ -77,7 +79,7 @@ export function matchesRow(r: Row, f: string): boolean {
   return r.cells.some((c) => (c.text ?? '').toLowerCase().includes(needle)) || (r.health.reason ?? '').toLowerCase().includes(needle)
 }
 
-export function ResourceTable({ columns, rows, hideScope, filter, selected, onSelect, onOpen, onLogs, onTerminal, metrics, rowMenu, onDelete, defaultSort }: Props) {
+export function ResourceTable({ columns, rows, hideScope, filter, selected, onSelect, onOpen, onLogs, onTerminal, metrics, rowMenu, onDelete, defaultSort, areaFocus }: Props) {
   const now = useNow(10_000)
   const [menu, setMenu] = useState<{ items: MenuItem[]; at: { x: number; y: number } } | null>(null)
   const openMenu = (r: Row, at: { x: number; y: number }) => {
@@ -142,9 +144,14 @@ export function ResourceTable({ columns, rows, hideScope, filter, selected, onSe
   const onKey = (e: React.KeyboardEvent) => {
     if (!sorted.length) return
     const i = sorted.findIndex((r) => r.id === selected)
-    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+    // A page: the rows that fit, less one kept for context.
+    const page = Math.max(1, Math.floor((scrollRef.current?.clientHeight ?? 0) / ROW_H) - 1)
+    const last = sorted.length - 1
+    const to =
+      e.key === 'ArrowDown' ? i + 1 : e.key === 'ArrowUp' ? (i < 0 ? 0 : i - 1) : e.key === 'PageDown' ? (i < 0 ? page : i + page) : e.key === 'PageUp' ? i - page : e.key === 'Home' ? 0 : e.key === 'End' ? last : null
+    if (to !== null && !e.altKey && !e.ctrlKey && !e.metaKey) {
       e.preventDefault()
-      const next = e.key === 'ArrowDown' ? Math.min(sorted.length - 1, i + 1) : Math.max(0, i < 0 ? 0 : i - 1)
+      const next = Math.max(0, Math.min(last, to))
       onSelect(sorted[next])
       virt.scrollToIndex(next, { align: 'auto' })
     } else if (onLogs && i >= 0 && isShortcut(e, 'KeyL', { ctrl: false, shift: false }) && !e.altKey) {
@@ -189,6 +196,7 @@ export function ResourceTable({ columns, rows, hideScope, filter, selected, onSe
       <div
         ref={scrollRef}
         tabIndex={0}
+        data-area-focus={areaFocus ? '' : undefined}
         onKeyDown={onKey}
         onScroll={(e) => headRef.current && (headRef.current.scrollLeft = e.currentTarget.scrollLeft)}
         className="min-h-0 flex-1 overflow-auto outline-none [scrollbar-gutter:stable]"

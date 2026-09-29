@@ -4,6 +4,7 @@ import type { ActionDescriptor, Relation, Ref, Resource } from '../api/types'
 import { Menu } from '../actions/Menu'
 import { actionLabel, classLabel, detailLabel, relationLabel, t } from '../i18n'
 import { inTerminal } from '../keyboard'
+import { focusMark, isTyping, restoreFocus } from '../shortcuts'
 import { PortsSection } from '../tunnels/Ports'
 import { useView } from '../views/useView'
 import type { ViewHub } from '../views/viewSync'
@@ -64,13 +65,33 @@ export function ResourceDrawer({ client, hub, target, subject, onClose, hasLogs,
     // revision: refetch when the object changes (any field, not only table cells)
   }, [client, current, key, revision, target.provider, target.id])
 
+  // Closing gives focus back to where details were opened from (else the table).
+  const [mark] = useState(focusMark)
+  const close = () => {
+    onClose()
+    restoreFocus(mark)
+  }
+  const keys = useRef({ close, depth: stack.length })
+  useEffect(() => {
+    keys.current = { close, depth: stack.length }
+  })
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && !inTerminal(e.target) && !(e.target instanceof HTMLElement && e.target.closest('.cm-panels'))) onClose()
+      if (inTerminal(e.target) || document.querySelector('[aria-modal="true"]')) return
+      if (e.key === 'Escape' && !(e.target instanceof HTMLElement && e.target.closest('.cm-panels'))) keys.current.close()
+      else if (e.key === 'ArrowLeft' && e.altKey && !e.ctrlKey && !e.shiftKey && !e.metaKey && !isTyping(e.target)) {
+        // Alt+←: back along the relations (never Backspace: it edits text);
+        // never the page's history (browser mode would leave the app).
+        e.preventDefault()
+        if (keys.current.depth > 1) {
+          setStack((s) => s.slice(0, -1))
+          setTab('details')
+        }
+      }
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [onClose])
+  }, [])
 
   const shown = res?.key === key ? res : null
   const r = shown?.r
@@ -85,12 +106,35 @@ export function ResourceDrawer({ client, hub, target, subject, onClose, hasLogs,
   }
 
   return (
-    <aside role="dialog" aria-label={`${current.kind} ${current.name}`} className="absolute inset-y-0 right-0 z-10 flex w-[min(720px,55%)] flex-col border-l border-line bg-app shadow-2xl">
+    <aside role="dialog" aria-label={`${current.kind} ${current.name}`} data-area="details" tabIndex={-1} className="absolute inset-y-0 right-0 z-10 flex w-[min(720px,55%)] flex-col border-l border-line bg-app shadow-2xl outline-none">
       {/* Name first, whole; the object's tools on a line of their own. */}
       <header className="border-b border-line px-4 py-2">
+        {stack.length > 1 && (
+          // Where the relations led: each step is a way back.
+          <nav aria-label={t('drawer.path')} className="mb-1 flex min-w-0 flex-wrap items-center gap-1 text-xs text-fg-subtle">
+            {stack.slice(0, -1).map((ref, i) => (
+              <span key={i} className="flex min-w-0 items-center gap-1">
+                <button
+                  className="max-w-48 truncate rounded px-1 hover:bg-hover hover:text-fg"
+                  title={`${ref.kind} ${ref.name}`}
+                  onClick={() => {
+                    setStack((s) => s.slice(0, i + 1))
+                    setTab('details')
+                  }}
+                >
+                  {ref.name}
+                </button>
+                <span aria-hidden>›</span>
+              </span>
+            ))}
+            <span aria-current="page" className="max-w-48 truncate px-1 text-fg-muted">
+              {current.name}
+            </span>
+          </nav>
+        )}
         <div className="flex items-center gap-2">
           {stack.length > 1 && (
-            <button className="rounded px-1.5 text-fg-muted hover:bg-hover hover:text-fg" onClick={() => setStack((s) => s.slice(0, -1))} aria-label={t('drawer.back')}>
+            <button className="rounded px-1.5 text-fg-muted hover:bg-hover hover:text-fg" onClick={() => setStack((s) => s.slice(0, -1))} aria-label={t('drawer.back')} title={`${t('drawer.back')} (Alt+←)`}>
               ←
             </button>
           )}
@@ -98,7 +142,7 @@ export function ResourceDrawer({ client, hub, target, subject, onClose, hasLogs,
           <h2 className="min-w-0 flex-1 truncate font-semibold" title={current.name}>
             {current.name}
           </h2>
-          <button className="rounded px-2 text-lg leading-none text-fg-muted hover:bg-hover hover:text-fg" onClick={onClose} aria-label={t('drawer.close')}>
+          <button className="rounded px-2 text-lg leading-none text-fg-muted hover:bg-hover hover:text-fg" onClick={close} aria-label={t('drawer.close')}>
             ×
           </button>
         </div>

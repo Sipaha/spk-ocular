@@ -4,6 +4,7 @@ import type { TargetRef } from '../api/types'
 import { t } from '../i18n'
 import { reconfigured, useStore } from '../store'
 import { dock, MIN_DOCK, useDock, type DockTab } from './store'
+import { openPalette } from '../palette/store'
 
 // Heavy parts are lazy chunks: the log viewer (virtual list, ANSI, search
 // worker) and the terminal (xterm).
@@ -31,7 +32,7 @@ export function Dock({ client, current, mode, onHeightDone }: Props) {
   const drag = useRef<{ y: number; h: number } | null>(null)
   if (!tabs.length) return null
   return (
-    <section aria-label={t('dock.label')} className="flex shrink-0 flex-col border-t border-line bg-app" style={{ height }}>
+    <section aria-label={t('dock.label')} data-area="dock" className="flex shrink-0 flex-col border-t border-line bg-app" style={{ height }}>
       <div
         role="separator"
         aria-orientation="horizontal"
@@ -66,6 +67,15 @@ export function Dock({ client, current, mode, onHeightDone }: Props) {
             stale={tb.kind === 'term' && reconfigured(targets, tb.target.provider, tb.target.id, tb.rev)}
           />
         ))}
+        {/* In a terminal Ctrl+K is the program's: the palette is here. */}
+        <button
+          className="ml-auto mb-0.5 shrink-0 rounded border border-line px-1.5 text-[11px] text-fg-subtle hover:bg-hover hover:text-fg"
+          onClick={openPalette}
+          aria-label={`${t('palette.label')} (Ctrl+K)`}
+          title={t('palette.label')}
+        >
+          Ctrl+K
+        </button>
       </div>
       <div className="relative min-h-0 flex-1">
         {tabs.map((tb) => (
@@ -94,7 +104,7 @@ function TabHandle({ tab, active, foreign, stale }: { tab: DockTab; active: bool
       className={['group flex max-w-72 items-center gap-1 rounded-t-md border border-b-0 px-2 py-0.5 text-xs', active ? 'border-line bg-app text-fg' : 'border-transparent text-fg-muted hover:text-fg'].join(' ')}
     >
       {tab.kind === 'term' && <span aria-hidden className="font-mono text-[10px] text-fg-subtle">{'>_'}</span>}
-      <button className="min-w-0 truncate" onClick={() => dock.activate(tab.id)} title={tip}>
+      <button className="min-w-0 truncate" onClick={() => dock.activate(tab.id)} title={tip} data-area-focus={active ? '' : undefined}>
         {tab.title}
       </button>
       {foreign && (

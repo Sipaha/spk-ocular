@@ -3,6 +3,7 @@ import { ApiError, type Client } from '../api/client'
 import type { ActionDescriptor, ActionParams, ActionPlan, Ref } from '../api/types'
 import { actionLabel, classLabel, t } from '../i18n'
 import { showNotice } from '../store'
+import { focusMark, restoreFocus } from '../shortcuts'
 
 /** An action chosen on an object: the dialog reviews it, then runs it. */
 export interface ActionRequest {
@@ -61,15 +62,15 @@ export function ActionDialog({ client, req, onClose, runTimeoutMs = RUN_TIMEOUT_
   const confirmRef = useRef<HTMLButtonElement>(null)
   const cancelRef = useRef<HTMLButtonElement>(null)
   const countRef = useRef<HTMLInputElement>(null)
-  const [opener] = useState(() => document.activeElement as HTMLElement | null)
+  const [mark] = useState(focusMark)
 
   useEffect(() => {
     live.current = true
     return () => {
       live.current = false
-      if (opener?.isConnected) opener.focus()
+      restoreFocus(mark) // the row may be gone (deleted): then the table
     }
-  }, [opener])
+  }, [mark])
 
   // fetchPlan reads a plan; state changes only when it answers, and only
   // if no later review was started meanwhile.

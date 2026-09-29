@@ -44,9 +44,10 @@ describe('Palette', () => {
   it('Ctrl+K opens it with the input focused; Esc closes and gives focus back', async () => {
     const f = setup()
     const grid = await openApp(f)
-    const scroll = grid.closest('[data-table-scroll]') as HTMLElement | null
-    ;(scroll ?? document.body).focus()
+    const scroll = grid.querySelector<HTMLElement>('[data-table-scroll]')!
+    scroll.focus()
     const before = document.activeElement
+    expect(before).toBe(scroll)
     const dlg = await openPalette()
     expect(within(dlg).getByRole('combobox', { name: 'Go to' })).toHaveFocus()
     await userEvent.keyboard('{Escape}')

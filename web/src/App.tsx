@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import type { Client } from './api/client'
 import { setLanguage, t } from './i18n'
 import { actions, selectedTarget, useStore } from './store'
@@ -11,9 +11,10 @@ import { Dock } from './dock/Dock'
 import { dock } from './dock/store'
 import { TunnelsPanel } from './tunnels/TunnelsPanel'
 import { tunnelLoader } from './tunnels/store'
-import { inTerminal, isShortcut } from './keyboard'
 import { Palette } from './palette/Palette'
 import { openPalette } from './palette/store'
+import { cycleArea, globalShortcut } from './shortcuts'
+import { HelpDialog } from './components/HelpDialog'
 
 export function App({ client }: { client: Client }) {
   const act = useMemo(() => actions(client), [client])
@@ -56,14 +57,22 @@ export function App({ client }: { client: Client }) {
     return off
   }, [client, act, hub, loadTunnels])
 
-  // Ctrl+K opens the palette from anywhere but a terminal (there it is the
-  // program's) and another modal dialog.
+  // The app-wide keys (shortcuts.ts): not a terminal's, not under a modal dialog.
+  const [help, setHelp] = useState(false)
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (e.isComposing || e.altKey || !isShortcut(e, 'KeyK', { ctrl: true, shift: false })) return
-      if (inTerminal(e.target) || document.querySelector('[aria-modal="true"]')) return
+      const id = globalShortcut(e)
+      if (!id) return
       e.preventDefault()
-      openPalette()
+      if (id === 'palette') openPalette()
+      else if (id === 'help') setHelp(true)
+      else if (id === 'nextArea' || id === 'prevArea') cycleArea(id === 'nextArea' ? 1 : -1)
+      else {
+        // The open table's filter wins over the contexts filter.
+        const el = document.querySelector<HTMLInputElement>('[data-primary-filter]') ?? document.querySelector<HTMLInputElement>('[data-target-filter]')
+        el?.focus()
+        el?.select()
+      }
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
@@ -114,6 +123,7 @@ export function App({ client }: { client: Client }) {
       </div>
       <TunnelsPanel client={client} mode={info?.mode === 'desktop' ? 'desktop' : 'browser'} />
       <Palette client={client} act={act} />
+      {help && <HelpDialog onClose={() => setHelp(false)} />}
       <StatusBar />
     </div>
   )

@@ -1,41 +1,14 @@
 import { useEffect, useRef } from 'react'
 import type { Target, TargetGroup } from '../api/types'
 import { t } from '../i18n'
-import { inTerminal, isShortcut } from '../keyboard'
 import { type Actions, matchesFilter, targetKey, useStore } from '../store'
 import { EyeIcon, HelmWheelIcon, SearchIcon, WarningIcon } from './icons'
 import { openPalette } from '../palette/store'
 
-/**
- * "/" by the physical key (on a Russian layout it types "."), or by the
- * character (layouts where "/" sits elsewhere, e.g. Shift+7).
- */
-export function isFilterKey(e: Pick<KeyboardEvent, 'key' | 'code' | 'ctrlKey' | 'metaKey' | 'altKey' | 'shiftKey'>): boolean {
-  if (e.ctrlKey || e.metaKey || e.altKey) return false
-  return e.key === '/' || isShortcut(e, 'Slash', { shift: false })
-}
-
 export function Sidebar({ act }: { act: Actions }) {
   const view = useStore((s) => s.view)
   const filter = useStore((s) => s.filter)
-  const filterRef = useRef<HTMLInputElement>(null)
   const listRef = useRef<HTMLDivElement>(null)
-
-  // "/" focuses the filter from anywhere except another text field.
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      const typing = e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement || inTerminal(e.target)
-      if (!typing && isFilterKey(e)) {
-        e.preventDefault()
-        // The open table's filter wins over the target filter.
-        const el = document.querySelector<HTMLInputElement>('[data-primary-filter]') ?? filterRef.current
-        el?.focus()
-        el?.select()
-      }
-    }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [])
 
   const onListKey = (e: React.KeyboardEvent) => {
     if (e.key === 'ArrowDown') {
@@ -68,7 +41,7 @@ export function Sidebar({ act }: { act: Actions }) {
   }
 
   return (
-    <aside className="flex h-full w-60 shrink-0 flex-col border-r border-line bg-sidebar">
+    <aside data-area="targets" className="flex h-full w-60 shrink-0 flex-col border-r border-line bg-sidebar">
       <div className="flex items-center gap-2 px-4 pt-4 pb-3">
         <EyeIcon className="h-5 w-5 text-accent" />
         <span className="text-[15px] font-semibold tracking-tight">SPK Ocular</span>
@@ -84,7 +57,7 @@ export function Sidebar({ act }: { act: Actions }) {
       <label className="mx-3 mb-2 flex items-center gap-2 rounded-md border border-line bg-app px-2 py-1.5 focus-within:border-accent">
         <SearchIcon className="h-3.5 w-3.5 text-fg-subtle" />
         <input
-          ref={filterRef}
+          data-target-filter
           value={filter}
           onChange={(e) => act.setFilter(e.target.value)}
           onKeyDown={onFilterKey}
@@ -98,6 +71,7 @@ export function Sidebar({ act }: { act: Actions }) {
         ref={listRef}
         role="listbox"
         tabIndex={0}
+        data-area-focus
         onKeyDown={onListKey}
         aria-label="targets"
         className="min-h-0 flex-1 overflow-y-auto px-2 pb-3 outline-none"

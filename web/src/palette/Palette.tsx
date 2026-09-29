@@ -6,6 +6,7 @@ import { type Actions, useStore } from '../store'
 import { SearchIcon } from '../components/icons'
 import { buildItems, type PaletteItem, type Sources } from './items'
 import { closePalette, usePalette } from './store'
+import { focusMark, restoreFocus } from '../shortcuts'
 
 /** Ctrl+K: go to a view, context, namespace, row of the table or recent object. */
 export function Palette({ client, act }: { client: Client; act: Actions }) {
@@ -24,7 +25,7 @@ function PaletteDialog({ client, act }: { client: Client; act: Actions }) {
   // The item the user moved to (kept across live updates by its key).
   const [moved, setMoved] = useState<string | null>(null)
   const [recents, setRecents] = useState<RecentObject[]>([])
-  const [opener] = useState(() => document.activeElement as HTMLElement | null)
+  const [mark] = useState(focusMark)
   const input = useRef<HTMLInputElement>(null)
   const list = useRef<HTMLDivElement>(null)
 
@@ -49,10 +50,8 @@ function PaletteDialog({ client, act }: { client: Client; act: Actions }) {
 
   useEffect(() => {
     input.current?.focus()
-    return () => {
-      if (opener?.isConnected) opener.focus()
-    }
-  }, [opener])
+    return () => restoreFocus(mark)
+  }, [mark])
 
   const sources: Sources = useMemo(() => {
     const group = view?.groups.find((g) => g.provider === hostProvider)
