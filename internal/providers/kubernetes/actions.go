@@ -285,7 +285,7 @@ func (s *session) failedWrite(ctx context.Context, def *kindDef, run provider.Ac
 
 // prepareExtrasTimeout bounds the optional parts of a plan (rights,
 // autoscalers, pod counts): late ones are reported as unknown.
-const prepareExtrasTimeout = 5 * time.Second
+var prepareExtrasTimeout = 5 * time.Second // a variable for tests
 
 // PrepareAction reads what the action would do; nothing changes.
 func (s *session) PrepareAction(ctx context.Context, ref core.Ref, action string, p core.ActionParams) (core.ActionPlan, error) {
@@ -313,30 +313,45 @@ func (s *session) PrepareAction(ctx context.Context, ref core.Ref, action string
 	plan.Effects, plan.Warnings = fx.effects, fx.warnings
 	plan.Destructive = plan.Destructive || fx.destructive
 
-	// The optional parts, in parallel within one deadline.
+	// The optional parts, in parallel within one deadline; an answer that
+	// ignores it (a stuck transport) is not waited for.
 	ectx, cancel := context.WithTimeout(ctx, prepareExtrasTimeout)
 	defer cancel()
-	type extra struct {
-		effects, warnings []string
-	}
 	rights := make(chan core.Rights, 1)
-	extras := make(chan extra, 2)
+	hpas := make(chan []string, 1)
+	podCount := make(chan []string, 1)
 	go func() { rights <- s.rights(ectx, def, action, u) }()
-	pending := 0
-	if action == actScale.ID {
-		pending++
-		go func() { w := s.autoscalers(ectx, def, u); extras <- extra{warnings: w} }()
+	waitHPAs := action == actScale.ID
+	if waitHPAs {
+		go func() { hpas <- s.autoscalers(ectx, def, u) }()
 	}
-	if action == actDelete.ID && def != podsKind && def.gvr.Group == "apps" {
-		pending++
-		go func() { extras <- extra{effects: s.podsOf(ectx, def, u)} }()
+	waitPods := action == actDelete.ID && def != podsKind && def.gvr.Group == "apps"
+	if waitPods {
+		go func() { podCount <- s.podsOf(ectx, def, u) }()
 	}
-	plan.Rights = <-rights
-	for ; pending > 0; pending-- {
-		e := <-extras
-		plan.Effects = append(plan.Effects, e.effects...)
-		plan.Warnings = append(plan.Warnings, e.warnings...)
+	waitRights := true
+	var podFx []string
+wait:
+	for waitRights || waitHPAs || waitPods {
+		select {
+		case plan.Rights = <-rights:
+			waitRights = false
+		case w := <-hpas:
+			plan.Warnings = append(plan.Warnings, w...)
+			waitHPAs = false
+		case podFx = <-podCount:
+			waitPods = false
+		case <-ectx.Done():
+			break wait
+		}
 	}
+	if waitRights {
+		plan.Rights = core.Rights{State: core.RightsUnknown, Reason: "the check took too long"}
+	}
+	if waitHPAs {
+		plan.Warnings = append(plan.Warnings, "The count could not be checked against autoscalers (could not check autoscalers in time).")
+	}
+	plan.Effects = append(plan.Effects, podFx...) // a late pod count is left out
 	if def == podsKind && action == actDelete.ID {
 		plan.Effects = append(plan.Effects, s.podController(ctx, u))
 	}

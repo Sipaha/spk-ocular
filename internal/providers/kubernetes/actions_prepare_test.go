@@ -5,13 +5,16 @@ import (
 	"errors"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	kruntime "k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/client-go/dynamic"
 	k8stesting "k8s.io/client-go/testing"
 
 	"github.com/spk/spk-ocular/internal/core"
@@ -344,6 +347,84 @@ func TestRightsFollowTheReviewStatus(t *testing.T) {
 			assert.Contains(t, r.Reason, c.reason)
 		})
 	}
+}
+
+// stallingDyn answers List and Create of the named resources only when
+// release closes, ignoring the context (a stuck transport). It stalls
+// outside the fake client, whose reactors run under one lock.
+type stallingDyn struct {
+	dynamic.Interface
+	stall   map[string]bool
+	release <-chan struct{}
+}
+
+func (d stallingDyn) Resource(gvr schema.GroupVersionResource) dynamic.NamespaceableResourceInterface {
+	r := d.Interface.Resource(gvr)
+	if !d.stall[gvr.Resource] {
+		return r
+	}
+	return stallingRes{r, d.release}
+}
+
+type stallingRes struct {
+	dynamic.NamespaceableResourceInterface
+	release <-chan struct{}
+}
+
+func (r stallingRes) Namespace(ns string) dynamic.ResourceInterface {
+	return stallingNsRes{r.NamespaceableResourceInterface.Namespace(ns), r.release}
+}
+
+func (r stallingRes) Create(context.Context, *unstructured.Unstructured, metav1.CreateOptions, ...string) (*unstructured.Unstructured, error) {
+	<-r.release
+	return nil, errors.New("too late")
+}
+
+type stallingNsRes struct {
+	dynamic.ResourceInterface
+	release <-chan struct{}
+}
+
+func (r stallingNsRes) List(context.Context, metav1.ListOptions) (*unstructured.UnstructuredList, error) {
+	<-r.release
+	return nil, errors.New("too late")
+}
+
+func TestAPlanDoesNotWaitForLateChecks(t *testing.T) {
+	old := prepareExtrasTimeout
+	prepareExtrasTimeout = 50 * time.Millisecond
+	t.Cleanup(func() { prepareExtrasTimeout = old })
+	release := make(chan struct{})
+	t.Cleanup(func() { close(release) })
+	d := workload("Deployment", "web", "uid-web", "1", map[string]any{"replicas": int64(2), "selector": map[string]any{"matchLabels": map[string]any{"app": "web"}}})
+	session := func(t *testing.T, stall ...string) *session {
+		c := actionClient(d)
+		ssarAnswer(c, true, nil)
+		st := map[string]bool{}
+		for _, r := range stall {
+			st[r] = true
+		}
+		s := newSession("ctx", "h", stallingDyn{c, st, release}, false)
+		t.Cleanup(s.Close)
+		return s
+	}
+	t.Run("rights and autoscalers", func(t *testing.T) {
+		s := session(t, "selfsubjectaccessreviews", "horizontalpodautoscalers")
+		start := time.Now()
+		plan := prepare(t, s, deployWebRef, "scale", count(3))
+		assert.Less(t, time.Since(start), 2*time.Second)
+		assert.Equal(t, core.RightsUnknown, plan.Rights.State)
+		assert.Contains(t, plan.Rights.Reason, "the check took too long")
+		assert.Contains(t, text(plan), "could not check autoscalers in time")
+		assert.Contains(t, text(plan), "2 → 3")
+	})
+	t.Run("pod count", func(t *testing.T) {
+		s := session(t, "replicasets")
+		plan := prepare(t, s, deployWebRef, "delete", core.ActionParams{})
+		assert.Equal(t, core.RightsAllowed, plan.Rights.State)
+		assert.NotContains(t, text(plan), "its pods")
+		assert.Contains(t, text(plan), "deletion is requested")
+	})
 }
 
 func TestAPlanNamesItsTargetAndPinsTheObject(t *testing.T) {
