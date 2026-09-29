@@ -5,6 +5,8 @@ export class ApiError extends Error {
   constructor(
     public code: string,
     public detail: string,
+    /** No coded answer came back (the connection failed, a bare HTTP status): whether the server acted is not known. */
+    public transport = false,
   ) {
     super(detail ? `${code}: ${detail}` : code)
   }
@@ -64,20 +66,25 @@ export const runRequest = (plan: ActionPlan) => ({
   configRev: plan.where.configRev ?? '',
 })
 
+const CodeInternal = 'internal'
+
 const tokenMeta = () => document.querySelector('meta[name="spk-ocular-api-token"]')?.getAttribute('content') ?? ''
 
 async function post<T>(method: string, body: unknown): Promise<T> {
   const headers: Record<string, string> = { 'content-type': 'application/json' }
   const token = tokenMeta()
   if (token) headers.Authorization = `Bearer ${token}`
-  const r = await fetch(`/api/${method}`, { method: 'POST', headers, body: JSON.stringify(body ?? {}) })
+  let r: Response
+  try {
+    r = await fetch(`/api/${method}`, { method: 'POST', headers, body: JSON.stringify(body ?? {}) })
+  } catch (e) {
+    throw new ApiError(CodeInternal, e instanceof Error ? e.message : String(e), true)
+  }
   const isJSON = r.headers.get('content-type')?.includes('application/json')
   if (!r.ok) {
-    if (isJSON) {
-      const e = (await r.json()) as { code?: string; detail?: string }
-      throw new ApiError(e.code ?? 'internal', e.detail ?? '')
-    }
-    throw new ApiError('internal', `HTTP ${r.status}`)
+    const e = isJSON ? ((await r.json().catch(() => null)) as { code?: string; detail?: string } | null) : null
+    if (e?.code) throw new ApiError(e.code, e.detail ?? '')
+    throw new ApiError(CodeInternal, `HTTP ${r.status}`, true)
   }
   return (isJSON ? await r.json() : undefined) as T
 }
@@ -123,11 +130,17 @@ export const httpClient: Client = {
   },
 }
 
-/** Wails rejects with an Error whose message is CodedError's "code: detail". */
+/**
+ * Wails rejects with an Error whose message is CodedError's "code: detail";
+ * a message that does not start with a code came from the runtime, not from
+ * an API method (a transport failure).
+ */
 export function parseWailsError(err: unknown): ApiError {
   const msg = err instanceof Error ? err.message : String((err as { message?: string })?.message ?? err)
   const i = msg.indexOf(': ')
-  return i < 0 ? new ApiError(msg, '') : new ApiError(msg.slice(0, i), msg.slice(i + 2))
+  const code = i < 0 ? msg : msg.slice(0, i)
+  if (!/^[a-z][a-z_]*$/.test(code)) return new ApiError(CodeInternal, msg, true)
+  return new ApiError(code, i < 0 ? '' : msg.slice(i + 2))
 }
 
 const FQN = 'github.com/spk/spk-ocular/internal/api/transport.API.'

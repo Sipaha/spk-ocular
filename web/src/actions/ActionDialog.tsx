@@ -147,20 +147,24 @@ export function ActionDialog({ client, req, onClose, runTimeoutMs = RUN_TIMEOUT_
         }),
       ])
       // Told even when the dialog is gone (another target was chosen meanwhile).
-      showNotice(res.message)
-      if (live.current) onClose()
+      if (live.current) {
+        showNotice(res.message)
+        onClose()
+      } else showNotice(`${plan.where.targetTitle} · ${res.message}`)
     } catch (e) {
       const code = codeOf(e)
+      // No coded answer (the connection failed): the request may have been applied.
+      const transport = !(e instanceof ApiError) || e.transport
       const out: Outcome =
         e instanceof RunTimeout
           ? { type: 'unknown', text: t('action.timeout', { sec: Math.round(runTimeoutMs / 1000) }) }
-          : code === 'unknown'
+          : code === 'unknown' || transport
             ? { type: 'unknown', text: `${t('action.unknown')} ${detailOf(e)}` }
             : code === 'conflict'
               ? { type: 'conflict', text: t('action.conflict', { detail: detailOf(e) }) }
               : { type: 'failed', text: t('action.failed', { class: classLabel(code), detail: detailOf(e) }) }
       if (!live.current) {
-        showNotice(`${actionLabel(action)} ${plan.where.ref.name}: ${out.text}`, 10_000)
+        showNotice(`${plan.where.targetTitle} · ${actionLabel(action)} ${plan.where.ref.name}: ${out.text}`, 10_000)
         return
       }
       setOutcome(out)

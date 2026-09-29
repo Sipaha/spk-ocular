@@ -252,7 +252,8 @@ describe('ActionDialog', () => {
     await userEvent.click(await screen.findByRole('button', { name: 'Restart' }))
     unmount()
     await act(async () => run.resolve({ message: 'deployment api: restart requested' }))
-    expect(useStore.getState().notice).toBe('deployment api: restart requested')
+    // Another target is shown now: the notice says where it happened.
+    expect(useStore.getState().notice).toBe('prod-ctx · deployment api: restart requested')
   })
 
   it('a failure of a run whose dialog went away is told too', async () => {
@@ -264,7 +265,31 @@ describe('ActionDialog', () => {
     await userEvent.click(await screen.findByRole('button', { name: 'Restart' }))
     unmount()
     await act(async () => run.reject(new ApiError('forbidden', 'nope')))
-    expect(useStore.getState().notice).toBe('Restart api: Failed · access denied: nope')
+    expect(useStore.getState().notice).toBe('prod-ctx · Restart api: Failed · access denied: nope')
+  })
+
+  it('a lost connection during a run is an unknown outcome, not a failure', async () => {
+    const { f, dialog } = setup(del)
+    f.client.runAction = vi.fn(async () => {
+      throw new TypeError('Failed to fetch')
+    })
+    await userEvent.click(await within(dialog).findByRole('button', { name: 'Delete' }))
+    const alert = await within(dialog).findByRole('alert')
+    expect(alert).toHaveTextContent('outcome is not known. Check the object before repeating.')
+    expect(alert).toHaveTextContent('Failed to fetch')
+    expect(alert).not.toHaveTextContent('Failed ·')
+    expect(within(dialog).queryByRole('button', { name: 'Review again' })).not.toBeInTheDocument()
+  })
+
+  it('a transport answer (no coded error) during a run is an unknown outcome', async () => {
+    const { f, dialog } = setup(restart)
+    f.client.runAction = vi.fn(async () => {
+      throw new ApiError('internal', 'HTTP 502', true)
+    })
+    await userEvent.click(await within(dialog).findByRole('button', { name: 'Restart' }))
+    const alert = await within(dialog).findByRole('alert')
+    expect(alert).toHaveTextContent('outcome is not known')
+    expect(alert).toHaveTextContent('HTTP 502')
   })
 
   it('Tab stays in the dialog', async () => {
