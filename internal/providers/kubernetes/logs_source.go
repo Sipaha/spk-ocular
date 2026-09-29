@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"math/rand/v2"
+	"sync"
 	"time"
 
 	"github.com/spk/spk-ocular/internal/provider"
@@ -24,8 +25,11 @@ const (
 	// already buffered (a quiet pod's lines are never held back).
 	batchLines = 500
 	batchBytes = 64 << 10
-	retryFirst = time.Second
-	retryCap   = 10 * time.Second
+	// maxLogRequests bounds pods/log requests open at once in the app (8
+	// tabs × 20 container streams would be 160).
+	maxLogRequests = 64
+	retryFirst     = time.Second
+	retryCap       = 10 * time.Second
 )
 
 // cursor remembers what one container instance has delivered, in file order.
@@ -122,15 +126,19 @@ func (s *skipper) clean(ended bool) bool {
 
 // podSource streams one container of one pod.
 type podSource struct {
-	id                   int
-	ns, pod, uid, ctr    string
-	fetch                logFetcher
-	box                  *obsBox // follow only; nil for one-shot requests
-	sink                 provider.LogSink
-	q                    provider.LogQuery
-	cur                  cursor
-	incarnation          string // container ID the cursor belongs to
-	opened               bool   // a request was answered
+	id                int
+	ns, pod, uid, ctr string
+	fetch             logFetcher
+	slots             chan struct{} // nil: unlimited
+	box               *obsBox       // follow only; nil for one-shot requests
+	sink              provider.LogSink
+	q                 provider.LogQuery
+	cur               cursor
+	incarnation       string // container ID the cursor belongs to
+	opened            bool   // a request was answered
+	// late: the source joined after the stream began (a new pod, a freed
+	// slot): its first request reads the instance from its start.
+	late                 bool
 	sent                 provider.LogState
 	retryFirst, retryCap time.Duration
 }
@@ -142,6 +150,48 @@ func newPodSource(id int, ns, pod, uid, ctr string, fetch logFetcher, box *obsBo
 // staleIncarnation: the instance read is known to be older than the
 // observed one (never equal to a container ID).
 const staleIncarnation = "\x00stale"
+
+// open takes one of the app's log request slots for the life of the
+// response (waiting, and saying so, while all are taken).
+func (s *podSource) open(ctx context.Context, req podLogRequest) (io.ReadCloser, error) {
+	if s.slots != nil {
+		select {
+		case s.slots <- struct{}{}:
+		default:
+			if err := s.state(provider.LogWaiting, "", fmt.Sprintf("%d log streams are open at once; waiting for one to close", cap(s.slots))); err != nil {
+				return nil, err
+			}
+			select {
+			case s.slots <- struct{}{}:
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			}
+		}
+	}
+	rc, err := s.fetch(ctx, req)
+	if err != nil {
+		s.release()
+		return nil, err
+	}
+	return &slotBody{ReadCloser: rc, release: s.release}, nil
+}
+
+func (s *podSource) release() {
+	if s.slots != nil {
+		<-s.slots
+	}
+}
+
+type slotBody struct {
+	io.ReadCloser
+	release func()
+	once    sync.Once
+}
+
+func (b *slotBody) Close() error {
+	b.once.Do(b.release)
+	return b.ReadCloser.Close()
+}
 
 // errSourceDone ends a source whose final state was reported.
 var errSourceDone = errors.New("source finished")
@@ -187,7 +237,7 @@ func tailOf(q provider.LogQuery) int64 {
 
 // once: a complete, non-follow answer (current or previous instance).
 func (s *podSource) once(ctx context.Context) error {
-	rc, err := s.fetch(ctx, podLogRequest{
+	rc, err := s.open(ctx, podLogRequest{
 		Namespace: s.ns, Pod: s.pod, Container: s.ctr, Previous: s.q.Previous,
 		TailLines: tailOf(s.q), SinceTime: s.q.SinceTime,
 	})
@@ -256,7 +306,7 @@ func (s *podSource) follow(ctx context.Context) error {
 			}
 		}
 		req, sk := s.plan(c, tracked)
-		rc, err := s.fetch(ctx, req)
+		rc, err := s.open(ctx, req)
 		if err != nil {
 			if ctx.Err() != nil {
 				return ctx.Err()
@@ -412,6 +462,9 @@ func (s *podSource) plan(c ctrObs, tracked bool) (podLogRequest, *skipper) {
 	if !s.opened {
 		s.incarnation = c.id
 		req.TailLines = tailOf(s.q)
+		if s.late {
+			req.TailLines = startupTail
+		}
 		return req, nil
 	}
 	// An unknown instance (the first request went out before the pod was

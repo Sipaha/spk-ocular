@@ -8,6 +8,7 @@ import (
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/cache"
 
 	"github.com/spk/spk-ocular/internal/core"
@@ -25,14 +26,26 @@ func (s *session) LogInfo(ctx context.Context, ref core.Ref) (core.LogInfo, erro
 	if err != nil {
 		return core.LogInfo{}, err
 	}
-	switch ref.Kind {
-	case podsKind.desc.ID:
+	return logInfoOf(s.kinds.byID[ref.Kind], u)
+}
+
+func logInfoOf(def *kindDef, u *unstructured.Unstructured) (core.LogInfo, error) {
+	switch {
+	case def == podsKind:
 		info := core.LogInfo{Channels: podChannels(u.Object, "spec"), Previous: true}
-		info.DefaultChannel = defaultChannel(u, info.Channels)
+		info.DefaultChannel = defaultChannel(u.GetAnnotations(), info.Channels)
+		return info, nil
+	case logWorkloads[def]:
+		info := core.LogInfo{Channels: podChannels(u.Object, "spec", "template", "spec"), Aggregate: true}
+		ann, _, _ := unstructured.NestedStringMap(u.Object, "spec", "template", "metadata", "annotations")
+		info.DefaultChannel = defaultChannel(ann, info.Channels)
 		return info, nil
 	}
-	return core.LogInfo{}, &provider.Error{Class: provider.ClassUnsupported, Message: fmt.Sprintf("%s have no logs", ref.Kind)}
+	return core.LogInfo{}, &provider.Error{Class: provider.ClassUnsupported, Message: fmt.Sprintf("%s have no logs", def.desc.ID)}
 }
+
+// logWorkloads: kinds whose logs are their pods' (by controller UID).
+var logWorkloads = map[*kindDef]bool{deploymentsKind: true, statefulSetsKind: true, daemonSetsKind: true, replicaSetsKind: true}
 
 // getObject GETs ref's object and checks its UID.
 func (s *session) getObject(ctx context.Context, ref core.Ref) (*unstructured.Unstructured, error) {
@@ -73,8 +86,8 @@ func podChannels(o map[string]any, path ...string) []core.LogChannel {
 	return out
 }
 
-func defaultChannel(u *unstructured.Unstructured, chs []core.LogChannel) string {
-	if want := u.GetAnnotations()[defaultContainerAnnotation]; want != "" {
+func defaultChannel(annotations map[string]string, chs []core.LogChannel) string {
+	if want := annotations[defaultContainerAnnotation]; want != "" {
 		for _, c := range chs {
 			if c.ID == want {
 				return want
@@ -94,11 +107,47 @@ func (s *session) StreamLogs(ctx context.Context, ref core.Ref, q provider.LogQu
 	if s.logs == nil {
 		return &provider.Error{Class: provider.ClassUnsupported, Message: "logs are not available for this context"}
 	}
-	switch ref.Kind {
-	case podsKind.desc.ID:
+	switch def := s.kinds.byID[ref.Kind]; {
+	case def == podsKind:
 		return s.streamPod(ctx, ref, q, sink)
+	case logWorkloads[def]:
+		return s.streamWorkload(ctx, def, ref, q, sink)
 	}
 	return &provider.Error{Class: provider.ClassUnsupported, Message: fmt.Sprintf("%s have no logs", ref.Kind)}
+}
+
+func (s *session) streamWorkload(ctx context.Context, def *kindDef, ref core.Ref, q provider.LogQuery, sink provider.LogSink) error {
+	if q.Previous {
+		return &provider.Error{Class: provider.ClassUnsupported, Message: "previous logs are shown for one pod at a time"}
+	}
+	u, err := s.getObject(ctx, ref) // UID-checked
+	if err != nil {
+		return err
+	}
+	info, err := logInfoOf(def, u)
+	if err != nil {
+		return err
+	}
+	tr, err := s.trackWorkload(def, ref.Scope, u.GetUID())
+	if err != nil {
+		return &provider.Error{Class: provider.ClassGone, Message: err.Error()}
+	}
+	defer tr.stop()
+	g := &logGroup{s: s, ns: ref.Scope, q: q, sink: &lockedSink{sink: sink}, tr: tr, channel: channelsFor(q.Channel, info.DefaultChannel)}
+	return g.run(ctx)
+}
+
+// channelsFor picks a member's channels: all, the default, or one.
+func channelsFor(want, def string) func(memberPod) []string {
+	return func(m memberPod) []string {
+		switch want {
+		case provider.ChannelAll:
+			return m.ctrs
+		case "":
+			return []string{def}
+		}
+		return []string{want}
+	}
 }
 
 func (s *session) streamPod(ctx context.Context, ref core.Ref, q provider.LogQuery, sink provider.LogSink) error {
@@ -111,7 +160,13 @@ func (s *session) streamPod(ctx context.Context, ref core.Ref, q provider.LogQue
 		ctr = info.DefaultChannel
 	}
 	if ctr == provider.ChannelAll {
-		return &provider.Error{Class: provider.ClassUnsupported, Message: "all containers of a pod: not yet"}
+		tr, err := s.trackPod(ref.Scope, ref.Name, types.UID(ref.UID))
+		if err != nil {
+			return &provider.Error{Class: provider.ClassGone, Message: err.Error()}
+		}
+		defer tr.stop()
+		g := &logGroup{s: s, ns: ref.Scope, q: q, sink: &lockedSink{sink: sink}, tr: tr, channel: channelsFor(ctr, "")}
+		return g.run(ctx)
 	}
 	if err := sink.Source(1, ref.UID+"/"+ctr, ref.Name+"/"+ctr, ctr); err != nil {
 		return err
@@ -126,6 +181,7 @@ func (s *session) streamPod(ctx context.Context, ref core.Ref, q provider.LogQue
 		defer stop()
 	}
 	src := newPodSource(1, ref.Scope, ref.Name, ref.UID, ctr, s.logs, box, sink, q)
+	src.slots = s.slots
 	// One source: its backlog is simply the start of its stream.
 	if err := sink.Ready(); err != nil {
 		return err
@@ -180,9 +236,10 @@ func (s *session) observePod(ns, name string, box *obsBox) (stop func(), err err
 	}, nil
 }
 
-// watchObservation marks box synced once the handler got the initial state,
-// and blind while the cache cannot load (e.g. no permission to watch pods:
-// pods/log may still be allowed). Local state only — no cluster calls.
+// watchObservation marks box synced once the handler got the initial
+// state, and blind while the cache's list/watch keeps failing (e.g. pods
+// may be listed but not watched: the list "syncs", yet no change would ever
+// arrive). Local state only — no cluster calls.
 func watchObservation(c *informerCache, reg cache.ResourceEventHandlerRegistration, box *obsBox, done <-chan struct{}) {
 	t := time.NewTicker(100 * time.Millisecond)
 	defer t.Stop()
@@ -196,19 +253,34 @@ func watchObservation(c *informerCache, reg cache.ResourceEventHandlerRegistrati
 			return
 		case now := <-t.C:
 			if reg.HasSynced() {
-				box.setBlind("")
 				box.setSynced()
-				return
 			}
-			tr := c.transport()
-			switch {
-			case !tr.failing:
-				failingSince = time.Time{}
-			case failingSince.IsZero():
-				failingSince = now
-			case now.Sub(failingSince) >= observeBlindAfter:
-				box.setBlind(strings.TrimSpace(fmt.Sprintf("%s: %s", tr.class, tr.message)))
-			}
+			box.setBlind(cacheProblem(now, &failingSince, c))
 		}
 	}
+}
+
+// cacheProblem describes caches that have failed for observeBlindAfter
+// ("" while they work).
+func cacheProblem(now time.Time, since *time.Time, cs ...*informerCache) string {
+	var bad []string
+	for _, c := range cs {
+		if c == nil {
+			continue
+		}
+		if tr := c.transport(); tr.failing {
+			bad = append(bad, fmt.Sprintf("%s: %s", tr.class, tr.message))
+		}
+	}
+	if len(bad) == 0 {
+		*since = time.Time{}
+		return ""
+	}
+	if since.IsZero() {
+		*since = now
+	}
+	if now.Sub(*since) < observeBlindAfter {
+		return ""
+	}
+	return strings.Join(bad, "; ")
 }

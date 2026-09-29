@@ -2,6 +2,7 @@ package kubernetes
 
 import (
 	"context"
+	"fmt"
 	"os/exec"
 	"strings"
 	"testing"
@@ -139,4 +140,107 @@ func TestKindLogsForbiddenIsSaid(t *testing.T) {
 	assert.Equal(t, provider.LogError, sink.lastState().State)
 	assert.Equal(t, provider.ClassForbidden, sink.lastState().Class)
 	assert.Empty(t, sink.texts())
+}
+
+// A deployment's pods in one stream; scale-up adds a source from its first
+// line, scale-down ends one.
+func TestKindLogsOfADeployment(t *testing.T) {
+	p, target := kindProvider(t)
+	sess, err := p.Open(context.Background(), target)
+	require.NoError(t, err)
+	defer sess.Close()
+	ls := sess.(provider.LogSource)
+	uid := strings.TrimSpace(kubectlKind(t, "", "-n", "ocular-demo", "get", "deploy", "chatter", "-o", "jsonpath={.metadata.uid}"))
+	ref := core.Ref{Provider: ProviderID, Target: target, Scope: "ocular-demo", Kind: "apps/deployments", Name: "chatter", UID: uid}
+	info, err := ls.LogInfo(context.Background(), ref)
+	require.NoError(t, err)
+	assert.True(t, info.Aggregate)
+	assert.Equal(t, "app", info.DefaultChannel)
+
+	sink := newLogRecorder()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	done := make(chan error, 1)
+	go func() { done <- ls.StreamLogs(ctx, ref, provider.LogQuery{Follow: true, TailLines: 6}, sink) }()
+	sink.await(t, "ready", func() bool { sink.mu.Lock(); defer sink.mu.Unlock(); return sink.ready })
+	sink.mu.Lock()
+	assert.Len(t, sink.sources, 2)
+	assert.LessOrEqual(t, sink.readyAt, 6, "the tail is overall")
+	sink.mu.Unlock()
+
+	kubectlKind(t, "", "-n", "ocular-demo", "scale", "deploy/chatter", "--replicas=3")
+	t.Cleanup(func() { kubectlKind(t, "", "-n", "ocular-demo", "scale", "deploy/chatter", "--replicas=2") })
+	require.Eventually(t, func() bool { return sink.sourceCount() == 3 }, 90*time.Second, 100*time.Millisecond)
+	sink.mu.Lock()
+	newKey := sink.sources[2]
+	sink.mu.Unlock()
+	require.Eventually(t, func() bool {
+		sink.mu.Lock()
+		defer sink.mu.Unlock()
+		for i, l := range sink.lines {
+			if sink.lineSrc[i] == newKey && strings.HasSuffix(l.Text, " tick 1") {
+				return true
+			}
+		}
+		return false
+	}, 60*time.Second, 100*time.Millisecond, "the new pod's first line")
+
+	kubectlKind(t, "", "-n", "ocular-demo", "scale", "deploy/chatter", "--replicas=2")
+	require.Eventually(t, func() bool {
+		sink.mu.Lock()
+		defer sink.mu.Unlock()
+		for key, st := range sink.stateOf {
+			if key != "" && st.State == provider.LogEnded {
+				return true
+			}
+		}
+		return false
+	}, 90*time.Second, 100*time.Millisecond, "a removed pod's source ends")
+	cancel()
+	<-done
+
+	// no line twice per pod (tick numbers strictly increase per source)
+	sink.mu.Lock()
+	defer sink.mu.Unlock()
+	last := map[string]int{}
+	for i, l := range sink.lines {
+		var host string
+		var n int
+		f := strings.Fields(l.Text)
+		require.GreaterOrEqual(t, len(f), 4, l.Text)
+		host = f[1]
+		_, err := fmt.Sscanf(f[3], "%d", &n)
+		require.NoError(t, err)
+		assert.Greater(t, n, last[host], "%s at line %d (%s)", l.Text, i, sink.lineSrc[i])
+		last[host] = n
+	}
+}
+
+// pods/log allowed, watching pods not (list is): a pod's logs — one
+// container or all — still stream; a deployment cannot be read at all by
+// this user and says so.
+func TestKindLogsWithoutPodWatch(t *testing.T) {
+	s := rbacSession(t, "nowatch").(provider.LogSource)
+	// the oldest pod: a scale-down (another test) removes the newest ones
+	name := strings.TrimSpace(kubectlKind(t, "", "-n", "ocular-demo", "get", "pods", "-l", "app=chatter",
+		"--sort-by=.metadata.creationTimestamp", "-o", "jsonpath={.items[0].metadata.name}"))
+	uid := strings.TrimSpace(kubectlKind(t, "", "-n", "ocular-demo", "get", "pod", name, "-o", "jsonpath={.metadata.uid}"))
+	ref := core.Ref{Provider: ProviderID, Scope: "ocular-demo", Kind: "pods", Name: name, UID: uid}
+	for _, ch := range []string{"app", provider.ChannelAll} {
+		sink := newLogRecorder()
+		ctx, cancel := context.WithCancel(context.Background())
+		done := make(chan error, 1)
+		go func() {
+			done <- s.StreamLogs(ctx, ref, provider.LogQuery{Channel: ch, Follow: true, TailLines: 2}, sink)
+		}()
+		sink.await(t, "live lines of "+ch, func() bool { return len(sink.texts()) >= 4 })
+		cancel()
+		require.ErrorIs(t, <-done, context.Canceled)
+	}
+
+	err := s.StreamLogs(context.Background(), core.Ref{Provider: ProviderID, Scope: "ocular-demo", Kind: "apps/deployments", Name: "chatter"},
+		provider.LogQuery{Follow: true, TailLines: 2}, newLogRecorder())
+	var pe *provider.Error
+	require.ErrorAs(t, err, &pe)
+	assert.Equal(t, provider.ClassForbidden, pe.Class, "%v", err)
 }

@@ -31,6 +31,7 @@ type fakeKubelet struct {
 	eof       chan struct{} // closed: end every open follow cleanly
 	ctrs      map[string]*fakeCtr
 	forbidden bool
+	slow      map[string]time.Duration // pod → delay before a non-follow answer
 	requests  []url.Values
 	srv       *httptest.Server
 }
@@ -53,7 +54,7 @@ type fakeRec struct {
 
 func newFakeKubelet(t *testing.T) *fakeKubelet {
 	t.Helper()
-	k := &fakeKubelet{changed: make(chan struct{}), cut: make(chan struct{}), eof: make(chan struct{}), ctrs: map[string]*fakeCtr{}}
+	k := &fakeKubelet{slow: map[string]time.Duration{}, changed: make(chan struct{}), cut: make(chan struct{}), eof: make(chan struct{}), ctrs: map[string]*fakeCtr{}}
 	k.srv = httptest.NewServer(http.HandlerFunc(k.serve))
 	t.Cleanup(k.srv.Close)
 	return k
@@ -157,6 +158,15 @@ func (k *fakeKubelet) serve(w http.ResponseWriter, r *http.Request) {
 	ctr := q.Get("container")
 	k.mu.Lock()
 	k.requests = append(k.requests, q)
+	if d := k.slow[pod]; d > 0 && q.Get("follow") != "true" {
+		k.mu.Unlock()
+		select {
+		case <-time.After(d):
+		case <-r.Context().Done():
+			return
+		}
+		k.mu.Lock()
+	}
 	if k.forbidden {
 		k.mu.Unlock()
 		writeStatus(w, http.StatusForbidden, metav1.StatusReasonForbidden, fmt.Sprintf(`pods "%s" is forbidden: User "viewer" cannot get resource "pods/log"`, pod))
@@ -271,39 +281,50 @@ func tailStart(recs []fakeRec, n int) int {
 type logRecorder struct {
 	mu      sync.Mutex
 	lines   []provider.LogLine
+	lineSrc []string // the source key of each line
 	states  []provider.LogState
+	stateOf map[string]provider.LogState // latest per source key ("" = the stream)
 	ready   bool
+	readyAt int // lines delivered before Ready
 	sources []string
+	keys    map[int]string
 	changed chan struct{}
 }
 
-func newLogRecorder() *logRecorder { return &logRecorder{changed: make(chan struct{})} }
+func newLogRecorder() *logRecorder {
+	return &logRecorder{changed: make(chan struct{}), keys: map[int]string{}, stateOf: map[string]provider.LogState{}}
+}
 
 func (s *logRecorder) bumpLocked() {
 	close(s.changed)
 	s.changed = make(chan struct{})
 }
 
-func (s *logRecorder) Source(_ int, key, _, _ string) error {
+func (s *logRecorder) Source(id int, key, _, _ string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.sources = append(s.sources, key)
+	s.keys[id] = key
 	s.bumpLocked()
 	return nil
 }
 
-func (s *logRecorder) Lines(_ int, l []provider.LogLine) error {
+func (s *logRecorder) Lines(id int, l []provider.LogLine) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.lines = append(s.lines, l...)
+	for range l {
+		s.lineSrc = append(s.lineSrc, s.keys[id])
+	}
 	s.bumpLocked()
 	return nil
 }
 
-func (s *logRecorder) State(_ int, st provider.LogState) error {
+func (s *logRecorder) State(id int, st provider.LogState) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.states = append(s.states, st)
+	s.stateOf[s.keys[id]] = st
 	s.bumpLocked()
 	return nil
 }
@@ -312,6 +333,7 @@ func (s *logRecorder) Ready() error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.ready = true
+	s.readyAt = len(s.lines)
 	s.bumpLocked()
 	return nil
 }
@@ -324,6 +346,18 @@ func (s *logRecorder) texts() []string {
 		out[i] = l.Text
 	}
 	return out
+}
+
+func (s *logRecorder) state(key string) provider.LogState {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.stateOf[key]
+}
+
+func (s *logRecorder) sourceCount() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return len(s.sources)
 }
 
 func (s *logRecorder) lastState() provider.LogState {

@@ -59,6 +59,7 @@ func (p *Provider) Open(_ context.Context, target string) (provider.Session, err
 		return nil, &provider.Error{Class: provider.ClassInternal, Message: err.Error()}
 	}
 	sess := newSession(target, kc.Hash, dyn, true)
+	sess.slots = p.logSlots
 	if sess.logs, err = httpLogFetcher(cfg); err != nil {
 		return nil, &provider.Error{Class: provider.ClassInternal, Message: err.Error()}
 	}
@@ -108,7 +109,8 @@ type session struct {
 	kinds   *kindRegistry
 	now     func() time.Time
 	metrics metricsCache
-	logs    logFetcher // nil: no logs (tests without a server)
+	logs    logFetcher    // nil: no logs (tests without a server)
+	slots   chan struct{} // the provider's logSlots; nil: unlimited
 }
 
 func newSession(target, hash string, dyn dynamic.Interface, watchList bool) *session {

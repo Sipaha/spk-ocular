@@ -21,6 +21,8 @@ type Provider struct {
 	getenv   func(string) string
 	home     string
 	shimPath string // this binary, run as a bounded exec credential plugin
+	// logSlots bounds pods/log requests open at once across all sessions.
+	logSlots chan struct{}
 
 	mu   sync.Mutex
 	last loaded // latest Discover result; P1 builds clients from it
@@ -41,7 +43,7 @@ func (p *Provider) WithExecShim(path string) *Provider {
 
 // NewWith is New with an injected environment (tests).
 func NewWith(getenv func(string) string, home string) *Provider {
-	return &Provider{getenv: getenv, home: home}
+	return &Provider{getenv: getenv, home: home, logSlots: make(chan struct{}, maxLogRequests)}
 }
 
 func (p *Provider) ID() string    { return ProviderID }
