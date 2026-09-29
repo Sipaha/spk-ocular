@@ -180,6 +180,11 @@ Go + Wails v3 + React. Спецификация: `docs/specs/2026-09-29-spk-ocul
 - Запуски терминала принадлежат ему в реестре потоков (owner `term:<id>`): `ForgetTerminal`
   завершает подключённый и отзывает неподключённый; «Подключиться заново» и «забыть» атомарны. —
   `TestForgettingATerminalEndsItsRuns`, `TestAReopenRacingForgetLeavesNoRun`.
+- `Close` провайдерских хэндлов — никогда под блокировками API: под своим мьютексом регистрировать
+  через `Registry.Register`/`RegisterTerm` и вызывать `release` после разблокировки. Сброс ввода
+  по `intr` вычитает только снятое с очереди (пишущийся кусок остаётся в окне). —
+  `TestARefusedRunIsClosedOutsideThePrototypesLock`, `TestRegisteringLeavesClosingToRelease`,
+  `TestTermInterruptKeepsTheChunkBeingWrittenCounted`.
 - Вставка из буфера (асинхронная) идёт только в соединение, в котором был жест; иначе видимый
   отказ. Живость в `TerminalView` — локальная для монтирования (StrictMode монтирует дважды). —
   `TerminalView.test.tsx`.
@@ -289,6 +294,8 @@ Go + Wails v3 + React. Спецификация: `docs/specs/2026-09-29-spk-ocul
   строками.
 - **Xvfb сбрасывает раскладку, когда отключается последний клиент** — `setxkbmap` делать, когда
   окно приложения уже открыто.
+- **Chromium не засчитывает переполнение grid-треков абсолютных строк целиком** в прокрутку
+  контейнера: у строк/заголовка таблицы явный `min-width` (сумма минимальных ширин колонок).
 - **Две сетки `resources`**: список событий в деталях — тоже `ResourceTable`; в e2e брать `.first()`.
 - Кандидат из соседей, ещё не встреченный здесь: fetch с `Blob`/`FormData`-телом через `wails://`
   роняет WebKitGTK (сохранение логов в desktop — строковым телом на loopback).
