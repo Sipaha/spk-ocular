@@ -202,7 +202,11 @@ func (s *session) RunAction(ctx context.Context, run provider.ActionRun) (core.A
 func (s *session) write(ctx context.Context, def *kindDef, run provider.ActionRun, u *unstructured.Unstructured) (string, error) {
 	ctx, cancel := context.WithTimeout(ctx, getTimeout)
 	defer cancel()
-	res := s.dyn.Resource(def.gvr).Namespace(u.GetNamespace())
+	wr := s.writer
+	if wr == nil {
+		wr = dynWriter{s.dyn}
+	}
+	ns := u.GetNamespace()
 	name := fmt.Sprintf("%s %s", singular(def), u.GetName())
 	switch run.Action {
 	case actRestart.ID:
@@ -211,7 +215,7 @@ func (s *session) write(ctx context.Context, def *kindDef, run provider.ActionRu
 			// Nanoseconds: two restarts within a second are two rollouts.
 			"spec": map[string]any{"template": map[string]any{"metadata": map[string]any{"annotations": map[string]any{restartedAtKey: time.Now().Format(time.RFC3339Nano)}}}},
 		})
-		_, err := res.Patch(ctx, u.GetName(), types.MergePatchType, patch, metav1.PatchOptions{})
+		err := wr.patch(ctx, def.gvr, ns, u.GetName(), types.MergePatchType, patch, "")
 		return name + ": restart requested", err
 	case actScale.ID:
 		m := *run.Params.Count
@@ -221,11 +225,11 @@ func (s *session) write(ctx context.Context, def *kindDef, run provider.ActionRu
 			{"op": "test", "path": "/spec/replicas", "value": replicas(u.Object)},
 			{"op": "replace", "path": "/spec/replicas", "value": m},
 		})
-		_, err := res.Patch(ctx, u.GetName(), types.JSONPatchType, patch, metav1.PatchOptions{}, "scale")
+		err := wr.patch(ctx, def.gvr, ns, u.GetName(), types.JSONPatchType, patch, "scale")
 		return fmt.Sprintf("%s: scale %d → %d requested", name, replicas(u.Object), m), err
 	case actDelete.ID:
 		uid, rv, bg := u.GetUID(), u.GetResourceVersion(), metav1.DeletePropagationBackground
-		err := res.Delete(ctx, u.GetName(), metav1.DeleteOptions{Preconditions: &metav1.Preconditions{UID: &uid, ResourceVersion: &rv}, PropagationPolicy: &bg})
+		err := wr.delete(ctx, def.gvr, ns, u.GetName(), metav1.DeleteOptions{Preconditions: &metav1.Preconditions{UID: &uid, ResourceVersion: &rv}, PropagationPolicy: &bg})
 		return name + ": deletion requested", err
 	}
 	return "", &provider.Error{Class: provider.ClassUnsupported, Message: run.Action}
@@ -246,6 +250,9 @@ func (s *session) failedWrite(ctx context.Context, def *kindDef, run provider.Ac
 		return false, &provider.Error{Class: provider.ClassForbidden, Message: statusMessage(err)}
 	case apierrors.IsNotFound(err):
 		return false, &provider.Error{Class: provider.ClassGone, Message: fmt.Sprintf("%s %s no longer exists", singular(def), was.GetName())}
+	case ambiguous(err):
+		// A server or proxy failure answer: the write may have been applied.
+		return false, &provider.Error{Class: provider.ClassUnknown, Message: fmt.Sprintf("the result is not known (%s): check %s %s before repeating", statusMessage(err), singular(def), was.GetName())}
 	case !apierrors.IsConflict(err) && !apierrors.IsInvalid(err):
 		class, msg := classify(err)
 		return false, &provider.Error{Class: class, Message: msg}

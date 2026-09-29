@@ -55,15 +55,30 @@ func (p *Provider) Open(_ context.Context, target string) (provider.Session, err
 		return nil, &provider.Error{Class: provider.ClassInternal, Message: err.Error()}
 	}
 	execshim.Wrap(cfg, p.shimPath, execshim.DefaultTimeout)
-	dyn, err := dynamic.NewForConfig(cfg)
+	sess, err := sessionFor(cfg, target, kc.Name, kc.Hash)
 	if err != nil {
 		return nil, &provider.Error{Class: provider.ClassInternal, Message: err.Error()}
 	}
-	sess := newSession(target, kc.Hash, dyn, true)
-	sess.conn = newConn(cfg, dyn, target, kc.Name, kc.Hash)
 	sess.slots = p.logSlots
+	return sess, nil
+}
+
+// sessionFor builds a session talking to cfg: its dynamic client, the
+// connection snapshot, the log fetcher and the action writer.
+func sessionFor(cfg *rest.Config, target, title, hash string) (*session, error) {
+	dyn, err := dynamic.NewForConfig(cfg)
+	if err != nil {
+		return nil, err
+	}
+	sess := newSession(target, hash, dyn, true)
+	sess.conn = newConn(cfg, dyn, target, title, hash)
 	if sess.logs, err = httpLogFetcher(cfg); err != nil {
-		return nil, &provider.Error{Class: provider.ClassInternal, Message: err.Error()}
+		sess.Close()
+		return nil, err
+	}
+	if sess.writer, err = newRESTWriter(cfg); err != nil {
+		sess.Close()
+		return nil, err
 	}
 	return sess, nil
 }
@@ -116,6 +131,8 @@ type session struct {
 	// conn is the connection snapshot live resources (terminals, tunnels)
 	// keep; it outlives the session.
 	conn *conn
+	// writer sends actions' writes (nil: through dyn — fake clients in tests).
+	writer actionWriter
 	// beforeWrite (tests) runs between an action's read and its write.
 	beforeWrite func(action string, u *unstructured.Unstructured)
 }
