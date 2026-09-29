@@ -689,6 +689,7 @@ func TestConcurrentFailuresShareOnePodCheck(t *testing.T) {
 		return nil
 	}
 	var wg sync.WaitGroup
+	var returned atomic.Int32
 	for range 5 {
 		wg.Add(1)
 		go func() {
@@ -700,9 +701,13 @@ func TestConcurrentFailuresShareOnePodCheck(t *testing.T) {
 			defer st.Close()
 			_, _ = io.ReadAll(st)
 			assert.Error(t, st.Result())
+			returned.Add(1)
 		}()
 	}
-	require.Eventually(t, func() bool { return calls.Load() == 1 }, 5*time.Second, 10*time.Millisecond)
+	// One failure checks (and blocks); the others, failing meanwhile, leave
+	// it to that check and return at once.
+	require.Eventually(t, func() bool { return returned.Load() == 4 }, 5*time.Second, 10*time.Millisecond)
+	assert.EqualValues(t, 1, calls.Load())
 	close(release)
 	wg.Wait()
 	assert.EqualValues(t, 1, calls.Load())
