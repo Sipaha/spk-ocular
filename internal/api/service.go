@@ -13,6 +13,7 @@ import (
 	"github.com/spk/spk-ocular/internal/events"
 	"github.com/spk/spk-ocular/internal/provider"
 	"github.com/spk/spk-ocular/internal/store"
+	"github.com/spk/spk-ocular/internal/views"
 )
 
 const prefSelectedTarget = "selected_target"
@@ -30,6 +31,11 @@ type Service struct {
 	em    *events.Emitter
 	opts  Options
 
+	views *views.Manager
+
+	sessMu   sync.Mutex
+	sessions map[string]*sessionEntry // by ownerKey
+
 	cancel context.CancelFunc
 	wg     sync.WaitGroup
 }
@@ -37,7 +43,7 @@ type Service struct {
 var _ API = (*Service)(nil)
 
 func NewService(reg *provider.Registry, st *store.Store, em *events.Emitter, o Options) *Service {
-	return &Service{reg: reg, store: st, em: em, opts: o}
+	return &Service{reg: reg, store: st, em: em, opts: o, views: views.NewManager(em), sessions: map[string]*sessionEntry{}}
 }
 
 // Start begins watching local configuration of providers that support it.
@@ -53,6 +59,7 @@ func (s *Service) Start(ctx context.Context) {
 		go func() {
 			defer s.wg.Done()
 			err := w.Watch(ctx, func() {
+				s.revalidateSessions(ctx, p.ID())
 				s.em.Emit(events.Event{Type: EventTargetsChanged, Key: p.ID(), Payload: map[string]any{"provider": p.ID()}})
 			})
 			if err != nil {
@@ -62,12 +69,18 @@ func (s *Service) Start(ctx context.Context) {
 	}
 }
 
-// Close stops the watchers and waits for them.
+// Close stops the watchers, views and sessions.
 func (s *Service) Close() {
 	if s.cancel != nil {
 		s.cancel()
 	}
 	s.wg.Wait()
+	s.views.CloseAll()
+	s.sessMu.Lock()
+	for key := range s.sessions {
+		s.closeSessionLocked(key)
+	}
+	s.sessMu.Unlock()
 }
 
 func (s *Service) AppInfo(context.Context) (AppInfo, error) {
@@ -124,6 +137,7 @@ func (s *Service) SelectTarget(ctx context.Context, providerID, id string) error
 	if err := s.store.SetUIPref(ctx, prefSelectedTarget, string(b)); err != nil {
 		return coded(CodeInternal, err)
 	}
+	s.closeOtherSessions(ownerKey(providerID, id))
 	return nil
 }
 

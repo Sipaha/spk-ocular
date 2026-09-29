@@ -35,7 +35,8 @@ func newCore(ctx context.Context, mode string) (*appCore, error) {
 	if err != nil {
 		return nil, fmt.Errorf("open db: %w", err)
 	}
-	reg, err := provider.NewRegistry(kubernetes.New())
+	self, _ := os.Executable() // runs kubeconfig exec plugins with a timeout (internal/execshim)
+	reg, err := provider.NewRegistry(kubernetes.New().WithExecShim(self))
 	if err != nil {
 		_ = st.Close()
 		return nil, err

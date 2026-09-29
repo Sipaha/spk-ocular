@@ -93,6 +93,35 @@ func (h *HTTP) routes() {
 	h.mux.HandleFunc("POST /api/SelectTarget", handle(func(ctx context.Context, r *api.TargetRef) (any, error) {
 		return nil, h.api.SelectTarget(ctx, r.Provider, r.ID)
 	}))
+	type targetReq struct {
+		Provider string `json:"provider"`
+		Target   string `json:"target"`
+	}
+	h.mux.HandleFunc("POST /api/ListKinds", handle(func(ctx context.Context, r *targetReq) (any, error) {
+		return h.api.ListKinds(ctx, r.Provider, r.Target)
+	}))
+	h.mux.HandleFunc("POST /api/ListScopes", handle(func(ctx context.Context, r *targetReq) (any, error) {
+		return h.api.ListScopes(ctx, r.Provider, r.Target)
+	}))
+	h.mux.HandleFunc("POST /api/OpenView", handle(func(ctx context.Context, r *api.OpenViewRequest) (any, error) {
+		return h.api.OpenView(ctx, *r)
+	}))
+	h.mux.HandleFunc("POST /api/GetRows", handle(func(ctx context.Context, r *struct {
+		ViewID string `json:"viewId"`
+		Since  uint64 `json:"since"`
+	}) (any, error) {
+		return h.api.GetRows(ctx, r.ViewID, r.Since)
+	}))
+	h.mux.HandleFunc("POST /api/CloseView", handle(func(ctx context.Context, r *struct {
+		ViewID string `json:"viewId"`
+	}) (any, error) {
+		return nil, h.api.CloseView(ctx, r.ViewID)
+	}))
+	h.mux.HandleFunc("POST /api/TouchViews", handle(func(ctx context.Context, r *struct {
+		ViewIDs []string `json:"viewIds"`
+	}) (any, error) {
+		return h.api.TouchViews(ctx, r.ViewIDs)
+	}))
 	h.mux.HandleFunc("GET /api/events", h.serveEvents)
 }
 

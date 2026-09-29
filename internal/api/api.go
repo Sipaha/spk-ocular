@@ -5,17 +5,54 @@ package api
 
 import (
 	"context"
+	"errors"
 
 	"github.com/spk/spk-ocular/internal/core"
 	"github.com/spk/spk-ocular/internal/events"
+	"github.com/spk/spk-ocular/internal/provider"
+	"github.com/spk/spk-ocular/internal/views"
 )
 
 type API interface {
 	AppInfo(ctx context.Context) (AppInfo, error)
 	// ListTargets re-reads local configuration (kubeconfig, ...): no network.
 	ListTargets(ctx context.Context) (TargetsView, error)
-	// SelectTarget remembers the user's choice across restarts.
+	// SelectTarget remembers the user's choice across restarts and closes
+	// the sessions of other targets (one active context).
 	SelectTarget(ctx context.Context, provider, id string) error
+
+	// ListKinds: what the target's session can show.
+	ListKinds(ctx context.Context, provider, target string) ([]core.KindDescriptor, error)
+	// ListScopes lists namespaces / projects. A permission error is not a
+	// failure of the call: ScopesView.Error says so and the UI lets the user
+	// type a scope.
+	ListScopes(ctx context.Context, provider, target string) (ScopesView, error)
+	// OpenView starts a live table; rows are pulled with GetRows.
+	OpenView(ctx context.Context, req OpenViewRequest) (ViewInfo, error)
+	// GetRows returns changes after cursor since (0: a full snapshot). A
+	// closed/unknown view is CodeGone: reopen it.
+	GetRows(ctx context.Context, viewID string, since uint64) (views.Page, error)
+	CloseView(ctx context.Context, viewID string) error
+	// TouchViews renews the leases of the UI's open views and returns the
+	// ids that are gone.
+	TouchViews(ctx context.Context, viewIDs []string) ([]string, error)
+}
+
+type OpenViewRequest struct {
+	Provider string         `json:"provider"`
+	Target   string         `json:"target"`
+	Query    provider.Query `json:"query"`
+}
+
+type ViewInfo struct {
+	ViewID string              `json:"viewId"`
+	Kind   core.KindDescriptor `json:"kind"`
+}
+
+type ScopesView struct {
+	Scopes []core.Scope `json:"scopes"`
+	// Error is set when scopes cannot be listed (code + detail).
+	Error *CodedError `json:"error,omitempty"`
 }
 
 type AppInfo struct {
@@ -54,13 +91,19 @@ const (
 	EventTargetsChanged = "targets_changed"
 	// EventResync (events.TypeResync): the UI fell behind; reload all state.
 	EventResync = events.TypeResync
+	// EventViewChanged: {viewId, version} or {viewId, gone: true}.
+	EventViewChanged = views.EventViewChanged
 )
 
 // Error codes (CodedError.Code) — stable, the UI switches on them.
+// Provider error classes (provider.ErrorClass) travel as codes unchanged:
+// forbidden, unauthorized, unavailable, gone, not_found, unsupported, ...
 const (
-	CodeInternal   = "internal"
-	CodeBadRequest = "bad_request"
-	CodeNotFound   = "not_found"
+	CodeInternal    = "internal"
+	CodeBadRequest  = "bad_request"
+	CodeNotFound    = "not_found"
+	CodeGone        = "gone"
+	CodeUnsupported = "unsupported"
 )
 
 // CodedError is what API methods return: a stable code for the UI plus a
@@ -75,6 +118,19 @@ func (e *CodedError) Error() string {
 		return e.Code
 	}
 	return e.Code + ": " + e.Detail
+}
+
+// fromProvider maps a provider error to a coded one (class = code).
+func fromProvider(err error) *CodedError {
+	var pe *provider.Error
+	if errors.As(err, &pe) {
+		return &CodedError{Code: string(pe.Class), Detail: pe.Message}
+	}
+	var ce *CodedError
+	if errors.As(err, &ce) {
+		return ce
+	}
+	return coded(CodeInternal, err)
 }
 
 func coded(code string, err error) *CodedError {
