@@ -5,7 +5,7 @@
 Go + Wails v3 + React. Спецификация: `docs/specs/2026-09-29-spk-ocular-design.md`.
 Планы: `docs/plans/`. Бэклог: `docs/backlog.md`.
 
-Статус: P0 (каркас) готов — `docs/plans/2026-09-29-p0-skeleton.md`. Следующий — P1.
+Статус: P0 (каркас) и P1 (ресурсы, детали, метрики) готовы — `docs/plans/`. Следующий — P2 (логи).
 
 ## Сборка и тесты
 
@@ -20,6 +20,14 @@ Go + Wails v3 + React. Спецификация: `docs/specs/2026-09-29-spk-ocul
 - `make lint` — go vet и golangci-lint (с тегами desktop и без) + eslint + tsc.
 - **`make check`** — гейт перед каждым коммитом: lint, все тесты, обе сборки.
 - `make pss PID=<pid>` — Private_Dirty/PSS процесса и его WebKit-детей (бюджет ~150 МБ Private_Dirty).
+- Реальный кластер (kind в Docker; `KIND=<путь>`, если kind не в PATH): `make kind-up` (kubeconfig —
+  `build/kind-ocular-dev.kubeconfig`, никогда не в `~/.kube`), `make test-kind` (Go-тесты `*Kind*`),
+  `make e2e-kind` (Playwright), `make kind-down`. Обе цели **падают**, если кластера нет, и сами
+  сидируют фикстуры (`scripts/kind-seed.sh`, `kind-rbac.sh`, `kind-metrics.sh`). Нагрузка —
+  `scripts/kind-load.sh <kubeconfig> [up|down]`, замер — `node tests/e2e/measure-kind.mjs <bin>
+  <kind kubeconfig> <viewer kubeconfig> <scratch>` (печатает тайминги, счётчики `/api/_test/stats`
+  и Private_Dirty). Синтетика памяти кэша: `OCULAR_SYNTH=1 go test -run Synthetic -v ./internal/providers/kubernetes/`.
+- `SPK_OCULAR_KLOG=1` — вернуть логи client-go (klog) в stderr для отладки.
 - `E2E_BIN=<путь> E2E_PORT=<порт>` — e2e против другой browser-сборки.
 - Проверка desktop без экрана пользователя: `xvfb-run -a -s "-screen 0 1400x900x24" <скрипт>`,
   окно ищется `xwininfo -root -tree | grep '"SPK Ocular"'`, снимок — `import -window root`.
@@ -30,11 +38,18 @@ Go + Wails v3 + React. Спецификация: `docs/specs/2026-09-29-spk-ocul
   `/api/events`, bearer из `<meta name="spk-ocular-api-token">`), `transport/wails.go` (бинды,
   FQN `github.com/spk/spk-ocular/internal/api/transport.API.<Method>`). Новый метод API = метод в
   интерфейсе + `Service` + маршрут в `http.go` + метод в `wails.go` + `web/src/api/client.ts`.
-- `internal/events` — неблокирующий `Emitter` + `Coalescer` (порт spk-mm-client).
+- `internal/events` — `Emitter` (почтовый ящик «последнее событие на (type, key)» у каждого
+  подписчика, переполнение → `resync`) + `Coalescer`.
+- `internal/views` — provider-агностичный hot-layer видов: `View` (строки, версии, надгробия,
+  `Since(cursor)`), `Manager` (непереиспользуемые id, `view_changed` через Coalescer, аренды 60 с,
+  `gone` при закрытии). Клиентская половина протокола — `web/src/views/viewSync.ts`.
 - `internal/core` — provider-агностичные типы; `internal/provider` — `Provider`, опциональные
   интерфейсы (`TargetWatcher`), `Registry`.
 - `internal/providers/kubernetes` — contexts из kubeconfig (`kubeconfig.go`), inotify-watch
-  (`watch.go`).
+  (`watch.go`), сессия (`session.go`), кэши informers (`cache.go`, `slim.go`, `listwatch.go`),
+  вид поверх кэша (`view_watch.go`), kinds (`kinds.go`, `kind_*.go`), детали и связи
+  (`resource.go`), метрики (`metrics.go`).
+- `internal/execshim` — shim для exec-плагинов kubeconfig (таймаут, смерть вместе с приложением).
 - `internal/store` — SQLite, миграции `migrations/NNNN_*.sql`, `ui_prefs`, `target_state`.
 - `internal/desktop` — Wails-окно, D-Bus probe, GPU policy. `cmd/spk-ocular` — cobra, режимы.
 - `web/` — React/Vite/Tailwind/zustand; `tests/e2e/` — Playwright.
@@ -57,13 +72,31 @@ Go + Wails v3 + React. Спецификация: `docs/specs/2026-09-29-spk-ocul
   `TestExtraContextIDIsStableWhenPrimaryGainsSameName`.
 - Запомненный выбор target не стирается, пока target временно пропал из kubeconfig: вернётся —
   выбор тоже. — `TestSelectionIsRememberedAndHiddenWhileTargetIsAbsent`, e2e.
+- Строка вида — ID = UID объекта: одноимённая замена = удаление + добавление; поздний delete
+  старого UID не трогает новую строку. — `TestReplacementWithSameNameAndLateDelete`,
+  `TestReplacementUnderSameNameDropsOldRow`.
+- Ready вида — только после `HasSynced` регистрации обработчика (все начальные объекты дошли до
+  вида), пустой список тоже; транспорт (list/watch) — отдельно: stale/error с классом. Запрет
+  никогда не выглядит пустой таблицей. — `TestWatchDeliversSnapshotThenReadyThenChanges`,
+  `TestEmptyListStillBecomesReady`, `TestForbiddenIsAnErrorNotAnEmptyTable`, kind-тесты RBAC.
+- Значения Secret/ConfigMap не попадают в списочные кэши (только имена ключей); в YAML
+  деталей значения Secret — `<N bytes>`. — `TestConfigMapsAndSecretsKeepOnlyKeyNames`,
+  `TestGetMasksSecretValues`, e2e «secrets never show their values».
+- Все вызовы к кластеру — с контекстом и таймаутом; `rest.Config.Timeout` не ставить (рвёт watch);
+  exec-плагины — только через `execshim.Wrap`. — `TestClientGoRequestWithHangingPluginFails`.
+- Связи: владение — по UID контроллера (не только labels); Service без selector не «выбирает»
+  все pods; ошибка поиска связей не роняет ресурс. — `TestDeploymentRelationsFollowControllerUID`,
+  `TestSelectorlessServiceSelectsNothing`, `TestRelationErrorsDoNotFailTheResource`.
+- Новый kind: `kindDef` (колонки, `keep`-whitelist, `project` c health), регистрация в
+  `allKinds`, строка таблицы-теста в `kinds_test.go`, строка в `kindOf` (resource.go);
+  kind-тест `TestKindEveryKindBecomesReady` проверит его на кластере.
 - Browser-режим отвечает только на loopback-`Host` (защита от DNS rebinding: `/` отдаёт токен). —
   `TestNonLoopbackHostIsRejected`.
 - `/api/_test/*` — только с `--test-api` и токеном. — `TestTestAPIOnlyWithFlagAndToken`.
 - Destructive-действия — только с подтверждением, в котором виден context/namespace/объект.
 - Версии `github.com/wailsapp/wails/v3` и `@wailsio/runtime` совпадают (сейчас `3.0.0-beta.26`).
 - `go build ./...` без тега `wails` обязан проходить: desktop-код за тегом.
-- Стартовый JS-чанк < 300 КБ gz, xterm/CodeMirror — только ленивые чанки. — `web/scripts/check-bundle.mjs`
+- Стартовый JS-чанк < 300 КБ gz (сейчас ~94 КБ), xterm/CodeMirror — только ленивые чанки. — `web/scripts/check-bundle.mjs`
   (часть `pnpm build`).
 - Wails `LogLevel` — Warn: Info логирует каждый asset-запрос, Debug — результаты биндингов.
 - Горячие клавиши — по `KeyboardEvent.code` (`web/src/keyboard.ts`), иначе не работают в русской
@@ -79,6 +112,25 @@ Go + Wails v3 + React. Спецификация: `docs/specs/2026-09-29-spk-ocul
 - **Playwright выполняет `playwright.config.ts` в раннере И в каждом воркере**: `mkdtemp` в конфиге
   без защиты даёт воркерам другой каталог, чем у webServer. Каталог создаётся один раз и передаётся
   через `process.env.E2E_ROOT` (воркеры наследуют env).
+- **client-go v0.37: WatchList включён по умолчанию** — начальное состояние приходит watch-потоком
+  (`sendInitialEvents`), а не List; поэтому «успешный List» не может быть признаком ready, а обёртка
+  `ListerWatcher` обязана сохранять `ListOptions` и сообщать `IsWatchListSemanticsUnSupported`
+  (fake-клиенты в тестах — `watchList=false`).
+- **Exec-плагин kubeconfig без контекста** (client-go `exec.go`): зависший `yc`/`kubelogin` вешает
+  все запросы кластера и остаётся сиротой — только через shim (`docs/spikes/2026-09-29-exec-plugin-hang.md`).
+- **`metav1.Time` — точность до секунды**: время, прошедшее через ObjectMeta (slim-кэш), теряет доли
+  секунды; тесты на пороги времени держат запас > 1 с.
+- **Trimmed Unstructured дорог по памяти** из-за накладных расходов `map[string]any` (~6 КБ/pod
+  после фильтра) — в кэше `slimObject` (~1,3 КБ); интернирование строк почти не помогает.
+- **dynamic fake**: не соблюдает field selectors и не сопоставляет PodMetrics с ресурсом `pods`
+  группы metrics.k8s.io — такие вещи проверять на kind или отдавать через reactor.
+- **klog client-go** пишет каждую неудачную попытку watch в stderr — заглушен (`SPK_OCULAR_KLOG=1`).
+- **HTTPS_PROXY в окружении** уводит запросы к фикстурным (несуществующим) кластерам в прокси —
+  e2e сбрасывает прокси-переменные в env webServer.
+- **Порты dev-серверов заняты чужими процессами** (другие сессии/worktree): перед запуском проверять
+  `ss -ltn "sport = :PORT"` и брать свободный, а не убивать чужой процесс.
+- **jsdom без раскладки**: `getBoundingClientRect` = 0 → виртуальная таблица пустая; в
+  `web/vitest.setup.ts` элементам задан размер экрана.
 - **Язык UI**: gettext-порядок `LANGUAGE` > `LC_ALL` > `LC_MESSAGES` > `LANG`; у пользователя
   `LANGUAGE=en_US`, поэтому `LANG=ru_RU…` один не даёт русский UI. `LC_ALL=C` — английский.
 - **jsdom** не знает `scrollIntoView` — заглушка в `web/vitest.setup.ts`; `@wailsio/runtime` там же

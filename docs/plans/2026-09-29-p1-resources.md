@@ -102,91 +102,91 @@ scripts/kind-seed.sh    тестовые ресурсы: здоровые, crash
 ## Задачи
 
 ### Task 1: core-типы и контракт Session
-- [ ] `core`: `Ref`, `Health{State, Reason, Message, Issues}`, `Cell` (типизированное значение:
+- [x] `core`: `Ref`, `Health{State, Reason, Message, Issues}`, `Cell` (типизированное значение:
       text/number/age/ratio/status + null), `Column`, `KindDescriptor{ID, Title, Group, Columns,
       Scoped}`, `ScopeSel{Mode, Name}`, `Scope`, `Relation{Type, Ref}`, `Resource`.
-- [ ] `provider`: `Session`, `Query{Kind, Scope, FieldSelector}`, `Delta` (Snapshot/Upsert/Delete/
+- [x] `provider`: `Session`, `Query{Kind, Scope, FieldSelector}`, `Delta` (Snapshot/Upsert/Delete/
       Status/Closed), `ViewStatus{State, Class, Message}`, классы ошибок; `Provider.Open`.
-- [ ] Тесты: JSON-формы типов (стабильны для UI), валидация `ScopeSel`.
+- [x] Тесты: JSON-формы типов (стабильны для UI), валидация `ScopeSel`.
 
 ### Task 2: движок видов `internal/views`
-- [ ] `View`: строки (неизменяемые снимки), `version`, журнал «id → версия изменения»,
+- [x] `View`: строки (неизменяемые снимки), `version`, журнал «id → версия изменения»,
       надгробия, `minRetained`, статус; `Apply(delta)`; `Since(v)` → `{reset, upserts, deleted,
       status, version}` атомарно; ограничение журнала (по числу), UID-замена = delete+add.
-- [ ] `Manager`: `Open(session, query)` → непрозрачный id (эпоха + счётчик), горутина чтения
+- [x] `Manager`: `Open(session, query)` → непрозрачный id (эпоха + счётчик), горутина чтения
       `Delta`, `Coalescer` 100 мс → `view_changed{viewId, version}` (Key = viewId), `Close`,
       закрытие всех видов сессии.
-- [ ] Тесты: since=0 → reset; инвалидация во время чтения; курсор вне диапазона → reset;
+- [x] Тесты: since=0 → reset; инвалидация во время чтения; курсор вне диапазона → reset;
       пустой reset; delete/recreate одного имени; статус без изменения строк двигает версию;
       старый viewId после Close → `gone`; гонки (`-race`) с конкурентными Apply/Since.
 
 ### Task 3: Kubernetes-сессия и кэши
-- [ ] `session.go`: rest.Config через `clientcmd` (loading rules = `kubeContext.Files`, override
+- [x] `session.go`: rest.Config через `clientcmd` (loading rules = `kubeContext.Files`, override
       context), QPS/Burst, таймауты; хеш разрешённой конфигурации; dynamic + discovery клиенты.
-- [ ] `listwatch.go` + `cache.go`: ключ (GVR, namespace, field selector); аренды; grace 60 с;
+- [x] `listwatch.go` + `cache.go`: ключ (GVR, namespace, field selector); аренды; grace 60 с;
       LRU ≤ 8 неактивных; resync 0; transform; статус из обёртки ListerWatcher.
-- [ ] Тесты на fake dynamic client: аренда/освобождение/grace (фейковые часы), LRU-вытеснение,
+- [x] Тесты на fake dynamic client: аренда/освобождение/grace (фейковые часы), LRU-вытеснение,
       повторное открытие = новый informer, статус forbidden/stale/ready.
 
 ### Task 4: kinds, проекции, health
-- [ ] 10 kinds + namespaces (scopes) + replicasets (внутренний, для связей): GVR, колонки,
+- [x] 10 kinds + namespaces (scopes) + replicasets (внутренний, для связей): GVR, колонки,
       whitelist transform, проекция в `Row`, health по правилам спецификации.
-- [ ] Планировщик дедлайнов (Pending > 5 мин → Warning; Ready=false на старте — Progressing
+- [x] Планировщик дедлайнов (Pending > 5 мин → Warning; Ready=false на старте — Progressing
       с grace), фейковые часы.
-- [ ] Табличные тесты на фикстурах (YAML объектов): crashloop, imagepull, OOMKilled (lastState),
+- [x] Табличные тесты на фикстурах (YAML объектов): crashloop, imagepull, OOMKilled (lastState),
       pending unschedulable, terminating, succeeded job-pod, deployment rollout/desired=0,
       observedGeneration, node Ready=Unknown, service LB без адреса, secret без значений в кэше.
 
 ### Task 5: API и жизненный цикл сессий
-- [ ] Методы: `ListKinds(target)`, `ListScopes(target)` (+ статус forbidden), `OpenView(target,
+- [x] Методы: `ListKinds(target)`, `ListScopes(target)` (+ статус forbidden), `OpenView(target,
       kind, scope, fieldSelector)`, `GetRows(viewId, since)`, `CloseView(viewId)`,
       `GetResource(target, ref)`, `GetMetrics(target, kind, scope)`. HTTP + Wails + client.ts.
-- [ ] Сессии: создаются по первому запросу target-а; при `targets_changed` сравнивается хеш —
+- [x] Сессии: создаются по первому запросу target-а; при `targets_changed` сравнивается хеш —
       изменился/исчез → сессия и её виды закрываются (последний `view_changed{gone}`); выбор
       другого target-а закрывает остальные сессии; `TouchViews(ids)` продлевает аренды и
       возвращает исчезнувшие.
-- [ ] Счётчики для замеров и утечек (`/api/_test/stats`): активные виды, кэши, аренды,
+- [x] Счётчики для замеров и утечек (`/api/_test/stats`): активные виды, кэши, аренды,
       watch-запросы, горутины.
-- [ ] Тесты: сервис с фейковым провайдером; транспорт — маршруты и коды ошибок.
+- [x] Тесты: сервис с фейковым провайдером; транспорт — маршруты и коды ошибок.
 
 ### Task 6: детали, YAML, связи, метрики
-- [ ] `GetResource`: полный объект (проверка UID), YAML без `managedFields` и last-applied,
+- [x] `GetResource`: полный объект (проверка UID), YAML без `managedFields` и last-applied,
       маскирование Secret; факты; связи со своим статусом — запрет/медленность связей не
       роняет ресурс: owners вверх, pods вниз (Deployment → по UID контроллера через RS, не
       только по labels), svc → pods по selector (без selector — никаких «всех pods»),
       ingress → services, pod → node; ReplicaSet открывается в drawer, хотя в навигации нет.
-- [ ] Namespaces — наблюдаемый список (вид kind namespaces), а не разовый запрос: новые
+- [x] Namespaces — наблюдаемый список (вид kind namespaces), а не разовый запрос: новые
       появляются сами; запрет — ручной ввод.
-- [ ] `metrics.go`: наличие API через discovery; pods/nodes usage; кэш 10 с; нет API → пусто
+- [x] `metrics.go`: наличие API через discovery; pods/nodes usage; кэш 10 с; нет API → пусто
       без ошибки.
-- [ ] Тесты на fake клиентах.
+- [x] Тесты на fake клиентах.
 
 ### Task 7: Web
-- [ ] `useView` — курсорный протокол (один запрос на вид, повтор пока применённая < объявленной,
+- [x] `useView` — курсорный протокол (один запрос на вид, повтор пока применённая < объявленной,
       ограниченные повторы при ошибке, игнор старых ответов, `resync` → reset).
-- [ ] `KindNav` (группы), `ScopePicker` (все/один; ручной ввод, если список запрещён),
+- [x] `KindNav` (группы), `ScopePicker` (все/один; ручной ввод, если список запрещён),
       `ResourceTable` (TanStack Virtual, сортировка, фильтр, клавиатура ↑↓/Enter), `StatusCell`,
       возраст тикает на клиенте, CPU/RAM колонки.
-- [ ] `ResourceDrawer`: факты, YAML (ленивый CodeMirror 6), Events объекта (вид), связи с
+- [x] `ResourceDrawer`: факты, YAML (ленивый CodeMirror 6), Events объекта (вид), связи с
       переходом; Esc закрывает.
-- [ ] Состояние по target-у в `target_state` (последний kind и scope).
-- [ ] vitest: `useView` (все сценарии протокола), таблица, drawer; бандл-бюджет.
+- [x] Состояние по target-у в `target_state` (последний kind и scope).
+- [x] vitest: `useView` (все сценарии протокола), таблица, drawer; бандл-бюджет.
 
 ### Task 8: e2e и замеры на kind
-- [ ] `make e2e-kind` — отдельная цель, **падает**, если кластера нет (не «зелёная из-за
+- [x] `make e2e-kind` — отдельная цель, **падает**, если кластера нет (не «зелёная из-за
       пропуска»); `make check` остаётся герметичным. Все команды — с явным сгенерированным
       kubeconfig и context; версии kind/node/образов зафиксированы.
-- [ ] `scripts/kind-seed.sh`: namespaces, deployment, statefulset, daemonset, service, ingress,
+- [x] `scripts/kind-seed.sh`: namespaces, deployment, statefulset, daemonset, service, ingress,
       configmap, secret, crashloop, imagepull, pending (невозможный nodeSelector);
       metrics-server (`--kubelet-insecure-tls` только в фикстуре) с проверкой реального сэмпла;
       сценарий без метрик.
-- [ ] RBAC: ServiceAccount с Role только в одном namespace (свежий короткий токен на прогон):
+- [x] RBAC: ServiceAccount с Role только в одном namespace (свежий короткий токен на прогон):
       проверить `can-i` — namespaces/nodes/все namespaces запрещены, pods в своём — можно;
       варианты «list можно, watch нельзя», «list/watch можно, get нельзя», отзыв прав при
       открытой таблице; events и metrics — разрешены и запрещены.
-- [ ] Playwright (`tests/e2e/kind.spec.ts`): таблицы и health, живое обновление (scale),
+- [x] Playwright (`tests/e2e/kind.spec.ts`): таблицы и health, живое обновление (scale),
       детали/YAML/events/связи, 403 → понятная ошибка, ручной namespace, метрики.
-- [ ] Нагрузка (отдельная фикстура): 5k ConfigMaps разного размера (малые/крупные — проверка
+- [x] Нагрузка (отдельная фикстура): 5k ConfigMaps разного размера (малые/крупные — проверка
       whitelist) + 3k pending pods с неиспользуемым `schedulerName` (без нагрузки на
       планировщик); синтетические 10k «Running» pods через локальный fake-сервер list/watch
       (помечено: синтетика). Замеры: холодный/тёплый первый список, пик и установившийся
@@ -194,7 +194,7 @@ scripts/kind-seed.sh    тестовые ресурсы: здоровые, crash
       all/ns, relist после 410, churn с медленным UI, очистка после смены context; счётчики
       видов/кэшей/горутин. Бюджет LRU (8 неактивных) — целевая настройка по замерам, не
       обещание; итоги — сюда и в спецификацию.
-- [ ] Desktop под Xvfb: скриншот таблицы и drawer.
+- [x] Desktop под Xvfb: скриншот таблицы и drawer.
 
 ## Review Focus
 
@@ -208,3 +208,26 @@ scripts/kind-seed.sh    тестовые ресурсы: здоровые, crash
    старые ответы не перетирают новый вид.
 5. Удаление и пересоздание объекта с тем же именем (pod контроллера) — строка обновляется,
    drawer не показывает чужой объект (проверка UID).
+
+## Итоги выполнения (2026-09-29)
+
+Всё из задач 1–8 сделано; `make check`, `make test-kind`, `make e2e-kind` зелёные.
+
+- **Отличия от плана.**
+  - Провайдер отдаёт изменения через синхронный неблокирующий `Sink`, а не канал (обработчики
+    informer-а не должны блокироваться).
+  - Exec-плагины идут через shim (`internal/execshim`) — спайк подтвердил зависание и сироту.
+  - Кэши хранят `slimObject` (типизированный `ObjectMeta` + JSON) — профилирование показало
+    4,7× выигрыш против trimmed Unstructured (см. спецификацию, решение 2).
+  - Сессии без видов закрываются через 60 с; выбор target-а в UI оптимистичный — замер нашёл
+    «оживление» закрытой сессии старой страницей.
+  - Список namespaces — живой вид (`ScopesView.Kind`), а не разовый запрос.
+  - В drawer связи и события объекта; ReplicaSets скрыты из навигации, но открываются.
+- **Проверено на kind** (Go и Playwright): 12 kinds доходят до ready; события объекта
+  фильтруются на сервере; RBAC: namespaces запрещены → ошибка forbidden и ручной ввод, свой
+  namespace работает, «все namespaces» — объяснённый запрет, list без watch → stale+forbidden
+  с данными; метрики pods/nodes; живое масштабирование; secrets замаскированы.
+- **Не сделано / в бэклог:** отзыв прав при открытой таблице не проверялся (существующий
+  watch живёт до таймаута apiserver — ограничение Kubernetes); синтетика 10k Running pods —
+  на уровне проекции/памяти, не через сервер list/watch.
+- **Грабли** — в AGENTS.md «Things that bite».

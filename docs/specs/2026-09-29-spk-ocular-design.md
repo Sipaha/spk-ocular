@@ -1,7 +1,7 @@
 # SPK Ocular — лёгкий локальный просмотрщик инфраструктуры
 
-Дата: 2026-09-29. Статус: план утверждён пользователем 2026-09-29; P0 (каркас) реализован и
-проверен 2026-09-29 (`docs/plans/2026-09-29-p0-skeleton.md`), следующий — P1.
+Дата: 2026-09-29. Статус: план утверждён пользователем 2026-09-29; P0 (каркас) и P1 (ресурсы,
+детали, метрики) реализованы и проверены на kind 2026-09-29 (`docs/plans/`); следующий — P2 (логи).
 Решения приняты пользователем в переписке; документ фиксирует итог, а не варианты.
 
 ## Зачем
@@ -281,15 +281,17 @@ relist); медленные inspect — в ограниченном пуле с 
    Resync — 0; обработчики только дешёвая неизменяемая проекция, без сети и блокирующих
    отправок. Более широкий уже открытый кэш переиспользуется; ради экономии не заводится
    watch на весь кластер для пользователя с правами на один namespace.
-2. **Trimmed Unstructured.** Dynamic client + transform с белым списком полей на kind:
+2. **Компактные списочные кэши.** Dynamic client + transform с белым списком полей на kind:
    идентичность, UID, resourceVersion, namespace, labels, ownerReferences и то, что нужно
    health/связям/колонкам; вырезаются `managedFields`, last-applied, крупный spec; значения
    Secret/ConfigMap в списочных кэшах не хранятся. Transform идемпотентен, обрабатывает
-   `DeletedFinalStateUnknown`; hot-layer не мутирует объекты кэша. Metadata-only informer —
-   только для kind без status. Полный объект — отдельный `GET` с проверкой UID. Другое
-   представление — только если профилирование покажет необходимость. Замеры P1: пик
-   начального LIST на 10k pods, удерживаемая куча, повторная навигация, пик relist,
-   высокий churn с медленным UI.
+   `DeletedFinalStateUnknown`; hot-layer не мутирует объекты кэша. Полный объект — отдельный
+   `GET` с проверкой UID. Профилирование P1 показало, что у trimmed Unstructured основная
+   цена — накладные расходы `map[string]any`, поэтому в кэше лежит `slimObject`: типизированный
+   `ObjectMeta` (ключи, владельцы, удаление) + JSON отфильтрованного тела; проекция
+   разворачивает его один раз на изменение. Синтетика (10k «реальных» pods): без фильтра
+   25,3 КБ/pod, trimmed Unstructured 6,1 КБ, slim 1,3 КБ; развернуть и спроецировать все
+   10k — ~110 мс.
 3. **Health считает backend (provider).** UI не знает, что такое CrashLoopBackOff. Правила:
    Succeeded — успешное завершение, не «не готов»; Ready=false на старте — Progressing с
    grace; PodScheduled=False/Unschedulable, ошибки образа/конфигурации — конкретные
@@ -311,7 +313,11 @@ relist); медленные inspect — в ограниченном пуле с 
    показывает покрытие; эти аренды входят в тот же бюджет. Связи (Deployment → ReplicaSet →
    Pod) тоже берут нужные внутренние наблюдения (ReplicaSet), а не зависят от того, какие
    таблицы пользователь открывал.
-7. **Один активный context.** Переключение — старые сессии и кэши освобождаются.
+7. **Один активный context.** Выбор target-а закрывает сессии остальных; сессия без видов
+   закрывается через 60 с (страница ушла, вид «осиротел»); UI переключает выбор сразу,
+   не дожидаясь ответа, — иначе старая страница успевала переоткрыть вид на закрытой
+   сессии (найдено замером). Список scopes — живой вид kind, названного провайдером
+   (`ScopesView.Kind`, k8s: namespaces).
 8. **Действия.** restart — patch аннотации `kubectl.kubernetes.io/restartedAt`; scale — через
    subresource `scale`; delete — подтверждение с явным context/namespace/именем.
 9. **Никаких фоновых опросов в ядре.** Фича, требующая постоянного опроса кластера, в ядро не
@@ -322,8 +328,8 @@ relist); медленные inspect — в ограниченном пуле с 
 `~/.spk/ocular/ocular.db`, `modernc.org/sqlite`, WAL, одно соединение, встроенные миграции
 `internal/store/migrations/NNNN_*.sql`, многошаговые записи только через `Store.WithTx`
 (паттерн spk-mm-client). Таблицы: `ui_prefs` (выбранный target — `selected_target`) и
-`target_state` (provider, target, key → JSON: последний scope и вид, ширины/порядок колонок —
-с P1). Недавние переходы для палитры — P5.
+`target_state` (provider, target, key → JSON: последний `kind` и `scope` — с P1; ширины и
+порядок колонок — позже). Недавние переходы для палитры — P5.
 Секреты в БД не хранятся — credentials остаются в kubeconfig.
 
 ## Лёгкость — как не превратиться в Lens
@@ -355,7 +361,10 @@ relist); медленные inspect — в ограниченном пуле с 
 
 - Go: fake/dynamic fake client-go для unit; проекции, health и детекторы Problems — таблицы
   фикстур. `go test -race`.
-- Интеграция: реальный кластер в kind (Docker есть); бинарь kind — в `.agents/tools` solution.
+- Интеграция: реальный кластер в kind (`make kind-up`, `make test-kind`, `make e2e-kind`);
+  фикстуры `scripts/kind-seed.sh` (функциональные), `kind-rbac.sh` (пользователи с правами на
+  один namespace и без watch), `kind-metrics.sh` (metrics-server), `kind-load.sh` (нагрузка);
+  замер — `tests/e2e/measure-kind.mjs`. Цели kind падают без кластера, `make check` герметичен.
 - e2e: Playwright против `--browser` с изолированным `SPK_OCULAR_HOME` и `--test-api`.
 - Реальный кластер через outwall — только с разрешения пользователя и только чтение.
 - Единый гейт `make check`: gofmt, vet, golangci-lint, `go test -race`, eslint, tsc, vitest,
@@ -367,7 +376,15 @@ relist); медленные inspect — в ограниченном пуле с 
   список contexts из kubeconfig с живым обновлением, browser-режим, `make check`. Замер
   (desktop, Xvfb, 3 contexts): Private_Dirty 96 МБ (Go 55 + WebProcess 34 + NetworkProcess 7),
   окно ~0,2 с; бинари 14 МБ (browser) / 22 МБ (desktop); стартовый чанк 79 КБ gz.
-- **P1** — namespaces, 10 видов с watch, health, details/YAML/events/related, метрики.
+- **P1** ✅ — 11 видов (+ скрытый ReplicaSets) с живыми таблицами и health, namespaces (живой
+  список, ручной ввод при запрете), детали (факты, YAML, связи с переходами, события объекта),
+  CPU/RAM из metrics.k8s.io, состояние по target-у. Проверено на kind: права только на
+  namespace, list без watch, metrics-server, живое масштабирование. Замеры (kind: 3k pending
+  pods + 5k ConfigMaps, из них 500 по ~60 КБ): холодная таблица 3k pods 0,6–1,5 с, 5k
+  ConfigMaps 1,8–4 с, тёплая 0,2–1 с; backend Private_Dirty 20 МБ с pods, 28 МБ с pods+
+  ConfigMaps, после 13 быстрых переходов 30 МБ (2 активных + 8 неактивных кэшей), после смены
+  context и простоя — 11 МБ; desktop с открытой таблицей 3k pods — 148 МБ Private_Dirty всех
+  процессов (Go 53, WebProcess 95, Network 7), окно 0,21 с.
 - **P2** — логи.
 - **P3** — exec и port-forward.
 - **P4** — действия restart/scale/delete с подтверждениями.
