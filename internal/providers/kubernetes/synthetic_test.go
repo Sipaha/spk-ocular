@@ -20,14 +20,14 @@ func realisticPod(i int) *unstructured.Unstructured {
 	}
 	container := func(n string) map[string]any {
 		return map[string]any{"name": n, "image": "registry.example.com/team/service:1.2.3", "env": env,
-			"resources": map[string]any{"limits": map[string]any{"cpu": "1", "memory": "1Gi"}, "requests": map[string]any{"cpu": "100m", "memory": "256Mi"}},
+			"resources":    map[string]any{"limits": map[string]any{"cpu": "1", "memory": "1Gi"}, "requests": map[string]any{"cpu": "100m", "memory": "256Mi"}},
 			"volumeMounts": []any{map[string]any{"name": "cfg", "mountPath": "/etc/cfg"}, map[string]any{"name": "token", "mountPath": "/var/run/secrets"}}}
 	}
 	status := func(n string) map[string]any {
 		return map[string]any{"name": n, "ready": true, "restartCount": int64(2), "started": true, "image": "registry.example.com/team/service:1.2.3",
-			"imageID": "registry.example.com/team/service@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+			"imageID":     "registry.example.com/team/service@sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
 			"containerID": "containerd://0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
-			"state": map[string]any{"running": map[string]any{"startedAt": "2026-09-29T10:00:00Z"}}}
+			"state":       map[string]any{"running": map[string]any{"startedAt": "2026-09-29T10:00:00Z"}}}
 	}
 	mf := []any{}
 	for j := 0; j < 4; j++ {
