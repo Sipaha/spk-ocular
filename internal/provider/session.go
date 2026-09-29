@@ -100,6 +100,49 @@ type ViewStatus struct {
 	State   StatusState `json:"state"`
 	Class   ErrorClass  `json:"class,omitempty"`
 	Message string      `json:"message,omitempty"`
+	// Coverage: a view built from several sources says how each one is
+	// (in the provider's fixed order), so an empty result with a source
+	// not seen is not "all is well". Compare with Equal, copy with Clone.
+	Coverage []SourceCoverage `json:"coverage,omitempty"`
+}
+
+// SourceCoverage is how one source of a view is observed.
+type SourceCoverage struct {
+	Source  string        `json:"source"`
+	State   CoverageState `json:"state"`
+	Class   ErrorClass    `json:"class,omitempty"`
+	Message string        `json:"message,omitempty"`
+}
+
+type CoverageState string
+
+const (
+	CoverageLoading CoverageState = "loading"
+	CoverageReady   CoverageState = "ready"
+	CoverageStale   CoverageState = "stale"  // rows are the last known
+	CoverageDenied  CoverageState = "denied" // no permission to observe it
+	CoverageError   CoverageState = "error"
+)
+
+// Equal compares statuses, coverage included.
+func (s ViewStatus) Equal(o ViewStatus) bool {
+	if s.State != o.State || s.Class != o.Class || s.Message != o.Message || len(s.Coverage) != len(o.Coverage) {
+		return false
+	}
+	for i := range s.Coverage {
+		if s.Coverage[i] != o.Coverage[i] {
+			return false
+		}
+	}
+	return true
+}
+
+// Clone copies the status so the copy shares nothing with it.
+func (s ViewStatus) Clone() ViewStatus {
+	if s.Coverage != nil {
+		s.Coverage = append([]SourceCoverage(nil), s.Coverage...)
+	}
+	return s
 }
 
 // Error is a classified provider error.

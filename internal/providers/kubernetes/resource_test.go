@@ -22,7 +22,9 @@ import (
 func fullFake(objs ...runtime.Object) *dynamicfake.FakeDynamicClient {
 	lists := map[schema.GroupVersionResource]string{}
 	for _, d := range allKinds.list {
-		lists[d.gvr] = kindOf(d) + "List"
+		if !d.virtual {
+			lists[d.gvr] = kindOf(d) + "List"
+		}
 	}
 	lists[podMetricsGVR] = "PodMetricsList"
 	lists[nodeMetricsGVR] = "NodeMetricsList"

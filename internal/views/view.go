@@ -96,8 +96,8 @@ func (v *View) apply(d provider.Delta) bool {
 			dirty = true
 		}
 	}
-	if d.Status != nil && *d.Status != v.status {
-		v.status = *d.Status
+	if d.Status != nil && !d.Status.Equal(v.status) {
+		v.status = d.Status.Clone()
 		v.statusChange = next
 		dirty = true
 	}
@@ -124,7 +124,7 @@ func (v *View) del(id string, at uint64) {
 func (v *View) Since(since uint64) Page {
 	v.mu.Lock()
 	defer v.mu.Unlock()
-	p := Page{ViewID: v.id, Version: v.version, Status: v.status, Upserts: []core.Row{}, Deleted: []string{}}
+	p := Page{ViewID: v.id, Version: v.version, Status: v.status.Clone(), Upserts: []core.Row{}, Deleted: []string{}}
 	if since == 0 || since < v.minRetained || since > v.version {
 		p.Reset = true
 		for _, r := range v.rows {

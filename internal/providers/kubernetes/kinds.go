@@ -25,6 +25,8 @@ type kindDef struct {
 	// health; next is when the row must be re-projected even without an
 	// API change (zero: never).
 	project func(u *unstructured.Unstructured, now time.Time) (cells []core.Cell, h core.Health, next time.Time)
+	// virtual: a view made of other kinds (Problems), not an API resource.
+	virtual bool
 }
 
 // fields is a whitelist tree: true keeps a value whole; a nested fields

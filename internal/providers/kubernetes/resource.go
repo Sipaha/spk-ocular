@@ -33,7 +33,7 @@ const maxRelated = 200
 // reported in RelationsError and never fails the resource itself.
 func (s *session) Get(ctx context.Context, ref core.Ref) (*core.Resource, error) {
 	def := s.kinds.byID[ref.Kind]
-	if def == nil {
+	if def == nil || def.virtual {
 		return nil, &provider.Error{Class: provider.ClassUnsupported, Message: fmt.Sprintf("unknown kind %q", ref.Kind)}
 	}
 	ctx, cancel := context.WithTimeout(ctx, getTimeout)
@@ -155,7 +155,7 @@ func kindFor(apiVersion, kind string) string {
 		group = apiVersion[:i]
 	}
 	for _, d := range allKinds.list {
-		if d.gvr.Group == group && strings.EqualFold(kindOf(d), kind) {
+		if !d.virtual && d.gvr.Group == group && strings.EqualFold(kindOf(d), kind) {
 			return d.desc.ID
 		}
 	}

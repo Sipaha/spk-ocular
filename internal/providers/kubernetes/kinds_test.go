@@ -314,6 +314,9 @@ func TestKindIDsAreUniqueAndQualified(t *testing.T) {
 	for _, d := range allKinds.list {
 		assert.False(t, seen[d.desc.ID], d.desc.ID)
 		seen[d.desc.ID] = true
+		if d.virtual {
+			continue // a view of other kinds, not an API resource
+		}
 		if d.gvr.Group != "" {
 			assert.Equal(t, d.gvr.Group+"/"+d.gvr.Resource, d.desc.ID, "grouped kinds are qualified")
 		}

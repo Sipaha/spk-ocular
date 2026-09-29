@@ -29,6 +29,7 @@ var namespacesGVR = schema.GroupVersionResource{Version: "v1", Resource: "namesp
 
 // kinds in navigation order.
 var allKinds = newKindRegistry(
+	problemsKind,
 	podsKind, deploymentsKind, statefulSetsKind, daemonSetsKind, replicaSetsKind,
 	servicesKind, ingressesKind,
 	configMapsKind, secretsKind,
@@ -135,12 +136,14 @@ type session struct {
 	writer actionWriter
 	// beforeWrite (tests) runs between an action's read and its write.
 	beforeWrite func(action string, u *unstructured.Unstructured)
+	// problemSources are what a Problems view observes (tests replace them).
+	problemSources []problemSource
 }
 
 func newSession(target, hash string, dyn dynamic.Interface, watchList bool) *session {
 	ctx, cancel := context.WithCancel(context.Background())
 	return &session{
-		ctx: ctx, cancel: cancel, target: target, hash: hash, dyn: dyn, caches: newCacheManager(dyn, watchList), kinds: allKinds, now: time.Now,
+		ctx: ctx, cancel: cancel, target: target, hash: hash, dyn: dyn, caches: newCacheManager(dyn, watchList), kinds: allKinds, now: time.Now, problemSources: problemSources,
 		conn: newConn(&rest.Config{Host: "https://cluster.invalid"}, dyn, target, target, hash),
 	}
 }
@@ -171,13 +174,27 @@ func (s *session) Scopes(ctx context.Context) ([]core.Scope, error) {
 
 func (s *session) Watch(q provider.Query, sink provider.Sink) (func(), error) {
 	def := s.kinds.byID[q.Kind]
-	if def == nil {
+	switch {
+	case def == nil:
 		return nil, &provider.Error{Class: provider.ClassUnsupported, Message: fmt.Sprintf("unknown kind %q", q.Kind)}
+	case !q.Scope.Valid():
+		return nil, &provider.Error{Class: provider.ClassInternal, Message: "invalid scope selector"}
+	case def == problemsKind:
+		return s.watchProblems(q, sink)
+	}
+	return s.watchDef(def, q, "", sink)
+}
+
+// watchDef feeds sink from def's cache for q; selector (a field selector)
+// narrows the cache further.
+func (s *session) watchDef(def *kindDef, q provider.Query, selector string, sink provider.Sink) (func(), error) {
+	if def.virtual {
+		return nil, &provider.Error{Class: provider.ClassUnsupported, Message: fmt.Sprintf("%s is not observed directly", def.desc.ID)}
 	}
 	if !q.Scope.Valid() {
 		return nil, &provider.Error{Class: provider.ClassInternal, Message: "invalid scope selector"}
 	}
-	key := cacheKey{gvr: def.gvr}
+	key := cacheKey{gvr: def.gvr, selector: selector}
 	if def.namespaced && q.Scope.Mode == core.ScopeOne {
 		key.namespace = q.Scope.Name
 	}

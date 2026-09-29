@@ -59,7 +59,7 @@ func init() {
 // getObject GETs ref's object and checks its UID.
 func (s *session) getObject(ctx context.Context, ref core.Ref) (*unstructured.Unstructured, error) {
 	def := s.kinds.byID[ref.Kind]
-	if def == nil {
+	if def == nil || def.virtual {
 		return nil, &provider.Error{Class: provider.ClassUnsupported, Message: fmt.Sprintf("unknown kind %q", ref.Kind)}
 	}
 	ctx, cancel := context.WithTimeout(ctx, getTimeout)

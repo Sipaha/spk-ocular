@@ -356,3 +356,26 @@ func TestOpenRacingCloseOwnerIsGone(t *testing.T) {
 	_, err := m.Open("s1", &fakeSource{}, provider.Query{})
 	assert.NoError(t, err)
 }
+
+// Coverage is a slice: an equal one is no change, a different one is; what
+// a caller holds (given or returned) cannot change the view's status.
+func TestCoverageIsComparedAndCopied(t *testing.T) {
+	v := newView("v", nil)
+	cov := []provider.SourceCoverage{{Source: "Pods", State: provider.CoverageReady}, {Source: "Nodes", State: provider.CoverageDenied, Class: provider.ClassForbidden}}
+	st := provider.ViewStatus{State: provider.StatusReady, Coverage: cov}
+	v.Apply(provider.Delta{Status: &st})
+	ver := v.Since(0).Version
+	same := provider.ViewStatus{State: provider.StatusReady, Coverage: append([]provider.SourceCoverage(nil), cov...)}
+	v.Apply(provider.Delta{Status: &same})
+	assert.Equal(t, ver, v.Since(0).Version, "an equal coverage is no change")
+
+	cov[1].State = provider.CoverageReady // the caller's slice, after handing it over
+	assert.Equal(t, provider.CoverageDenied, v.Since(0).Status.Coverage[1].State)
+	got := v.Since(0).Status
+	got.Coverage[0].State = provider.CoverageError
+	assert.Equal(t, provider.CoverageReady, v.Since(0).Status.Coverage[0].State)
+
+	changed := provider.ViewStatus{State: provider.StatusReady, Coverage: []provider.SourceCoverage{{Source: "Pods", State: provider.CoverageStale}}}
+	v.Apply(provider.Delta{Status: &changed})
+	assert.Greater(t, v.Since(0).Version, ver)
+}
