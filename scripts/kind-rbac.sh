@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Namespace-limited users for the disposable kind cluster. Writes
-#   <outdir>/viewer.kubeconfig   get/list/watch pods in ocular-demo only
+#   <outdir>/viewer.kubeconfig   get/list/watch pods in ocular-demo only (no logs, exec, port-forward)
 #   <outdir>/nowatch.kubeconfig  get/list pods and read pods/log in ocular-demo, no watch
 # with fresh short-lived ServiceAccount tokens and ocular-demo as default namespace.
 set -euo pipefail
@@ -67,5 +67,7 @@ kv() { kubectl --kubeconfig "$OUT/viewer.kubeconfig" "$@"; }
 [ "$(kv auth can-i list namespaces 2>/dev/null || true)" = no ]
 [ "$(kubectl --kubeconfig "$OUT/nowatch.kubeconfig" auth can-i watch pods -n ocular-demo 2>/dev/null || true)" = no ]
 [ "$(kv auth can-i get pods --subresource=log -n ocular-demo 2>/dev/null || true)" = no ]
+[ "$(kv auth can-i create pods --subresource=exec -n ocular-demo 2>/dev/null || true)" = no ]
+[ "$(kv auth can-i create pods --subresource=portforward -n ocular-demo 2>/dev/null || true)" = no ]
 [ "$(kubectl --kubeconfig "$OUT/nowatch.kubeconfig" auth can-i get pods --subresource=log -n ocular-demo)" = yes ]
 echo "rbac kubeconfigs in $OUT"

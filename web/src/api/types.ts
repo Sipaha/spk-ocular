@@ -284,6 +284,8 @@ export interface TerminalRequest {
 }
 
 export interface TerminalInfo {
+  /** Names the terminal across reconnects; forget it when the tab closes. */
+  terminalId: string
   /** WebSocket to <streamBase as ws:>/term/<streamId> once, within 30 s. */
   streamId: string
   target: LiveTarget

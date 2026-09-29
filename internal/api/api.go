@@ -59,6 +59,11 @@ type API interface {
 	// the app, not the session); the page opens a WebSocket to
 	// <StreamBase>/term/<id>.
 	OpenTerminal(ctx context.Context, req TerminalRequest) (TerminalInfo, error)
+	// ReopenTerminal runs a terminal's command again with the connection
+	// and pod it was opened with (a new stream id, the same terminal id).
+	ReopenTerminal(ctx context.Context, req ReopenTerminalRequest) (TerminalInfo, error)
+	// ForgetTerminal: the terminal's tab closed.
+	ForgetTerminal(ctx context.Context, terminalID string) error
 	// StreamBase: where streams are served (desktop: a loopback URL with a
 	// token; browser: a path on this server).
 	StreamBase(ctx context.Context) (string, error)

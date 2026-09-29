@@ -42,7 +42,7 @@ func newTermFixture(t *testing.T, tm termTimings) *fixture {
 	return f
 }
 
-var fastTimings = termTimings{ping: time.Hour, pingTimeout: time.Hour, ackTimeout: time.Hour, drain: 5 * time.Second, write: 5 * time.Second}
+var fastTimings = termTimings{ping: time.Hour, pingTimeout: time.Hour, ackTimeout: time.Hour, drain: 5 * time.Second, write: 5 * time.Second, hangup: 300 * time.Millisecond}
 
 func (f *fixture) termURL(id string) string {
 	return "ws" + strings.TrimPrefix(f.srv.URL, "http") + "/" + f.h.Token() + "/term/" + id
@@ -559,4 +559,72 @@ func TestTermDeadPageIsDetectedByPing(t *testing.T) {
 		t.Fatal("a page that does not answer pings was not dropped")
 	}
 	require.Eventually(t, func() bool { return ft.closed.Load() == 1 }, 5*time.Second, 10*time.Millisecond)
+}
+
+// ttyShell behaves like a shell on a TTY: it echoes input and ends with 130
+// on ^C followed by ^D. It reports the input it saw and whether it was
+// cancelled rather than hung up.
+func ttyShell(seen chan<- []byte, cancelled *atomic.Bool) func(ctx context.Context, term provider.Terminal) (provider.ExitStatus, error) {
+	return func(ctx context.Context, term provider.Terminal) (provider.ExitStatus, error) {
+		var all []byte
+		buf := make([]byte, 64)
+		for {
+			n, err := term.Stdin.Read(buf)
+			if err != nil {
+				cancelled.Store(ctx.Err() != nil)
+				seen <- all
+				return provider.ExitStatus{}, ctx.Err()
+			}
+			all = append(all, buf[:n]...)
+			_, _ = term.Stdout.Write(buf[:n])
+			if bytes.HasSuffix(all, []byte{3, 4}) {
+				cancelled.Store(ctx.Err() != nil)
+				seen <- all
+				return provider.ExitStatus{Code: 130, Known: true}, nil
+			}
+		}
+	}
+}
+
+func TestTermClosingThePageHangsUpInBand(t *testing.T) {
+	f := newTermFixture(t, fastTimings)
+	seen := make(chan []byte, 1)
+	var cancelled atomic.Bool
+	ft := &fakeTerm{run: ttyShell(seen, &cancelled)}
+	id, err := f.reg.AddTerm(ft, provider.TermSize{Cols: 80, Rows: 24})
+	require.NoError(t, err)
+	cl := newClient(f.dial(t, id))
+	cl.send(t, websocket.MessageBinary, []byte("sleep 99\r"))
+	require.Eventually(t, func() bool { return cl.output() == "sleep 99\r" }, 5*time.Second, 10*time.Millisecond)
+	_ = cl.c.Close(websocket.StatusNormalClosure, "tab closed")
+	select {
+	case got := <-seen:
+		assert.Equal(t, []byte("sleep 99\r\x03\x04"), got)
+	case <-time.After(5 * time.Second):
+		t.Fatal("the command was not hung up")
+	}
+	assert.False(t, cancelled.Load(), "ended by ^C ^D, not by cancellation")
+	require.Eventually(t, func() bool { return ft.closed.Load() == 1 }, 5*time.Second, 10*time.Millisecond)
+}
+
+func TestTermCommandIgnoringTheHangupIsCancelled(t *testing.T) {
+	f := newTermFixture(t, fastTimings)
+	var cancelled atomic.Bool
+	ended := make(chan time.Time, 1)
+	ft := &fakeTerm{run: func(ctx context.Context, term provider.Terminal) (provider.ExitStatus, error) {
+		_, _ = term.Stdout.Write([]byte("vim"))
+		_, _ = io.Copy(io.Discard, term.Stdin) // ignores ^C ^D
+		cancelled.Store(ctx.Err() != nil)
+		ended <- time.Now()
+		return provider.ExitStatus{}, ctx.Err()
+	}}
+	id, err := f.reg.AddTerm(ft, provider.TermSize{Cols: 80, Rows: 24})
+	require.NoError(t, err)
+	cl := newClient(f.dial(t, id))
+	require.Eventually(t, func() bool { return cl.output() == "vim" }, 5*time.Second, 10*time.Millisecond)
+	closed := time.Now()
+	_ = cl.c.Close(websocket.StatusNormalClosure, "tab closed")
+	at := <-ended
+	assert.True(t, cancelled.Load())
+	assert.GreaterOrEqual(t, at.Sub(closed), fastTimings.hangup-50*time.Millisecond, "cancelled only after the hang-up time")
 }

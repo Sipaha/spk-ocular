@@ -154,6 +154,14 @@ func (h *HTTP) routes() {
 	h.mux.HandleFunc("POST /api/OpenTerminal", handle(func(ctx context.Context, r *api.TerminalRequest) (any, error) {
 		return h.api.OpenTerminal(ctx, *r)
 	}))
+	h.mux.HandleFunc("POST /api/ReopenTerminal", handle(func(ctx context.Context, r *api.ReopenTerminalRequest) (any, error) {
+		return h.api.ReopenTerminal(ctx, *r)
+	}))
+	h.mux.HandleFunc("POST /api/ForgetTerminal", handle(func(ctx context.Context, r *struct {
+		TerminalID string `json:"terminalId"`
+	}) (any, error) {
+		return nil, h.api.ForgetTerminal(ctx, r.TerminalID)
+	}))
 	h.mux.HandleFunc("POST /api/StreamBase", handle(func(ctx context.Context, _ *struct{}) (any, error) {
 		return h.api.StreamBase(ctx)
 	}))

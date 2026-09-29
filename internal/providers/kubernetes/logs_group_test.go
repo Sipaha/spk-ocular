@@ -51,8 +51,9 @@ func deployment(name, uid string, ctrs ...string) *unstructured.Unstructured {
 func replicaSet(name, uid, deployUID string) *unstructured.Unstructured {
 	return &unstructured.Unstructured{Object: map[string]any{
 		"apiVersion": "apps/v1", "kind": "ReplicaSet",
-		"metadata": map[string]any{"name": name, "namespace": "ns", "uid": uid, "ownerReferences": []any{ctrlRef("Deployment", "web", deployUID)}},
-		"spec":     map[string]any{"replicas": int64(1)},
+		"metadata": map[string]any{"name": name, "namespace": "ns", "uid": uid, "ownerReferences": []any{ctrlRef("Deployment", "web", deployUID)},
+			"labels": map[string]any{"app": "web"}}, // a ReplicaSet carries its template's labels
+		"spec": map[string]any{"replicas": int64(1)},
 	}}
 }
 

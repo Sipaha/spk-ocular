@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sync"
 
 	"github.com/spk/spk-ocular/internal/core"
 	"github.com/spk/spk-ocular/internal/provider"
@@ -22,10 +23,91 @@ type TerminalRequest struct {
 }
 
 type TerminalInfo struct {
+	// TerminalID names the terminal across reconnects (ReopenTerminal);
+	// ForgetTerminal when its tab closes.
+	TerminalID string `json:"terminalId"`
 	// StreamID: open a WebSocket to <StreamBase>/term/<StreamID> once,
 	// within 30 s (web/src/term/protocol.ts).
 	StreamID string          `json:"streamId"`
 	Target   core.LiveTarget `json:"target"`
+}
+
+type ReopenTerminalRequest struct {
+	TerminalID string `json:"terminalId"`
+	Cols       int    `json:"cols"`
+	Rows       int    `json:"rows"`
+}
+
+// maxTermProtos bounds remembered terminals (a tab that never said
+// ForgetTerminal); the oldest is forgotten first.
+const maxTermProtos = 64
+
+// termProtos remembers each terminal's prepared handle: a reconnect runs
+// again with the same connection snapshot, pod and container (never
+// silently a new target configuration).
+type termProtos struct {
+	mu     sync.Mutex
+	seq    uint64
+	order  []string
+	byID   map[string]provider.ExecHandle
+	closed bool
+}
+
+func (p *termProtos) add(h provider.ExecHandle) string {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.closed { // the app is closing: nothing will reopen it
+		h.Close()
+		return ""
+	}
+	if p.byID == nil {
+		p.byID = map[string]provider.ExecHandle{}
+	}
+	p.seq++
+	id := fmt.Sprintf("t%d", p.seq)
+	p.byID[id] = h
+	p.order = append(p.order, id)
+	for len(p.order) > maxTermProtos {
+		old := p.order[0]
+		p.order = p.order[1:]
+		if h := p.byID[old]; h != nil {
+			delete(p.byID, old)
+			h.Close()
+		}
+	}
+	return id
+}
+
+func (p *termProtos) get(id string) provider.ExecHandle {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.byID[id]
+}
+
+func (p *termProtos) forget(id string) {
+	p.mu.Lock()
+	h := p.byID[id]
+	delete(p.byID, id)
+	for i, o := range p.order {
+		if o == id {
+			p.order = append(p.order[:i], p.order[i+1:]...)
+			break
+		}
+	}
+	p.mu.Unlock()
+	if h != nil {
+		h.Close()
+	}
+}
+
+func (p *termProtos) closeAll() {
+	p.mu.Lock()
+	hs := p.byID
+	p.byID, p.order, p.closed = nil, nil, true
+	p.mu.Unlock()
+	for _, h := range hs {
+		h.Close()
+	}
 }
 
 const (
@@ -57,9 +139,16 @@ func (s *Service) ExecInfo(ctx context.Context, ref core.Ref) (core.ExecInfo, er
 	return info, nil
 }
 
-func validTerminal(req TerminalRequest) error {
-	if req.Cols < 1 || req.Cols > 1000 || req.Rows < 1 || req.Rows > 1000 {
+func validSize(cols, rows int) error {
+	if cols < 1 || cols > 1000 || rows < 1 || rows > 1000 {
 		return errors.New("terminal size must be 1..1000 columns and rows")
+	}
+	return nil
+}
+
+func validTerminal(req TerminalRequest) error {
+	if err := validSize(req.Cols, req.Rows); err != nil {
+		return err
 	}
 	if len(req.Command) > maxArgs {
 		return fmt.Errorf("at most %d arguments", maxArgs)
@@ -89,23 +178,57 @@ func (s *Service) OpenTerminal(ctx context.Context, req TerminalRequest) (Termin
 	if err != nil {
 		return TerminalInfo{}, err
 	}
-	h, err := ex.PrepareExec(ctx, req.Ref, provider.ExecRequest{Instance: req.Instance, Channel: req.Channel, Command: req.Command})
+	proto, err := ex.PrepareExec(ctx, req.Ref, provider.ExecRequest{Instance: req.Instance, Channel: req.Channel, Command: req.Command})
 	if err != nil {
 		return TerminalInfo{}, fromProvider(err)
 	}
-	return s.registerTerminal(h, provider.TermSize{Cols: uint16(req.Cols), Rows: uint16(req.Rows)})
+	info, err := s.startTerminal(proto, req.Cols, req.Rows)
+	if err != nil {
+		proto.Close()
+		return TerminalInfo{}, err
+	}
+	info.TerminalID = s.terms.add(proto)
+	return info, nil
 }
 
-// registerTerminal hands h to the stream registry (which closes it on any
-// failure, including the app closing meanwhile).
-func (s *Service) registerTerminal(h provider.ExecHandle, size provider.TermSize) (TerminalInfo, error) {
-	target := h.Describe()
-	id, err := s.streams.AddTerm(h, size)
+// ReopenTerminal runs a terminal's command again ("reconnect") with the
+// connection snapshot and pinned pod/container it was opened with.
+func (s *Service) ReopenTerminal(_ context.Context, req ReopenTerminalRequest) (TerminalInfo, error) {
+	if err := validSize(req.Cols, req.Rows); err != nil {
+		return TerminalInfo{}, coded(CodeBadRequest, err)
+	}
+	proto := s.terms.get(req.TerminalID)
+	if proto == nil {
+		return TerminalInfo{}, coded(CodeGone, errors.New("this terminal is no longer known; open a new one"))
+	}
+	info, err := s.startTerminal(proto, req.Cols, req.Rows)
+	if err != nil {
+		return TerminalInfo{}, err
+	}
+	info.TerminalID = req.TerminalID
+	return info, nil
+}
+
+// ForgetTerminal: the terminal's tab is gone; it cannot be reopened.
+func (s *Service) ForgetTerminal(_ context.Context, terminalID string) error {
+	s.terms.forget(terminalID)
+	return nil
+}
+
+// startTerminal registers a fresh run of proto with the stream registry
+// (which closes that run's handle on any failure, including the app
+// closing meanwhile).
+func (s *Service) startTerminal(proto provider.ExecHandle, cols, rows int) (TerminalInfo, error) {
+	h, err := proto.Again()
+	if err != nil {
+		return TerminalInfo{}, fromProvider(err)
+	}
+	id, err := s.streams.AddTerm(h, provider.TermSize{Cols: uint16(cols), Rows: uint16(rows)})
 	switch {
 	case errors.Is(err, streams.ErrLimit):
 		return TerminalInfo{}, &CodedError{Code: CodeLimit, Detail: err.Error()}
 	case err != nil:
 		return TerminalInfo{}, coded(CodeGone, err)
 	}
-	return TerminalInfo{StreamID: id, Target: target}, nil
+	return TerminalInfo{StreamID: id, Target: proto.Describe()}, nil
 }

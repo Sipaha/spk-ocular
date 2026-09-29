@@ -36,6 +36,10 @@ export interface Client {
   execInfo(ref: Ref): Promise<ExecInfo>
   /** Registers a terminal; open a WebSocket to wsBase(streamBase()) + '/term/' + streamId. */
   openTerminal(req: TerminalRequest): Promise<TerminalInfo>
+  /** Runs the terminal's command again with the connection and pod it was opened with. */
+  reopenTerminal(terminalId: string, cols: number, rows: number): Promise<TerminalInfo>
+  /** The terminal's tab closed. */
+  forgetTerminal(terminalId: string): Promise<void>
   /** Desktop: a loopback URL with a token; browser: a path on this server. */
   streamBase(): Promise<string>
   subscribeEvents(onEvent: (e: ApiEvent) => void): () => void
@@ -81,6 +85,8 @@ export const httpClient: Client = {
   openLogStream: (ref, query) => post('OpenLogStream', { ref, query }),
   execInfo: (ref) => post('ExecInfo', ref),
   openTerminal: (req) => post('OpenTerminal', req),
+  reopenTerminal: (terminalId, cols, rows) => post('ReopenTerminal', { terminalId, cols, rows }),
+  forgetTerminal: (terminalId) => done(post('ForgetTerminal', { terminalId })),
   streamBase: () => post('StreamBase', {}),
   subscribeEvents(onEvent) {
     const es = new EventSource(`/api/events?token=${encodeURIComponent(tokenMeta())}`)
@@ -129,6 +135,8 @@ export const wailsClient: Client = {
   openLogStream: (ref, query) => wcall('OpenLogStream', { ref, query }),
   execInfo: (ref) => wcall('ExecInfo', ref),
   openTerminal: (req) => wcall('OpenTerminal', req),
+  reopenTerminal: (terminalId, cols, rows) => wcall('ReopenTerminal', { terminalId, cols, rows }),
+  forgetTerminal: (terminalId) => wcall('ForgetTerminal', terminalId),
   streamBase: () => wcall('StreamBase'),
   subscribeEvents(onEvent) {
     const offs = EVENT_TYPES.map((type) =>

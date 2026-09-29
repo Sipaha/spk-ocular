@@ -22,20 +22,23 @@ import (
 // echoHandle echoes input until its terminal ends; it records whether it
 // was closed and whether its session was closed while it ran.
 type echoHandle struct {
-	sess    *fakeSession
-	closed  atomic.Int32
-	running chan struct{}
+	owner  *execSession
+	sess   *fakeSession
+	closed atomic.Int32
 }
 
 func (h *echoHandle) Describe() core.LiveTarget {
 	return core.LiveTarget{Provider: "k", Target: h.sess.target, TargetTitle: h.sess.target, ConfigHash: h.sess.hash, Instance: "p", Channel: "app"}
 }
-func (h *echoHandle) Again() (provider.ExecHandle, error) { return &echoHandle{sess: h.sess}, nil }
-func (h *echoHandle) Close()                              { h.closed.Add(1) }
+func (h *echoHandle) Again() (provider.ExecHandle, error) {
+	c := &echoHandle{owner: h.owner, sess: h.sess}
+	h.owner.mu.Lock()
+	h.owner.runs = append(h.owner.runs, c)
+	h.owner.mu.Unlock()
+	return c, nil
+}
+func (h *echoHandle) Close() { h.closed.Add(1) }
 func (h *echoHandle) Run(ctx context.Context, t provider.Terminal) (provider.ExitStatus, error) {
-	if h.running != nil {
-		close(h.running)
-	}
 	buf := make([]byte, 256)
 	for {
 		n, err := t.Stdin.Read(buf)
@@ -51,7 +54,8 @@ func (h *echoHandle) Run(ctx context.Context, t provider.Terminal) (provider.Exi
 type execSession struct {
 	*fakeSession
 	mu       sync.Mutex
-	handles  []*echoHandle
+	handles  []*echoHandle // prepared (the API's prototypes)
+	runs     []*echoHandle // copies that ran or were registered
 	prepared []provider.ExecRequest
 }
 
@@ -63,7 +67,7 @@ func (e *execSession) ExecInfo(context.Context, core.Ref) (core.ExecInfo, error)
 func (e *execSession) PrepareExec(_ context.Context, _ core.Ref, req provider.ExecRequest) (provider.ExecHandle, error) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
-	h := &echoHandle{sess: e.fakeSession, running: make(chan struct{})}
+	h := &echoHandle{owner: e, sess: e.fakeSession}
 	e.handles = append(e.handles, h)
 	e.prepared = append(e.prepared, req)
 	return h, nil
@@ -153,10 +157,30 @@ func TestTerminalsOutliveTheirSession(t *testing.T) {
 	now = now.Add(sessionIdle + time.Second)
 	s.reapIdleSessions()
 	echo(t, c, "after reconfigure and reap")
-	assert.Equal(t, int32(0), k.sessions[0].handles[0].closed.Load())
+	run := k.sessions[0].runs[0]
+	assert.Equal(t, int32(0), run.closed.Load())
 
 	_ = c.Close(websocket.StatusNormalClosure, "")
-	require.Eventually(t, func() bool { return k.sessions[0].handles[0].closed.Load() == 1 }, 5*time.Second, 10*time.Millisecond)
+	require.Eventually(t, func() bool { return run.closed.Load() == 1 }, 5*time.Second, 10*time.Millisecond)
+
+	// Reconnect runs the same prepared command again, from the old session's
+	// snapshot (no new PrepareExec on today's session).
+	again, err := s.ReopenTerminal(ctx, ReopenTerminalRequest{TerminalID: live.TerminalID, Cols: 100, Rows: 30})
+	require.NoError(t, err)
+	assert.Equal(t, live.TerminalID, again.TerminalID)
+	assert.NotEqual(t, live.StreamID, again.StreamID)
+	assert.Equal(t, "h1", again.Target.ConfigHash, "the snapshot it was opened with")
+	echo(t, dialTerm(t, base, again.StreamID), "reconnected")
+	total := 0
+	for _, es := range k.sessions {
+		total += len(es.prepared)
+	}
+	assert.Equal(t, 2, total, "reconnecting prepares nothing new")
+
+	require.NoError(t, s.ForgetTerminal(ctx, live.TerminalID))
+	assert.Equal(t, int32(1), k.sessions[0].handles[0].closed.Load(), "a forgotten prototype is released")
+	_, err = s.ReopenTerminal(ctx, ReopenTerminalRequest{TerminalID: live.TerminalID, Cols: 100, Rows: 30})
+	assert.True(t, IsCoded(err, CodeGone), "%v", err)
 }
 
 func TestOpenTerminalValidatesBeforePreparing(t *testing.T) {
@@ -190,11 +214,12 @@ func TestTerminalLimitReleasesTheRefusedHandle(t *testing.T) {
 	}
 	_, err := s.OpenTerminal(ctx, termReq)
 	assert.True(t, IsCoded(err, CodeLimit), "%v", err)
-	hs := k.sessions[0].handles
-	assert.Equal(t, int32(1), hs[len(hs)-1].closed.Load())
+	es := k.sessions[0]
+	assert.Equal(t, int32(1), es.runs[len(es.runs)-1].closed.Load(), "the refused run")
+	assert.Equal(t, int32(1), es.handles[len(es.handles)-1].closed.Load(), "the refused prototype")
 
-	s.Close() // the app exits: pending terminals are released
-	for _, h := range hs {
+	s.Close() // the app exits: pending terminals and prototypes are released
+	for _, h := range append(es.handles, es.runs...) {
 		assert.Equal(t, int32(1), h.closed.Load())
 	}
 	assert.Equal(t, 0, s.Streams().Count(streams.KindTerm))

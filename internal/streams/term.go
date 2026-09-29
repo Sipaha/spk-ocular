@@ -7,6 +7,7 @@ import (
 	"io"
 	"math"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/coder/websocket"
@@ -46,12 +47,24 @@ type termTimings struct {
 	ackTimeout        time.Duration // output window full and no ack for this long
 	drain             time.Duration // after the command ended, to deliver its output
 	write             time.Duration // one network write
+	hangup            time.Duration // for the command to end after ^C ^D
 }
 
 var defaultTermTimings = termTimings{
 	ping: 20 * time.Second, pingTimeout: 15 * time.Second,
 	ackTimeout: 60 * time.Second, drain: 10 * time.Second, write: writeTimeout,
+	hangup: 2 * time.Second,
 }
+
+// hangupKeys end a terminal that is going away the way a user would:
+// ^C interrupts the foreground job, then ^D (EOF on the emptied line)
+// ends the shell. Closing the connection alone does not: container
+// runtimes (containerd on kind, measured) keep an exec'd process and its
+// children running after the client is gone, and closing stdin does not
+// reach a TTY as EOF (docs/plans/2026-09-29-p3-exec-portforward.md).
+var hangupKeys = [][]byte{{0x03}, {0x04}}
+
+const hangupKeyGap = 100 * time.Millisecond
 
 var (
 	errPageGone   = errors.New("the page closed the terminal")
@@ -85,15 +98,16 @@ type termBridge struct {
 	readCancel context.CancelFunc
 	out        chan outMsg
 
-	mu      sync.Mutex
-	sent    int64 // output bytes sent (reserved before sending)
-	acked   int64 // output bytes the page processed
-	credit  chan struct{}
-	inQ     [][]byte
-	inBytes int   // received, not yet written to stdin
-	inDone  int64 // written to stdin
-	inSig   chan struct{}
-	running sync.Once
+	mu       sync.Mutex
+	sent     int64 // output bytes sent (reserved before sending)
+	acked    int64 // output bytes the page processed
+	credit   chan struct{}
+	inQ      [][]byte
+	inBytes  int   // received, not yet written to stdin
+	inDone   int64 // written to stdin
+	inSig    chan struct{}
+	running  sync.Once
+	attached atomic.Bool // the command side started reading input or writing output
 
 	sizes *sizeBox
 }
@@ -115,6 +129,11 @@ func signal(c chan struct{}) {
 	}
 }
 
+type runResult struct {
+	st  provider.ExitStatus
+	err error
+}
+
 // run serves the terminal until the command ends, the page goes away or
 // parent is cancelled (revoked says which end frame that deserves). It
 // returns when every goroutine it started has finished.
@@ -126,9 +145,13 @@ func (b *termBridge) run(parent context.Context, sess TermSession, revoked func(
 	b.sizes.done = ctx.Done()
 	inR, inW := io.Pipe()
 	outR, outW := io.Pipe()
-	// Ending unblocks a command stuck writing output nobody will read, or
-	// reading input that will not come.
-	stopPipes := context.AfterFunc(ctx, func() {
+	// The command's own context outlives the bridge's by the hang-up:
+	// ending the terminal first asks the command to end in-band.
+	runCtx, runCancel := context.WithCancel(context.Background())
+	defer runCancel()
+	// Once the command is told to stop, unblock it if it is stuck writing
+	// output or reading input.
+	stopPipes := context.AfterFunc(runCtx, func() {
 		_ = outR.CloseWithError(errTermDone)
 		_ = inR.CloseWithError(errTermDone)
 	})
@@ -147,11 +170,22 @@ func (b *termBridge) run(parent context.Context, sess TermSession, revoked func(
 	go func() { defer close(outDone); b.outputLoop(outR) }()
 
 	b.send(websocket.MessageText, termState("connecting"))
-	st, runErr := sess.Run(ctx, provider.Terminal{
-		Stdin:  &firstRead{r: inR, first: b.markRunning},
-		Stdout: outW,
-		Sizes:  b.sizes,
-	})
+	runDone := make(chan runResult, 1)
+	go func() {
+		st, err := sess.Run(runCtx, provider.Terminal{
+			Stdin:  &firstRead{r: inR, first: b.markRunning},
+			Stdout: outW,
+			Sizes:  b.sizes,
+		})
+		runDone <- runResult{st, err}
+	}()
+	var res runResult
+	select {
+	case res = <-runDone:
+	case <-ctx.Done():
+		res = b.hangup(inW, runDone, runCancel)
+	}
+	st, runErr := res.st, res.err
 	_ = outW.Close() // the output loop sees EOF after what is buffered
 	drain := time.NewTimer(b.tm.drain)
 	select {
@@ -208,11 +242,39 @@ func (b *termBridge) run(parent context.Context, sess TermSession, revoked func(
 	}
 	_ = b.conn.CloseNow()
 	b.readCancel()
-	_ = inR.CloseWithError(errTermDone)
-	_ = outR.CloseWithError(errTermDone)
+	runCancel()
+	_ = inW.CloseWithError(errTermDone)
 	<-writerDone
 	<-outDone
 	wg.Wait()
+}
+
+// hangup ends a command whose terminal is going away: ^C ^D in-band (the
+// output keeps being read and dropped meanwhile, so the command is not
+// stuck writing), then, if it has not ended within the hang-up time,
+// cancellation.
+func (b *termBridge) hangup(inW io.Writer, runDone <-chan runResult, runCancel context.CancelFunc) runResult {
+	if b.attached.Load() {
+		go func() {
+			for i, k := range hangupKeys {
+				if i > 0 {
+					time.Sleep(hangupKeyGap)
+				}
+				if _, err := inW.Write(k); err != nil {
+					return
+				}
+			}
+		}()
+		t := time.NewTimer(b.tm.hangup)
+		defer t.Stop()
+		select {
+		case r := <-runDone:
+			return r
+		case <-t.C:
+		}
+	}
+	runCancel()
+	return <-runDone
 }
 
 // finalEnd tries to tell a still-listening page why the terminal ended
@@ -284,6 +346,7 @@ func (b *termBridge) writeLoop() {
 }
 
 func (b *termBridge) markRunning() {
+	b.attached.Store(true)
 	b.running.Do(func() { b.send(websocket.MessageText, termState("running")) })
 }
 
@@ -387,7 +450,6 @@ func (b *termBridge) pushInput(p []byte) bool {
 // stdinLoop copies queued input to the command; each written chunk is
 // confirmed to the page ("iack"), which frees its input window.
 func (b *termBridge) stdinLoop(w *io.PipeWriter) {
-	defer func() { _ = w.Close() }()
 	for {
 		b.mu.Lock()
 		var chunk []byte
@@ -422,32 +484,42 @@ func (b *termBridge) stdinLoop(w *io.PipeWriter) {
 // outputLoop sends the command's output only as the page has credit for
 // it, so a page that falls behind stops the command instead of growing
 // buffers. At most one chunk is read ahead (so the end of the output is
-// seen even while the window is full).
+// seen even while the window is full). Once the terminal is ending the
+// output is read and dropped until the command is gone (it must not get
+// stuck writing while it is being hung up).
 func (b *termBridge) outputLoop(r io.Reader) {
 	buf := make([]byte, termReadChunk)
 	for {
 		n, err := r.Read(buf)
 		if n > 0 {
 			b.markRunning()
-		}
-		for p := buf[:n]; len(p) > 0; {
-			avail, ok := b.waitCredit()
-			if !ok {
-				return
+			if b.ctx.Err() == nil {
+				b.deliver(buf[:n])
 			}
-			k := min(avail, len(p))
-			b.mu.Lock()
-			b.sent += int64(k)
-			b.mu.Unlock()
-			if !b.send(websocket.MessageBinary, append([]byte(nil), p[:k]...)) {
-				return
-			}
-			p = p[k:]
 		}
 		if err != nil {
 			return
 		}
 	}
+}
+
+// deliver sends p as credit allows; false once the terminal is ending.
+func (b *termBridge) deliver(p []byte) bool {
+	for len(p) > 0 {
+		avail, ok := b.waitCredit()
+		if !ok {
+			return false
+		}
+		k := min(avail, len(p))
+		b.mu.Lock()
+		b.sent += int64(k)
+		b.mu.Unlock()
+		if !b.send(websocket.MessageBinary, append([]byte(nil), p[:k]...)) {
+			return false
+		}
+		p = p[k:]
+	}
+	return true
 }
 
 // waitCredit returns how many output bytes may be sent now, waiting while

@@ -59,7 +59,13 @@ export function fakeClient(targets: Target[]) {
       instances: [{ id: ref.uid ?? ref.name, title: ref.name, ready: true, channels: [{ id: 'app', title: 'app', running: true }], defaultChannel: 'app' }],
       defaultInstance: ref.uid ?? ref.name,
     })),
+    reopenTerminal: vi.fn(async (terminalId: string) => ({
+      terminalId, streamId: 't2',
+      target: { provider: 'kubernetes', target: 'ctx', targetTitle: 'ctx', ref: { provider: 'kubernetes', target: 'ctx', kind: 'pods', name: 'p' }, instance: 'p', channel: 'app' },
+    })),
+    forgetTerminal: vi.fn(async () => {}),
     openTerminal: vi.fn(async (req: TerminalRequest) => ({
+      terminalId: 'term-1',
       streamId: 't1',
       target: { provider: req.ref.provider, target: req.ref.target, targetTitle: req.ref.target, ref: req.ref, instance: req.ref.name, channel: 'app' },
     })),

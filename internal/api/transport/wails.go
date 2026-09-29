@@ -68,4 +68,10 @@ func (w *API) ExecInfo(ref core.Ref) (core.ExecInfo, error) {
 func (w *API) OpenTerminal(req api.TerminalRequest) (api.TerminalInfo, error) {
 	return w.a.OpenTerminal(context.Background(), req)
 }
+func (w *API) ReopenTerminal(req api.ReopenTerminalRequest) (api.TerminalInfo, error) {
+	return w.a.ReopenTerminal(context.Background(), req)
+}
+func (w *API) ForgetTerminal(terminalID string) error {
+	return w.a.ForgetTerminal(context.Background(), terminalID)
+}
 func (w *API) StreamBase() (string, error) { return w.a.StreamBase(context.Background()) }

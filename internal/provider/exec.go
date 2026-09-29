@@ -40,7 +40,8 @@ type ExecHandle interface {
 	// side is attached.
 	Run(ctx context.Context, t Terminal) (ExitStatus, error)
 	// Again is a fresh handle for the same connection snapshot and target
-	// ("reconnect").
+	// ("reconnect"); the API keeps the prepared handle as a prototype and
+	// runs copies.
 	Again() (ExecHandle, error)
 	Close()
 }

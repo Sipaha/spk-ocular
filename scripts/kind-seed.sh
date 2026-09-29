@@ -107,6 +107,14 @@ spec:
           done
 ---
 apiVersion: v1
+kind: Pod
+metadata: {name: noshell, namespace: ocular-demo}
+spec:
+  terminationGracePeriodSeconds: 1
+  containers:
+  - {name: app, image: "registry.k8s.io/pause:3.10", imagePullPolicy: IfNotPresent} # no shell inside (exec tests)
+---
+apiVersion: v1
 kind: ConfigMap
 metadata: {name: web-config, namespace: ocular-demo}
 data: {nginx.conf: "server {}", LOG_LEVEL: debug}
@@ -119,3 +127,4 @@ YAML
 k -n ocular-demo rollout status deploy/web --timeout=180s
 k -n ocular-demo rollout status sts/db --timeout=180s
 k -n ocular-demo rollout status deploy/chatter --timeout=180s
+k -n ocular-demo wait --for=condition=Ready pod/noshell --timeout=120s

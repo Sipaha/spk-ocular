@@ -308,14 +308,14 @@ type Stream interface {
   16 (с ожидающими) → `limit`; истёкший id закрывает хэндл; `unsupported` у провайдера без exec.
 
 ### Task 4. Kubernetes: exec (вертикальный срез)
-- [ ] `exec.go`: снимок (клиент из копии `rest.Config`), `ExecInfo` (pod / pods workload-а по UID
+- [x] `exec.go`: снимок (клиент из копии `rest.Config`), `ExecInfo` (pod / pods workload-а по UID
   контроллера со всеми страницами), `PrepareExec` (закрепление UID), `Run` (сверка UID, fallback-
   executor с предикатом kubectl, ошибки: 403 → `forbidden` «нужно право pods/exec», нет `sh`,
   не запущен, код выхода), `Again`.
-- [ ] Тесты: хэндл работает после `Session.Close`; сверка UID при замене; разбор ошибок;
+- [x] Тесты: хэндл работает после `Session.Close`; сверка UID при замене; разбор ошибок;
   локальные серверы, придерживающие TLS и заголовки upgrade (WS-путь) — «подключение» висит до
   отмены, закрытие вкладки его отменяет и горутин не остаётся.
-- [ ] kind (`TestKindExec*`): вывод команды, `stty size` после resize, код выхода; принудительно
+- [x] kind (`TestKindExec*`): вывод команды, `stty size` после resize, код выхода; принудительно
   WebSocket-путь и SPDY-фолбэк; нет `pods/exec` (`kind-rbac.sh`: отдельный пользователь);
   закрытие → интерактивный shell и shell с foreground `sleep` исчезают (best effort проверяется
   на kind, где он выполняется); образ без sh → понятная ошибка.
@@ -386,6 +386,35 @@ type Stream interface {
 - [ ] AGENTS.md (правила, things that bite), спецификация (P3 ✅, «Потоки», «Provider API»,
   переопределение «одного активного context-а»), бэклог; раздел «Итоги».
 - [ ] Ревью реализации Codex, исправления, раздел «Ревью реализации».
+
+## Находки реализации (Task 2–4, 2026-09-29)
+
+- **Процессы exec не умирают при разрыве соединения** (kind/containerd, измерено): отмена exec
+  оставляет в контейнере и shell, и его foreground-процесс; закрытие stdin до TTY как EOF не
+  доходит. Поэтому мост терминала при закрытии вкладки / выходе приложения «вешает трубку»
+  in-band: `^C`, через 100 мс `^D` (завершает shell на опустевшей строке), вывод при этом
+  дочитывается и выбрасывается; только если команда не завершилась за 2 с — отмена. Измерено на
+  kind: shell + `sleep` завершаются за ~25 мс, процессов не остаётся
+  (`TestKindTerminalClosingTheTabEndsTheShellAndItsChild`; без моста —
+  `TestKindExecCancelAloneLeavesTheShell`). Программы, игнорирующие `^C`/`^D` (vim), могут
+  остаться — best effort, как и было обещано.
+- **Фолбэк exec на SPDY не срабатывал бы никогда**: client-go v0.37 возвращает
+  `UpgradeFailureError` из `k8s.io/streaming/pkg/httpstream`, а одноимённый предикат устаревшего
+  `apimachinery/pkg/util/httpstream` его не узнаёт. Предикат — из `streaming`
+  (`TestFallbackRecognisesClientGoUpgradeFailures`, тест SPDY-зависания).
+- **Рукопожатие не отменялось контекстом ни на WS-, ни на SPDY-пути** (gorilla и SPDY round
+  tripper читают ответ upgrade без контекста). Решение (`upgrade.go`): WS — httptrace-хук
+  `GotConn` закрывает соединение по отмене; SPDY — свой upgrader (dial client-go, ожидание ответа
+  под контекстом, после рукопожатия контекст его больше не держит). Тест: TLS-зависание,
+  зависание заголовков WS, зависание SPDY после отказа WS — всё заканчивается отменой, горутин нет.
+- **Начальный размер TTY приходит отдельным каналом**: команда, стартующая мгновенно
+  (`sh -c 'stty size'`), может увидеть 0×0 — свойство протокола exec (как у kubectl); интерактивный
+  shell успевает.
+- «Подключиться заново»: API хранит подготовленный хэндл-прототип под `terminalId`
+  (`ReopenTerminal` запускает копию с тем же снимком и pod-ом, `ForgetTerminal` при закрытии
+  вкладки, ≤ 64 прототипа).
+- Фикстуры kind: pod `noshell` (образ `pause`), в `kind-rbac.sh` проверка, что у `viewer` нет
+  `pods/exec` и `pods/portforward`.
 
 ## Ревью плана (Codex, 2026-09-29)
 

@@ -87,7 +87,10 @@ const (
 	ClassNotFound     ErrorClass = "not_found"
 	ClassUnsupported  ErrorClass = "unsupported"
 	ClassConflict     ErrorClass = "conflict"
-	ClassInternal     ErrorClass = "internal"
+	// ClassInvalid: the request cannot be done as asked (a container that
+	// is not running, a command that does not exist).
+	ClassInvalid  ErrorClass = "bad_request"
+	ClassInternal ErrorClass = "internal"
 )
 
 type ViewStatus struct {

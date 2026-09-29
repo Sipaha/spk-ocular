@@ -37,6 +37,7 @@ type Service struct {
 	views      *views.Manager
 	streams    *streams.Registry
 	streamBase func() (string, error)
+	terms      termProtos
 
 	sessMu   sync.Mutex
 	sessions map[string]*sessionEntry // by ownerKey
@@ -85,6 +86,7 @@ func (s *Service) Close() {
 	s.wg.Wait()
 	s.views.CloseAll()
 	s.streams.Close()
+	s.terms.closeAll()
 	s.sessMu.Lock()
 	if s.reaper != nil {
 		s.reaper.Stop()

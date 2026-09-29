@@ -59,6 +59,7 @@ func (p *Provider) Open(_ context.Context, target string) (provider.Session, err
 		return nil, &provider.Error{Class: provider.ClassInternal, Message: err.Error()}
 	}
 	sess := newSession(target, kc.Hash, dyn, true)
+	sess.conn = newConn(cfg, dyn, target, kc.Name, kc.Hash)
 	sess.slots = p.logSlots
 	if sess.logs, err = httpLogFetcher(cfg); err != nil {
 		return nil, &provider.Error{Class: provider.ClassInternal, Message: err.Error()}
@@ -111,11 +112,17 @@ type session struct {
 	metrics metricsCache
 	logs    logFetcher    // nil: no logs (tests without a server)
 	slots   chan struct{} // the provider's logSlots; nil: unlimited
+	// conn is the connection snapshot live resources (terminals, tunnels)
+	// keep; it outlives the session.
+	conn *conn
 }
 
 func newSession(target, hash string, dyn dynamic.Interface, watchList bool) *session {
 	ctx, cancel := context.WithCancel(context.Background())
-	return &session{ctx: ctx, cancel: cancel, target: target, hash: hash, dyn: dyn, caches: newCacheManager(dyn, watchList), kinds: allKinds, now: time.Now}
+	return &session{
+		ctx: ctx, cancel: cancel, target: target, hash: hash, dyn: dyn, caches: newCacheManager(dyn, watchList), kinds: allKinds, now: time.Now,
+		conn: newConn(&rest.Config{Host: "https://cluster.invalid"}, dyn, target, target, hash),
+	}
 }
 
 func (s *session) ConfigHash() string           { return s.hash }
