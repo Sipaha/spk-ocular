@@ -172,9 +172,30 @@ Go + Wails v3 + React. Спецификация: `docs/specs/2026-09-29-spk-ocul
 - Вывод терминала — только по кредиту страницы (окно 1 МиБ, `ack`), ввод — окно 256 КиБ (`iack`);
   читатель WS не блокируется никогда. — `TestTermOutputStopsAtTheWindowUntilAcked`,
   `TestTermCommandNotReadingStdinKeepsControlAlive`.
+- У stdin терминала один писатель (`stdinLoop`): очередь ввода, `^C` по `intr`, при закрытии —
+  сброс очереди, затем `^C`/`^D`. Ctrl+C страницы — управляющее `intr` вне окна ввода: сервер
+  сбрасывает свою очередь (засчитывая в `iack`) и пишет `^C` первым; неверный `iack` — нарушение
+  протокола. — `TestTermClosingDropsQueuedInputAndHangsUpAfterIt`,
+  `TestTermInterruptDropsQueuedInputAndGoesFirst`, `protocol.test.ts`.
+- Запуски терминала принадлежат ему в реестре потоков (owner `term:<id>`): `ForgetTerminal`
+  завершает подключённый и отзывает неподключённый; «Подключиться заново» и «забыть» атомарны. —
+  `TestForgettingATerminalEndsItsRuns`, `TestAReopenRacingForgetLeavesNoRun`.
+- Вставка из буфера (асинхронная) идёт только в соединение, в котором был жест; иначе видимый
+  отказ. Живость в `TerminalView` — локальная для монтирования (StrictMode монтирует дважды). —
+  `TerminalView.test.tsx`.
+- Exec: явный `Instance` workload-а сверяется с цепочкой контроллеров (UID); годный pod — не
+  удаляется и Running|Pending, канал — по своему состоянию; полный листинг сверх 20 000 —
+  ошибка, не обрезка. — `TestAnExplicitInstanceMustBelongToTheWorkload`,
+  `TestARunningInitContainerOfAPendingPodCanBeOpened`.
+- Отказ апгрейда (SPDY) читается под отменой и дедлайном 5 с, соединение не переиспользуется. —
+  `TestARefusalWithAStalledBodyEndsByCancelOrDeadline`.
 - Ошибка одного соединения туннеля не закрывает общий upstream; после ошибки upstream сверяет
-  свой pod и уходит, если pod исчез. — `TestPortErrorFailsOneConnectionAndTheNeighbourLives`,
-  `TestAServiceTunnelMovesOnWhenItsPodIsDeleted`.
+  свой pod (одна проверка на все одновременные сбои, живёт не дольше upstream-а — Stop её не ждёт)
+  и уходит, если pod исчез; молчащий error stream через 5 с — ошибка. —
+  `TestPortErrorFailsOneConnectionAndTheNeighbourLives`, `TestAServiceTunnelMovesOnWhenItsPodIsDeleted`,
+  `TestClosingTheUpstreamCancelsTheFailureCheck`, `TestASilentErrorStreamIsATimeout`.
+- Номер порта может быть объявлен для TCP и UDP (DNS 53): туннель берёт TCP-запись. —
+  `TestATCPPortSharingItsNumberWithUDPIsAccepted`.
 - Туннель слушает только loopback, показывает фактические адреса (не `localhost`); явный занятый
   порт — `conflict`, авто — удалённый при ≥ 1024 и свободном, иначе любой. —
   `TestExplicitPortInUseIsAConflict`, `TestAutoPortTakesTheRemoteOneOrAnyFree`, e2e.
@@ -253,6 +274,8 @@ Go + Wails v3 + React. Спецификация: `docs/specs/2026-09-29-spk-ocul
   оставляет shell и его foreground-процесс; закрытие stdin до TTY как EOF не доходит — отсюда
   «вешание трубки» мостом. Убитое `SIGKILL`-ом приложение (или `kubectl exec`) оставляет shell-ы
   в pod-е; Playwright по умолчанию гасит webServer именно так — в конфигах `gracefulShutdown: SIGTERM`.
+- **`TMPDIR` с `..` в пути** роняет `TestSaveNeedsAnAllowedOriginAndWritesUnique` (сравнение
+  путей): задавать канонический абсолютный путь.
 - **Предикат фолбэка exec на SPDY**: client-go v0.37 возвращает `UpgradeFailureError` из
   `k8s.io/streaming/pkg/httpstream`; одноимённый предикат устаревшего `apimachinery/pkg/util/httpstream`
   его не узнаёт (фолбэк не сработал бы никогда).

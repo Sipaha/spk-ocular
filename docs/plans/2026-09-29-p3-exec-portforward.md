@@ -570,6 +570,54 @@ Desktop под Xvfb против kind (замеры — `make pss`, Private_Dirt
     насыщения из «спайка» перенесены в Task 10: транспорт спайк закрыл, остальное — свойства
     реализации.
 
+## Ревью реализации (Codex, 2026-09-30)
+
+Сессия Codex (только чтение, воспроизводящие тесты вне репозитория) прислала 8 основных
+замечаний и несколько второстепенных; все проверены и признаны по существу. Каждое исправление
+начинается с регрессионного теста, который падал на старом коде.
+1. P1 — очередь ввода могла дописаться в stdin после отмены, а `^C`/`^D` «вешания трубки»
+   гонялись с ней: у stdin теперь один писатель (`stdinLoop`): очередь, при закрытии — сброс
+   очереди, `^C`, 100 мс, `^D` (80df7cf; `TestTermClosingDropsQueuedInputAndHangsUpAfterIt`).
+2. P1 — тело отказа SPDY-апгрейда читалось без отмены: читается внутри `RoundTrip` под отменой и
+   дедлайном 5 с, соединение не переиспользуется (fd695db;
+   `TestARefusalWithAStalledBodyEndsByCancelOrDeadline`).
+3. P1 — явный `Instance` в exec обходил проверку workload-а: pod сверяется с цепочкой
+   контроллеров (Deployment → ReplicaSet по UID), workload — GET с UID (19bb499;
+   `TestAnExplicitInstanceMustBelongToTheWorkload`).
+4. P2 — Stop туннеля ждал проверки pod-а после сбоя соединения (GET до 10 с на
+   `context.Background()`): проверка живёт контекстом upstream-а (Close/retire его отменяют) и
+   контекстом вызвавшего, одновременные сбои делят одну проверку; молчащий error stream через
+   5 с — ошибка `unavailable`, а не молчаливый успех (b7ef296;
+   `TestClosingTheUpstreamCancelsTheFailureCheck`, `TestConcurrentFailuresShareOnePodCheck`,
+   `TestASilentErrorStreamIsATimeout`).
+5. P2 — Ctrl+C застревал за исчерпанным окном ввода: управляющее сообщение `intr` вне окна;
+   сервер сбрасывает свою очередь (засчитывая её в `iack`) и пишет `^C` следующим; страница
+   сбрасывает локальную очередь; строгая проверка `iack` (80df7cf;
+   `TestTermInterruptDropsQueuedInputAndGoesFirst`, `protocol.test.ts`).
+6. P2 — запущенные init-контейнеры pod-а в Pending были скрыты от exec: pod годится, если не
+   удаляется и Running|Pending, канал — по собственному состоянию, Running pod-ы первыми
+   (19bb499; `TestARunningInitContainerOfAPendingPodCanBeOpened`). Port-forward по-прежнему
+   только к Running.
+7. P2 — TCP-порт отвергался, если UDP объявлен с тем же номером (DNS 53): достаточно одной
+   поддерживаемой записи с этим номером (c356cc8;
+   `TestATCPPortSharingItsNumberWithUDPIsAccepted`, оба порядка, Service и Pod).
+8. P2 — асинхронная вставка из буфера (Ctrl+Shift+V) не была привязана к соединению: текст
+   уходит в соединение, в котором сделан жест, иначе видимый отказ; в неподключённый терминал —
+   сразу «не подключён». Заодно: поздний успешный `OpenTerminal` первого монтирования StrictMode
+   теперь забывается (раньше общий `aliveRef` «оживлял» его второй монтаж — терминал утекал)
+   (7affc73; `TerminalView.test.tsx`).
+
+Второстепенные, тоже исправлены: полный листинг кандидатов exec падает (`unsupported`) после
+20 000 объектов вместо молчаливой обрезки (19bb499); `PrepareForward` проверяет порт на том же
+снимке объекта, который закрепляет (c356cc8); запуски терминала принадлежат ему в реестре
+потоков (`term:<id>`): `ForgetTerminal` завершает подключённый запуск и отзывает ещё не
+подключённый, а «Подключиться заново» и «забыть» атомарны; хэндлы закрываются вне мьютекса
+(c2e47c9; `TestForgettingATerminalEndsItsRuns`, `TestAReopenRacingForgetLeavesNoRun`).
+Проверка безопасности обхода Origin/токена не нашла; подход с `configRev` принят.
+
+Попутно: `golangci-lint` (revive) ругался на коммит 80df7cf (контекст не первым аргументом,
+пустые циклы в тестах) — исправлено в 376bc55.
+
 ## Вне P3 (бэклог)
 
 - Ephemeral debug-контейнеры (`kubectl debug`), attach к процессу без exec.
