@@ -2,6 +2,7 @@ package kubernetes
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -99,19 +100,32 @@ func (u *ctxSpdyUpgrader) RoundTrip(req *http.Request) (*http.Response, error) {
 	}
 	stop := context.AfterFunc(req.Context(), func() { _ = conn.Close() })
 	resp, err := http.ReadResponse(bufio.NewReader(conn), nil)
+	refused := err == nil && resp.StatusCode != http.StatusSwitchingProtocols
+	if refused {
+		// A refusal's body (why) is read still under cancellation and with
+		// a deadline of its own: a peer that sends headers and withholds the
+		// body must not hold the handshake. The connection is not kept.
+		_ = conn.SetReadDeadline(time.Now().Add(refusalBodyTimeout))
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 4<<10))
+		_ = resp.Body.Close()
+		resp.Body = io.NopCloser(bytes.NewReader(body))
+	}
 	if !stop() { // the context ended during the handshake: the conn is closed
 		if err == nil {
 			_ = resp.Body.Close()
 		}
 		return nil, fmt.Errorf("upgrade cancelled: %w", context.Cause(req.Context()))
 	}
-	if err != nil {
+	if err != nil || refused {
 		_ = conn.Close()
-		return nil, err
+		return resp, err
 	}
 	u.conn = conn
 	return resp, nil
 }
+
+// refusalBodyTimeout bounds reading a refused upgrade's explanation.
+var refusalBodyTimeout = 5 * time.Second // a variable for tests
 
 // NewConnection validates the upgrade answer (as client-go's does) and
 // starts SPDY on the connection.

@@ -1,11 +1,13 @@
 package kubernetes
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strconv"
 	"strings"
 	"sync"
@@ -13,8 +15,12 @@ import (
 	"time"
 
 	gwebsocket "github.com/gorilla/websocket"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	pfconst "k8s.io/apimachinery/pkg/util/portforward"
+	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/portforward"
 	streamhttp "k8s.io/streaming/pkg/httpstream"
 	streamspdy "k8s.io/streaming/pkg/httpstream/spdy"
@@ -212,4 +218,49 @@ func echoBackend(t *testing.T) string {
 		}
 	}()
 	return ln.Addr().String()
+}
+
+// A refused upgrade whose body never completes ends by cancellation, and
+// without it by the refusal's own deadline — as the refusal it is.
+func TestARefusalWithAStalledBodyEndsByCancelOrDeadline(t *testing.T) {
+	entered := make(chan struct{}, 2)
+	release := make(chan struct{})
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusForbidden)
+		w.(http.Flusher).Flush()
+		entered <- struct{}{}
+		select {
+		case <-release:
+		case <-r.Context().Done():
+		}
+	}))
+	defer srv.Close()
+	defer close(release)
+	d := &forwardDialer{c: &conn{cfg: &rest.Config{Host: srv.URL}}, deadAfter: time.Second}
+	u, err := url.Parse(srv.URL)
+	require.NoError(t, err)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	go func() { _, err := d.dialSPDY(ctx, u); done <- err }()
+	<-entered
+	cancel()
+	select {
+	case err := <-done:
+		assert.ErrorIs(t, err, context.Canceled)
+	case <-time.After(2 * time.Second):
+		t.Fatal("cancel did not end a refusal with a stalled body")
+	}
+
+	old := refusalBodyTimeout
+	refusalBodyTimeout = 200 * time.Millisecond
+	defer func() { refusalBodyTimeout = old }()
+	go func() { _, err := d.dialSPDY(context.Background(), u); done <- err }()
+	<-entered
+	select {
+	case err := <-done:
+		assert.True(t, apierrors.IsForbidden(err), "the refusal, not a hang: %v", err)
+	case <-time.After(2 * time.Second):
+		t.Fatal("the refusal's body had no deadline")
+	}
 }

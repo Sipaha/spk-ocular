@@ -305,9 +305,23 @@ func TestExecHandshakeThatNeverAnswersEndsOnlyByCancel(t *testing.T) {
 		}
 	}))
 	defer spdyStall.Close()
+	// Refuses both, and withholds the SPDY refusal's body.
+	bodyStall := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet {
+			http.Error(w, "no websockets here", http.StatusBadRequest)
+			return
+		}
+		w.WriteHeader(http.StatusForbidden)
+		w.(http.Flusher).Flush()
+		select {
+		case <-release:
+		case <-r.Context().Done():
+		}
+	}))
+	defer bodyStall.Close()
 	defer close(release)
 
-	for name, host := range map[string]string{"tls": "https://" + tlsStall.Addr().String(), "headers": headerStall.URL, "spdy": spdyStall.URL} {
+	for name, host := range map[string]string{"tls": "https://" + tlsStall.Addr().String(), "headers": headerStall.URL, "spdy": spdyStall.URL, "refusal body": bodyStall.URL} {
 		t.Run(name, func(t *testing.T) {
 			before := runtime.NumGoroutine()
 			cfg := &rest.Config{Host: host, TLSClientConfig: rest.TLSClientConfig{Insecure: true}}
