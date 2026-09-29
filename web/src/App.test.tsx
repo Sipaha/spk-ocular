@@ -43,6 +43,15 @@ describe('App', () => {
     expect(await screen.findByRole('option', { name: /added/ })).toBeInTheDocument()
   })
 
+  it('reloads on resync (missed events)', async () => {
+    const f = fakeClient([k8s('a')])
+    render(<App client={f.client} />)
+    await screen.findByRole('option', { name: /a/ })
+    f.state.view.groups[0].targets.push(k8s('late'))
+    act(() => f.emit({ type: 'resync' }))
+    expect(await screen.findByRole('option', { name: /late/ })).toBeInTheDocument()
+  })
+
   it('shows unreadable kubeconfig files as a warning', async () => {
     const f = fakeClient([k8s('ok')])
     f.state.view.groups[0].problems = [{ source: '/home/u/.kube/broken', message: 'yaml: line 3: did not find expected key' }]

@@ -7,6 +7,7 @@ import (
 	"context"
 
 	"github.com/spk/spk-ocular/internal/core"
+	"github.com/spk/spk-ocular/internal/events"
 )
 
 type API interface {
@@ -51,6 +52,8 @@ type TargetsView struct {
 const (
 	// EventTargetsChanged: local configuration changed; call ListTargets.
 	EventTargetsChanged = "targets_changed"
+	// EventResync (events.TypeResync): the UI fell behind; reload all state.
+	EventResync = events.TypeResync
 )
 
 // Error codes (CodedError.Code) — stable, the UI switches on them.

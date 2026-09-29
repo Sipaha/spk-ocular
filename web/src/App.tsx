@@ -14,7 +14,7 @@ export function App({ client }: { client: Client }) {
 
   useEffect(() => {
     const off = client.subscribeEvents((e) => {
-      if (e.type === 'targets_changed') void act.reload()
+      if (e.type === 'targets_changed' || e.type === 'resync') void act.reload()
     })
     void act.init()
     return off

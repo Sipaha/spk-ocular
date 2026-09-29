@@ -44,7 +44,8 @@ export interface AppInfo {
   language: 'ru' | 'en'
 }
 
-export type EventType = 'targets_changed'
+/** resync: the UI fell behind the backend's events; reload all state. */
+export type EventType = 'targets_changed' | 'resync'
 
 export interface ApiEvent {
   type: EventType

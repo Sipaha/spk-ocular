@@ -48,9 +48,9 @@ export const httpClient: Client = {
   subscribeEvents(onEvent) {
     const es = new EventSource(`/api/events?token=${encodeURIComponent(tokenMeta())}`)
     es.onmessage = (m) => onEvent(JSON.parse(m.data) as ApiEvent)
-    // EventSource reconnects by itself; after a gap the view may be stale,
-    // so every (re)open is reported as a change.
-    es.onopen = () => onEvent({ type: 'targets_changed' })
+    // EventSource reconnects by itself; events emitted during the gap are
+    // gone, so every (re)open is a resync.
+    es.onopen = () => onEvent({ type: 'resync' })
     return () => es.close()
   },
 }
@@ -72,7 +72,7 @@ async function wcall<T>(method: string, ...args: unknown[]): Promise<T> {
   }
 }
 
-const EVENT_TYPES: EventType[] = ['targets_changed']
+const EVENT_TYPES: EventType[] = ['targets_changed', 'resync']
 
 export const wailsClient: Client = {
   appInfo: () => wcall('AppInfo'),

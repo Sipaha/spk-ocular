@@ -52,17 +52,16 @@ func Run(ctx context.Context, o Options) error {
 
 	// Relay core events to the page (Wails events; payload is the one arg).
 	go func() {
-		ch, unsub := o.Emitter.Subscribe()
+		sub, unsub := o.Emitter.Subscribe()
 		defer unsub()
 		for {
 			select {
 			case <-ctx.Done():
 				return
-			case ev, ok := <-ch:
-				if !ok {
-					return
+			case <-sub.Wake():
+				for _, ev := range sub.Drain() {
+					app.Event.Emit(ev.Type, ev.Payload)
 				}
-				app.Event.Emit(ev.Type, ev.Payload)
 			}
 		}
 	}()

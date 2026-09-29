@@ -108,14 +108,16 @@ func TestFailingProviderDoesNotHideOthers(t *testing.T) {
 func TestWatcherChangeEmitsTargetsChanged(t *testing.T) {
 	k := &fakeProvider{id: "k", changed: make(chan struct{})}
 	s, em := newService(t, k)
-	ch, unsub := em.Subscribe()
+	sub, unsub := em.Subscribe()
 	defer unsub()
 	s.Start(context.Background())
 	k.changed <- struct{}{}
 	select {
-	case ev := <-ch:
-		assert.Equal(t, EventTargetsChanged, ev.Type)
-		assert.Equal(t, "k", ev.Payload["provider"])
+	case <-sub.Wake():
+		evs := sub.Drain()
+		require.Len(t, evs, 1)
+		assert.Equal(t, EventTargetsChanged, evs[0].Type)
+		assert.Equal(t, "k", evs[0].Payload["provider"])
 	case <-time.After(2 * time.Second):
 		t.Fatal("no targets_changed")
 	}

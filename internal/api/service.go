@@ -53,7 +53,7 @@ func (s *Service) Start(ctx context.Context) {
 		go func() {
 			defer s.wg.Done()
 			err := w.Watch(ctx, func() {
-				s.em.Emit(events.Event{Type: EventTargetsChanged, Payload: map[string]any{"provider": p.ID()}})
+				s.em.Emit(events.Event{Type: EventTargetsChanged, Key: p.ID(), Payload: map[string]any{"provider": p.ID()}})
 			})
 			if err != nil {
 				slog.Warn("target watch stopped; the list refreshes only on demand", "provider", p.ID(), "err", err)

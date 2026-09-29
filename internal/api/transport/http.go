@@ -100,7 +100,7 @@ func (h *HTTP) serveEvents(w http.ResponseWriter, r *http.Request) {
 	rc := http.NewResponseController(w)
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-store")
-	ch, unsub := h.events.Subscribe()
+	sub, unsub := h.events.Subscribe()
 	defer unsub()
 	write := func(s string) bool {
 		_ = rc.SetWriteDeadline(time.Now().Add(sseWriteTimeout))
@@ -122,13 +122,12 @@ func (h *HTTP) serveEvents(w http.ResponseWriter, r *http.Request) {
 			if !write(": ping\n\n") {
 				return
 			}
-		case ev, ok := <-ch:
-			if !ok {
-				return
-			}
-			b, _ := json.Marshal(ev)
-			if !write("data: " + string(b) + "\n\n") {
-				return
+		case <-sub.Wake():
+			for _, ev := range sub.Drain() {
+				b, _ := json.Marshal(ev)
+				if !write("data: " + string(b) + "\n\n") {
+					return
+				}
 			}
 		}
 	}
