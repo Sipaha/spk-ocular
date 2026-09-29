@@ -42,6 +42,36 @@ type LiveTarget struct {
 	Ref        Ref    `json:"ref"`
 	Instance   string `json:"instance,omitempty"` // title of the pinned instance
 	Channel    string `json:"channel,omitempty"`
+	// Port: the remote port of a tunnel.
+	Port int `json:"port,omitempty"`
 	// Command: argv as run (empty = the interactive shell).
 	Command []string `json:"command,omitempty"`
+}
+
+// ForwardPort is a port of an object that can be forwarded.
+type ForwardPort struct {
+	// Port is the number to forward (k8s: the Service port or the
+	// container port).
+	Port int    `json:"port"`
+	Name string `json:"name,omitempty"`
+	// Protocol: "TCP"; others are listed but not Supported.
+	Protocol string `json:"protocol"`
+	// Note: where it leads, human-readable ("→ 8080", "container web").
+	Note string `json:"note,omitempty"`
+	// Scheme is "http" or "https" when the port is known to speak it (its
+	// name or application protocol says so): the UI offers "Open".
+	Scheme    string `json:"scheme,omitempty"`
+	Supported bool   `json:"supported"`
+	// Reason: why it cannot be forwarded.
+	Reason string `json:"reason,omitempty"`
+}
+
+// ForwardInfo says which ports of an object can be forwarded.
+type ForwardInfo struct {
+	Ports []ForwardPort `json:"ports"`
+	// AnyPort: a port that is not listed can be forwarded too (k8s: a Pod).
+	AnyPort bool `json:"anyPort,omitempty"`
+	// Unsupported: nothing can be forwarded, and why (a selectorless
+	// Service, an ExternalName).
+	Unsupported string `json:"unsupported,omitempty"`
 }
