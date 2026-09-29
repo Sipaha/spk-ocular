@@ -64,8 +64,8 @@ func (f *fakeSession) Watch(_ provider.Query, sink provider.Sink) (func(), error
 	return func() {}, nil
 }
 func (f *fakeSession) Get(context.Context, core.Ref) (*core.Resource, error) { return nil, nil }
-func (f *fakeSession) Close()                                              { f.mu.Lock(); f.closed = true; f.mu.Unlock() }
-func (f *fakeSession) isClosed() bool                                      { f.mu.Lock(); defer f.mu.Unlock(); return f.closed }
+func (f *fakeSession) Close()                                                { f.mu.Lock(); f.closed = true; f.mu.Unlock() }
+func (f *fakeSession) isClosed() bool                                        { f.mu.Lock(); defer f.mu.Unlock(); return f.closed }
 
 func newOpenable(targets ...string) *openable {
 	o := &openable{fakeProvider: fakeProvider{id: "k", targets: targets, changed: make(chan struct{})}, hashes: map[string]string{}}
@@ -171,4 +171,3 @@ func TestOpenViewValidation(t *testing.T) {
 	_, err = s2.ListKinds(ctx, "plain", "x")
 	assert.True(t, IsCoded(err, CodeUnsupported), "providers without Open")
 }
-
