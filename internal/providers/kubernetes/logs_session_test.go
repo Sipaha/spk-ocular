@@ -106,3 +106,33 @@ func TestStreamLogsFollowsARestartFromTheCache(t *testing.T) {
 	active, _ := s.caches.stats()
 	assert.Equal(t, 0, active, "the pod observation lease is released")
 }
+
+// Observations come from the slim cache, where numbers are JSON float64s:
+// exit codes and restart counts must survive that (an OnFailure container
+// that failed must not look like a success).
+func TestObservePodThroughTheSlimCache(t *testing.T) {
+	u := pod("ns", "p", "uid-1", withLogContainers, func(o map[string]any) {
+		o["spec"].(map[string]any)["restartPolicy"] = "OnFailure"
+		o["status"].(map[string]any)["containerStatuses"] = []any{map[string]any{
+			"name": "app", "containerID": "containerd://c2", "restartCount": int64(4),
+			"state":     map[string]any{"waiting": map[string]any{"reason": "CrashLoopBackOff"}},
+			"lastState": map[string]any{"terminated": map[string]any{"exitCode": int64(3), "containerID": "containerd://c2"}},
+		}}
+		o["status"].(map[string]any)["ephemeralContainerStatuses"] = []any{map[string]any{
+			"name": "debugger", "containerID": "containerd://e1",
+			"state": map[string]any{"terminated": map[string]any{"exitCode": int64(0), "containerID": "containerd://e1"}},
+		}}
+	})
+	so, err := slim(trim(u, podsKind.keep))
+	require.NoError(t, err)
+	o := observePod(so.expand())
+	app := o.ctrs["app"]
+	assert.Equal(t, ctrObs{id: "containerd://c2", restarts: 4, waiting: "CrashLoopBackOff", exitCode: 3}, app)
+	assert.True(t, o.restartExpected(app), "OnFailure + exit 3: it comes back")
+	assert.Equal(t, ctrSidecar, o.ctrs["mesh"].kind)
+	assert.Equal(t, ctrInit, o.ctrs["migrate"].kind)
+	dbg := o.ctrs["debugger"]
+	assert.Equal(t, ctrEphemeral, dbg.kind)
+	assert.True(t, dbg.exited)
+	assert.False(t, o.restartExpected(dbg))
+}

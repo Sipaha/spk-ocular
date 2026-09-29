@@ -65,7 +65,7 @@ func observePod(u *unstructured.Unstructured) podObs {
 			name := strOf(cs, "name")
 			c := o.ctrs[name]
 			c.id = strOf(cs, "containerID")
-			c.restarts, _, _ = unstructured.NestedInt64(cs, "restartCount")
+			c.restarts = i64(cs, "restartCount")
 			if st, ok := cs["state"].(map[string]any); ok {
 				if r, ok := st["running"].(map[string]any); ok {
 					c.running = true
@@ -76,17 +76,19 @@ func observePod(u *unstructured.Unstructured) podObs {
 				}
 				if t, ok := st["terminated"].(map[string]any); ok {
 					c.exited = true
-					c.exitCode, _, _ = unstructured.NestedInt64(t, "exitCode")
+					c.exitCode = i64(t, "exitCode")
 					if id := strOf(t, "containerID"); id != "" {
 						c.id = id
 					}
 				}
 			}
-			if c.id == "" { // waiting after a restart: the last instance
-				if lt, ok := cs["lastState"].(map[string]any); ok {
-					if t, ok := lt["terminated"].(map[string]any); ok {
+			if lt, ok := cs["lastState"].(map[string]any); ok && !c.running && !c.exited {
+				// waiting after an exit (CrashLoopBackOff): the last instance
+				if t, ok := lt["terminated"].(map[string]any); ok {
+					if c.id == "" {
 						c.id = strOf(t, "containerID")
 					}
+					c.exitCode = i64(t, "exitCode")
 				}
 			}
 			o.ctrs[name] = c

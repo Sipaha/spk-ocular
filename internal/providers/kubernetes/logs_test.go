@@ -428,3 +428,33 @@ func TestCursorReplayPlan(t *testing.T) {
 	assert.Len(t, expect, cursorRing)
 	assert.False(t, covered, "lines of that second fell out of the ring")
 }
+
+// The first request went out before the pod was observed (the instance is
+// unknown): its end must not make the same file look like a new instance
+// and be read again (found on kind).
+func TestLogFirstRequestBeforeTheCacheSynced(t *testing.T) {
+	old := firstSyncWait
+	firstSyncWait = 10 * time.Millisecond
+	t.Cleanup(func() { firstSyncWait = old })
+	k := newFakeKubelet(t)
+	k.start("p", "app", "c1")
+	k.log("p", "app", fakeRec{ts: at(1), text: "run 1"}, fakeRec{ts: at(1.5), text: "tick"})
+	box := newObsBox() // not synced yet
+	r := startSource(t, k, box, follow100)
+	r.sink.await(t, "run 1", func() bool { return len(r.sink.texts()) == 2 })
+
+	box.set(runningObs("uid-1", "c1"))
+	box.setSynced()
+	k.end("p", "app")
+	box.set(exited(runningObs("uid-1", "c1"), 1))
+	r.sink.await(t, "waiting", func() bool { return r.sink.lastState().State == provider.LogWaiting })
+	k.start("p", "app", "c2")
+	k.log("p", "app", fakeRec{ts: at(9), text: "run 2"})
+	o := runningObs("uid-1", "c2")
+	o.ctrs["app"] = ctrObs{id: "c2", running: true, startedAt: at(8)}
+	box.set(o)
+	r.sink.await(t, "run 2", func() bool { return len(r.sink.texts()) == 3 })
+	time.Sleep(50 * time.Millisecond)
+	assert.Equal(t, []string{"run 1", "tick", "run 2"}, r.sink.texts())
+	assert.False(t, r.sink.hasState(provider.LogGap), "the new instance was recognised, not guessed")
+}

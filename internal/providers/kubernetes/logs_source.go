@@ -139,6 +139,10 @@ func newPodSource(id int, ns, pod, uid, ctr string, fetch logFetcher, box *obsBo
 	return &podSource{id: id, ns: ns, pod: pod, uid: uid, ctr: ctr, fetch: fetch, box: box, sink: sink, q: q, retryFirst: retryFirst, retryCap: retryCap}
 }
 
+// staleIncarnation: the instance read is known to be older than the
+// observed one (never equal to a container ID).
+const staleIncarnation = "\x00stale"
+
 // errSourceDone ends a source whose final state was reported.
 var errSourceDone = errors.New("source finished")
 
@@ -218,8 +222,16 @@ func (s *podSource) requestFailed(ctx context.Context, err error) error {
 	return s.finish(provider.LogError, class, msg)
 }
 
+// firstSyncWait: the first request waits this long at most for the pod
+// observation, so the instance it reads is known (else a later restart
+// could not be told from the same file).
+var firstSyncWait = 3 * time.Second
+
 func (s *podSource) follow(ctx context.Context) error {
 	backoff := s.retryFirst
+	if err := s.awaitFirstSync(ctx); err != nil {
+		return err
+	}
 	for {
 		obs, synced, blind, changed := s.box.get()
 		tracked := synced && blind == ""
@@ -299,6 +311,24 @@ func (s *podSource) follow(ctx context.Context) error {
 	}
 }
 
+func (s *podSource) awaitFirstSync(ctx context.Context) error {
+	limit := time.NewTimer(firstSyncWait)
+	defer limit.Stop()
+	for {
+		_, synced, blind, changed := s.box.get()
+		if synced || blind != "" {
+			return nil
+		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-limit.C:
+			return nil
+		case <-changed:
+		}
+	}
+}
+
 func blindReason(b string) string {
 	if b == "" {
 		return "the pod list is not available yet"
@@ -339,8 +369,18 @@ func (s *podSource) afterEOF(ctx context.Context, backoff *time.Duration) error 
 			return err
 		}
 		c := obs.ctrs[s.ctr]
+		if s.incarnation == "" && c.id != "" {
+			// The first request went out before the pod was observed: the
+			// instance read was the observed one unless that one started
+			// after the last line read.
+			if c.running && s.cur.last() != "" && tsTime(s.cur.last()).Before(c.startedAt.Add(-time.Second)) {
+				s.incarnation = staleIncarnation
+			} else {
+				s.incarnation = c.id
+			}
+		}
 		switch {
-		case c.id != "" && c.id != s.incarnation:
+		case c.id != "" && s.incarnation != "" && c.id != s.incarnation:
 			return nil // a newer instance is already known: open it now
 		case c.running:
 			// The same instance still runs: the connection broke (or the
@@ -374,7 +414,9 @@ func (s *podSource) plan(c ctrObs, tracked bool) (podLogRequest, *skipper) {
 		req.TailLines = tailOf(s.q)
 		return req, nil
 	}
-	same := !tracked || c.id == s.incarnation
+	// An unknown instance (the first request went out before the pod was
+	// observed) is resumed as the same file; the skipper checks it.
+	same := !tracked || s.incarnation == "" || c.id == s.incarnation
 	if !same && c.running && s.cur.last() != "" && !tsTime(s.cur.last()).Before(c.startedAt) {
 		// The last request already reached this instance (the cache saw the
 		// restart after we did): same file, resume.
