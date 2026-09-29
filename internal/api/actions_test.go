@@ -30,7 +30,7 @@ func (a *actionSession) Kinds() []core.KindDescriptor {
 	return []core.KindDescriptor{{ID: "deployments", Title: "Deployments", Scoped: true, Actions: []core.ActionDescriptor{restartAction, scaleAction, deleteAction}}}
 }
 
-func (a *actionSession) PrepareAction(_ context.Context, ref core.Ref, action string, p core.ActionParams) (core.ActionPlan, error) {
+func (a *actionSession) PrepareAction(_ context.Context, ref core.Ref, _ string, p core.ActionParams) (core.ActionPlan, error) {
 	if h := a.o.duringPrepare; h != nil {
 		h()
 	}
