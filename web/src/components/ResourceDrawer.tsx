@@ -15,11 +15,14 @@ interface Props {
   /** The object shown; history is kept for relation navigation. */
   subject: Ref
   onClose: () => void
+  /** Kinds with logs get a Logs button. */
+  hasLogs?: (kindId: string) => boolean
+  onLogs?: (ref: Ref) => void
 }
 
 type Tab = 'details' | 'yaml'
 
-export function ResourceDrawer({ client, hub, target, subject, onClose }: Props) {
+export function ResourceDrawer({ client, hub, target, subject, onClose, hasLogs, onLogs }: Props) {
   const [stack, setStack] = useState<Ref[]>([subject])
   const [tab, setTab] = useState<Tab>('details')
   const [res, setRes] = useState<{ key: string; r?: Resource; error?: string } | null>(null)
@@ -64,6 +67,15 @@ export function ResourceDrawer({ client, hub, target, subject, onClose }: Props)
         )}
         <span className="text-xs uppercase tracking-wide text-fg-subtle">{current.kind}</span>
         <h2 className="min-w-0 flex-1 truncate font-semibold">{current.name}</h2>
+        {onLogs && hasLogs?.(current.kind) && (
+          <button
+            className="rounded-md border border-line px-2 py-0.5 text-xs text-fg-muted hover:bg-hover hover:text-fg"
+            onClick={() => onLogs({ ...(r?.ref ?? current), provider: target.provider, target: target.id })}
+            title={t('logs.openHint')}
+          >
+            {t('logs.open')}
+          </button>
+        )}
         <button className="rounded px-2 text-lg leading-none text-fg-muted hover:bg-hover hover:text-fg" onClick={onClose} aria-label={t('drawer.close')}>
           ×
         </button>

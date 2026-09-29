@@ -2,6 +2,7 @@ import { useVirtualizer } from '@tanstack/react-virtual'
 import { useMemo, useRef, useState } from 'react'
 import type { Cell, Column, HealthState, MetricsView, Row } from '../api/types'
 import { formatAge, formatBytes, formatCPU } from '../format'
+import { isShortcut } from '../keyboard'
 import { useNow } from '../views/useView'
 
 const ROW_H = 28
@@ -20,6 +21,8 @@ interface Props {
   selected: string | null
   onSelect: (row: Row) => void
   onOpen?: (row: Row) => void
+  /** L on a row: its logs (kinds that have them). */
+  onLogs?: (row: Row) => void
   /** Usage for metric columns (CPU/Memory), by row id. */
   metrics?: MetricsView | null
 }
@@ -61,7 +64,7 @@ export function matchesRow(r: Row, f: string): boolean {
   return r.cells.some((c) => (c.text ?? '').toLowerCase().includes(needle)) || (r.health.reason ?? '').toLowerCase().includes(needle)
 }
 
-export function ResourceTable({ columns, rows, hideScope, filter, selected, onSelect, onOpen, metrics }: Props) {
+export function ResourceTable({ columns, rows, hideScope, filter, selected, onSelect, onOpen, onLogs, metrics }: Props) {
   const now = useNow(10_000)
   const [sort, setSort] = useState<Sort>({ col: 0, desc: false })
   const visibleCols = useMemo(
@@ -114,6 +117,9 @@ export function ResourceTable({ columns, rows, hideScope, filter, selected, onSe
       const next = e.key === 'ArrowDown' ? Math.min(sorted.length - 1, i + 1) : Math.max(0, i < 0 ? 0 : i - 1)
       onSelect(sorted[next])
       virt.scrollToIndex(next, { align: 'auto' })
+    } else if (onLogs && i >= 0 && isShortcut(e, 'KeyL', { ctrl: false, shift: false }) && !e.altKey) {
+      e.preventDefault()
+      onLogs(sorted[i])
     } else if (e.key === 'Enter' && i >= 0 && onOpen) {
       e.preventDefault()
       onOpen(sorted[i])

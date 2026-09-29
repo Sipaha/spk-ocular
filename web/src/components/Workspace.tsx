@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { Client } from '../api/client'
 import type { KindDescriptor, Ref, Row, ScopeSel, ScopesView, Target } from '../api/types'
 import { classLabel, t } from '../i18n'
@@ -9,6 +9,7 @@ import { ResourceDrawer } from './ResourceDrawer'
 import { ResourceTable } from './ResourceTable'
 import { TargetDetails } from './TargetDetails'
 import { SearchIcon, WarningIcon } from './icons'
+import { LogsDock, tabId, type LogTab } from '../logs/LogsDock'
 
 const OVERVIEW = '__overview'
 
@@ -52,12 +53,37 @@ export function Workspace({ client, hub, target }: { client: Client; hub: ViewHu
   const setKind = (k: string) => remember({ kind: k, scope })
   const setScope = (s: ScopeSel) => remember({ kind, scope: s })
 
+  // Log tabs belong to this target (its session): switching the context
+  // closes them with the Workspace.
+  const [tabs, setTabs] = useState<LogTab[]>([])
+  const [activeTab, setActiveTab] = useState<string | null>(null)
+  const [dockHeight, setDockHeight] = useState(320)
+  const openLogs = useCallback((ref: Ref) => {
+    const id = tabId(ref)
+    setTabs((ts) => (ts.some((x) => x.id === id) ? ts : [...ts, { id, ref, title: `${ref.kind.split('/').pop()}/${ref.name}` }]))
+    setActiveTab(id)
+  }, [])
+  const closeTab = (id: string) => {
+    setTabs((ts) => {
+      const i = ts.findIndex((x) => x.id === id)
+      const rest = ts.filter((x) => x.id !== id)
+      if (activeTab === id) setActiveTab(rest[Math.min(i, rest.length - 1)]?.id ?? null)
+      return rest
+    })
+  }
+  const hasLogs = useCallback((kindId: string) => !!kinds?.find((k) => k.id === kindId)?.logs, [kinds])
+
   useEffect(() => {
     // Workspace is keyed by target: state starts fresh for each one.
     let live = true
     const fallback: UIState = { kind: 'pods', scope: defaultNs ? { mode: 'one', name: defaultNs } : { mode: 'all' } }
     client.getTargetState(target.provider, target.id).then(
-      (st) => live && setUI(parseState(st, fallback)),
+      (st) => {
+        if (!live) return
+        setUI(parseState(st, fallback))
+        const h = Number(st.logsHeight)
+        if (h > 0) setDockHeight(h)
+      },
       () => live && setUI(fallback),
     )
     client.listKinds(target.provider, target.id).then(
@@ -95,6 +121,7 @@ export function Workspace({ client, hub, target }: { client: Client; hub: ViewHu
         {kindsError && <p className="mt-3 px-2 text-xs text-danger">{kindsError}</p>}
       </nav>
       <main className="flex min-w-0 flex-1 flex-col">
+        <div className="flex min-h-0 flex-1 flex-col">
         {!ui ? null : kind === OVERVIEW || !current ? (
           <div className="min-h-0 flex-1 overflow-y-auto">
             <TargetDetails />
@@ -111,8 +138,23 @@ export function Workspace({ client, hub, target }: { client: Client; hub: ViewHu
             scope={current.scoped ? scope : { mode: 'none' }}
             scopes={scopes}
             onScope={setScope}
+            hasLogs={hasLogs}
+            onLogs={openLogs}
           />
         )}
+        </div>
+        <LogsDock
+          client={client}
+          tabs={tabs}
+          active={activeTab}
+          height={dockHeight}
+          onActivate={setActiveTab}
+          onClose={closeTab}
+          onHeight={(h, done) => {
+            setDockHeight(h)
+            if (done) void client.setTargetState(target.provider, target.id, 'logsHeight', String(Math.round(h))).catch(() => {})
+          }}
+        />
       </main>
     </div>
   )
@@ -138,8 +180,10 @@ function ResourcePage(props: {
   scope: ScopeSel
   scopes: ScopesView | null
   onScope: (s: ScopeSel) => void
+  hasLogs: (kindId: string) => boolean
+  onLogs: (ref: Ref) => void
 }) {
-  const { client, hub, target, kind, scope, scopes, onScope } = props
+  const { client, hub, target, kind, scope, scopes, onScope, hasLogs, onLogs } = props
   const scopeKey = JSON.stringify(scope)
   const query = useMemo(() => ({ kind: kind.id, scope: JSON.parse(scopeKey) as ScopeSel }), [kind.id, scopeKey])
   const view = useView(hub, target.provider, target.id, query)
@@ -193,6 +237,7 @@ function ResourcePage(props: {
           selected={selected}
           onSelect={(r: Row) => setSelected(r.id)}
           onOpen={(r: Row) => setOpen(r.ref)}
+          onLogs={kind.logs ? (r: Row) => onLogs(r.ref) : undefined}
           metrics={metrics}
         />
         {open && (
@@ -203,6 +248,8 @@ function ResourcePage(props: {
             target={{ provider: target.provider, id: target.id }}
             subject={open}
             onClose={() => setOpen(null)}
+            hasLogs={hasLogs}
+            onLogs={onLogs}
           />
         )}
       </div>

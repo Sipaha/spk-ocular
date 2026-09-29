@@ -1,9 +1,9 @@
-import { act, render, screen, within } from '@testing-library/react'
+import { act, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { App } from '../App'
 import { initialState, useStore } from '../store'
-import { fakeClient, k8s, podRow, scopeRow } from '../test/fakeClient'
+import { fakeClient, k8s, podRow, podsKind, scopeRow } from '../test/fakeClient'
 
 beforeEach(() => useStore.setState({ ...initialState }))
 
@@ -162,5 +162,34 @@ describe('drawer follows its object', () => {
     await act(async () => f.emit({ type: 'view_changed', payload: { viewId: 'v-pods', version: 999 } }))
     await vi.waitFor(() => expect((f.client.getResource as ReturnType<typeof vi.fn>).mock.calls.length).toBeGreaterThan(calls), { timeout: 2000 })
     expect(f.client.openView).toHaveBeenCalledWith('kubernetes', 'prod', expect.objectContaining({ kind: 'pods', name: 'api-1' }))
+  })
+})
+
+describe('Workspace logs', () => {
+  it('opens logs from the drawer and with L on a row, one tab per object', async () => {
+    const f = fakeClient([k8s('prod')])
+    f.client.listKinds = vi.fn(async () => [{ ...podsKind, logs: true }])
+    f.state.rows = [podRow('api-1', 'web'), podRow('api-2', 'web')]
+    // streams are not the point here: a body that never sends anything
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(new ReadableStream())))
+    const grid = await openProd(f)
+    const user = userEvent.setup()
+    await user.click(await within(grid).findByText('api-1'))
+    await user.keyboard('{Enter}')
+    await user.click(await screen.findByRole('button', { name: 'Logs' }))
+    expect(await screen.findByRole('tab', { name: /pods\/api-1/ })).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Close' })) // the drawer
+    await user.click(within(grid).getByText('api-2'))
+    await user.keyboard('l')
+    expect(await screen.findByRole('tab', { name: /pods\/api-2/ })).toHaveAttribute('aria-selected', 'true')
+    await user.click(within(grid).getByText('api-1'))
+    await user.keyboard('l') // again: the existing tab, not a second one
+    expect(screen.getAllByRole('tab', { name: /pods\/api-1/ })).toHaveLength(1)
+    await waitFor(() => expect(f.client.logInfo).toHaveBeenCalledTimes(2))
+
+    await user.click(within(screen.getByRole('tab', { name: /pods\/api-1/ })).getByRole('button', { name: 'Close tab' }))
+    expect(screen.queryByRole('tab', { name: /pods\/api-1/ })).not.toBeInTheDocument()
+    vi.unstubAllGlobals()
   })
 })

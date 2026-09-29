@@ -19,6 +19,29 @@
   --color-success: #5fad65;
   --color-warning: #e8c44d;
 
+  /* logs: levels and the 16 ANSI colours (Darcula-like, readable on --color-app) */
+  --color-log-error: #f75464;
+  --color-log-warn: #e8c44d;
+  --color-log-info: #dfe1e5;
+  --color-log-debug: #8c8f96;
+  --color-log-trace: #6f737a;
+  --color-ansi-0: #4b4e55;
+  --color-ansi-1: #f0524f;
+  --color-ansi-2: #5c962c;
+  --color-ansi-3: #c0a13a;
+  --color-ansi-4: #3993d4;
+  --color-ansi-5: #a771bf;
+  --color-ansi-6: #00a3a3;
+  --color-ansi-7: #bcbec4;
+  --color-ansi-8: #6f737a;
+  --color-ansi-9: #ff4050;
+  --color-ansi-10: #4fc414;
+  --color-ansi-11: #e5bf00;
+  --color-ansi-12: #1fb0ff;
+  --color-ansi-13: #ed7eed;
+  --color-ansi-14: #00e5e5;
+  --color-ansi-15: #ffffff;
+
   --font-mono: "JetBrains Mono", "SF Mono", "Cascadia Code", "Fira Code",
     "Roboto Mono", ui-monospace, "Menlo", "Consolas", monospace;
 }
@@ -45,3 +68,9 @@ html { color-scheme: dark; }
 }
 
 ::selection { background: color-mix(in srgb, var(--color-accent) 35%, transparent); }
+
+/* logs: search matches, and no selection outside the viewer while a
+   drag-selection runs inside it (SPK-launcher) */
+mark.log-match { background: #ffeb3b; color: #000; border-radius: 2px; }
+mark.log-match-current { background: #ff9800; color: #000; border-radius: 2px; }
+body.log-select-drag { -webkit-user-select: none; user-select: none; }
