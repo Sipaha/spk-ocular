@@ -56,3 +56,21 @@ func (s *Store) SetTargetState(ctx context.Context, provider, target, key, value
 		provider, target, key, value)
 	return err
 }
+
+// TargetState returns all per-target values.
+func (s *Store) TargetState(ctx context.Context, provider, target string) (map[string]string, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT key, value FROM target_state WHERE provider = ? AND target = ?`, provider, target)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := map[string]string{}
+	for rows.Next() {
+		var k, v string
+		if err := rows.Scan(&k, &v); err != nil {
+			return nil, err
+		}
+		out[k] = v
+	}
+	return out, rows.Err()
+}

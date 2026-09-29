@@ -15,7 +15,7 @@ async function openProd(f: ReturnType<typeof fakeClient>) {
 
 describe('Workspace', () => {
   it('shows live rows of the default namespace with health', async () => {
-    const f = fakeClient([k8s('prod', { details: [{ key: 'namespace', value: 'web' }] })])
+    const f = fakeClient([k8s('prod', { details: [{ key: 'defaultNamespace', value: 'web' }] })])
     f.state.rows = [podRow('api-1', 'web'), podRow('api-2', 'web', 'CrashLoopBackOff', { state: 'error', reason: 'CrashLoopBackOff' })]
     const grid = await openProd(f)
     expect(await within(grid).findByText('api-1')).toBeInTheDocument()
@@ -26,7 +26,7 @@ describe('Workspace', () => {
   })
 
   it('switching to all namespaces reopens the view and shows the namespace column', async () => {
-    const f = fakeClient([k8s('prod', { details: [{ key: 'namespace', value: 'web' }] })])
+    const f = fakeClient([k8s('prod', { details: [{ key: 'defaultNamespace', value: 'web' }] })])
     const grid = await openProd(f)
     await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Namespace' }), '')
     expect(f.client.openView).toHaveBeenLastCalledWith('kubernetes', 'prod', { kind: 'pods', scope: { mode: 'all' } })
@@ -72,3 +72,60 @@ describe('Workspace', () => {
     expect(f.client.openView).toHaveBeenLastCalledWith('kubernetes', 'prod', { kind: 'pods', scope: { mode: 'one', name: 'team-a' } })
   })
 })
+
+describe('Workspace details and state', () => {
+  it('opens a row in the drawer, follows a relation and goes back', async () => {
+    const f = fakeClient([k8s('prod')])
+    f.state.rows = [podRow('api-1', 'web')]
+    const grid = await openProd(f)
+    await userEvent.click(await within(grid).findByText('api-1'))
+    const drawer = await screen.findByRole('dialog', { name: 'pods api-1' })
+    expect(await within(drawer).findByText('node-1', { selector: 'dd' })).toBeInTheDocument()
+    await userEvent.click(within(drawer).getByRole('button', { name: 'nodes/node-1' }))
+    expect(await screen.findByRole('dialog', { name: 'nodes node-1' })).toBeInTheDocument()
+    expect(f.client.getResource).toHaveBeenLastCalledWith(expect.objectContaining({ kind: 'nodes', name: 'node-1', target: 'prod' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Back' }))
+    expect(await screen.findByRole('dialog', { name: 'pods api-1' })).toBeInTheDocument()
+    await userEvent.keyboard('{Escape}')
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  })
+
+  it('shows metrics in CPU/Memory columns by row id', async () => {
+    const f = fakeClient([k8s('prod')])
+    const withMetrics = { ...podsKindWithMetrics }
+    f.client.listKinds = vi.fn(async () => [withMetrics])
+    f.client.openView = vi.fn(async () => ({ viewId: 'v1', kind: withMetrics }))
+    f.state.rows = [podRow('api-1', 'web')]
+    f.client.getMetrics = vi.fn(async () => ({ status: 'ok', values: { 'uid-web-api-1': { cpu: 0.25, memory: 64 * 1024 * 1024 } } }))
+    const grid = await openProd(f)
+    expect(await within(grid).findByText('250m')).toBeInTheDocument()
+    expect(within(grid).getByText('64Mi')).toBeInTheDocument()
+  })
+
+  it('restores the last kind and scope of the target', async () => {
+    const f = fakeClient([k8s('prod')])
+    f.client.getTargetState = vi.fn(async () => ({ kind: '"pods"', scope: '{"mode":"one","name":"data"}' }))
+    await openProd(f)
+    expect(f.client.openView).toHaveBeenCalledTimes(1)
+    expect(f.client.openView).toHaveBeenCalledWith('kubernetes', 'prod', { kind: 'pods', scope: { mode: 'one', name: 'data' } })
+    await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Namespace' }), 'web')
+    expect(f.client.setTargetState).toHaveBeenCalledWith('kubernetes', 'prod', 'scope', '{"mode":"one","name":"web"}')
+  })
+})
+
+const podsKindWithMetrics = {
+  id: 'pods',
+  title: 'Pods',
+  group: 'Workloads',
+  scoped: true,
+  columns: [
+    { id: 'name', title: 'Name', type: 'text' as const },
+    { id: 'namespace', title: 'Namespace', type: 'text' as const, scopeColumn: true },
+    { id: 'ready', title: 'Ready', type: 'ratio' as const },
+    { id: 'status', title: 'Status', type: 'status' as const },
+    { id: 'restarts', title: 'Restarts', type: 'number' as const },
+    { id: 'age', title: 'Age', type: 'age' as const },
+    { id: 'cpu', title: 'CPU', type: 'cpu' as const, metric: true },
+    { id: 'memory', title: 'Memory', type: 'bytes' as const, metric: true },
+  ],
+}

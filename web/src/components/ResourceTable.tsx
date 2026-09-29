@@ -1,6 +1,6 @@
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { useMemo, useRef, useState } from 'react'
-import type { Cell, Column, HealthState, Row } from '../api/types'
+import type { Cell, Column, HealthState, MetricsView, Row } from '../api/types'
 import { formatAge, formatBytes, formatCPU } from '../format'
 import { useNow } from '../views/useView'
 
@@ -20,6 +20,8 @@ interface Props {
   selected: string | null
   onSelect: (row: Row) => void
   onOpen?: (row: Row) => void
+  /** Usage for metric columns (CPU/Memory), by row id. */
+  metrics?: MetricsView | null
 }
 
 export const healthText: Record<HealthState, string> = {
@@ -59,25 +61,36 @@ export function matchesRow(r: Row, f: string): boolean {
   return r.cells.some((c) => (c.text ?? '').toLowerCase().includes(needle)) || (r.health.reason ?? '').toLowerCase().includes(needle)
 }
 
-export function ResourceTable({ columns, rows, hideScope, filter, selected, onSelect, onOpen }: Props) {
+export function ResourceTable({ columns, rows, hideScope, filter, selected, onSelect, onOpen, metrics }: Props) {
   const now = useNow(10_000)
   const [sort, setSort] = useState<Sort>({ col: 0, desc: false })
   const visibleCols = useMemo(
     () => columns.map((c, i) => ({ c, i })).filter(({ c }) => !(hideScope && c.scopeColumn)),
     [columns, hideScope],
   )
+  // Metric columns take their values from the metrics poll, not the row.
+  const cellOf = useMemo(() => {
+    const values = metrics?.status === 'ok' ? metrics.values : null
+    return (r: Row, i: number): Cell | undefined => {
+      const c = columns[i]
+      if (!c?.metric) return r.cells[i]
+      const u = values?.[r.id]
+      if (!u) return undefined
+      return { num: c.type === 'cpu' ? u.cpu : u.memory }
+    }
+  }, [metrics, columns])
   const sorted = useMemo(() => {
     const f = filter.trim()
     const list = f ? rows.filter((r) => matchesRow(r, f)) : rows.slice()
     const col = columns[sort.col]
     if (col) {
       list.sort((a, b) => {
-        const d = cmp(col, a.cells[sort.col], b.cells[sort.col]) || a.ref.name.localeCompare(b.ref.name)
+        const d = cmp(col, cellOf(a, sort.col), cellOf(b, sort.col)) || a.ref.name.localeCompare(b.ref.name)
         return sort.desc ? -d : d
       })
     }
     return list
-  }, [rows, filter, sort, columns])
+  }, [rows, filter, sort, columns, cellOf])
 
   const scrollRef = useRef<HTMLDivElement>(null)
   const virt = useVirtualizer({
@@ -133,8 +146,10 @@ export function ResourceTable({ columns, rows, hideScope, filter, selected, onSe
                 key={vi.key}
                 role="row"
                 aria-selected={isSel}
-                onClick={() => onSelect(r)}
-                onDoubleClick={() => onOpen?.(r)}
+                onClick={() => {
+                  onSelect(r)
+                  onOpen?.(r)
+                }}
                 title={r.health.message ? `${r.health.reason}: ${r.health.message}` : r.health.reason}
                 className={['absolute left-0 grid w-full cursor-default items-center border-b border-line/40', isSel ? 'bg-active' : 'hover:bg-hover'].join(' ')}
                 style={{ top: vi.start, height: ROW_H, gridTemplateColumns: template }}
@@ -151,7 +166,7 @@ export function ResourceTable({ columns, rows, hideScope, filter, selected, onSe
                     ].join(' ')}
                   >
                     {c.type === 'status' && <HealthDot state={r.health.state} />}
-                    {cellText(c, r.cells[i], now)}
+                    {cellText(c, cellOf(r, i), now)}
                   </span>
                 ))}
               </div>

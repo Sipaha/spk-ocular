@@ -49,3 +49,9 @@ func (w *API) GetResource(ref core.Ref) (*core.Resource, error) {
 func (w *API) GetMetrics(viewID string) (api.MetricsView, error) {
 	return w.a.GetMetrics(context.Background(), viewID)
 }
+func (w *API) GetTargetState(provider, target string) (map[string]string, error) {
+	return w.a.GetTargetState(context.Background(), provider, target)
+}
+func (w *API) SetTargetState(provider, target, key, value string) error {
+	return w.a.SetTargetState(context.Background(), provider, target, key, value)
+}

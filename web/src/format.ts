@@ -15,6 +15,7 @@ export function formatAge(ms: number): string {
 
 /** CPU cores: 0.25 → "250m", 1.5 → "1.50". */
 export function formatCPU(cores: number): string {
+  if (cores > 0 && cores < 0.0005) return '<1m' // measured, but below a millicore
   if (cores < 1) return `${Math.round(cores * 1000)}m`
   return cores.toFixed(cores < 10 ? 2 : 1)
 }
@@ -28,5 +29,5 @@ export function formatBytes(n: number): string {
     v /= 1024
     i++
   }
-  return `${v >= 100 || i === 0 ? Math.round(v) : v.toFixed(1)}${units[i]}`
+  return `${v >= 100 || i === 0 ? Math.round(v) : Number(v.toFixed(1))}${units[i]}`
 }

@@ -64,3 +64,16 @@ func TestTargetStateIsKeyedByProviderAndTarget(t *testing.T) {
 	v, _ = s.GetTargetState(ctx, "compose", "prod", "scope")
 	assert.Empty(t, v)
 }
+
+func TestTargetStateLists(t *testing.T) {
+	ctx := context.Background()
+	s := open(t, filepath.Join(t.TempDir(), "db"))
+	require.NoError(t, s.SetTargetState(ctx, "k", "a", "kind", `"pods"`))
+	require.NoError(t, s.SetTargetState(ctx, "k", "a", "scope", `{"mode":"all"}`))
+	require.NoError(t, s.SetTargetState(ctx, "k", "b", "kind", `"nodes"`))
+	m, err := s.TargetState(ctx, "k", "a")
+	require.NoError(t, err)
+	assert.Equal(t, map[string]string{"kind": `"pods"`, "scope": `{"mode":"all"}`}, m)
+	m, _ = s.TargetState(ctx, "k", "zzz")
+	assert.Empty(t, m)
+}

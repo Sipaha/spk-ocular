@@ -1,6 +1,6 @@
 import { vi } from 'vitest'
 import type { Client } from '../api/client'
-import type { ApiEvent, KindDescriptor, Row, Target, TargetsView } from '../api/types'
+import type { ApiEvent, KindDescriptor, Ref, Row, Target, TargetsView } from '../api/types'
 
 export const k8s = (id: string, extra: Partial<Target> = {}): Target => ({
   provider: 'kubernetes',
@@ -35,6 +35,14 @@ export function fakeClient(targets: Target[]) {
     getRows: vi.fn(async () => ({ viewId: 'v1', version: 1, reset: true, upserts: state.rows, deleted: [], status: { state: 'ready' as const } })),
     closeView: vi.fn(async () => {}),
     touchViews: vi.fn(async () => []),
+    getResource: vi.fn(async (ref: Ref) => ({
+      ref, health: { state: 'ok' as const }, yaml: `kind: Pod\nmetadata:\n  name: ${ref.name}\n`,
+      facts: [{ key: 'kind', value: 'Pod' }, { key: 'Node', value: 'node-1' }],
+      relations: [{ type: 'runs-on', ref: { provider: 'kubernetes', target: ref.target, kind: 'nodes', name: 'node-1' } }],
+    })),
+    getMetrics: vi.fn(async () => ({ status: 'unsupported', values: {} })),
+    getTargetState: vi.fn(async () => ({})),
+    setTargetState: vi.fn(async () => {}),
     subscribeEvents: vi.fn((cb: (e: ApiEvent) => void) => {
       listener = cb
       return () => {

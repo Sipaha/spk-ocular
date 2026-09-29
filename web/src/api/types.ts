@@ -161,3 +161,32 @@ export interface Page {
   deleted: string[]
   status: ViewStatus
 }
+
+export interface Relation {
+  /** owner | owns | selects | routes-to | runs-on */
+  type: string
+  ref: Ref
+}
+
+export interface Resource {
+  ref: Ref
+  health: Health
+  facts: Detail[]
+  yaml: string
+  relations: Relation[] | null
+  relationsError?: string
+}
+
+export interface Usage {
+  cpu: number
+  memory: number
+}
+
+export interface MetricsView {
+  /** "ok" or an error class: unsupported (no metrics API), forbidden, ... */
+  status: string
+  message?: string
+  timestamp?: string
+  window?: string
+  values: Record<string, Usage>
+}

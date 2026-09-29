@@ -36,7 +36,8 @@ test('selection opens the resources, keeps details in Overview, survives a reloa
   await expect(page.getByText('https://staging.example:6443')).toBeVisible()
   await expect(page.getByText('ns-staging')).toBeVisible()
   await page.reload()
-  await expect(page.getByRole('heading', { name: 'Pods' })).toBeVisible()
+  // The target comes back with its last page (Overview) remembered.
+  await expect(page.getByRole('heading', { name: 'staging', exact: true })).toBeVisible()
   await expect(option(page, 'staging')).toHaveAttribute('aria-selected', 'true')
 })
 

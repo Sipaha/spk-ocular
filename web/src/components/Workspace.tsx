@@ -1,27 +1,65 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { Client } from '../api/client'
-import type { KindDescriptor, Row, ScopeSel, ScopesView, Target } from '../api/types'
+import type { KindDescriptor, Ref, Row, ScopeSel, ScopesView, Target } from '../api/types'
 import { classLabel, t } from '../i18n'
+import { useMetrics } from '../views/useMetrics'
 import { useView } from '../views/useView'
 import type { ViewHub } from '../views/viewSync'
+import { ResourceDrawer } from './ResourceDrawer'
 import { ResourceTable } from './ResourceTable'
 import { TargetDetails } from './TargetDetails'
 import { SearchIcon, WarningIcon } from './icons'
 
 const OVERVIEW = '__overview'
 
+interface UIState {
+  kind: string
+  scope: ScopeSel
+}
+
+function parseState(st: Record<string, string>, fallback: UIState): UIState {
+  const parse = (v: string | undefined) => {
+    try {
+      return v ? JSON.parse(v) : undefined
+    } catch {
+      return undefined
+    }
+  }
+  const kind = parse(st.kind)
+  const scope = parse(st.scope)
+  return {
+    kind: typeof kind === 'string' ? kind : fallback.kind,
+    scope: scope && typeof scope.mode === 'string' ? (scope as ScopeSel) : fallback.scope,
+  }
+}
+
 /** The selected target: kind navigation + the current table. */
 export function Workspace({ client, hub, target }: { client: Client; hub: ViewHub; target: Target }) {
   const [kinds, setKinds] = useState<KindDescriptor[] | null>(null)
   const [kindsError, setKindsError] = useState<string | null>(null)
-  const [kind, setKind] = useState<string>('pods')
   const [scopes, setScopes] = useState<ScopesView | null>(null)
-  const defaultNs = target.details?.find((d) => d.key === 'namespace')?.value
-  const [scope, setScope] = useState<ScopeSel>(defaultNs ? { mode: 'one', name: defaultNs } : { mode: 'all' })
+  const defaultNs = target.details?.find((d) => d.key === 'defaultNamespace')?.value
+  // Last kind and scope per target (SQLite target_state); null until loaded,
+  // so the default view is not opened only to be replaced.
+  const [ui, setUI] = useState<UIState | null>(null)
+  const kind = ui?.kind ?? 'pods'
+  const scope: ScopeSel = ui?.scope ?? { mode: 'all' }
+  const remember = (next: UIState) => {
+    setUI(next)
+    void client.setTargetState(target.provider, target.id, 'kind', JSON.stringify(next.kind)).catch(() => {})
+    void client.setTargetState(target.provider, target.id, 'scope', JSON.stringify(next.scope)).catch(() => {})
+  }
+  const setKind = (k: string) => remember({ kind: k, scope })
+  const setScope = (s: ScopeSel) => remember({ kind, scope: s })
 
   useEffect(() => {
     // Workspace is keyed by target: state starts fresh for each one.
     let live = true
+    const fallback: UIState = { kind: 'pods', scope: defaultNs ? { mode: 'one', name: defaultNs } : { mode: 'all' } }
+    client.getTargetState(target.provider, target.id).then(
+      (st) => live && setUI(parseState(st, fallback)),
+      () => live && setUI(fallback),
+    )
     client.listKinds(target.provider, target.id).then(
       (k) => live && setKinds(k),
       (e) => live && setKindsError(e instanceof Error ? e.message : String(e)),
@@ -33,7 +71,7 @@ export function Workspace({ client, hub, target }: { client: Client; hub: ViewHu
     return () => {
       live = false
     }
-  }, [client, target.provider, target.id])
+  }, [client, target.provider, target.id, defaultNs])
 
   const groups = useMemo(() => {
     const m = new Map<string, KindDescriptor[]>()
@@ -57,12 +95,20 @@ export function Workspace({ client, hub, target }: { client: Client; hub: ViewHu
         {kindsError && <p className="mt-3 px-2 text-xs text-danger">{kindsError}</p>}
       </nav>
       <main className="flex min-w-0 flex-1 flex-col">
-        {kind === OVERVIEW || !current ? (
+        {!ui ? null : kind === OVERVIEW || !current ? (
           <div className="min-h-0 flex-1 overflow-y-auto">
             <TargetDetails />
           </div>
         ) : (
-          <ResourcePage hub={hub} target={target} kind={current} scope={current.scoped ? scope : { mode: 'none' }} scopes={scopes} onScope={setScope} />
+          <ResourcePage
+            client={client}
+            hub={hub}
+            target={target}
+            kind={current}
+            scope={current.scoped ? scope : { mode: 'none' }}
+            scopes={scopes}
+            onScope={setScope}
+          />
         )}
       </main>
     </div>
@@ -82,6 +128,7 @@ function NavItem({ active, onClick, label }: { active: boolean; onClick: () => v
 }
 
 function ResourcePage(props: {
+  client: Client
   hub: ViewHub
   target: Target
   kind: KindDescriptor
@@ -89,12 +136,17 @@ function ResourcePage(props: {
   scopes: ScopesView | null
   onScope: (s: ScopeSel) => void
 }) {
-  const { hub, target, kind, scope, scopes, onScope } = props
-  const query = useMemo(() => ({ kind: kind.id, scope }), [kind.id, scope])
+  const { client, hub, target, kind, scope, scopes, onScope } = props
+  const scopeKey = JSON.stringify(scope)
+  const query = useMemo(() => ({ kind: kind.id, scope: JSON.parse(scopeKey) as ScopeSel }), [kind.id, scopeKey])
   const view = useView(hub, target.provider, target.id, query)
   const [filter, setFilter] = useState('')
   const [selected, setSelected] = useState<string | null>(null)
+  const [open, setOpen] = useState<Ref | null>(null)
   const columns = view.kind?.columns ?? kind.columns
+  const metrics = useMetrics(client, view.viewId, columns.some((c) => c.metric))
+  // The open object's current row: its changes refresh the drawer.
+  const openRow = open ? view.rows.find((r) => r.ref.uid === open.uid && r.ref.name === open.name) : undefined
 
   return (
     <>
@@ -127,14 +179,29 @@ function ResourcePage(props: {
         </label>
       </header>
       <StatusBanner state={view.status.state} cls={view.status.class} message={view.status.message} empty={view.rows.length === 0} />
-      <ResourceTable
-        columns={columns}
-        rows={view.rows}
-        hideScope={scope.mode === 'one'}
-        filter={filter}
-        selected={selected}
-        onSelect={(r: Row) => setSelected(r.id)}
-      />
+      <div className="relative flex min-h-0 flex-1 flex-col">
+        <ResourceTable
+          columns={columns}
+          rows={view.rows}
+          hideScope={scope.mode === 'one'}
+          filter={filter}
+          selected={selected}
+          onSelect={(r: Row) => setSelected(r.id)}
+          onOpen={(r: Row) => setOpen(r.ref)}
+          metrics={metrics}
+        />
+        {open && (
+          <ResourceDrawer
+            key={`${open.kind}/${open.scope}/${open.name}/${open.uid}`}
+            client={client}
+            hub={hub}
+            target={{ provider: target.provider, id: target.id }}
+            subject={open}
+            revision={openRow}
+            onClose={() => setOpen(null)}
+          />
+        )}
+      </div>
     </>
   )
 }

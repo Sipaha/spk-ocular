@@ -123,6 +123,17 @@ func (h *HTTP) routes() {
 	}) (any, error) {
 		return h.api.TouchViews(ctx, r.ViewIDs)
 	}))
+	h.mux.HandleFunc("POST /api/GetTargetState", handle(func(ctx context.Context, r *targetReq) (any, error) {
+		return h.api.GetTargetState(ctx, r.Provider, r.Target)
+	}))
+	h.mux.HandleFunc("POST /api/SetTargetState", handle(func(ctx context.Context, r *struct {
+		Provider string `json:"provider"`
+		Target   string `json:"target"`
+		Key      string `json:"key"`
+		Value    string `json:"value"`
+	}) (any, error) {
+		return nil, h.api.SetTargetState(ctx, r.Provider, r.Target, r.Key, r.Value)
+	}))
 	h.mux.HandleFunc("POST /api/GetResource", handle(func(ctx context.Context, r *core.Ref) (any, error) {
 		return h.api.GetResource(ctx, *r)
 	}))

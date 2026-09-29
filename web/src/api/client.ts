@@ -1,5 +1,5 @@
 import { Call, Events } from '@wailsio/runtime'
-import type { ApiEvent, AppInfo, EventType, KindDescriptor, Page, Query, ScopesView, TargetsView, ViewInfo } from './types'
+import type { ApiEvent, AppInfo, EventType, KindDescriptor, MetricsView, Page, Query, Ref, Resource, ScopesView, TargetsView, ViewInfo } from './types'
 
 export class ApiError extends Error {
   constructor(
@@ -25,6 +25,11 @@ export interface Client {
   closeView(viewId: string): Promise<void>
   /** Renews leases; returns the ids that are gone. */
   touchViews(viewIds: string[]): Promise<string[]>
+  getResource(ref: Ref): Promise<Resource>
+  /** Usage for an open view's rows; a missing metrics API is a status, not a rejection. */
+  getMetrics(viewId: string): Promise<MetricsView>
+  getTargetState(provider: string, target: string): Promise<Record<string, string>>
+  setTargetState(provider: string, target: string, key: string, value: string): Promise<void>
   subscribeEvents(onEvent: (e: ApiEvent) => void): () => void
 }
 
@@ -60,6 +65,10 @@ export const httpClient: Client = {
   getRows: (viewId, since) => post('GetRows', { viewId, since }),
   closeView: (viewId) => done(post('CloseView', { viewId })),
   touchViews: (viewIds) => post('TouchViews', { viewIds }),
+  getResource: (ref) => post('GetResource', ref),
+  getMetrics: (viewId) => post('GetMetrics', { viewId }),
+  getTargetState: (provider, target) => post('GetTargetState', { provider, target }),
+  setTargetState: (provider, target, key, value) => done(post('SetTargetState', { provider, target, key, value })),
   subscribeEvents(onEvent) {
     const es = new EventSource(`/api/events?token=${encodeURIComponent(tokenMeta())}`)
     es.onmessage = (m) => onEvent(JSON.parse(m.data) as ApiEvent)
@@ -99,6 +108,10 @@ export const wailsClient: Client = {
   getRows: (viewId, since) => wcall('GetRows', viewId, since),
   closeView: (viewId) => wcall('CloseView', viewId),
   touchViews: (viewIds) => wcall('TouchViews', viewIds),
+  getResource: (ref) => wcall('GetResource', ref),
+  getMetrics: (viewId) => wcall('GetMetrics', viewId),
+  getTargetState: (provider, target) => wcall('GetTargetState', provider, target),
+  setTargetState: (provider, target, key, value) => wcall('SetTargetState', provider, target, key, value),
   subscribeEvents(onEvent) {
     const offs = EVENT_TYPES.map((type) =>
       Events.On(type, (ev: { data: unknown }) => {

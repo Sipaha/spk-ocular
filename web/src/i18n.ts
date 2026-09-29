@@ -20,7 +20,8 @@ const en = {
   'detail.server': 'Server',
   'detail.user': 'User',
   'detail.auth': 'Authentication',
-  'detail.namespace': 'Default namespace',
+  'detail.defaultNamespace': 'Default namespace',
+  'detail.namespace': 'Namespace',
   'detail.file': 'Kubeconfig',
   'status.desktop': 'desktop',
   'status.browser': 'browser',
@@ -42,6 +43,23 @@ const en = {
   'class.unsupported': 'not supported',
   'class.gone': 'gone',
   'class.internal': 'internal error',
+  'drawer.back': 'Back',
+  'drawer.close': 'Close',
+  'drawer.details': 'Details',
+  'drawer.yaml': 'YAML',
+  'drawer.health': 'Health',
+  'drawer.related': 'Related',
+  'drawer.relationsPartial': 'Some relations could not be loaded: {error}',
+  'drawer.events': 'Events',
+  'drawer.noEvents': 'No events',
+  'rel.owner': 'Owned by',
+  'rel.owns': 'Owns',
+  'rel.selects': 'Selects',
+  'rel.routes-to': 'Routes to',
+  'rel.runs-on': 'Runs on',
+  'detail.kind': 'Kind',
+  'detail.created': 'Created',
+  'detail.labels': 'Labels',
 } as const
 
 export type MessageKey = keyof typeof en
@@ -65,7 +83,8 @@ const ru: Record<MessageKey, string> = {
   'detail.server': 'Сервер',
   'detail.user': 'Пользователь',
   'detail.auth': 'Аутентификация',
-  'detail.namespace': 'Namespace по умолчанию',
+  'detail.defaultNamespace': 'Namespace по умолчанию',
+  'detail.namespace': 'Namespace',
   'detail.file': 'Kubeconfig',
   'status.desktop': 'desktop',
   'status.browser': 'браузер',
@@ -87,6 +106,23 @@ const ru: Record<MessageKey, string> = {
   'class.unsupported': 'не поддерживается',
   'class.gone': 'больше не существует',
   'class.internal': 'внутренняя ошибка',
+  'drawer.back': 'Назад',
+  'drawer.close': 'Закрыть',
+  'drawer.details': 'Детали',
+  'drawer.yaml': 'YAML',
+  'drawer.health': 'Состояние',
+  'drawer.related': 'Связи',
+  'drawer.relationsPartial': 'Часть связей не загрузилась: {error}',
+  'drawer.events': 'События',
+  'drawer.noEvents': 'Событий нет',
+  'rel.owner': 'Владелец',
+  'rel.owns': 'Владеет',
+  'rel.selects': 'Выбирает',
+  'rel.routes-to': 'Направляет на',
+  'rel.runs-on': 'Запущен на',
+  'detail.kind': 'Kind',
+  'detail.created': 'Создан',
+  'detail.labels': 'Labels',
 }
 
 const dicts = { en, ru }
@@ -117,4 +153,10 @@ export const _dicts = dicts // tests
 export function classLabel(cls: string): string {
   const k = `class.${cls}` as MessageKey
   return k in en ? t(k) : cls
+}
+
+/** Relation type label; unknown types show as-is. */
+export function relationLabel(type: string): string {
+  const k = `rel.${type}` as MessageKey
+  return k in en ? t(k) : type
 }

@@ -179,3 +179,24 @@ func IsCoded(err error, code string) bool {
 	var ce *CodedError
 	return errors.As(err, &ce) && ce.Code == code
 }
+
+// maxStateValue bounds one UI state value: it is small UI state, not storage.
+const maxStateValue = 4096
+
+func (s *Service) GetTargetState(ctx context.Context, providerID, target string) (map[string]string, error) {
+	m, err := s.store.TargetState(ctx, providerID, target)
+	if err != nil {
+		return nil, coded(CodeInternal, err)
+	}
+	return m, nil
+}
+
+func (s *Service) SetTargetState(ctx context.Context, providerID, target, key, value string) error {
+	if key == "" || len(value) > maxStateValue {
+		return coded(CodeBadRequest, fmt.Errorf("bad state entry %q (%d bytes)", key, len(value)))
+	}
+	if err := s.store.SetTargetState(ctx, providerID, target, key, value); err != nil {
+		return coded(CodeInternal, err)
+	}
+	return nil
+}

@@ -83,7 +83,7 @@ func target(kc kubeContext) core.Target {
 	add("server", kc.Server)
 	add("user", kc.User)
 	add("auth", kc.Auth)
-	add("namespace", kc.Namespace)
+	add("defaultNamespace", kc.Namespace)
 	add("file", kc.DefinedIn)
 	if kc.Extra {
 		// Contexts from standalone files in ~/.kube are not what kubectl

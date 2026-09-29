@@ -6,6 +6,8 @@ export const TOUCH_INTERVAL_MS = 20_000
 const MAX_RETRIES = 5
 
 export interface ViewState {
+  /** The backend view id (for metrics); null while (re)opening. */
+  viewId: string | null
   kind: KindDescriptor | null
   rows: Row[]
   status: ViewStatus
@@ -34,7 +36,7 @@ export class ViewSync {
   private retryTimer: ReturnType<typeof setTimeout> | null = null
   private disposed = false
   private rows = new Map<string, Row>()
-  private state: ViewState = { kind: null, rows: [], status: { state: 'loading' }, openError: null }
+  private state: ViewState = { viewId: null, kind: null, rows: [], status: { state: 'loading' }, openError: null }
   private listeners = new Set<() => void>()
 
   constructor(
@@ -74,7 +76,7 @@ export class ViewSync {
       }
       this.viewId = info.viewId
       this.retries = 0
-      this.emit({ kind: info.kind, openError: null })
+      this.emit({ viewId: info.viewId, kind: info.kind, openError: null })
       void this.pull()
     } catch (e) {
       if (this.disposed || gen !== this.generation) return
