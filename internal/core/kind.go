@@ -52,6 +52,8 @@ type KindDescriptor struct {
 	// Hidden kinds are not in the navigation but can be opened (a
 	// ReplicaSet reached from a Deployment).
 	Hidden bool `json:"hidden,omitempty"`
+	// Logs: objects of this kind have logs (the session is a LogSource).
+	Logs bool `json:"logs,omitempty"`
 }
 
 // ScopeMode makes the scope selector explicit instead of overloading "".

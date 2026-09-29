@@ -136,3 +136,13 @@ func TestObservePodThroughTheSlimCache(t *testing.T) {
 	assert.True(t, dbg.exited)
 	assert.False(t, o.restartExpected(dbg))
 }
+
+func TestKindsWithLogsSaySo(t *testing.T) {
+	withLogs := map[string]bool{}
+	for _, d := range allKinds.descriptors() {
+		if d.Logs {
+			withLogs[d.ID] = true
+		}
+	}
+	assert.Equal(t, map[string]bool{"pods": true, "apps/deployments": true, "apps/statefulsets": true, "apps/daemonsets": true, "apps/replicasets": true}, withLogs)
+}

@@ -47,6 +47,14 @@ func logInfoOf(def *kindDef, u *unstructured.Unstructured) (core.LogInfo, error)
 // logWorkloads: kinds whose logs are their pods' (by controller UID).
 var logWorkloads = map[*kindDef]bool{deploymentsKind: true, statefulSetsKind: true, daemonSetsKind: true, replicaSetsKind: true}
 
+// The descriptors say which kinds have logs (the UI offers them there).
+func init() {
+	podsKind.desc.Logs = true
+	for def := range logWorkloads {
+		def.desc.Logs = true
+	}
+}
+
 // getObject GETs ref's object and checks its UID.
 func (s *session) getObject(ctx context.Context, ref core.Ref) (*unstructured.Unstructured, error) {
 	def := s.kinds.byID[ref.Kind]

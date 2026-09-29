@@ -117,6 +117,8 @@ export interface KindDescriptor {
   scoped: boolean
   /** Not in the navigation (reached through relations). */
   hidden?: boolean
+  /** Objects of this kind have logs. */
+  logs?: boolean
 }
 
 export type ScopeMode = 'all' | 'one' | 'none'
