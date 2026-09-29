@@ -1,6 +1,6 @@
 import { vi } from 'vitest'
 import type { Client } from '../api/client'
-import type { ApiEvent, KindDescriptor, Query, Ref, Row, Target, TargetsView } from '../api/types'
+import type { ApiEvent, KindDescriptor, Query, Ref, Row, Target, TargetsView, TerminalRequest } from '../api/types'
 
 export const k8s = (id: string, extra: Partial<Target> = {}): Target => ({
   provider: 'kubernetes',
@@ -55,6 +55,14 @@ export function fakeClient(targets: Target[]) {
     setTargetState: vi.fn(async () => {}),
     logInfo: vi.fn(async () => ({ channels: [{ id: 'app', title: 'app' }], defaultChannel: 'app', aggregate: false, previous: true })),
     openLogStream: vi.fn(async () => ({ streamId: 's1' })),
+    execInfo: vi.fn(async (ref: Ref) => ({
+      instances: [{ id: ref.uid ?? ref.name, title: ref.name, ready: true, channels: [{ id: 'app', title: 'app', running: true }], defaultChannel: 'app' }],
+      defaultInstance: ref.uid ?? ref.name,
+    })),
+    openTerminal: vi.fn(async (req: TerminalRequest) => ({
+      streamId: 't1',
+      target: { provider: req.ref.provider, target: req.ref.target, targetTitle: req.ref.target, ref: req.ref, instance: req.ref.name, channel: 'app' },
+    })),
     streamBase: vi.fn(async () => '/streams/tok'),
     subscribeEvents: vi.fn((cb: (e: ApiEvent) => void) => {
       listener = cb

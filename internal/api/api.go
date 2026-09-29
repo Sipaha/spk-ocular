@@ -52,6 +52,13 @@ type API interface {
 	// OpenLogStream registers a log stream bound to the target's session;
 	// the page reads it from StreamBase (NDJSON, web/src/logs/ndjson.ts).
 	OpenLogStream(ctx context.Context, req LogStreamRequest) (LogStreamInfo, error)
+	// ExecInfo: where a command can run for an object (instances = pods,
+	// channels = containers).
+	ExecInfo(ctx context.Context, ref core.Ref) (core.ExecInfo, error)
+	// OpenTerminal prepares a command and registers its terminal (owned by
+	// the app, not the session); the page opens a WebSocket to
+	// <StreamBase>/term/<id>.
+	OpenTerminal(ctx context.Context, req TerminalRequest) (TerminalInfo, error)
 	// StreamBase: where streams are served (desktop: a loopback URL with a
 	// token; browser: a path on this server).
 	StreamBase(ctx context.Context) (string, error)

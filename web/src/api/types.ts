@@ -119,6 +119,10 @@ export interface KindDescriptor {
   hidden?: boolean
   /** Objects of this kind have logs. */
   logs?: boolean
+  /** A command (terminal) can run in objects of this kind. */
+  exec?: boolean
+  /** Ports of objects of this kind can be forwarded. */
+  forward?: boolean
 }
 
 export type ScopeMode = 'all' | 'one' | 'none'
@@ -233,4 +237,54 @@ export interface LogQuery {
 export interface LogStreamInfo {
   /** GET <streamBase>/logs/<streamId> once, within 30 s. */
   streamId: string
+}
+
+export interface ExecChannel {
+  id: string
+  title: string
+  note?: string
+  running: boolean
+  state?: string
+}
+
+export interface ExecInstance {
+  id: string
+  title: string
+  ready: boolean
+  channels: ExecChannel[]
+  defaultChannel: string
+}
+
+export interface ExecInfo {
+  instances: ExecInstance[]
+  defaultInstance: string
+}
+
+/** What a live resource (terminal, tunnel) is connected to, as captured when opened. */
+export interface LiveTarget {
+  provider: string
+  target: string
+  targetTitle: string
+  endpoint?: string
+  configHash?: string
+  ref: Ref
+  instance?: string
+  channel?: string
+  command?: string[]
+}
+
+export interface TerminalRequest {
+  ref: Ref
+  instance?: string
+  channel?: string
+  /** argv; empty = the interactive shell */
+  command?: string[]
+  cols: number
+  rows: number
+}
+
+export interface TerminalInfo {
+  /** WebSocket to <streamBase as ws:>/term/<streamId> once, within 30 s. */
+  streamId: string
+  target: LiveTarget
 }

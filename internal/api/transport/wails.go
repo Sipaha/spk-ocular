@@ -62,4 +62,10 @@ func (w *API) LogInfo(ref core.Ref) (core.LogInfo, error) {
 func (w *API) OpenLogStream(req api.LogStreamRequest) (api.LogStreamInfo, error) {
 	return w.a.OpenLogStream(context.Background(), req)
 }
+func (w *API) ExecInfo(ref core.Ref) (core.ExecInfo, error) {
+	return w.a.ExecInfo(context.Background(), ref)
+}
+func (w *API) OpenTerminal(req api.TerminalRequest) (api.TerminalInfo, error) {
+	return w.a.OpenTerminal(context.Background(), req)
+}
 func (w *API) StreamBase() (string, error) { return w.a.StreamBase(context.Background()) }

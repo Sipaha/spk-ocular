@@ -223,7 +223,8 @@ func (s *Service) Stats() map[string]any {
 	}
 	out := map[string]any{
 		"views":      views,
-		"streams":    s.streams.Len(),
+		"streams":    s.streams.Count(streams.KindLogs),
+		"terminals":  s.streams.Count(streams.KindTerm),
 		"goroutines": runtime.NumGoroutine(),
 		"heap_inuse": ms.HeapInuse,
 		"heap_alloc": ms.HeapAlloc,

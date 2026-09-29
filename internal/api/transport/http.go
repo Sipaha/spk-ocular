@@ -148,6 +148,12 @@ func (h *HTTP) routes() {
 	h.mux.HandleFunc("POST /api/OpenLogStream", handle(func(ctx context.Context, r *api.LogStreamRequest) (any, error) {
 		return h.api.OpenLogStream(ctx, *r)
 	}))
+	h.mux.HandleFunc("POST /api/ExecInfo", handle(func(ctx context.Context, r *core.Ref) (any, error) {
+		return h.api.ExecInfo(ctx, *r)
+	}))
+	h.mux.HandleFunc("POST /api/OpenTerminal", handle(func(ctx context.Context, r *api.TerminalRequest) (any, error) {
+		return h.api.OpenTerminal(ctx, *r)
+	}))
 	h.mux.HandleFunc("POST /api/StreamBase", handle(func(ctx context.Context, _ *struct{}) (any, error) {
 		return h.api.StreamBase(ctx)
 	}))
