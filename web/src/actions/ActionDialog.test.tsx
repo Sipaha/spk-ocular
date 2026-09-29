@@ -112,6 +112,19 @@ describe('ActionDialog', () => {
     expect(confirm).not.toBeInTheDocument() // one run: it is gone once sent
   })
 
+  it('scale to 0: the reviewed destructive plan moves the focus from the count to Cancel', async () => {
+    const { f, dialog } = setup(scale, (p) => planOf(scale, p, { current: 2, destructive: p.count === 0 }))
+    const input = await within(dialog).findByRole('textbox')
+    await waitFor(() => expect(input).toHaveValue('2'))
+    await userEvent.clear(input)
+    await userEvent.type(input, '0{Enter}')
+    const confirm = await within(dialog).findByRole('button', { name: 'Scale' })
+    expect(confirm).toHaveClass('bg-danger')
+    await waitFor(() => expect(within(dialog).getByRole('button', { name: 'Cancel' })).toHaveFocus())
+    await userEvent.keyboard('{Enter}')
+    expect(f.client.runAction).not.toHaveBeenCalled()
+  })
+
   it('scale: an out-of-range count is explained, not sent', async () => {
     const { f, dialog } = setup(scale, (p) => planOf(scale, p, { current: 2 }))
     const input = await within(dialog).findByRole('textbox')

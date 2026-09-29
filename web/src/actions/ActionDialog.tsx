@@ -116,6 +116,7 @@ export function ActionDialog({ client, req, onClose, runTimeoutMs = RUN_TIMEOUT_
       countRef.current?.focus()
       countRef.current?.select()
     } else if (plan && canRun && !destructive) confirmRef.current?.focus()
+    else if (plan && destructive) cancelRef.current?.focus() // also from the count: a destructive plan starts at Cancel
     else if (!box.current?.contains(document.activeElement) || document.activeElement === box.current) cancelRef.current?.focus()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [plan, busy])
