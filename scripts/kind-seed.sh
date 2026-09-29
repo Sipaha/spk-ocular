@@ -22,7 +22,7 @@ spec:
     metadata: {labels: {app: web}}
     spec:
       containers:
-      - {name: nginx, image: "nginx:1.27-alpine", ports: [{containerPort: 80}]}
+      - {name: nginx, image: "nginx:1.27-alpine", ports: [{name: http, containerPort: 80}]}
 ---
 apiVersion: v1
 kind: Service
@@ -30,6 +30,21 @@ metadata: {name: web, namespace: ocular-demo}
 spec:
   selector: {app: web}
   ports: [{port: 80, targetPort: 80}]
+---
+# Tunnels: a named targetPort, and none (the API defaults it to the port).
+apiVersion: v1
+kind: Service
+metadata: {name: web-named, namespace: ocular-demo}
+spec:
+  selector: {app: web}
+  ports: [{name: http, port: 8080, targetPort: http}]
+---
+apiVersion: v1
+kind: Service
+metadata: {name: web-default, namespace: ocular-demo}
+spec:
+  selector: {app: web}
+  ports: [{port: 80}]
 ---
 apiVersion: v1
 kind: Pod

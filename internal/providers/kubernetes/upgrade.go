@@ -51,6 +51,10 @@ func closeOnCancel(ctx context.Context) context.Context {
 type ctxSpdyUpgrader struct {
 	rt   *streamspdy.SpdyRoundTripper
 	conn net.Conn
+	// wrap, when set, wraps the upgraded connection (port-forward's
+	// liveness watchdog); pingPeriod overrides spdyPingPeriod.
+	wrap       func(net.Conn) net.Conn
+	pingPeriod time.Duration
 }
 
 // spdyTransports returns the round tripper for a SPDY upgrade request
@@ -123,7 +127,14 @@ func (u *ctxSpdyUpgrader) NewConnection(resp *http.Response) (streamhttp.Connect
 		}
 		return nil, fmt.Errorf("unable to upgrade connection: %w", upgradeError(resp.StatusCode, body))
 	}
-	return streamspdy.NewClientConnectionWithPings(u.conn, spdyPingPeriod)
+	c, period := u.conn, spdyPingPeriod
+	if u.wrap != nil {
+		c = u.wrap(c)
+	}
+	if u.pingPeriod > 0 {
+		period = u.pingPeriod
+	}
+	return streamspdy.NewClientConnectionWithPings(c, period)
 }
 
 // upgradeError is a refused upgrade as an API status error when the body is

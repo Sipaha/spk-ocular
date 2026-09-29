@@ -125,9 +125,14 @@ func (c *conn) podURL(ns, name, sub string, q url.Values) (*url.URL, error) {
 }
 
 func (c *conn) getPod(ctx context.Context, ns, name string) (*unstructured.Unstructured, error) {
+	return c.get(ctx, podsKind, ns, name)
+}
+
+// get GETs an object with the snapshot's client.
+func (c *conn) get(ctx context.Context, def *kindDef, ns, name string) (*unstructured.Unstructured, error) {
 	ctx, cancel := context.WithTimeout(ctx, getTimeout)
 	defer cancel()
-	u, err := c.dyn.Resource(podsKind.gvr).Namespace(ns).Get(ctx, name, metav1.GetOptions{})
+	u, err := c.dyn.Resource(def.gvr).Namespace(ns).Get(ctx, name, metav1.GetOptions{})
 	if err != nil {
 		class, msg := classify(err)
 		return nil, &provider.Error{Class: class, Message: msg}
