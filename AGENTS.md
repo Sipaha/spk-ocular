@@ -79,6 +79,22 @@ Go + Wails v3 + React. Спецификация: `docs/specs/2026-09-29-spk-ocul
   вида), пустой список тоже; транспорт (list/watch) — отдельно: stale/error с классом. Запрет
   никогда не выглядит пустой таблицей. — `TestWatchDeliversSnapshotThenReadyThenChanges`,
   `TestEmptyListStillBecomesReady`, `TestForbiddenIsAnErrorNotAnEmptyTable`, kind-тесты RBAC.
+- Всё, что проецирует объект и применяет его к виду (обработчики informer-а и перерасчёт
+  health по таймеру), идёт под одним затвором вида `viewWatch.order` и читает store под ним;
+  дедлайн принадлежит инкарнации (UID); таймер несёт поколение. —
+  `TestDeadlineCannotResurrectADeletedObject`, `TestDeadlineSkipsAReplacementAndLateDeleteKeepsItsDeadline`.
+- Виды принадлежат инкарнации сессии (уникальный owner); `Open`, начатый до `CloseOwner`,
+  отклоняется (`revoked` по owner). — `TestOpenRacingCloseOwnerIsGone`,
+  `TestViewsBelongToOneSessionIncarnation`.
+- Транспорт: у LIST клиентский дедлайн, у watch — только на получение заголовков (здоровый
+  поток не обрывать); поток, не восстановленный за 5 с, делает вид stale. —
+  `TestWatchWithoutHeadersGoesStale`, `TestDroppedStreamThatStaysDownGoesStale`, `TestRenewedStreamStaysReady`.
+- Строка несёт `Rev` (resourceVersion); открытые детали следят за своим объектом отдельным
+  видом `Query.Name` и перечитываются по смене ревизии. — e2e «open details follow changes…».
+- Метрики — только по UID объекта из кэша, существовавшего на момент сэмпла. —
+  `TestMetricsSampleOlderThanTheObjectIsNotAttributed`.
+- Поиск связей идёт по страницам (continue) до лимита после фильтра и сообщает усечение. —
+  `TestRelationsFollowPagination`, `TestRelationsAreCappedAndSayIt`.
 - Значения Secret/ConfigMap не попадают в списочные кэши (только имена ключей); в YAML
   деталей значения Secret — `<N bytes>`. — `TestConfigMapsAndSecretsKeepOnlyKeyNames`,
   `TestGetMasksSecretValues`, e2e «secrets never show their values».
@@ -122,6 +138,13 @@ Go + Wails v3 + React. Спецификация: `docs/specs/2026-09-29-spk-ocul
   секунды; тесты на пороги времени держат запас > 1 с.
 - **Trimmed Unstructured дорог по памяти** из-за накладных расходов `map[string]any` (~6 КБ/pod
   после фильтра) — в кэше `slimObject` (~1,3 КБ); интернирование строк почти не помогает.
+- **client-go считает watch короче секунды без событий ошибкой** («very short watch») и уходит в
+  backoff — тестовые серверы должны держать поток > 1 с.
+- **dynamic fake фильтрует по label selector и ответы reactor-а** — объекты в reactor-ах должны
+  нести нужные labels.
+- **ClientGo `ListAction`** не отдаёт `ListOptions` — в reactor-е приводить к `ListActionImpl`.
+- **Scale-down в e2e**: pod показывается Terminating до окончания grace-периода, строка исчезает
+  позже — считать «живые» строки и ждать удаления с запасом.
 - **dynamic fake**: не соблюдает field selectors и не сопоставляет PodMetrics с ресурсом `pods`
   группы metrics.k8s.io — такие вещи проверять на kind или отдавать через reactor.
 - **klog client-go** пишет каждую неудачную попытку watch в stderr — заглушен (`SPK_OCULAR_KLOG=1`).
