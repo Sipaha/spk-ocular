@@ -199,7 +199,7 @@ func (s *session) ref(kind *kindDef, ns, name, uid string) core.Ref {
 
 // relations: owners up; owned pods down (by controller UID, not labels
 // alone); service → pods by selector (none without one); ingress →
-// services; pod → node.
+// services; pod → node; event → its object (by UID).
 func (s *session) relations(ctx context.Context, def *kindDef, u *unstructured.Unstructured) ([]core.Relation, bool, error) {
 	var out []core.Relation
 	var errs []error
@@ -207,10 +207,11 @@ func (s *session) relations(ctx context.Context, def *kindDef, u *unstructured.U
 	ns := u.GetNamespace()
 	for _, o := range u.GetOwnerReferences() {
 		r := core.Ref{Provider: ProviderID, Target: s.target, Scope: ns, Kind: kindFor(o.APIVersion, o.Kind), Name: o.Name, UID: string(o.UID)}
-		if r.Kind == "" {
+		inert := r.Kind == ""
+		if inert {
 			r.Kind = strings.ToLower(o.Kind) // shown, not openable
 		}
-		out = append(out, core.Relation{Type: "owner", Ref: r})
+		out = append(out, core.Relation{Type: "owner", Ref: r, Inert: inert})
 	}
 	switch def {
 	case deploymentsKind:
@@ -251,12 +252,29 @@ func (s *session) relations(ctx context.Context, def *kindDef, u *unstructured.U
 				add(str(p, "backend", "service", "name"))
 			}
 		}
+	case eventsKind:
+		out = append(out, eventSubject(s, u))
 	case podsKind:
 		if n := str(u.Object, "spec", "nodeName"); n != "" {
 			out = append(out, core.Relation{Type: "runs-on", Ref: s.ref(nodesKind, "", n, "")})
 		}
 	}
 	return out, trunc, errors.Join(errs...)
+}
+
+// eventSubject: what the event is about, by UID — opening it shows that
+// object or "no longer exists", never a same-named replacement. Without a
+// UID, or of a kind Ocular does not show, it is named, not openable.
+func eventSubject(s *session, u *unstructured.Unstructured) core.Relation {
+	o := u.Object
+	kind := str(o, "involvedObject", "kind")
+	r := core.Ref{Provider: ProviderID, Target: s.target, Scope: str(o, "involvedObject", "namespace"),
+		Kind: kindFor(str(o, "involvedObject", "apiVersion"), kind), Name: str(o, "involvedObject", "name"), UID: str(o, "involvedObject", "uid")}
+	inert := r.Kind == "" || r.UID == ""
+	if r.Kind == "" {
+		r.Kind = strings.ToLower(kind)
+	}
+	return core.Relation{Type: "about", Ref: r, Inert: inert}
 }
 
 func podRelations(s *session, pods []unstructured.Unstructured) []core.Relation {

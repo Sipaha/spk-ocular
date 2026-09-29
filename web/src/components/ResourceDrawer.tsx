@@ -287,9 +287,15 @@ function Details({ hub, target, r, onGo, ports }: { client: Client; hub: ViewHub
               <ul>
                 {rels.map((rel) => (
                   <li key={`${rel.ref.kind}/${rel.ref.name}/${rel.ref.uid ?? ''}`}>
-                    <button className="text-accent hover:underline" onClick={() => onGo({ ...rel.ref, provider: target.provider, target: target.id })}>
-                      {rel.ref.kind}/{rel.ref.name}
-                    </button>
+                    {rel.inert ? (
+                      <span className="text-fg-muted" title={t('drawer.relationInert')}>
+                        {rel.ref.kind}/{rel.ref.name}
+                      </span>
+                    ) : (
+                      <button className="text-accent hover:underline" onClick={() => onGo({ ...rel.ref, provider: target.provider, target: target.id })}>
+                        {rel.ref.kind}/{rel.ref.name}
+                      </button>
+                    )}
                   </li>
                 ))}
               </ul>

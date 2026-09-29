@@ -269,9 +269,11 @@ export interface Page {
 }
 
 export interface Relation {
-  /** owner | owns | selects | routes-to | runs-on */
+  /** owner | owns | selects | routes-to | runs-on | about */
   type: string
   ref: Ref
+  /** Named, not openable (a kind not shown, or an object that cannot be pinned down). */
+  inert?: boolean
 }
 
 export interface Resource {

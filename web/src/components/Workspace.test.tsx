@@ -91,6 +91,25 @@ describe('Workspace details and state', () => {
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
   })
 
+  it('a relation that cannot be pinned down is named, not a link', async () => {
+    const f = fakeClient([k8s('prod')])
+    f.state.rows = [podRow('api-1', 'web')]
+    f.client.getResource = vi.fn(async (ref) => ({
+      ref, health: { state: 'ok' as const }, yaml: '', facts: [],
+      relations: [
+        { type: 'about', ref: { provider: 'kubernetes', target: 'prod', kind: 'pods', name: 'api-0', uid: 'u0' } },
+        { type: 'about', ref: { provider: 'kubernetes', target: 'prod', kind: 'job', name: 'backup' }, inert: true },
+      ],
+    }))
+    const grid = await openProd(f)
+    await userEvent.click(await within(grid).findByText('api-1'))
+    const drawer = await screen.findByRole('dialog', { name: 'pods api-1' })
+    expect(await within(drawer).findByRole('button', { name: 'pods/api-0' })).toBeInTheDocument()
+    expect(within(drawer).getByText('job/backup')).toHaveAttribute('title', 'Cannot be opened here')
+    expect(within(drawer).queryByRole('button', { name: 'job/backup' })).not.toBeInTheDocument()
+    expect(within(drawer).getByText('About')).toBeInTheDocument()
+  })
+
   it('shows metrics in CPU/Memory columns by row id', async () => {
     const f = fakeClient([k8s('prod')])
     const withMetrics = { ...podsKindWithMetrics }

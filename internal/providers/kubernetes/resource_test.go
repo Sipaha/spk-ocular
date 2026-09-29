@@ -306,3 +306,54 @@ func TestRelationsAreCappedAndSayIt(t *testing.T) {
 	assert.Len(t, r.Relations, maxRelated)
 	assert.True(t, r.RelationsTruncated)
 }
+
+// Review 2026-09-30 (Codex, P5): an Event from Problems opened with no way
+// to its object. The link names the object by UID — a same-named
+// replacement opens as "no longer exists", never as the event's subject;
+// without a UID, or of a kind Ocular does not show, it is shown, not openable.
+func TestEventRelatesToItsObjectByUID(t *testing.T) {
+	ev := func(name string, involved map[string]any) *unstructured.Unstructured {
+		return mk("v1", "Event", "web", name, "e-"+name, map[string]any{"type": "Warning", "reason": "BackOff", "involvedObject": involved})
+	}
+	live := pod("web", "a", "uid-a")
+	s := newSession("t", "h", fullFake(live,
+		ev("live", map[string]any{"apiVersion": "v1", "kind": "Pod", "namespace": "web", "name": "a", "uid": "uid-a"}),
+		ev("old", map[string]any{"apiVersion": "v1", "kind": "Pod", "namespace": "web", "name": "a", "uid": "uid-old"}),
+		ev("nouid", map[string]any{"apiVersion": "v1", "kind": "Pod", "namespace": "web", "name": "a"}),
+		ev("job", map[string]any{"apiVersion": "batch/v1", "kind": "Job", "namespace": "web", "name": "backup", "uid": "uid-j"}),
+		ev("node", map[string]any{"kind": "Node", "name": "node-1", "uid": "node-1"}),
+	), false)
+	defer s.Close()
+	about := func(name string) core.Relation {
+		t.Helper()
+		r, err := s.Get(context.Background(), core.Ref{Kind: "events", Scope: "web", Name: name})
+		require.NoError(t, err)
+		require.Len(t, r.Relations, 1, "%+v", r.Relations)
+		assert.Equal(t, "about", r.Relations[0].Type)
+		return r.Relations[0]
+	}
+	assert.Equal(t, core.Relation{Type: "about", Ref: core.Ref{Provider: ProviderID, Target: "t", Scope: "web", Kind: "pods", Name: "a", UID: "uid-a"}}, about("live"))
+
+	old := about("old")
+	assert.False(t, old.Inert)
+	_, err := s.Get(context.Background(), old.Ref)
+	var pe *provider.Error
+	require.ErrorAs(t, err, &pe)
+	assert.Equal(t, provider.ClassGone, pe.Class, "the replacement is not the event's object")
+
+	assert.Equal(t, core.Relation{Type: "about", Ref: core.Ref{Provider: ProviderID, Target: "t", Scope: "web", Kind: "pods", Name: "a"}, Inert: true}, about("nouid"),
+		"without a UID the current same-named pod may be another one")
+	assert.Equal(t, core.Relation{Type: "about", Ref: core.Ref{Provider: ProviderID, Target: "t", Scope: "web", Kind: "job", Name: "backup", UID: "uid-j"}, Inert: true}, about("job"))
+	assert.Equal(t, core.Relation{Type: "about", Ref: core.Ref{Provider: ProviderID, Target: "t", Kind: "nodes", Name: "node-1", UID: "node-1"}}, about("node"))
+}
+
+func TestAnOwnerOfAKindNotShownIsNotOpenable(t *testing.T) {
+	p := pod("web", "a", "uid-a", func(o map[string]any) {
+		o["metadata"].(map[string]any)["ownerReferences"] = []any{map[string]any{"apiVersion": "batch/v1", "kind": "Job", "name": "backup", "uid": "uid-j", "controller": true}}
+	})
+	s := newSession("t", "h", fullFake(p), false)
+	defer s.Close()
+	r, err := s.Get(context.Background(), core.Ref{Kind: "pods", Scope: "web", Name: "a"})
+	require.NoError(t, err)
+	assert.Contains(t, r.Relations, core.Relation{Type: "owner", Ref: core.Ref{Provider: ProviderID, Target: "t", Scope: "web", Kind: "job", Name: "backup", UID: "uid-j"}, Inert: true})
+}

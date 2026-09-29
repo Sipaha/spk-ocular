@@ -102,9 +102,13 @@ type Row struct {
 
 // Relation links an object to another one.
 type Relation struct {
-	// Type: "owner" (up), "owns" (down), "selects", "routes-to", "runs-on".
+	// Type: "owner" (up), "owns" (down), "selects", "routes-to", "runs-on",
+	// "about" (what an event is about).
 	Type string `json:"type"`
 	Ref  Ref    `json:"ref"`
+	// Inert: named, not openable — a kind the provider does not show, or an
+	// object it cannot pin down (opening by name could show another one).
+	Inert bool `json:"inert,omitempty"`
 }
 
 // Resource is the full view of one object for the details panel.
