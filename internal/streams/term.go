@@ -457,12 +457,14 @@ func (b *termBridge) interrupt() {
 }
 
 // dropInputLocked forgets the queued input; it counts as done for the
-// page's window.
+// page's window. A chunk being written is not queued: it stays counted
+// until its write ends.
 func (b *termBridge) dropInputLocked() {
 	for _, c := range b.inQ {
+		b.inBytes -= len(c)
 		b.inDone += int64(len(c))
 	}
-	b.inQ, b.inBytes = nil, 0
+	b.inQ = nil
 }
 
 // stdinLoop is the only writer of the command's stdin: queued input, ^C

@@ -730,3 +730,62 @@ func TestTermInterruptDropsQueuedInputAndGoesFirst(t *testing.T) {
 		t.Fatal("the command did not get the interrupt")
 	}
 }
+
+// An interrupt drops only what is still queued: the chunk being written
+// stays counted until its write ends, so the input window never goes
+// negative (or lets the page past it), however often Ctrl+C comes.
+func TestTermInterruptKeepsTheChunkBeingWrittenCounted(t *testing.T) {
+	b := newTermBridge(nil, fastTimings, nil, provider.TermSize{})
+	ctx, cancel := context.WithCancelCause(context.Background())
+	b.ctx, b.cancel = ctx, cancel
+	runCtx, stop := context.WithCancel(context.Background())
+	defer stop()
+	r, w := io.Pipe()
+	defer r.Close()
+	done := make(chan struct{})
+	counts := func() (int, int64) {
+		b.mu.Lock()
+		defer b.mu.Unlock()
+		assert.GreaterOrEqual(t, b.inBytes, 0)
+		assert.LessOrEqual(t, b.inBytes, termInWindow)
+		return b.inBytes, b.inDone
+	}
+	require.True(t, b.pushInput([]byte("AAAA")))
+	require.True(t, b.pushInput([]byte("BBBB")))
+	go func() {
+		b.stdinLoop(runCtx, w)
+		close(done)
+	}()
+	require.Eventually(t, func() bool { // AAAA is being written (the pipe blocks it)
+		b.mu.Lock()
+		defer b.mu.Unlock()
+		return len(b.inQ) == 1
+	}, 5*time.Second, time.Millisecond)
+
+	b.interrupt()
+	b.interrupt() // repeated
+	n, d := counts()
+	assert.Equal(t, 4, n, "AAAA is still in flight")
+	assert.EqualValues(t, 4, d, "BBBB dropped counts as done")
+	require.True(t, b.pushInput([]byte("CC")), "input after the interrupt")
+
+	buf := make([]byte, 4)
+	_, err := io.ReadFull(r, buf)
+	require.NoError(t, err)
+	assert.Equal(t, "AAAA", string(buf))
+	one := make([]byte, 1)
+	_, err = io.ReadFull(r, one)
+	require.NoError(t, err)
+	assert.Equal(t, []byte{3}, one, "^C next, before later input")
+	_, err = io.ReadFull(r, buf[:2])
+	require.NoError(t, err)
+	assert.Equal(t, "CC", string(buf[:2]))
+	require.Eventually(t, func() bool {
+		n, d := counts()
+		return n == 0 && d == 10
+	}, 5*time.Second, time.Millisecond)
+
+	cancel(errPageGone)
+	_ = w.Close()
+	<-done
+}
