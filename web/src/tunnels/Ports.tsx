@@ -24,8 +24,8 @@ export function PortsSection({ client, subject }: { client: Client; subject: Ref
   }, [client, subject])
 
   return (
-    <section className="px-4 pb-4" aria-label={t('fwd.ports')}>
-      <h3 className="pb-1 text-[11px] font-semibold uppercase tracking-wider text-fg-subtle">{t('fwd.ports')}</h3>
+    <section aria-label={t('fwd.ports')}>
+      <h3 className="mb-1.5 text-[11px] font-semibold uppercase tracking-wider text-fg-subtle">{t('fwd.ports')}</h3>
       {error && <p className="text-xs text-danger">{error}</p>}
       {info?.unsupported && <p className="text-xs text-fg-muted">{info.unsupported}</p>}
       {info && !info.unsupported && (

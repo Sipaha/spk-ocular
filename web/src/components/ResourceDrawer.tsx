@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useMemo, useState } from 'react'
+import { lazy, Suspense, useEffect, useMemo, useState, type ReactNode } from 'react'
 import type { Client } from '../api/client'
 import type { Relation, Ref, Resource } from '../api/types'
 import { classLabel, detailLabel, relationLabel, t } from '../i18n'
@@ -131,16 +131,23 @@ export function ResourceDrawer({ client, hub, target, subject, onClose, hasLogs,
             </Suspense>
           </div>
         )}
-        {r && tab === 'details' && <Details client={client} hub={hub} target={target} r={r} onGo={go} />}
-        {r && tab === 'details' && hasForward?.(current.kind) && (
-          <PortsSection key={key} client={client} subject={{ ...r.ref, provider: target.provider, target: target.id }} />
+        {r && tab === 'details' && (
+          <Details
+            client={client}
+            hub={hub}
+            target={target}
+            r={r}
+            onGo={go}
+            // Right under the facts: the events list below is a fixed-height box.
+            ports={hasForward?.(current.kind) && <PortsSection key={key} client={client} subject={{ ...r.ref, provider: target.provider, target: target.id }} />}
+          />
         )}
       </div>
     </aside>
   )
 }
 
-function Details({ hub, target, r, onGo }: { client: Client; hub: ViewHub; target: { provider: string; id: string }; r: Resource; onGo: (ref: Ref) => void }) {
+function Details({ hub, target, r, onGo, ports }: { client: Client; hub: ViewHub; target: { provider: string; id: string }; r: Resource; onGo: (ref: Ref) => void; ports?: ReactNode }) {
   const groups = useMemo(() => {
     const m = new Map<string, Relation[]>()
     for (const rel of r.relations ?? []) m.set(rel.type, [...(m.get(rel.type) ?? []), rel])
@@ -167,6 +174,7 @@ function Details({ hub, target, r, onGo }: { client: Client; hub: ViewHub; targe
           </div>
         ))}
       </dl>
+      {ports}
       {(groups.length > 0 || r.relationsError) && (
         <section aria-label={t('drawer.related')}>
           <h3 className="mb-1.5 text-[11px] font-semibold uppercase tracking-wider text-fg-subtle">{t('drawer.related')}</h3>
