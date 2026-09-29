@@ -98,6 +98,7 @@ export function ResourceTable({ columns, rows, hideScope, filter, selected, onSe
   }, [rows, filter, sort, columns, cellOf])
 
   const scrollRef = useRef<HTMLDivElement>(null)
+  const headRef = useRef<HTMLDivElement>(null)
   const virt = useVirtualizer({
     count: sorted.length,
     getScrollElement: () => scrollRef.current,
@@ -132,22 +133,32 @@ export function ResourceTable({ columns, rows, hideScope, filter, selected, onSe
   }
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col" role="grid" aria-rowcount={sorted.length} aria-label="resources">
-      <div className="grid shrink-0 border-b border-line bg-sidebar text-[11px] font-semibold uppercase tracking-wide text-fg-subtle" style={{ gridTemplateColumns: template }} role="row">
-        {visibleCols.map(({ c, i }) => (
-          <button
-            key={c.id}
-            role="columnheader"
-            aria-sort={sort.col === i ? (sort.desc ? 'descending' : 'ascending') : 'none'}
-            onClick={() => setSort((s) => ({ col: i, desc: s.col === i ? !s.desc : false }))}
-            className={['truncate px-3 py-1.5 text-left hover:text-fg', isNumeric(c) ? 'text-right' : ''].join(' ')}
-          >
-            {c.title}
-            {sort.col === i && <span className="ml-1">{sort.desc ? '↓' : '↑'}</span>}
-          </button>
-        ))}
+    <div className="flex min-h-0 min-w-0 flex-1 flex-col" role="grid" aria-rowcount={sorted.length} aria-label="resources">
+      {/* The header scrolls sideways with the rows (a narrow window), never the page. */}
+      <div ref={headRef} className="shrink-0 overflow-hidden border-b border-line bg-sidebar">
+        <div className="grid text-[11px] font-semibold uppercase tracking-wide text-fg-subtle" style={{ gridTemplateColumns: template }} role="row">
+          {visibleCols.map(({ c, i }) => (
+            <button
+              key={c.id}
+              role="columnheader"
+              aria-sort={sort.col === i ? (sort.desc ? 'descending' : 'ascending') : 'none'}
+              onClick={() => setSort((s) => ({ col: i, desc: s.col === i ? !s.desc : false }))}
+              className={['truncate px-3 py-1.5 text-left hover:text-fg', isNumeric(c) ? 'text-right' : ''].join(' ')}
+            >
+              {c.title}
+              {sort.col === i && <span className="ml-1">{sort.desc ? '↓' : '↑'}</span>}
+            </button>
+          ))}
+        </div>
       </div>
-      <div ref={scrollRef} tabIndex={0} onKeyDown={onKey} className="min-h-0 flex-1 overflow-auto outline-none" data-table-scroll>
+      <div
+        ref={scrollRef}
+        tabIndex={0}
+        onKeyDown={onKey}
+        onScroll={(e) => headRef.current && (headRef.current.scrollLeft = e.currentTarget.scrollLeft)}
+        className="min-h-0 flex-1 overflow-auto outline-none"
+        data-table-scroll
+      >
         <div style={{ height: virt.getTotalSize(), position: 'relative' }}>
           {virt.getVirtualItems().map((vi) => {
             const r = sorted[vi.index]
