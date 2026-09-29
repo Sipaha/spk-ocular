@@ -10,6 +10,8 @@ import (
 	"syscall"
 
 	"github.com/spf13/cobra"
+
+	"github.com/spk/spk-ocular/internal/execshim"
 )
 
 // version is set at build time: -ldflags "-X main.version=...".
@@ -56,6 +58,11 @@ func newRootCmd(run runners) *cobra.Command {
 }
 
 func main() {
+	// client-go runs this binary as a bounded exec credential plugin
+	// (internal/execshim); it must not start the app.
+	if len(os.Args) > 1 && os.Args[1] == execshim.Subcommand {
+		os.Exit(execshim.Main(os.Args[2:], os.Stdin, os.Stdout, os.Stderr))
+	}
 	tuneGoMemory(os.Getenv)
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
