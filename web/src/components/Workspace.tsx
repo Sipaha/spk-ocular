@@ -393,7 +393,7 @@ function CoverageNote({ coverage }: { coverage: SourceCoverage[] }) {
   const why = (c: SourceCoverage) =>
     c.state === 'denied' ? classLabel(c.class ?? 'forbidden') : c.state === 'error' ? classLabel(c.class ?? 'internal') : t(c.state === 'stale' ? 'coverage.stale' : 'coverage.loading')
   return (
-    <p role="note" aria-label={t('coverage.label')} className="mx-4 mt-2 text-xs text-fg-muted" title={missing.map((c) => `${c.source}: ${c.message ?? c.state}`).join('\n')}>
+    <p role="note" aria-label={t('coverage.label')} className="mx-4 my-2 text-xs text-fg-muted" title={missing.map((c) => `${c.source}: ${c.message ?? c.state}`).join('\n')}>
       {t('coverage.notObserved')}: {missing.map((c) => `${c.source} (${why(c)})`).join(', ')}
     </p>
   )
