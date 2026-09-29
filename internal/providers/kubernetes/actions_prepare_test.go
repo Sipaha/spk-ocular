@@ -195,12 +195,40 @@ func TestDeletingAPodSaysWhatMayRecreateIt(t *testing.T) {
 	}
 }
 
-func TestDeletingAWorkloadCountsItsPodsAsSeenNow(t *testing.T) {
-	d := workload("Deployment", "web", "uid-web", "1", map[string]any{"replicas": int64(2), "selector": map[string]any{"matchLabels": map[string]any{"app": "web"}}})
-	sel := labelled(map[string]any{"app": "web"})
-	s, _ := actionSession(t, d, pod("ns", "a", "a", sel), pod("ns", "b", "b", sel), pod("ns", "other", "o"))
-	plan := prepare(t, s, deployWebRef, "delete", core.ActionParams{})
-	assert.Contains(t, text(plan), "its pods are deleted too (2 now)")
+// labelledWeb carries the labels every workload below selects on.
+func labelledWeb(u *unstructured.Unstructured) *unstructured.Unstructured {
+	labelled(map[string]any{"app": "web"})(u.Object)
+	return u
+}
+
+func TestDeletingAWorkloadCountsThePodsItOwnsNow(t *testing.T) {
+	sel := map[string]any{"matchLabels": map[string]any{"app": "web"}}
+	webPod := func(name string) *unstructured.Unstructured { return labelledWeb(pod("ns", name, "p-"+name)) }
+	// Same labels, not owned: a bare pod and a pod of another ReplicaSet.
+	strangers := []kruntime.Object{webPod("bare"), owned(webPod("foreign"), "ReplicaSet", "other", "rs-other"),
+		labelledWeb(workload("ReplicaSet", "other", "rs-other", "1", map[string]any{"selector": sel}))}
+	t.Run("deployment: through its replicasets", func(t *testing.T) {
+		d := workload("Deployment", "web", "uid-web", "1", map[string]any{"replicas": int64(2), "selector": sel})
+		objs := append([]kruntime.Object{d,
+			owned(labelledWeb(workload("ReplicaSet", "web-1", "rs-1", "1", map[string]any{"selector": sel})), "Deployment", "web", "uid-web"),
+			owned(labelledWeb(workload("ReplicaSet", "web-0", "rs-0", "1", map[string]any{"selector": sel})), "Deployment", "web", "uid-web"),
+			owned(webPod("a"), "ReplicaSet", "web-1", "rs-1"), owned(webPod("b"), "ReplicaSet", "web-1", "rs-1"),
+			owned(webPod("old"), "ReplicaSet", "web-0", "rs-0")}, strangers...)
+		s, _ := actionSession(t, objs...)
+		assert.Contains(t, text(prepare(t, s, deployWebRef, "delete", core.ActionParams{})), "its pods are deleted too (3 now)")
+	})
+	t.Run("statefulset: its own pods", func(t *testing.T) {
+		sts := workload("StatefulSet", "web", "uid-sts", "1", map[string]any{"replicas": int64(1), "selector": sel})
+		objs := append([]kruntime.Object{sts, owned(webPod("web-0"), "StatefulSet", "web", "uid-sts")}, strangers...)
+		s, _ := actionSession(t, objs...)
+		plan := prepare(t, s, refOf("apps/statefulsets", "web", "uid-sts"), "delete", core.ActionParams{})
+		assert.Contains(t, text(plan), "its pods are deleted too (1 now)")
+	})
+	t.Run("replicaset without pods", func(t *testing.T) {
+		s, _ := actionSession(t, append([]kruntime.Object{labelledWeb(workload("ReplicaSet", "web-9", "rs-9", "1", map[string]any{"replicas": int64(0), "selector": sel}))}, strangers...)...)
+		plan := prepare(t, s, refOf("apps/replicasets", "web-9", "rs-9"), "delete", core.ActionParams{})
+		assert.Contains(t, text(plan), "it has no pods now")
+	})
 }
 
 func hpa(name string, target map[string]any, minR, maxR int64) *unstructured.Unstructured {
@@ -280,6 +308,42 @@ func TestRightsAreCheckedWithSeparateAttributes(t *testing.T) {
 		plan := prepare(t, s, deployWebRef, "restart", core.ActionParams{})
 		assert.Equal(t, core.RightsUnknown, plan.Rights.State)
 	})
+}
+
+// ssarStatus makes SelfSubjectAccessReview answer with this status.
+func ssarStatus(c interface {
+	PrependReactor(verb, resource string, fn k8stesting.ReactionFunc)
+}, st map[string]any) {
+	c.PrependReactor("create", "selfsubjectaccessreviews", func(a k8stesting.Action) (bool, kruntime.Object, error) {
+		u := a.(k8stesting.CreateAction).GetObject().(*unstructured.Unstructured).DeepCopy()
+		u.Object["status"] = st
+		return true, u, nil
+	})
+}
+
+func TestRightsFollowTheReviewStatus(t *testing.T) {
+	d := workload("Deployment", "web", "uid-web", "1", map[string]any{"replicas": int64(2)})
+	cases := []struct {
+		name   string
+		status map[string]any
+		state  core.RightsState
+		reason string
+	}{
+		{"allowed", map[string]any{"allowed": true}, core.RightsAllowed, ""},
+		{"denied outright", map[string]any{"allowed": false, "denied": true, "reason": "policy"}, core.RightsDenied, "(policy)"},
+		{"no opinion", map[string]any{"allowed": false}, core.RightsDenied, "you may not patch"},
+		{"evaluation failed", map[string]any{"allowed": false, "evaluationError": "webhook authorizer unreachable"}, core.RightsUnknown, "webhook authorizer unreachable"},
+		{"denied although evaluation failed", map[string]any{"allowed": false, "denied": true, "evaluationError": "partial"}, core.RightsDenied, "you may not patch"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			s, cl := actionSession(t, d)
+			ssarStatus(cl, c.status)
+			r := prepare(t, s, deployWebRef, "restart", core.ActionParams{}).Rights
+			assert.Equal(t, c.state, r.State)
+			assert.Contains(t, r.Reason, c.reason)
+		})
+	}
 }
 
 func TestAPlanNamesItsTargetAndPinsTheObject(t *testing.T) {

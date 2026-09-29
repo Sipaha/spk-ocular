@@ -8,6 +8,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/types"
 
 	"github.com/spk/spk-ocular/internal/core"
 )
@@ -173,20 +174,58 @@ func isNotFound(err error) bool { return strings.Contains(err.Error(), "not foun
 // maxCounted bounds counting a workload's pods.
 const maxCounted = 500
 
-// podsOf counts the pods a workload's selector matches now.
-func (s *session) podsOf(ctx context.Context, u *unstructured.Unstructured) []string {
+// podsOf counts the pods a workload owns now: a Deployment's through its
+// ReplicaSets, the others' directly (controller references, not labels: an
+// unrelated pod with the same labels is not deleted with it). Counting is
+// bounded; a partial count is said as "at least".
+func (s *session) podsOf(ctx context.Context, def *kindDef, u *unstructured.Unstructured) []string {
+	const unknown = "Its pods are deleted too."
 	sel, err := metav1.LabelSelectorAsSelector(labelSelectorOf(u.Object))
 	if err != nil || sel.Empty() {
-		return []string{"Its pods are deleted too."}
+		return []string{unknown}
 	}
-	l, err := s.dyn.Resource(podsKind.gvr).Namespace(u.GetNamespace()).List(ctx, metav1.ListOptions{LabelSelector: sel.String(), Limit: maxCounted})
+	list := func(gvr schema.GroupVersionResource) ([]unstructured.Unstructured, bool, error) {
+		l, err := s.dyn.Resource(gvr).Namespace(u.GetNamespace()).List(ctx, metav1.ListOptions{LabelSelector: sel.String(), Limit: maxCounted})
+		if err != nil {
+			return nil, false, err
+		}
+		return l.Items, l.GetContinue() != "", nil
+	}
+	owners := map[types.UID]bool{u.GetUID(): true}
+	partial := false
+	if def == deploymentsKind {
+		owners = map[types.UID]bool{}
+		rss, more, err := list(replicaSetsKind.gvr)
+		if err != nil {
+			return []string{unknown}
+		}
+		partial = more
+		for i := range rss {
+			if c := metav1.GetControllerOf(&rss[i]); c != nil && c.UID == u.GetUID() {
+				owners[rss[i].GetUID()] = true
+			}
+		}
+	}
+	pods, more, err := list(podsKind.gvr)
+	if err != nil {
+		return []string{unknown}
+	}
+	partial = partial || more
+	n := 0
+	for i := range pods {
+		if c := metav1.GetControllerOf(&pods[i]); c != nil && owners[c.UID] {
+			n++
+		}
+	}
 	switch {
-	case err != nil:
-		return []string{"Its pods are deleted too."}
-	case l.GetContinue() != "":
-		return []string{fmt.Sprintf("Its pods are deleted too (more than %d now).", maxCounted)}
+	case partial && n == 0:
+		return []string{unknown}
+	case partial:
+		return []string{fmt.Sprintf("Its pods are deleted too (at least %d now).", n)}
+	case n == 0:
+		return []string{"It has no pods now."}
 	}
-	return []string{fmt.Sprintf("Its pods are deleted too (%d now).", len(l.Items))}
+	return []string{fmt.Sprintf("Its pods are deleted too (%d now).", n)}
 }
 
 func labelSelectorOf(o map[string]any) *metav1.LabelSelector {
@@ -266,6 +305,11 @@ func (s *session) rights(ctx context.Context, def *kindDef, action string, u *un
 	}
 	if allowed {
 		return core.Rights{State: core.RightsAllowed}
+	}
+	// Neither allowed nor denied, and the authorizer failed: no answer.
+	denied, _, _ := unstructured.NestedBool(out.Object, "status", "denied")
+	if e := str(out.Object, "status", "evaluationError"); !denied && e != "" {
+		return core.Rights{State: core.RightsUnknown, Reason: e}
 	}
 	what := def.gvr.Resource
 	if sub != "" {

@@ -329,7 +329,7 @@ func (s *session) PrepareAction(ctx context.Context, ref core.Ref, action string
 	}
 	if action == actDelete.ID && def != podsKind && def.gvr.Group == "apps" {
 		pending++
-		go func() { extras <- extra{effects: s.podsOf(ectx, u)} }()
+		go func() { extras <- extra{effects: s.podsOf(ectx, def, u)} }()
 	}
 	plan.Rights = <-rights
 	for ; pending > 0; pending-- {
