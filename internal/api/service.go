@@ -1,0 +1,167 @@
+package api
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"log/slog"
+	"strings"
+	"sync"
+
+	"github.com/spk/spk-ocular/internal/core"
+	"github.com/spk/spk-ocular/internal/events"
+	"github.com/spk/spk-ocular/internal/provider"
+	"github.com/spk/spk-ocular/internal/store"
+)
+
+const prefSelectedTarget = "selected_target"
+
+type Options struct {
+	Version string
+	Mode    string // "desktop" | "browser"
+	Getenv  func(string) string
+}
+
+// Service implements API.
+type Service struct {
+	reg   *provider.Registry
+	store *store.Store
+	em    *events.Emitter
+	opts  Options
+
+	cancel context.CancelFunc
+	wg     sync.WaitGroup
+}
+
+var _ API = (*Service)(nil)
+
+func NewService(reg *provider.Registry, st *store.Store, em *events.Emitter, o Options) *Service {
+	return &Service{reg: reg, store: st, em: em, opts: o}
+}
+
+// Start begins watching local configuration of providers that support it.
+// It never blocks on the network.
+func (s *Service) Start(ctx context.Context) {
+	ctx, s.cancel = context.WithCancel(ctx)
+	for _, p := range s.reg.All() {
+		w, ok := p.(provider.TargetWatcher)
+		if !ok {
+			continue
+		}
+		s.wg.Add(1)
+		go func() {
+			defer s.wg.Done()
+			err := w.Watch(ctx, func() {
+				s.em.Emit(events.Event{Type: EventTargetsChanged, Payload: map[string]any{"provider": p.ID()}})
+			})
+			if err != nil {
+				slog.Warn("target watch stopped; the list refreshes only on demand", "provider", p.ID(), "err", err)
+			}
+		}()
+	}
+}
+
+// Close stops the watchers and waits for them.
+func (s *Service) Close() {
+	if s.cancel != nil {
+		s.cancel()
+	}
+	s.wg.Wait()
+}
+
+func (s *Service) AppInfo(context.Context) (AppInfo, error) {
+	return AppInfo{
+		Name:     "SPK Ocular",
+		Version:  s.opts.Version,
+		Mode:     s.opts.Mode,
+		Language: uiLanguage(s.opts.Getenv),
+	}, nil
+}
+
+func (s *Service) ListTargets(ctx context.Context) (TargetsView, error) {
+	view := TargetsView{Groups: []TargetGroup{}}
+	sel, err := s.selected(ctx)
+	if err != nil {
+		return view, coded(CodeInternal, err)
+	}
+	for _, p := range s.reg.All() {
+		g := TargetGroup{Provider: p.ID(), Title: p.Title(), Targets: []core.Target{}, Problems: []core.Problem{}}
+		d, err := p.Discover(ctx)
+		if err != nil {
+			g.Error = err.Error()
+		} else {
+			g.Targets = append(g.Targets, d.Targets...)
+			g.Problems = append(g.Problems, d.Problems...)
+		}
+		for _, t := range g.Targets {
+			if sel != nil && sel.Provider == t.Provider && sel.ID == t.ID {
+				view.Selected = sel
+			}
+		}
+		view.Groups = append(view.Groups, g)
+	}
+	return view, nil
+}
+
+func (s *Service) SelectTarget(ctx context.Context, providerID, id string) error {
+	p, ok := s.reg.Get(providerID)
+	if !ok {
+		return coded(CodeNotFound, fmt.Errorf("unknown provider %q", providerID))
+	}
+	d, err := p.Discover(ctx)
+	if err != nil {
+		return coded(CodeInternal, err)
+	}
+	found := false
+	for _, t := range d.Targets {
+		found = found || t.ID == id
+	}
+	if !found {
+		return coded(CodeNotFound, fmt.Errorf("no target %q in %s", id, p.Title()))
+	}
+	b, _ := json.Marshal(TargetRef{Provider: providerID, ID: id})
+	if err := s.store.SetUIPref(ctx, prefSelectedTarget, string(b)); err != nil {
+		return coded(CodeInternal, err)
+	}
+	return nil
+}
+
+func (s *Service) selected(ctx context.Context) (*TargetRef, error) {
+	raw, err := s.store.GetUIPref(ctx, prefSelectedTarget)
+	if err != nil || raw == "" {
+		return nil, err
+	}
+	var ref TargetRef
+	if err := json.Unmarshal([]byte(raw), &ref); err != nil {
+		slog.Warn("ignoring an unreadable remembered target", "err", err)
+		return nil, nil
+	}
+	return &ref, nil
+}
+
+// uiLanguage follows the system's message language (gettext order:
+// LANGUAGE, LC_ALL, LC_MESSAGES, LANG). Russian or English.
+func uiLanguage(getenv func(string) string) string {
+	if getenv == nil {
+		return "en"
+	}
+	for _, k := range []string{"LANGUAGE", "LC_ALL", "LC_MESSAGES", "LANG"} {
+		v := getenv(k)
+		if v == "" {
+			continue
+		}
+		first, _, _ := strings.Cut(v, ":") // LANGUAGE is a list
+		if strings.HasPrefix(first, "ru") {
+			return "ru"
+		}
+		return "en" // C/POSIX included: gettext shows untranslated messages
+	}
+	return "en"
+}
+
+// IsCoded reports whether err is a CodedError with the given code.
+func IsCoded(err error, code string) bool {
+	var ce *CodedError
+	return errors.As(err, &ce) && ce.Code == code
+}
