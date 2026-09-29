@@ -200,3 +200,35 @@ export interface MetricsView {
   window?: string
   values: Record<string, Usage>
 }
+
+export interface LogChannel {
+  id: string
+  title: string
+  /** "init", "sidecar", "ephemeral" */
+  note?: string
+}
+
+export interface LogInfo {
+  channels: LogChannel[]
+  defaultChannel: string
+  /** The object is a group of sources (a workload's pods). */
+  aggregate: boolean
+  /** Previous-instance logs make sense (one pod). */
+  previous: boolean
+}
+
+export interface LogQuery {
+  /** "" = default, "*" = all */
+  channel?: string
+  previous?: boolean
+  follow?: boolean
+  /** N > 0 or -1 = all (within the backend's budget) */
+  tailLines: number
+  /** Absolute cutoff (RFC 3339), fixed when the stream is opened. */
+  sinceTime?: string
+}
+
+export interface LogStreamInfo {
+  /** GET <streamBase>/logs/<streamId> once, within 30 s. */
+  streamId: string
+}

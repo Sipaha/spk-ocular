@@ -55,3 +55,11 @@ func (w *API) GetTargetState(provider, target string) (map[string]string, error)
 func (w *API) SetTargetState(provider, target, key, value string) error {
 	return w.a.SetTargetState(context.Background(), provider, target, key, value)
 }
+
+func (w *API) LogInfo(ref core.Ref) (core.LogInfo, error) {
+	return w.a.LogInfo(context.Background(), ref)
+}
+func (w *API) OpenLogStream(req api.LogStreamRequest) (api.LogStreamInfo, error) {
+	return w.a.OpenLogStream(context.Background(), req)
+}
+func (w *API) StreamBase() (string, error) { return w.a.StreamBase(context.Background()) }

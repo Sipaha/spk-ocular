@@ -15,6 +15,8 @@ import (
 
 type sessionEntry struct {
 	sess     provider.Session
+	provider string
+	target   string
 	hash     string
 	lastUsed time.Time
 	// owner is this incarnation's views owner: unique per session, so a
@@ -77,7 +79,7 @@ func (s *Service) session(ctx context.Context, providerID, target string) (provi
 		return nil, fromProvider(err)
 	}
 	s.sessSeq++
-	s.sessions[key] = &sessionEntry{sess: sess, hash: sess.ConfigHash(), lastUsed: s.now(), owner: fmt.Sprintf("%s#%d", key, s.sessSeq)}
+	s.sessions[key] = &sessionEntry{sess: sess, provider: providerID, target: target, hash: sess.ConfigHash(), lastUsed: s.now(), owner: fmt.Sprintf("%s#%d", key, s.sessSeq)}
 	s.armReaperLocked()
 	return sess, nil
 }
@@ -104,6 +106,7 @@ func (s *Service) closeSessionLocked(key string) {
 	}
 	delete(s.sessions, key)
 	s.views.CloseOwner(e.owner)
+	s.streams.CloseOwner(e.owner)
 	e.sess.Close()
 }
 
@@ -277,9 +280,13 @@ func (s *Service) armReaperLocked() {
 	})
 }
 
-// reapIdleSessions closes sessions that have had no views for sessionIdle.
+// reapIdleSessions closes sessions that have had no views and no streams
+// (an open log tab) for sessionIdle.
 func (s *Service) reapIdleSessions() {
 	owners := s.views.Owners()
+	for o, n := range s.streams.Owners() {
+		owners[o] += n
+	}
 	now := s.now()
 	s.sessMu.Lock()
 	defer s.sessMu.Unlock()

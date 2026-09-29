@@ -46,6 +46,15 @@ type API interface {
 	// GetMetrics: usage for the rows of an open view. Status is "ok" or an
 	// error class (unsupported = no metrics API) — never an empty success.
 	GetMetrics(ctx context.Context, viewID string) (MetricsView, error)
+
+	// LogInfo: what logs an object has (channels = containers).
+	LogInfo(ctx context.Context, ref core.Ref) (core.LogInfo, error)
+	// OpenLogStream registers a log stream bound to the target's session;
+	// the page reads it from StreamBase (NDJSON, web/src/logs/ndjson.ts).
+	OpenLogStream(ctx context.Context, req LogStreamRequest) (LogStreamInfo, error)
+	// StreamBase: where streams are served (desktop: a loopback URL with a
+	// token; browser: a path on this server).
+	StreamBase(ctx context.Context) (string, error)
 }
 
 type MetricsView struct {
@@ -125,6 +134,8 @@ const (
 	CodeNotFound    = "not_found"
 	CodeGone        = "gone"
 	CodeUnsupported = "unsupported"
+	// CodeLimit: too many open streams.
+	CodeLimit = "limit"
 )
 
 // CodedError is what API methods return: a stable code for the UI plus a

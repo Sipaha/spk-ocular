@@ -15,6 +15,7 @@ import (
 	"github.com/spk/spk-ocular/internal/events"
 	"github.com/spk/spk-ocular/internal/provider"
 	"github.com/spk/spk-ocular/internal/store"
+	"github.com/spk/spk-ocular/internal/streams"
 	"github.com/spk/spk-ocular/internal/views"
 )
 
@@ -33,7 +34,9 @@ type Service struct {
 	em    *events.Emitter
 	opts  Options
 
-	views *views.Manager
+	views      *views.Manager
+	streams    *streams.Registry
+	streamBase func() (string, error)
 
 	sessMu   sync.Mutex
 	sessions map[string]*sessionEntry // by ownerKey
@@ -48,7 +51,7 @@ type Service struct {
 var _ API = (*Service)(nil)
 
 func NewService(reg *provider.Registry, st *store.Store, em *events.Emitter, o Options) *Service {
-	return &Service{reg: reg, store: st, em: em, opts: o, views: views.NewManager(em), sessions: map[string]*sessionEntry{}, now: time.Now}
+	return &Service{reg: reg, store: st, em: em, opts: o, views: views.NewManager(em), streams: streams.NewRegistry(), sessions: map[string]*sessionEntry{}, now: time.Now}
 }
 
 // Start begins watching local configuration of providers that support it.
@@ -81,6 +84,7 @@ func (s *Service) Close() {
 	}
 	s.wg.Wait()
 	s.views.CloseAll()
+	s.streams.Close()
 	s.sessMu.Lock()
 	if s.reaper != nil {
 		s.reaper.Stop()
@@ -219,6 +223,7 @@ func (s *Service) Stats() map[string]any {
 	}
 	out := map[string]any{
 		"views":      views,
+		"streams":    s.streams.Len(),
 		"goroutines": runtime.NumGoroutine(),
 		"heap_inuse": ms.HeapInuse,
 		"heap_alloc": ms.HeapAlloc,

@@ -142,6 +142,15 @@ func (h *HTTP) routes() {
 	}) (any, error) {
 		return h.api.GetMetrics(ctx, r.ViewID)
 	}))
+	h.mux.HandleFunc("POST /api/LogInfo", handle(func(ctx context.Context, r *core.Ref) (any, error) {
+		return h.api.LogInfo(ctx, *r)
+	}))
+	h.mux.HandleFunc("POST /api/OpenLogStream", handle(func(ctx context.Context, r *api.LogStreamRequest) (any, error) {
+		return h.api.OpenLogStream(ctx, *r)
+	}))
+	h.mux.HandleFunc("POST /api/StreamBase", handle(func(ctx context.Context, _ *struct{}) (any, error) {
+		return h.api.StreamBase(ctx)
+	}))
 	h.mux.HandleFunc("GET /api/events", h.serveEvents)
 }
 

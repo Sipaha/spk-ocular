@@ -9,7 +9,9 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/spk/spk-ocular/internal/api"
 	"github.com/spk/spk-ocular/internal/api/transport"
+	"github.com/spk/spk-ocular/internal/streams"
 )
 
 // shutdownTimeout bounds graceful shutdown: an open SSE tab never closes its
@@ -44,6 +46,10 @@ func newBrowserHandler(c *appCore, dist fs.FS, testAPI bool) (http.Handler, stri
 	apiH := transport.NewHTTP(c.Service, c.Emitter)
 	mux := http.NewServeMux()
 	mux.Handle("/api/", apiH)
+	// Streams (logs) on the same origin; the token is in the path.
+	sh := streams.NewHandler(c.Service.Streams(), streams.HandlerOptions{Classify: api.StreamErrorClass})
+	mux.Handle("/streams/", http.StripPrefix("/streams", sh))
+	c.Service.SetStreamBase(func() (string, error) { return "/streams/" + sh.Token(), nil })
 	if testAPI {
 		mux.Handle("/api/_test/", transport.AuthGuard(apiH.AuthToken(), testRoutes(c)))
 	}

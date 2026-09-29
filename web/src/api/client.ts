@@ -1,5 +1,5 @@
 import { Call, Events } from '@wailsio/runtime'
-import type { ApiEvent, AppInfo, EventType, KindDescriptor, MetricsView, Page, Query, Ref, Resource, ScopesView, TargetsView, ViewInfo } from './types'
+import type { ApiEvent, AppInfo, EventType, KindDescriptor, LogInfo, LogQuery, LogStreamInfo, MetricsView, Page, Query, Ref, Resource, ScopesView, TargetsView, ViewInfo } from './types'
 
 export class ApiError extends Error {
   constructor(
@@ -30,6 +30,11 @@ export interface Client {
   getMetrics(viewId: string): Promise<MetricsView>
   getTargetState(provider: string, target: string): Promise<Record<string, string>>
   setTargetState(provider: string, target: string, key: string, value: string): Promise<void>
+  logInfo(ref: Ref): Promise<LogInfo>
+  /** Registers a log stream; read it from streamBase() + '/logs/' + streamId. */
+  openLogStream(ref: Ref, query: LogQuery): Promise<LogStreamInfo>
+  /** Desktop: a loopback URL with a token; browser: a path on this server. */
+  streamBase(): Promise<string>
   subscribeEvents(onEvent: (e: ApiEvent) => void): () => void
 }
 
@@ -69,6 +74,9 @@ export const httpClient: Client = {
   getMetrics: (viewId) => post('GetMetrics', { viewId }),
   getTargetState: (provider, target) => post('GetTargetState', { provider, target }),
   setTargetState: (provider, target, key, value) => done(post('SetTargetState', { provider, target, key, value })),
+  logInfo: (ref) => post('LogInfo', ref),
+  openLogStream: (ref, query) => post('OpenLogStream', { ref, query }),
+  streamBase: () => post('StreamBase', {}),
   subscribeEvents(onEvent) {
     const es = new EventSource(`/api/events?token=${encodeURIComponent(tokenMeta())}`)
     es.onmessage = (m) => onEvent(JSON.parse(m.data) as ApiEvent)
@@ -112,6 +120,9 @@ export const wailsClient: Client = {
   getMetrics: (viewId) => wcall('GetMetrics', viewId),
   getTargetState: (provider, target) => wcall('GetTargetState', provider, target),
   setTargetState: (provider, target, key, value) => wcall('SetTargetState', provider, target, key, value),
+  logInfo: (ref) => wcall('LogInfo', ref),
+  openLogStream: (ref, query) => wcall('OpenLogStream', { ref, query }),
+  streamBase: () => wcall('StreamBase'),
   subscribeEvents(onEvent) {
     const offs = EVENT_TYPES.map((type) =>
       Events.On(type, (ev: { data: unknown }) => {

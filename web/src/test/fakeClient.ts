@@ -53,6 +53,9 @@ export function fakeClient(targets: Target[]) {
     getMetrics: vi.fn(async () => ({ status: 'unsupported', values: {} })),
     getTargetState: vi.fn(async () => ({})),
     setTargetState: vi.fn(async () => {}),
+    logInfo: vi.fn(async () => ({ channels: [{ id: 'app', title: 'app' }], defaultChannel: 'app', aggregate: false, previous: true })),
+    openLogStream: vi.fn(async () => ({ streamId: 's1' })),
+    streamBase: vi.fn(async () => '/streams/tok'),
     subscribeEvents: vi.fn((cb: (e: ApiEvent) => void) => {
       listener = cb
       return () => {
