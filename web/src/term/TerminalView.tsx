@@ -72,7 +72,6 @@ export default function TerminalView({ client, tab, active, mode }: Props) {
   // Every (re)connect is a generation: late answers and callbacks of an
   // older one never touch the newer.
   const genRef = useRef(0)
-  const aliveRef = useRef(true)
   const [phase, setPhase] = useState<TermPhase>('opening')
   const [ended, setEnded] = useState<TermEnd | null>(null)
   const [openError, setOpenError] = useState<{ text: string; code?: string } | null>(null)
@@ -85,7 +84,9 @@ export default function TerminalView({ client, tab, active, mode }: Props) {
   useEffect(() => {
     const host = hostRef.current!
     const gens = genRef
-    aliveRef.current = true
+    // This mount's life (StrictMode mounts twice: a ref would be revived
+    // by the second mount while the first one's open is still pending).
+    let alive = true
     const connect = async (again: boolean) => {
       const term = termRef.current
       if (!term) return
@@ -103,17 +104,18 @@ export default function TerminalView({ client, tab, active, mode }: Props) {
           ? await client.reopenTerminal(idRef.current, cols, rows)
           : await client.openTerminal({ ...tab.open, cols, rows })
       } catch (e) {
-        if (gen === genRef.current && aliveRef.current) {
+        if (gen === genRef.current && alive) {
           setOpenError({ text: errText(e), code: e instanceof ApiError ? e.code : undefined })
           setPhase('ended')
         }
         return
       }
-      if (!aliveRef.current) {
-        void client.forgetTerminal(info.terminalId).catch(() => {}) // the tab closed meanwhile
+      if (!alive || gen !== genRef.current) {
+        // The tab closed or a newer attempt began: a terminal only this
+        // attempt knows of is forgotten (a reopen's is the tab's own).
+        if (!alive || info.terminalId !== idRef.current) void client.forgetTerminal(info.terminalId).catch(() => {})
         return
       }
-      if (gen !== genRef.current) return
       idRef.current = info.terminalId
       const tg = info.target
       dock.update(tab.id, { title: tg.channel && tg.instance ? `${tg.channel} · ${tg.instance}` : tab.title, hint: describe(info), rev: tg.configRev })
@@ -124,7 +126,7 @@ export default function TerminalView({ client, tab, active, mode }: Props) {
         if (gen === genRef.current) setOpenError({ text: errText(e) })
         return
       }
-      if (gen !== genRef.current || !aliveRef.current) return
+      if (gen !== genRef.current || !alive) return
       if (again) term.write(`\r\n${DIM(`──── ${t('term.reconnected')} ────`)}\r\n`)
       const conn = new TermConnection(`${base}/term/${encodeURIComponent(info.streamId)}`, {
         output: (data, done) => (gen === genRef.current ? term.write(data, done) : done()),
@@ -182,7 +184,22 @@ export default function TerminalView({ client, tab, active, mode }: Props) {
       }
       if (isShortcut(ev, 'KeyV', { ctrl: true, shift: true })) {
         ev.preventDefault()
-        void readText(mode).then((text) => text && term.paste(text))
+        // The clipboard answers later: the text goes to the connection the
+        // gesture was made in, or nowhere (and says so).
+        const conn = connRef.current
+        const gen = genRef.current
+        if (!conn?.live) {
+          setNotice(t('term.pasteNoConnection'))
+          return false
+        }
+        void readText(mode).then((text) => {
+          if (!text || !alive) return
+          if (genRef.current !== gen || connRef.current !== conn || !conn.live) {
+            setNotice(t('term.pasteDropped'))
+            return
+          }
+          term.paste(text)
+        })
         return false
       }
       return true
@@ -201,7 +218,7 @@ export default function TerminalView({ client, tab, active, mode }: Props) {
 
     void connect(false)
     return () => {
-      aliveRef.current = false
+      alive = false
       gens.current++
       ro.disconnect()
       if (timer) clearTimeout(timer)

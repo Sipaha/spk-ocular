@@ -110,6 +110,11 @@ export class TermConnection {
     this.ws.onerror = () => {}
   }
 
+  /** Not closed or ended: input is still accepted. */
+  get live(): boolean {
+    return !this.closed
+  }
+
   /** Bytes queued locally, not yet sent (paste in progress). */
   get pending(): number {
     return this.queued
