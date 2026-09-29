@@ -80,7 +80,7 @@ function TunnelRow({ tn, client, mode }: { tn: Tunnel; client: Client; mode: 'de
     <li className="flex flex-col gap-0.5 border-b border-line px-3 py-2 text-xs last:border-b-0" aria-label={what}>
       <div className="flex items-center gap-2">
         <span className={`h-2 w-2 shrink-0 rounded-full ${stateColor[tn.state]}`} title={t(`fwd.state.${tn.state}`)} />
-        <code className="font-mono text-fg" data-address>
+        <code className="shrink-0 whitespace-nowrap font-mono text-fg" data-address>
           {tn.addresses.join('  ')}
         </code>
         <span className="text-fg-subtle">→</span>
