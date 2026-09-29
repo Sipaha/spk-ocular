@@ -111,6 +111,10 @@ export function ResourceTable({ columns, rows, hideScope, filter, selected, onSe
   })
 
   const template = visibleCols.map(({ c }) => (c.width ? `${c.width}px` : 'minmax(120px, 1fr)')).join(' ')
+  // The columns' least width, set on the header and the rows: Chromium does
+  // not count the overflowing tracks of the (absolute) rows fully, so the
+  // last columns could not be scrolled to.
+  const minWidth = visibleCols.reduce((sum, { c }) => sum + (c.width || 120), 0)
 
   const onKey = (e: React.KeyboardEvent) => {
     if (!sorted.length) return
@@ -135,8 +139,8 @@ export function ResourceTable({ columns, rows, hideScope, filter, selected, onSe
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col" role="grid" aria-rowcount={sorted.length} aria-label="resources">
       {/* The header scrolls sideways with the rows (a narrow window), never the page. */}
-      <div ref={headRef} className="shrink-0 overflow-hidden border-b border-line bg-sidebar">
-        <div className="grid text-[11px] font-semibold uppercase tracking-wide text-fg-subtle" style={{ gridTemplateColumns: template }} role="row">
+      <div ref={headRef} className="shrink-0 overflow-hidden border-b border-line bg-sidebar [scrollbar-gutter:stable]">
+        <div className="grid text-[11px] font-semibold uppercase tracking-wide text-fg-subtle" style={{ gridTemplateColumns: template, minWidth }} role="row">
           {visibleCols.map(({ c, i }) => (
             <button
               key={c.id}
@@ -156,10 +160,10 @@ export function ResourceTable({ columns, rows, hideScope, filter, selected, onSe
         tabIndex={0}
         onKeyDown={onKey}
         onScroll={(e) => headRef.current && (headRef.current.scrollLeft = e.currentTarget.scrollLeft)}
-        className="min-h-0 flex-1 overflow-auto outline-none"
+        className="min-h-0 flex-1 overflow-auto outline-none [scrollbar-gutter:stable]"
         data-table-scroll
       >
-        <div style={{ height: virt.getTotalSize(), position: 'relative' }}>
+        <div style={{ height: virt.getTotalSize(), minWidth, position: 'relative' }}>
           {virt.getVirtualItems().map((vi) => {
             const r = sorted[vi.index]
             const isSel = r.id === selected
@@ -174,7 +178,7 @@ export function ResourceTable({ columns, rows, hideScope, filter, selected, onSe
                 }}
                 title={r.health.message ? `${r.health.reason}: ${r.health.message}` : r.health.reason}
                 className={['absolute left-0 grid w-full cursor-default items-center border-b border-line/40', isSel ? 'bg-active' : 'hover:bg-hover'].join(' ')}
-                style={{ top: vi.start, height: ROW_H, gridTemplateColumns: template }}
+                style={{ top: vi.start, height: ROW_H, gridTemplateColumns: template, minWidth }}
               >
                 {visibleCols.map(({ c, i }) => (
                   <span

@@ -203,4 +203,18 @@ test('a narrow window scrolls the table sideways, never the page', async ({ page
   expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBe(0)
   await grid.locator('[data-table-scroll]').evaluate((e) => (e.scrollLeft = 150))
   await expect.poll(() => grid.evaluate((g) => g.children[0].scrollLeft)).toBe(150) // the header follows
+  // Scrolled to the end, the last column is reachable and its header sits over it.
+  await grid.locator('[data-table-scroll]').evaluate((e) => (e.scrollLeft = e.scrollWidth))
+  await expect
+    .poll(() =>
+      grid.evaluate((g) => {
+        const heads = g.querySelectorAll('[role=columnheader]')
+        const cells = g.querySelector('[data-table-scroll] [role=row]')!.querySelectorAll('[role=gridcell]')
+        const h = heads[heads.length - 1].getBoundingClientRect()
+        const c = cells[cells.length - 1].getBoundingClientRect()
+        const view = g.querySelector('[data-table-scroll]')!.getBoundingClientRect()
+        return [Math.round(h.left - c.left), Math.round(h.right - c.right), c.right <= view.right + 1]
+      }),
+    )
+    .toEqual([0, 0, true])
 })
