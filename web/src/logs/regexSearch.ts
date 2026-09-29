@@ -29,6 +29,7 @@ export class RegexSearch {
   private waiting = new Set<number>()
   private timer: ReturnType<typeof setTimeout> | null = null
   private sentUpTo = 0 // highest id sent
+  private floor = 0 // lines below this id are gone (answers may still name them)
   hits = new Map<number, Range[]>()
   state: RegexState = 'idle'
 
@@ -43,6 +44,7 @@ export class RegexSearch {
     this.stop()
     this.hits = new Map()
     this.sentUpTo = 0
+    this.floor = 0
     if (!source) {
       this.state = 'idle'
       this.onChange()
@@ -69,8 +71,14 @@ export class RegexSearch {
   /** Lines below id are gone from the buffer. */
   drop(before: number) {
     if (!this.worker) return
+    this.floor = Math.max(this.floor, before)
     this.worker.postMessage({ t: 'drop', before })
     for (const id of this.hits.keys()) if (id < before) this.hits.delete(id)
+  }
+
+  /** Every line sent so far is gone (the buffer was cleared / restarted). */
+  dropAll() {
+    this.drop(this.sentUpTo + 1)
   }
 
   stop() {
@@ -102,7 +110,7 @@ export class RegexSearch {
   private receive(m: FromWorker) {
     this.waiting.delete(m.seq)
     if (m.reset) this.hits = new Map()
-    for (const [id, r] of m.hits) this.hits.set(id, r)
+    for (const [id, r] of m.hits) if (id >= this.floor) this.hits.set(id, r)
     if (this.timer) clearTimeout(this.timer)
     this.timer = null
     this.arm() // still waiting for later requests: a fresh budget for them

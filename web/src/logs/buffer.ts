@@ -60,8 +60,14 @@ export class Ingest {
     return out
   }
 
+  /** A new stream: no carry (ids go on: they stay unique in the tab). */
   forget() {
     this.carry.clear()
+  }
+
+  /** A boundary in one source (restart, reconnect) or a source retired. */
+  forgetSource(src: number) {
+    this.carry.delete(src)
   }
 }
 

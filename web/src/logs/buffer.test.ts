@@ -58,3 +58,22 @@ describe('window', () => {
     expect(trim(frozen, false, 10, 1e9).entries).toHaveLength(10)
   })
 })
+
+describe('Ingest across streams', () => {
+  it('keeps ids unique after forget (a reopened stream)', () => {
+    const ing = new Ingest()
+    const a = ing.entries(1, [['', 'x']])
+    ing.forget()
+    const b = ing.entries(1, [['', 'y']])
+    expect(b[0].id).toBeGreaterThan(a[0].id)
+  })
+
+  it('a boundary drops the carried style and level', () => {
+    const ing = new Ingest()
+    ing.entries(1, [['', '\x1b[31mERROR still red']])
+    ing.forgetSource(1)
+    const [e] = ing.entries(1, [['', 'new process']])
+    expect(e.style).toBeUndefined()
+    expect(e.level).toBeNull()
+  })
+})

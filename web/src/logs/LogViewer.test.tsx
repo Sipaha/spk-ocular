@@ -13,6 +13,7 @@ function stream() {
   return {
     response: new Response(body, { status: 200, headers: { 'Content-Type': 'application/x-ndjson' } }),
     send: (...frames: unknown[]) => ctl.enqueue(enc.encode(frames.map((f) => JSON.stringify(f) + '\n').join(''))),
+    raw: (text: string) => ctl.enqueue(enc.encode(text)),
     close: () => ctl.close(),
   }
 }
@@ -81,5 +82,73 @@ describe('LogViewer', () => {
     render(<LogViewer client={c} subject={pod} active />)
     await screen.findByText(/too many open streams/)
     expect(screen.getByRole('button', { name: 'Reopen' })).toBeInTheDocument()
+  })
+
+  it('ignores a replaced stream, keeps gap warnings, and aborts on a broken frame', async () => {
+    const { client: c } = fakeClient([k8s('dev')])
+    const s1 = stream()
+    const s2 = stream()
+    const signals: AbortSignal[] = []
+    const fetchMock = vi.fn(async (_u: string, init: RequestInit) => {
+      signals.push(init.signal!)
+      return signals.length === 1 ? s1.response : s2.response
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    const user = userEvent.setup()
+    render(<LogViewer client={c} subject={pod} active />)
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1))
+    act(() =>
+      s1.send(
+        { k: 'source', id: 1, key: 'a', label: 'a/app' },
+        { k: 'lines', s: 1, l: [['2026-09-29T10:00:01Z', 'first']] },
+        { k: 'ready' },
+        // a reconnect gap and "streaming" again in the same chunk
+        { k: 'state', s: 1, state: 'gap', msg: 'lines around the reconnect may be missing' },
+        { k: 'state', s: 1, state: 'streaming' },
+      ),
+    )
+    await screen.findByText('first')
+    expect(await screen.findByRole('status')).toHaveTextContent('possible gap — lines around the reconnect may be missing')
+
+    // a new stream (another tail): the old one's late lines must not appear
+    await user.selectOptions(screen.getByRole('combobox', { name: 'Lines' }), '100')
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2))
+    expect(signals[0].aborted).toBe(true)
+    act(() => s1.send({ k: 'lines', s: 1, l: [['2026-09-29T10:00:02Z', 'late from the old stream']] }))
+    act(() => s2.send({ k: 'source', id: 1, key: 'a', label: 'a/app' }, { k: 'lines', s: 1, l: [['2026-09-29T10:00:03Z', 'new stream']] }, { k: 'ready' }))
+    await screen.findByText('new stream')
+    expect(screen.queryByText('late from the old stream')).not.toBeInTheDocument()
+    expect(screen.queryByText('first')).not.toBeInTheDocument()
+
+    // a broken frame: an error, and the request is released at once
+    act(() => s2.raw('{not json}\n'))
+    await waitFor(() => expect(screen.getByLabelText('stream state')).toHaveTextContent('Failed'))
+    expect(signals[1].aborted).toBe(true)
+  })
+
+  it('forgets finished sources whose lines were all evicted', async () => {
+    const { client: c } = fakeClient([k8s('dev')])
+    const s1 = stream()
+    vi.stubGlobal('fetch', vi.fn(async () => s1.response))
+    render(<LogViewer client={c} subject={pod} active />)
+    await waitFor(() => expect(c.openLogStream).toHaveBeenCalled())
+    act(() =>
+      s1.send(
+        { k: 'source', id: 1, key: 'old', label: 'old-pod/app' },
+        { k: 'source', id: 2, key: 'new', label: 'new-pod/app' },
+        { k: 'lines', s: 1, l: [['', 'from the old pod']] },
+        { k: 'lines', s: 2, l: [['', 'from the new pod']] },
+        { k: 'ready' },
+        { k: 'state', s: 1, state: 'ended', msg: 'the pod was deleted' },
+      ),
+    )
+    await screen.findByText('from the old pod')
+    expect(screen.getByRole('button', { name: 'Source' })).toHaveAttribute('aria-pressed', 'true')
+    const many = Array.from({ length: 50_000 }, (_, i) => ['', `line ${i}`])
+    act(() => s1.send({ k: 'lines', s: 2, l: many.slice(0, 25_000) }, { k: 'lines', s: 2, l: many.slice(25_000) }))
+    // the old pod's line is evicted; its source goes with it: one source
+    // left, so the prefix column switches off by itself
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Source' })).toHaveAttribute('aria-pressed', 'false'), { timeout: 5000 })
+    expect(screen.queryByText(/the pod was deleted/)).not.toBeInTheDocument()
   })
 })

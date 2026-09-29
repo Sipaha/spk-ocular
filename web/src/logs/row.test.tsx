@@ -29,3 +29,14 @@ describe('row', () => {
     expect(red?.style.color).toBe('var(--color-ansi-1)')
   })
 })
+
+describe('cut lines', () => {
+  it('say so on screen and in copies', async () => {
+    const { LINE_CUT } = await import('./ndjson')
+    const { CUT_MARK } = await import('./row')
+    const [e] = new Ingest().entries(1, [['', 'head of a huge line', LINE_CUT]])
+    expect(rowText(e, { showTime: false, showSource: false, labelOf: () => '' })).toBe('head of a huge line' + CUT_MARK)
+    const { container } = render(<div>{renderMessage(e, [], false)}</div>)
+    expect(container.textContent).toBe('head of a huge line' + CUT_MARK)
+  })
+})

@@ -2,6 +2,10 @@ import type { ReactNode } from 'react'
 import { parseAnsi, PLAIN, styleCss } from './ansi'
 import type { LogEntry } from './buffer'
 import type { Range } from './match'
+import { LINE_CUT } from './ndjson'
+
+/** Shown (and copied) after a line the backend cut at its size limit. */
+export const CUT_MARK = ' … [line cut: longer than 256 KiB]'
 
 export interface RowOpts {
   showTime: boolean
@@ -26,7 +30,7 @@ export function rowText(e: LogEntry, o: RowOpts): string {
   let s = ''
   if (o.showTime) s += fmtTime(e.ts).padEnd(TIME_WIDTH) + ' '
   if (o.showSource) s += o.labelOf(e.src) + ' '
-  return s + e.plain
+  return s + e.plain + (e.flags & LINE_CUT ? CUT_MARK : '')
 }
 
 const SOURCE_COLORS = ['#6fb3f2', '#e0a458', '#8fce7a', '#d68fd6', '#5fc7c0', '#e07f7f', '#b3a6f5', '#c9c36a']
@@ -66,6 +70,11 @@ export function shortLabels(labels: string[]): string[] {
  * with search matches (plain-text ranges) marked on top.
  */
 export function renderMessage(e: LogEntry, ranges: Range[], current: boolean): ReactNode {
+  const msg = renderSpans(e, ranges, current)
+  return e.flags & LINE_CUT ? [msg, <span key="cut" className="text-warning">{CUT_MARK}</span>] : msg
+}
+
+function renderSpans(e: LogEntry, ranges: Range[], current: boolean): ReactNode {
   if (e.plain === '') return ' ' // a blank line still needs a caret position (WebKit hit-testing)
   const spans = e.raw || e.style ? parseAnsi(e.raw ?? e.plain, e.style ?? PLAIN).spans : [{ text: e.plain, style: PLAIN }]
   if (!ranges.length && spans.length === 1 && spans[0].style === PLAIN) return e.plain

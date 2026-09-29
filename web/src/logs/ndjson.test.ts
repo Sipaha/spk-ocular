@@ -25,3 +25,16 @@ describe('NdjsonDecoder', () => {
     expect(() => d.push(enc.encode('{"k":"lines","l":"' + 'x'.repeat(MAX_FRAME_CHARS)))).toThrow(FrameTooLarge)
   })
 })
+
+describe('NdjsonDecoder frame cap', () => {
+  it('refuses an oversized frame whole or in pieces alike', () => {
+    const big = '{"k":"lines","s":1,"l":[["t","' + 'x'.repeat(MAX_FRAME_CHARS) + '"]]}\n'
+    expect(() => new NdjsonDecoder().push(enc.encode(big))).toThrow(FrameTooLarge)
+    const d = new NdjsonDecoder()
+    const b = enc.encode(big)
+    expect(() => {
+      d.push(b.slice(0, 1000))
+      d.push(b.slice(1000))
+    }).toThrow(FrameTooLarge)
+  })
+})

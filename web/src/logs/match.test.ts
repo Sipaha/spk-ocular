@@ -62,6 +62,16 @@ describe('RegexSearch', () => {
     rs.stop()
   })
 
+  it('keeps searching the lines of a new stream (ids go on across streams)', async () => {
+    const rs = new RegexSearch(fakeWorker, () => {})
+    rs.setPattern('ok', [{ id: 1, plain: 'ok' }, { id: 2, plain: 'ok' }])
+    rs.dropAll() // the buffer started over
+    rs.add([{ id: 3, plain: 'ok again' }])
+    for (let i = 0; i < 4; i++) await Promise.resolve()
+    expect([...rs.hits.keys()]).toEqual([3])
+    rs.stop()
+  })
+
   it('kills a worker that does not answer in time', () => {
     vi.useFakeTimers()
     const hung: WorkerLike = { onmessage: null, postMessage() {}, terminate: vi.fn() }

@@ -143,13 +143,18 @@ function Stream({ client, subject, active, query, toolbar, view }: { client: Cli
   const f = useLogFilter(win.entries)
   const showSource = view.showSource ?? sources.size > 1
 
-  const labels = useMemo(() => {
+  const liveLabels = useMemo(() => {
     const list = [...sources.values()]
     const short = shortLabels(list.map((s) => s.label))
     const m = new Map<number, { label: string; color: string }>()
     list.forEach((s, i) => m.set(s.id, { label: short[i], color: sourceColor(s.key) }))
     return m
   }, [sources])
+  // While the user drag-selects, the prefix layout must not change under
+  // the selection (a new source can change the short labels and widths).
+  const [heldLabels, setHeldLabels] = useState(liveLabels)
+  if (!selecting && heldLabels !== liveLabels) setHeldLabels(liveLabels)
+  const labels = selecting ? heldLabels : liveLabels
   const width = Math.max(0, ...[...labels.values()].map((l) => l.label.length))
   const rowOpts = useMemo<RowOpts>(
     () => ({ showTime, showSource, labelOf: (src) => (labels.get(src)?.label ?? '?').padEnd(width) }),
@@ -210,8 +215,12 @@ function Stream({ client, subject, active, query, toolbar, view }: { client: Cli
     }
   }
 
-  // a source that simply ended (a complete answer) is not a problem
-  const problems = [...sources.values()].filter((s) => s.state && s.state.state !== 'streaming' && !(s.state.state === 'ended' && !s.state.msg && !s.state.class))
+  // a source that simply ended (a complete answer) is not a problem;
+  // gap/truncated warnings stay (history may be incomplete) after the
+  // source is streaming again
+  const problems = [...sources.values()].filter(
+    (s) => s.warn || (s.state && s.state.state !== 'streaming' && !(s.state.state === 'ended' && !s.state.msg && !s.state.class)),
+  )
   const terminal = status.phase === 'gone' || status.phase === 'disconnected' || status.phase === 'error'
 
   return (
@@ -335,14 +344,18 @@ function Problems({ problems, notice, labels }: { problems: LogSource[]; notice?
   return (
     <div role="status" className="shrink-0 space-y-0.5 border-b border-line bg-panel/60 px-3 py-1 text-[11px]">
       {notice && <p className={tone(notice.state)}>{notice.msg}</p>}
-      {shown.map((s) => (
-        <p key={s.id} className={tone(s.state!.state)}>
-          {labels.size > 1 && <b style={{ color: labels.get(s.id)?.color }}>{labels.get(s.id)?.label}: </b>}
-          {t(`logs.state.${s.state!.state}` as MessageKey)}
-          {s.state!.class && ` · ${classLabel(s.state!.class)}`}
-          {s.state!.msg && ` — ${s.state!.msg}`}
-        </p>
-      ))}
+      {shown.map((s) => {
+        const st = s.state && s.state.state !== 'streaming' ? s.state : s.warn!
+        return (
+          <p key={s.id} className={tone(st.state)}>
+            {labels.size > 1 && <b style={{ color: labels.get(s.id)?.color }}>{labels.get(s.id)?.label}: </b>}
+            {t(`logs.state.${st.state}` as MessageKey)}
+            {st.class && ` · ${classLabel(st.class)}`}
+            {st.msg && ` — ${st.msg}`}
+            {st !== s.warn && s.warn && <span className="text-warning"> · {t(`logs.state.${s.warn.state}` as MessageKey)}</span>}
+          </p>
+        )
+      })}
       {problems.length > shown.length && <p className="text-fg-subtle">{t('logs.moreProblems', { count: problems.length - shown.length })}</p>}
     </div>
   )

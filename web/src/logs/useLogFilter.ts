@@ -65,7 +65,10 @@ export function useLogFilter(entries: LogEntry[], opts: { worker?: () => WorkerL
   useEffect(() => {
     const rs = rsRef.current
     if (!rs || rs.state === 'idle' || rs.state === 'slow') return
+    // everything below the first line is gone (all of it, when the buffer
+    // was cleared or a new stream began)
     if (entries.length) rs.drop(entries[0].id)
+    else rs.dropAll()
     rs.add(entries)
   }, [entries])
 

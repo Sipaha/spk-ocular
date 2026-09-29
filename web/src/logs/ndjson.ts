@@ -16,8 +16,10 @@ export const LINE_CUT = 1
 export const LINE_NO_TIME = 2
 
 /**
- * A frame is at most one batch of lines (≤ 500 lines / 64 KB of text on the
- * server, each line ≤ 256 KiB); anything far larger means a broken stream.
+ * A frame is at most one batch of lines (the server cuts batches at 500
+ * lines / 64 KB of text, each line ≤ 256 KiB: a frame stays well under
+ * 2 MB even with JSON escapes); anything larger means a broken stream —
+ * whether it arrives whole or in pieces.
  */
 export const MAX_FRAME_CHARS = 8 << 20
 
@@ -54,6 +56,7 @@ export class NdjsonDecoder {
       if (nl < 0) break
       const line = text.slice(start, nl)
       start = nl + 1
+      if (line.length > MAX_FRAME_CHARS) throw new FrameTooLarge()
       if (line) out.push(JSON.parse(line) as Frame)
     }
     this.pending = text.slice(start)
