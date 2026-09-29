@@ -48,6 +48,34 @@ func testRoutes(c *appCore) http.Handler {
 			c.Synthetic.Reconfigure()
 			w.WriteHeader(http.StatusNoContent)
 		})
+		// Steer the synthetic actions: rights, failures, a slow run.
+		mux.HandleFunc("POST /api/_test/synthetic/controls", func(w http.ResponseWriter, r *http.Request) {
+			var ctl synthetic.Controls
+			if err := json.NewDecoder(r.Body).Decode(&ctl); err != nil {
+				http.Error(w, err.Error(), http.StatusBadRequest)
+				return
+			}
+			c.Synthetic.SetControls(ctl)
+			w.WriteHeader(http.StatusNoContent)
+		})
+		// Change a workload as another actor would.
+		mux.HandleFunc("POST /api/_test/synthetic/mutate", func(w http.ResponseWriter, r *http.Request) {
+			var m synthetic.Mutation
+			if err := json.NewDecoder(r.Body).Decode(&m); err != nil {
+				http.Error(w, err.Error(), http.StatusBadRequest)
+				return
+			}
+			if err := c.Synthetic.Mutate(m); err != nil {
+				http.Error(w, err.Error(), http.StatusNotFound)
+				return
+			}
+			w.WriteHeader(http.StatusNoContent)
+		})
+		// The workloads as at start, no controls.
+		mux.HandleFunc("POST /api/_test/synthetic/reset", func(w http.ResponseWriter, _ *http.Request) {
+			c.Synthetic.ResetActions()
+			w.WriteHeader(http.StatusNoContent)
+		})
 	}
 	mux.HandleFunc("POST /api/_test/gc", func(w http.ResponseWriter, _ *http.Request) {
 		runtime.GC()

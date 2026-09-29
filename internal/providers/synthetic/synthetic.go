@@ -1,9 +1,9 @@
 // Package synthetic is a test-only provider (spk-ocular --test-api
 // --test-synthetic): one target whose objects have deterministic logs that
 // e2e tests drive through /api/_test/logs, an echo terminal (live.go) and
-// ports served by in-process HTTP servers. It exercises the generic log,
-// terminal and tunnel UI without a cluster — and shows that UI knows
-// nothing about Kubernetes.
+// ports served by in-process HTTP servers, and workloads to act on
+// (actions.go). It exercises the generic log, terminal, tunnel and action
+// UI without a cluster — and shows that UI knows nothing about Kubernetes.
 package synthetic
 
 import (
@@ -32,6 +32,7 @@ var objects = map[string][]string{
 // Provider holds the live log feeds tests push into.
 type Provider struct {
 	live live
+	wl   workloads
 	// rev is the configuration revision (Reconfigure bumps it); changed
 	// wakes Watch.
 	rev     atomic.Int64
@@ -59,6 +60,7 @@ type Event struct {
 func New() *Provider {
 	p := &Provider{subs: map[*sub]struct{}{}, clock: time.Date(2026, 9, 29, 10, 0, 0, 0, time.UTC), changed: make(chan struct{}, 1)}
 	p.rev.Store(1)
+	p.wl.init()
 	return p
 }
 
@@ -135,11 +137,14 @@ var kind = core.KindDescriptor{
 }
 
 func (s *session) ConfigHash() string                           { return s.hash }
-func (s *session) Kinds() []core.KindDescriptor                 { return []core.KindDescriptor{kind} }
+func (s *session) Kinds() []core.KindDescriptor                 { return []core.KindDescriptor{kind, workloadKind} }
 func (s *session) Scopes(context.Context) ([]core.Scope, error) { return nil, nil }
 func (s *session) ScopeKind() string                            { return "" }
 func (s *session) Close()                                       {}
 func (s *session) Get(_ context.Context, ref core.Ref) (*core.Resource, error) {
+	if ref.Kind == WorkloadKind {
+		return s.getWorkload(ref.Name)
+	}
 	if _, ok := objects[ref.Name]; !ok {
 		return nil, &provider.Error{Class: provider.ClassNotFound, Message: ref.Name}
 	}
@@ -151,6 +156,9 @@ func (s *session) ref(name string) core.Ref {
 }
 
 func (s *session) Watch(q provider.Query, sink provider.Sink) (func(), error) {
+	if q.Kind == WorkloadKind {
+		return s.watchWorkloads(q, sink)
+	}
 	var rows []core.Row
 	for _, name := range []string{"api", "workers"} {
 		if q.Name != "" && q.Name != name {
