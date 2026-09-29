@@ -38,6 +38,7 @@ type Service struct {
 	sessMu   sync.Mutex
 	sessions map[string]*sessionEntry // by ownerKey
 	reaper   *time.Timer
+	sessSeq  uint64
 	now      func() time.Time
 
 	cancel context.CancelFunc

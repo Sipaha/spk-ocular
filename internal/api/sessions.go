@@ -17,6 +17,10 @@ type sessionEntry struct {
 	sess     provider.Session
 	hash     string
 	lastUsed time.Time
+	// owner is this incarnation's views owner: unique per session, so a
+	// view (or an in-flight Open) of a retired session can never be taken
+	// for one of its replacement.
+	owner string
 }
 
 // sessionIdle: a session without views is closed after this long (a page
@@ -24,6 +28,20 @@ type sessionEntry struct {
 const sessionIdle = 60 * time.Second
 
 func ownerKey(providerID, target string) string { return providerID + "\x00" + target }
+
+// sessionFor is session() for callers that need the incarnation too.
+func (s *Service) sessionFor(ctx context.Context, providerID, target string) (*sessionEntry, error) {
+	if _, err := s.session(ctx, providerID, target); err != nil {
+		return nil, err
+	}
+	s.sessMu.Lock()
+	defer s.sessMu.Unlock()
+	e := s.sessions[ownerKey(providerID, target)]
+	if e == nil {
+		return nil, coded(CodeGone, errors.New("session closed"))
+	}
+	return e, nil
+}
 
 // session returns the open session for a target, building it on first use
 // or when the target's configuration changed since. Sessions never block on
@@ -58,7 +76,8 @@ func (s *Service) session(ctx context.Context, providerID, target string) (provi
 	if err != nil {
 		return nil, fromProvider(err)
 	}
-	s.sessions[key] = &sessionEntry{sess: sess, hash: sess.ConfigHash(), lastUsed: s.now()}
+	s.sessSeq++
+	s.sessions[key] = &sessionEntry{sess: sess, hash: sess.ConfigHash(), lastUsed: s.now(), owner: fmt.Sprintf("%s#%d", key, s.sessSeq)}
 	s.armReaperLocked()
 	return sess, nil
 }
@@ -84,7 +103,7 @@ func (s *Service) closeSessionLocked(key string) {
 		return
 	}
 	delete(s.sessions, key)
-	s.views.CloseOwner(key)
+	s.views.CloseOwner(e.owner)
 	e.sess.Close()
 }
 
@@ -157,12 +176,12 @@ func (s *Service) OpenView(ctx context.Context, req OpenViewRequest) (ViewInfo, 
 	if !req.Query.Scope.Valid() {
 		return ViewInfo{}, coded(CodeBadRequest, errors.New("invalid scope selector"))
 	}
-	sess, err := s.session(ctx, req.Provider, req.Target)
+	e, err := s.sessionFor(ctx, req.Provider, req.Target)
 	if err != nil {
 		return ViewInfo{}, err
 	}
 	var kind *core.KindDescriptor
-	for _, k := range sess.Kinds() {
+	for _, k := range e.sess.Kinds() {
 		if k.ID == req.Query.Kind {
 			kind = &k
 		}
@@ -170,7 +189,10 @@ func (s *Service) OpenView(ctx context.Context, req OpenViewRequest) (ViewInfo, 
 	if kind == nil {
 		return ViewInfo{}, coded(CodeUnsupported, fmt.Errorf("unknown kind %q", req.Query.Kind))
 	}
-	id, err := s.views.Open(ownerKey(req.Provider, req.Target), sess, req.Query)
+	id, err := s.views.Open(e.owner, e.sess, req.Query)
+	if errors.Is(err, views.ErrGone) {
+		return ViewInfo{}, coded(CodeGone, errors.New("the session was replaced while opening; retry"))
+	}
 	if err != nil {
 		return ViewInfo{}, fromProvider(err)
 	}
@@ -215,9 +237,7 @@ func (s *Service) GetMetrics(ctx context.Context, viewID string) (MetricsView, e
 	if errors.Is(err, views.ErrGone) {
 		return MetricsView{}, coded(CodeGone, err)
 	}
-	s.sessMu.Lock()
-	e := s.sessions[owner]
-	s.sessMu.Unlock()
+	e := s.entryByOwner(owner)
 	if e == nil {
 		return MetricsView{}, coded(CodeGone, errors.New("session closed"))
 	}
@@ -226,6 +246,9 @@ func (s *Service) GetMetrics(ctx context.Context, viewID string) (MetricsView, e
 		return MetricsView{Status: CodeUnsupported, Values: map[string]provider.Usage{}}, nil
 	}
 	m, err := src.Metrics(ctx, q)
+	if s.entryByOwner(owner) != e {
+		return MetricsView{}, coded(CodeGone, errors.New("session closed")) // retired while fetching
+	}
 	if err != nil {
 		ce := fromProvider(err)
 		return MetricsView{Status: ce.Code, Message: ce.Detail, Values: map[string]provider.Usage{}}, nil
@@ -261,7 +284,7 @@ func (s *Service) reapIdleSessions() {
 	s.sessMu.Lock()
 	defer s.sessMu.Unlock()
 	for key, e := range s.sessions {
-		if owners[key] > 0 {
+		if owners[e.owner] > 0 {
 			e.lastUsed = now
 			continue
 		}
@@ -269,4 +292,16 @@ func (s *Service) reapIdleSessions() {
 			s.closeSessionLocked(key)
 		}
 	}
+}
+
+// entryByOwner finds the live session incarnation owning views, or nil.
+func (s *Service) entryByOwner(owner string) *sessionEntry {
+	s.sessMu.Lock()
+	defer s.sessMu.Unlock()
+	for _, e := range s.sessions {
+		if e.owner == owner {
+			return e
+		}
+	}
+	return nil
 }

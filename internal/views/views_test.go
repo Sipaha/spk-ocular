@@ -321,3 +321,38 @@ func TestLeasesExpireUnlessTouchedOrPulled(t *testing.T) {
 	assert.Equal(t, []string{orphan}, m.Touch([]string{kept, orphan}), "the UI learns which to reopen")
 	assert.Equal(t, 1, src.stopped)
 }
+
+// blockingSource holds Watch until released, to race CloseOwner with Open.
+type blockingSource struct {
+	entered, release chan struct{}
+	stopped          chan struct{}
+}
+
+func (b *blockingSource) Watch(_ provider.Query, sink provider.Sink) (func(), error) {
+	close(b.entered)
+	<-b.release
+	sink.Apply(provider.Delta{Status: ready})
+	return func() { close(b.stopped) }, nil
+}
+
+// Review 2026-09-29: an Open inside Watch when its owner is closed used to
+// register a live view on the retired session.
+func TestOpenRacingCloseOwnerIsGone(t *testing.T) {
+	m := NewManager(events.NewEmitter())
+	defer m.CloseAll()
+	src := &blockingSource{entered: make(chan struct{}), release: make(chan struct{}), stopped: make(chan struct{})}
+	res := make(chan error, 1)
+	go func() {
+		_, err := m.Open("s1", src, provider.Query{})
+		res <- err
+	}()
+	<-src.entered
+	m.CloseOwner("s1")
+	close(src.release)
+	assert.ErrorIs(t, <-res, ErrGone)
+	<-src.stopped // its subscription was stopped
+	assert.Empty(t, m.Owners())
+	// A new incarnation of the same owner works again.
+	_, err := m.Open("s1", &fakeSource{}, provider.Query{})
+	assert.NoError(t, err)
+}

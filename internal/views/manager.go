@@ -55,7 +55,10 @@ type Manager struct {
 	seq    uint64
 	views  map[string]*entry
 	closed bool
-	sweep  *time.Timer // armed only while views exist
+	// revoked counts CloseOwner calls per owner: an Open that started
+	// before its owner was closed must not register afterwards.
+	revoked map[string]uint64
+	sweep   *time.Timer // armed only while views exist
 }
 
 func NewManager(em *events.Emitter) *Manager {
@@ -63,7 +66,7 @@ func NewManager(em *events.Emitter) *Manager {
 	_, _ = rand.Read(b)
 	return &Manager{
 		em: em, coal: events.NewCoalescer(coalesceDelay), epoch: hex.EncodeToString(b),
-		views: map[string]*entry{}, now: time.Now, ttl: leaseTTL,
+		views: map[string]*entry{}, now: time.Now, ttl: leaseTTL, revoked: map[string]uint64{},
 	}
 }
 
@@ -77,6 +80,7 @@ func (m *Manager) Open(owner string, src Source, q provider.Query) (string, erro
 	}
 	m.seq++
 	id := fmt.Sprintf("v%s-%d", m.epoch, m.seq)
+	gen := m.revoked[owner]
 	m.mu.Unlock()
 
 	v := newView(id, func() { m.notify(id) })
@@ -86,8 +90,8 @@ func (m *Manager) Open(owner string, src Source, q provider.Query) (string, erro
 	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	if m.closed {
-		stop()
+	if m.closed || m.revoked[owner] != gen {
+		stop() // the owner went away while this view was being set up
 		return "", ErrGone
 	}
 	m.views[id] = &entry{view: v, owner: owner, query: q, stop: stop, touched: m.now()}
@@ -128,19 +132,23 @@ func (m *Manager) Touch(ids []string) (gone []string) {
 	return gone
 }
 
-// Expire closes views whose lease ran out and returns their ids.
+// Expire closes views whose lease ran out and returns their ids. Selection
+// and removal happen under one lock, so a Touch cannot slip in between.
 func (m *Manager) Expire() []string {
 	m.mu.Lock()
 	cutoff := m.now().Add(-m.ttl)
 	var ids []string
+	var gone []*entry
 	for id, e := range m.views {
 		if e.touched.Before(cutoff) {
 			ids = append(ids, id)
+			gone = append(gone, e)
+			delete(m.views, id)
 		}
 	}
 	m.mu.Unlock()
-	for _, id := range ids {
-		m.Close(id)
+	for _, e := range gone {
+		e.stop()
 	}
 	return ids
 }
@@ -199,6 +207,7 @@ func (m *Manager) Close(id string) {
 // otherwise.
 func (m *Manager) CloseOwner(owner string) []string {
 	m.mu.Lock()
+	m.revoked[owner]++
 	var gone []*entry
 	var ids []string
 	for id, e := range m.views {

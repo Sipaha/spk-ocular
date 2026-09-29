@@ -243,3 +243,25 @@ func TestIdleSessionsAreReaped(t *testing.T) {
 	s.reapIdleSessions()
 	assert.True(t, k.opened[0].isClosed())
 }
+
+func TestViewsBelongToOneSessionIncarnation(t *testing.T) {
+	ctx := context.Background()
+	ms := &metricSession{m: provider.Metrics{Values: map[string]provider.Usage{"/p": {CPU: 1}}}}
+	k := &metricOpenable{openable: newOpenable("a"), ms: ms}
+	s, _ := newService(t, k)
+	old, err := s.OpenView(ctx, OpenViewRequest{Provider: "k", Target: "a", Query: provider.Query{Kind: "pods", Scope: allScopes}})
+	require.NoError(t, err)
+	oldOwner := s.sessions[ownerKey("k", "a")].owner
+
+	k.setHash("a", "h2")
+	s.revalidateSessions(ctx, "k")
+	fresh, err := s.OpenView(ctx, OpenViewRequest{Provider: "k", Target: "a", Query: provider.Query{Kind: "pods", Scope: allScopes}})
+	require.NoError(t, err)
+	assert.NotEqual(t, oldOwner, s.sessions[ownerKey("k", "a")].owner, "a new incarnation, a new owner")
+
+	_, err = s.GetMetrics(ctx, old.ViewID)
+	assert.True(t, IsCoded(err, CodeGone), "the old view went with its session")
+	mv, err := s.GetMetrics(ctx, fresh.ViewID)
+	require.NoError(t, err)
+	assert.Equal(t, "ok", mv.Status)
+}
