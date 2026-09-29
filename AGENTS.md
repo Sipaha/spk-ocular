@@ -48,6 +48,7 @@ Go + Wails v3 + React. Спецификация: `docs/specs/2026-09-29-spk-ocul
   `/api/events`, bearer из `<meta name="spk-ocular-api-token">`), `transport/wails.go` (бинды,
   FQN `github.com/spk/spk-ocular/internal/api/transport.API.<Method>`). Новый метод API = метод в
   интерфейсе + `Service` + маршрут в `http.go` + метод в `wails.go` + `web/src/api/client.ts`.
+  Ошибки HTTP-транспорта — статус 400 с классом в `code` (`forbidden`, `conflict`, `unknown`, …).
 - `internal/events` — `Emitter` (почтовый ящик «последнее событие на (type, key)» у каждого
   подписчика, переполнение → `resync`) + `Coalescer`.
 - `internal/views` — provider-агностичный hot-layer видов: `View` (строки, версии, надгробия,
@@ -80,8 +81,17 @@ Go + Wails v3 + React. Спецификация: `docs/specs/2026-09-29-spk-ocul
   `internal/providers/kubernetes/forward.go` (порты, выбор pod-а, закрепление UID) и
   `forward_dial.go` (WS-туннель / SPDY, потоки error+data, сторож живости, уход с мёртвого pod-а).
   Клиент — `web/src/tunnels/` (индикатор «⇄ N», панель, секция «Ports», диалог).
+- Действия: `internal/api/actions.go` (`PrepareAction` из одной записи сессии, `RunAction`:
+  строгая проверка запроса, сверка `ConfigRev`, выполнение на захваченной сессии),
+  `internal/providers/kubernetes/actions.go` (матрица kind × действие, `Expect`, запись с
+  предусловиями, повторы, классификация) и `actions_effects.go` (последствия по стратегии,
+  политика PVC, контроллер pod-а, HPA, SSAR). Клиент — `web/src/actions/` (`Menu`,
+  `ActionDialog`), меню строки и `Delete` — `ResourceTable` (`rowMenu`, `onDelete`), «Действия ▾»
+  — `ResourceDrawer`, уведомление — `showNotice` в `store.ts`.
 - `internal/providers/synthetic` — тестовый провайдер (`--test-api --test-synthetic`): логи,
-  эхо-терминал и порты (`live.go`), переконфигурация (`POST /api/_test/synthetic/reconfigure`).
+  эхо-терминал и порты (`live.go`), переконфигурация (`POST /api/_test/synthetic/reconfigure`),
+  вид Workloads с действиями (`actions.go`; `POST /api/_test/synthetic/controls` — права, отказ,
+  `unknown`, задержка; `mutate` — чужое изменение/замена; `reset`).
 - `internal/execshim` — shim для exec-плагинов kubeconfig (таймаут, смерть вместе с приложением).
 - `internal/store` — SQLite, миграции `migrations/NNNN_*.sql`, `ui_prefs`, `target_state`.
 - `internal/desktop` — Wails-окно, D-Bus probe, GPU policy. `cmd/spk-ocular` — cobra, режимы.
@@ -209,7 +219,23 @@ Go + Wails v3 + React. Спецификация: `docs/specs/2026-09-29-spk-ocul
 - Вывод терминала — недоверенные данные: без OSC 52, без открытия ссылок, без смены заголовков.
 - Regex-поиск в UI — только в Worker с бюджетом времени; plain и фильтр `*` — линейные. —
   `match.test.ts` (`(a|aa)+$` убивает воркер).
-- Destructive-действия — только с подтверждением, в котором виден context/namespace/объект.
+- Действие выполняется над подтверждённым объектом и планом: `RunAction` требует UID,
+  `ConfigRev` и `Expect`, читает строго по UID (заменённый одноимённый — `gone`), несовпавший
+  `Expect` — `conflict` без записи; запись — с предусловиями UID + `resourceVersion`. —
+  `internal/api/actions_test.go`, `TestKindActionOnAnObjectReplacedBetweenReadAndWrite`,
+  `TestKindActionReplicasChangedAfterThePlanIsAConflict`.
+- Повтор записи — только когда перечитывание доказало, что её не было (тот же UID и `Expect`,
+  другая версия), ≤ 3; ответ без HTTP-статуса — `unknown`, без повторов. —
+  `TestKindActionStatusChurnIsRetried`, `actions_run_test.go`.
+- Последствия — только известное, «запрошено»/«может», по стратегии; судьба данных PVC — по
+  reclaim policy тома; права «не удалось проверить» ≠ «разрешено». — `actions_prepare_test.go`,
+  `TestKindActionStatefulSetClaimsFollowTheRetentionPolicy`, `ActionDialog.test.tsx`.
+- Подтверждение (все contexts RW — это только UX): видны context, сервер, namespace, вид, имя;
+  опасный план — красная кнопка и фокус на «Отмена»; удержанный Enter не подтверждает; Enter в
+  поле числа — просмотр, не выполнение; один `RunAction` на подтверждение (синхронный замок);
+  Esc не закрывает во время выполнения; цель меню — строка под курсором / текущий объект деталей;
+  `Delete` — только в теле таблицы. — `ActionDialog.test.tsx`, `WorkspaceActions.test.tsx`,
+  `tests/e2e/actions.spec.ts`.
 - Версии `github.com/wailsapp/wails/v3` и `@wailsio/runtime` совпадают (сейчас `3.0.0-beta.26`).
 - `go build ./...` без тега `wails` обязан проходить: desktop-код за тегом.
 - Стартовый JS-чанк < 300 КБ gz (сейчас вход 86 КБ + общие ~18 КБ), xterm (~87 КБ gz)/CodeMirror — только ленивые чанки. — `web/scripts/check-bundle.mjs`
@@ -238,6 +264,17 @@ Go + Wails v3 + React. Спецификация: `docs/specs/2026-09-29-spk-ocul
   секунды; тесты на пороги времени держат запас > 1 с.
 - **Trimmed Unstructured дорог по памяти** из-за накладных расходов `map[string]any` (~6 КБ/pod
   после фильтра) — в кэше `slimObject` (~1,3 КБ); интернирование строк почти не помогает.
+- **WebKitGTK не показывает `:focus-visible` для фокуса, поставленного скриптом** (начальный фокус
+  диалога, ловушка Tab) — у кнопок диалога действий явное кольцо по `:focus`, иначе не видно,
+  что нажмёт Enter.
+- **Неявная отправка формы**: Enter в поле не отправляет форму, если её кнопка по умолчанию
+  `disabled` — поэтому «Просмотреть» не отключается на время подготовки.
+- **Фейковый dynamic client**: reactor-ы вызываются под его блокировкой — менять объекты только
+  через `c.Tracker()`, вызов клиента из reactor-а — дедлок.
+- **PVC, оставленные StatefulSet-ом при scale down** (`whenScaled=Retain`), сохраняют
+  ownerReference на него и удаляются вместе с ним при `whenDeleted=Delete` (проверено на kind).
+- **kubelet отвечает 200 с текстом «unable to retrieve container logs for containerd://…»**, если
+  предыдущий контейнер crashloop-а подменили во время чтения `previous` — e2e перечитывает.
 - **client-go считает watch короче секунды без событий ошибкой** («very short watch») и уходит в
   backoff — тестовые серверы должны держать поток > 1 с.
 - **dynamic fake фильтрует по label selector и ответы reactor-а** — объекты в reactor-ах должны

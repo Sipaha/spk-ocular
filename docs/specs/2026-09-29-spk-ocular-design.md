@@ -2,7 +2,8 @@
 
 Дата: 2026-09-29. Статус: план утверждён пользователем 2026-09-29; P0 (каркас), P1 (ресурсы,
 детали, метрики) и P2 (логи) реализованы и проверены на kind 2026-09-29, P3 (терминалы и
-туннели) — 2026-09-30 (`docs/plans/`); следующий — P4 (действия).
+туннели) и P4 (действия) — 2026-09-30 (`docs/plans/`); следующий — P5 (Problems, палитра,
+клавиатура, полировка).
 Решения приняты пользователем в переписке; документ фиксирует итог, а не варианты.
 
 ## Зачем
@@ -285,7 +286,18 @@ type Upstream interface {                       // одно соединение
     Label() string; Open(ctx) (Stream, error); Done() <-chan struct{}; Err() error; Close()
 }
 type Stream interface { io.ReadWriter; CloseWrite() error; Close() error; Result() error }
-// Впереди (P4): Actioner (дескрипторы действий на объект).
+// P4 (KindDescriptor.Actions: id, заголовок, destructive, параметр count min..max).
+// Протокол без состояния на сервере: план → подтверждение в UI → выполнение плана.
+type Actioner interface {
+    // Только чтение: где (target, сервер, ref с UID), последствия, предупреждения,
+    // права (allowed/denied/unknown), Unavailable, Current (scale), Destructive плана,
+    // Expect — непрозрачный отпечаток действия, параметров и состояния, от которого
+    // зависят последствия.
+    PrepareAction(ctx, ref Ref, action string, p ActionParams) (ActionPlan, error)
+    // Строго по UID; Expect не совпал → conflict; заменён/удалён → gone;
+    // отправлено без ответа → unknown (не повторяется).
+    RunAction(ctx, ActionRun{Ref, Action, Params, Expect}) (ActionResult, error)
+}
 ```
 
 Структурированные ошибки API: `forbidden`, `unavailable`, `gone`, `conflict`,
@@ -372,8 +384,18 @@ relist); медленные inspect — в ограниченном пуле с 
    не дожидаясь ответа, — иначе старая страница успевала переоткрыть вид на закрытой
    сессии (найдено замером). Список scopes — живой вид kind, названного провайдером
    (`ScopesView.Kind`, k8s: namespaces).
-8. **Действия.** restart — patch аннотации `kubectl.kubernetes.io/restartedAt`; scale — через
-   subresource `scale`; delete — подтверждение с явным context/namespace/именем.
+8. **Действия (P4).** Двухшаговый протокол без серверных токенов: `PrepareAction` читает план
+   (последствия, права, `Expect`), UI показывает его — context, сервер, namespace, вид, имя — и
+   после подтверждения отправляет план обратно с `ConfigRev` target-а. `RunAction` перечитывает
+   объект строго по UID, сверяет `Expect` (изменились replicas/политика PVC/пауза — `conflict`,
+   «Проверить заново») и пишет с предусловиями UID + `resourceVersion`: restart — merge patch
+   `kubectl.kubernetes.io/restartedAt` (RFC3339Nano), scale — JSON Patch subresource `scale` с
+   `test`, delete — `Preconditions{UID, RV}` + фоновый каскад. Повтор (≤ 3) — только когда
+   перечитывание доказывает, что записи не было (тот же UID и `Expect`, другая версия); ответ
+   без HTTP-статуса — `unknown` («проверьте, прежде чем повторять»). Последствия — честные и
+   по стратегии («запрошено», «может»; политика PVC StatefulSet, контроллер pod-а, HPA), права —
+   `SelfSubjectAccessReview`, «не удалось проверить» ≠ «разрешено». Подтверждение — только UX:
+   все contexts RW (решение пользователя 2026-09-30).
 9. **Никаких фоновых опросов в ядре.** Фича, требующая постоянного опроса кластера, в ядро не
    попадает; метрики опрашиваются только для видимой таблицы.
 
@@ -459,7 +481,16 @@ relist); медленные inspect — в ограниченном пуле с 
   Private_Dirty всех процессов 109 МБ → пик 314 МБ во время 50 МБ (мусор JS в WebProcess) → 147 МБ
   после (полный scrollback 5000 строк); терминал + туннель в покое — 105 МБ; выход 0,18 с, порты
   свободны.
-- **P4** — действия restart/scale/delete с подтверждениями.
+- **P4** ✅ — действия (2026-09-30): restart Deployment/StatefulSet/DaemonSet, scale
+  Deployment/StatefulSet (0..10000, в два шага: число → просмотр), delete pods, workloads,
+  ReplicaSets, Services, Ingresses, ConfigMaps, Secrets. Меню «Действия» в деталях (текущий
+  объект после переходов), контекстное меню строки (правый клик, `Shift+F10`, клавиша меню),
+  `Delete` на таблице; диалог с где/что/правами, красная кнопка и фокус на «Отмена» у опасного
+  плана, один запрос на подтверждение, `unknown`/`conflict` в диалоге, уведомление в строке
+  состояния. Проверено на kind (замена объекта между чтением и записью, смена только status,
+  чужое изменение replicas, политика PVC StatefulSet при scale down и delete, paused, HPA,
+  RBAC viewer) и в desktop под Xvfb (контекстное меню, диалоги, `Delete`/`Shift+F10` в русской
+  раскладке, фокус и Esc).
 - **P5** — Problems, палитра, клавиатурная навигация, полировка, soak-замер памяти.
 - **Затем** — Docker Compose provider.
 
