@@ -105,3 +105,35 @@ test('open details follow changes the table does not show', async ({ page }) => 
     kubectl('-n', 'ocular-demo', 'patch', 'configmap', 'web-config', '--type=merge', '-p', '{"data":{"LOG_LEVEL":"debug"}}')
   }
 })
+
+const logPanel = (page: Page) => page.locator('[role=tabpanel]:not([hidden])')
+const logRows = (page: Page) => logPanel(page).locator('[data-log-viewport] [data-index]')
+
+test('logs of a pod from its details; previous of a crash-looping one', async ({ page }) => {
+  await openTarget(page, 'kind-ocular-dev')
+  const grid = await kindPage(page, 'Pods')
+  await row(grid, 'crashloop').click()
+  await page.keyboard.press('Enter')
+  await page.getByRole('dialog').getByRole('button', { name: 'Logs' }).click()
+  await expect(logRows(page).first()).toHaveText('starting', { timeout: 30_000 })
+  await logPanel(page).getByRole('button', { name: 'Previous' }).click()
+  await expect(logPanel(page).getByLabel('stream state')).toHaveText('Complete', { timeout: 30_000 })
+  await expect(logRows(page).first()).toHaveText('starting')
+})
+
+test('logs of a deployment: every pod in one stream, live', async ({ page }) => {
+  await openTarget(page, 'kind-ocular-dev')
+  const grid = await kindPage(page, 'Deployments')
+  await row(grid, 'chatter').click()
+  await page.keyboard.press('l')
+  const panel = logPanel(page)
+  await expect(panel.getByLabel('stream state')).toHaveText('Live', { timeout: 30_000 })
+  const pods = kubectl('-n', 'ocular-demo', 'get', 'pods', '-l', 'app=chatter', '-o', 'jsonpath={.items[*].metadata.name}').trim().split(/\s+/)
+  expect(pods).toHaveLength(2)
+  for (const p of pods) await expect(logRows(page).filter({ hasText: `${p} tick` }).first()).toBeAttached({ timeout: 30_000 })
+  const before = await logRows(page).last().textContent()
+  await expect.poll(async () => logRows(page).last().textContent(), { timeout: 10_000 }).not.toBe(before) // live
+  // ANSI colours from the pods reach the page as styles, not escape codes
+  await expect(panel.locator('[data-log-viewport]')).not.toContainText('[31m')
+  await expect(panel.locator('[data-log-viewport] span[style*="--color-ansi-1"]').first()).toBeAttached()
+})
