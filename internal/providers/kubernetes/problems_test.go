@@ -186,6 +186,8 @@ func TestProblemsViewShowsCurrentProblemsAndRecentEvidence(t *testing.T) {
 	ev, _ := rowByID(p, "events#u-ev")
 	assert.Equal(t, "events", ev.Ref.Kind, "the evidence opens as the event itself")
 	assert.Equal(t, []string{"recent", "Event", "web", "pod/crash", "BackOff", "back-off (3 in total)"}, texts(ev.Cells[:6]))
+	assert.True(t, ev.Cells[0].Muted, "evidence is shown quieter")
+	assert.False(t, crash.Cells[0].Muted)
 	assert.NotZero(t, ev.Cells[6].Time)
 
 	node, _ := rowByID(p, "nodes#u-n1")

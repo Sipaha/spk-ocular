@@ -1,6 +1,6 @@
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { useMemo, useRef, useState } from 'react'
-import type { Cell, Column, HealthState, MetricsView, Row } from '../api/types'
+import type { Cell, Column, HealthState, MetricsView, Row, SortSpec } from '../api/types'
 import { formatAge, formatBytes, formatCPU } from '../format'
 import { isShortcut } from '../keyboard'
 import { Menu, type MenuItem } from '../actions/Menu'
@@ -36,6 +36,8 @@ interface Props {
   rowMenu?: (row: Row) => MenuItem[]
   /** Delete on the focused table: the selected row. */
   onDelete?: (row: Row) => void
+  /** The kind's first sort (else by the first column). */
+  defaultSort?: SortSpec
 }
 
 export const healthText: Record<HealthState, string> = {
@@ -75,14 +77,19 @@ export function matchesRow(r: Row, f: string): boolean {
   return r.cells.some((c) => (c.text ?? '').toLowerCase().includes(needle)) || (r.health.reason ?? '').toLowerCase().includes(needle)
 }
 
-export function ResourceTable({ columns, rows, hideScope, filter, selected, onSelect, onOpen, onLogs, onTerminal, metrics, rowMenu, onDelete }: Props) {
+export function ResourceTable({ columns, rows, hideScope, filter, selected, onSelect, onOpen, onLogs, onTerminal, metrics, rowMenu, onDelete, defaultSort }: Props) {
   const now = useNow(10_000)
   const [menu, setMenu] = useState<{ items: MenuItem[]; at: { x: number; y: number } } | null>(null)
   const openMenu = (r: Row, at: { x: number; y: number }) => {
     const items = rowMenu?.(r) ?? []
     if (items.length) setMenu({ items, at })
   }
-  const [sort, setSort] = useState<Sort>({ col: 0, desc: false })
+  const [sort, setSort] = useState<Sort>(() => {
+    const col = defaultSort ? columns.findIndex((c) => c.id === defaultSort.column) : -1
+    return col < 0 ? { col: 0, desc: false } : { col, desc: !!defaultSort?.desc }
+  })
+  // Ties: the kind's second key (ascending), then the name.
+  const thenCol = defaultSort?.then ? columns.findIndex((c) => c.id === defaultSort.then) : -1
   const visibleCols = useMemo(
     () => columns.map((c, i) => ({ c, i })).filter(({ c }) => !(hideScope && c.scopeColumn)),
     [columns, hideScope],
@@ -103,13 +110,15 @@ export function ResourceTable({ columns, rows, hideScope, filter, selected, onSe
     const list = f ? rows.filter((r) => matchesRow(r, f)) : rows.slice()
     const col = columns[sort.col]
     if (col) {
+      const then = thenCol >= 0 && thenCol !== sort.col ? columns[thenCol] : null
       list.sort((a, b) => {
-        const d = cmp(col, cellOf(a, sort.col), cellOf(b, sort.col)) || a.ref.name.localeCompare(b.ref.name)
-        return sort.desc ? -d : d
+        const d = cmp(col, cellOf(a, sort.col), cellOf(b, sort.col))
+        if (d) return sort.desc ? -d : d
+        return (then ? cmp(then, cellOf(a, thenCol), cellOf(b, thenCol)) : 0) || a.ref.name.localeCompare(b.ref.name)
       })
     }
     return list
-  }, [rows, filter, sort, columns, cellOf])
+  }, [rows, filter, sort, columns, cellOf, thenCol])
 
   const scrollRef = useRef<HTMLDivElement>(null)
   const headRef = useRef<HTMLDivElement>(null)
@@ -212,21 +221,24 @@ export function ResourceTable({ columns, rows, hideScope, filter, selected, onSe
                 className={['absolute left-0 grid w-full cursor-default items-center border-b border-line/40', isSel ? 'bg-active' : 'hover:bg-hover'].join(' ')}
                 style={{ top: vi.start, height: ROW_H, gridTemplateColumns: template, minWidth }}
               >
-                {visibleCols.map(({ c, i }) => (
-                  <span
-                    key={c.id}
-                    role="gridcell"
-                    className={[
-                      'truncate px-3',
-                      isNumeric(c) ? 'text-right font-mono text-[12px]' : '',
-                      c.type === 'status' ? healthText[r.health.state] : '',
-                      i === 0 ? 'font-medium' : '',
-                    ].join(' ')}
-                  >
-                    {c.type === 'status' && <HealthDot state={r.health.state} />}
-                    {cellText(c, cellOf(r, i), now)}
-                  </span>
-                ))}
+                {visibleCols.map(({ c, i }) => {
+                  const cell = cellOf(r, i)
+                  return (
+                    <span
+                      key={c.id}
+                      role="gridcell"
+                      className={[
+                        'truncate px-3',
+                        isNumeric(c) ? 'text-right font-mono text-[12px]' : '',
+                        c.type === 'status' ? (cell?.muted ? 'text-fg-subtle' : healthText[r.health.state]) : '',
+                        i === 0 ? 'font-medium' : '',
+                      ].join(' ')}
+                    >
+                      {c.type === 'status' && <HealthDot state={r.health.state} muted={cell?.muted} />}
+                      {cellText(c, cell, now)}
+                    </span>
+                  )
+                })}
               </div>
             )
           })}
@@ -250,6 +262,12 @@ const dotColor: Record<HealthState, string> = {
   unknown: 'bg-fg-muted',
 }
 
-export function HealthDot({ state }: { state: HealthState }) {
-  return <span aria-hidden className={['mr-1.5 inline-block h-2 w-2 rounded-full align-middle', dotColor[state]].join(' ')} />
+/** muted: a ring, not a dot — evidence rather than a current state. */
+export function HealthDot({ state, muted }: { state: HealthState; muted?: boolean }) {
+  return (
+    <span
+      aria-hidden
+      className={['mr-1.5 inline-block h-2 w-2 rounded-full align-middle', muted ? 'border border-fg-subtle' : dotColor[state]].join(' ')}
+    />
+  )
 }

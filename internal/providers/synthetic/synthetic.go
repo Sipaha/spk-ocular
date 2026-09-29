@@ -136,8 +136,10 @@ var kind = core.KindDescriptor{
 	Columns: []core.Column{{ID: "name", Title: "Name", Type: core.ColText}, {ID: "sources", Title: "Sources", Type: core.ColNumber}},
 }
 
-func (s *session) ConfigHash() string                           { return s.hash }
-func (s *session) Kinds() []core.KindDescriptor                 { return []core.KindDescriptor{kind, workloadKind} }
+func (s *session) ConfigHash() string { return s.hash }
+func (s *session) Kinds() []core.KindDescriptor {
+	return []core.KindDescriptor{kind, workloadKind, problemsKind}
+}
 func (s *session) Scopes(context.Context) ([]core.Scope, error) { return nil, nil }
 func (s *session) ScopeKind() string                            { return "" }
 func (s *session) Close()                                       {}
@@ -156,8 +158,11 @@ func (s *session) ref(name string) core.Ref {
 }
 
 func (s *session) Watch(q provider.Query, sink provider.Sink) (func(), error) {
-	if q.Kind == WorkloadKind {
+	switch q.Kind {
+	case WorkloadKind:
 		return s.watchWorkloads(q, sink)
+	case ProblemsKind:
+		return s.watchProblems(sink)
 	}
 	var rows []core.Row
 	for _, name := range []string{"api", "workers"} {

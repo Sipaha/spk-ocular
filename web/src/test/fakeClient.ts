@@ -1,6 +1,6 @@
 import { vi } from 'vitest'
 import type { Client } from '../api/client'
-import type { ApiEvent, KindDescriptor, Query, Ref, Row, Target, TargetsView, TerminalRequest } from '../api/types'
+import type { ApiEvent, KindDescriptor, Query, Ref, Row, Target, TargetsView, TerminalRequest, ViewStatus } from '../api/types'
 
 export const k8s = (id: string, extra: Partial<Target> = {}): Target => ({
   provider: 'kubernetes',
@@ -20,6 +20,9 @@ export function fakeClient(targets: Target[]) {
   const state = {
     rows: [] as Row[],
     rowsByKind: {} as Record<string, Row[]>,
+    /** Descriptors openView answers with (else pods / a generic one). */
+    kinds: {} as Record<string, KindDescriptor>,
+    statusByKind: {} as Record<string, ViewStatus>,
     version: 0,
     view: { groups: [{ provider: 'kubernetes', title: 'Kubernetes', targets, problems: [] }], selected: null } as TargetsView,
   }
@@ -36,12 +39,12 @@ export function fakeClient(targets: Target[]) {
     // One view per kind: v-<kind>; rows from state.rowsByKind, pods default to state.rows.
     openView: vi.fn(async (_p: string, _t: string, q: Query) => ({
       viewId: `v-${q.kind}`,
-      kind: q.kind === 'pods' ? podsKind : { id: q.kind, title: q.kind, group: 'Other', scoped: false, columns: [{ id: 'name', title: 'Name', type: 'text' as const }] },
+      kind: state.kinds[q.kind] ?? (q.kind === 'pods' ? podsKind : { id: q.kind, title: q.kind, group: 'Other', scoped: false, columns: [{ id: 'name', title: 'Name', type: 'text' as const }] }),
     })),
     getRows: vi.fn(async (viewId: string) => {
       const kind = viewId.slice(2)
       const rows = state.rowsByKind[kind] ?? (kind === 'pods' ? state.rows : [])
-      return { viewId, version: ++state.version, reset: true, upserts: rows, deleted: [], status: { state: 'ready' as const } }
+      return { viewId, version: ++state.version, reset: true, upserts: rows, deleted: [], status: state.statusByKind[kind] ?? { state: 'ready' as const } }
     }),
     closeView: vi.fn(async () => {}),
     touchViews: vi.fn(async () => []),

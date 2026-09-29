@@ -33,6 +33,8 @@ type Cell struct {
 	Num *float64 `json:"num,omitempty"`
 	// Time is unix milliseconds for age columns.
 	Time int64 `json:"time,omitempty"`
+	// Muted: shown quieter — evidence (a recent event), not a current state.
+	Muted bool `json:"muted,omitempty"`
 }
 
 func TextCell(s string) Cell { return Cell{Text: s} }
@@ -62,6 +64,16 @@ type KindDescriptor struct {
 	Forward bool `json:"forward,omitempty"`
 	// Actions objects of this kind offer (the session is an Actioner).
 	Actions []ActionDescriptor `json:"actions,omitempty"`
+	// Sort is how a table of this kind is first sorted (nil: by the first
+	// column).
+	Sort *SortSpec `json:"sort,omitempty"`
+}
+
+// SortSpec: sort by Column (descending if Desc), ties by Then (ascending).
+type SortSpec struct {
+	Column string `json:"column"`
+	Desc   bool   `json:"desc,omitempty"`
+	Then   string `json:"then,omitempty"`
 }
 
 // ScopeMode makes the scope selector explicit instead of overloading "".

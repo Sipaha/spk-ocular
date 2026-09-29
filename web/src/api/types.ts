@@ -92,6 +92,8 @@ export interface Cell {
   num?: number
   /** unix ms (age columns) */
   time?: number
+  /** Shown quieter: evidence (a recent event), not a current state. */
+  muted?: boolean
 }
 
 export interface Row {
@@ -130,6 +132,15 @@ export interface KindDescriptor {
   forward?: boolean
   /** Actions objects of this kind offer (restart, scale, delete, …). */
   actions?: ActionDescriptor[]
+  /** How a table of this kind is first sorted (else by the first column). */
+  sort?: SortSpec
+}
+
+/** Sort by column (descending if desc), ties by then (ascending). */
+export interface SortSpec {
+  column: string
+  desc?: boolean
+  then?: string
 }
 
 // ---- actions (internal/core/action.go)
@@ -212,6 +223,17 @@ export type StatusState = 'loading' | 'ready' | 'stale' | 'error'
 
 export interface ViewStatus {
   state: StatusState
+  class?: string
+  message?: string
+  /** A view of several sources: how each is observed (provider order). */
+  coverage?: SourceCoverage[]
+}
+
+export type CoverageState = 'loading' | 'ready' | 'stale' | 'denied' | 'error'
+
+export interface SourceCoverage {
+  source: string
+  state: CoverageState
   class?: string
   message?: string
 }

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { Client } from '../api/client'
-import type { ActionDescriptor, KindDescriptor, Ref, Row, ScopeSel, ScopesView, Target } from '../api/types'
+import type { ActionDescriptor, KindDescriptor, Ref, Row, ScopeSel, ScopesView, SourceCoverage, Target } from '../api/types'
 import { actionLabel, classLabel, t } from '../i18n'
 import { ActionDialog, type ActionRequest } from '../actions/ActionDialog'
 import type { MenuItem } from '../actions/Menu'
@@ -212,14 +212,15 @@ function ResourcePage(props: {
   const [open, setOpen] = useState<Ref | null>(null)
   const columns = view.kind?.columns ?? kind.columns
   const metrics = useMetrics(client, view.viewId, columns.some((c) => c.metric))
-  const actions = actionsOf(kind.id)
-  const del = actions.find((a) => a.id === 'delete')
+  // What a row offers is its object's kind's (a Problems row is a pod, a
+  // deployment, an event…), not the table's.
+  const deleteOf = (r: Row) => actionsOf(r.ref.kind).find((a) => a.id === 'delete')
   // The row's menu, for the row it opens on (its ref as of now).
   const rowMenu = (r: Row): MenuItem[] => {
     const items: MenuItem[] = [{ id: 'details', label: t('row.details'), onSelect: () => setOpen(r.ref) }]
-    if (kind.logs) items.push({ id: 'logs', label: t('row.logs'), hint: 'L', onSelect: () => onLogs(r.ref) })
-    if (kind.exec) items.push({ id: 'terminal', label: t('row.terminal'), hint: 'S', onSelect: () => onTerminal(r.ref, false) })
-    actions.forEach((a, i) =>
+    if (hasLogs(r.ref.kind)) items.push({ id: 'logs', label: t('row.logs'), hint: 'L', onSelect: () => onLogs(r.ref) })
+    if (hasExec(r.ref.kind)) items.push({ id: 'terminal', label: t('row.terminal'), hint: 'S', onSelect: () => onTerminal(r.ref, false) })
+    actionsOf(r.ref.kind).forEach((a, i) =>
       items.push({ id: `action-${a.id}`, label: actionLabel(a) + (a.param ? '…' : ''), danger: a.destructive, separator: i === 0, hint: a.id === 'delete' ? 'Delete' : undefined, onSelect: () => onAction(r.ref, a) }),
     )
     return items
@@ -259,7 +260,8 @@ function ResourcePage(props: {
           />
         </label>
       </header>
-      <StatusBanner state={view.status.state} cls={view.status.class} message={view.status.message} empty={view.rows.length === 0} />
+      <StatusBanner state={view.status.state} cls={view.status.class} message={view.status.message} empty={view.rows.length === 0} coverage={view.status.coverage} />
+      {view.status.coverage && <CoverageNote coverage={view.status.coverage} />}
       <div className="relative flex min-h-0 flex-1 flex-col">
         <ResourceTable
           columns={columns}
@@ -269,11 +271,15 @@ function ResourcePage(props: {
           selected={selected}
           onSelect={(r: Row) => setSelected(r.id)}
           onOpen={(r: Row) => setOpen(r.ref)}
-          onLogs={kind.logs ? (r: Row) => onLogs(r.ref) : undefined}
-          onTerminal={kind.exec ? (r: Row, dialog: boolean) => onTerminal(r.ref, dialog) : undefined}
+          onLogs={(r: Row) => hasLogs(r.ref.kind) && onLogs(r.ref)}
+          onTerminal={(r: Row, dialog: boolean) => hasExec(r.ref.kind) && onTerminal(r.ref, dialog)}
           metrics={metrics}
           rowMenu={rowMenu}
-          onDelete={del && ((r: Row) => onAction(r.ref, del))}
+          onDelete={(r: Row) => {
+            const del = deleteOf(r)
+            if (del) onAction(r.ref, del)
+          }}
+          defaultSort={view.kind?.sort ?? kind.sort}
         />
         {open && (
           <ResourceDrawer
@@ -359,8 +365,13 @@ function ScopePicker({ scope, scopes, onScope }: { scope: ScopeSel; scopes: Scop
   )
 }
 
-function StatusBanner({ state, cls, message, empty }: { state: string; cls?: string; message?: string; empty: boolean }) {
-  if (state === 'ready') return empty ? <p className="px-4 py-6 text-center text-fg-subtle">{t('table.empty')}</p> : null
+function StatusBanner({ state, cls, message, empty, coverage }: { state: string; cls?: string; message?: string; empty: boolean; coverage?: SourceCoverage[] }) {
+  if (state === 'ready') {
+    if (!empty) return null
+    // A view of several sources: nothing found is only "nothing" where it could look.
+    const text = !coverage ? t('table.empty') : coverage.every((c) => c.state === 'ready') ? t('coverage.noneFound') : t('coverage.noneInObserved')
+    return <p className="px-4 py-6 text-center text-fg-subtle">{text}</p>
+  }
   if (state === 'loading') return empty ? <p className="px-4 py-6 text-center text-fg-subtle">{t('app.loading')}</p> : null
   const isErr = state === 'error'
   return (
@@ -372,5 +383,18 @@ function StatusBanner({ state, cls, message, empty }: { state: string; cls?: str
         {message && <span className="block opacity-90">{message}</span>}
       </span>
     </div>
+  )
+}
+
+/** What a view of several sources could not observe (quietly: not an error). */
+function CoverageNote({ coverage }: { coverage: SourceCoverage[] }) {
+  const missing = coverage.filter((c) => c.state !== 'ready')
+  if (!missing.length) return null
+  const why = (c: SourceCoverage) =>
+    c.state === 'denied' ? classLabel(c.class ?? 'forbidden') : c.state === 'error' ? classLabel(c.class ?? 'internal') : t(c.state === 'stale' ? 'coverage.stale' : 'coverage.loading')
+  return (
+    <p role="note" aria-label={t('coverage.label')} className="mx-4 mt-2 text-xs text-fg-muted" title={missing.map((c) => `${c.source}: ${c.message ?? c.state}`).join('\n')}>
+      {t('coverage.notObserved')}: {missing.map((c) => `${c.source} (${why(c)})`).join(', ')}
+    </p>
   )
 }

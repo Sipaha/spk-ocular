@@ -22,7 +22,9 @@ import (
 
 var problemsKind = &kindDef{
 	desc: core.KindDescriptor{
-		ID: "problems", Title: "Problems", Group: "Overview", Scoped: true,
+		ID: "problems", Title: "Problems", Group: "Health", Scoped: true,
+		// The worst first; among equals the most recent first.
+		Sort: &core.SortSpec{Column: "severity", Desc: true, Then: "since"},
 		Columns: []core.Column{
 			{ID: "severity", Title: "Severity", Type: core.ColStatus, Width: 90},
 			{ID: "kind", Title: "Kind", Type: core.ColText, Width: 110},
@@ -86,8 +88,10 @@ func problemDef(d *kindDef, recent bool) *kindDef {
 		if len(h.Issues) > 0 && h.Issues[0].Since != 0 {
 			since = core.TimeCell(h.Issues[0].Since)
 		}
+		sev := core.NumCell(severityRank[severity], severity)
+		sev.Muted = recent // evidence, not a current state
 		return []core.Cell{
-			core.NumCell(severityRank[severity], severity), core.TextCell(singular), core.TextCell(u.GetNamespace()), core.TextCell(name),
+			sev, core.TextCell(singular), core.TextCell(u.GetNamespace()), core.TextCell(name),
 			core.TextCell(h.Reason), core.TextCell(h.Message), since,
 		}, h, next
 	}
