@@ -25,7 +25,16 @@ var podFatalWaiting = map[string]bool{
 	"CreateContainerError": true, "RunContainerError": true, "ErrImageNeverPull": true,
 }
 
-var containerStatusKeep = fields{"name": true, "ready": true, "restartCount": true, "state": true, "lastState": true, "started": true}
+// containerStateKeep: what status text and health read from a container state.
+var containerStateKeep = fields{
+	"waiting":    fields{"reason": true, "message": true},
+	"running":    fields{"startedAt": true},
+	"terminated": fields{"reason": true, "exitCode": true, "signal": true, "startedAt": true, "finishedAt": true},
+}
+
+var containerStatusKeep = fields{"name": true, "ready": true, "restartCount": true, "state": containerStateKeep, "lastState": containerStateKeep}
+
+var conditionKeep = fields{"type": true, "status": true, "reason": true, "message": true, "lastTransitionTime": true}
 
 var podsKind = &kindDef{
 	desc: core.KindDescriptor{
@@ -45,14 +54,15 @@ var podsKind = &kindDef{
 	gvr:        schema.GroupVersionResource{Version: "v1", Resource: "pods"},
 	namespaced: true,
 	keep: fields{
+		// Images, ports, env etc. are read from the full object in details.
 		"spec": fields{
-			"nodeName": true, "schedulerName": true,
-			"containers":     fields{"name": true, "image": true, "ports": true},
-			"initContainers": fields{"name": true, "image": true},
+			"nodeName":       true,
+			"containers":     fields{"name": true},
+			"initContainers": fields{"name": true},
 		},
 		"status": fields{
 			"phase": true, "reason": true, "message": true, "podIP": true, "startTime": true,
-			"conditions":            true,
+			"conditions":            conditionKeep,
 			"containerStatuses":     containerStatusKeep,
 			"initContainerStatuses": containerStatusKeep,
 		},

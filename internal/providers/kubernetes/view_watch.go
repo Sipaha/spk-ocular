@@ -4,7 +4,9 @@ import (
 	"sync"
 	"time"
 
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/cache"
 
 	"github.com/spk/spk-ocular/internal/core"
@@ -57,14 +59,14 @@ func (w *viewWatch) row(u *unstructured.Unstructured) (core.Row, time.Time) {
 func (w *viewWatch) handlers() cache.ResourceEventHandlerFuncs {
 	return cache.ResourceEventHandlerFuncs{
 		AddFunc: func(obj any) {
-			if u, ok := obj.(*unstructured.Unstructured); ok {
+			if u, ok := asUnstructured(obj); ok {
 				r, next := w.row(u)
 				w.sink.Apply(provider.Delta{Upserts: []core.Row{r}})
 				w.schedule(objKey(u), next)
 			}
 		},
 		UpdateFunc: func(oldObj, newObj any) {
-			u, ok := newObj.(*unstructured.Unstructured)
+			u, ok := asUnstructured(newObj)
 			if !ok {
 				return
 			}
@@ -72,7 +74,7 @@ func (w *viewWatch) handlers() cache.ResourceEventHandlerFuncs {
 			d := provider.Delta{Upserts: []core.Row{r}}
 			// Same name, new object (client-go may report a replacement as
 			// an update): the old row goes, object-local UI state with it.
-			if old, ok := oldObj.(*unstructured.Unstructured); ok && old.GetUID() != u.GetUID() && old.GetUID() != "" {
+			if old, ok := oldObj.(interface{ GetUID() types.UID }); ok && old.GetUID() != u.GetUID() && old.GetUID() != "" {
 				d.Deletes = []string{string(old.GetUID())}
 			}
 			w.sink.Apply(d)
@@ -82,19 +84,21 @@ func (w *viewWatch) handlers() cache.ResourceEventHandlerFuncs {
 			if tomb, ok := obj.(cache.DeletedFinalStateUnknown); ok {
 				obj = tomb.Obj
 			}
-			if u, ok := obj.(*unstructured.Unstructured); ok {
+			if u, ok := obj.(metav1.Object); ok {
 				id := string(u.GetUID())
 				if id == "" {
 					id = u.GetNamespace() + "/" + u.GetName()
 				}
 				w.sink.Apply(provider.Delta{Deletes: []string{id}})
-				w.schedule(objKey(u), time.Time{})
+				w.schedule(metaKey(u), time.Time{})
 			}
 		},
 	}
 }
 
-func objKey(u *unstructured.Unstructured) string {
+func objKey(u *unstructured.Unstructured) string { return metaKey(u) }
+
+func metaKey(u metav1.Object) string {
 	if u.GetNamespace() == "" {
 		return u.GetName()
 	}
@@ -204,7 +208,7 @@ func (w *viewWatch) fire() {
 		if !ok {
 			continue
 		}
-		if u, ok := obj.(*unstructured.Unstructured); ok {
+		if u, ok := asUnstructured(obj); ok {
 			r, next := w.row(u)
 			w.sink.Apply(provider.Delta{Upserts: []core.Row{r}})
 			if !next.IsZero() && next.After(now) {

@@ -131,9 +131,9 @@ func (m *cacheManager) start(key cacheKey, def *kindDef) *informerCache {
 			if pre != nil {
 				pre(u)
 			}
-			return trim(u, keep), nil
+			return slim(trim(u, keep))
 		}
-		return obj, nil // DeletedFinalStateUnknown etc.: already transformed inside
+		return obj, nil // already slim, or DeletedFinalStateUnknown of a slim object
 	})
 	go c.inf.Run(c.stop)
 	return c

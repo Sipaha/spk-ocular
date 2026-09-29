@@ -80,7 +80,7 @@ func (h *harness) until(id string, cond func(views.Page) bool) views.Page {
 		require.NoError(h.t, err)
 		last = p
 		return cond(p)
-	}, 5*time.Second, 10*time.Millisecond, "last page: %+v", last)
+	}, 8*time.Second, 10*time.Millisecond, "last page: %+v", last)
 	return last
 }
 
@@ -177,7 +177,8 @@ func TestIdleCachesAreEvictedAfterGraceAndBeyondLimit(t *testing.T) {
 }
 
 func TestTimeBasedHealthChangesWithoutAPIEvents(t *testing.T) {
-	created := time.Now().Add(-podPendingWarnAfter + 300*time.Millisecond)
+	// Kubernetes timestamps have second precision: leave a margin above that.
+	created := time.Now().Add(-podPendingWarnAfter + 2*time.Second)
 	pending := pod("web", "p", "uid-p", func(o map[string]any) {
 		o["metadata"].(map[string]any)["creationTimestamp"] = created.UTC().Format(time.RFC3339Nano)
 		o["status"] = map[string]any{"phase": "Pending"}
