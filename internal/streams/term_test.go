@@ -628,3 +628,17 @@ func TestTermCommandIgnoringTheHangupIsCancelled(t *testing.T) {
 	assert.True(t, cancelled.Load())
 	assert.GreaterOrEqual(t, at.Sub(closed), fastTimings.hangup-50*time.Millisecond, "cancelled only after the hang-up time")
 }
+
+func TestSizeBoxSkipsTheSizeTheCommandHas(t *testing.T) {
+	done := make(chan struct{})
+	b := newSizeBox(provider.TermSize{Cols: 80, Rows: 24})
+	b.done = done
+	assert.Equal(t, provider.TermSize{Cols: 80, Rows: 24}, *b.Next())
+	b.set(provider.TermSize{Cols: 80, Rows: 24}) // the page repeating its size
+	b.set(provider.TermSize{Cols: 90, Rows: 24})
+	b.set(provider.TermSize{Cols: 100, Rows: 30})
+	assert.Equal(t, provider.TermSize{Cols: 100, Rows: 30}, *b.Next(), "latest wins")
+	b.set(provider.TermSize{Cols: 100, Rows: 30})
+	close(done)
+	assert.Nil(t, b.Next(), "no repeated size before the end")
+}

@@ -597,8 +597,14 @@ func newSizeBox(initial provider.TermSize) *sizeBox {
 	return &sizeBox{cur: initial, fresh: true, sig: make(chan struct{}, 1)}
 }
 
+// set queues v; the size the command has or will get anyway is no change
+// (the page reports its size again after connecting).
 func (s *sizeBox) set(v provider.TermSize) {
 	s.mu.Lock()
+	if v == s.cur {
+		s.mu.Unlock()
+		return
+	}
 	s.cur, s.fresh = v, true
 	s.mu.Unlock()
 	signal(s.sig)
