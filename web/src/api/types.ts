@@ -113,6 +113,8 @@ export interface KindDescriptor {
   group: string
   columns: Column[]
   scoped: boolean
+  /** Not in the navigation (reached through relations). */
+  hidden?: boolean
 }
 
 export type ScopeMode = 'all' | 'one' | 'none'

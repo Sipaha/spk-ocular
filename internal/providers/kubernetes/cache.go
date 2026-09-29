@@ -125,9 +125,12 @@ func (m *cacheManager) start(key cacheKey, def *kindDef) *informerCache {
 	c.inf = cache.NewSharedIndexInformerWithOptions(lw, &unstructured.Unstructured{}, cache.SharedIndexInformerOptions{
 		ObjectDescription: key.gvr.String(),
 	})
-	keep := def.keep
+	keep, pre := def.keep, def.pre
 	_ = c.inf.SetTransform(func(obj any) (any, error) {
 		if u, ok := obj.(*unstructured.Unstructured); ok {
+			if pre != nil {
+				pre(u)
+			}
 			return trim(u, keep), nil
 		}
 		return obj, nil // DeletedFinalStateUnknown etc.: already transformed inside

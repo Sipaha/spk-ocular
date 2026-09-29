@@ -37,7 +37,7 @@ export function Workspace({ client, hub, target }: { client: Client; hub: ViewHu
 
   const groups = useMemo(() => {
     const m = new Map<string, KindDescriptor[]>()
-    for (const k of kinds ?? []) m.set(k.group, [...(m.get(k.group) ?? []), k])
+    for (const k of kinds ?? []) if (!k.hidden) m.set(k.group, [...(m.get(k.group) ?? []), k])
     return [...m.entries()]
   }, [kinds])
   const current = kinds?.find((k) => k.id === kind)

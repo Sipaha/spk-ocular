@@ -52,5 +52,39 @@ spec:
   nodeSelector: {ocular.test/never: "true"}
   containers:
   - {name: app, image: "busybox:1.36", command: ["sleep", "3600"]}
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata: {name: db, namespace: ocular-demo}
+spec:
+  replicas: 2
+  serviceName: db
+  selector: {matchLabels: {app: db}}
+  template:
+    metadata: {labels: {app: db}}
+    spec:
+      containers:
+      - {name: db, image: "busybox:1.36", command: ["sleep", "3600"]}
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata: {name: web, namespace: ocular-demo}
+spec:
+  rules:
+  - host: web.ocular.test
+    http:
+      paths:
+      - {path: /, pathType: Prefix, backend: {service: {name: web, port: {number: 80}}}}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata: {name: web-config, namespace: ocular-demo}
+data: {nginx.conf: "server {}", LOG_LEVEL: debug}
+---
+apiVersion: v1
+kind: Secret
+metadata: {name: web-credentials, namespace: ocular-demo}
+stringData: {username: admin, password: not-a-real-password}
 YAML
 k -n ocular-demo rollout status deploy/web --timeout=180s
+k -n ocular-demo rollout status sts/db --timeout=180s

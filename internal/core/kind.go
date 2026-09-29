@@ -49,6 +49,9 @@ type KindDescriptor struct {
 	Columns []Column `json:"columns"`
 	// Scoped: objects live in a scope (namespace / compose project).
 	Scoped bool `json:"scoped"`
+	// Hidden kinds are not in the navigation but can be opened (a
+	// ReplicaSet reached from a Deployment).
+	Hidden bool `json:"hidden,omitempty"`
 }
 
 // ScopeMode makes the scope selector explicit instead of overloading "".

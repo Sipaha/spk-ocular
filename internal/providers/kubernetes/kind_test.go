@@ -159,3 +159,53 @@ func TestKindListWithoutWatch(t *testing.T) {
 	assert.Contains(t, p.Status.Message, "cannot watch")
 	assert.NotEmpty(t, p.Upserts)
 }
+
+func TestKindEveryKindBecomesReady(t *testing.T) {
+	p, target := kindProvider(t)
+	sess, err := p.Open(context.Background(), target)
+	require.NoError(t, err)
+	defer sess.Close()
+	m := views.NewManager(events.NewEmitter())
+	defer m.CloseAll()
+	for _, k := range sess.Kinds() {
+		scope := core.ScopeSel{Mode: core.ScopeAll}
+		if !k.Scoped {
+			scope = core.ScopeSel{Mode: core.ScopeNone}
+		}
+		id, err := m.Open("s", sess, provider.Query{Kind: k.ID, Scope: scope})
+		require.NoError(t, err, k.ID)
+		pg := waitStatus(t, m, id, func(p views.Page) bool { return p.Status.State != provider.StatusLoading })
+		assert.Equal(t, provider.StatusReady, pg.Status.State, "%s: %+v", k.ID, pg.Status)
+		for _, r := range pg.Upserts {
+			assert.Len(t, r.Cells, len(k.Columns), k.ID)
+		}
+		t.Logf("%-28s %4d rows", k.ID, len(pg.Upserts))
+	}
+}
+
+func TestKindEventsOfOneObject(t *testing.T) {
+	p, target := kindProvider(t)
+	sess, err := p.Open(context.Background(), target)
+	require.NoError(t, err)
+	defer sess.Close()
+	m := views.NewManager(events.NewEmitter())
+	defer m.CloseAll()
+	ns := core.ScopeSel{Mode: core.ScopeOne, Name: "ocular-demo"}
+	pods, _ := m.Open("s", sess, provider.Query{Kind: "pods", Scope: ns})
+	pg := waitStatus(t, m, pods, func(p views.Page) bool { return p.Status.State == provider.StatusReady })
+	var crash core.Ref
+	for _, r := range pg.Upserts {
+		if r.Ref.Name == "crashloop" {
+			crash = r.Ref
+		}
+	}
+	require.NotEmpty(t, crash.UID, "seeded crashloop pod")
+	evs, err := m.Open("s", sess, provider.Query{Kind: "events", Scope: ns, Subject: &crash})
+	require.NoError(t, err)
+	pg = waitStatus(t, m, evs, func(p views.Page) bool { return p.Status.State == provider.StatusReady && len(p.Upserts) > 0 })
+	for _, r := range pg.Upserts {
+		assert.Equal(t, "pod/crashloop", r.Cells[3].Text, "only the subject's events (server-side selector)")
+	}
+	_, err = m.Open("s", sess, provider.Query{Kind: "pods", Scope: ns, Subject: &crash})
+	assert.Error(t, err, "only events narrow to an object")
+}

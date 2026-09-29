@@ -26,8 +26,13 @@ const scopesTimeout = 15 * time.Second
 
 var namespacesGVR = schema.GroupVersionResource{Version: "v1", Resource: "namespaces"}
 
-// kinds in navigation order. P1 grows this list.
-var allKinds = newKindRegistry(podsKind)
+// kinds in navigation order.
+var allKinds = newKindRegistry(
+	podsKind, deploymentsKind, statefulSetsKind, daemonSetsKind, replicaSetsKind,
+	servicesKind, ingressesKind,
+	configMapsKind, secretsKind,
+	nodesKind, namespacesKind, eventsKind,
+)
 
 var _ provider.Opener = (*Provider)(nil)
 
@@ -130,6 +135,15 @@ func (s *session) Watch(q provider.Query, sink provider.Sink) (func(), error) {
 	key := cacheKey{gvr: def.gvr}
 	if def.namespaced && q.Scope.Mode == core.ScopeOne {
 		key.namespace = q.Scope.Name
+	}
+	if q.Subject != nil {
+		// Only events can be narrowed to an object: core/v1 involvedObject.uid,
+		// in the object's namespace (cluster-scoped objects: all namespaces).
+		if def != eventsKind || q.Subject.UID == "" {
+			return nil, &provider.Error{Class: provider.ClassUnsupported, Message: "narrowing to an object needs events and the object's UID"}
+		}
+		key.namespace = q.Subject.Scope
+		key.selector = "involvedObject.uid=" + q.Subject.UID
 	}
 	c, ok := s.caches.acquire(key, def)
 	if !ok {

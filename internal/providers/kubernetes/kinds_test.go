@@ -1,0 +1,199 @@
+package kubernetes
+
+import (
+	"testing"
+	"time"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+
+	"github.com/spk/spk-ocular/internal/core"
+)
+
+func obj(created time.Duration, o map[string]any) *unstructured.Unstructured {
+	meta := map[string]any{"name": "x", "namespace": "ns", "uid": "u", "creationTimestamp": ts(created), "generation": int64(2)}
+	if m, ok := o["metadata"].(map[string]any); ok {
+		for k, v := range m {
+			meta[k] = v
+		}
+	}
+	o["metadata"] = meta
+	return &unstructured.Unstructured{Object: o}
+}
+
+func project(t *testing.T, d *kindDef, u *unstructured.Unstructured) ([]core.Cell, core.Health, time.Time) {
+	t.Helper()
+	if d.pre != nil {
+		d.pre(u)
+	}
+	u = trim(u, d.keep)
+	cells, h, next := d.project(u, now)
+	require.Len(t, cells, len(d.desc.Columns), "one cell per column")
+	return cells, h, next
+}
+
+func deploy(replicas, ready, updated, avail, observed int64, conds ...any) *unstructured.Unstructured {
+	return obj(time.Hour, map[string]any{
+		"spec": map[string]any{"replicas": replicas, "selector": map[string]any{}},
+		"status": map[string]any{"replicas": replicas, "readyReplicas": ready, "updatedReplicas": updated,
+			"availableReplicas": avail, "observedGeneration": observed, "conditions": conds},
+	})
+}
+
+func TestDeploymentHealth(t *testing.T) {
+	cases := []struct {
+		name   string
+		u      *unstructured.Unstructured
+		ready  string
+		state  core.HealthState
+		reason string
+	}{
+		{"healthy", deploy(3, 3, 3, 3, 2), "3/3", core.HealthOK, ""},
+		{"scaled to zero", deploy(0, 0, 0, 0, 2), "0/0", core.HealthOK, "ScaledToZero"},
+		{"spec not observed yet", deploy(3, 3, 3, 3, 1), "3/3", core.HealthProgressing, "RollingOut"},
+		{"rolling", deploy(3, 2, 1, 2, 2), "2/3", core.HealthProgressing, "RollingOut"},
+		{"partially unavailable", deploy(3, 2, 3, 2, 2), "2/3", core.HealthWarning, "Unavailable"},
+		{"nothing available", deploy(3, 0, 3, 0, 2), "0/3", core.HealthError, "Unavailable"},
+		{"deadline exceeded", deploy(3, 1, 2, 1, 2, map[string]any{"type": "Progressing", "status": "False", "reason": "ProgressDeadlineExceeded", "message": "timed out"}),
+			"1/3", core.HealthError, "ProgressDeadlineExceeded"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			cells, h, _ := project(t, deploymentsKind, c.u)
+			assert.Equal(t, c.ready, cells[2].Text)
+			assert.Equal(t, c.state, h.State, "%+v", h)
+			assert.Equal(t, c.reason, h.Reason)
+		})
+	}
+}
+
+func TestStatefulSetAndDaemonSetHealth(t *testing.T) {
+	sts := obj(time.Hour, map[string]any{"spec": map[string]any{"replicas": int64(3)},
+		"status": map[string]any{"readyReplicas": int64(1), "observedGeneration": int64(2), "currentRevision": "a", "updateRevision": "a"}})
+	cells, h, _ := project(t, statefulSetsKind, sts)
+	assert.Equal(t, "1/3", cells[2].Text)
+	assert.Equal(t, core.HealthWarning, h.State)
+
+	ds := obj(time.Hour, map[string]any{"status": map[string]any{"desiredNumberScheduled": int64(4), "currentNumberScheduled": int64(4),
+		"numberReady": int64(4), "updatedNumberScheduled": int64(4), "numberAvailable": int64(4), "numberMisscheduled": int64(1), "observedGeneration": int64(2)}})
+	cells, h, _ = project(t, daemonSetsKind, ds)
+	assert.Equal(t, "4/4", cells[4].Text)
+	assert.Equal(t, core.HealthWarning, h.State)
+	assert.Equal(t, "Misscheduled", h.Reason)
+}
+
+func TestServiceColumnsAndPendingLoadBalancer(t *testing.T) {
+	svc := obj(time.Minute, map[string]any{"spec": map[string]any{"type": "LoadBalancer", "clusterIP": "10.0.0.5",
+		"ports": []any{map[string]any{"port": int64(443), "nodePort": int64(30443), "protocol": "TCP"}, map[string]any{"port": int64(53), "protocol": "UDP"}}}})
+	cells, h, next := project(t, servicesKind, svc)
+	assert.Equal(t, "LoadBalancer", cells[2].Text)
+	assert.Equal(t, "443:30443/TCP,53/UDP", cells[5].Text)
+	assert.Equal(t, core.HealthProgressing, h.State)
+	assert.False(t, next.IsZero(), "turns into a warning later without an API event")
+
+	old := obj(time.Hour, map[string]any{"spec": map[string]any{"type": "LoadBalancer"}})
+	_, h, _ = project(t, servicesKind, old)
+	assert.Equal(t, core.HealthWarning, h.State)
+
+	lb := obj(time.Hour, map[string]any{"spec": map[string]any{"type": "LoadBalancer"},
+		"status": map[string]any{"loadBalancer": map[string]any{"ingress": []any{map[string]any{"ip": "1.2.3.4"}}}}})
+	cells, h, _ = project(t, servicesKind, lb)
+	assert.Equal(t, "1.2.3.4", cells[4].Text)
+	assert.Equal(t, core.HealthOK, h.State)
+
+	plain := obj(time.Hour, map[string]any{"spec": map[string]any{"clusterIP": "10.0.0.1"}})
+	cells, h, _ = project(t, servicesKind, plain)
+	assert.Equal(t, "ClusterIP", cells[2].Text)
+	assert.Equal(t, core.HealthOK, h.State)
+}
+
+func TestIngressColumns(t *testing.T) {
+	ing := obj(time.Hour, map[string]any{"spec": map[string]any{"ingressClassName": "nginx",
+		"rules": []any{map[string]any{"host": "a.example"}, map[string]any{}}, "tls": []any{map[string]any{}}},
+		"status": map[string]any{"loadBalancer": map[string]any{"ingress": []any{map[string]any{"hostname": "lb.example"}}}}})
+	cells, h, _ := project(t, ingressesKind, ing)
+	assert.Equal(t, []string{"nginx", "a.example,*", "lb.example", "80,443"}, []string{cells[2].Text, cells[3].Text, cells[4].Text, cells[5].Text})
+	assert.Equal(t, core.HealthOK, h.State)
+}
+
+func TestConfigMapsAndSecretsKeepOnlyKeyNames(t *testing.T) {
+	sec := obj(time.Hour, map[string]any{"type": "Opaque", "data": map[string]any{"password": "c2VjcmV0", "user": "YWRtaW4="}})
+	cells, _, _ := project(t, secretsKind, sec)
+	assert.Equal(t, "Opaque", cells[2].Text)
+	assert.Equal(t, "password, user", cells[3].Text)
+	_, hasData := sec.Object["data"]
+	assert.False(t, hasData, "values never reach the cache")
+	trimmed := trim(sec, secretsKind.keep)
+	secretsKind.pre(trimmed) // idempotent on an already transformed object
+	assert.Equal(t, []string{"password", "user"}, keyNames(trimmed))
+
+	big := map[string]any{}
+	for _, k := range []string{"a", "b", "c", "d"} {
+		big[k] = "value"
+	}
+	cm := obj(time.Hour, map[string]any{"data": big, "binaryData": map[string]any{"bin": "AAAA"}})
+	cells, _, _ = project(t, configMapsKind, cm)
+	assert.Equal(t, "5", cells[2].Text, "many keys: the count")
+	assert.InDelta(t, 5, *cells[2].Num, 0)
+}
+
+func TestNodeHealth(t *testing.T) {
+	node := func(ready string, extra ...any) *unstructured.Unstructured {
+		conds := append([]any{map[string]any{"type": "Ready", "status": ready, "message": "kubelet says " + ready}}, extra...)
+		n := obj(time.Hour, map[string]any{
+			"metadata": map[string]any{"namespace": "", "labels": map[string]any{"node-role.kubernetes.io/control-plane": "", "node-role.kubernetes.io/worker": ""}},
+			"spec":     map[string]any{"unschedulable": true},
+			"status": map[string]any{"conditions": conds, "nodeInfo": map[string]any{"kubeletVersion": "v1.37.0"},
+				"addresses": []any{map[string]any{"type": "InternalIP", "address": "10.1.1.1"}}},
+		})
+		return n
+	}
+	cells, h, _ := project(t, nodesKind, node("True"))
+	assert.Equal(t, "Ready,SchedulingDisabled", cells[1].Text)
+	assert.Equal(t, "control-plane,worker", cells[2].Text)
+	assert.Equal(t, "v1.37.0", cells[3].Text)
+	assert.Equal(t, "10.1.1.1", cells[4].Text)
+	assert.Equal(t, core.HealthOK, h.State)
+
+	_, h, _ = project(t, nodesKind, node("False"))
+	assert.Equal(t, core.HealthError, h.State)
+	_, h, _ = project(t, nodesKind, node("Unknown"))
+	assert.Equal(t, core.HealthUnknown, h.State, "stopped reporting is not a confirmed failure")
+	_, h, _ = project(t, nodesKind, node("True", map[string]any{"type": "DiskPressure", "status": "True", "message": "disk full"}))
+	assert.Equal(t, core.HealthWarning, h.State)
+	assert.Equal(t, "DiskPressure", h.Reason)
+}
+
+func TestEventColumns(t *testing.T) {
+	ev := obj(time.Hour, map[string]any{
+		"involvedObject": map[string]any{"kind": "Pod", "name": "web-1", "uid": "p1"},
+		"reason":         "BackOff", "message": "Back-off restarting failed container", "type": "Warning",
+		"count": int64(7), "lastTimestamp": ts(2 * time.Minute),
+	})
+	cells, h, _ := project(t, eventsKind, ev)
+	assert.Equal(t, now.Add(-2*time.Minute).UnixMilli(), cells[0].Time)
+	assert.Equal(t, "Warning", cells[1].Text)
+	assert.Equal(t, "pod/web-1", cells[3].Text)
+	assert.Equal(t, "7", cells[5].Text)
+	assert.Equal(t, core.HealthWarning, h.State)
+
+	series := obj(time.Hour, map[string]any{"type": "Normal", "eventTime": now.Add(-time.Minute).Format(time.RFC3339Nano),
+		"series": map[string]any{"count": int64(3), "lastObservedTime": ts(10 * time.Second)}})
+	cells, h, _ = project(t, eventsKind, series)
+	assert.Equal(t, now.Add(-10*time.Second).UnixMilli(), cells[0].Time)
+	assert.Equal(t, "3", cells[5].Text)
+	assert.Equal(t, core.HealthOK, h.State)
+}
+
+func TestKindIDsAreUniqueAndQualified(t *testing.T) {
+	seen := map[string]bool{}
+	for _, d := range allKinds.list {
+		assert.False(t, seen[d.desc.ID], d.desc.ID)
+		seen[d.desc.ID] = true
+		if d.gvr.Group != "" {
+			assert.Equal(t, d.gvr.Group+"/"+d.gvr.Resource, d.desc.ID, "grouped kinds are qualified")
+		}
+		assert.Equal(t, d.namespaced, d.desc.Scoped, d.desc.ID)
+	}
+}

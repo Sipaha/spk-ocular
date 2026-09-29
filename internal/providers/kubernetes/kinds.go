@@ -18,6 +18,9 @@ type kindDef struct {
 	// else — managedFields, annotations, big specs, Secret values — is
 	// dropped before the object is stored.
 	keep fields
+	// pre runs before the whitelist on the full object (e.g. replace
+	// ConfigMap/Secret values by their key names). Must be idempotent.
+	pre func(u *unstructured.Unstructured)
 	// project turns a (trimmed) object into a row. now is for time-based
 	// health; next is when the row must be re-projected even without an
 	// API change (zero: never).
@@ -37,7 +40,7 @@ var metaKeep = fields{
 
 // trim applies a whitelist in place and returns the object. Idempotent.
 func trim(u *unstructured.Unstructured, keep fields) *unstructured.Unstructured {
-	full := fields{"apiVersion": true, "kind": true, "metadata": metaKeep}
+	full := fields{"apiVersion": true, "kind": true, "metadata": metaKeep, keysField: true}
 	for k, v := range keep {
 		full[k] = v
 	}
@@ -76,6 +79,37 @@ func keepValue(v any, keep fields) any {
 	return v
 }
 
+// keysField holds the key names of a ConfigMap/Secret in list caches (the
+// values themselves are never cached).
+const keysField = "ocularKeys"
+
+// keysOnly replaces data maps by the sorted list of their keys.
+func keysOnly(maps ...string) func(u *unstructured.Unstructured) {
+	return func(u *unstructured.Unstructured) {
+		if _, done := u.Object[keysField]; done {
+			return
+		}
+		var keys []any
+		for _, m := range maps {
+			if d, ok := u.Object[m].(map[string]any); ok {
+				for k := range d {
+					keys = append(keys, k)
+				}
+			}
+		}
+		sortAny(keys)
+		u.Object[keysField] = keys
+	}
+}
+
+func sortAny(v []any) {
+	for i := 1; i < len(v); i++ {
+		for j := i; j > 0 && v[j].(string) < v[j-1].(string); j-- {
+			v[j], v[j-1] = v[j-1], v[j]
+		}
+	}
+}
+
 // registry of kinds by id, in navigation order.
 type kindRegistry struct {
 	list []*kindDef
@@ -97,6 +131,11 @@ func (r *kindRegistry) descriptors() []core.KindDescriptor {
 		out = append(out, d.desc)
 	}
 	return out
+}
+
+func strs(u map[string]any, path ...string) []string {
+	v, _, _ := unstructured.NestedStringSlice(u, path...)
+	return v
 }
 
 // Common helpers for projections.
