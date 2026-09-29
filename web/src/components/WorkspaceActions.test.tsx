@@ -142,6 +142,7 @@ describe('actions in the workspace', () => {
     await act(async () => f.emit({ type: 'view_changed', payload: { viewId: 'v-pods-api-1', version: 99 } }))
     expect(await screen.findByText('This object no longer exists.', undefined, { timeout: 3000 })).toBeInTheDocument()
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Actions/ })).not.toBeInTheDocument() // nothing to act on
   })
 
 })

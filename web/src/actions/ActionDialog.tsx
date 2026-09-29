@@ -28,6 +28,11 @@ type Outcome =
 
 const RUN_TIMEOUT_MS = 60_000
 
+// A visible focus on every button: WebKitGTK does not show :focus-visible
+// for focus set by script (the initial focus, the Tab trap), and which
+// button Enter presses must be seen.
+const btn = 'rounded-md px-3 py-1 outline-none focus:ring-2 focus:ring-accent focus:ring-offset-2 focus:ring-offset-panel disabled:opacity-50'
+
 class RunTimeout extends Error {}
 
 const detailOf = (e: unknown) => (e instanceof ApiError ? e.detail || e.code : e instanceof Error ? e.message : String(e))
@@ -295,17 +300,17 @@ export function ActionDialog({ client, req, onClose, runTimeoutMs = RUN_TIMEOUT_
         )}
 
         <div className="flex justify-end gap-2">
-          <button ref={cancelRef} type="button" disabled={busy === 'run'} className="rounded-md px-3 py-1 text-fg-muted hover:bg-hover disabled:opacity-50" onClick={close}>
+          <button ref={cancelRef} type="button" disabled={busy === 'run'} className={`${btn} text-fg-muted hover:bg-hover`} onClick={close}>
             {sent || outcome?.type === 'prepareFailed' ? t('action.close') : t('action.cancel')}
           </button>
           {(outcome?.type === 'conflict' || outcome?.type === 'prepareFailed') && (
-            <button type="button" className="rounded-md border border-line px-3 py-1 hover:bg-hover" onClick={() => (param && count.trim() ? review() : prepare({}))}>
+            <button type="button" className={`${btn} border border-line hover:bg-hover`} onClick={() => (param && count.trim() ? review() : prepare({}))}>
               {t('action.reviewAgain')}
             </button>
           )}
           {param && !reviewed && !sent && (
             // Enabled while a review is read: a disabled default button would swallow Enter in the count.
-            <button type="submit" disabled={busy === 'run'} className="rounded-md bg-accent px-3 py-1 text-accent-fg disabled:opacity-50">
+            <button type="submit" disabled={busy === 'run'} className={`${btn} bg-accent text-accent-fg`}>
               {t('action.review')}
             </button>
           )}
@@ -315,7 +320,7 @@ export function ActionDialog({ client, req, onClose, runTimeoutMs = RUN_TIMEOUT_
               type="button"
               disabled={!canRun}
               onClick={() => void run()}
-              className={['rounded-md px-3 py-1 disabled:opacity-50', destructive ? 'bg-danger text-white' : 'bg-accent text-accent-fg'].join(' ')}
+              className={[btn, destructive ? 'bg-danger text-white' : 'bg-accent text-accent-fg'].join(' ')}
             >
               {label}
             </button>

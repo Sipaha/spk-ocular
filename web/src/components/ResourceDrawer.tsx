@@ -67,6 +67,8 @@ export function ResourceDrawer({ client, hub, target, subject, onClose, hasLogs,
   const r = shown?.r
   const actions = actionsOf?.(current.kind) ?? []
   // The object shown now (after relation navigation: that one), with the UID read.
+  // A deleted object has nothing to open or act on.
+  const hasTools = !shown?.gone && ((!!onLogs && !!hasLogs?.(current.kind)) || (!!onTerminal && !!hasExec?.(current.kind)) || (!!onAction && actions.length > 0))
   const shownRef = (): Ref => ({ ...(r?.ref ?? current), provider: target.provider, target: target.id })
   const go = (ref: Ref) => {
     setStack((s) => [...s, ref])
@@ -75,68 +77,77 @@ export function ResourceDrawer({ client, hub, target, subject, onClose, hasLogs,
 
   return (
     <aside role="dialog" aria-label={`${current.kind} ${current.name}`} className="absolute inset-y-0 right-0 z-10 flex w-[min(720px,55%)] flex-col border-l border-line bg-app shadow-2xl">
-      <header className="flex items-center gap-2 border-b border-line px-4 py-2">
-        {stack.length > 1 && (
-          <button className="rounded px-1.5 text-fg-muted hover:bg-hover hover:text-fg" onClick={() => setStack((s) => s.slice(0, -1))} aria-label={t('drawer.back')}>
-            ←
-          </button>
-        )}
-        <span className="text-xs uppercase tracking-wide text-fg-subtle">{current.kind}</span>
-        <h2 className="min-w-0 flex-1 truncate font-semibold">{current.name}</h2>
-        {onLogs && hasLogs?.(current.kind) && (
-          <button
-            className="rounded-md border border-line px-2 py-0.5 text-xs text-fg-muted hover:bg-hover hover:text-fg"
-            onClick={() => onLogs({ ...(r?.ref ?? current), provider: target.provider, target: target.id })}
-            title={t('logs.openHint')}
-          >
-            {t('logs.open')}
-          </button>
-        )}
-        {onTerminal && hasExec?.(current.kind) && (
-          <>
-            <button
-              className="rounded-md border border-line px-2 py-0.5 text-xs text-fg-muted hover:bg-hover hover:text-fg"
-              onClick={() => onTerminal({ ...(r?.ref ?? current), provider: target.provider, target: target.id }, false)}
-              title={t('term.openHint')}
-            >
-              {t('term.open')}
+      {/* Name first, whole; the object's tools on a line of their own. */}
+      <header className="border-b border-line px-4 py-2">
+        <div className="flex items-center gap-2">
+          {stack.length > 1 && (
+            <button className="rounded px-1.5 text-fg-muted hover:bg-hover hover:text-fg" onClick={() => setStack((s) => s.slice(0, -1))} aria-label={t('drawer.back')}>
+              ←
             </button>
-            <button
-              className="rounded-md border border-line px-2 py-0.5 text-xs text-fg-muted hover:bg-hover hover:text-fg"
-              onClick={() => onTerminal({ ...(r?.ref ?? current), provider: target.provider, target: target.id }, true)}
-              title={t('term.dialogHint')}
-              aria-label={t('term.dialog')}
-            >
-              …
-            </button>
-          </>
-        )}
-        {onAction && actions.length > 0 && (
-          <button
-            ref={actionsBtn}
-            className="rounded-md border border-line px-2 py-0.5 text-xs text-fg-muted hover:bg-hover hover:text-fg"
-            aria-haspopup="menu"
-            aria-expanded={!!menuAt}
-            title={t('action.menuHint')}
-            onClick={() => {
-              const b = actionsBtn.current?.getBoundingClientRect()
-              setMenuAt({ x: b?.left ?? 0, y: (b?.bottom ?? 0) + 2 })
-            }}
-          >
-            {t('action.menu')} ▾
+          )}
+          <span className="shrink-0 text-xs uppercase tracking-wide text-fg-subtle">{current.kind}</span>
+          <h2 className="min-w-0 flex-1 truncate font-semibold" title={current.name}>
+            {current.name}
+          </h2>
+          <button className="rounded px-2 text-lg leading-none text-fg-muted hover:bg-hover hover:text-fg" onClick={onClose} aria-label={t('drawer.close')}>
+            ×
           </button>
+        </div>
+        {hasTools && (
+          <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+            {onLogs && hasLogs?.(current.kind) && (
+              <button
+                className="rounded-md border border-line px-2 py-0.5 text-xs text-fg-muted hover:bg-hover hover:text-fg"
+                onClick={() => onLogs({ ...(r?.ref ?? current), provider: target.provider, target: target.id })}
+                title={t('logs.openHint')}
+              >
+                {t('logs.open')}
+              </button>
+            )}
+            {onTerminal && hasExec?.(current.kind) && (
+              <>
+                <button
+                  className="rounded-md border border-line px-2 py-0.5 text-xs text-fg-muted hover:bg-hover hover:text-fg"
+                  onClick={() => onTerminal({ ...(r?.ref ?? current), provider: target.provider, target: target.id }, false)}
+                  title={t('term.openHint')}
+                >
+                  {t('term.open')}
+                </button>
+                <button
+                  className="rounded-md border border-line px-2 py-0.5 text-xs text-fg-muted hover:bg-hover hover:text-fg"
+                  onClick={() => onTerminal({ ...(r?.ref ?? current), provider: target.provider, target: target.id }, true)}
+                  title={t('term.dialogHint')}
+                  aria-label={t('term.dialog')}
+                >
+                  …
+                </button>
+              </>
+            )}
+            {onAction && actions.length > 0 && (
+              <button
+                ref={actionsBtn}
+                className="rounded-md border border-line px-2 py-0.5 text-xs text-fg-muted hover:bg-hover hover:text-fg"
+                aria-haspopup="menu"
+                aria-expanded={!!menuAt}
+                title={t('action.menuHint')}
+                onClick={() => {
+                  const b = actionsBtn.current?.getBoundingClientRect()
+                  setMenuAt({ x: b?.left ?? 0, y: (b?.bottom ?? 0) + 2 })
+                }}
+              >
+                {t('action.menu')} ▾
+              </button>
+            )}
+            {menuAt && onAction && (
+              <Menu
+                label={t('action.menu')}
+                at={menuAt}
+                onClose={() => setMenuAt(null)}
+                items={actions.map((a) => ({ id: a.id, label: actionLabel(a) + (a.param ? '…' : ''), danger: a.destructive, onSelect: () => onAction(shownRef(), a) }))}
+              />
+            )}
+          </div>
         )}
-        {menuAt && onAction && (
-          <Menu
-            label={t('action.menu')}
-            at={menuAt}
-            onClose={() => setMenuAt(null)}
-            items={actions.map((a) => ({ id: a.id, label: actionLabel(a) + (a.param ? '…' : ''), danger: a.destructive, onSelect: () => onAction(shownRef(), a) }))}
-          />
-        )}
-        <button className="rounded px-2 text-lg leading-none text-fg-muted hover:bg-hover hover:text-fg" onClick={onClose} aria-label={t('drawer.close')}>
-          ×
-        </button>
       </header>
       <nav className="flex gap-1 border-b border-line px-3" role="tablist">
         {(['details', 'yaml'] as Tab[]).map((tb) => (

@@ -3,6 +3,7 @@
 in the environment): XTest through ctypes.
 
     xinput.py click X Y        left click at screen coordinates
+    xinput.py rclick X Y       right click (a context menu)
     xinput.py key NAME...      press keys (X keysym names: l, Return, Escape;
                                modifiers: ctrl+a, shift+Tab)
     xinput.py type TEXT        type ASCII text
@@ -69,12 +70,12 @@ def flush():
     time.sleep(0.05)
 
 
-def click(x, y):
+def click(x, y, button=1):
     xtst.XTestFakeMotionEvent(dpy, -1, x, y, 0)
     flush()
-    xtst.XTestFakeButtonEvent(dpy, 1, 1, 0)
+    xtst.XTestFakeButtonEvent(dpy, button, 1, 0)
     flush()
-    xtst.XTestFakeButtonEvent(dpy, 1, 0, 0)
+    xtst.XTestFakeButtonEvent(dpy, button, 0, 0)
     flush()
 
 
@@ -134,8 +135,10 @@ while args:
     cmd = args.pop(0)
     if cmd == "click":
         click(int(args.pop(0)), int(args.pop(0)))
+    elif cmd == "rclick":
+        click(int(args.pop(0)), int(args.pop(0)), button=3)
     elif cmd == "key":
-        while args and args[0] not in ("click", "key", "type", "sleep", "drag", "group", "close", "resize", "scroll"):
+        while args and args[0] not in ("click", "rclick", "key", "type", "sleep", "drag", "group", "close", "resize", "scroll"):
             key(args.pop(0))
     elif cmd == "type":
         for ch in args.pop(0):
