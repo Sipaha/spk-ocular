@@ -25,6 +25,7 @@ const bin = process.env.E2E_BIN ?? '../../build/bin/spk-ocular'
 
 export default defineConfig({
   testDir: '.',
+  testMatch: 'targets.spec.ts',
   workers: 1, // one app instance, shared state — specs restore what they change
   use: { baseURL: `http://127.0.0.1:${port}`, locale: 'en-US', screenshot: 'only-on-failure' },
   webServer: {

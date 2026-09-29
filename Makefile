@@ -1,4 +1,4 @@
-.PHONY: kind-up kind-down test-kind build build-web build-go build-desktop release run run-browser test test-go test-web test-e2e lint lint-go lint-web check fmt tidy clean pss
+.PHONY: kind-up kind-down test-kind e2e-kind build build-web build-go build-desktop release run run-browser test test-go test-web test-e2e lint lint-go lint-web check fmt tidy clean pss
 
 BIN_DIR := build/bin
 BIN     := $(BIN_DIR)/spk-ocular
@@ -105,3 +105,11 @@ test-kind:
 	bash scripts/kind-rbac.sh $(KIND_KUBECONFIG) $(CURDIR)/build/rbac >/dev/null
 	bash scripts/kind-metrics.sh $(KIND_KUBECONFIG) >/dev/null
 	OCULAR_KIND_KUBECONFIG=$(KIND_KUBECONFIG) OCULAR_KIND_RBAC_DIR=$(CURDIR)/build/rbac go test -race -count=1 -run Kind ./internal/...
+
+# Browser e2e against the real kind cluster (fails without it).
+e2e-kind: build
+	@test -s $(KIND_KUBECONFIG) || { echo "no kind kubeconfig at $(KIND_KUBECONFIG): run make kind-up"; exit 1; }
+	bash scripts/kind-seed.sh $(KIND_KUBECONFIG) >/dev/null
+	bash scripts/kind-rbac.sh $(KIND_KUBECONFIG) $(CURDIR)/build/rbac >/dev/null
+	bash scripts/kind-metrics.sh $(KIND_KUBECONFIG) >/dev/null
+	cd tests/e2e && OCULAR_KIND_KUBECONFIG=$(KIND_KUBECONFIG) OCULAR_KIND_RBAC_DIR=$(CURDIR)/build/rbac pnpm exec playwright test -c playwright.kind.config.ts && rm -rf .run
