@@ -137,3 +137,59 @@ test('logs of a deployment: every pod in one stream, live', async ({ page }) => 
   await expect(panel.locator('[data-log-viewport]')).not.toContainText('[31m')
   await expect(panel.locator('[data-log-viewport] span[style*="--color-ansi-1"]').first()).toBeAttached()
 })
+
+const termScreen = (page: Page) => logPanel(page).locator('.xterm-rows')
+
+test('a terminal in a pod: a shell, output, the exit code', async ({ page }) => {
+  await openTarget(page, 'kind-ocular-dev')
+  const grid = await kindPage(page, 'Pods')
+  await row(grid, /^web-/).first().click()
+  await page.keyboard.press('s')
+  await expect(page.getByRole('tab', { name: /^nginx · web-/ })).toBeVisible()
+  await expect(termScreen(page)).toContainText('#', { timeout: 30_000 }) // the prompt
+  // busybox ash swallows what is typed right after its prompt (it races its
+  // own cursor-position query, ESC[6n; kubectl exec -it loses it the same
+  // way): settle with empty lines until one gives a new prompt.
+  const prompts = async () => ((await termScreen(page).textContent()) ?? '').split('#').length
+  await expect(async () => {
+    const n = await prompts()
+    await page.keyboard.press('Enter')
+    await expect.poll(prompts, { timeout: 1000 }).toBeGreaterThan(n)
+  }).toPass({ timeout: 15_000 })
+  await page.keyboard.type('echo "sum=$((40+2))"')
+  await page.keyboard.press('Enter')
+  await expect(termScreen(page)).toContainText('sum=42')
+  await page.keyboard.type('exit 3')
+  await page.keyboard.press('Enter')
+  await expect(logPanel(page).getByRole('alert')).toContainText('process exited with code 3')
+})
+
+test('a terminal needs pods/exec: denied is said in the tab', async ({ page }) => {
+  await openTarget(page, 'ocular-viewer')
+  const grid = page.getByRole('grid', { name: 'resources' })
+  await row(grid, /^web-/).first().click()
+  await page.keyboard.press('s')
+  await expect(logPanel(page).getByRole('alert')).toContainText('access denied')
+})
+
+test('a tunnel to a service: the runner reaches nginx through it', async ({ page }) => {
+  await openTarget(page, 'kind-ocular-dev')
+  const grid = await kindPage(page, 'Services')
+  await row(grid, 'web').click()
+  await page.keyboard.press('Enter')
+  const ports = page.getByRole('dialog', { name: 'services web' }).getByRole('region', { name: 'Ports' })
+  await ports.getByRole('listitem').filter({ hasText: '80' }).getByRole('button', { name: 'Forward' }).click()
+  const dlg = page.getByRole('dialog', { name: 'Forward a port' })
+  await dlg.getByRole('combobox').selectOption('http')
+  await dlg.getByRole('button', { name: 'Forward' }).click()
+  const tunnel = page.getByRole('region', { name: 'Port forwards' }).getByRole('listitem', { name: 'services/web:80' })
+  await expect(tunnel).toContainText('connected')
+  await expect(tunnel).toContainText(/via web-[\w-]+:80/)
+  const addr = (await tunnel.locator('[data-address]').textContent())!.split(/\s+/)[0]
+  const res = await fetch(`http://${addr}/`)
+  expect(res.status).toBe(200)
+  expect(await res.text()).toContain('Welcome to nginx')
+  await tunnel.getByRole('button', { name: 'Stop' }).click()
+  await expect(tunnel).toHaveCount(0)
+  await expect(fetch(`http://${addr}/`)).rejects.toThrow()
+})

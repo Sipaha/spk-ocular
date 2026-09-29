@@ -54,7 +54,7 @@ test-web:
 	cd web && pnpm test
 
 test-e2e: build
-	cd tests/e2e && pnpm install --frozen-lockfile --silent && pnpm exec playwright install chromium && pnpm exec playwright test && pnpm exec playwright test -c playwright.logs.config.ts && rm -rf .run
+	cd tests/e2e && pnpm install --frozen-lockfile --silent && pnpm exec playwright install chromium && pnpm exec playwright test && pnpm exec playwright test -c playwright.synth.config.ts && rm -rf .run
 
 lint: lint-go lint-web
 

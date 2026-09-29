@@ -18,8 +18,10 @@ Go + Wails v3 + React. Спецификация: `docs/specs/2026-09-29-spk-ocul
   с настоящим kubeconfig и `~/.spk/ocular`.
 - `make test` = `test-go` (`go test -race`) + `test-web` (vitest) + `test-e2e` (Playwright против
   browser-режима с фикстурным `KUBECONFIG`/`HOME`/`SPK_OCULAR_HOME` в `tests/e2e/.run/`: два
-  конфига — `playwright.config.ts` и `playwright.logs.config.ts`, последний запускает
-  `--test-api --test-synthetic`: синтетический провайдер с логами, `POST /api/_test/logs/emit`).
+  конфига — `playwright.config.ts` и `playwright.synth.config.ts`, последний запускает
+  `--test-api --test-synthetic`: синтетический провайдер с логами (`POST /api/_test/logs/emit`),
+  эхо-терминалом (`flood N`, `exit N`, `size CxR` при resize) и портами на встроенных
+  HTTP-серверах; `GET /api/_test/stats` добавляет его счётчики `syn_*`).
 - `make lint` — go vet и golangci-lint (с тегами desktop и без) + eslint + tsc.
 - **`make check`** — гейт перед каждым коммитом: lint, все тесты, обе сборки.
 - `make pss PID=<pid>` — Private_Dirty/PSS процесса и его WebKit-детей (бюджет ~150 МБ Private_Dirty).
