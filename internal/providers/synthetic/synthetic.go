@@ -10,6 +10,7 @@ import (
 	"context"
 	"fmt"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/spk/spk-ocular/internal/core"
@@ -30,10 +31,14 @@ var objects = map[string][]string{
 
 // Provider holds the live log feeds tests push into.
 type Provider struct {
-	live  live
-	mu    sync.Mutex
-	subs  map[*sub]struct{}
-	clock time.Time
+	live live
+	// rev is the configuration revision (Reconfigure bumps it); changed
+	// wakes Watch.
+	rev     atomic.Int64
+	changed chan struct{}
+	mu      sync.Mutex
+	subs    map[*sub]struct{}
+	clock   time.Time
 }
 
 type sub struct {
@@ -52,18 +57,45 @@ type Event struct {
 }
 
 func New() *Provider {
-	return &Provider{subs: map[*sub]struct{}{}, clock: time.Date(2026, 9, 29, 10, 0, 0, 0, time.UTC)}
+	p := &Provider{subs: map[*sub]struct{}{}, clock: time.Date(2026, 9, 29, 10, 0, 0, 0, time.UTC), changed: make(chan struct{}, 1)}
+	p.rev.Store(1)
+	return p
+}
+
+func (p *Provider) hash() string { return fmt.Sprint(p.rev.Load()) }
+
+// Reconfigure changes the target's configuration (as an edited kubeconfig
+// would): open sessions are rebuilt, live resources keep the old one.
+func (p *Provider) Reconfigure() {
+	p.rev.Add(1)
+	select {
+	case p.changed <- struct{}{}:
+	default:
+	}
+}
+
+var _ provider.TargetWatcher = (*Provider)(nil)
+
+func (p *Provider) Watch(ctx context.Context, onChange func()) error {
+	for {
+		select {
+		case <-ctx.Done():
+			return nil
+		case <-p.changed:
+			onChange()
+		}
+	}
 }
 
 func (p *Provider) ID() string    { return ID }
 func (p *Provider) Title() string { return "Synthetic (test)" }
 
 func (p *Provider) Discover(context.Context) (provider.Discovery, error) {
-	return provider.Discovery{Targets: []core.Target{{Provider: ID, ID: Target, Title: Target, Subtitle: "test provider", ConfigHash: "1"}}}, nil
+	return provider.Discovery{Targets: []core.Target{{Provider: ID, ID: Target, Title: Target, Subtitle: "test provider", ConfigHash: p.hash()}}}, nil
 }
 
 func (p *Provider) Open(context.Context, string) (provider.Session, error) {
-	return &session{p: p}, nil
+	return &session{p: p, hash: p.hash()}, nil
 }
 
 // Emit sends ev to the open streams of object; it returns how many got it.
@@ -90,7 +122,10 @@ func (p *Provider) ts() string {
 	return p.clock.Format(time.RFC3339Nano)
 }
 
-type session struct{ p *Provider }
+type session struct {
+	p    *Provider
+	hash string // the configuration it was opened with
+}
 
 var _ provider.LogSource = (*session)(nil)
 
@@ -99,7 +134,7 @@ var kind = core.KindDescriptor{
 	Columns: []core.Column{{ID: "name", Title: "Name", Type: core.ColText}, {ID: "sources", Title: "Sources", Type: core.ColNumber}},
 }
 
-func (s *session) ConfigHash() string                           { return "1" }
+func (s *session) ConfigHash() string                           { return s.hash }
 func (s *session) Kinds() []core.KindDescriptor                 { return []core.KindDescriptor{kind} }
 func (s *session) Scopes(context.Context) ([]core.Scope, error) { return nil, nil }
 func (s *session) ScopeKind() string                            { return "" }

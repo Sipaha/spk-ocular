@@ -42,6 +42,13 @@ func testRoutes(c *appCore) http.Handler {
 			_ = json.NewEncoder(w).Encode(map[string]int{"delivered": c.Synthetic.Emit(req.Object, req.Event)})
 		})
 	}
+	if c.Synthetic != nil {
+		// Change the synthetic target's configuration (targets_changed).
+		mux.HandleFunc("POST /api/_test/synthetic/reconfigure", func(w http.ResponseWriter, _ *http.Request) {
+			c.Synthetic.Reconfigure()
+			w.WriteHeader(http.StatusNoContent)
+		})
+	}
 	mux.HandleFunc("POST /api/_test/gc", func(w http.ResponseWriter, _ *http.Request) {
 		runtime.GC()
 		debug.FreeOSMemory()

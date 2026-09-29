@@ -87,35 +87,36 @@ func (s *session) PrepareExec(_ context.Context, ref core.Ref, req provider.Exec
 	if req.Channel != "" && req.Channel != "main" {
 		return nil, &provider.Error{Class: provider.ClassNotFound, Message: "channel " + req.Channel}
 	}
-	return s.p.newExecHandle(s.ref(ref.Name), inst, req.Command), nil
+	return s.p.newExecHandle(s.ref(ref.Name), s.hash, inst, req.Command), nil
 }
 
-func (p *Provider) liveTarget(ref core.Ref) core.LiveTarget {
-	return core.LiveTarget{Provider: ID, Target: Target, TargetTitle: Target, Endpoint: "synthetic.local", ConfigHash: "1", Ref: ref}
+func liveTarget(ref core.Ref, hash string) core.LiveTarget {
+	return core.LiveTarget{Provider: ID, Target: Target, TargetTitle: Target, Endpoint: "synthetic.local", ConfigHash: hash, Ref: ref}
 }
 
 // execHandle runs the echo terminal (see run).
 type execHandle struct {
 	p      *Provider
 	ref    core.Ref
+	hash   string
 	inst   string
 	argv   []string
 	closed atomic.Bool
 }
 
-func (p *Provider) newExecHandle(ref core.Ref, inst string, argv []string) *execHandle {
+func (p *Provider) newExecHandle(ref core.Ref, hash, inst string, argv []string) *execHandle {
 	p.live.handles.Add(1)
-	return &execHandle{p: p, ref: ref, inst: inst, argv: argv}
+	return &execHandle{p: p, ref: ref, hash: hash, inst: inst, argv: argv}
 }
 
 func (h *execHandle) Describe() core.LiveTarget {
-	t := h.p.liveTarget(h.ref)
+	t := liveTarget(h.ref, h.hash)
 	t.Instance, t.Channel, t.Command = h.inst, "main", h.argv
 	return t
 }
 
 func (h *execHandle) Again() (provider.ExecHandle, error) {
-	return h.p.newExecHandle(h.ref, h.inst, h.argv), nil
+	return h.p.newExecHandle(h.ref, h.hash, h.inst, h.argv), nil
 }
 
 func (h *execHandle) Close() {
@@ -327,7 +328,7 @@ func (s *session) PrepareForward(_ context.Context, ref core.Ref, req provider.F
 	for _, p := range ps {
 		if p.Port == req.Port && p.Supported {
 			s.p.live.handles.Add(1)
-			return &fwdHandle{p: s.p, ref: s.ref(ref.Name), port: req.Port}, nil
+			return &fwdHandle{p: s.p, ref: s.ref(ref.Name), hash: s.hash, port: req.Port}, nil
 		}
 	}
 	return nil, &provider.Error{Class: provider.ClassNotFound, Message: fmt.Sprintf("%s has no TCP port %d", ref.Name, req.Port)}
@@ -336,12 +337,13 @@ func (s *session) PrepareForward(_ context.Context, ref core.Ref, req provider.F
 type fwdHandle struct {
 	p      *Provider
 	ref    core.Ref
+	hash   string
 	port   int
 	closed atomic.Bool
 }
 
 func (h *fwdHandle) Describe() core.LiveTarget {
-	t := h.p.liveTarget(h.ref)
+	t := liveTarget(h.ref, h.hash)
 	t.Port = h.port
 	return t
 }
