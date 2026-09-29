@@ -101,4 +101,6 @@ kind-down:
 test-kind:
 	@test -s $(KIND_KUBECONFIG) || { echo "no kind kubeconfig at $(KIND_KUBECONFIG): run make kind-up"; exit 1; }
 	@kubectl --kubeconfig $(KIND_KUBECONFIG) get --raw /readyz >/dev/null || { echo "kind cluster $(KIND_CLUSTER) is not reachable: run make kind-up"; exit 1; }
-	OCULAR_KIND_KUBECONFIG=$(KIND_KUBECONFIG) go test -race -count=1 -run Kind ./...
+	bash scripts/kind-seed.sh $(KIND_KUBECONFIG) >/dev/null
+	bash scripts/kind-rbac.sh $(KIND_KUBECONFIG) $(CURDIR)/build/rbac >/dev/null
+	OCULAR_KIND_KUBECONFIG=$(KIND_KUBECONFIG) OCULAR_KIND_RBAC_DIR=$(CURDIR)/build/rbac go test -race -count=1 -run Kind ./internal/...

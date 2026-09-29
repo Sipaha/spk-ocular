@@ -87,3 +87,75 @@ func TestKindUnreachableServerIsAnError(t *testing.T) {
 		return pg.Status.State == provider.StatusError && pg.Status.Class == provider.ClassUnavailable
 	}, 20*time.Second, 50*time.Millisecond)
 }
+
+// rbacSession opens the kind cluster as a namespace-limited ServiceAccount
+// (scripts/kind-rbac.sh, run by make test-kind).
+func rbacSession(t *testing.T, who string) provider.Session {
+	t.Helper()
+	dir := os.Getenv("OCULAR_KIND_RBAC_DIR")
+	if dir == "" {
+		t.Skip("OCULAR_KIND_RBAC_DIR not set (make test-kind)")
+	}
+	cfg := filepath.Join(dir, who+".kubeconfig")
+	p := NewWith(func(k string) string {
+		if k == "KUBECONFIG" {
+			return cfg
+		}
+		return ""
+	}, t.TempDir())
+	d, err := p.Discover(context.Background())
+	require.NoError(t, err)
+	require.Len(t, d.Targets, 1)
+	s, err := p.Open(context.Background(), d.Targets[0].ID)
+	require.NoError(t, err)
+	t.Cleanup(s.Close)
+	return s
+}
+
+func waitStatus(t *testing.T, m *views.Manager, id string, ok func(views.Page) bool) views.Page {
+	t.Helper()
+	var p views.Page
+	require.Eventually(t, func() bool {
+		p, _ = m.Get(id, 0)
+		return ok(p)
+	}, 30*time.Second, 20*time.Millisecond, "last: %+v", p.Status)
+	return p
+}
+
+func TestKindNamespaceLimitedUser(t *testing.T) {
+	s := rbacSession(t, "viewer")
+	m := views.NewManager(events.NewEmitter())
+	defer m.CloseAll()
+
+	_, err := s.Scopes(context.Background())
+	var pe *provider.Error
+	require.ErrorAs(t, err, &pe)
+	assert.Equal(t, provider.ClassForbidden, pe.Class, "listing namespaces is denied")
+
+	own, err := m.Open("s", s, provider.Query{Kind: "pods", Scope: core.ScopeSel{Mode: core.ScopeOne, Name: "ocular-demo"}})
+	require.NoError(t, err)
+	p := waitStatus(t, m, own, func(p views.Page) bool { return p.Status.State == provider.StatusReady })
+	assert.NotEmpty(t, p.Upserts, "its own namespace works")
+
+	all, err := m.Open("s", s, provider.Query{Kind: "pods", Scope: core.ScopeSel{Mode: core.ScopeAll}})
+	require.NoError(t, err)
+	p = waitStatus(t, m, all, func(p views.Page) bool { return p.Status.State == provider.StatusError })
+	assert.Equal(t, provider.ClassForbidden, p.Status.Class, "all namespaces: denied, not an empty table")
+	assert.Empty(t, p.Upserts)
+}
+
+// list allowed, watch denied: the rows are shown (the reflector falls back
+// from WatchList to a plain list) but the view is stale with the reason.
+func TestKindListWithoutWatch(t *testing.T) {
+	s := rbacSession(t, "nowatch")
+	m := views.NewManager(events.NewEmitter())
+	defer m.CloseAll()
+	id, err := m.Open("s", s, provider.Query{Kind: "pods", Scope: core.ScopeSel{Mode: core.ScopeOne, Name: "ocular-demo"}})
+	require.NoError(t, err)
+	// Settles on stale (rows from the list, live updates denied) — it may
+	// pass through error while the watch fails before the list is processed.
+	p := waitStatus(t, m, id, func(p views.Page) bool { return p.Status.State == provider.StatusStale })
+	assert.Equal(t, provider.ClassForbidden, p.Status.Class)
+	assert.Contains(t, p.Status.Message, "cannot watch")
+	assert.NotEmpty(t, p.Upserts)
+}
