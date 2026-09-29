@@ -22,7 +22,9 @@ linters:
         text: "Error return value of `.*\\.(Close|Rollback)` is not checked"
       # Internal packages are not a public API; doc comments are optional.
       - linters: [revive]
-        text: "exported .* should have comment or be unexported"
+        text: "exported .* should have comment"
+      - linters: [revive]
+        text: "comment on exported .* should be of the form"
       - linters: [revive]
         text: "should have a package comment"
 formatters:

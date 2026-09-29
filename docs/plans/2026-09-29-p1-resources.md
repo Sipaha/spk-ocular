@@ -30,16 +30,50 @@ Events, связи (владельцы вверх, pods вниз) с перех�
 - **Тестовый кластер** — kind `ocular-dev` (бинарь `../.agents/tools/kind`, kubeconfig
   `../.agents/tmp/kind-ocular.kubeconfig`, не в `~/.kube` пользователя). Реальные кластеры
   пользователя — только чтение и только с его разрешения.
-- **События объекта** — это вид kind `events` с field selector `involvedObject.uid=<uid>`:
-  тот же механизм, без отдельного API.
-- **Метрики** — `metrics.k8s.io` через dynamic client (без модуля `k8s.io/metrics`); UI
-  запрашивает `GetMetrics` для видимой таблицы раз в 15 с, backend кэширует ответ на 10 с.
-- **Статус informer-а** — через обёртку `ListerWatcher`: успешный List/Watch → `ready`,
-  ошибка → `stale` (были данные) / `error` с классом; запрет — класс `forbidden`.
+- **События объекта** — вид kind `events` с `Query.Subject = Ref объекта`; адаптер
+  переводит в core/v1 `involvedObject.uid=<uid>` в namespace объекта (для кластерных
+  объектов — по всем namespaces, запрет честно показывается). Общий UI не строит
+  field selector-ы. Пустой UID — ошибка, не «все события».
+- **Метрики** — `metrics.k8s.io` через dynamic client (без модуля `k8s.io/metrics`),
+  `resource.ParseQuantity`. `GetMetrics(viewId)` → `{status: ok|unsupported|forbidden|
+  unavailable, timestamp, window, values{rowId → cpu/mem, null = нет сэмпла}}`: backend
+  сопоставляет сэмплы текущим строкам вида (удалённые/пересозданные не получают чужих
+  значений). UI тянет только для видимой таблицы pods/nodes, следующий запрос — через 15 с
+  после завершения предыдущего, пауза при скрытом окне; backend — singleflight + кэш 10 с;
+  «не установлено» — только при подтверждённом отсутствии группы, с ограниченным
+  негативным кэшем.
+- **Ready** — не «успешный List/Watch», а барьер «начальное состояние обработано этим
+  обработчиком»: `ResourceEventHandlerRegistration.HasSynced` становится true только после
+  того, как все начальные уведомления дошли до обработчика (и до вида — `Sink` синхронный),
+  после чего вид получает `Status{Ready}`; пустой список проходит тот же барьер.
+  Транспортное состояние отдельно: обёртка `ListerWatcher` (+ обёртка `watch.Interface` для
+  `watch.Error` и неожиданного закрытия, без второго потребителя `ResultChan`, с сохранением
+  `ListOptions`/WatchList) → `stale` (данные были) / `error` с классом; обычное продление
+  watch по таймауту — не ошибка, без мигания статуса. (Ревью Codex.)
+- **Передача в вид** — `Sink.Apply` синхронно из обработчика informer-а (вид — память под
+  коротким мьютексом, не блокирует); подключение к «тёплому» кэшу — `AddEventHandler`
+  воспроизводит текущие объекты этому обработчику по порядку, без щели между снимком и
+  изменениями; буфер выше по потоку — у processorListener client-go.
+- **Аренды видов** — вид закрывается, если UI не тянул и не продлевал его 60 с (`Touch`
+  каждые 20 с); перезагруженная/закрытая страница не оставляет живых видов. Закрытие по
+  смене конфигурации шлёт последнее `view_changed{gone}` — UI узнаёт и переоткрывает.
+  Выбор другого target-а закрывает сессии остальных (один активный context).
+- **Exec-плагины аутентификации** — client-go v0.37 запускает плагин без контекста (зависший
+  `yc` не убить таймаутом запроса). Спайк в Task 3: фейковый зависающий плагин; если
+  подтвердится — shim (наш же бинарь) запускает плагин с таймаутом и `Pdeathsig`, сохраняя
+  протокол ExecCredential. До демонстрации гарантию отмены не заявлять.
 - **Secrets в YAML** — значения `data`/`stringData` заменены на `<N bytes>`; раскрытие —
   бэклог (осознанное действие, отдельный запрос).
 - **Problems, рост рестартов, палитра** — P5; планировщик дедлайнов нужен уже здесь для
   «Pending дольше N» в health pods.
+
+## Порядок работ (после ревью)
+
+Сначала тонкий вертикальный срез на настоящем kind, потом ширина: Task 1–2 → Task 3 (+ спайк
+exec-плагина) с одним kind Pods → минимальные Task 5/7 (таблица pods) → smoke на kind
+(жизненный цикл, RBAC, переподключение) → остальные kinds (Task 4) → детали и метрики
+(Task 6) → полный UI (Task 7) → нагрузка (Task 8). Каждый коммит — `make check` зелёный;
+ещё не реализованные методы API возвращают явный `unsupported`, не пустой успех.
 
 ## Файлы
 
@@ -108,14 +142,21 @@ scripts/kind-seed.sh    тестовые ресурсы: здоровые, crash
       kind, scope, fieldSelector)`, `GetRows(viewId, since)`, `CloseView(viewId)`,
       `GetResource(target, ref)`, `GetMetrics(target, kind, scope)`. HTTP + Wails + client.ts.
 - [ ] Сессии: создаются по первому запросу target-а; при `targets_changed` сравнивается хеш —
-      изменился/исчез → сессия и её виды закрываются (виды отдают `gone`); переключение
-      target-а освобождает сессию без видов.
+      изменился/исчез → сессия и её виды закрываются (последний `view_changed{gone}`); выбор
+      другого target-а закрывает остальные сессии; `TouchViews(ids)` продлевает аренды и
+      возвращает исчезнувшие.
+- [ ] Счётчики для замеров и утечек (`/api/_test/stats`): активные виды, кэши, аренды,
+      watch-запросы, горутины.
 - [ ] Тесты: сервис с фейковым провайдером; транспорт — маршруты и коды ошибок.
 
 ### Task 6: детали, YAML, связи, метрики
 - [ ] `GetResource`: полный объект (проверка UID), YAML без `managedFields` и last-applied,
-      маскирование Secret; факты; связи: owners вверх, pods вниз (ownerRefs через RS / selector
-      для svc), ingress → services, pod → node.
+      маскирование Secret; факты; связи со своим статусом — запрет/медленность связей не
+      роняет ресурс: owners вверх, pods вниз (Deployment → по UID контроллера через RS, не
+      только по labels), svc → pods по selector (без selector — никаких «всех pods»),
+      ingress → services, pod → node; ReplicaSet открывается в drawer, хотя в навигации нет.
+- [ ] Namespaces — наблюдаемый список (вид kind namespaces), а не разовый запрос: новые
+      появляются сами; запрет — ручной ввод.
 - [ ] `metrics.go`: наличие API через discovery; pods/nodes usage; кэш 10 с; нет API → пусто
       без ошибки.
 - [ ] Тесты на fake клиентах.
@@ -132,13 +173,27 @@ scripts/kind-seed.sh    тестовые ресурсы: здоровые, crash
 - [ ] vitest: `useView` (все сценарии протокола), таблица, drawer; бандл-бюджет.
 
 ### Task 8: e2e и замеры на kind
+- [ ] `make e2e-kind` — отдельная цель, **падает**, если кластера нет (не «зелёная из-за
+      пропуска»); `make check` остаётся герметичным. Все команды — с явным сгенерированным
+      kubeconfig и context; версии kind/node/образов зафиксированы.
 - [ ] `scripts/kind-seed.sh`: namespaces, deployment, statefulset, daemonset, service, ingress,
-      configmap, secret, crashloop, imagepull, pending; RBAC-пользователь только на один
-      namespace (kubeconfig с токеном ServiceAccount).
-- [ ] Playwright (`tests/e2e/kind.spec.ts`, запускается при наличии кластера): таблицы и health,
-      живое обновление (scale), детали/YAML/events/связи, 403 → понятная ошибка, ручной namespace.
-- [ ] Замеры: 5k ConfigMaps + 3k pending pods — пик и удержание памяти, время первой таблицы,
-      повторная навигация, churn; `scripts/pss.sh`. Итоги — в этот план и спецификацию.
+      configmap, secret, crashloop, imagepull, pending (невозможный nodeSelector);
+      metrics-server (`--kubelet-insecure-tls` только в фикстуре) с проверкой реального сэмпла;
+      сценарий без метрик.
+- [ ] RBAC: ServiceAccount с Role только в одном namespace (свежий короткий токен на прогон):
+      проверить `can-i` — namespaces/nodes/все namespaces запрещены, pods в своём — можно;
+      варианты «list можно, watch нельзя», «list/watch можно, get нельзя», отзыв прав при
+      открытой таблице; events и metrics — разрешены и запрещены.
+- [ ] Playwright (`tests/e2e/kind.spec.ts`): таблицы и health, живое обновление (scale),
+      детали/YAML/events/связи, 403 → понятная ошибка, ручной namespace, метрики.
+- [ ] Нагрузка (отдельная фикстура): 5k ConfigMaps разного размера (малые/крупные — проверка
+      whitelist) + 3k pending pods с неиспользуемым `schedulerName` (без нагрузки на
+      планировщик); синтетические 10k «Running» pods через локальный fake-сервер list/watch
+      (помечено: синтетика). Замеры: холодный/тёплый первый список, пик и установившийся
+      Private_Dirty только дерева Ocular, куча Go, навигация > 8 запросов с перекрытием
+      all/ns, relist после 410, churn с медленным UI, очистка после смены context; счётчики
+      видов/кэшей/горутин. Бюджет LRU (8 неактивных) — целевая настройка по замерам, не
+      обещание; итоги — сюда и в спецификацию.
 - [ ] Desktop под Xvfb: скриншот таблицы и drawer.
 
 ## Review Focus

@@ -148,7 +148,7 @@ columns}`; `CloseView(viewId)`. Запрос вида неизменяем (см
 **Дельты.** Informer → hot-layer вида: текущие строки + журнал «последнее изменение на id»
 и надгробия удалённых, ограниченный по числу записей; версия — счётчик Ocular (не
 `resourceVersion` Kubernetes). `Coalescer` 100 мс → `view_changed {viewId, version}` (ключ —
-viewId). UI: `GetRows(viewId, since)` → `{viewId, version, reset, upserts, deletedIds,
+viewId). UI: `GetRows(viewId, since)` → `{viewId, version, reset, upserts, deleted,
 status}`; `since=0` или курсор вне сохранённого диапазона → `reset` с полным снимком
 (пустой снимок — тоже валидный ответ). Данные ответа и его версия снимаются атомарно,
 строки — неизменяемые снимки. Клиент двигает курсор только после применения ответа (не
