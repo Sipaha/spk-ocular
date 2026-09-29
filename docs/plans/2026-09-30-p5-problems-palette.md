@@ -291,16 +291,19 @@ Problems показывает два рода строк, и UI их разли�
   за пользователем); бэклог — скорость рестартов.
 
 ### Task 2. Вид Problems (Kubernetes)
-- [ ] Фильтрующий адаптер `Sink` (upsert/delete/Reset по источнику) — unit-тесты: проблема
+- [x] Фильтрующий адаптер `Sink` (upsert/delete/Reset по источнику) — unit-тесты: проблема
   появилась/ушла, Reset одного источника не трогает другие, поздний delete старого UID.
-- [ ] kind `problems`: источники, аренды на потребителя, ID `<kindID>#<uid>`, колонки, Since,
+- [x] kind `problems`: источники, аренды на потребителя, ID `<kindID>#<uid>`, колонки, Since,
   узлы как кластерные.
-- [ ] `ViewStatus.Coverage` + явное сравнение в `views`; статусы вида по правилам покрытия.
-- [ ] Тесты на fake: каждая строка из «что проблема»; событие → строка «recent» с Ref на Event;
+- [x] `ViewStatus.Coverage` + явное сравнение в `views`; статусы вида по правилам покрытия.
+- [x] Тесты на fake: каждая строка из «что проблема»; событие → строка «recent» с Ref на Event;
   общий informer с таблицей pods при двух арендах, освобождение одной; RBAC без nodes/events →
   покрытие denied, вид ready; все источники stale → stale со строками.
-- [ ] kind: crashloop/imagepull/pending, RecentRestart у crashloop-а, Warning event; у
+- [x] kind: crashloop/imagepull/pending, RecentRestart у crashloop-а, Warning event; у
   viewer-а без nodes/events — покрытие denied (узел NotReady на kind не моделируем).
+  Сделано: 52c8b13 (вид, адаптер, покрытие, fake-тесты с мутантами), kind — `TestKindProblems`,
+  `TestKindProblemsCoverageOfAViewer`. Находка kind: crashloop между падениями на миг Running —
+  тогда pod только warning (RecentRestart), в back-off — error.
 
 ### Task 3. Статистика desktop, churn, короткий soak
 - [ ] `--test-api` у desktop, stats со счётчиками дедлайнов; `scripts/kind-churn.sh`
