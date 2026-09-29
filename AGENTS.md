@@ -5,8 +5,10 @@
 Go + Wails v3 + React. Спецификация: `docs/specs/2026-09-29-spk-ocular-design.md`.
 Планы: `docs/plans/`. Бэклог: `docs/backlog.md`.
 
-Статус: P0 (каркас), P1 (ресурсы, детали, метрики), P2 (логи) и P3 (терминалы, туннели) готовы —
-`docs/plans/`. Следующий — P4 (действия restart/scale/delete).
+Статус: P0 (каркас), P1 (ресурсы, детали, метрики), P2 (логи), P3 (терминалы, туннели) и P4
+(действия restart/scale/delete) готовы — `docs/plans/`. P5 (Problems, палитра `Ctrl+K`,
+клавиатура, полировка) реализован; остаются часовой soak памяти и ревью реализации
+(`docs/plans/2026-09-30-p5-problems-palette.md`, Task 8). Следующий — Docker Compose provider.
 
 ## Сборка и тесты
 
@@ -32,6 +34,12 @@ Go + Wails v3 + React. Спецификация: `docs/specs/2026-09-29-spk-ocul
   `scripts/kind-load.sh <kubeconfig> [up|down]`, замер — `node tests/e2e/measure-kind.mjs <bin>
   <kind kubeconfig> <viewer kubeconfig> <scratch>` (печатает тайминги, счётчики `/api/_test/stats`
   и Private_Dirty). Синтетика памяти кэша: `OCULAR_SYNTH=1 go test -run Synthetic -v ./internal/providers/kubernetes/`.
+- Soak: `scripts/kind-churn.sh <kind kubeconfig> up|run|pause|break|down` (namespace `ocular-churn`,
+  ограниченный набор постоянно меняющихся объектов; отказывается работать не с kind-ocular-dev),
+  desktop с `--test-api` (test-маршруты на отдельном loopback-порту, адрес и токен — в
+  `<data>/test-api.json`, 0600, удаляется при выходе) и `scripts/soak-sample.sh <pid> <data> <csv>`
+  (раз в `INTERVAL` с: MemAvailable, Private_Dirty/PSS/swap дерева, PID-ы, счётчики stats, фаза из
+  `PHASE_FILE`; при MemAvailable < 8 ГБ отказывается — вытесненные страницы уходят из Private_Dirty).
 - `SPK_OCULAR_KLOG=1` — вернуть логи client-go (klog) в stderr для отладки.
 - `E2E_BIN=<путь> E2E_PORT=<порт>` — e2e против другой browser-сборки.
 - Проверка desktop без экрана пользователя: `xvfb-run -a -s "-screen 0 1400x900x24" <скрипт>`
@@ -88,12 +96,31 @@ Go + Wails v3 + React. Спецификация: `docs/specs/2026-09-29-spk-ocul
   политика PVC, контроллер pod-а, HPA, SSAR). Клиент — `web/src/actions/` (`Menu`,
   `ActionDialog`), меню строки и `Delete` — `ResourceTable` (`rowMenu`, `onDelete`), «Действия ▾»
   — `ResourceDrawer`, уведомление — `showNotice` в `store.ts`.
+- Problems: `internal/providers/kubernetes/problems.go` — вид `problems` как набор обычных
+  `viewWatch` (pods, workloads, services, ingresses, nodes, Warning events) через фильтрующие
+  адаптеры `problemsFeed` в один sink (Reset источника → явные удаления), ID строки
+  `<kindID>#<uid>`, `Ref` — сам объект (у события — Event); покрытие — `ViewStatus.Coverage`
+  по источникам. Клиент — пункт навигации и заметка покрытия в `Workspace.tsx`; возможности
+  строки (логи, exec, действия, `Delete`) — по `Ref.Kind` строки, не по виду таблицы.
+- Палитра `Ctrl+K`: `web/src/palette/` (`score.ts` — свой fuzzy-скорер, `items.ts` — источники и
+  грамматика `:`-команд, `store.ts`, `Palette.tsx`); алиасы видов — `KindDescriptor.Aliases`,
+  scope/target — `TargetGroup.aliases` из опционального `provider.CommandAliaser` (k8s: `ns`,
+  `ctx`); недавние объекты — `recent_objects` (миграция 0002, API `RecentObjects`/`TouchRecent`,
+  запись деталями при успешном открытии). Запросы палитры странице (фильтр, открыть объект) —
+  `PageReq{value, seq}`, применяются один раз при рендере.
+- Клавиатура: `web/src/shortcuts.ts` — реестр `KEYS` (его показывает справка `?`,
+  `HelpDialog.tsx`) и `globalShortcut` (один слушатель в `App`); области `F6` — атрибуты
+  `data-area`/`data-area-focus`; возврат фокуса — `focusMark`/`restoreFocus`.
+- Тексты провайдера — `core.Message{key, params, text}`: английский источник в
+  `kubernetes/messages.go`, русский по ключу — `providerTexts` в `web/src/i18n.ts`
+  (`messageText`, неизвестный ключ — английский текст).
 - `internal/providers/synthetic` — тестовый провайдер (`--test-api --test-synthetic`): логи,
   эхо-терминал и порты (`live.go`), переконфигурация (`POST /api/_test/synthetic/reconfigure`),
   вид Workloads с действиями (`actions.go`; `POST /api/_test/synthetic/controls` — права, отказ,
   `unknown`, задержка; `mutate` — чужое изменение/замена; `reset`).
 - `internal/execshim` — shim для exec-плагинов kubeconfig (таймаут, смерть вместе с приложением).
-- `internal/store` — SQLite, миграции `migrations/NNNN_*.sql`, `ui_prefs`, `target_state`.
+- `internal/store` — SQLite, миграции `migrations/NNNN_*.sql`, `ui_prefs`, `target_state`,
+  `recent_objects` (≤ 50 на target, ≤ 500 всего).
 - `internal/desktop` — Wails-окно, D-Bus probe, GPU policy. `cmd/spk-ocular` — cobra, режимы.
 - `web/` — React/Vite/Tailwind/zustand; `tests/e2e/` — Playwright.
 
@@ -256,7 +283,27 @@ Go + Wails v3 + React. Спецификация: `docs/specs/2026-09-29-spk-ocul
   (часть `pnpm build`).
 - Wails `LogLevel` — Warn: Info логирует каждый asset-запрос, Debug — результаты биндингов.
 - Горячие клавиши — по `KeyboardEvent.code` (`web/src/keyboard.ts`), иначе не работают в русской
-  раскладке.
+  раскладке; все глобальные — в реестре `web/src/shortcuts.ts` (справка `?` показывает его же).
+  Терминал получает все клавиши (и `Ctrl+K`, Esc, `F6`); в полях ввода работают только `Ctrl+K`,
+  Esc и `F6` (F-клавиши не печатают — иначе из фильтра не уйти); `?` и `/` — по физической
+  клавише или по символу. — `shortcuts.test.ts`, `Keyboard.test.tsx`, `tests/e2e/keyboard.spec.ts`.
+- Problems — «проблемы в наблюдаемой области»: состояние (не подтверждённое свидетельством) не
+  показывается как сбой; недавний рестарт — по `lastState.terminated.finishedAt` (10 мин),
+  Warning event — одна строка на UID с окном 15 мин по последнему наблюдению, истекают
+  дедлайнами; «0 проблем» при неполном покрытии перечисляет непокрытое. —
+  `problems_test.go`, `TestKindProblems*`, `Problems.test.tsx`, `tests/e2e/problems.spec.ts`.
+- Палитра не делает LIST ради поиска: объекты — только текущая таблица и недавние. Команда
+  выбирается (курсор) только при одном точном совпадении; частичное/неоднозначное — список без
+  курсора, Enter ничего не делает; тихого «первого fuzzy-кандидата» у команд нет. Недавние —
+  с UID в идентичности: заменённый одноимённый открывается как «объекта больше нет». —
+  `items.test.ts`, `Palette.test.tsx`, `internal/store` тесты, `tests/e2e/palette.spec.ts`.
+- `ListScopes` никогда не возвращает `null` (пустой срез), UI терпит и `null`. — e2e palette.
+- Фразы провайдера (последствия, предупреждения, причины) — ключ + параметры, не готовый текст;
+  новый ключ = английский в `messages.go` + русский в `providerTexts`. —
+  `TestTheUIsTranslationsCoverEveryMessage` (разбирает `i18n.ts`).
+- Поздний ответ `RunAction` (после клиентского таймаута) меняет только «неизвестно» своего
+  прогона (номер прогона отдельно от поколения диалога) или становится уведомлением с target-ом;
+  ничего не отправляет заново и не трогает более новый диалог. — `ActionDialog.test.tsx`.
 - Каталог данных — `~/.spk/ocular` (`SPK_OCULAR_HOME`); временные файлы агентов — в
   `.agents/tmp` solution, не в `/tmp`.
 
@@ -354,6 +401,13 @@ Go + Wails v3 + React. Спецификация: `docs/specs/2026-09-29-spk-ocul
   окно приложения уже открыто.
 - **Chromium не засчитывает переполнение grid-треков абсолютных строк целиком** в прокрутку
   контейнера: у строк/заголовка таблицы явный `min-width` (сумма минимальных ширин колонок).
+- **React compiler lint запрещает `setState` в эффектах** — «применить запрос один раз» делается
+  при рендере по смене `seq` (`PageReq`), а обычная навигация его сбрасывает, иначе он повторится
+  при повторном монтировании.
+- **user-event: `{?}`/`{/}` дают `code: Unknown`** — клавиши по символу проверять и по `key`
+  (поэтому `?` и `/` сопоставляются по коду или по символу).
+- **`pnpm exec tsc -b` переписывает отслеживаемый `web/tsconfig.tsbuildinfo`** — перед коммитом
+  `git checkout web/tsconfig.tsbuildinfo`.
 - **Две сетки `resources`**: список событий в деталях — тоже `ResourceTable`; в e2e брать `.first()`.
 - Кандидат из соседей, ещё не встреченный здесь: fetch с `Blob`/`FormData`-телом через `wails://`
   роняет WebKitGTK (сохранение логов в desktop — строковым телом на loopback).
