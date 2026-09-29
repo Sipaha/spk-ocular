@@ -270,13 +270,17 @@ func (s *session) failedWrite(ctx context.Context, def *kindDef, run provider.Ac
 	return false, &provider.Error{Class: provider.ClassInvalid, Message: statusMessage(err)}
 }
 
-// PrepareAction reads what the action would do.
+// prepareExtrasTimeout bounds the optional parts of a plan (rights,
+// autoscalers, pod counts): late ones are reported as unknown.
+const prepareExtrasTimeout = 5 * time.Second
+
+// PrepareAction reads what the action would do; nothing changes.
 func (s *session) PrepareAction(ctx context.Context, ref core.Ref, action string, p core.ActionParams) (core.ActionPlan, error) {
 	def, d, err := s.actionTarget(ref, action, p, false)
 	if err != nil {
 		return core.ActionPlan{}, err
 	}
-	u, err := s.getObject(ctx, ref)
+	u, err := s.getObject(ctx, ref) // an unpinned ref (from a relation) is pinned here
 	if err != nil {
 		return core.ActionPlan{}, err
 	}
@@ -285,13 +289,43 @@ func (s *session) PrepareAction(ctx context.Context, ref core.Ref, action string
 		Where: core.LiveTarget{Provider: ProviderID, Target: s.conn.target, TargetTitle: s.conn.targetTitle, Endpoint: s.conn.endpoint,
 			ConfigHash: s.hash, Ref: ref},
 		Action: d, Params: p, Destructive: d.Destructive,
-		Rights:      core.Rights{State: core.RightsUnknown},
 		Unavailable: actionUnavailable(def, action, u),
 		Expect:      actionExpect(def, action, p, u),
 	}
 	if action == actScale.ID {
 		n := replicas(u.Object)
 		plan.Current = &n
+	}
+	fx := effects(def, action, p, u)
+	plan.Effects, plan.Warnings = fx.effects, fx.warnings
+	plan.Destructive = plan.Destructive || fx.destructive
+
+	// The optional parts, in parallel within one deadline.
+	ectx, cancel := context.WithTimeout(ctx, prepareExtrasTimeout)
+	defer cancel()
+	type extra struct {
+		effects, warnings []string
+	}
+	rights := make(chan core.Rights, 1)
+	extras := make(chan extra, 2)
+	go func() { rights <- s.rights(ectx, def, action, u) }()
+	pending := 0
+	if action == actScale.ID {
+		pending++
+		go func() { w := s.autoscalers(ectx, def, u); extras <- extra{warnings: w} }()
+	}
+	if action == actDelete.ID && def != podsKind && def.gvr.Group == "apps" {
+		pending++
+		go func() { extras <- extra{effects: s.podsOf(ectx, u)} }()
+	}
+	plan.Rights = <-rights
+	for ; pending > 0; pending-- {
+		e := <-extras
+		plan.Effects = append(plan.Effects, e.effects...)
+		plan.Warnings = append(plan.Warnings, e.warnings...)
+	}
+	if def == podsKind && action == actDelete.ID {
+		plan.Effects = append(plan.Effects, s.podController(ctx, u))
 	}
 	return plan, nil
 }

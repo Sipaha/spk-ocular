@@ -69,6 +69,9 @@ func expectNow(t *testing.T, s *session, ref core.Ref, action string, p core.Act
 func writes(c *dynamicfake.FakeDynamicClient) []k8stesting.Action {
 	var out []k8stesting.Action
 	for _, a := range c.Actions() {
+		if a.GetResource().Resource == "selfsubjectaccessreviews" { // a question, not a change
+			continue
+		}
 		if v := a.GetVerb(); v == "patch" || v == "delete" || v == "update" || v == "create" {
 			out = append(out, a)
 		}
