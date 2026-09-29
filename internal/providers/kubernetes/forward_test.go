@@ -683,7 +683,7 @@ func TestConcurrentFailuresShareOnePodCheck(t *testing.T) {
 	u := refusedUpstream(t, newPFServer(t))
 	var calls atomic.Int32
 	release := make(chan struct{})
-	u.alive = func(ctx context.Context) error {
+	u.alive = func(context.Context) error {
 		calls.Add(1)
 		<-release
 		return nil

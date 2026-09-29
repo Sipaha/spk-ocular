@@ -171,7 +171,7 @@ func (b *termBridge) run(parent context.Context, sess TermSession, revoked func(
 	writerDone := make(chan struct{})
 	go func() { defer close(writerDone); b.writeLoop() }()
 	start(b.readLoop)
-	start(func() { b.stdinLoop(inW, runCtx) })
+	start(func() { b.stdinLoop(runCtx, inW) })
 	start(b.pingLoop)
 	outDone := make(chan struct{})
 	go func() { defer close(outDone); b.outputLoop(outR) }()
@@ -469,10 +469,10 @@ func (b *termBridge) dropInputLocked() {
 // on "intr", and — once the terminal is ending — the hang-up keys, in that
 // order and never interleaved. Each written or dropped chunk is confirmed
 // to the page ("iack"), which frees its input window.
-func (b *termBridge) stdinLoop(w *io.PipeWriter, runCtx context.Context) {
+func (b *termBridge) stdinLoop(runCtx context.Context, w *io.PipeWriter) {
 	for {
 		if b.ctx.Err() != nil {
-			b.hangupInput(w, runCtx)
+			b.hangupInput(runCtx, w)
 			return
 		}
 		b.mu.Lock()
@@ -512,7 +512,7 @@ func (b *termBridge) stdinLoop(w *io.PipeWriter, runCtx context.Context) {
 // hangupInput drops what is still queued and, if the command is attached,
 // types ^C, then ^D after a short gap. A write the command does not take
 // ends when its run is cancelled (the pipe closes).
-func (b *termBridge) hangupInput(w io.Writer, runCtx context.Context) {
+func (b *termBridge) hangupInput(runCtx context.Context, w io.Writer) {
 	b.mu.Lock()
 	b.dropInputLocked()
 	b.intr = false

@@ -648,9 +648,11 @@ func TestSizeBoxSkipsTheSizeTheCommandHas(t *testing.T) {
 // page sent before it is queued in the bridge); then until until(ctx)
 // returns it reads its stdin, which it reports.
 func blockedReader(seen chan<- []byte, applied chan<- struct{}, until func(sizes provider.TermSizes), done func(all []byte) bool) func(ctx context.Context, term provider.Terminal) (provider.ExitStatus, error) {
-	return func(ctx context.Context, term provider.Terminal) (provider.ExitStatus, error) {
+	return func(_ context.Context, term provider.Terminal) (provider.ExitStatus, error) {
 		_, _ = term.Stdout.Write([]byte("ready"))
-		for s := term.Sizes.Next(); s != nil && s.Cols != 100; s = term.Sizes.Next() {
+		s := term.Sizes.Next()
+		for s != nil && s.Cols != 100 {
+			s = term.Sizes.Next()
 		}
 		close(applied)
 		until(term.Sizes)
@@ -672,7 +674,7 @@ func TestTermClosingDropsQueuedInputAndHangsUpAfterIt(t *testing.T) {
 	seen, applied := make(chan []byte, 1), make(chan struct{})
 	ft := &fakeTerm{run: blockedReader(seen, applied,
 		func(sizes provider.TermSizes) { // the terminal is gone before the command reads
-			for sizes.Next() != nil {
+			for sizes.Next() != nil { //nolint:revive // drain until the terminal is gone
 			}
 		},
 		func(all []byte) bool { return bytes.HasSuffix(all, []byte{3, 4}) })}
