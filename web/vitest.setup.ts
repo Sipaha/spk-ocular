@@ -17,3 +17,11 @@ vi.mock('@wailsio/runtime', () => ({
 
 // jsdom has no layout: scrollIntoView is missing.
 if (!Element.prototype.scrollIntoView) Element.prototype.scrollIntoView = vi.fn()
+
+// jsdom measures every element as 0×0, so virtualized lists would render no
+// rows. Give elements a screen-sized box.
+Element.prototype.getBoundingClientRect = function () {
+  return { x: 0, y: 0, top: 0, left: 0, right: 1000, bottom: 800, width: 1000, height: 800, toJSON() {} } as DOMRect
+}
+Object.defineProperty(HTMLElement.prototype, 'offsetHeight', { configurable: true, get: () => 800 })
+Object.defineProperty(HTMLElement.prototype, 'offsetWidth', { configurable: true, get: () => 1000 })

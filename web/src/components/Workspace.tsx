@@ -1,0 +1,199 @@
+import { useEffect, useMemo, useState } from 'react'
+import type { Client } from '../api/client'
+import type { KindDescriptor, Row, ScopeSel, ScopesView, Target } from '../api/types'
+import { classLabel, t } from '../i18n'
+import { useView } from '../views/useView'
+import type { ViewHub } from '../views/viewSync'
+import { ResourceTable } from './ResourceTable'
+import { TargetDetails } from './TargetDetails'
+import { SearchIcon, WarningIcon } from './icons'
+
+const OVERVIEW = '__overview'
+
+/** The selected target: kind navigation + the current table. */
+export function Workspace({ client, hub, target }: { client: Client; hub: ViewHub; target: Target }) {
+  const [kinds, setKinds] = useState<KindDescriptor[] | null>(null)
+  const [kindsError, setKindsError] = useState<string | null>(null)
+  const [kind, setKind] = useState<string>('pods')
+  const [scopes, setScopes] = useState<ScopesView | null>(null)
+  const defaultNs = target.details?.find((d) => d.key === 'namespace')?.value
+  const [scope, setScope] = useState<ScopeSel>(defaultNs ? { mode: 'one', name: defaultNs } : { mode: 'all' })
+
+  useEffect(() => {
+    // Workspace is keyed by target: state starts fresh for each one.
+    let live = true
+    client.listKinds(target.provider, target.id).then(
+      (k) => live && setKinds(k),
+      (e) => live && setKindsError(e instanceof Error ? e.message : String(e)),
+    )
+    client.listScopes(target.provider, target.id).then(
+      (s) => live && setScopes(s),
+      () => live && setScopes({ scopes: [], error: { code: 'unavailable', detail: '' } }),
+    )
+    return () => {
+      live = false
+    }
+  }, [client, target.provider, target.id])
+
+  const groups = useMemo(() => {
+    const m = new Map<string, KindDescriptor[]>()
+    for (const k of kinds ?? []) m.set(k.group, [...(m.get(k.group) ?? []), k])
+    return [...m.entries()]
+  }, [kinds])
+  const current = kinds?.find((k) => k.id === kind)
+
+  return (
+    <div className="flex min-h-0 flex-1">
+      <nav aria-label="resources" className="w-44 shrink-0 overflow-y-auto border-r border-line bg-sidebar/60 px-2 py-3">
+        <NavItem active={kind === OVERVIEW} onClick={() => setKind(OVERVIEW)} label={t('nav.overview')} />
+        {groups.map(([group, list]) => (
+          <section key={group} className="mt-3">
+            <h3 className="px-2 pb-1 text-[11px] font-semibold uppercase tracking-wider text-fg-subtle">{group}</h3>
+            {list.map((k) => (
+              <NavItem key={k.id} active={kind === k.id} onClick={() => setKind(k.id)} label={k.title} />
+            ))}
+          </section>
+        ))}
+        {kindsError && <p className="mt-3 px-2 text-xs text-danger">{kindsError}</p>}
+      </nav>
+      <main className="flex min-w-0 flex-1 flex-col">
+        {kind === OVERVIEW || !current ? (
+          <div className="min-h-0 flex-1 overflow-y-auto">
+            <TargetDetails />
+          </div>
+        ) : (
+          <ResourcePage hub={hub} target={target} kind={current} scope={current.scoped ? scope : { mode: 'none' }} scopes={scopes} onScope={setScope} />
+        )}
+      </main>
+    </div>
+  )
+}
+
+function NavItem({ active, onClick, label }: { active: boolean; onClick: () => void; label: string }) {
+  return (
+    <button
+      onClick={onClick}
+      aria-current={active ? 'page' : undefined}
+      className={['block w-full truncate rounded-md px-2 py-1 text-left', active ? 'bg-active text-fg' : 'text-fg-muted hover:bg-hover hover:text-fg'].join(' ')}
+    >
+      {label}
+    </button>
+  )
+}
+
+function ResourcePage(props: {
+  hub: ViewHub
+  target: Target
+  kind: KindDescriptor
+  scope: ScopeSel
+  scopes: ScopesView | null
+  onScope: (s: ScopeSel) => void
+}) {
+  const { hub, target, kind, scope, scopes, onScope } = props
+  const query = useMemo(() => ({ kind: kind.id, scope }), [kind.id, scope])
+  const view = useView(hub, target.provider, target.id, query)
+  const [filter, setFilter] = useState('')
+  const [selected, setSelected] = useState<string | null>(null)
+  const columns = view.kind?.columns ?? kind.columns
+
+  return (
+    <>
+      <header className="flex shrink-0 items-center gap-3 border-b border-line px-4 py-2">
+        <h1 className="text-[15px] font-semibold">{kind.title}</h1>
+        <span className="text-xs text-fg-subtle" aria-label="count">
+          {view.rows.length}
+        </span>
+        {kind.scoped && <ScopePicker scope={scope} scopes={scopes} onScope={onScope} />}
+        <label className="ml-auto flex w-64 items-center gap-2 rounded-md border border-line bg-app px-2 py-1 focus-within:border-accent">
+          <SearchIcon className="h-3.5 w-3.5 text-fg-subtle" />
+          <input
+            data-primary-filter
+            value={filter}
+            onChange={(e) => setFilter(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Escape') {
+                if (filter) setFilter('')
+                else e.currentTarget.blur()
+              } else if (e.key === 'ArrowDown') {
+                e.preventDefault()
+                document.querySelector<HTMLElement>('[data-table-scroll]')?.focus()
+              }
+            }}
+            placeholder={t('table.filter')}
+            aria-label={t('table.filterLabel')}
+            className="w-full bg-transparent outline-none placeholder:text-fg-subtle"
+            spellCheck={false}
+          />
+        </label>
+      </header>
+      <StatusBanner state={view.status.state} cls={view.status.class} message={view.status.message} empty={view.rows.length === 0} />
+      <ResourceTable
+        columns={columns}
+        rows={view.rows}
+        hideScope={scope.mode === 'one'}
+        filter={filter}
+        selected={selected}
+        onSelect={(r: Row) => setSelected(r.id)}
+      />
+    </>
+  )
+}
+
+function ScopePicker({ scope, scopes, onScope }: { scope: ScopeSel; scopes: ScopesView | null; onScope: (s: ScopeSel) => void }) {
+  const [typed, setTyped] = useState(scope.mode === 'one' ? (scope.name ?? '') : '')
+  if (scopes?.error) {
+    // Listing namespaces is forbidden (or failed): the user can still type one.
+    return (
+      <form
+        className="flex items-center gap-1"
+        onSubmit={(e) => {
+          e.preventDefault()
+          onScope(typed.trim() ? { mode: 'one', name: typed.trim() } : { mode: 'all' })
+        }}
+      >
+        <input
+          value={typed}
+          onChange={(e) => setTyped(e.target.value)}
+          placeholder={t('scope.type')}
+          aria-label={t('scope.label')}
+          title={t('scope.cannotList', { error: scopes.error.detail || scopes.error.code })}
+          className="w-44 rounded-md border border-line bg-app px-2 py-1 outline-none focus:border-accent"
+        />
+      </form>
+    )
+  }
+  const value = scope.mode === 'one' ? (scope.name ?? '') : ''
+  const names = scopes?.scopes.map((s) => s.name) ?? []
+  if (value && !names.includes(value)) names.unshift(value)
+  return (
+    <select
+      aria-label={t('scope.label')}
+      value={value}
+      onChange={(e) => onScope(e.target.value ? { mode: 'one', name: e.target.value } : { mode: 'all' })}
+      className="rounded-md border border-line bg-app px-2 py-1 outline-none focus:border-accent"
+    >
+      <option value="">{t('scope.all')}</option>
+      {names.map((n) => (
+        <option key={n} value={n}>
+          {n}
+        </option>
+      ))}
+    </select>
+  )
+}
+
+function StatusBanner({ state, cls, message, empty }: { state: string; cls?: string; message?: string; empty: boolean }) {
+  if (state === 'ready') return empty ? <p className="px-4 py-6 text-center text-fg-subtle">{t('table.empty')}</p> : null
+  if (state === 'loading') return empty ? <p className="px-4 py-6 text-center text-fg-subtle">{t('app.loading')}</p> : null
+  const isErr = state === 'error'
+  return (
+    <div role="alert" className={['mx-4 mt-3 flex items-start gap-2 rounded-md px-3 py-2 text-xs', isErr ? 'bg-danger/10 text-danger' : 'bg-warning/10 text-warning'].join(' ')}>
+      <WarningIcon className="mt-px h-3.5 w-3.5 shrink-0" />
+      <span>
+        <b>{t(isErr ? 'status.error' : 'status.stale')}</b>
+        {cls && ` · ${classLabel(cls)}`}
+        {message && <span className="block opacity-90">{message}</span>}
+      </span>
+    </div>
+  )
+}

@@ -1,5 +1,5 @@
 import { Call, Events } from '@wailsio/runtime'
-import type { ApiEvent, AppInfo, EventType, TargetsView } from './types'
+import type { ApiEvent, AppInfo, EventType, KindDescriptor, Page, Query, ScopesView, TargetsView, ViewInfo } from './types'
 
 export class ApiError extends Error {
   constructor(
@@ -16,6 +16,15 @@ export interface Client {
   listTargets(): Promise<TargetsView>
   /** Remembers the choice across restarts; not_found if the target is gone. */
   selectTarget(provider: string, id: string): Promise<void>
+  listKinds(provider: string, target: string): Promise<KindDescriptor[]>
+  /** Permission problems come back in ScopesView.error, not as a rejection. */
+  listScopes(provider: string, target: string): Promise<ScopesView>
+  openView(provider: string, target: string, query: Query): Promise<ViewInfo>
+  /** Changes after cursor `since` (0: full snapshot); rejects with code "gone" for a closed view. */
+  getRows(viewId: string, since: number): Promise<Page>
+  closeView(viewId: string): Promise<void>
+  /** Renews leases; returns the ids that are gone. */
+  touchViews(viewIds: string[]): Promise<string[]>
   subscribeEvents(onEvent: (e: ApiEvent) => void): () => void
 }
 
@@ -45,6 +54,12 @@ export const httpClient: Client = {
   appInfo: () => post('AppInfo', {}),
   listTargets: () => post('ListTargets', {}),
   selectTarget: (provider, id) => done(post('SelectTarget', { provider, id })),
+  listKinds: (provider, target) => post('ListKinds', { provider, target }),
+  listScopes: (provider, target) => post('ListScopes', { provider, target }),
+  openView: (provider, target, query) => post('OpenView', { provider, target, query }),
+  getRows: (viewId, since) => post('GetRows', { viewId, since }),
+  closeView: (viewId) => done(post('CloseView', { viewId })),
+  touchViews: (viewIds) => post('TouchViews', { viewIds }),
   subscribeEvents(onEvent) {
     const es = new EventSource(`/api/events?token=${encodeURIComponent(tokenMeta())}`)
     es.onmessage = (m) => onEvent(JSON.parse(m.data) as ApiEvent)
@@ -72,12 +87,18 @@ async function wcall<T>(method: string, ...args: unknown[]): Promise<T> {
   }
 }
 
-const EVENT_TYPES: EventType[] = ['targets_changed', 'resync']
+const EVENT_TYPES: EventType[] = ['targets_changed', 'resync', 'view_changed']
 
 export const wailsClient: Client = {
   appInfo: () => wcall('AppInfo'),
   listTargets: () => wcall('ListTargets'),
   selectTarget: (provider, id) => wcall('SelectTarget', provider, id),
+  listKinds: (provider, target) => wcall('ListKinds', provider, target),
+  listScopes: (provider, target) => wcall('ListScopes', provider, target),
+  openView: (provider, target, query) => wcall('OpenView', { provider, target, query }),
+  getRows: (viewId, since) => wcall('GetRows', viewId, since),
+  closeView: (viewId) => wcall('CloseView', viewId),
+  touchViews: (viewIds) => wcall('TouchViews', viewIds),
   subscribeEvents(onEvent) {
     const offs = EVENT_TYPES.map((type) =>
       Events.On(type, (ev: { data: unknown }) => {

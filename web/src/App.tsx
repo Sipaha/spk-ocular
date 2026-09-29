@@ -1,24 +1,30 @@
 import { useEffect, useMemo } from 'react'
 import type { Client } from './api/client'
 import { setLanguage, t } from './i18n'
-import { actions, useStore } from './store'
+import { actions, selectedTarget, useStore } from './store'
+import { ViewHub } from './views/viewSync'
+import { Workspace } from './components/Workspace'
 import { Sidebar } from './components/Sidebar'
 import { StatusBar } from './components/StatusBar'
 import { TargetDetails } from './components/TargetDetails'
 
 export function App({ client }: { client: Client }) {
   const act = useMemo(() => actions(client), [client])
+  const hub = useMemo(() => new ViewHub(client), [client])
   const info = useStore((s) => s.info)
   const view = useStore((s) => s.view)
+  const target = useStore((s) => selectedTarget(s.view))
   const loadError = useStore((s) => s.loadError)
 
   useEffect(() => {
     const off = client.subscribeEvents((e) => {
+      if (e.type === 'view_changed') hub.onViewChanged(e.payload)
+      if (e.type === 'resync') hub.resyncAll()
       if (e.type === 'targets_changed' || e.type === 'resync') void act.reload()
     })
     void act.init()
     return off
-  }, [client, act])
+  }, [client, act, hub])
 
   // Language before the first paint of real content: the app renders the
   // loading state until AppInfo arrives.
@@ -45,9 +51,13 @@ export function App({ client }: { client: Client }) {
     <div className="flex h-full flex-col">
       <div className="flex min-h-0 flex-1">
         <Sidebar act={act} />
-        <main className="min-w-0 flex-1 overflow-y-auto">
-          <TargetDetails />
-        </main>
+        {target ? (
+          <Workspace key={`${target.provider}/${target.id}`} client={client} hub={hub} target={target} />
+        ) : (
+          <main className="min-w-0 flex-1 overflow-y-auto">
+            <TargetDetails />
+          </main>
+        )}
       </div>
       <StatusBar />
     </div>

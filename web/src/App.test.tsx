@@ -16,9 +16,11 @@ describe('App', () => {
     expect(screen.getByText('Pick a context on the left')).toBeInTheDocument()
 
     await userEvent.click(screen.getByRole('option', { name: /dev/ }))
+    expect(await screen.findByRole('heading', { name: 'Pods' })).toBeInTheDocument()
+    expect(screen.getByRole('option', { name: /dev/ })).toHaveAttribute('aria-selected', 'true')
+    await userEvent.click(screen.getByRole('button', { name: 'Overview' }))
     expect(await screen.findByRole('heading', { name: 'dev' })).toBeInTheDocument()
     expect(screen.getByText('https://dev.example:6443')).toBeInTheDocument()
-    expect(screen.getByRole('option', { name: /dev/ })).toHaveAttribute('aria-selected', 'true')
   })
 
   it('"/" focuses the filter; arrows and Enter select from the keyboard', async () => {
@@ -30,7 +32,7 @@ describe('App', () => {
     await userEvent.keyboard('a')
     // alpha, beta, gamma all contain "a": cursor starts on the first one
     await userEvent.keyboard('{ArrowDown}{Enter}')
-    expect(await screen.findByRole('heading', { name: 'beta' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'Pods' })).toBeInTheDocument()
     expect(f.client.selectTarget).toHaveBeenCalledWith('kubernetes', 'beta')
   })
 

@@ -3,7 +3,10 @@ package main
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"os"
+
+	"k8s.io/klog/v2"
 
 	"github.com/spk/spk-ocular/internal/api"
 	"github.com/spk/spk-ocular/internal/events"
@@ -24,6 +27,7 @@ type appCore struct {
 // newCore wires everything and starts the service's watchers. Nothing here
 // touches the network: startup stays fast with an unreachable cluster.
 func newCore(ctx context.Context, mode string) (*appCore, error) {
+	quietClientGo()
 	p, err := paths.Resolve()
 	if err != nil {
 		return nil, err
@@ -51,4 +55,13 @@ func newCore(ctx context.Context, mode string) (*appCore, error) {
 func (c *appCore) Close() {
 	c.Service.Close()
 	_ = c.Store.Close()
+}
+
+// quietClientGo silences client-go's klog output (every failed watch retry
+// is an error line on stderr): the same failures reach the UI as view
+// statuses. SPK_OCULAR_KLOG=1 keeps it for debugging.
+func quietClientGo() {
+	if os.Getenv("SPK_OCULAR_KLOG") == "" {
+		klog.SetSlogLogger(slog.New(slog.DiscardHandler))
+	}
 }

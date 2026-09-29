@@ -25,6 +25,23 @@ const en = {
   'status.desktop': 'desktop',
   'status.browser': 'browser',
   'error.selectFailed': 'Could not select: {error}',
+  'nav.overview': 'Overview',
+  'table.filter': 'Filter (/)',
+  'table.filterLabel': 'Filter rows',
+  'table.empty': 'No objects',
+  'scope.all': 'All namespaces',
+  'scope.label': 'Namespace',
+  'scope.type': 'Type a namespace',
+  'scope.cannotList': 'Cannot list namespaces: {error}',
+  'status.error': 'Cannot show',
+  'status.stale': 'Connection lost, showing last known state',
+  'class.forbidden': 'access denied',
+  'class.unauthorized': 'not authenticated',
+  'class.unavailable': 'cluster unavailable',
+  'class.not_found': 'not found',
+  'class.unsupported': 'not supported',
+  'class.gone': 'gone',
+  'class.internal': 'internal error',
 } as const
 
 export type MessageKey = keyof typeof en
@@ -53,6 +70,23 @@ const ru: Record<MessageKey, string> = {
   'status.desktop': 'desktop',
   'status.browser': 'браузер',
   'error.selectFailed': 'Не удалось выбрать: {error}',
+  'nav.overview': 'Обзор',
+  'table.filter': 'Фильтр (/)',
+  'table.filterLabel': 'Фильтр строк',
+  'table.empty': 'Объектов нет',
+  'scope.all': 'Все namespaces',
+  'scope.label': 'Namespace',
+  'scope.type': 'Введите namespace',
+  'scope.cannotList': 'Нельзя получить список namespaces: {error}',
+  'status.error': 'Не удаётся показать',
+  'status.stale': 'Связь потеряна, показано последнее известное',
+  'class.forbidden': 'нет доступа',
+  'class.unauthorized': 'не аутентифицирован',
+  'class.unavailable': 'кластер недоступен',
+  'class.not_found': 'не найдено',
+  'class.unsupported': 'не поддерживается',
+  'class.gone': 'больше не существует',
+  'class.internal': 'внутренняя ошибка',
 }
 
 const dicts = { en, ru }
@@ -78,3 +112,9 @@ export function detailLabel(key: string): string {
 }
 
 export const _dicts = dicts // tests
+
+/** Error class (API code) label; unknown classes show as-is. */
+export function classLabel(cls: string): string {
+  const k = `class.${cls}` as MessageKey
+  return k in en ? t(k) : cls
+}

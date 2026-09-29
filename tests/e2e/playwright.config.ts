@@ -38,6 +38,11 @@ export default defineConfig({
       LANGUAGE: '',
       LC_ALL: '',
       LC_MESSAGES: '',
+      // Fixture clusters are unreachable by design; no detour through a proxy.
+      HTTPS_PROXY: '',
+      HTTP_PROXY: '',
+      https_proxy: '',
+      http_proxy: '',
     },
     reuseExistingServer: false,
   },

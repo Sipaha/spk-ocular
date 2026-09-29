@@ -26,8 +26,10 @@ export function Sidebar({ act }: { act: Actions }) {
       const typing = e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement
       if (!typing && isFilterKey(e)) {
         e.preventDefault()
-        filterRef.current?.focus()
-        filterRef.current?.select()
+        // The open table's filter wins over the target filter.
+        const el = document.querySelector<HTMLInputElement>('[data-primary-filter]') ?? filterRef.current
+        el?.focus()
+        el?.select()
       }
     }
     window.addEventListener('keydown', onKey)

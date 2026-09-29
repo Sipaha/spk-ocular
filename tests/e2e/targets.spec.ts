@@ -21,14 +21,22 @@ test('lists contexts from KUBECONFIG and ~/.kube, marking current-context', asyn
   await expect(page.getByText('SECRET')).toHaveCount(0)
 })
 
-test('selection shows details and survives a reload', async ({ page }) => {
+const overview = async (page: Page, name: string) => {
+  await page.getByRole('button', { name: 'Overview' }).click()
+  await expect(page.getByRole('heading', { name, exact: true })).toBeVisible()
+}
+
+test('selection opens the resources, keeps details in Overview, survives a reload', async ({ page }) => {
   await page.goto('/')
   await option(page, 'staging').click()
-  await expect(page.getByRole('heading', { name: 'staging' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Pods' })).toBeVisible()
+  // Unreachable fixture cluster: an explained error, never an empty table.
+  await expect(page.getByRole('alert').filter({ hasText: 'Cannot show' })).toBeVisible({ timeout: 15_000 })
+  await overview(page, 'staging')
   await expect(page.getByText('https://staging.example:6443')).toBeVisible()
   await expect(page.getByText('ns-staging')).toBeVisible()
   await page.reload()
-  await expect(page.getByRole('heading', { name: 'staging' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Pods' })).toBeVisible()
   await expect(option(page, 'staging')).toHaveAttribute('aria-selected', 'true')
 })
 
@@ -39,7 +47,8 @@ test('keyboard: / filters, arrows and Enter select', async ({ page }) => {
   await page.keyboard.type('la')
   await expect(page.getByRole('option')).toHaveCount(1)
   await page.keyboard.press('Enter')
-  await expect(page.getByRole('heading', { name: 'lab' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Pods' })).toBeVisible()
+  await expect(option(page, 'lab')).toHaveAttribute('aria-selected', 'true')
   await page.keyboard.press('Escape')
   await expect(page.getByRole('option')).toHaveCount(4)
 })
@@ -56,28 +65,30 @@ test('a broken kubeconfig is a warning; other contexts stay', async ({ page }) =
   await page.goto('/')
   await expect(page.getByRole('option')).toHaveCount(4)
   writeAtomic(e.two, 'apiVersion: v1\nkind: Config\ncontexts: [ {{{\n')
-  await expect(page.getByRole('alert')).toContainText('Could not read 1 file(s)')
-  await expect(page.getByRole('alert')).toContainText('two.yaml')
+  const warning = page.getByRole('alert').filter({ hasText: 'Could not read' })
+  await expect(warning).toContainText('Could not read 1 file(s)')
+  await expect(warning).toContainText('two.yaml')
   await expect(page.getByRole('option')).toHaveCount(3) // prod, staging, lab
   writeAtomic(e.two, TWO)
-  await expect(page.getByRole('alert')).toHaveCount(0)
+  await expect(warning).toHaveCount(0)
   await expect(page.getByRole('option')).toHaveCount(4)
 })
 
 test('a selected context that disappears is deselected, and comes back', async ({ page }) => {
   await page.goto('/')
   await option(page, 'dev').click()
-  await expect(page.getByRole('heading', { name: 'dev' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Pods' })).toBeVisible()
   writeAtomic(e.two, kubeconfig('', 'other'))
   await expect(page.getByText('Pick a context on the left')).toBeVisible()
   writeAtomic(e.two, TWO)
-  await expect(page.getByRole('heading', { name: 'dev' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Pods' })).toBeVisible()
+  await expect(option(page, 'dev')).toHaveAttribute('aria-selected', 'true')
 })
 
 test('screenshot', async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 800 })
   await page.goto('/')
   await option(page, 'prod').click()
-  await expect(page.getByRole('heading', { name: 'prod' })).toBeVisible()
+  await overview(page, 'prod')
   await page.screenshot({ path: `${process.env.E2E_ROOT}/../screenshot.png` })
 })

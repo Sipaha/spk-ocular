@@ -44,10 +44,118 @@ export interface AppInfo {
   language: 'ru' | 'en'
 }
 
-/** resync: the UI fell behind the backend's events; reload all state. */
-export type EventType = 'targets_changed' | 'resync'
+/**
+ * resync: the UI fell behind the backend's events; reload all state.
+ * view_changed: {viewId, version} — pull; {viewId, gone: true} — reopen.
+ */
+export type EventType = 'targets_changed' | 'resync' | 'view_changed'
 
 export interface ApiEvent {
   type: EventType
   payload?: Record<string, unknown>
+}
+
+// ---- resources and views (internal/core, internal/provider, internal/views)
+
+export interface Ref {
+  provider: string
+  target: string
+  scope?: string
+  kind: string
+  name: string
+  uid?: string
+}
+
+export type HealthState = 'ok' | 'progressing' | 'warning' | 'error' | 'terminating' | 'unknown'
+
+export interface Issue {
+  state: HealthState
+  reason: string
+  message?: string
+}
+
+export interface Health {
+  state: HealthState
+  reason?: string
+  message?: string
+  issues?: Issue[]
+}
+
+/** A typed value; `{}` is "no value". */
+export interface Cell {
+  text?: string
+  num?: number
+  /** unix ms (age columns) */
+  time?: number
+}
+
+export interface Row {
+  id: string
+  ref: Ref
+  cells: Cell[]
+  health: Health
+}
+
+export type ColumnType = 'text' | 'number' | 'age' | 'status' | 'ratio' | 'cpu' | 'bytes'
+
+export interface Column {
+  id: string
+  title: string
+  type: ColumnType
+  width?: number
+  scopeColumn?: boolean
+  metric?: boolean
+}
+
+export interface KindDescriptor {
+  id: string
+  title: string
+  group: string
+  columns: Column[]
+  scoped: boolean
+}
+
+export type ScopeMode = 'all' | 'one' | 'none'
+
+export interface ScopeSel {
+  mode: ScopeMode
+  name?: string
+}
+
+export interface Query {
+  kind: string
+  scope: ScopeSel
+  subject?: Ref
+}
+
+export interface CodedErrorDTO {
+  code: string
+  detail: string
+}
+
+export interface ScopesView {
+  scopes: { name: string }[]
+  error?: CodedErrorDTO
+}
+
+export interface ViewInfo {
+  viewId: string
+  kind: KindDescriptor
+}
+
+export type StatusState = 'loading' | 'ready' | 'stale' | 'error'
+
+export interface ViewStatus {
+  state: StatusState
+  class?: string
+  message?: string
+}
+
+export interface Page {
+  viewId: string
+  version: number
+  reset: boolean
+  upserts: Row[]
+  deleted: string[]
+  status: ViewStatus
 }
