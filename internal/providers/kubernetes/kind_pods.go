@@ -15,7 +15,10 @@ import (
 const (
 	podPendingWarnAfter  = 5 * time.Minute  // Pending this long is a problem
 	podNotReadyWarnAfter = 2 * time.Minute  // Running but not ready this long
-	podRecentOOM         = 10 * time.Minute // an OOM kill stays visible this long
+	podRecentRestart     = 10 * time.Minute // a restart (an OOM kill too) stays visible this long
+	// A termination time further ahead than this is clock skew: nothing is
+	// claimed about it; closer ones count as now.
+	clockSkewTolerance = time.Minute
 )
 
 // Waiting reasons that mean the container cannot run as configured.
@@ -195,14 +198,11 @@ func podHealth(u *unstructured.Unstructured, status string, now time.Time) (core
 			issues = append(issues, core.Issue{State: core.HealthError, Reason: nonEmpty(str(cs, "state", "terminated", "reason"), "Error"),
 				Message: containerMsg(cs, fmt.Sprintf("exited with code %d", i64(cs, "state", "terminated", "exitCode")))})
 		}
-		if str(cs, "lastState", "terminated", "reason") == "OOMKilled" {
-			at := timeAt(cs, "lastState", "terminated", "finishedAt")
-			if !at.IsZero() && now.Sub(at) < podRecentOOM {
-				issues = append(issues, core.Issue{State: core.HealthWarning, Reason: "OOMKilled",
-					Message: containerMsg(cs, "killed for exceeding its memory limit "+ago(now, at))})
-				next = earliest(next, at.Add(podRecentOOM))
-			}
+		is, at, ok := recentRestart(cs, now)
+		if ok {
+			issues = append(issues, is)
 		}
+		next = earliest(next, at)
 	}
 
 	created := u.GetCreationTimestamp().Time
@@ -236,6 +236,39 @@ func podHealth(u *unstructured.Unstructured, status string, now time.Time) (core
 	return core.HealthFrom(issues), next
 }
 
+// recentRestart: the container's previous instance ended (the API's
+// termination time — not when the new one started; no local history) within
+// podRecentRestart. next is when the verdict changes: the end of the window,
+// or, for a time further ahead than clock skew allows, when local time
+// catches up with it.
+func recentRestart(cs map[string]any, now time.Time) (is core.Issue, next time.Time, ok bool) {
+	at := timeAt(cs, "lastState", "terminated", "finishedAt")
+	switch {
+	case at.IsZero():
+		return core.Issue{}, time.Time{}, false
+	case at.After(now.Add(clockSkewTolerance)):
+		return core.Issue{}, at.Add(-clockSkewTolerance), false
+	case now.Sub(at) >= podRecentRestart:
+		return core.Issue{}, time.Time{}, false
+	}
+	since := at
+	if since.After(now) {
+		since = now
+	}
+	total := "1 restart reported in total"
+	if n := i64(cs, "restartCount"); n != 1 {
+		total = fmt.Sprintf("%d restarts reported in total", n)
+	}
+	is = core.Issue{State: core.HealthWarning, Reason: "RecentRestart", Since: since.UnixMilli()}
+	if r := str(cs, "lastState", "terminated", "reason"); r == "OOMKilled" {
+		is.Reason = "OOMKilled"
+		is.Message = containerMsg(cs, "the previous instance was killed for exceeding its memory limit; "+total)
+	} else {
+		is.Message = containerMsg(cs, fmt.Sprintf("the previous instance ended with exit code %d (%s); %s", i64(cs, "lastState", "terminated", "exitCode"), nonEmpty(r, "no reason given"), total))
+	}
+	return is, at.Add(podRecentRestart), true
+}
+
 type condition struct {
 	status, reason, message string
 	at                      time.Time
@@ -263,8 +296,6 @@ func nonEmpty(s, fallback string) string {
 	}
 	return s
 }
-
-func ago(now, t time.Time) string { return dur(now.Sub(t)) + " ago" }
 
 // dur is a compact duration: 45s, 12m, 3h, 5d.
 func dur(d time.Duration) string {

@@ -75,6 +75,8 @@ export interface Issue {
   state: HealthState
   reason: string
   message?: string
+  /** When the issue began (unix ms), if the provider knows it. */
+  since?: number
 }
 
 export interface Health {

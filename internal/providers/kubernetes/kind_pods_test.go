@@ -110,3 +110,79 @@ func TestPodProjection(t *testing.T) {
 		})
 	}
 }
+
+// A previous instance ended recently, by the API's own time of that
+// termination (not a restart time; no local history). restartCount is the
+// API's lifetime total. A termination time too far ahead (clock skew) is
+// judged once local time catches up — never left out for good.
+func TestRecentTermination(t *testing.T) {
+	exited := func(ago time.Duration, reason string, code int64) map[string]any {
+		return map[string]any{"terminated": map[string]any{"reason": reason, "exitCode": code, "finishedAt": ts(ago)}}
+	}
+	runningPod := func(status map[string]any) *unstructured.Unstructured {
+		status["phase"] = "Running"
+		status["conditions"] = readyCond("True", time.Minute)
+		return podObj(time.Hour, status)
+	}
+	t.Run("app container", func(t *testing.T) {
+		_, h, next := projectPod(runningPod(map[string]any{"containerStatuses": []any{cs("app", true, 4, running, exited(2*time.Minute, "Error", 1))}}), now)
+		assert.Equal(t, core.HealthWarning, h.State)
+		assert.Equal(t, "RecentRestart", h.Reason)
+		assert.Equal(t, "container app: the previous instance ended with exit code 1 (Error); 4 restarts reported in total", h.Message)
+		assert.Equal(t, now.Add(-2*time.Minute).UnixMilli(), h.Issues[0].Since)
+		assert.Equal(t, now.Add(-2*time.Minute).Add(podRecentRestart), next)
+	})
+	t.Run("exit 0 is a restart too", func(t *testing.T) {
+		_, h, _ := projectPod(runningPod(map[string]any{"containerStatuses": []any{cs("app", true, 1, running, exited(time.Minute, "Completed", 0))}}), now)
+		assert.Equal(t, "RecentRestart", h.Reason)
+		assert.Contains(t, h.Message, "1 restart reported in total")
+	})
+	t.Run("waiting in back-off: the error leads, the termination is listed", func(t *testing.T) {
+		_, h, _ := projectPod(runningPod(map[string]any{"containerStatuses": []any{cs("app", false, 5, waiting("CrashLoopBackOff"), exited(time.Minute, "Error", 1))}}), now)
+		assert.Equal(t, core.HealthError, h.State)
+		assert.Equal(t, "CrashLoopBackOff", h.Reason)
+		assert.Len(t, h.Issues, 2)
+	})
+	t.Run("sidecar in init statuses, several containers", func(t *testing.T) {
+		_, h, next := projectPod(runningPod(map[string]any{
+			"initContainerStatuses": []any{cs("proxy", true, 1, running, exited(time.Minute, "Error", 137))},
+			"containerStatuses":     []any{cs("app", true, 2, running, exited(3*time.Minute, "Error", 1))}}), now)
+		assert.Len(t, h.Issues, 2)
+		assert.Equal(t, now.Add(-3*time.Minute).Add(podRecentRestart), next, "the earliest expiry")
+	})
+	t.Run("OOM keeps its reason, one issue", func(t *testing.T) {
+		_, h, _ := projectPod(runningPod(map[string]any{"containerStatuses": []any{cs("app", true, 1, running, exited(time.Minute, "OOMKilled", 137))}}), now)
+		assert.Equal(t, "OOMKilled", h.Reason)
+		assert.Len(t, h.Issues, 1)
+	})
+	t.Run("no previous instance", func(t *testing.T) {
+		_, h, next := projectPod(runningPod(map[string]any{"containerStatuses": []any{cs("app", true, 0, running, nil)}}), now)
+		assert.Equal(t, core.HealthOK, h.State)
+		assert.True(t, next.IsZero())
+	})
+	t.Run("long ago", func(t *testing.T) {
+		_, h, next := projectPod(runningPod(map[string]any{"containerStatuses": []any{cs("app", true, 4, running, exited(time.Hour, "Error", 1))}}), now)
+		assert.Equal(t, core.HealthOK, h.State)
+		assert.True(t, next.IsZero())
+	})
+	t.Run("a finished pod stays finished", func(t *testing.T) {
+		pod := podObj(time.Hour, map[string]any{"phase": "Succeeded", "containerStatuses": []any{cs("app", false, 1,
+			map[string]any{"terminated": map[string]any{"reason": "Completed"}}, exited(time.Minute, "Error", 1))}})
+		_, h, _ := projectPod(pod, now)
+		assert.Equal(t, core.HealthOK, h.State)
+	})
+	t.Run("slightly ahead: now", func(t *testing.T) {
+		_, h, next := projectPod(runningPod(map[string]any{"containerStatuses": []any{cs("app", true, 1, running, exited(-30*time.Second, "Error", 1))}}), now)
+		assert.Equal(t, "RecentRestart", h.Reason)
+		assert.Equal(t, now.UnixMilli(), h.Issues[0].Since, "never in the future")
+		assert.False(t, next.IsZero())
+	})
+	t.Run("far ahead: judged when local time catches up", func(t *testing.T) {
+		pod := runningPod(map[string]any{"containerStatuses": []any{cs("app", true, 1, running, exited(-5*time.Minute, "Error", 1))}})
+		_, h, next := projectPod(pod, now)
+		assert.Equal(t, core.HealthOK, h.State)
+		assert.Equal(t, now.Add(5*time.Minute-clockSkewTolerance), next)
+		_, h, _ = projectPod(pod, next)
+		assert.Equal(t, "RecentRestart", h.Reason)
+	})
+}

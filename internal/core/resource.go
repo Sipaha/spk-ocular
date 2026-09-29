@@ -56,6 +56,9 @@ type Issue struct {
 	State   HealthState `json:"state"`
 	Reason  string      `json:"reason"`
 	Message string      `json:"message,omitempty"`
+	// Since is when the issue began, unix milliseconds, if the provider
+	// knows it (0: unknown) — not the object's creation or last update.
+	Since int64 `json:"since,omitempty"`
 }
 
 // Health summarizes an object: State/Reason/Message come from the worst
