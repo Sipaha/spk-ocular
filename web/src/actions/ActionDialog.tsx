@@ -26,6 +26,8 @@ type Outcome =
   | { type: 'conflict'; text: string }
   | { type: 'unknown'; text: string }
   | { type: 'failed'; text: string }
+  /** An answer after the timeout said it was done. */
+  | { type: 'lateDone'; text: string }
 
 const RUN_TIMEOUT_MS = 60_000
 
@@ -35,6 +37,18 @@ const RUN_TIMEOUT_MS = 60_000
 const btn = 'rounded-md px-3 py-1 outline-none focus:ring-2 focus:ring-accent focus:ring-offset-2 focus:ring-offset-panel disabled:opacity-50'
 
 class RunTimeout extends Error {}
+
+/** What a run's rejection means for the user. */
+function outcomeOf(e: unknown): Outcome {
+  const code = codeOf(e)
+  // No coded answer (the connection failed): the request may have been applied.
+  const transport = !(e instanceof ApiError) || e.transport
+  return code === 'unknown' || transport
+    ? { type: 'unknown', text: `${t('action.unknown')} ${detailOf(e)}` }
+    : code === 'conflict'
+      ? { type: 'conflict', text: t('action.conflict', { detail: detailOf(e) }) }
+      : { type: 'failed', text: t('action.failed', { class: classLabel(code), detail: detailOf(e) }) }
+}
 
 const detailOf = (e: unknown) => (e instanceof ApiError ? e.detail || e.code : e instanceof Error ? e.message : String(e))
 const codeOf = (e: unknown) => (e instanceof ApiError ? e.code : 'internal')
@@ -59,6 +73,10 @@ export function ActionDialog({ client, req, onClose, runTimeoutMs = RUN_TIMEOUT_
   const lock = useRef(false)
   const live = useRef(true)
   const box = useRef<HTMLFormElement>(null)
+  // Runs are numbered apart from reviews; lateFor: the run whose timeout the
+  // dialog shows as "unknown" (only its late answer may replace it).
+  const runSeq = useRef(0)
+  const lateFor = useRef(0)
   const confirmRef = useRef<HTMLButtonElement>(null)
   const cancelRef = useRef<HTMLButtonElement>(null)
   const countRef = useRef<HTMLInputElement>(null)
@@ -94,6 +112,7 @@ export function ActionDialog({ client, req, onClose, runTimeoutMs = RUN_TIMEOUT_
   }
 
   const prepare = (p: ActionParams) => {
+    lateFor.current = 0
     setBusy('prepare')
     setOutcome(null)
     setSent(false)
@@ -140,12 +159,34 @@ export function ActionDialog({ client, req, onClose, runTimeoutMs = RUN_TIMEOUT_
     setSent(true)
     setBusy('run')
     setOutcome(null)
+    const op = ++runSeq.current
+    const where = `${plan.where.targetTitle} · `
     let timer: ReturnType<typeof setTimeout> | undefined
+    const answer = client.runAction(plan)
+    let timedOut = false
+    // After the timeout the answer still comes: it replaces this run's
+    // "unknown" in its open dialog, else it is a notice with the target. It
+    // never touches a newer confirmation and sends nothing again.
+    const lateAnswer = (out: Outcome, message?: string) => {
+      if (!timedOut) return
+      if (live.current && lateFor.current === op) {
+        lateFor.current = 0
+        setOutcome(out)
+        if (message) showNotice(message)
+      } else showNotice(`${where}${out.type === 'lateDone' ? out.text : `${actionLabel(action)} ${plan.where.ref.name}: ${out.text}`}`, 10_000)
+    }
+    answer.then(
+      (res) => lateAnswer({ type: 'lateDone', text: t('action.lateDone', { message: res.message }) }, res.message),
+      (e) => lateAnswer({ ...outcomeOf(e), text: t('action.late', { text: outcomeOf(e).text }) }),
+    )
     try {
       const res = await Promise.race([
-        client.runAction(plan),
+        answer,
         new Promise<never>((_, reject) => {
-          timer = setTimeout(() => reject(new RunTimeout()), runTimeoutMs)
+          timer = setTimeout(() => {
+            timedOut = true
+            reject(new RunTimeout())
+          }, runTimeoutMs)
         }),
       ])
       // Told even when the dialog is gone (another target was chosen meanwhile).
@@ -154,21 +195,12 @@ export function ActionDialog({ client, req, onClose, runTimeoutMs = RUN_TIMEOUT_
         onClose()
       } else showNotice(`${plan.where.targetTitle} · ${res.message}`)
     } catch (e) {
-      const code = codeOf(e)
-      // No coded answer (the connection failed): the request may have been applied.
-      const transport = !(e instanceof ApiError) || e.transport
-      const out: Outcome =
-        e instanceof RunTimeout
-          ? { type: 'unknown', text: t('action.timeout', { sec: Math.round(runTimeoutMs / 1000) }) }
-          : code === 'unknown' || transport
-            ? { type: 'unknown', text: `${t('action.unknown')} ${detailOf(e)}` }
-            : code === 'conflict'
-              ? { type: 'conflict', text: t('action.conflict', { detail: detailOf(e) }) }
-              : { type: 'failed', text: t('action.failed', { class: classLabel(code), detail: detailOf(e) }) }
+      const out: Outcome = e instanceof RunTimeout ? { type: 'unknown', text: t('action.timeout', { sec: Math.round(runTimeoutMs / 1000) }) } : outcomeOf(e)
       if (!live.current) {
-        showNotice(`${plan.where.targetTitle} · ${actionLabel(action)} ${plan.where.ref.name}: ${out.text}`, 10_000)
+        showNotice(`${where}${actionLabel(action)} ${plan.where.ref.name}: ${out.text}`, 10_000)
         return
       }
+      if (e instanceof RunTimeout) lateFor.current = op
       setOutcome(out)
       setBusy(null)
     } finally {
@@ -203,7 +235,7 @@ export function ActionDialog({ client, req, onClose, runTimeoutMs = RUN_TIMEOUT_
   const name = where?.ref.name ?? ref.name
   const scope = where?.ref.scope ?? ref.scope
   const label = actionLabel(action)
-  const unknownOrDone = outcome?.type === 'unknown'
+  const unknownOrDone = outcome?.type === 'unknown' || outcome?.type === 'lateDone'
 
   return (
     <div className="absolute inset-0 z-20 flex items-start justify-center bg-black/40 pt-20" onMouseDown={(e) => e.target === e.currentTarget && close()}>
@@ -307,7 +339,11 @@ export function ActionDialog({ client, req, onClose, runTimeoutMs = RUN_TIMEOUT_
         )}
 
         {busy === 'run' && <p className="text-fg-subtle">{t('action.running')}</p>}
-        {outcome && (
+        {outcome?.type === 'lateDone' ? (
+          <p role="status" className="rounded-md bg-success/10 px-3 py-2 text-success">
+            {outcome.text}
+          </p>
+        ) : outcome && (
           <p role="alert" className={['rounded-md px-3 py-2', outcome.type === 'unknown' || outcome.type === 'conflict' ? 'bg-warning/10 text-warning' : 'bg-danger/10 text-danger'].join(' ')}>
             {outcome.text}
           </p>

@@ -250,6 +250,63 @@ describe('ActionDialog', () => {
     expect(within(dialog).getByRole('button', { name: 'Close' })).toBeEnabled()
   })
 
+  describe('an answer after the timeout', () => {
+    it('success: its dialog, still showing "unknown", says it was done', async () => {
+      const { f, dialog, onClose } = setup(restart, undefined, 50)
+      const run = deferred<{ message: string }>()
+      f.client.runAction = vi.fn(() => run.promise)
+      await userEvent.click(await within(dialog).findByRole('button', { name: 'Restart' }))
+      expect(await within(dialog).findByRole('alert')).toHaveTextContent('No answer within 0 s')
+      await act(async () => run.resolve({ message: 'deployment api: restart requested' }))
+      expect(within(dialog).getByRole('status')).toHaveTextContent('Done after all: deployment api: restart requested')
+      expect(within(dialog).queryByRole('alert')).not.toBeInTheDocument()
+      expect(useStore.getState().notice).toBe('deployment api: restart requested')
+      expect(onClose).not.toHaveBeenCalled() // the user closes it
+      expect(f.client.runAction).toHaveBeenCalledTimes(1) // nothing is sent again
+    })
+
+    it('a refusal: its dialog says the late answer', async () => {
+      const { f, dialog } = setup(restart, undefined, 50)
+      const run = deferred<{ message: string }>()
+      f.client.runAction = vi.fn(() => run.promise)
+      await userEvent.click(await within(dialog).findByRole('button', { name: 'Restart' }))
+      await within(dialog).findByRole('alert')
+      await act(async () => run.reject(new ApiError('forbidden', 'nope')))
+      expect(within(dialog).getByRole('alert')).toHaveTextContent('The answer came late: Failed · access denied: nope')
+      expect(within(dialog).queryByRole('button', { name: 'Restart' })).not.toBeInTheDocument()
+    })
+
+    it('its dialog closed: a notice says where and what', async () => {
+      const f = fakeClient([k8s('prod')])
+      f.client.prepareAction = vi.fn(async (_r: Ref, _a: string, p: ActionParams) => planOf(restart, p))
+      const run = deferred<{ message: string }>()
+      f.client.runAction = vi.fn(() => run.promise)
+      const { unmount } = render(<ActionDialog client={f.client} req={{ ref, action: restart, kindTitle: 'Deployment' }} onClose={() => {}} runTimeoutMs={50} />)
+      await userEvent.click(await screen.findByRole('button', { name: 'Restart' }))
+      await screen.findByRole('alert')
+      unmount()
+      await act(async () => run.resolve({ message: 'deployment api: restart requested' }))
+      expect(useStore.getState().notice).toBe('prod-ctx · Done after all: deployment api: restart requested')
+    })
+
+    it('another confirmation open meanwhile is left alone', async () => {
+      const f = fakeClient([k8s('prod')])
+      f.client.prepareAction = vi.fn(async (_r: Ref, _a: string, p: ActionParams) => planOf(p.count === undefined ? restart : scale, p))
+      const run = deferred<{ message: string }>()
+      f.client.runAction = vi.fn(() => run.promise)
+      const first = render(<ActionDialog key={1} client={f.client} req={{ ref, action: restart, kindTitle: 'Deployment' }} onClose={() => {}} runTimeoutMs={50} />)
+      await userEvent.click(await screen.findByRole('button', { name: 'Restart' }))
+      await screen.findByRole('alert')
+      first.rerender(<ActionDialog key={2} client={f.client} req={{ ref, action: del, kindTitle: 'Deployment' }} onClose={() => {}} />)
+      const second = screen.getByRole('dialog', { name: 'Delete api' })
+      await within(second).findByRole('button', { name: 'Delete' })
+      await act(async () => run.reject(new ApiError('forbidden', 'nope')))
+      expect(within(second).queryByRole('alert')).not.toBeInTheDocument()
+      expect(within(second).getByRole('button', { name: 'Delete' })).toBeEnabled()
+      expect(useStore.getState().notice).toBe('prod-ctx · Restart api: The answer came late: Failed · access denied: nope')
+    })
+  })
+
   it('a conflict offers a new review; its plan can run', async () => {
     let n = 0
     const { f, dialog } = setup(restart, (p) => planOf(restart, p, { expect: `e${++n}` }))

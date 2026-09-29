@@ -273,6 +273,8 @@ const en = {
   'action.conflict': 'The object or the context changed since this was reviewed: {detail}',
   'action.unknown': 'The request was sent, but its outcome is not known. Check the object before repeating.',
   'action.timeout': 'No answer within {sec} s: the outcome is not known. Check the object before repeating.',
+  'action.lateDone': 'Done after all: {message}',
+  'action.late': 'The answer came late: {text}',
   'action.failed': 'Failed · {class}: {detail}',
   'action.prepareFailed': 'Could not read the current state · {class}: {detail}',
 } as const
@@ -551,6 +553,8 @@ const ru: Record<MessageKey, string> = {
   'action.conflict': 'Объект или контекст изменились после просмотра: {detail}',
   'action.unknown': 'Запрос отправлен, но результат неизвестен. Проверьте объект, прежде чем повторять.',
   'action.timeout': 'Нет ответа за {sec} с: результат неизвестен. Проверьте объект, прежде чем повторять.',
+  'action.lateDone': 'Всё-таки выполнено: {message}',
+  'action.late': 'Ответ пришёл поздно: {text}',
   'action.failed': 'Не выполнено · {class}: {detail}',
   'action.prepareFailed': 'Не удалось прочитать текущее состояние · {class}: {detail}',
 }
