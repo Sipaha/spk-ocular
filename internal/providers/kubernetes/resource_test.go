@@ -2,6 +2,7 @@ package kubernetes
 
 import (
 	"context"
+	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -179,4 +180,64 @@ func TestMetricsParseCacheAndAbsence(t *testing.T) {
 	_, err = s2.Metrics(context.Background(), provider.Query{Kind: "nodes", Scope: core.ScopeSel{Mode: core.ScopeNone}})
 	require.ErrorAs(t, err, &pe)
 	assert.Equal(t, provider.ClassUnsupported, pe.Class)
+}
+
+// pagingReactor serves pods in pages (continue tokens), like the apiserver.
+func pagingReactor(pages [][]*unstructured.Unstructured) k8stesting.ReactionFunc {
+	return func(a k8stesting.Action) (bool, runtime.Object, error) {
+		cont := a.(k8stesting.ListActionImpl).GetListOptions().Continue
+		i := 0
+		if cont != "" {
+			fmt.Sscanf(cont, "page-%d", &i)
+		}
+		l := &unstructured.UnstructuredList{Object: map[string]any{"apiVersion": "v1", "kind": "PodList"}}
+		for _, p := range pages[i] {
+			l.Items = append(l.Items, *p)
+		}
+		if i+1 < len(pages) {
+			l.SetContinue(fmt.Sprintf("page-%d", i+1))
+		}
+		return true, l, nil
+	}
+}
+
+// Review 2026-09-29: relations read only the first page; the owned pods on
+// page 2 were lost behind same-labelled pods of another controller.
+func TestRelationsFollowPagination(t *testing.T) {
+	sel := map[string]any{"matchLabels": map[string]any{"app": "web"}}
+	sts := mk("apps/v1", "StatefulSet", "web", "db", "s1", map[string]any{"spec": map[string]any{"replicas": int64(1), "selector": sel}})
+	podOf := func(name, uid, owner string) *unstructured.Unstructured {
+		return mk("v1", "Pod", "web", name, uid, map[string]any{"metadata": map[string]any{
+			"labels": map[string]any{"app": "web"}, "ownerReferences": []any{map[string]any{"apiVersion": "apps/v1", "kind": "StatefulSet", "name": "x", "uid": owner, "controller": true}}}})
+	}
+	var page1 []*unstructured.Unstructured
+	for i := 0; i < 3; i++ {
+		page1 = append(page1, podOf(fmt.Sprintf("other-%d", i), fmt.Sprintf("o%d", i), "someone-else"))
+	}
+	client := fullFake(sts)
+	client.PrependReactor("list", "pods", pagingReactor([][]*unstructured.Unstructured{page1, {podOf("db-0", "p0", "s1")}}))
+	s := newSession("t", "h", client, false)
+	defer s.Close()
+	r, err := s.Get(context.Background(), core.Ref{Kind: "apps/statefulsets", Scope: "web", Name: "db"})
+	require.NoError(t, err)
+	require.Len(t, r.Relations, 1)
+	assert.Equal(t, "db-0", r.Relations[0].Ref.Name)
+	assert.False(t, r.RelationsTruncated)
+}
+
+func TestRelationsAreCappedAndSayIt(t *testing.T) {
+	svc := mk("v1", "Service", "web", "web", "s1", map[string]any{"spec": map[string]any{"selector": map[string]any{"app": "web"}}})
+	var many []*unstructured.Unstructured
+	for i := 0; i < maxRelated+50; i++ {
+		many = append(many, mk("v1", "Pod", "web", fmt.Sprintf("p-%d", i), fmt.Sprintf("u%d", i), map[string]any{"metadata": map[string]any{"labels": map[string]any{"app": "web"}}}))
+	}
+	client := fullFake(svc)
+	client.PrependReactor("list", "pods", pagingReactor([][]*unstructured.Unstructured{many[:150], many[150:]}))
+	s := newSession("t", "h", client, false)
+	defer s.Close()
+	r, err := s.Get(context.Background(), core.Ref{Kind: "services", Scope: "web", Name: "web"})
+	require.NoError(t, err)
+	assert.Empty(t, r.RelationsError)
+	assert.Len(t, r.Relations, maxRelated)
+	assert.True(t, r.RelationsTruncated)
 }

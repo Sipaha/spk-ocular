@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/labels"
@@ -80,8 +81,9 @@ func (s *session) Get(ctx context.Context, ref core.Ref) (*core.Resource, error)
 		Facts:  facts(def, u, cells),
 		YAML:   string(y),
 	}
-	rels, relErr := s.relations(ctx, def, u)
+	rels, truncated, relErr := s.relations(ctx, def, u)
 	out.Relations = rels
+	out.RelationsTruncated = truncated
 	if relErr != nil {
 		out.RelationsError = relErr.Error()
 	}
@@ -198,9 +200,10 @@ func (s *session) ref(kind *kindDef, ns, name, uid string) core.Ref {
 // relations: owners up; owned pods down (by controller UID, not labels
 // alone); service → pods by selector (none without one); ingress →
 // services; pod → node.
-func (s *session) relations(ctx context.Context, def *kindDef, u *unstructured.Unstructured) ([]core.Relation, error) {
+func (s *session) relations(ctx context.Context, def *kindDef, u *unstructured.Unstructured) ([]core.Relation, bool, error) {
 	var out []core.Relation
 	var errs []error
+	var trunc bool
 	ns := u.GetNamespace()
 	for _, o := range u.GetOwnerReferences() {
 		r := core.Ref{Provider: ProviderID, Target: s.target, Scope: ns, Kind: kindFor(o.APIVersion, o.Kind), Name: o.Name, UID: string(o.UID)}
@@ -211,24 +214,24 @@ func (s *session) relations(ctx context.Context, def *kindDef, u *unstructured.U
 	}
 	switch def {
 	case deploymentsKind:
-		rss, err := s.owned(ctx, replicaSetsKind, u)
+		rss, err := s.owned(ctx, replicaSetsKind, u, &trunc)
 		errs = append(errs, err)
 		for _, rs := range rss {
 			if desiredReplicas(rs.Object) == 0 && i64(rs.Object, "status", "replicas") == 0 {
 				continue // old revisions scaled to zero
 			}
 			out = append(out, core.Relation{Type: "owns", Ref: s.ref(replicaSetsKind, ns, rs.GetName(), string(rs.GetUID()))})
-			pods, err := s.owned(ctx, podsKind, &rs)
+			pods, err := s.owned(ctx, podsKind, &rs, &trunc)
 			errs = append(errs, err)
 			out = append(out, podRelations(s, pods)...)
 		}
 	case statefulSetsKind, daemonSetsKind, replicaSetsKind:
-		pods, err := s.owned(ctx, podsKind, u)
+		pods, err := s.owned(ctx, podsKind, u, &trunc)
 		errs = append(errs, err)
 		out = append(out, podRelations(s, pods)...)
 	case servicesKind:
 		if sel, _, _ := unstructured.NestedStringMap(u.Object, "spec", "selector"); len(sel) > 0 {
-			pods, err := s.list(ctx, podsKind, ns, labels.SelectorFromSet(sel).String())
+			pods, err := s.list(ctx, podsKind, ns, labels.SelectorFromSet(sel).String(), &trunc, nil)
 			errs = append(errs, err)
 			for _, p := range pods {
 				out = append(out, core.Relation{Type: "selects", Ref: s.ref(podsKind, ns, p.GetName(), string(p.GetUID()))})
@@ -253,7 +256,7 @@ func (s *session) relations(ctx context.Context, def *kindDef, u *unstructured.U
 			out = append(out, core.Relation{Type: "runs-on", Ref: s.ref(nodesKind, "", n, "")})
 		}
 	}
-	return out, errors.Join(errs...)
+	return out, trunc, errors.Join(errs...)
 }
 
 func podRelations(s *session, pods []unstructured.Unstructured) []core.Relation {
@@ -266,7 +269,7 @@ func podRelations(s *session, pods []unstructured.Unstructured) []core.Relation 
 
 // owned lists objects of kind controlled by owner: narrowed by the owner's
 // label selector when it has one, then filtered by controller UID.
-func (s *session) owned(ctx context.Context, kind *kindDef, owner *unstructured.Unstructured) ([]unstructured.Unstructured, error) {
+func (s *session) owned(ctx context.Context, kind *kindDef, owner *unstructured.Unstructured, trunc *bool) ([]unstructured.Unstructured, error) {
 	selector := ""
 	if m, ok, _ := unstructured.NestedMap(owner.Object, "spec", "selector"); ok {
 		var ls metav1.LabelSelector
@@ -276,24 +279,44 @@ func (s *session) owned(ctx context.Context, kind *kindDef, owner *unstructured.
 			}
 		}
 	}
-	items, err := s.list(ctx, kind, owner.GetNamespace(), selector)
-	if err != nil {
-		return nil, err
-	}
-	var out []unstructured.Unstructured
-	for _, it := range items {
-		if c := metav1.GetControllerOfNoCopy(&it); c != nil && c.UID == owner.GetUID() {
-			out = append(out, it)
-		}
-	}
-	return out, nil
+	return s.list(ctx, kind, owner.GetNamespace(), selector, trunc, func(it *unstructured.Unstructured) bool {
+		c := metav1.GetControllerOfNoCopy(it)
+		return c != nil && c.UID == owner.GetUID()
+	})
 }
 
-func (s *session) list(ctx context.Context, kind *kindDef, ns, selector string) ([]unstructured.Unstructured, error) {
-	l, err := s.dyn.Resource(kind.gvr).Namespace(ns).List(ctx, metav1.ListOptions{LabelSelector: selector, Limit: maxRelated})
-	if err != nil {
-		class, msg := classify(err)
-		return nil, fmt.Errorf("%s: %s (%s)", kind.desc.Title, msg, class)
+// listPage is the server page size for relation lookups.
+const listPage = 500
+
+// list follows continuation pages until maxRelated objects pass keep (nil:
+// all) or the list ends; *trunc is set when more may exist. An expired
+// continue token ends the walk with what was found (trunc set).
+func (s *session) list(ctx context.Context, kind *kindDef, ns, selector string, trunc *bool, keep func(*unstructured.Unstructured) bool) ([]unstructured.Unstructured, error) {
+	var out []unstructured.Unstructured
+	opts := metav1.ListOptions{LabelSelector: selector, Limit: listPage}
+	for {
+		l, err := s.dyn.Resource(kind.gvr).Namespace(ns).List(ctx, opts)
+		if err != nil {
+			if apierrors.IsResourceExpired(err) || apierrors.IsGone(err) {
+				*trunc = true
+				return out, nil
+			}
+			class, msg := classify(err)
+			return out, fmt.Errorf("%s: %s (%s)", kind.desc.Title, msg, class)
+		}
+		for i := range l.Items {
+			if keep != nil && !keep(&l.Items[i]) {
+				continue
+			}
+			if len(out) == maxRelated {
+				*trunc = true
+				return out, nil
+			}
+			out = append(out, l.Items[i])
+		}
+		if l.GetContinue() == "" {
+			return out, nil
+		}
+		opts.Continue = l.GetContinue()
 	}
-	return l.Items, nil
 }

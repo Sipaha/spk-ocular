@@ -146,6 +146,7 @@ function Details({ hub, target, r, onGo }: { client: Client; hub: ViewHub; targe
             </div>
           ))}
           {r.relationsError && <p className="text-xs text-warning">{t('drawer.relationsPartial', { error: r.relationsError })}</p>}
+          {r.relationsTruncated && <p className="text-xs text-fg-subtle">{t('drawer.relationsTruncated')}</p>}
         </section>
       )}
       {r.ref.uid && r.ref.kind !== 'events' && <ObjectEvents hub={hub} subject={r.ref} />}

@@ -181,6 +181,8 @@ export interface Resource {
   yaml: string
   relations: Relation[] | null
   relationsError?: string
+  /** A relation list hit its cap; more exist. */
+  relationsTruncated?: boolean
 }
 
 export interface Usage {

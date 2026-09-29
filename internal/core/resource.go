@@ -114,4 +114,6 @@ type Resource struct {
 	// RelationsError: some relations could not be looked up (denied, slow);
 	// the rest of the resource is still valid.
 	RelationsError string `json:"relationsError,omitempty"`
+	// RelationsTruncated: a relation list hit its cap (200); more exist.
+	RelationsTruncated bool `json:"relationsTruncated,omitempty"`
 }
