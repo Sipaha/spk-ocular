@@ -171,3 +171,50 @@ func TestOpenViewValidation(t *testing.T) {
 	_, err = s2.ListKinds(ctx, "plain", "x")
 	assert.True(t, IsCoded(err, CodeUnsupported), "providers without Open")
 }
+
+type metricSession struct {
+	*fakeSession
+	m   provider.Metrics
+	err error
+}
+
+func (m *metricSession) Metrics(context.Context, provider.Query) (provider.Metrics, error) {
+	return m.m, m.err
+}
+
+type metricOpenable struct {
+	*openable
+	ms *metricSession
+}
+
+func (o *metricOpenable) Open(ctx context.Context, target string) (provider.Session, error) {
+	s, _ := o.openable.Open(ctx, target)
+	o.ms.fakeSession = s.(*fakeSession)
+	return o.ms, nil
+}
+
+func TestGetMetricsJoinsCurrentRowsAndReportsStatus(t *testing.T) {
+	ctx := context.Background()
+	ms := &metricSession{m: provider.Metrics{Values: map[string]provider.Usage{
+		"/p":         {CPU: 0.1, Memory: 1024}, // fakeSession's row: Ref{Name: "p"}, no scope
+		"ns/deleted": {CPU: 9},
+	}}}
+	k := &metricOpenable{openable: newOpenable("a"), ms: ms}
+	s, _ := newService(t, k)
+	info, err := s.OpenView(ctx, OpenViewRequest{Provider: "k", Target: "a", Query: provider.Query{Kind: "pods", Scope: allScopes}})
+	require.NoError(t, err)
+
+	mv, err := s.GetMetrics(ctx, info.ViewID)
+	require.NoError(t, err)
+	assert.Equal(t, "ok", mv.Status)
+	assert.Equal(t, map[string]provider.Usage{"1": {CPU: 0.1, Memory: 1024}}, mv.Values, "keyed by row id; objects not in the view get nothing")
+
+	ms.err = &provider.Error{Class: provider.ClassUnsupported, Message: "metrics.k8s.io is not installed"}
+	mv, err = s.GetMetrics(ctx, info.ViewID)
+	require.NoError(t, err, "a missing metrics API is a status, not a failed call")
+	assert.Equal(t, "unsupported", mv.Status)
+	assert.Empty(t, mv.Values)
+
+	_, err = s.GetMetrics(ctx, "v-unknown")
+	assert.True(t, IsCoded(err, CodeGone))
+}

@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/spk/spk-ocular/internal/api"
+	"github.com/spk/spk-ocular/internal/core"
 	"github.com/spk/spk-ocular/internal/events"
 )
 
@@ -121,6 +122,14 @@ func (h *HTTP) routes() {
 		ViewIDs []string `json:"viewIds"`
 	}) (any, error) {
 		return h.api.TouchViews(ctx, r.ViewIDs)
+	}))
+	h.mux.HandleFunc("POST /api/GetResource", handle(func(ctx context.Context, r *core.Ref) (any, error) {
+		return h.api.GetResource(ctx, *r)
+	}))
+	h.mux.HandleFunc("POST /api/GetMetrics", handle(func(ctx context.Context, r *struct {
+		ViewID string `json:"viewId"`
+	}) (any, error) {
+		return h.api.GetMetrics(ctx, r.ViewID)
 	}))
 	h.mux.HandleFunc("GET /api/events", h.serveEvents)
 }

@@ -107,4 +107,7 @@ type Resource struct {
 	Facts     []Detail   `json:"facts"`
 	YAML      string     `json:"yaml"`
 	Relations []Relation `json:"relations"`
+	// RelationsError: some relations could not be looked up (denied, slow);
+	// the rest of the resource is still valid.
+	RelationsError string `json:"relationsError,omitempty"`
 }

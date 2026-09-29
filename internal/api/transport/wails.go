@@ -43,3 +43,9 @@ func (w *API) CloseView(viewID string) error { return w.a.CloseView(context.Back
 func (w *API) TouchViews(viewIDs []string) ([]string, error) {
 	return w.a.TouchViews(context.Background(), viewIDs)
 }
+func (w *API) GetResource(ref core.Ref) (*core.Resource, error) {
+	return w.a.GetResource(context.Background(), ref)
+}
+func (w *API) GetMetrics(viewID string) (api.MetricsView, error) {
+	return w.a.GetMetrics(context.Background(), viewID)
+}

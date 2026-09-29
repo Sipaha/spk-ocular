@@ -8,6 +8,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/spk/spk-ocular/internal/core"
 	"github.com/spk/spk-ocular/internal/events"
 	"github.com/spk/spk-ocular/internal/provider"
 )
@@ -168,6 +169,17 @@ func (m *Manager) Get(id string, since uint64) (Page, error) {
 		return Page{}, ErrGone
 	}
 	return e.view.Since(since), nil
+}
+
+// Info returns a view's owner, query and current rows (ErrGone if closed).
+func (m *Manager) Info(id string) (owner string, q provider.Query, rows []core.Row, err error) {
+	m.mu.Lock()
+	e := m.views[id]
+	m.mu.Unlock()
+	if e == nil {
+		return "", provider.Query{}, nil, ErrGone
+	}
+	return e.owner, e.query, e.view.Since(0).Upserts, nil
 }
 
 // Close stops one view; closing an unknown view is a no-op.

@@ -209,3 +209,54 @@ func TestKindEventsOfOneObject(t *testing.T) {
 	_, err = m.Open("s", sess, provider.Query{Kind: "pods", Scope: ns, Subject: &crash})
 	assert.Error(t, err, "only events narrow to an object")
 }
+
+func TestKindDetailsAndRelations(t *testing.T) {
+	p, target := kindProvider(t)
+	sess, err := p.Open(context.Background(), target)
+	require.NoError(t, err)
+	defer sess.Close()
+	r, err := sess.Get(context.Background(), core.Ref{Kind: "apps/deployments", Scope: "ocular-demo", Name: "web"})
+	require.NoError(t, err)
+	assert.Empty(t, r.RelationsError)
+	var rs, pods int
+	for _, rel := range r.Relations {
+		switch rel.Ref.Kind {
+		case "apps/replicasets":
+			rs++
+		case "pods":
+			pods++
+		}
+	}
+	assert.Equal(t, 1, rs)
+	assert.Equal(t, 3, pods)
+
+	sec, err := sess.Get(context.Background(), core.Ref{Kind: "secrets", Scope: "ocular-demo", Name: "web-credentials"})
+	require.NoError(t, err)
+	assert.NotContains(t, sec.YAML, "bm90LWEtcmVhbC1wYXNzd29yZA==") // base64 of the seeded password
+	assert.Contains(t, sec.YAML, "password: <19 bytes>")
+}
+
+// Needs metrics-server (scripts/kind-metrics.sh, run by make test-kind).
+func TestKindMetrics(t *testing.T) {
+	p, target := kindProvider(t)
+	sess, err := p.Open(context.Background(), target)
+	require.NoError(t, err)
+	defer sess.Close()
+	src := sess.(provider.MetricsSource)
+	var m provider.Metrics
+	require.Eventually(t, func() bool {
+		m, err = src.Metrics(context.Background(), provider.Query{Kind: "pods", Scope: core.ScopeSel{Mode: core.ScopeOne, Name: "ocular-demo"}})
+		return err == nil && len(m.Values) > 0
+	}, 90*time.Second, 5*time.Second, "err: %v", err)
+	var sawWeb bool
+	for k, u := range m.Values {
+		if len(k) > len("ocular-demo/web-") && k[:len("ocular-demo/web-")] == "ocular-demo/web-" {
+			sawWeb = true
+			assert.Greater(t, u.Memory, 1024.0*1024, "an nginx pod uses more than 1Mi")
+		}
+	}
+	assert.True(t, sawWeb)
+	nodes, err := src.Metrics(context.Background(), provider.Query{Kind: "nodes", Scope: core.ScopeSel{Mode: core.ScopeNone}})
+	require.NoError(t, err)
+	assert.Contains(t, nodes.Values, "/ocular-dev-control-plane")
+}

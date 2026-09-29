@@ -92,12 +92,13 @@ func configHash(name string, cfg *clientcmdapi.Config, files []string) string {
 }
 
 type session struct {
-	target string
-	hash   string
-	dyn    dynamic.Interface
-	caches *cacheManager
-	kinds  *kindRegistry
-	now    func() time.Time
+	target  string
+	hash    string
+	dyn     dynamic.Interface
+	caches  *cacheManager
+	kinds   *kindRegistry
+	now     func() time.Time
+	metrics metricsCache
 }
 
 func newSession(target, hash string, dyn dynamic.Interface, watchList bool) *session {
@@ -173,8 +174,4 @@ func (s *session) detach(c *informerCache, w *viewWatch) {
 	delete(c.watchers, w)
 	c.mu.Unlock()
 	s.caches.release(c)
-}
-
-func (s *session) Get(context.Context, core.Ref) (*core.Resource, error) {
-	return nil, &provider.Error{Class: provider.ClassUnsupported, Message: "details are not implemented yet"}
 }

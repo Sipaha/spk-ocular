@@ -6,6 +6,7 @@ package api
 import (
 	"context"
 	"errors"
+	"time"
 
 	"github.com/spk/spk-ocular/internal/core"
 	"github.com/spk/spk-ocular/internal/events"
@@ -36,6 +37,20 @@ type API interface {
 	// TouchViews renews the leases of the UI's open views and returns the
 	// ids that are gone.
 	TouchViews(ctx context.Context, viewIDs []string) ([]string, error)
+	// GetResource: the details of one object (YAML, facts, relations).
+	GetResource(ctx context.Context, ref core.Ref) (*core.Resource, error)
+	// GetMetrics: usage for the rows of an open view. Status is "ok" or an
+	// error class (unsupported = no metrics API) — never an empty success.
+	GetMetrics(ctx context.Context, viewID string) (MetricsView, error)
+}
+
+type MetricsView struct {
+	Status    string    `json:"status"`
+	Message   string    `json:"message,omitempty"`
+	Timestamp time.Time `json:"timestamp,omitzero"`
+	Window    string    `json:"window,omitempty"`
+	// Values by row id; rows without a sample are absent (unknown).
+	Values map[string]provider.Usage `json:"values"`
 }
 
 type OpenViewRequest struct {

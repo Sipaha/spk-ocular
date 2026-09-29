@@ -189,3 +189,45 @@ func (s *Service) TouchViews(_ context.Context, viewIDs []string) ([]string, err
 	}
 	return gone, nil
 }
+
+func (s *Service) GetResource(ctx context.Context, ref core.Ref) (*core.Resource, error) {
+	sess, err := s.session(ctx, ref.Provider, ref.Target)
+	if err != nil {
+		return nil, err
+	}
+	r, err := sess.Get(ctx, ref)
+	if err != nil {
+		return nil, fromProvider(err)
+	}
+	return r, nil
+}
+
+func (s *Service) GetMetrics(ctx context.Context, viewID string) (MetricsView, error) {
+	owner, q, rows, err := s.views.Info(viewID)
+	if errors.Is(err, views.ErrGone) {
+		return MetricsView{}, coded(CodeGone, err)
+	}
+	s.sessMu.Lock()
+	e := s.sessions[owner]
+	s.sessMu.Unlock()
+	if e == nil {
+		return MetricsView{}, coded(CodeGone, errors.New("session closed"))
+	}
+	src, ok := e.sess.(provider.MetricsSource)
+	if !ok {
+		return MetricsView{Status: CodeUnsupported, Values: map[string]provider.Usage{}}, nil
+	}
+	m, err := src.Metrics(ctx, q)
+	if err != nil {
+		ce := fromProvider(err)
+		return MetricsView{Status: ce.Code, Message: ce.Detail, Values: map[string]provider.Usage{}}, nil
+	}
+	out := MetricsView{Status: "ok", Timestamp: m.Timestamp, Window: m.Window, Values: map[string]provider.Usage{}}
+	// Join by the current rows: a deleted or replaced object gets nothing.
+	for _, r := range rows {
+		if u, ok := m.Values[r.Ref.Scope+"/"+r.Ref.Name]; ok {
+			out.Values[r.ID] = u
+		}
+	}
+	return out, nil
+}
