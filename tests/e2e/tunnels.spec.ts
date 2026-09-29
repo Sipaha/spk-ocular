@@ -1,6 +1,6 @@
 import { expect, test, type Page } from '@playwright/test'
 import { createServer, type Server } from 'node:net'
-import { selectObject, since, stats } from './synth'
+import { expectScreen, reconfigure, selectObject, since, stats } from './synth'
 
 // Tunnels to the synthetic provider's ports (in-process HTTP servers). The
 // request goes through the runner's own HTTP client, not the page.
@@ -83,4 +83,33 @@ test('a local port that is taken is an error in the dialog', async ({ page }) =>
   } finally {
     busy.close()
   }
+})
+
+test('a terminal and a tunnel opened before a reconfiguration say so; new ones do not', async ({ page }) => {
+  const dlg = await forwardDialog(page, 'api', 80)
+  await dlg.getByRole('button', { name: 'Forward' }).click()
+  const row = panel(page).getByRole('listitem', { name: 'services/api:80' })
+  await expect(row).toContainText('connected')
+  await page.keyboard.press('Escape') // the drawer
+  await page.getByRole('grid', { name: 'resources' }).getByRole('gridcell', { name: 'api', exact: true }).click()
+  await page.keyboard.press('s')
+  await expectScreen(page, 'synthetic terminal on api')
+  const tab = page.getByRole('tab', { name: /main · api/ })
+  await expect(tab.getByText('config changed')).toHaveCount(0)
+  await expect(row.getByText('config changed')).toHaveCount(0)
+
+  await reconfigure(page)
+  await expect(tab.getByText('config changed')).toBeVisible()
+  await expect(tab.getByText('config changed')).toHaveAttribute('title', /still uses the old one/)
+  await expect(row.getByText('config changed')).toBeVisible()
+  const addr = (await row.locator('[data-address]').textContent())!.split(/\s+/)[0]
+  expect(await (await fetch(`http://${addr}/still`)).text()).toBe('hello from api:80 /still\n') // and works
+
+  // a terminal opened now uses the new configuration
+  await page.getByRole('grid', { name: 'resources' }).getByRole('gridcell', { name: 'api', exact: true }).click()
+  await page.keyboard.press('s')
+  await expect(page.getByRole('tab', { name: /main · api/ })).toHaveCount(2)
+  await expect(page.getByRole('tab', { name: /main · api/ }).nth(1)).toContainText('main · api')
+  await expect(page.getByRole('tab', { name: /main · api/ }).nth(1).getByText('config changed')).toHaveCount(0)
+  await row.getByRole('button', { name: 'Stop' }).click()
 })

@@ -44,3 +44,9 @@ export async function since(page: Page, base: Stats): Promise<Stats> {
 
 /** Clicks into the active terminal (focus). */
 export const focusTerminal = (page: Page) => activePanel(page).locator('[data-terminal-host]').click()
+
+/** Changes the synthetic target's configuration (like an edited kubeconfig). */
+export async function reconfigure(page: Page) {
+  const res = await page.request.post('/api/_test/synthetic/reconfigure', { headers: { Authorization: `Bearer ${await token(page)}` } })
+  expect(res.ok()).toBeTruthy()
+}

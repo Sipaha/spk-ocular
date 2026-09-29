@@ -193,3 +193,14 @@ test('a tunnel to a service: the runner reaches nginx through it', async ({ page
   await expect(tunnel).toHaveCount(0)
   await expect(fetch(`http://${addr}/`)).rejects.toThrow()
 })
+
+test('a narrow window scrolls the table sideways, never the page', async ({ page }) => {
+  await page.setViewportSize({ width: 1000, height: 800 })
+  await openTarget(page, 'kind-ocular-dev')
+  const grid = (await kindPage(page, 'Pods', '')).first() // the drawer's events are a grid too
+  await row(grid, /^web-/).first().click()
+  await expect(page.getByRole('dialog', { name: /^pods web-/ })).toBeVisible()
+  expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBe(0)
+  await grid.locator('[data-table-scroll]').evaluate((e) => (e.scrollLeft = 150))
+  await expect.poll(() => grid.evaluate((g) => g.children[0].scrollLeft)).toBe(150) // the header follows
+})

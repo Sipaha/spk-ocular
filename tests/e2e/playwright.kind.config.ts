@@ -37,5 +37,8 @@ export default defineConfig({
       LANG: 'en_US.UTF-8', LANGUAGE: '', LC_ALL: '', LC_MESSAGES: '',
     },
     reuseExistingServer: false,
+    // SIGTERM, not the default SIGKILL: the app hangs up its terminals (no
+    // shells left in the cluster) and frees its tunnels' ports.
+    gracefulShutdown: { signal: 'SIGTERM', timeout: 5000 },
   },
 })
