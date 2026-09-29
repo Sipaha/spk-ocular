@@ -10,6 +10,7 @@ import (
 	"time"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/rest"
@@ -115,6 +116,8 @@ type session struct {
 	// conn is the connection snapshot live resources (terminals, tunnels)
 	// keep; it outlives the session.
 	conn *conn
+	// beforeWrite (tests) runs between an action's read and its write.
+	beforeWrite func(action string, u *unstructured.Unstructured)
 }
 
 func newSession(target, hash string, dyn dynamic.Interface, watchList bool) *session {

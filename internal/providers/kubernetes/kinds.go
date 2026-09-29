@@ -128,7 +128,9 @@ func newKindRegistry(defs ...*kindDef) *kindRegistry {
 func (r *kindRegistry) descriptors() []core.KindDescriptor {
 	out := make([]core.KindDescriptor, 0, len(r.list))
 	for _, d := range r.list {
-		out = append(out, d.desc)
+		desc := d.desc
+		desc.Actions = kindActions[d]
+		out = append(out, desc)
 	}
 	return out
 }
