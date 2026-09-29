@@ -7,6 +7,9 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -91,4 +94,44 @@ func TestSyntheticActionsThroughTheAPI(t *testing.T) {
 	assert.Contains(t, body, `"code":"conflict"`)
 	code, _ = post("/api/_test/synthetic/mutate", map[string]any{"object": "nope"})
 	assert.Equal(t, http.StatusNotFound, code)
+}
+
+// The desktop's test routes: loopback, a token, where to find both in the
+// data directory (owner-only), gone when stopped.
+func TestDesktopTestAPI(t *testing.T) {
+	t.Setenv(paths.EnvHome, t.TempDir())
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("KUBECONFIG", "")
+	c, err := newCore(context.Background(), "desktop", false)
+	require.NoError(t, err)
+	t.Cleanup(c.Close)
+	stop, err := startTestAPI(c)
+	require.NoError(t, err)
+	file := filepath.Join(c.Paths.DataDir, testAPIFile)
+	fi, err := os.Stat(file)
+	require.NoError(t, err)
+	assert.Equal(t, os.FileMode(0o600), fi.Mode().Perm())
+	var info struct{ URL, Token string }
+	b, _ := os.ReadFile(file)
+	require.NoError(t, json.Unmarshal(b, &info))
+	assert.True(t, strings.HasPrefix(info.URL, "http://127.0.0.1:"), info.URL)
+
+	resp, err := http.Get(info.URL + "/api/_test/stats")
+	require.NoError(t, err)
+	_ = resp.Body.Close()
+	assert.Equal(t, http.StatusUnauthorized, resp.StatusCode)
+	req, _ := http.NewRequest(http.MethodGet, info.URL+"/api/_test/stats", nil)
+	req.Header.Set("Authorization", "Bearer "+info.Token)
+	resp, err = http.DefaultClient.Do(req)
+	require.NoError(t, err)
+	var st map[string]any
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&st))
+	_ = resp.Body.Close()
+	assert.Contains(t, st, "goroutines")
+
+	stop()
+	_, err = os.Stat(file)
+	assert.True(t, os.IsNotExist(err))
+	_, err = http.Get(info.URL + "/api/_test/stats")
+	assert.Error(t, err, "the listener is closed")
 }

@@ -228,3 +228,20 @@ func TestScopesForbiddenIsClassified(t *testing.T) {
 	require.ErrorAs(t, err, &pe)
 	assert.Equal(t, provider.ClassForbidden, pe.Class)
 }
+
+// Stats count what a soak must see: list and watch requests (a relist
+// shows as another list or initial sync), watchers and pending deadlines.
+func TestStatsCountRequestsWatchersAndDeadlines(t *testing.T) {
+	client := fakeClient(pod("web", "p", "uid-p", func(o map[string]any) {
+		o["status"] = map[string]any{"phase": "Pending"}
+		o["metadata"].(map[string]any)["creationTimestamp"] = time.Now().UTC().Format(time.RFC3339)
+	}))
+	h := newHarness(t, client)
+	id := h.open("pods", all)
+	h.until(id, isReady)
+	require.Eventually(t, func() bool { return h.sess.Stats()["cache_watch_starts"] >= 1 }, 5*time.Second, 10*time.Millisecond)
+	st := h.sess.Stats()
+	assert.GreaterOrEqual(t, st["cache_lists"]+st["cache_initial_syncs"], 1)
+	assert.Equal(t, 1, st["watchers"])
+	assert.Equal(t, 1, st["deadlines"], "a fresh Pending pod turns into a warning later")
+}

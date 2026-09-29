@@ -44,6 +44,7 @@ type statusListWatch struct {
 	report    transportReport
 	ended     func() // a watch stream ended (renewal or a dropped connection)
 	watchList bool   // the client supports WatchList semantics (real clients do)
+	counts    *requestCounts
 }
 
 var (
@@ -61,6 +62,7 @@ func (lw *statusListWatch) opts(o metav1.ListOptions) metav1.ListOptions {
 func (lw *statusListWatch) ListWithContext(ctx context.Context, o metav1.ListOptions) (runtime.Object, error) {
 	ctx, cancel := context.WithTimeout(ctx, listTimeout)
 	defer cancel()
+	lw.counts.lists.Add(1)
 	obj, err := lw.res.List(ctx, lw.opts(o))
 	lw.report(err)
 	return obj, err
@@ -70,6 +72,10 @@ func (lw *statusListWatch) WatchWithContext(ctx context.Context, o metav1.ListOp
 	// Cancel only if the stream does not start in time; once it has, the
 	// context lives until the stream ends or is stopped.
 	ctx, cancel := context.WithCancel(ctx)
+	lw.counts.watchStarts.Add(1)
+	if o.SendInitialEvents != nil && *o.SendInitialEvents {
+		lw.counts.initialSyncs.Add(1) // WatchList: the state comes by the watch (a relist)
+	}
 	timer := time.AfterFunc(watchEstablishTimeout, cancel)
 	w, err := lw.res.Watch(ctx, lw.opts(o))
 	if !timer.Stop() && err == nil {

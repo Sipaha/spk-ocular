@@ -14,15 +14,22 @@ import (
 func TestRootDispatchesModes(t *testing.T) {
 	var gotBrowser *browserOpts
 	desktop := false
+	var gotDesktop browserOpts
 	r := runners{
 		browser: func(_ context.Context, o browserOpts) error { gotBrowser = &o; return nil },
-		desktop: func(context.Context) error { desktop = true; return nil },
+		desktop: func(_ context.Context, o browserOpts) error { desktop, gotDesktop = true, o; return nil },
 	}
 
 	cmd := newRootCmd(r)
 	cmd.SetArgs([]string{})
 	require.NoError(t, cmd.Execute())
 	assert.True(t, desktop, "no flags: desktop window")
+	assert.Equal(t, browserOpts{Port: 5190}, gotDesktop)
+
+	cmd = newRootCmd(r)
+	cmd.SetArgs([]string{"--test-api"})
+	require.NoError(t, cmd.Execute())
+	assert.True(t, gotDesktop.TestAPI, "the desktop app has test routes too")
 
 	cmd = newRootCmd(r)
 	cmd.SetArgs([]string{"--browser", "--port", "6001", "--test-api"})

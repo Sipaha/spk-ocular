@@ -27,7 +27,7 @@ type browserOpts struct {
 
 type runners struct {
 	browser func(ctx context.Context, o browserOpts) error
-	desktop func(ctx context.Context) error
+	desktop func(ctx context.Context, o browserOpts) error
 }
 
 func newRootCmd(run runners) *cobra.Command {
@@ -46,12 +46,12 @@ func newRootCmd(run runners) *cobra.Command {
 			if browser {
 				return run.browser(cmd.Context(), o)
 			}
-			return run.desktop(cmd.Context())
+			return run.desktop(cmd.Context(), o)
 		},
 	}
 	root.Flags().BoolVar(&browser, "browser", false, "Serve the UI over HTTP on localhost instead of opening a window")
 	root.Flags().IntVar(&o.Port, "port", 5190, "HTTP port for --browser")
-	root.Flags().BoolVar(&o.TestAPI, "test-api", false, "Expose /api/_test/* automation routes (development/e2e only)")
+	root.Flags().BoolVar(&o.TestAPI, "test-api", false, "Expose /api/_test/* automation routes (development/e2e only; desktop: on a loopback port written to test-api.json in the data directory)")
 	root.Flags().BoolVar(&o.TestSynthetic, "test-synthetic", false, "Add a synthetic test provider (e2e only; needs --test-api)")
 	_ = root.Flags().MarkHidden("test-synthetic")
 	root.AddCommand(&cobra.Command{

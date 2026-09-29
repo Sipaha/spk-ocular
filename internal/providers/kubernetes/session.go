@@ -246,5 +246,8 @@ func (s *session) detach(c *informerCache, w *viewWatch) {
 // Stats reports cache counts for leak checks (/api/_test/stats).
 func (s *session) Stats() map[string]int {
 	active, idle := s.caches.stats()
-	return map[string]int{"caches_active": active, "caches_idle": idle}
+	watchers, deadlines := s.caches.watchStats()
+	return map[string]int{"caches_active": active, "caches_idle": idle, "watchers": watchers, "deadlines": deadlines,
+		"cache_lists": int(s.caches.counts.lists.Load()), "cache_watch_starts": int(s.caches.counts.watchStarts.Load()),
+		"cache_initial_syncs": int(s.caches.counts.initialSyncs.Load())}
 }

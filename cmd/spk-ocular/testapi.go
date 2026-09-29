@@ -1,11 +1,18 @@
 package main
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
+	"net"
 	"net/http"
+	"os"
+	"path/filepath"
 	"runtime"
 	"runtime/debug"
+	"time"
 
+	"github.com/spk/spk-ocular/internal/api/transport"
 	"github.com/spk/spk-ocular/internal/providers/synthetic"
 )
 
@@ -83,4 +90,36 @@ func testRoutes(c *appCore) http.Handler {
 		w.WriteHeader(http.StatusNoContent)
 	})
 	return mux
+}
+
+// testAPIFile (in the data directory) tells automation where the desktop's
+// test routes listen and their token.
+const testAPIFile = "test-api.json"
+
+// startTestAPI serves the test routes for the desktop app (--test-api, soak
+// and desktop tests): a loopback port of their own with a token of their
+// own, written to testAPIFile (owner-only). stop closes both.
+func startTestAPI(c *appCore) (stop func(), err error) {
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		return nil, err
+	}
+	b := make([]byte, 32)
+	_, _ = rand.Read(b)
+	token := hex.EncodeToString(b)
+	srv := &http.Server{
+		Handler:           transport.LoopbackHostGuard(transport.AuthGuard(token, testRoutes(c))),
+		ReadHeaderTimeout: 10 * time.Second,
+	}
+	go func() { _ = srv.Serve(ln) }()
+	file := filepath.Join(c.Paths.DataDir, testAPIFile)
+	info, _ := json.Marshal(map[string]string{"url": "http://" + ln.Addr().String(), "token": token})
+	if err := os.WriteFile(file, info, 0o600); err != nil {
+		_ = srv.Close()
+		return nil, err
+	}
+	return func() {
+		_ = os.Remove(file)
+		_ = srv.Close()
+	}, nil
 }

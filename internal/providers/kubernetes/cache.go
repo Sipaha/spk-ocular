@@ -3,6 +3,7 @@ package kubernetes
 import (
 	"errors"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -117,6 +118,14 @@ type cacheManager struct {
 	caches map[cacheKey]*informerCache
 	timer  *time.Timer
 	closed bool
+
+	counts requestCounts
+}
+
+// requestCounts count the informers' requests (stats for soaks: a relist
+// shows as another list or initial sync, a reconnect as a watch start).
+type requestCounts struct {
+	lists, watchStarts, initialSyncs atomic.Int64
 }
 
 func newCacheManager(dyn dynamic.Interface, watchList bool) *cacheManager {
@@ -149,7 +158,7 @@ func (m *cacheManager) start(key cacheKey, def *kindDef) *informerCache {
 	if key.namespace != "" {
 		ri = res.Namespace(key.namespace)
 	}
-	lw := &statusListWatch{res: ri, selector: key.selector, report: c.setTransport, ended: c.streamEnded, watchList: m.watchList}
+	lw := &statusListWatch{res: ri, selector: key.selector, report: c.setTransport, ended: c.streamEnded, watchList: m.watchList, counts: &m.counts}
 	c.inf = cache.NewSharedIndexInformerWithOptions(lw, &unstructured.Unstructured{}, cache.SharedIndexInformerOptions{
 		ObjectDescription: key.gvr.String(),
 	})
@@ -260,6 +269,23 @@ func (m *cacheManager) stats() (active, idle int) {
 		c.mu.Unlock()
 	}
 	return active, idle
+}
+
+// watchStats counts the views watching caches and their pending deadlines.
+func (m *cacheManager) watchStats() (watchers, deadlines int) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for _, c := range m.caches {
+		c.mu.Lock()
+		for w := range c.watchers {
+			watchers++
+			w.mu.Lock()
+			deadlines += len(w.deadlines)
+			w.mu.Unlock()
+		}
+		c.mu.Unlock()
+	}
+	return watchers, deadlines
 }
 
 func (m *cacheManager) closeAll() {

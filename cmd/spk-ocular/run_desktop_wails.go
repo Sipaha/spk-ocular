@@ -13,12 +13,19 @@ import (
 	"github.com/spk/spk-ocular/internal/streams"
 )
 
-func runDesktop(ctx context.Context) error {
+func runDesktop(ctx context.Context, o browserOpts) error {
 	c, err := newCore(ctx, "desktop", false)
 	if err != nil {
 		return err
 	}
 	defer c.Close()
+	if o.TestAPI {
+		stop, err := startTestAPI(c)
+		if err != nil {
+			return err
+		}
+		defer stop()
+	}
 	// Logs stream from a loopback server, never through wails:// (WebKitGTK
 	// truncates and buffers streams there); saving goes to Downloads (the
 	// webview has no download manager).
