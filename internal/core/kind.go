@@ -73,6 +73,10 @@ type KindDescriptor struct {
 	// Sort is how a table of this kind is first sorted (nil: by the first
 	// column).
 	Sort *SortSpec `json:"sort,omitempty"`
+	// NotCovered: a view built from several sources (ViewStatus.Coverage
+	// lists them) names what it does not look at by design, so "nothing
+	// found" is never read as "nothing wrong anywhere".
+	NotCovered []string `json:"notCovered,omitempty"`
 }
 
 // SortSpec: sort by Column (descending if Desc), ties by Then (ascending).

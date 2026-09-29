@@ -19,7 +19,8 @@ test('the worst first; evidence quieter; what could not be observed is said', as
   const names = await grid.getByRole('row').locator('[role=gridcell]:nth-child(3)').allTextContents()
   expect(names).toEqual(['api', 'db', 'workers'])
   await expect(grid.getByRole('gridcell', { name: /recent/ })).toHaveClass(/text-fg-subtle/)
-  await expect(page.getByRole('note', { name: 'Coverage' })).toHaveText('Not observed: Nodes (access denied)')
+  await expect(page.getByRole('note', { name: 'Not observed' })).toHaveText('Not observed: Nodes (access denied)')
+  await expect(page.getByRole('note', { name: 'Coverage' })).toHaveText('Checked: Services, Workloads, Nodes')
 })
 
 test("a row's menu is its object's kind's: a workload offers its actions", async ({ page }) => {

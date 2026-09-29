@@ -16,6 +16,7 @@ const problems: KindDescriptor = {
   group: 'Health',
   scoped: true,
   sort: { column: 'severity', desc: true, then: 'since' },
+  notCovered: ['Jobs', 'custom resources'],
   columns: [
     { id: 'severity', title: 'Severity', type: 'status' },
     { id: 'kind', title: 'Kind', type: 'text' },
@@ -102,15 +103,21 @@ describe('Problems', () => {
         { source: 'Warning events', state: 'loading' },
       ],
     })
-    const note = await screen.findByRole('note', { name: 'Coverage' })
-    expect(note).toHaveTextContent('Not observed: Nodes (cluster-wide) (access denied), Warning events (loading)')
+    const alert = await screen.findByRole('note', { name: 'Not observed' })
+    expect(alert).toHaveTextContent('Not observed: Nodes (cluster-wide) (access denied), Warning events (loading)')
+    expect(alert).toHaveClass('text-warning')
     expect(screen.getByText('No problems in what could be observed.')).toBeInTheDocument()
     expect(screen.queryByText('No objects')).not.toBeInTheDocument()
   })
 
-  it('full coverage and no problems: said plainly, no note', async () => {
-    await openProblems([], { state: 'ready', coverage: [{ source: 'Pods', state: 'ready' }] })
+  // Review 2026-09-30 (Codex, P5): with every source ready the coverage
+  // vanished — "No problems found" then hid what is never looked at.
+  it('always says what is checked and what is not, also with full coverage', async () => {
+    await openProblems([], { state: 'ready', coverage: [{ source: 'Pods', state: 'ready' }, { source: 'Nodes (cluster-wide)', state: 'ready' }] })
     expect(await screen.findByText('No problems found.')).toBeInTheDocument()
-    expect(screen.queryByRole('note', { name: 'Coverage' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('note', { name: 'Not observed' })).not.toBeInTheDocument()
+    const scope = screen.getByRole('note', { name: 'Coverage' })
+    expect(scope).toHaveTextContent('Checked: Pods, Nodes (cluster-wide) · not checked: Jobs, custom resources')
+    expect(scope).not.toHaveClass('text-warning')
   })
 })

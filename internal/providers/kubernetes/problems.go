@@ -25,6 +25,8 @@ var problemsKind = &kindDef{
 		ID: "problems", Title: "Problems", Group: "Health", Scoped: true,
 		// The worst first; among equals the most recent first.
 		Sort: &core.SortSpec{Column: "severity", Desc: true, Then: "since"},
+		// Not observed (the sources are problemSources).
+		NotCovered: []string{"Jobs", "CronJobs", "PersistentVolumeClaims", "custom resources"},
 		Columns: []core.Column{
 			{ID: "severity", Title: "Severity", Type: core.ColStatus, Width: 90},
 			{ID: "kind", Title: "Kind", Type: core.ColText, Width: 110},
@@ -48,7 +50,7 @@ type problemSource struct {
 }
 
 // problemSources, in coverage order. Jobs, CronJobs, PVCs and custom
-// resources are not observed (the coverage says what is).
+// resources are not observed (problemsKind.NotCovered says so).
 var problemSources = []problemSource{
 	{def: problemDef(podsKind, false), title: "Pods"},
 	{def: problemDef(deploymentsKind, false), title: "Deployments"},

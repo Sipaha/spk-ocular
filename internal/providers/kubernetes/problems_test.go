@@ -279,3 +279,10 @@ func TestProblemsCannotBeNarrowed(t *testing.T) {
 	_, err = s.Get(context.Background(), core.Ref{Kind: "problems", Name: "x"})
 	assertClass(t, err, provider.ClassUnsupported)
 }
+
+func TestProblemsNameWhatTheyNeverLookAt(t *testing.T) {
+	assert.Equal(t, []string{"Jobs", "CronJobs", "PersistentVolumeClaims", "custom resources"}, problemsKind.desc.NotCovered)
+	for _, src := range problemSources {
+		assert.NotContains(t, problemsKind.desc.NotCovered, src.title, "a source is covered")
+	}
+}

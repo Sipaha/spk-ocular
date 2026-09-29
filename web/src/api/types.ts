@@ -148,6 +148,8 @@ export interface KindDescriptor {
   actions?: ActionDescriptor[]
   /** How a table of this kind is first sorted (else by the first column). */
   sort?: SortSpec
+  /** A view of several sources: what it does not look at by design. */
+  notCovered?: string[]
 }
 
 /** Sort by column (descending if desc), ties by then (ascending). */

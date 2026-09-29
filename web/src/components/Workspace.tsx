@@ -334,7 +334,7 @@ function ResourcePage(props: {
         </label>
       </header>
       <StatusBanner state={view.status.state} cls={view.status.class} message={view.status.message} empty={view.rows.length === 0} coverage={view.status.coverage} />
-      {view.status.coverage && <CoverageNote coverage={view.status.coverage} />}
+      {view.status.coverage && <CoverageNote coverage={view.status.coverage} notCovered={view.kind?.notCovered ?? kind.notCovered} />}
       <div className="relative flex min-h-0 flex-1 flex-col">
         <div data-area="table" className="flex min-h-0 flex-1 flex-col">
         <ResourceTable
@@ -464,15 +464,23 @@ function StatusBanner({ state, cls, message, empty, coverage }: { state: string;
   )
 }
 
-/** What a view of several sources could not observe (quietly: not an error). */
-function CoverageNote({ coverage }: { coverage: SourceCoverage[] }) {
+/** What a view of several sources looks at and what not (always, quietly),
+ * and — apart and more visible — the sources it could not observe now. */
+function CoverageNote({ coverage, notCovered }: { coverage: SourceCoverage[]; notCovered?: string[] }) {
   const missing = coverage.filter((c) => c.state !== 'ready')
-  if (!missing.length) return null
   const why = (c: SourceCoverage) =>
     c.state === 'denied' ? classLabel(c.class ?? 'forbidden') : c.state === 'error' ? classLabel(c.class ?? 'internal') : t(c.state === 'stale' ? 'coverage.stale' : 'coverage.loading')
   return (
-    <p role="note" aria-label={t('coverage.label')} className="mx-4 my-2 text-xs text-fg-muted" title={missing.map((c) => `${c.source}: ${c.message ?? c.state}`).join('\n')}>
-      {t('coverage.notObserved')}: {missing.map((c) => `${c.source} (${why(c)})`).join(', ')}
-    </p>
+    <div className="mx-4 my-2 space-y-0.5 text-xs">
+      {missing.length > 0 && (
+        <p role="note" aria-label={t('coverage.notObserved')} className="text-warning" title={missing.map((c) => `${c.source}: ${c.message ?? c.state}`).join('\n')}>
+          {t('coverage.notObserved')}: {missing.map((c) => `${c.source} (${why(c)})`).join(', ')}
+        </p>
+      )}
+      <p role="note" aria-label={t('coverage.label')} className="text-fg-subtle">
+        {t('coverage.checked')}: {coverage.map((c) => c.source).join(', ')}
+        {notCovered?.length ? ` · ${t('coverage.notChecked')}: ${notCovered.join(', ')}` : ''}
+      </p>
+    </div>
   )
 }
