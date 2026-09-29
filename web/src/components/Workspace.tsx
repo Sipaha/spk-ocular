@@ -155,7 +155,11 @@ function ResourcePage(props: {
         <span className="text-xs text-fg-subtle" aria-label="count">
           {view.rows.length}
         </span>
-        {kind.scoped && <ScopePicker scope={scope} scopes={scopes} onScope={onScope} />}
+        {kind.scoped && (scopes?.kind && !scopes.error ? (
+          <LiveScopePicker hub={hub} target={target} scopeKind={scopes.kind} scope={scope} scopes={scopes} onScope={onScope} />
+        ) : (
+          <ScopePicker scope={scope} scopes={scopes} onScope={onScope} />
+        ))}
         <label className="ml-auto flex w-64 items-center gap-2 rounded-md border border-line bg-app px-2 py-1 focus-within:border-accent">
           <SearchIcon className="h-3.5 w-3.5 text-fg-subtle" />
           <input
@@ -204,6 +208,25 @@ function ResourcePage(props: {
       </div>
     </>
   )
+}
+
+/** The scope list kept live by a view of the provider's scope kind. */
+function LiveScopePicker(props: {
+  hub: ViewHub
+  target: Target
+  scopeKind: string
+  scope: ScopeSel
+  scopes: ScopesView
+  onScope: (s: ScopeSel) => void
+}) {
+  const { hub, target, scopeKind, scope, scopes, onScope } = props
+  const query = useMemo(() => ({ kind: scopeKind, scope: { mode: 'none' as const } }), [scopeKind])
+  const view = useView(hub, target.provider, target.id, query)
+  const live = useMemo(
+    () => (view.status.state === 'ready' || view.status.state === 'stale' ? { scopes: view.rows.map((r) => ({ name: r.ref.name })).sort((a, b) => a.name.localeCompare(b.name)) } : scopes),
+    [view.rows, view.status.state, scopes],
+  )
+  return <ScopePicker scope={scope} scopes={live} onScope={onScope} />
 }
 
 function ScopePicker({ scope, scopes, onScope }: { scope: ScopeSel; scopes: ScopesView | null; onScope: (s: ScopeSel) => void }) {

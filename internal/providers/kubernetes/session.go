@@ -106,6 +106,7 @@ func newSession(target, hash string, dyn dynamic.Interface, watchList bool) *ses
 }
 
 func (s *session) ConfigHash() string           { return s.hash }
+func (s *session) ScopeKind() string            { return namespacesKind.desc.ID }
 func (s *session) Kinds() []core.KindDescriptor { return s.kinds.descriptors() }
 func (s *session) Close()                       { s.caches.closeAll() }
 

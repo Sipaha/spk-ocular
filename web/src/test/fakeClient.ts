@@ -1,6 +1,6 @@
 import { vi } from 'vitest'
 import type { Client } from '../api/client'
-import type { ApiEvent, KindDescriptor, Ref, Row, Target, TargetsView } from '../api/types'
+import type { ApiEvent, KindDescriptor, Query, Ref, Row, Target, TargetsView } from '../api/types'
 
 export const k8s = (id: string, extra: Partial<Target> = {}): Target => ({
   provider: 'kubernetes',
@@ -19,6 +19,8 @@ export function fakeClient(targets: Target[]) {
   let listener: ((e: ApiEvent) => void) | null = null
   const state = {
     rows: [] as Row[],
+    rowsByKind: {} as Record<string, Row[]>,
+    version: 0,
     view: { groups: [{ provider: 'kubernetes', title: 'Kubernetes', targets, problems: [] }], selected: null } as TargetsView,
   }
   const client: Client = {
@@ -31,8 +33,16 @@ export function fakeClient(targets: Target[]) {
     }),
     listKinds: vi.fn(async () => [podsKind]),
     listScopes: vi.fn(async () => ({ scopes: [{ name: 'default' }, { name: 'web' }] })),
-    openView: vi.fn(async () => ({ viewId: 'v1', kind: podsKind })),
-    getRows: vi.fn(async () => ({ viewId: 'v1', version: 1, reset: true, upserts: state.rows, deleted: [], status: { state: 'ready' as const } })),
+    // One view per kind: v-<kind>; rows from state.rowsByKind, pods default to state.rows.
+    openView: vi.fn(async (_p: string, _t: string, q: Query) => ({
+      viewId: `v-${q.kind}`,
+      kind: q.kind === 'pods' ? podsKind : { id: q.kind, title: q.kind, group: 'Other', scoped: false, columns: [{ id: 'name', title: 'Name', type: 'text' as const }] },
+    })),
+    getRows: vi.fn(async (viewId: string) => {
+      const kind = viewId.slice(2)
+      const rows = state.rowsByKind[kind] ?? (kind === 'pods' ? state.rows : [])
+      return { viewId, version: ++state.version, reset: true, upserts: rows, deleted: [], status: { state: 'ready' as const } }
+    }),
     closeView: vi.fn(async () => {}),
     touchViews: vi.fn(async () => []),
     getResource: vi.fn(async (ref: Ref) => ({
@@ -77,4 +87,11 @@ export const podRow = (name: string, ns: string, status = 'Running', health: Row
   ref: { provider: 'kubernetes', target: 'prod', scope: ns, kind: 'pods', name, uid: `uid-${ns}-${name}` },
   cells: [{ text: name }, { text: ns }, { text: '1/1', num: 1 }, { text: status }, { text: '0', num: 0 }, { time: Date.now() - 3_600_000 }],
   health,
+})
+
+export const scopeRow = (name: string): Row => ({
+  id: `ns-${name}`,
+  ref: { provider: 'kubernetes', target: 'prod', kind: 'namespaces', name },
+  cells: [{ text: name }],
+  health: { state: 'ok' },
 })

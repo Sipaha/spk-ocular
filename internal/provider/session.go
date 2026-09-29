@@ -25,6 +25,9 @@ type Session interface {
 	// is returned as *Error{Class: ClassForbidden}: the UI then lets the
 	// user type a scope instead of pretending there are none.
 	Scopes(ctx context.Context) ([]core.Scope, error)
+	// ScopeKind is the kind whose rows are the scopes ("namespaces"), so the
+	// UI can keep the scope list live; "" if scopes cannot be watched.
+	ScopeKind() string
 	// Watch starts feeding sink with q's rows until stop is called. The first
 	// deliveries establish the initial state and end with Status{Ready} once
 	// it is fully processed (not merely listed); later deliveries are changes.

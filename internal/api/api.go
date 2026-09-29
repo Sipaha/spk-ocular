@@ -70,6 +70,8 @@ type ViewInfo struct {
 
 type ScopesView struct {
 	Scopes []core.Scope `json:"scopes"`
+	// Kind: open a view of this kind (scope "none") to keep the list live.
+	Kind string `json:"kind,omitempty"`
 	// Error is set when scopes cannot be listed (code + detail).
 	Error *CodedError `json:"error,omitempty"`
 }

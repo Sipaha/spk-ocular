@@ -142,7 +142,7 @@ func (s *Service) ListScopes(ctx context.Context, providerID, target string) (Sc
 	if err != nil {
 		return ScopesView{Scopes: []core.Scope{}, Error: fromProvider(err)}, nil
 	}
-	return ScopesView{Scopes: scopes}, nil
+	return ScopesView{Scopes: scopes, Kind: sess.ScopeKind()}, nil
 }
 
 func (s *Service) OpenView(ctx context.Context, req OpenViewRequest) (ViewInfo, error) {

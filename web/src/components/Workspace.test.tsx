@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { App } from '../App'
 import { initialState, useStore } from '../store'
-import { fakeClient, k8s, podRow } from '../test/fakeClient'
+import { fakeClient, k8s, podRow, scopeRow } from '../test/fakeClient'
 
 beforeEach(() => useStore.setState({ ...initialState }))
 
@@ -46,7 +46,7 @@ describe('Workspace', () => {
     expect(within(grid).getByText('db-0')).toBeInTheDocument()
 
     f.state.rows = [podRow('db-0', 'data'), podRow('db-1', 'data')]
-    await act(async () => f.emit({ type: 'view_changed', payload: { viewId: 'v1', version: 2 } }))
+    await act(async () => f.emit({ type: 'view_changed', payload: { viewId: 'v-pods', version: 99 } }))
     expect(await within(grid).findByText('db-1')).toBeInTheDocument()
   })
 
@@ -94,7 +94,7 @@ describe('Workspace details and state', () => {
     const f = fakeClient([k8s('prod')])
     const withMetrics = { ...podsKindWithMetrics }
     f.client.listKinds = vi.fn(async () => [withMetrics])
-    f.client.openView = vi.fn(async () => ({ viewId: 'v1', kind: withMetrics }))
+    f.client.openView = vi.fn(async () => ({ viewId: 'v-pods', kind: withMetrics }))
     f.state.rows = [podRow('api-1', 'web')]
     f.client.getMetrics = vi.fn(async () => ({ status: 'ok', values: { 'uid-web-api-1': { cpu: 0.25, memory: 64 * 1024 * 1024 } } }))
     const grid = await openProd(f)
@@ -129,3 +129,18 @@ const podsKindWithMetrics = {
     { id: 'memory', title: 'Memory', type: 'bytes' as const, metric: true },
   ],
 }
+
+describe('live scopes', () => {
+  it('keeps the namespace list live through the provider scope kind', async () => {
+    const f = fakeClient([k8s('prod')])
+    f.client.listScopes = vi.fn(async () => ({ scopes: [{ name: 'default' }], kind: 'namespaces' }))
+    f.state.rowsByKind.namespaces = [scopeRow('default'), scopeRow('web')]
+    await openProd(f)
+    const picker = screen.getByRole('combobox', { name: 'Namespace' })
+    expect(await within(picker).findByRole('option', { name: 'web' })).toBeInTheDocument()
+    f.state.rowsByKind.namespaces = [scopeRow('default'), scopeRow('web'), scopeRow('new-team')]
+    await act(async () => f.emit({ type: 'view_changed', payload: { viewId: 'v-namespaces', version: 99 } }))
+    expect(await within(picker).findByRole('option', { name: 'new-team' })).toBeInTheDocument()
+    expect(f.client.openView).toHaveBeenCalledWith('kubernetes', 'prod', { kind: 'namespaces', scope: { mode: 'none' } })
+  })
+})

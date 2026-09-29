@@ -137,6 +137,8 @@ export interface CodedErrorDTO {
 
 export interface ScopesView {
   scopes: { name: string }[]
+  /** A kind whose live rows are the scopes (k8s: namespaces). */
+  kind?: string
   error?: CodedErrorDTO
 }
 

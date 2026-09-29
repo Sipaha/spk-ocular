@@ -50,6 +50,7 @@ type fakeSession struct {
 }
 
 func (f *fakeSession) ConfigHash() string { return f.hash }
+func (f *fakeSession) ScopeKind() string  { return "" }
 func (f *fakeSession) Kinds() []core.KindDescriptor {
 	return []core.KindDescriptor{{ID: "pods", Title: "Pods", Scoped: true}}
 }
