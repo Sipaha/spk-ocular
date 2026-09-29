@@ -210,7 +210,8 @@ function Stream({ client, subject, active, query, toolbar, view }: { client: Cli
     }
   }
 
-  const problems = [...sources.values()].filter((s) => s.state && s.state.state !== 'streaming')
+  // a source that simply ended (a complete answer) is not a problem
+  const problems = [...sources.values()].filter((s) => s.state && s.state.state !== 'streaming' && !(s.state.state === 'ended' && !s.state.msg && !s.state.class))
   const terminal = status.phase === 'gone' || status.phase === 'disconnected' || status.phase === 'error'
 
   return (
