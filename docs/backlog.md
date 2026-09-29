@@ -1,6 +1,10 @@
 # Бэклог (после MVP)
 
 - **Docker Compose provider** — следующий provider; проверка абстракции (см. спецификацию).
+  Долг общего UI, найденный ревью P5 (Codex, 2026-09-30), — снять в этом этапе: `Workspace`
+  знает `defaultNamespace` и открывает `pods` по умолчанию, `ResourceDrawer` всегда открывает
+  связанный вид `events`, `ActionDialog` подписывает scope как `action.namespace`. Нужны
+  метаданные провайдера: вид по умолчанию, scope по умолчанию, связанный вид событий объекта.
 - Docker provider, SSH provider (`~/.ssh/config`), кастомные provider-ы.
 - Интеграция с агентами Claude/Codex (поэтому состояние сразу в SQLite — решение пользователя
   2026-09-29).
