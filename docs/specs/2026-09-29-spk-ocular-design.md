@@ -132,11 +132,43 @@ read-only/protected-пометка contexts, трей, несколько акт
 
 ### Живые таблицы: push-инвалидация, pull-дельта
 
-Informer → hot-layer в Go (строки с монотонной версией на вид) → `Coalescer` (100 мс,
-latest-wins) → событие `view_changed {viewId, version}` → UI вызывает
-`GetRows(viewId, sinceVersion)` и получает только изменённые строки и id удалённых.
-Если `sinceVersion` слишком старая — полный снимок. UI тянет данные, когда готов, —
-отдельный backpressure не нужен; большие списки не пересылаются целиком.
+Архитектура подтверждена независимым ревью (сессия Codex, 2026-09-29); контракт ниже
+уточнён по его замечаниям — без тяжёлого журнала событий и ACK/replay.
+
+**События.** Шина `internal/events` — не поток происшествий, а инвалидации: у каждого
+подписчика почтовый ящик «последнее событие на (type, key)» + wake на одно место; `Emit`
+не блокирует и не теряет последнее состояние, переполнение ящика (> 1024 ключей)
+схлопывается в одно `resync`. SSE (пере)открытие — тоже `resync`. Реализовано в P0.
+
+**Вид (view)** — открытый запрос таблицы: `OpenView(target, query)` → `{viewId, kind,
+columns}`; `CloseView(viewId)`. Запрос вида неизменяем (сменили namespace/kind/фильтр
+сервера — новый вид). `viewId` непрозрачный и никогда не переиспользуется (эпоха процесса +
+счётчик), поэтому курсор старого вида не может «оказаться новее» нового.
+
+**Дельты.** Informer → hot-layer вида: текущие строки + журнал «последнее изменение на id»
+и надгробия удалённых, ограниченный по числу записей; версия — счётчик Ocular (не
+`resourceVersion` Kubernetes). `Coalescer` 100 мс → `view_changed {viewId, version}` (ключ —
+viewId). UI: `GetRows(viewId, since)` → `{viewId, version, reset, upserts, deletedIds,
+status}`; `since=0` или курсор вне сохранённого диапазона → `reset` с полным снимком
+(пустой снимок — тоже валидный ответ). Данные ответа и его версия снимаются атомарно,
+строки — неизменяемые снимки. Клиент двигает курсор только после применения ответа (не
+по версии из события), держит один запрос на вид и тянет снова, пока применённая версия
+меньше объявленной; ошибка `GetRows` — ограниченные повторы, пока вид открыт; ответы
+закрытого/старого вида игнорируются. Тот же name с другим UID — удаление + добавление
+(client-go может сообщить это как Update): состояние, привязанное к объекту, сбрасывается.
+
+**Статус вида** — часть ответа и повод для `view_changed` даже без изменения строк:
+`loading` → `ready` (граница начального снимка) → `stale` (переподключение: последние
+данные остаются, но помечены) / `error` с классом (`forbidden`, `unavailable`, `gone`,
+`unsupported`, …). Запрет никогда не показывается пустой таблицей. Если список namespaces
+запрещён, а конкретный namespace читается, — namespace можно ввести вручную (и default из
+kubeconfig). Жизнь watch привязана к аренде вида, а не к контексту HTTP-запроса или
+Wails-вызова (там `context.Background`); у каждой операции свой таймаут/отмена.
+
+**Сессия target-а** строится из снимка его конфигурации; изменилась конфигурация context
+(сервер/аутентификация — видно по хешу разрешённого конфига) — сессия и её виды
+пересоздаются. Действия выполняются по явной паре (сессия, Ref), а не через «текущий
+выбор».
 
 ### Потоки
 
@@ -147,58 +179,71 @@ spk-mm-client и SPK-launcher). Логи — chunked fetch, exec — WebSocket. 
 
 ### Provider API
 
+Эскиз; окончательные сигнатуры фиксирует план P1. В P0 реализованы `Provider{ID, Title,
+Discover}` (возвращает `Discovery{Targets, Problems}`), `TargetWatcher`, `core.Target`.
+
 ```go
-// Идентичность любого объекта в любом provider-е.
+// Идентичность объекта. Kind квалифицирован (k8s: "apps/deployments", "pods"), чтобы CRD
+// разных групп не сталкивались; GVR остаётся внутри адаптера.
 type Ref struct {
-    Provider, Target, Scope, Kind, Name, UID string // k8s: context/ns/pods/x; compose: dockerctx/project/services/web
+    Provider, Target, Scope, Kind, Name, UID string
 }
 
-type Health struct { State HealthState; Reason, Message string } // OK|Progressing|Warning|Error|Unknown
+// Scope-селектор явный: все / один / неприменимо — не через "".
+type ScopeSel struct { Mode ScopeMode; Name string } // ScopeAll | ScopeOne | ScopeNone
 
-type Row struct {            // компактная проекция для таблиц; полный объект — только по запросу
+type Health struct {                 // сводка = проблема с наивысшим приоритетом
+    State  HealthState               // OK|Progressing|Warning|Error|Terminating|Unknown
+    Reason, Message string
+    Issues []Issue                   // упорядоченный список, внутренний источник для Problems
+}
+
+type Row struct {                    // компактная проекция для таблиц
     Ref    Ref
-    Cells  []any             // по колонкам KindDescriptor
+    Cells  []Cell                    // типизированные значения по колонкам, null/unknown различимы
     Health Health
-    Owners []Ref             // навигация вверх (pod → rs → deployment)
-}
-
-type KindDescriptor struct {
-    ID, Title, Group string  // "pods", "Pods", "Workloads"
-    Columns []Column         // name, type (age|status|number|text), width hint
-    Scoped  bool             // есть ли scope (namespace / compose project)
+    Owners []Ref                     // навигация вверх
 }
 
 type Provider interface {
     ID() string
-    Discover(ctx context.Context) ([]Target, error)   // kube contexts / docker contexts / ssh hosts
+    Title() string
+    Discover(ctx context.Context) (Discovery, error)
     Open(ctx context.Context, target string) (Session, error)
 }
 
 type Session interface {
     Kinds() []KindDescriptor
-    Scopes(ctx context.Context) ([]Scope, error)       // namespaces / compose projects
+    Scopes(ctx context.Context) ([]Scope, error)
+    // Watch отдаёт управляющие сообщения наравне с данными: Snapshot/Ready, Upsert,
+    // Delete, Status(stale|error+class), Closed. Асинхронные 403/обрывы — через Status.
     Watch(ctx context.Context, q Query) (<-chan Delta, error)
-    Get(ctx context.Context, ref Ref) (*Detail, error) // полный объект, YAML, поля
-    Related(ctx context.Context, ref Ref) ([]Ref, error)
+    Get(ctx context.Context, ref Ref) (*Resource, error) // полный объект; проверяет UID
+    Relations(ctx context.Context, ref Ref) ([]Relation, error) // {тип связи, Ref}, many-to-many
     Close() error
 }
 
-// Опциональные возможности — type assertion; UI показывает только то, что есть.
+// Опциональные возможности — type assertion; но наличие интерфейса ≠ доступность для
+// конкретного объекта и прав: действия описываются дескрипторами на объект
+// (supported/available/unknown + причина), ошибка выполнения — авторитетна.
 type EventSource   interface { Events(ctx context.Context, ref Ref) (<-chan Event, error) }
 type LogSource     interface { Logs(ctx context.Context, t LogTarget, o LogOpts) (io.ReadCloser, error) }
 type Execer        interface { Exec(ctx context.Context, t ExecTarget, tty TTY) error }
 type PortForwarder interface { Forward(ctx context.Context, t ForwardTarget, local int) (Forward, error) }
 type MetricsSource interface { Metrics(ctx context.Context, q Query) (map[string]Usage, error) }
 type Actioner      interface {
-    Actions(ref Ref) []ActionDescriptor // id, title, params, Destructive
+    Actions(ref Ref) []ActionDescriptor // id, title, params, Destructive, Availability
     Do(ctx context.Context, ref Ref, action string, params map[string]any) error
 }
 ```
 
-Общая часть — «список объектов с состоянием, детали, связи, возможности». Pods, namespaces
-и containers не проникают в `core`. UI рисует любую сущность через `KindDescriptor` + `Row` +
-`Detail`; для отдельных kind провайдер может зарегистрировать свою детальную панель
-(Pod — контейнеры с кнопками Logs/Exec), иначе — общая панель (поля + YAML + events + related).
+Структурированные ошибки API: `forbidden`, `unavailable`, `gone`, `conflict`,
+`unsupported`, `not_found`, `bad_request`, `internal`. Общая часть — «список объектов с
+состоянием, детали, связи, возможности». Pods, namespaces и containers не проникают в
+`core`. UI рисует любую сущность через `KindDescriptor` + `Row` + `Resource`; для
+отдельных kind провайдер регистрирует свою панель (Pod — контейнеры с Logs/Exec), иначе —
+общая (поля + YAML + events + связи). (`core.Detail` из P0 — пара «ключ/значение» факта,
+полный объект называется `Resource`.)
 
 ### Проверка абстракции на Docker Compose
 
@@ -206,31 +251,70 @@ type Actioner      interface {
 |---|---|---|
 | Target | kube context | Docker context/host |
 | Scope | namespace | compose project (label `com.docker.compose.project`) |
-| Kinds | pods, deployments, … | services, containers, networks, volumes, images |
+| Kinds | pods, deployments, … | services (наблюдаемые), containers, networks, volumes, images |
 | Health | phase, conditions, restarts | state + healthcheck |
-| Related | deployment → rs → pods | service → containers |
-| Events | Events API | `docker events` с фильтром |
+| Relations | deployment → rs → pods | service → containers; networks/volumes/images — many-to-many |
+| Events | Events API | `docker events` — подсказка + пересверка списком |
 | Logs / Exec | ✓ | ✓ |
 | PortForward | ✓ | нет — порты уже опубликованы; capability не реализуется |
 | Metrics | metrics.k8s.io | streaming stats API |
-| Actions | restart, scale, delete | restart, stop/start, rm, scale service |
+| Actions | restart, scale, delete | restart, stop/start, rm; scale/create — только при известной compose-модели |
 
-Ни одно поле `core` не лишнее и ничего не пришлось изображать Kubernetes-ом.
+Уточнение после ревью (2026-09-29): наблюдения Docker Engine — не желаемая модель Compose.
+По labels видны только существующие контейнеры: сервис без контейнеров не обнаружить,
+желаемое число реплик неизвестно. Поэтому сервис — синтетическая сущность с устойчивым id
+(endpoint/project/service), контейнеры — её воплощения; «желаемое» показывается как
+неизвестное, пока нет compose-файла; scale/create включаются только при доступной
+compose-модели. Images и внешние networks/volumes не принадлежат проекту — связи
+many-to-many. `docker events` хранит лишь последние 256 событий: поток событий — подсказка,
+источник правды — список + пересверка изменённых id (после переподключения — полный
+relist); медленные inspect — в ограниченном пуле с поколениями на id. Это ложится на тот же
+контракт Watch (snapshot/ready/upsert/delete/status) без семантики `resourceVersion`.
 
 ## Ключевые технические решения
 
-1. **Ленивые informers.** Поднимаются при открытии вида (ключ — context, namespace, kind),
-   останавливаются через ~60 с после ухода с вида. `SetTransform` вырезает `managedFields` и
-   крупные поля; полный объект — `GET` при открытии деталей.
-2. **Dynamic client + проекции.** Меньше зависимостей; CRD позже почти бесплатно (generic-колонки
-   или `additionalPrinterColumns`). Typed-пакеты — только для logs/exec/port-forward.
-3. **Health считает backend (provider).** UI не знает, что такое CrashLoopBackOff. Детекторы
-   Problems: CrashLoopBackOff, ImagePullBackOff/ErrImagePull, OOMKilled, Pending дольше порога,
-   рост рестартов, not ready, unavailable replicas, node NotReady/pressure, Warning events.
-4. **Один активный context.** Сессии других contexts закрываются после grace-периода.
-5. **Действия.** restart — patch аннотации `kubectl.kubernetes.io/restartedAt`; scale — через
+1. **Ленивые informers с бюджетом.** Ключ кэша — поколение сессии + GVR + нормализованный
+   namespace/селектор (кластерные ресурсы — без namespace). Поднимаются при открытии вида
+   (или Problems/связей — они тоже берут аренду), держатся ~60 с после последней аренды,
+   но число/объём неактивных кэшей ограничен (LRU), при смене context старые кэши
+   освобождаются сразу. Остановленный informer не перезапускается — только пересоздаётся.
+   Resync — 0; обработчики только дешёвая неизменяемая проекция, без сети и блокирующих
+   отправок. Более широкий уже открытый кэш переиспользуется; ради экономии не заводится
+   watch на весь кластер для пользователя с правами на один namespace.
+2. **Trimmed Unstructured.** Dynamic client + transform с белым списком полей на kind:
+   идентичность, UID, resourceVersion, namespace, labels, ownerReferences и то, что нужно
+   health/связям/колонкам; вырезаются `managedFields`, last-applied, крупный spec; значения
+   Secret/ConfigMap в списочных кэшах не хранятся. Transform идемпотентен, обрабатывает
+   `DeletedFinalStateUnknown`; hot-layer не мутирует объекты кэша. Metadata-only informer —
+   только для kind без status. Полный объект — отдельный `GET` с проверкой UID. Другое
+   представление — только если профилирование покажет необходимость. Замеры P1: пик
+   начального LIST на 10k pods, удерживаемая куча, повторная навигация, пик relist,
+   высокий churn с медленным UI.
+3. **Health считает backend (provider).** UI не знает, что такое CrashLoopBackOff. Правила:
+   Succeeded — успешное завершение, не «не готов»; Ready=false на старте — Progressing с
+   grace; PodScheduled=False/Unschedulable, ошибки образа/конфигурации — конкретные
+   причины; deletionTimestamp — Terminating, не Failed; lastState OOMKilled — недавняя
+   история, если текущий сбой не продолжается; workloads — observedGeneration vs
+   generation, desired=0, прогресс/дедлайн rollout, правила StatefulSet/DaemonSet; Node
+   Ready=Unknown ≠ подтверждённый сбой; Warning events — подкрепляющие недавние
+   свидетельства (dedup, lastSeen, count), а не вечные проблемы.
+4. **Время без опроса.** Правила «Pending дольше N», «недавний рестарт» истекают без
+   событий API — для этого один локальный планировщик дедлайнов (переоценка объекта в
+   нужный момент, отмена при update/delete/выселении), тесты на фейковых часах. Это
+   локальный таймер, а не опрос кластера — принцип «никаких фоновых опросов» не нарушен.
+5. **Рост рестартов — история наблюдений.** Первое наблюдение pod (UID + контейнер) задаёт
+   базу (100 старых рестартов — не «100 недавних»); рост — положительная дельта +
+   локальное время в ограниченном кольце в памяти (без SQLite); уменьшение счётчика или
+   новый UID — новая база; разрывы наблюдения помечаются, чтобы не утверждать точное время.
+6. **Problems — «проблемы в наблюдаемой области».** Открытый вид Problems берёт аренды
+   минимальных детекторов (pods, workloads, nodes, events) для выбранной области и честно
+   показывает покрытие; эти аренды входят в тот же бюджет. Связи (Deployment → ReplicaSet →
+   Pod) тоже берут нужные внутренние наблюдения (ReplicaSet), а не зависят от того, какие
+   таблицы пользователь открывал.
+7. **Один активный context.** Переключение — старые сессии и кэши освобождаются.
+8. **Действия.** restart — patch аннотации `kubectl.kubernetes.io/restartedAt`; scale — через
    subresource `scale`; delete — подтверждение с явным context/namespace/именем.
-6. **Никаких фоновых опросов в ядре.** Фича, требующая постоянного опроса кластера, в ядро не
+9. **Никаких фоновых опросов в ядре.** Фича, требующая постоянного опроса кластера, в ядро не
    попадает; метрики опрашиваются только для видимой таблицы.
 
 ## Состояние (SQLite)
