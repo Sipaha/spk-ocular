@@ -133,8 +133,52 @@ func TestExecInfoOfAWorkloadOffersItsRunningPodsReadyAndNewestFirst(t *testing.T
 	for _, in := range info.Instances {
 		titles = append(titles, in.Title)
 	}
-	assert.Equal(t, []string{"new-ready", "old-ready", "newest-not-ready"}, titles)
+	// a Pending pod with a running container is offered, after running ones
+	assert.Equal(t, []string{"new-ready", "old-ready", "newest-not-ready", "pending"}, titles)
 	assert.Equal(t, "new-ready/u-new", info.DefaultInstance)
+}
+
+func TestAnExplicitInstanceMustBelongToTheWorkload(t *testing.T) {
+	foreign := webPod("stranger", "u-str", "rs-x", 45)
+	s, _ := execSessionFor(t, nil,
+		deployment("web", "d1", "app"), replicaSet("web-rs", "rs1", "d1"), replicaSet("other-rs", "rs-x", "d-other"),
+		webPod("mine", "u-mine", "rs1", 10), foreign)
+	req := func(inst string) error {
+		_, err := s.PrepareExec(context.Background(), webRef(), provider.ExecRequest{Instance: inst, Channel: "app"})
+		return err
+	}
+	require.NoError(t, req("mine/u-mine"))
+	var pe *provider.Error
+	require.ErrorAs(t, req("stranger/u-str"), &pe, "a pod of another ReplicaSet")
+	assert.Equal(t, provider.ClassGone, pe.Class)
+	require.Error(t, req("mine/u-replaced"), "a stale choice")
+	_, err := s.PrepareExec(context.Background(), core.Ref{Kind: "apps/deployments", Scope: "ns", Name: "missing", UID: "d9"}, provider.ExecRequest{Instance: "mine/u-mine", Channel: "app"})
+	require.ErrorAs(t, err, &pe, "a workload that does not exist")
+	assert.Equal(t, provider.ClassNotFound, pe.Class)
+	_, err = s.PrepareExec(context.Background(), core.Ref{Kind: "apps/deployments", Scope: "ns", Name: "web", UID: "d-old"}, provider.ExecRequest{Instance: "mine/u-mine", Channel: "app"})
+	require.ErrorAs(t, err, &pe, "a replaced workload")
+	assert.Equal(t, provider.ClassGone, pe.Class)
+}
+
+func TestARunningInitContainerOfAPendingPodCanBeOpened(t *testing.T) {
+	p := pod("ns", "p", "u", func(o map[string]any) {
+		o["spec"].(map[string]any)["initContainers"] = []any{map[string]any{"name": "init"}, map[string]any{"name": "done"}}
+		o["status"] = map[string]any{"phase": "Pending",
+			"containerStatuses": []any{map[string]any{"name": "app", "state": map[string]any{"waiting": map[string]any{"reason": "PodInitializing"}}}},
+			"initContainerStatuses": []any{
+				map[string]any{"name": "init", "state": map[string]any{"running": map[string]any{}}},
+				map[string]any{"name": "done", "state": map[string]any{"terminated": map[string]any{"reason": "Completed"}}},
+			}}
+	})
+	chs := execChannels(p)
+	require.Len(t, chs, 2, "the waiting app container and the running init; the finished init is not offered")
+	assert.Equal(t, core.ExecChannel{ID: "app", Title: "app", State: "waiting: PodInitializing"}, chs[0])
+	assert.Equal(t, core.ExecChannel{ID: "init", Title: "init", Note: "init", Running: true, State: "running"}, chs[1])
+	s, _ := execSessionFor(t, nil, p)
+	_, err := s.PrepareExec(context.Background(), core.Ref{Kind: "pods", Scope: "ns", Name: "p", UID: "u"}, provider.ExecRequest{Channel: "init"})
+	require.NoError(t, err)
+	_, err = s.PrepareExec(context.Background(), core.Ref{Kind: "pods", Scope: "ns", Name: "p", UID: "u"}, provider.ExecRequest{Channel: "app"})
+	require.Error(t, err, "a container that is not running")
 }
 
 func TestPrepareExecPinsThePodAndChecksTheContainer(t *testing.T) {

@@ -181,11 +181,11 @@ func (s *session) execPods(ctx context.Context, ref core.Ref) ([]*unstructured.U
 	}
 	var out []*unstructured.Unstructured
 	for _, p := range pods {
-		if runnable(p) {
+		if execEligible(p) && hasRunningChannel(p) {
 			out = append(out, p)
 		}
 	}
-	rankPods(out)
+	rankExecPods(out)
 	if len(out) == 0 {
 		return nil, &provider.Error{Class: provider.ClassUnavailable, Message: fmt.Sprintf("%s has no running pods", ref.Name)}
 	}
@@ -257,16 +257,45 @@ func listAll(ctx context.Context, dyn dynamic.Interface, def *kindDef, ns, selec
 		for i := range l.Items {
 			out = append(out, &l.Items[i])
 		}
-		if l.GetContinue() == "" || len(out) >= maxListed {
+		if l.GetContinue() == "" {
 			return out, nil
+		}
+		if len(out) >= maxListed { // a partial list would be a wrong answer
+			return nil, &provider.Error{Class: provider.ClassUnsupported, Message: fmt.Sprintf("more than %d %s match; too many to choose from", maxListed, def.desc.ID)}
 		}
 		opts.Continue = l.GetContinue()
 	}
 }
 
-// runnable: a pod a command can run in — running and not being deleted.
+// runnable: a running pod that is not being deleted (a tunnel's target).
 func runnable(p *unstructured.Unstructured) bool {
 	return p.GetDeletionTimestamp() == nil && str(p.Object, "status", "phase") == "Running"
+}
+
+// execEligible: a pod whose running containers a command can run in — not
+// being deleted and not finished. A Pending pod qualifies: its init
+// containers run then (whether a container runs is its own state).
+func execEligible(p *unstructured.Unstructured) bool {
+	phase := str(p.Object, "status", "phase")
+	return p.GetDeletionTimestamp() == nil && (phase == "Running" || phase == "Pending")
+}
+
+func hasRunningChannel(p *unstructured.Unstructured) bool {
+	for _, c := range execChannels(p) {
+		if c.Running {
+			return true
+		}
+	}
+	return false
+}
+
+// rankExecPods: running pods first (their regular containers run), then as
+// rankPods.
+func rankExecPods(pods []*unstructured.Unstructured) {
+	rankPods(pods)
+	sort.SliceStable(pods, func(i, j int) bool {
+		return str(pods[i].Object, "status", "phase") == "Running" && str(pods[j].Object, "status", "phase") != "Running"
+	})
 }
 
 func podReady(p *unstructured.Unstructured) bool {
@@ -319,7 +348,7 @@ func execChannels(p *unstructured.Unstructured) []core.ExecChannel {
 			key = "ephemeralContainerStatuses/"
 		}
 		st := states[key+c.ID]
-		running := st != nil && st["running"] != nil && runnable(p)
+		running := st != nil && st["running"] != nil && execEligible(p)
 		if c.Note != "" && !running {
 			continue
 		}
@@ -358,15 +387,8 @@ func (s *session) PrepareExec(ctx context.Context, ref core.Ref, req provider.Ex
 		}
 		p = pods[0]
 	} else {
-		name, uid, ok := strings.Cut(req.Instance, "/")
-		if !ok {
-			return nil, invalid("bad instance %q", req.Instance)
-		}
-		if s.kinds.byID[ref.Kind] == podsKind && (name != ref.Name || (ref.UID != "" && uid != ref.UID)) {
-			return nil, invalid("instance %q is not %s", req.Instance, ref.Name)
-		}
 		var err error
-		if p, err = s.getObject(ctx, core.Ref{Kind: podsKind.desc.ID, Scope: ref.Scope, Name: name, UID: uid}); err != nil {
+		if p, err = s.explicitInstance(ctx, ref, req.Instance); err != nil {
 			return nil, err
 		}
 	}
@@ -386,6 +408,78 @@ func (s *session) PrepareExec(ctx context.Context, ref core.Ref, req provider.Ex
 		conn: s.conn, ns: p.GetNamespace(), pod: p.GetName(), uid: p.GetUID(), container: ch, argv: argv,
 		shell: len(req.Command) == 0, ref: ref,
 	}, nil
+}
+
+// explicitInstance is the chosen pod of ref, validated like the offer was:
+// the pod itself (name and UID), or a pod the workload — existing, with its
+// UID — controls (a Deployment through one of its ReplicaSets). A stale
+// choice or a pod of something else is refused, never run in.
+func (s *session) explicitInstance(ctx context.Context, ref core.Ref, instance string) (*unstructured.Unstructured, error) {
+	name, uid, ok := strings.Cut(instance, "/")
+	if !ok || name == "" || uid == "" {
+		return nil, invalid("bad instance %q", instance)
+	}
+	def := s.kinds.byID[ref.Kind]
+	switch {
+	case def == podsKind:
+		if name != ref.Name || (ref.UID != "" && uid != ref.UID) {
+			return nil, invalid("instance %q is not %s", instance, ref.Name)
+		}
+	case logWorkloads[def]:
+	default:
+		return nil, &provider.Error{Class: provider.ClassUnsupported, Message: fmt.Sprintf("commands cannot run in %s", ref.Kind)}
+	}
+	p, err := s.getObject(ctx, core.Ref{Kind: podsKind.desc.ID, Scope: ref.Scope, Name: name, UID: uid})
+	if err != nil {
+		return nil, err
+	}
+	if def != podsKind {
+		owner, err := s.getObject(ctx, ref)
+		if err != nil {
+			return nil, err
+		}
+		if err := s.controls(ctx, def, owner, p); err != nil {
+			return nil, err
+		}
+	}
+	if !execEligible(p) {
+		return nil, invalid("pod %s is %s", name, nonEmpty(strings.ToLower(str(p.Object, "status", "phase")), "being deleted"))
+	}
+	return p, nil
+}
+
+// controls checks that owner (a workload) controls pod: directly, or for
+// a Deployment through a ReplicaSet it controls.
+func (s *session) controls(ctx context.Context, def *kindDef, owner, pod *unstructured.Unstructured) error {
+	notOurs := &provider.Error{Class: provider.ClassGone, Message: fmt.Sprintf("pod %s is not (any more) a pod of %s", pod.GetName(), owner.GetName())}
+	c := metav1.GetControllerOfNoCopy(pod)
+	if c == nil {
+		return notOurs
+	}
+	if def != deploymentsKind {
+		if c.UID != owner.GetUID() {
+			return notOurs
+		}
+		return nil
+	}
+	if c.Kind != "ReplicaSet" {
+		return notOurs
+	}
+	rs, err := s.conn.get(ctx, replicaSetsKind, pod.GetNamespace(), c.Name)
+	var pe *provider.Error
+	if errors.As(err, &pe) && pe.Class == provider.ClassNotFound {
+		return notOurs
+	}
+	if err != nil {
+		return err
+	}
+	if rs.GetUID() != c.UID {
+		return notOurs
+	}
+	if rc := metav1.GetControllerOfNoCopy(rs); rc == nil || rc.UID != owner.GetUID() {
+		return notOurs
+	}
+	return nil
 }
 
 func channelRunnable(inst core.ExecInstance, ch string) error {
