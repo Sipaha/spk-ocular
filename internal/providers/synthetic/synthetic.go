@@ -1,7 +1,9 @@
 // Package synthetic is a test-only provider (spk-ocular --test-api
 // --test-synthetic): one target whose objects have deterministic logs that
-// e2e tests drive through /api/_test/logs. It exercises the generic log UI
-// without a cluster — and shows that UI knows nothing about Kubernetes.
+// e2e tests drive through /api/_test/logs, an echo terminal (live.go) and
+// ports served by in-process HTTP servers. It exercises the generic log,
+// terminal and tunnel UI without a cluster — and shows that UI knows
+// nothing about Kubernetes.
 package synthetic
 
 import (
@@ -28,6 +30,7 @@ var objects = map[string][]string{
 
 // Provider holds the live log feeds tests push into.
 type Provider struct {
+	live  live
 	mu    sync.Mutex
 	subs  map[*sub]struct{}
 	clock time.Time
@@ -92,7 +95,7 @@ type session struct{ p *Provider }
 var _ provider.LogSource = (*session)(nil)
 
 var kind = core.KindDescriptor{
-	ID: Kind, Title: "Services", Group: "Synthetic", Logs: true,
+	ID: Kind, Title: "Services", Group: "Synthetic", Logs: true, Exec: true, Forward: true,
 	Columns: []core.Column{{ID: "name", Title: "Name", Type: core.ColText}, {ID: "sources", Title: "Sources", Type: core.ColNumber}},
 }
 

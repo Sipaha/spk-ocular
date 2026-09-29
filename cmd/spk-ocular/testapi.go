@@ -19,7 +19,13 @@ func testRoutes(c *appCore) http.Handler {
 	})
 	mux.HandleFunc("GET /api/_test/stats", func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(c.Service.Stats())
+		st := c.Service.Stats()
+		if c.Synthetic != nil { // what its terminals and tunnels hold
+			for k, v := range c.Synthetic.LiveStats() {
+				st[k] = v
+			}
+		}
+		_ = json.NewEncoder(w).Encode(st)
 	})
 	if c.Synthetic != nil {
 		// Push lines/states into the synthetic provider's open log streams.
