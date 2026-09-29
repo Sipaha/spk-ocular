@@ -167,3 +167,67 @@ func TestSlimDeepCopyDoesNotAlias(t *testing.T) {
 	assert.Equal(t, `{"x":1}`, string(o.body))
 	assert.NotSame(t, o.DeletionTimestamp, cp.DeletionTimestamp)
 }
+
+// statusSink records statuses; the first Ready blocks until released, so a
+// newer status can be published while an older one is on its way.
+type statusSink struct {
+	mu       sync.Mutex
+	statuses []provider.StatusState
+	entered  chan struct{}
+	proceed  chan struct{}
+	once     sync.Once
+}
+
+func (s *statusSink) Apply(d provider.Delta) {
+	if d.Status == nil {
+		return
+	}
+	if d.Status.State == provider.StatusReady {
+		s.once.Do(func() { close(s.entered); <-s.proceed })
+	}
+	s.mu.Lock()
+	s.statuses = append(s.statuses, d.Status.State)
+	s.mu.Unlock()
+}
+
+func (s *statusSink) last() provider.StatusState {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.statuses[len(s.statuses)-1]
+}
+
+// Review 2026-09-30 (Codex, P5): a status computed before a newer one could
+// be applied after it — Coverage said ready while the cache kept failing.
+func TestAnOlderStatusCannotOverwriteANewerOne(t *testing.T) {
+	sink := &statusSink{entered: make(chan struct{}), proceed: make(chan struct{})}
+	c := &informerCache{watchers: map[*viewWatch]struct{}{}}
+	w := &viewWatch{c: c, def: &kindDef{}, sink: sink, now: time.Now, done: make(chan struct{}), deadlines: map[string]deadline{}}
+	c.watchers[w] = struct{}{}
+	w.synced = true
+
+	readyDone := make(chan struct{})
+	go func() { w.pushStatus(); close(readyDone) }() // computes Ready, stalls in Apply
+	<-sink.entered
+	failDone := make(chan struct{})
+	go func() { c.setTransport(errReconnecting); close(failDone) }()
+	select {
+	case <-failDone:
+		t.Fatal("the newer status must wait for the one being published")
+	case <-time.After(50 * time.Millisecond):
+	}
+	close(sink.proceed)
+	<-readyDone
+	<-failDone
+	assert.Equal(t, provider.StatusStale, w.status().State)
+	assert.Equal(t, provider.StatusStale, sink.last(), "the sink ends with the current status")
+}
+
+func TestNoStatusAfterStop(t *testing.T) {
+	sink := &statusSink{entered: make(chan struct{}), proceed: make(chan struct{})}
+	close(sink.proceed)
+	c := &informerCache{watchers: map[*viewWatch]struct{}{}}
+	w := &viewWatch{c: c, def: &kindDef{}, sink: sink, now: time.Now, done: make(chan struct{}), deadlines: map[string]deadline{}}
+	w.stop()
+	w.pushStatus()
+	assert.Empty(t, sink.statuses)
+}

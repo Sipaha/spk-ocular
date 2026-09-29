@@ -33,8 +33,8 @@ type viewWatch struct {
 	done chan struct{}
 
 	// order serializes everything that projects an observation and applies
-	// it to the sink: the informer's handler calls and deadline
-	// re-evaluations. Without it a timer could read an object, lose the CPU,
+	// it to the sink: the informer's handler calls, deadline
+	// re-evaluations and status publication. Without it a timer could read an object, lose the CPU,
 	// and apply it after the delete handler removed the row (resurrection).
 	order sync.Mutex
 
@@ -156,11 +156,13 @@ func (w *viewWatch) status() provider.ViewStatus {
 	return provider.ViewStatus{State: provider.StatusReady}
 }
 
+// pushStatus reads and applies the status under the order gate: a status
+// computed earlier can never be applied after a newer one (the last push
+// reads the current state). Callers hold no cache lock.
 func (w *viewWatch) pushStatus() {
-	w.mu.Lock()
-	stopped := w.stopped
-	w.mu.Unlock()
-	if stopped {
+	w.order.Lock()
+	defer w.order.Unlock()
+	if w.isStopped() {
 		return
 	}
 	st := w.status()
