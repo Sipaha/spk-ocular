@@ -1,6 +1,7 @@
 package kubernetes
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -10,6 +11,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/rest"
 
@@ -129,3 +131,67 @@ func TestRenewedStreamStaysReady(t *testing.T) {
 }
 
 func eventsEmitter() *events.Emitter { return events.NewEmitter() }
+
+// A server without WatchList (kube-apiserver before it was enabled by
+// default) answers a sendInitialEvents watch with 422; the reflector falls
+// back to LIST by itself. Reported, that refusal flashed "Cannot show" over
+// a view that then loaded fine (seen on a real cluster 2026-09-30). It is
+// not a transport failure, and the session asks it once.
+func TestAServerWithoutWatchListIsNoErrorAndAskedOnce(t *testing.T) {
+	var initial, plain atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		q := r.URL.Query()
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case q.Get("watch") == "true" && q.Get("sendInitialEvents") == "true":
+			initial.Add(1)
+			w.WriteHeader(http.StatusUnprocessableEntity)
+			_, _ = fmt.Fprint(w, `{"kind":"Status","apiVersion":"v1","status":"Failure","reason":"Invalid","code":422,`+
+				`"message":"ListOptions.meta.k8s.io \"\" is invalid: sendInitialEvents: Forbidden: sendInitialEvents is forbidden for watch unless the WatchList feature gate is enabled"}`)
+		case q.Get("watch") == "true":
+			plain.Add(1)
+			w.WriteHeader(http.StatusOK)
+			w.(http.Flusher).Flush()
+			<-r.Context().Done()
+		default:
+			_, _ = fmt.Fprint(w, podListJSON)
+		}
+	}))
+	t.Cleanup(srv.Close)
+	dyn, err := dynamic.NewForConfig(&rest.Config{Host: srv.URL})
+	require.NoError(t, err)
+
+	var refused atomic.Bool
+	var reports []error
+	lw := &statusListWatch{res: dyn.Resource(podsKind.gvr), report: func(err error) { reports = append(reports, err) }, watchList: true, refused: &refused, counts: &requestCounts{}}
+	yes := true
+	_, err = lw.WatchWithContext(context.Background(), metav1.ListOptions{SendInitialEvents: &yes})
+	require.Error(t, err, "the reflector must fall back")
+	for _, r := range reports {
+		assert.NoError(t, r, "a refused WatchList is not a transport error")
+	}
+	assert.True(t, lw.IsWatchListSemanticsUnSupported(), "new reflectors do not try it again")
+	_, err = lw.WatchWithContext(context.Background(), metav1.ListOptions{SendInitialEvents: &yes})
+	require.Error(t, err)
+	assert.EqualValues(t, 1, initial.Load(), "asked once per session")
+
+	// Through the session: views load, never in error, one WatchList request.
+	initial.Store(0)
+	s := newSession("t", "h", dyn, true)
+	t.Cleanup(s.Close)
+	m := views.NewManager(eventsEmitter())
+	t.Cleanup(m.CloseAll)
+	var seen []provider.StatusState
+	for _, scope := range []core.ScopeSel{{Mode: core.ScopeAll}, {Mode: core.ScopeOne, Name: "ns"}} {
+		id, err := m.Open("s", s, provider.Query{Kind: "pods", Scope: scope})
+		require.NoError(t, err)
+		require.Eventually(t, func() bool {
+			p, _ := m.Get(id, 0)
+			seen = append(seen, p.Status.State)
+			return p.Status.State == provider.StatusReady && len(p.Upserts) == 1
+		}, 10*time.Second, time.Millisecond)
+	}
+	assert.NotContains(t, seen, provider.StatusError)
+	assert.EqualValues(t, 1, initial.Load(), "the second view's informer does not ask again")
+	assert.Positive(t, plain.Load())
+}

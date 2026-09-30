@@ -7,6 +7,7 @@ import (
 	"net"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -44,6 +45,7 @@ type statusListWatch struct {
 	report    transportReport
 	ended     func() // a watch stream ended (renewal or a dropped connection)
 	watchList bool   // the client supports WatchList semantics (real clients do)
+	refused   *atomic.Bool
 	counts    *requestCounts
 }
 
@@ -72,8 +74,15 @@ func (lw *statusListWatch) WatchWithContext(ctx context.Context, o metav1.ListOp
 	// Cancel only if the stream does not start in time; once it has, the
 	// context lives until the stream ends or is stopped.
 	ctx, cancel := context.WithCancel(ctx)
+	initial := o.SendInitialEvents != nil && *o.SendInitialEvents
+	if initial && lw.refused != nil && lw.refused.Load() {
+		// The server refused WatchList already: the reflector falls back
+		// to LIST without asking again.
+		cancel()
+		return nil, errWatchListRefused
+	}
 	lw.counts.watchStarts.Add(1)
-	if o.SendInitialEvents != nil && *o.SendInitialEvents {
+	if initial {
 		lw.counts.initialSyncs.Add(1) // WatchList: the state comes by the watch (a relist)
 	}
 	timer := time.AfterFunc(watchEstablishTimeout, cancel)
@@ -87,6 +96,15 @@ func (lw *statusListWatch) WatchWithContext(ctx context.Context, o metav1.ListOp
 		cancel()
 		if errors.Is(err, context.Canceled) && ctx.Err() != nil {
 			err = fmt.Errorf("watch did not start within %s: %w", watchEstablishTimeout, context.DeadlineExceeded)
+		}
+		if initial && (apierrors.IsInvalid(err) || apierrors.IsBadRequest(err)) {
+			// A server without WatchList ("sendInitialEvents is forbidden
+			// … unless the WatchList feature gate is enabled"): not a
+			// failure — the reflector lists instead, and that is reported.
+			if lw.refused != nil {
+				lw.refused.Store(true)
+			}
+			return nil, err
 		}
 		lw.report(err)
 		return nil, err
@@ -105,7 +123,14 @@ func (lw *statusListWatch) Watch(o metav1.ListOptions) (watch.Interface, error) 
 
 // IsWatchListSemanticsUnSupported tells the reflector whether it may use
 // WatchList (the initial state as a watch stream); fake clients cannot.
-func (lw *statusListWatch) IsWatchListSemanticsUnSupported() bool { return !lw.watchList }
+// After the server refused it, new reflectors do not try it.
+func (lw *statusListWatch) IsWatchListSemanticsUnSupported() bool {
+	return !lw.watchList || (lw.refused != nil && lw.refused.Load())
+}
+
+// errWatchListRefused: WatchList is not asked again of a server that
+// refused it (the reflector falls back to LIST on any error).
+var errWatchListRefused = errors.New("the server does not serve WatchList")
 
 // reportingWatch forwards a watch stream (being its only consumer) and
 // reports watch.Error events. Stop is idempotent; forwarding never blocks

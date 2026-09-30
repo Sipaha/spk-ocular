@@ -419,7 +419,11 @@ P9 — правка YAML объекта Kubernetes с просмотром и о
 - **client-go v0.37: WatchList включён по умолчанию** — начальное состояние приходит watch-потоком
   (`sendInitialEvents`), а не List; поэтому «успешный List» не может быть признаком ready, а обёртка
   `ListerWatcher` обязана сохранять `ListOptions` и сообщать `IsWatchListSemanticsUnSupported`
-  (fake-клиенты в тестах — `watchList=false`).
+  (fake-клиенты в тестах — `watchList=false`). Сервер без WatchList отвечает на
+  `sendInitialEvents` 422 («…forbidden for watch unless the WatchList feature gate is enabled»),
+  reflector сам уходит на LIST — это не сбой транспорта (иначе вид на миг показывал «Cannot
+  show»); сессия запоминает отказ и больше не спрашивает (`cacheManager.noWatchList`). —
+  `TestAServerWithoutWatchListIsNoErrorAndAskedOnce`. Нашёл пользователь на своём кластере.
 - **Exec-плагин kubeconfig без контекста** (client-go `exec.go`): зависший `yc`/`kubelogin` вешает
   все запросы кластера и остаётся сиротой — только через shim (`docs/spikes/2026-09-29-exec-plugin-hang.md`).
 - **`metav1.Time` — точность до секунды**: время, прошедшее через ObjectMeta (slim-кэш), теряет доли

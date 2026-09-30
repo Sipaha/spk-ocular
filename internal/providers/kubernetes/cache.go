@@ -112,6 +112,9 @@ func (c *informerCache) transport() transport {
 type cacheManager struct {
 	dyn       dynamic.Interface
 	watchList bool
+	// noWatchList: the server refused WatchList (sendInitialEvents) once;
+	// no informer of the session asks again.
+	noWatchList atomic.Bool
 	// tables reads discovered kinds as server-side Tables (nil: the plain
 	// format through dyn); onSchema is told of an answer of another schema.
 	tables   *tableClient
@@ -166,7 +169,7 @@ func (m *cacheManager) start(key cacheKey, def *kindDef) *informerCache {
 	if key.namespace != "" {
 		ri = res.Namespace(key.namespace)
 	}
-	var lw cache.ListerWatcher = &statusListWatch{res: ri, selector: key.selector, report: c.setTransport, ended: c.streamEnded, watchList: m.watchList, counts: &m.counts}
+	var lw cache.ListerWatcher = &statusListWatch{res: ri, selector: key.selector, report: c.setTransport, ended: c.streamEnded, watchList: m.watchList, refused: &m.noWatchList, counts: &m.counts}
 	if sch := key.sch; sch != nil && sch.table && m.tables != nil {
 		lw = &tableListWatch{c: m.tables, gvr: key.gvr, namespace: key.namespace, selector: key.selector, report: c.setTransport, ended: c.streamEnded, counts: &m.counts,
 			check: func(cols []metav1.TableColumnDefinition) error {
