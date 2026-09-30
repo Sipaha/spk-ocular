@@ -190,13 +190,28 @@ func (s ViewStatus) Clone() ViewStatus {
 	return s
 }
 
-// Error is a classified provider error.
+// Error is a classified provider error. Message is its English text; Why,
+// when the sentence is the provider's own (not a server's text), is that
+// sentence by key for the UI to say in its language.
 type Error struct {
 	Class   ErrorClass
 	Message string
+	Why     *core.Message
 }
 
 func (e *Error) Error() string { return string(e.Class) + ": " + e.Message }
+
+// Said is an error whose text is the provider's sentence m.
+func Said(class ErrorClass, m core.Message) *Error {
+	if m.Params != nil {
+		params := make(map[string]string, len(m.Params))
+		for k, v := range m.Params {
+			params[k] = v
+		}
+		m.Params = params
+	}
+	return &Error{Class: class, Message: m.Text, Why: &m}
+}
 
 // MetricsSource is implemented by sessions that can report resource usage
 // for a query's rows (k8s: metrics.k8s.io for pods and nodes; Compose: the

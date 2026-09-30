@@ -255,7 +255,7 @@ func (s *session) RunAction(ctx context.Context, run provider.ActionRun) (core.A
 		}
 		msg, err := s.write(ctx, def, run, u)
 		if err == nil {
-			return core.ActionResult{Message: msg}, nil
+			return core.ActionResult{Message: core.Message{Text: msg}}, nil
 		}
 		retry, err := s.failedWrite(ctx, def, run, u, err)
 		if !retry || attempt == maxVersionRetries {

@@ -95,7 +95,7 @@ func TestKindActionRestartKeepsOtherAnnotationsAndTwiceIsTwoRollouts(t *testing.
 	ref := c.deployment("web", 1)
 	res, err := c.act(ref, "restart", core.ActionParams{})
 	require.NoError(t, err)
-	assert.Contains(t, res.Message, "restart requested")
+	assert.Contains(t, res.Message.Text, "restart requested")
 	first := c.jsonpath("deployment", "web", `{.spec.template.metadata.annotations.kubectl\.kubernetes\.io/restartedAt}`)
 	require.NotEmpty(t, first)
 	assert.Equal(t, "a", c.jsonpath("deployment", "web", "{.spec.template.metadata.annotations.team}"), "a merge: other annotations stay")
@@ -386,7 +386,7 @@ func TestKindActionCordonAndUncordon(t *testing.T) {
 	}
 	res, err := c.act(ref, "cordon", core.ActionParams{})
 	require.NoError(t, err)
-	assert.Contains(t, res.Message, "cordon requested")
+	assert.Contains(t, res.Message.Text, "cordon requested")
 	assert.Equal(t, "true", unschedulable())
 
 	plan, err := c.sess.PrepareAction(context.Background(), ref, "cordon", core.ActionParams{})
@@ -585,7 +585,7 @@ spec:
 
 	res, err := c.act(ref, "suspend", core.ActionParams{})
 	require.NoError(t, err)
-	assert.Contains(t, res.Message, "suspend requested")
+	assert.Contains(t, res.Message.Text, "suspend requested")
 	assert.Equal(t, "true", suspend())
 	plan := c.prepare(ref, "suspend", core.ActionParams{})
 	require.NotNil(t, plan.Unavailable, "already suspended")
@@ -633,7 +633,7 @@ spec:
 
 	res, err := c.sess.RunAction(context.Background(), provider.ActionRun{Ref: plan.Where.Ref, Action: "run", Expect: plan.Expect})
 	require.NoError(t, err)
-	assert.Contains(t, res.Message, job)
+	assert.Contains(t, res.Message.Text, job)
 	created := c.kubectlNS("get", "job", job, "-o", `jsonpath={.metadata.annotations.cronjob\.kubernetes\.io/instantiate} {.metadata.labels.app} {.metadata.ownerReferences[0].kind}/{.metadata.ownerReferences[0].uid}/{.metadata.ownerReferences[0].controller}`)
 	assert.Equal(t, "manual yearly CronJob/"+uid+"/true", created)
 

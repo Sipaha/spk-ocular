@@ -171,7 +171,7 @@ func TestRunNowCreatesTheReviewedJob(t *testing.T) {
 	job := jobOf(t, plan)
 	res, err := runNow(s, plan)
 	require.NoError(t, err)
-	assert.Contains(t, res.Message, job)
+	assert.Contains(t, res.Message.Text, job)
 	require.Equal(t, 1, w.creates())
 	tmpl := cronJob("nightly").Object["spec"].(map[string]any)["jobTemplate"].(map[string]any)["spec"]
 	assert.Equal(t, map[string]any{

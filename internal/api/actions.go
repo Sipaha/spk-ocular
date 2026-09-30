@@ -3,7 +3,6 @@ package api
 import (
 	"context"
 	"errors"
-	"fmt"
 
 	"github.com/spk/spk-ocular/internal/core"
 	"github.com/spk/spk-ocular/internal/provider"
@@ -30,11 +29,11 @@ type ActionRunRequest struct {
 func actioner(sess provider.Session, ref core.Ref, action string) (provider.Actioner, core.ActionDescriptor, error) {
 	act, ok := sess.(provider.Actioner)
 	if !ok {
-		return nil, core.ActionDescriptor{}, coded(CodeUnsupported, errors.New("objects of this target cannot be changed"))
+		return nil, core.ActionDescriptor{}, said(CodeUnsupported, "cannotChange")
 	}
 	d, err := core.FindAction(sess.Kinds(), ref.Kind, action)
 	if err != nil {
-		return nil, core.ActionDescriptor{}, coded(CodeUnsupported, err)
+		return nil, core.ActionDescriptor{}, noAction(sess.Kinds(), ref.Kind, action)
 	}
 	return act, d, nil
 }
@@ -117,10 +116,10 @@ func (s *Service) checkedSession(ctx context.Context, providerID, target, rev st
 	defer s.sessMu.Unlock()
 	e := s.sessions[ownerKey(providerID, target)]
 	if e == nil {
-		return nil, coded(CodeGone, errors.New("the session closed meanwhile; try again"))
+		return nil, said(CodeGone, "sessionClosed")
 	}
 	if s.configRev(e.hash) != rev {
-		return nil, coded(CodeConflict, fmt.Errorf("the configuration of %s changed since the action was reviewed; review it again", target))
+		return nil, said(CodeConflict, "configChanged", "target", target)
 	}
 	e.lastUsed = s.now()
 	return e.sess, nil

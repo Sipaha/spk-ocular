@@ -301,7 +301,7 @@ func TestDindActions(t *testing.T) {
 			t.Errorf("%s after stop: %+v %+v %v", p.Title, p, c.State, err)
 		}
 	}
-	t.Logf("service stop: %s", res.Message)
+	t.Logf("service stop: %s", res.Message.Text)
 
 	plan, err = s.PrepareAction(ctx, svc, "start", core.ActionParams{})
 	for i := 0; err == nil && plan.Unavailable != nil && i < 100; i++ { // the feed saw them stop
@@ -362,5 +362,5 @@ func TestDindActions(t *testing.T) {
 	if _, err := s.cl.InspectContainer(ctx, one.ID); !engine.IsNotFound(err) {
 		t.Errorf("removed container still inspects: %v", err)
 	}
-	t.Logf("remove: %s", res.Message)
+	t.Logf("remove: %s", res.Message.Text)
 }

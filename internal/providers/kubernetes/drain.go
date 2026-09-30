@@ -611,7 +611,7 @@ func (s *session) runDrain(ctx context.Context, def *kindDef, run provider.Actio
 			done++
 		}
 	}
-	return core.ActionResult{Message: fmt.Sprintf("node %s: drain requested (%d of %d parts done)", node.GetName(), done, len(parts)), Outcome: out, Parts: parts}, nil
+	return core.ActionResult{Message: core.Message{Text: fmt.Sprintf("node %s: drain requested (%d of %d parts done)", node.GetName(), done, len(parts))}, Outcome: out, Parts: parts}, nil
 }
 
 // drainCheck reads the node (by UID) and its pods again: they must be the
@@ -660,7 +660,7 @@ func (s *session) drainCordon(ctx context.Context, def *kindDef, run provider.Ac
 	cordon := provider.ActionRun{Ref: run.Ref, Action: actCordon.ID}
 	_, err := s.write(wctx, def, cordon, node)
 	if err == nil {
-		part.Outcome, part.Message = core.OutcomeDone, "cordon requested"
+		part.Outcome = core.OutcomeDone
 		return part, false, nil
 	}
 	var se apierrors.APIStatus
@@ -703,7 +703,7 @@ func (s *session) evictOne(ctx context.Context, p drainPod) core.ActionPart {
 		var se apierrors.APIStatus
 		switch {
 		case err == nil:
-			part.Outcome, part.Message = core.OutcomeDone, "eviction requested"
+			part.Outcome = core.OutcomeDone
 			return part
 		case !errors.As(err, &se) || ambiguous(err):
 			part.Outcome, part.Why = core.OutcomeUnknown, ptr(msg("drain.why.unknown", "detail", shortErr(err)))

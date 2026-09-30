@@ -104,7 +104,7 @@ func TestDiscoveredDeleteRuns(t *testing.T) {
 	require.NoError(t, err)
 	res, err := s.RunAction(context.Background(), provider.ActionRun{Ref: ref, Action: "delete", Expect: plan.Expect})
 	require.NoError(t, err)
-	assert.Equal(t, "widget alpha: deletion requested", res.Message)
+	assert.Equal(t, "widget alpha: deletion requested", res.Message.Text)
 	assert.Equal(t, 1, deletes(s))
 }
 

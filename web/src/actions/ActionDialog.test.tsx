@@ -198,7 +198,7 @@ describe('ActionDialog', () => {
 
   it('quick Enter and clicks: one run', async () => {
     const { f, dialog } = setup(restart)
-    const run = deferred<{ message: string }>()
+    const run = deferred<ActionResult>()
     f.client.runAction = vi.fn(() => run.promise)
     const confirm = await within(dialog).findByRole('button', { name: 'Restart' })
     await waitFor(() => expect(confirm).toHaveFocus())
@@ -208,7 +208,7 @@ describe('ActionDialog', () => {
     })
     await userEvent.keyboard('{Enter}')
     expect(f.client.runAction).toHaveBeenCalledTimes(1)
-    await act(async () => run.resolve({ message: 'ok' }))
+    await act(async () => run.resolve({ message: { text: 'ok' } }))
   })
 
   it('a late plan does not replace a later review', async () => {
@@ -229,13 +229,13 @@ describe('ActionDialog', () => {
 
   it('Esc while running does not close; the answer does', async () => {
     const { f, onClose, dialog } = setup(restart)
-    const run = deferred<{ message: string }>()
+    const run = deferred<ActionResult>()
     f.client.runAction = vi.fn(() => run.promise)
     await userEvent.click(await within(dialog).findByRole('button', { name: 'Restart' }))
     await userEvent.keyboard('{Escape}')
     expect(onClose).not.toHaveBeenCalled()
     expect(within(dialog).getByRole('button', { name: 'Close' })).toBeDisabled()
-    await act(async () => run.resolve({ message: 'deployment api: restart requested' }))
+    await act(async () => run.resolve({ message: { text: 'deployment api: restart requested' } }))
     expect(onClose).toHaveBeenCalled()
     expect(useStore.getState().notice).toBe('deployment api: restart requested')
   })
@@ -275,11 +275,11 @@ describe('ActionDialog', () => {
   describe('an answer after the timeout', () => {
     it('success: its dialog, still showing "unknown", says it was done', async () => {
       const { f, dialog, onClose } = setup(restart, undefined, 50)
-      const run = deferred<{ message: string }>()
+      const run = deferred<ActionResult>()
       f.client.runAction = vi.fn(() => run.promise)
       await userEvent.click(await within(dialog).findByRole('button', { name: 'Restart' }))
       expect(await within(dialog).findByRole('alert')).toHaveTextContent('No answer within 0 s')
-      await act(async () => run.resolve({ message: 'deployment api: restart requested' }))
+      await act(async () => run.resolve({ message: { text: 'deployment api: restart requested' } }))
       expect(within(dialog).getByRole('status')).toHaveTextContent('Done after all: deployment api: restart requested')
       expect(within(dialog).queryByRole('alert')).not.toBeInTheDocument()
       expect(useStore.getState().notice).toBe('deployment api: restart requested')
@@ -289,7 +289,7 @@ describe('ActionDialog', () => {
 
     it('a refusal: its dialog says the late answer', async () => {
       const { f, dialog } = setup(restart, undefined, 50)
-      const run = deferred<{ message: string }>()
+      const run = deferred<ActionResult>()
       f.client.runAction = vi.fn(() => run.promise)
       await userEvent.click(await within(dialog).findByRole('button', { name: 'Restart' }))
       await within(dialog).findByRole('alert')
@@ -301,20 +301,20 @@ describe('ActionDialog', () => {
     it('its dialog closed: a notice says where and what', async () => {
       const f = fakeClient([k8s('prod')])
       f.client.prepareAction = vi.fn(async (_r: Ref, _a: string, p: ActionParams) => planOf(restart, p))
-      const run = deferred<{ message: string }>()
+      const run = deferred<ActionResult>()
       f.client.runAction = vi.fn(() => run.promise)
       const { unmount } = render(<ActionDialog client={f.client} req={{ ref, action: restart, kindTitle: 'Deployment' }} onClose={() => {}} runTimeoutMs={50} />)
       await userEvent.click(await screen.findByRole('button', { name: 'Restart' }))
       await screen.findByRole('alert')
       unmount()
-      await act(async () => run.resolve({ message: 'deployment api: restart requested' }))
+      await act(async () => run.resolve({ message: { text: 'deployment api: restart requested' } }))
       expect(useStore.getState().notice).toBe('prod-ctx · Done after all: deployment api: restart requested')
     })
 
     it('another confirmation open meanwhile is left alone', async () => {
       const f = fakeClient([k8s('prod')])
       f.client.prepareAction = vi.fn(async (_r: Ref, _a: string, p: ActionParams) => planOf(p.count === undefined ? restart : scale, p))
-      const run = deferred<{ message: string }>()
+      const run = deferred<ActionResult>()
       f.client.runAction = vi.fn(() => run.promise)
       const first = render(<ActionDialog key={1} client={f.client} req={{ ref, action: restart, kindTitle: 'Deployment' }} onClose={() => {}} runTimeoutMs={50} />)
       await userEvent.click(await screen.findByRole('button', { name: 'Restart' }))
@@ -331,11 +331,11 @@ describe('ActionDialog', () => {
 
   describe('a run of several parts (a service\'s containers)', () => {
     const parts = (last: 'unknown' | 'refused'): ActionResult => ({
-      message: '1 of 3 containers restarted',
+      message: { text: '1 of 3 containers restarted' },
       outcome: last,
       parts: [
-        { id: 'c1', title: 'web-1', outcome: 'done', message: 'container web-1 restarted' },
-        { id: 'c2', title: 'web-2', outcome: last, message: 'no answer within 25s' },
+        { id: 'c1', title: 'web-1', outcome: 'done' },
+        { id: 'c2', title: 'web-2', outcome: last, why: { text: 'no answer within 25s' } },
         { id: 'c3', title: 'web-3', outcome: 'skipped' },
       ],
     })
@@ -365,7 +365,7 @@ describe('ActionDialog', () => {
     it('all parts done: closes like a single run, the notice counts them', async () => {
       const { f, dialog, onClose } = setup(restart)
       f.client.runAction = vi.fn(async () => ({
-        message: '2 of 2 containers restarted',
+        message: { text: '2 of 2 containers restarted' },
         outcome: 'done' as const,
         parts: [{ id: 'c1', title: 'web-1', outcome: 'done' as const }, { id: 'c2', title: 'web-2', outcome: 'done' as const }],
       }))
@@ -434,9 +434,9 @@ describe('ActionDialog', () => {
         const { f, dialog } = setup(restart, (p) => planOf(restart, p, { lists: [{ title: { key: 'compose.scope.singular', text: 'x' }, items: items(1) }] }))
         expect(await within(dialog).findByRole('region', { name: 'Проект (1)' })).toBeInTheDocument()
         f.client.runAction = vi.fn(async () => ({
-          message: 'm',
+          message: { text: 'm' },
           outcome: 'refused' as const,
-          parts: [{ id: 'p1', title: 'pod-1', outcome: 'refused' as const, message: 'raw', why: { key: 'compose.scope.singular', text: 'x' } }],
+          parts: [{ id: 'p1', title: 'pod-1', outcome: 'refused' as const, why: { key: 'compose.scope.singular', text: 'x' } }],
         }))
         await userEvent.click(within(dialog).getByRole('button', { name: 'Перезапустить' }))
         expect(await within(dialog).findByRole('list', { name: 'Итог' })).toHaveTextContent('pod-1Отказано · Проект')
@@ -448,7 +448,7 @@ describe('ActionDialog', () => {
     it('a run left unfinished (skipped parts): the dialog stays with them', async () => {
       const { f, dialog, onClose } = setup(restart)
       f.client.runAction = vi.fn(async () => ({
-        message: 'm',
+        message: { text: 'm' },
         outcome: 'skipped' as const,
         parts: [
           { id: 'p1', title: 'pod-1', outcome: 'done' as const },
@@ -464,7 +464,7 @@ describe('ActionDialog', () => {
     it('many parts: shown in portions, in their order, every one reachable', async () => {
       const { f, dialog } = setup(restart)
       const parts = Array.from({ length: 130 }, (_, i) => ({ id: `p${i}`, title: `pod-${i + 1}`, outcome: (i === 129 ? 'refused' : 'done') as 'done' | 'refused' }))
-      f.client.runAction = vi.fn(async () => ({ message: 'm', outcome: 'refused' as const, parts }))
+      f.client.runAction = vi.fn(async () => ({ message: { text: 'm' }, outcome: 'refused' as const, parts }))
       await userEvent.click(await within(dialog).findByRole('button', { name: 'Restart' }))
       const list = await within(dialog).findByRole('list', { name: 'Result' })
       const shown = within(list).getAllByRole('listitem')
@@ -485,7 +485,7 @@ describe('ActionDialog', () => {
     })
     await userEvent.click(await within(dialog).findByRole('button', { name: 'Restart' }))
     expect(await within(dialog).findByRole('alert')).toHaveTextContent('changed since this was reviewed')
-    f.client.runAction = vi.fn(async () => ({ message: 'ok' }))
+    f.client.runAction = vi.fn(async () => ({ message: { text: 'ok' } }))
     await userEvent.click(within(dialog).getByRole('button', { name: 'Review again' }))
     await userEvent.click(await within(dialog).findByRole('button', { name: 'Restart' }))
     expect(vi.mocked(f.client.runAction).mock.calls[0][0].expect).toBe('e2')
@@ -506,12 +506,12 @@ describe('ActionDialog', () => {
   it('the outcome of a run whose dialog went away (another target) is still told', async () => {
     const f = fakeClient([k8s('prod')])
     f.client.prepareAction = vi.fn(async (_r: Ref, _a: string, p: ActionParams) => planOf(restart, p))
-    const run = deferred<{ message: string }>()
+    const run = deferred<ActionResult>()
     f.client.runAction = vi.fn(() => run.promise)
     const { unmount } = render(<ActionDialog client={f.client} req={{ ref, action: restart, kindTitle: 'Deployments' }} onClose={() => {}} />)
     await userEvent.click(await screen.findByRole('button', { name: 'Restart' }))
     unmount()
-    await act(async () => run.resolve({ message: 'deployment api: restart requested' }))
+    await act(async () => run.resolve({ message: { text: 'deployment api: restart requested' } }))
     // Another target is shown now: the notice says where it happened.
     expect(useStore.getState().notice).toBe('prod-ctx · deployment api: restart requested')
   })
@@ -519,7 +519,7 @@ describe('ActionDialog', () => {
   it('a failure of a run whose dialog went away is told too', async () => {
     const f = fakeClient([k8s('prod')])
     f.client.prepareAction = vi.fn(async (_r: Ref, _a: string, p: ActionParams) => planOf(restart, p))
-    const run = deferred<{ message: string }>()
+    const run = deferred<ActionResult>()
     f.client.runAction = vi.fn(() => run.promise)
     const { unmount } = render(<ActionDialog client={f.client} req={{ ref, action: restart, kindTitle: 'Deployments' }} onClose={() => {}} />)
     await userEvent.click(await screen.findByRole('button', { name: 'Restart' }))

@@ -394,8 +394,7 @@ export interface ActionPart {
   id: string
   title: string
   outcome: ActionOutcome
-  message?: string
-  /** why, in the provider's words (preferred over message) */
+  /** why it is not done, in the provider's words (always for refused and unknown) */
   why?: Message
 }
 
@@ -419,7 +418,8 @@ export interface ActionItem {
  * when every part is (absent: done — older answers).
  */
 export interface ActionResult {
-  message: string
+  /** what was requested, in the provider's words */
+  message: Message
   /** skipped: not everything was done (parts left or not started) */
   outcome?: ActionOutcome
   parts?: ActionPart[]

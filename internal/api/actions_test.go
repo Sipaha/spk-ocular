@@ -50,7 +50,7 @@ func (a *actionSession) RunAction(_ context.Context, run provider.ActionRun) (co
 	if r := a.o.result; r != nil {
 		return *r, nil
 	}
-	return core.ActionResult{Message: run.Action + " requested"}, nil
+	return core.ActionResult{Message: core.Message{Text: run.Action + " requested"}}, nil
 }
 
 type ranAction struct {
@@ -144,7 +144,7 @@ func TestInvalidRunsReachNoProvider(t *testing.T) {
 	assert.Empty(t, k.ran())
 	res, err := s.RunAction(ctx, good)
 	require.NoError(t, err)
-	assert.Equal(t, "scale requested", res.Message)
+	assert.Equal(t, "scale requested", res.Message.Text)
 	require.Len(t, k.ran(), 1)
 	assert.Equal(t, provider.ActionRun{Ref: plan.Where.Ref, Action: "scale", Params: core.ActionParams{Count: intp(3)}, Expect: "e1"}, k.ran()[0].run)
 }
@@ -179,7 +179,7 @@ func TestARunStaysOnTheSessionItWasCheckedAgainst(t *testing.T) {
 	}
 	res, err := s.RunAction(ctx, runFor(plan, nil))
 	require.NoError(t, err)
-	assert.Equal(t, "restart requested", res.Message)
+	assert.Equal(t, "restart requested", res.Message.Text)
 	runs := k.ran()
 	require.Len(t, runs, 1)
 	assert.Equal(t, "h1", runs[0].on.hash, "ran on the checked session")
@@ -196,9 +196,9 @@ func TestARunReportsItsOutcomeAndParts(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, core.OutcomeDone, res.Outcome)
 
-	partial := core.ActionResult{Message: "1 of 3 restarted", Outcome: core.OutcomeUnknown, Parts: []core.ActionPart{
+	partial := core.ActionResult{Message: core.Message{Text: "1 of 3 restarted"}, Outcome: core.OutcomeUnknown, Parts: []core.ActionPart{
 		{ID: "a", Title: "web-1", Outcome: core.OutcomeDone},
-		{ID: "b", Title: "web-2", Outcome: core.OutcomeUnknown, Message: "no answer within 25s"},
+		{ID: "b", Title: "web-2", Outcome: core.OutcomeUnknown, Why: &core.Message{Text: "no answer within 25s"}},
 		{ID: "c", Title: "web-3", Outcome: core.OutcomeSkipped},
 	}}
 	k.result = &partial

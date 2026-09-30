@@ -300,7 +300,7 @@ func (s *session) runNow(ctx context.Context, def *kindDef, run provider.ActionR
 	defer cancel()
 	err = wr.create(wctx, jobsV1GVR, u.GetNamespace(), runJob(u, g.Job))
 	if err == nil {
-		return core.ActionResult{Message: fmt.Sprintf("Job %s created from cronjob %s", g.Job, u.GetName())}, nil
+		return core.ActionResult{Message: core.Message{Text: fmt.Sprintf("Job %s created from cronjob %s", g.Job, u.GetName())}}, nil
 	}
 	return core.ActionResult{}, runFailed(err, g.Job)
 }

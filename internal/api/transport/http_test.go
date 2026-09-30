@@ -32,6 +32,9 @@ func (f *fakeAPI) SelectTarget(_ context.Context, provider, id string) error {
 	if id == "missing" {
 		return &api.CodedError{Code: api.CodeNotFound, Detail: "no target"}
 	}
+	if id == "said" {
+		return &api.CodedError{Code: api.CodeConflict, Detail: "web changed", Why: &core.Message{Key: "kubernetes.error.changed", Params: map[string]string{"name": "web"}, Text: "web changed"}}
+	}
 	f.selected = api.TargetRef{Provider: provider, ID: id}
 	return nil
 }
@@ -115,6 +118,27 @@ func TestCodedErrorBecomes400WithCode(t *testing.T) {
 	var body map[string]string
 	require.NoError(t, json.NewDecoder(resp.Body).Decode(&body))
 	assert.Equal(t, api.CodeNotFound, body["code"])
+}
+
+// A reason travels as "why" next to the code and detail.
+func TestCodedErrorCarriesItsWhy(t *testing.T) {
+	h := NewHTTP(&fakeAPI{}, events.NewEmitter())
+	ts := httptest.NewServer(h)
+	defer ts.Close()
+	resp := call(t, h, ts.URL, "SelectTarget", `{"provider":"kubernetes","id":"said"}`)
+	assert.Equal(t, 400, resp.StatusCode)
+	var body struct {
+		Code   string        `json:"code"`
+		Detail string        `json:"detail"`
+		Why    *core.Message `json:"why"`
+	}
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&body))
+	assert.Equal(t, api.CodeConflict, body.Code)
+	assert.Equal(t, "web changed", body.Detail)
+	if assert.NotNil(t, body.Why) {
+		assert.Equal(t, "kubernetes.error.changed", body.Why.Key)
+		assert.Equal(t, "web", body.Why.Params["name"])
+	}
 }
 
 func TestMalformedBodyIsBadRequest(t *testing.T) {
@@ -264,4 +288,35 @@ func TestAValueRunIsFlat(t *testing.T) {
 	require.NoError(t, json.NewDecoder(resp.Body).Decode(&res))
 	assert.Equal(t, "t", res.Message)
 	assert.Equal(t, api.ValueEditRequest{Ref: core.Ref{Provider: "k", Target: "a"}, Base: "b", Key: "password", Op: "set", Value: "x", Encoding: "text"}, f.prepared)
+}
+
+// resultAPI answers RunAction with a keyed result and parts.
+type resultAPI struct{ fakeAPI }
+
+func (resultAPI) RunAction(context.Context, api.ActionRunRequest) (core.ActionResult, error) {
+	return core.ActionResult{
+		Message: core.Message{Key: "kubernetes.done.cordon", Params: map[string]string{"name": "w1"}, Text: "node w1: cordon requested"},
+		Outcome: core.OutcomeRefused,
+		Parts: []core.ActionPart{
+			{ID: "a", Title: "w1", Outcome: core.OutcomeDone},
+			{ID: "b", Title: "p1", Outcome: core.OutcomeRefused, Why: &core.Message{Key: "kubernetes.drain.why.pdb", Text: "a PodDisruptionBudget allows no more"}},
+		},
+	}, nil
+}
+
+// The result's wire shape (P13): message is a sentence object with its
+// key, params and English text; parts carry no message, only why.
+func TestAResultTravelsAsASentence(t *testing.T) {
+	h := NewHTTP(&resultAPI{}, events.NewEmitter())
+	ts := httptest.NewServer(h)
+	defer ts.Close()
+	resp := call(t, h, ts.URL, "RunAction", `{}`)
+	require.Equal(t, 200, resp.StatusCode)
+	var body map[string]any
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&body))
+	assert.Equal(t, map[string]any{"key": "kubernetes.done.cordon", "params": map[string]any{"name": "w1"}, "text": "node w1: cordon requested"}, body["message"])
+	parts := body["parts"].([]any)
+	assert.Equal(t, map[string]any{"id": "a", "title": "w1", "outcome": "done"}, parts[0])
+	assert.Equal(t, map[string]any{"key": "kubernetes.drain.why.pdb", "text": "a PodDisruptionBudget allows no more"}, parts[1].(map[string]any)["why"])
+	assert.NotContains(t, parts[1], "message")
 }

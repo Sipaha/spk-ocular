@@ -100,7 +100,7 @@ func TestCordonIsAMergePatchWithIdentityAndVersion(t *testing.T) {
 			ref := nodeRef("w1", "uid-w1")
 			res, err := s.RunAction(context.Background(), provider.ActionRun{Ref: ref, Action: tc.action, Expect: expectNow(t, s, ref, tc.action, core.ActionParams{})})
 			require.NoError(t, err)
-			assert.Contains(t, res.Message, "node w1: "+tc.action+" requested")
+			assert.Contains(t, res.Message.Text, "node w1: "+tc.action+" requested")
 			w := writes(c)
 			require.Len(t, w, 1)
 			p := w[0].(k8stesting.PatchAction)

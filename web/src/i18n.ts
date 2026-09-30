@@ -1067,6 +1067,11 @@ const providerTexts: Partial<Record<Language, Record<string, string>>> = {
     'kubernetes.values.reload': 'Pod-ы, читающие Secret как переменные окружения, увидят изменение только после перезапуска; смонтированные тома обновятся с задержкой (subPath — никогда).',
     'kubernetes.secret.hiddenReadForbidden': 'Сервер не дал прочитать Secret; его сообщение скрыто: в нём могут быть значения Secret.',
     'kubernetes.secret.hiddenReadOther': 'Secret не удалось прочитать; сообщение сервера скрыто: в нём могут быть значения Secret.',
+    'api.cannotChange': 'объекты этой цели нельзя менять',
+    'api.noAction': 'у вида {kind} больше нет действия {action}: обновите меню',
+    'api.unknownKind': 'вида {kind} больше нет: обновите меню',
+    'api.sessionClosed': 'сессия закрылась тем временем — попробуйте снова',
+    'api.configChanged': 'конфигурация {target} изменилась после просмотра — посмотрите снова',
   },
 }
 

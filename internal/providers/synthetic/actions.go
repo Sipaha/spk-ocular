@@ -414,10 +414,10 @@ func (s *session) RunAction(ctx context.Context, run provider.ActionRun) (core.A
 		parts = append(parts, core.ActionPart{ID: o.name + "-helper", Title: o.name + "-helper", Outcome: core.OutcomeSkipped, Why: &core.Message{Text: "left alone"}})
 		o.restarts++
 		w.changed(o, false)
-		return core.ActionResult{Message: "workload " + o.name + ": evacuation requested", Outcome: core.PartsOutcome(parts), Parts: parts}, nil
+		return core.ActionResult{Message: core.Message{Text: "workload " + o.name + ": evacuation requested"}, Outcome: core.PartsOutcome(parts), Parts: parts}, nil
 	}
 	if c.Fail == provider.ClassUnknown {
 		return core.ActionResult{}, &provider.Error{Class: provider.ClassUnknown, Message: "the request was sent but its outcome is not known (synthetic)"}
 	}
-	return core.ActionResult{Message: msg}, nil
+	return core.ActionResult{Message: core.Message{Text: msg}}, nil
 }

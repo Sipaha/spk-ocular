@@ -37,3 +37,9 @@ func TestTheUIsTranslationsCoverEveryMessage(t *testing.T) {
 		assert.True(t, ok, "a translation of an unknown key %s", key)
 	}
 }
+
+// A value is data: another parameter's placeholder inside it stays.
+func TestMessageParamsAreNotRescanned(t *testing.T) {
+	m := msg("act.stop", "name", "{signal}", "signal", "SIGTERM", "timeout", "10")
+	assert.Contains(t, m.Text, "{signal}")
+}

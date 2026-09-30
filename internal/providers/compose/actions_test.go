@@ -167,7 +167,7 @@ func TestStopRunsWithTheShownTimeout(t *testing.T) {
 	res, err := e.s.RunAction(t.Context(), runOf(plan, ctrRef(c)))
 	require.NoError(t, err)
 	assert.Equal(t, core.OutcomeDone, res.Outcome)
-	assert.Equal(t, "container p-web-1 stopped", res.Message)
+	assert.Equal(t, "container p-web-1 stopped", res.Message.Text)
 	assert.Empty(t, res.Parts)
 	assert.Equal(t, []string{"POST /containers/aaaa1111/stop t=0"}, writes(e))
 	got, err := e.s.cl.InspectContainer(t.Context(), c.ID)
@@ -248,7 +248,7 @@ func TestContainerRunAnswers(t *testing.T) {
 			res, err := e.s.RunAction(t.Context(), runOf(plan, ctrRef(c)))
 			if x.class == "" {
 				require.NoError(t, err)
-				assert.Equal(t, x.msg, res.Message)
+				assert.Equal(t, x.msg, res.Message.Text)
 				return
 			}
 			assert.Equal(t, x.class, errClass(err))
@@ -278,10 +278,10 @@ func TestServiceStopActsOnItsRunningContainersInOrder(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, core.OutcomeDone, res.Outcome)
 	assert.Equal(t, []core.ActionPart{
-		{ID: one.ID, Title: "p-web-1", Outcome: core.OutcomeDone, Message: "container p-web-1 stopped"},
-		{ID: three.ID, Title: "p-web-3", Outcome: core.OutcomeDone, Message: "container p-web-3 stopped"},
+		{ID: one.ID, Title: "p-web-1", Outcome: core.OutcomeDone},
+		{ID: three.ID, Title: "p-web-3", Outcome: core.OutcomeDone},
 	}, res.Parts)
-	assert.Equal(t, "2 of 2 containers stopped", res.Message)
+	assert.Equal(t, "2 of 2 containers stopped", res.Message.Text)
 	assert.Equal(t, []string{"POST /containers/cccc1111/stop t=10", "POST /containers/bbbb3333/stop t=3"}, writes(e))
 
 	_, err = e.s.RunAction(t.Context(), runOf(plan, svcRef("p", "web")))
@@ -365,9 +365,9 @@ func TestServiceRunStopsAtTheFirstFailure(t *testing.T) {
 			require.Len(t, res.Parts, 3)
 			assert.Equal(t, core.OutcomeDone, res.Parts[0].Outcome)
 			assert.Equal(t, x.outcome, res.Parts[1].Outcome)
-			assert.Contains(t, res.Parts[1].Message, "it failed")
+			assert.Contains(t, res.Parts[1].Why.Text, "it failed")
 			assert.Equal(t, core.ActionPart{ID: cs[2].ID, Title: "p-web-3", Outcome: core.OutcomeSkipped}, res.Parts[2])
-			assert.Equal(t, x.summary, res.Message)
+			assert.Equal(t, x.summary, res.Message.Text)
 			assert.Len(t, writes(e), 2, "the third was never sent")
 		})
 	}
@@ -383,7 +383,7 @@ func TestRemoveRun(t *testing.T) {
 	require.NoError(t, err)
 	res, err := e.s.RunAction(t.Context(), runOf(plan, ctrRef(c)))
 	require.NoError(t, err)
-	assert.Equal(t, "container p-web-1 removed", res.Message)
+	assert.Equal(t, "container p-web-1 removed", res.Message.Text)
 	assert.Equal(t, []string{"DELETE /containers/aaaa1111"}, writes(e))
 	_, err = e.s.cl.InspectContainer(t.Context(), c.ID)
 	assert.True(t, engine.IsNotFound(err))

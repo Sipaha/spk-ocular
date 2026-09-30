@@ -112,7 +112,7 @@ describe('actions in the workspace', () => {
 
   it('a done action says so in the status bar', async () => {
     const { f, grid } = await openProd()
-    f.client.runAction = vi.fn(async () => ({ message: 'pod api-2: deletion requested' }))
+    f.client.runAction = vi.fn(async () => ({ message: { text: 'pod api-2: deletion requested' } }))
     fireEvent.contextMenu(within(grid).getByText('api-2'))
     await userEvent.click(within(screen.getByRole('menu')).getByRole('menuitem', { name: 'Delete' }))
     const dialog = await screen.findByRole('dialog', { name: 'Delete api-2' })

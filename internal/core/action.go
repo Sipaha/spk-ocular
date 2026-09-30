@@ -152,21 +152,21 @@ const (
 // and returns its result, not an error, once any write was sent: Outcome
 // is done only when every part is, else the worst part's (unknown, then
 // refused, then skipped — PartsOutcome).
+// Message says what was requested (the UI shows it for a run without Parts).
 type ActionResult struct {
-	Message string        `json:"message"`
+	Message Message       `json:"message"`
 	Outcome ActionOutcome `json:"outcome"`
 	Parts   []ActionPart  `json:"parts,omitempty"`
 }
 
 // ActionPart is one write of a run: its object (ID: the full id, Title:
-// its name), its outcome and why.
+// its name), its outcome and why it is not done — always set for refused
+// and unknown parts, where possible for skipped ones.
 type ActionPart struct {
 	ID      string        `json:"id"`
 	Title   string        `json:"title"`
 	Outcome ActionOutcome `json:"outcome"`
-	Message string        `json:"message,omitempty"`
-	// Why in the provider's words (the UI prefers it to Message).
-	Why *Message `json:"why,omitempty"`
+	Why     *Message      `json:"why,omitempty"`
 }
 
 // PartsOutcome is a run's outcome from its parts: unknown outranks refused,

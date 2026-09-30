@@ -2,8 +2,6 @@ package kubernetes
 
 import (
 	"fmt"
-	"sort"
-	"strings"
 
 	"github.com/spk/spk-ocular/internal/core"
 )
@@ -167,15 +165,7 @@ func msg(key string, kv ...any) core.Message {
 		for i := 0; i+1 < len(kv); i += 2 {
 			m.Params[fmt.Sprint(kv[i])] = fmt.Sprint(kv[i+1])
 		}
-		// Longest names first: {count} must not eat a prefix of another.
-		names := make([]string, 0, len(m.Params))
-		for k := range m.Params {
-			names = append(names, k)
-		}
-		sort.Slice(names, func(i, j int) bool { return len(names[i]) > len(names[j]) })
-		for _, k := range names {
-			m.Text = strings.ReplaceAll(m.Text, "{"+k+"}", m.Params[k])
-		}
+		m.Text = core.Format(tmpl, m.Params)
 	}
 	return m
 }

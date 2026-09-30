@@ -500,3 +500,9 @@ func TestTheUIsTranslationsCoverEveryMessage(t *testing.T) {
 		assert.True(t, ok, "a translation of an unknown key %s", key)
 	}
 }
+
+// A value is data: another parameter's placeholder inside it stays.
+func TestMessageParamsAreNotRescanned(t *testing.T) {
+	m := msg("restart.rolling", "maxUnavailable", "{maxSurge}", "maxSurge", "25%")
+	assert.Equal(t, "Pods are replaced gradually (rolling update: max unavailable {maxSurge}, max surge 25%).", m.Text)
+}

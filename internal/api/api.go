@@ -241,10 +241,13 @@ type KindsView struct {
 }
 
 // CodedError is what API methods return: a stable code for the UI plus a
-// human-readable detail. Over Wails it travels as the string "code: detail".
+// human-readable detail; Why, when set, is the detail as a sentence by key
+// (the UI says it in its language). Over Wails it travels as the string
+// "code: detail", and as this JSON in the rejected call's cause.
 type CodedError struct {
-	Code   string `json:"code"`
-	Detail string `json:"detail"`
+	Code   string        `json:"code"`
+	Detail string        `json:"detail"`
+	Why    *core.Message `json:"why,omitempty"`
 }
 
 func (e *CodedError) Error() string {
@@ -258,7 +261,7 @@ func (e *CodedError) Error() string {
 func fromProvider(err error) *CodedError {
 	var pe *provider.Error
 	if errors.As(err, &pe) {
-		return &CodedError{Code: string(pe.Class), Detail: pe.Message}
+		return &CodedError{Code: string(pe.Class), Detail: pe.Message, Why: pe.Why}
 	}
 	var ce *CodedError
 	if errors.As(err, &ce) {

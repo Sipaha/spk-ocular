@@ -89,7 +89,7 @@ func writeErr(w http.ResponseWriter, err error) {
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusBadRequest)
-	_ = json.NewEncoder(w).Encode(map[string]string{"code": ce.Code, "detail": ce.Detail})
+	_ = json.NewEncoder(w).Encode(ce)
 }
 
 func (h *HTTP) routes() {

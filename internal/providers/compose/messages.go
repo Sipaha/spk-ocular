@@ -1,8 +1,6 @@
 package compose
 
 import (
-	"strings"
-
 	"github.com/spk/spk-ocular/internal/core"
 )
 
@@ -69,8 +67,8 @@ func msg(key string, kv ...string) core.Message {
 		m.Params = make(map[string]string, len(kv)/2)
 		for i := 0; i+1 < len(kv); i += 2 {
 			m.Params[kv[i]] = kv[i+1]
-			m.Text = strings.ReplaceAll(m.Text, "{"+kv[i]+"}", kv[i+1])
 		}
+		m.Text = core.Format(tmpl, m.Params)
 	}
 	return m
 }

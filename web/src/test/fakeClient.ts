@@ -85,7 +85,7 @@ export function fakeClient(targets: Target[]) {
     prepareAction: vi.fn(async () => {
       throw new Error('prepareAction not stubbed')
     }),
-    runAction: vi.fn(async () => ({ message: 'requested' })),
+    runAction: vi.fn(async () => ({ message: { text: 'requested' } })),
     getEditSource: vi.fn(async () => {
       throw new Error('getEditSource not stubbed')
     }),

@@ -214,7 +214,7 @@ export function ActionDialog({ client, req, onClose, runTimeoutMs = RUN_TIMEOUT_
       } else showNotice(`${where}${out.type === 'lateDone' ? out.text : `${actionLabel(action)} ${refTitle(plan.where.ref)}: ${out.text}`}`, 10_000)
     }
     // What a result says, for a notice: the sum of its parts or its message.
-    const told = (res: ActionResult) => (res.parts?.length ? `${actionLabel(action)} ${refTitle(plan.where.ref)}: ${partsSummary(res.parts)}` : res.message)
+    const told = (res: ActionResult) => (res.parts?.length ? `${actionLabel(action)} ${refTitle(plan.where.ref)}: ${partsSummary(res.parts)}` : messageText(res.message))
     answer.then(
       (res) => {
         const partial = partialOf(res)
@@ -415,7 +415,7 @@ export function ActionDialog({ client, req, onClose, runTimeoutMs = RUN_TIMEOUT_
                 render={(shown) => (
                   <ul aria-label={t('action.parts')} className="space-y-0.5 rounded-md border border-line px-3 py-2 text-xs">
                     {shown.map((p) => {
-                      const why = p.why ? messageText(p.why) : p.message
+                      const why = p.why && messageText(p.why)
                       return (
                         <li key={p.id} className="flex gap-2">
                           <span className="min-w-0 break-all font-mono">{p.title}</span>

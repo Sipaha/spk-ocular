@@ -304,7 +304,7 @@ func (s *session) RunAction(ctx context.Context, run provider.ActionRun) (core.A
 		if err != nil {
 			return core.ActionResult{}, err
 		}
-		return core.ActionResult{Message: m, Outcome: core.OutcomeDone}, nil
+		return core.ActionResult{Message: core.Message{Text: m}, Outcome: core.OutcomeDone}, nil
 	}
 	on, _ := touched(run.Action, cs)
 	if len(on) == 0 { // the fingerprint held: the plan said so too
@@ -319,21 +319,35 @@ func (s *session) RunAction(ctx context.Context, run provider.ActionRun) (core.A
 			res.Parts = append(res.Parts, part)
 			continue
 		}
-		m, err := s.writeAction(ctx, run.Action, c)
+		_, err := s.writeAction(ctx, run.Action, c)
 		switch {
 		case err == nil:
-			part.Outcome, part.Message = core.OutcomeDone, m
+			part.Outcome = core.OutcomeDone
 		case isUnknown(err):
-			part.Outcome, part.Message = core.OutcomeUnknown, err.Error()
+			part.Outcome, part.Why = core.OutcomeUnknown, whyOf(err)
 			res.Outcome = core.OutcomeUnknown
 		default:
-			part.Outcome, part.Message = core.OutcomeRefused, err.Error()
+			part.Outcome, part.Why = core.OutcomeRefused, whyOf(err)
 			res.Outcome = core.OutcomeRefused
 		}
 		res.Parts = append(res.Parts, part)
 	}
-	res.Message = partsSummary(run.Action, res.Parts)
+	res.Message = core.Message{Text: partsSummary(run.Action, res.Parts)}
 	return res, nil
+}
+
+// whyOf is a failed write's reason for its part: the provider's sentence,
+// else its text (a server's words).
+func whyOf(err error) *core.Message {
+	var pe *provider.Error
+	switch {
+	case errors.As(err, &pe) && pe.Why != nil:
+		why := *pe.Why
+		return &why
+	case errors.As(err, &pe):
+		return &core.Message{Text: pe.Message}
+	}
+	return &core.Message{Text: err.Error()}
 }
 
 func isUnknown(err error) bool {
