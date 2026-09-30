@@ -29,6 +29,9 @@ var messageTexts = map[string]string{
 	"error.gone":                      "{kind} {name} no longer exists: another object has its name now",
 	"logs.stream":                     "Stream",
 	"logs.allStreams":                 "stdout and stderr",
+	"level.container":                 "Container",
+	"exec.noRunning":                  "The service has no running containers",
+	"exec.notRunning":                 "The container is {state}",
 }
 
 // msg builds the message key with params given as name, value pairs.

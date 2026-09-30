@@ -88,10 +88,9 @@ func (c *Client) ResizeExec(ctx context.Context, execID string, cols, rows uint1
 // read (raw with a TTY; stdcopy frames without). It lives until Close or
 // the end of the context StartExec was given; Client.Close does not end it.
 type ExecConn struct {
-	rwc    io.ReadWriteCloser
-	cancel context.CancelFunc
-	stop   func() bool
-	once   sync.Once
+	rwc   io.ReadWriteCloser
+	stop  func() bool // unregisters the lifetime callback
+	close func() error
 }
 
 func (x *ExecConn) Read(p []byte) (int, error)  { return x.rwc.Read(p) }
@@ -101,22 +100,36 @@ func (x *ExecConn) Write(p []byte) (int, error) { return x.rwc.Write(p) }
 // the container is not killed by it: a TTY shell gets its hangup, others
 // may go on — the Engine has no way to stop an exec.
 func (x *ExecConn) Close() error {
-	var err error
-	x.once.Do(func() {
-		x.stop()
-		err = x.rwc.Close()
-		x.cancel()
-	})
-	return err
+	x.stop()
+	return x.close()
 }
+
+// closer closes rwc and ends the request's context once, however often
+// and from wherever it is called (the lifetime callback may run before
+// StartExec returns).
+func closer(rwc io.Closer, cancel context.CancelFunc) func() error {
+	var once sync.Once
+	var err error
+	return func() error {
+		once.Do(func() {
+			err = rwc.Close()
+			cancel()
+		})
+		return err
+	}
+}
+
+// testHookSwitched runs after the switch, before the lifetime callback is
+// registered (tests end the context there).
+var testHookSwitched func()
 
 // StartExec starts an exec attached: POST /exec/{id}/start upgraded to a
 // raw stream (101). ctx is the stream's lifetime — its end closes the
 // stream at any step; the switch is waited for HeaderTimeout. Once the
 // request may have been sent, a failure is unknown (the command may be
 // running: the daemon runs it on its own after accepting the start) — never
-// retried. A non-zero size is set right after the switch (API < 1.42
-// ignores it on create/start).
+// retried. The size goes with the start where the API has it (1.42+);
+// SetInitialSize sets it for every API once the stream is taken.
 func (c *Client) StartExec(ctx context.Context, execID string, tty bool, size ConsoleSize) (*ExecConn, error) {
 	const what = "starting the exec"
 	ver, err := c.apiVersion(ctx)
@@ -141,8 +154,11 @@ func (c *Client) StartExec(ctx context.Context, execID string, tty bool, size Co
 	resp, err := c.hc.Do(req)
 	timedOut := !hdr.Stop()
 	if err != nil {
+		// classified before the cleanup cancel: rctx ended only if the
+		// header timer fired or ctx ended
+		e := changeFailed(ctx, rctx, what, sent.v.Load(), err, c.cfg.HeaderTimeout)
 		cancel()
-		return nil, changeFailed(ctx, rctx, what, sent.v.Load(), err, c.cfg.HeaderTimeout)
+		return nil, e
 	}
 	fail := func(e error) (*ExecConn, error) {
 		_ = resp.Body.Close()
@@ -168,28 +184,41 @@ func (c *Client) StartExec(ctx context.Context, execID string, tty bool, size Co
 	if !ok {
 		return fail(unknownError(what, nil, "the switched stream is not writable"))
 	}
-	x := &ExecConn{rwc: rwc, cancel: cancel}
-	x.stop = context.AfterFunc(ctx, func() { _ = x.Close() })
-	if !size.zero() {
-		c.initialResize(ctx, execID, size)
+	cl := closer(rwc, cancel)
+	if testHookSwitched != nil {
+		testHookSwitched()
 	}
-	return x, nil
+	return &ExecConn{rwc: rwc, close: cl, stop: context.AfterFunc(ctx, func() { _ = cl() })}, nil
 }
 
-// initialResize sets the first size. The process may not have its TTY
-// yet right after the switch (the daemon answers 409/500): a few quick
-// tries, like the docker CLI; failing, the TTY keeps the daemon's size
-// until the next resize.
-func (c *Client) initialResize(ctx context.Context, execID string, size ConsoleSize) {
+// InitialSizeBudget bounds SetInitialSize as a whole.
+const InitialSizeBudget = 2 * time.Second
+
+// SetInitialSize sets a started exec's first size (API < 1.42 ignores the
+// size given with the start). The process may not have its TTY right
+// after the switch: a transient refusal is tried again a few times within
+// InitialSizeBudget, like the docker CLI does — a resize of the same exec
+// to the same size is idempotent, the one exception to "nothing is
+// retried". Other refusals are final. The error says the size was not set
+// (the TTY keeps the daemon's until the next resize).
+func (c *Client) SetInitialSize(ctx context.Context, execID string, size ConsoleSize) error {
+	ctx, cancel := context.WithTimeout(ctx, InitialSizeBudget)
+	defer cancel()
+	var err error
 	for i := range 5 {
-		err := c.ResizeExec(ctx, execID, size.Cols, size.Rows)
-		if err == nil || ClassOf(err) == provider.ClassNotFound {
-			return
+		if err = c.ResizeExec(ctx, execID, size.Cols, size.Rows); err == nil {
+			return nil
+		}
+		switch ClassOf(err) {
+		case provider.ClassConflict, provider.ClassUnavailable, provider.ClassUnknown:
+		default:
+			return err
 		}
 		select {
 		case <-ctx.Done():
-			return
+			return err
 		case <-time.After(time.Duration(i+1) * 10 * time.Millisecond):
 		}
 	}
+	return err
 }

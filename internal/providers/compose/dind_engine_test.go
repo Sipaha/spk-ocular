@@ -3,11 +3,13 @@ package compose
 import (
 	"bufio"
 	"context"
+	"errors"
 	"io"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/spk/spk-ocular/internal/core"
 	"github.com/spk/spk-ocular/internal/provider"
 	"github.com/spk/spk-ocular/internal/providers/compose/engine"
 )
@@ -42,6 +44,9 @@ func TestDindEngineWrites(t *testing.T) {
 			t.Fatal(err)
 		}
 		defer conn.Close()
+		// a command that never started refuses it ("exec process is not
+		// started"): the size is checked by stty below
+		_ = cl.SetInitialSize(ctx, xid, size)
 		if input != "" {
 			if _, err := io.WriteString(conn, input); err != nil {
 				t.Fatal(err)
@@ -112,5 +117,90 @@ func TestDindEngineWrites(t *testing.T) {
 	}
 	if _, err := cl.InspectContainer(ctx, id); !engine.IsNotFound(err) {
 		t.Errorf("removed container still inspects: %v", err)
+	}
+}
+
+// A terminal in a chosen replica of a service of the fixture: the shell
+// runs in exactly that container with the terminal's first size, the exit
+// code comes back; a missing command is refused with the daemon's text; a
+// closed terminal ends the run promptly.
+func TestDindExec(t *testing.T) {
+	host := dindHost(t)
+	s := dindSession(t, host)
+	ctx, cancel := context.WithTimeout(t.Context(), 2*time.Minute)
+	defer cancel()
+	ref := core.Ref{Provider: ProviderID, Target: "context:dind", Scope: "ocular-fixture", Kind: KindServices, Name: "ocular-fixture/logger"}
+	info, err := s.ExecInfo(ctx, ref)
+	if err != nil || len(info.Instances) != 2 {
+		t.Fatalf("logger replicas: %+v %v", info, err)
+	}
+	second := info.Instances[1]
+	dindVerify(t, host)
+	h, err := s.PrepareExec(ctx, ref, provider.ExecRequest{Instance: second.ID})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer h.Close()
+	if d := h.Describe(); d.Instance != second.Title || d.Endpoint == "" {
+		t.Errorf("describe: %+v", d)
+	}
+	r, w := io.Pipe()
+	var out syncBuf
+	done := make(chan struct{})
+	var st provider.ExitStatus
+	go func() {
+		defer close(done)
+		st, err = h.Run(ctx, provider.Terminal{Stdin: r, Stdout: &out, Sizes: newSizes(provider.TermSize{Cols: 100, Rows: 30})})
+	}()
+	_, _ = io.WriteString(w, "echo host=$(hostname); stty size; exit 3\n")
+	<-done
+	if err != nil || st != (provider.ExitStatus{Code: 3, Known: true}) {
+		t.Fatalf("run: %+v %v\n%s", st, err, out.String())
+	}
+	if !strings.Contains(out.String(), "host="+second.ID[:12]) || !strings.Contains(out.String(), "30 100") {
+		t.Errorf("not in the chosen replica or not its size: %q", out.String())
+	}
+
+	dindVerify(t, host)
+	missing, err := s.PrepareExec(ctx, ref, provider.ExecRequest{Instance: second.ID, Command: []string{"/nonexistent"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer missing.Close()
+	var mout syncBuf
+	_, err = missing.Run(ctx, provider.Terminal{Stdin: strings.NewReader(""), Stdout: &mout, Sizes: newSizes(provider.TermSize{Cols: 80, Rows: 24})})
+	var pe *provider.Error
+	if !errors.As(err, &pe) || pe.Class != provider.ClassInvalid || !strings.Contains(mout.String(), "no such file") {
+		t.Errorf("a missing command: %v %q", err, mout.String())
+	}
+
+	dindVerify(t, host)
+	again, err := h.Again()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer again.Close()
+	rctx, stop := context.WithCancel(ctx)
+	r2, w2 := io.Pipe()
+	defer w2.Close()
+	var out2 syncBuf
+	ended := make(chan error, 1)
+	go func() {
+		_, err := again.Run(rctx, provider.Terminal{Stdin: r2, Stdout: &out2, Sizes: newSizes(provider.TermSize{Cols: 80, Rows: 24})})
+		ended <- err
+	}()
+	_, _ = io.WriteString(w2, "echo ready\n")
+	deadline := time.Now().Add(10 * time.Second)
+	for !strings.Contains(out2.String(), "ready") && time.Now().Before(deadline) {
+		time.Sleep(20 * time.Millisecond)
+	}
+	stop()
+	select {
+	case err := <-ended:
+		if !errors.Is(err, context.Canceled) {
+			t.Errorf("a closed terminal: %v", err)
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("Run outlived its context")
 	}
 }

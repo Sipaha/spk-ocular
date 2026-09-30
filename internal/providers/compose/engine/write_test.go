@@ -47,6 +47,7 @@ func TestExecRoundTrip(t *testing.T) {
 	conn, err := c.StartExec(ctx, id, true, engine.ConsoleSize{Rows: 24, Cols: 80})
 	require.NoError(t, err)
 	defer conn.Close()
+	require.NoError(t, c.SetInitialSize(ctx, id, engine.ConsoleSize{Rows: 24, Cols: 80}))
 	_, err = io.WriteString(conn, "hello\nexit 3\n")
 	require.NoError(t, err)
 	out, err := io.ReadAll(conn)
@@ -224,20 +225,25 @@ func TestContainerStatsDecode(t *testing.T) {
 	runningContainer(f, "c1", "web-1")
 	c := writeClient(t, f, engine.Config{})
 	ctx := t.Context()
+	// the first two-point sample is complete by itself (the daemon takes both)
+	two, err := c.ContainerStats(ctx, "c1", false)
+	require.NoError(t, err)
+	assert.Equal(t, int64(5e8), two.PreCPUStats.CPUUsage.TotalUsage)
+	assert.Equal(t, int64(10e8), two.CPUStats.CPUUsage.TotalUsage)
+	assert.Equal(t, time.Second, two.Read.Sub(two.PreRead))
+	q := f.Requests()[len(f.Requests())-1].Query
+	assert.Equal(t, "false", q.Get("stream"))
+	assert.Empty(t, q.Get("one-shot"))
 	one, err := c.ContainerStats(ctx, "c1", true)
 	require.NoError(t, err)
-	assert.Equal(t, int64(5e8), one.CPUStats.CPUUsage.TotalUsage)
+	assert.Equal(t, int64(15e8), one.CPUStats.CPUUsage.TotalUsage)
 	assert.Zero(t, one.PreCPUStats.SystemCPUUsage)
+	assert.True(t, one.PreRead.IsZero())
 	assert.Equal(t, 2, one.CPUStats.OnlineCPUs)
 	assert.Equal(t, int64(64<<20), one.MemoryStats.Usage)
 	assert.Equal(t, int64(16<<20), one.MemoryStats.Stats["inactive_file"])
 	assert.False(t, one.Read.IsZero())
-	two, err := c.ContainerStats(ctx, "c1", false)
-	require.NoError(t, err)
-	assert.Equal(t, int64(5e8), two.PreCPUStats.CPUUsage.TotalUsage)
-	q := f.Requests()[len(f.Requests())-1].Query
-	assert.Equal(t, "false", q.Get("stream"))
-	assert.Empty(t, q.Get("one-shot"))
+	assert.Equal(t, "true", f.Requests()[len(f.Requests())-1].Query.Get("one-shot"))
 }
 
 // errors.Is works through the classified error.
@@ -375,8 +381,8 @@ func TestExecCanceledBeforeTheSwitchIsUnknownAndFast(t *testing.T) {
 	assert.Equal(t, 1, f.Count("/exec/e1/start"))
 }
 
-// API 1.41 has no ConsoleSize on create/start: the first size comes by a
-// resize right after the attach, with no resize from the terminal.
+// API 1.41 has no ConsoleSize on create/start: the first size comes by
+// SetInitialSize right after the attach, with no resize from the terminal.
 func TestExecFirstSizeOnAnOldAPI(t *testing.T) {
 	f := enginefake.New(t, enginefake.WithAPIVersion("1.41"))
 	runningContainer(f, "c1", "web-1")
@@ -388,6 +394,7 @@ func TestExecFirstSizeOnAnOldAPI(t *testing.T) {
 	conn, err := c.StartExec(ctx, id, true, size)
 	require.NoError(t, err)
 	defer conn.Close()
+	require.NoError(t, c.SetInitialSize(ctx, id, size))
 	x := f.Execs()[0]
 	assert.Nil(t, x.ConsoleSize, "not sent to 1.41")
 	assert.Equal(t, [][2]uint16{{132, 40}}, x.Sizes)
@@ -420,4 +427,66 @@ func TestStopPastItsWaitIsUnknown(t *testing.T) {
 	_, err = c.StopContainer(t.Context(), "gone", -1)
 	assert.True(t, engine.IsNotFound(err))
 	assert.Equal(t, "-1", f.Requests()[len(f.Requests())-1].Query.Get("t"))
+}
+
+// The daemon checks the container again at the start: paused between
+// create and start → refused, nothing ran.
+func TestExecStartRechecksTheContainer(t *testing.T) {
+	f := enginefake.New(t)
+	runningContainer(f, "c1", "web-1")
+	c := writeClient(t, f, engine.Config{})
+	ctx := t.Context()
+	id, err := c.CreateExec(ctx, "c1", engine.ExecConfig{Cmd: []string{"sh"}, Tty: true})
+	require.NoError(t, err)
+	f.PutContainer(engine.ContainerInspect{ID: "c1", Name: "/web-1", State: engine.ContainerState{Status: "paused", Running: true, Paused: true}})
+	_, err = c.StartExec(ctx, id, true, engine.ConsoleSize{})
+	assert.Equal(t, provider.ClassConflict, engine.ClassOf(err))
+	assert.False(t, f.Execs()[0].Started)
+}
+
+// A reset right after the start was sent is unknown with its own cause —
+// not a made-up timeout.
+func TestExecResetAfterSendKeepsItsCause(t *testing.T) {
+	f := enginefake.New(t)
+	f.AddHook(hijack("/exec/e1/start", func(conn io.ReadWriteCloser, _ *bufio.Reader) { _ = conn.Close() }))
+	c := writeClient(t, f, engine.Config{})
+	_, err := c.Ping(t.Context())
+	require.NoError(t, err)
+	_, err = c.StartExec(t.Context(), "e1", true, engine.ConsoleSize{})
+	require.Error(t, err)
+	assert.Equal(t, provider.ClassUnknown, engine.ClassOf(err))
+	assert.NotErrorIs(t, err, context.DeadlineExceeded)
+	assert.NotContains(t, err.Error(), "no answer within")
+}
+
+// The first size has one small budget as a whole; a final refusal is not
+// tried again, and the error says the size was not set.
+func TestSetInitialSizeIsBounded(t *testing.T) {
+	f := enginefake.New(t)
+	release := make(chan struct{})
+	defer close(release)
+	f.AddHook(func(w http.ResponseWriter, _ *http.Request, p string) bool {
+		switch p {
+		case "/exec/hang/resize":
+			<-release
+			return true
+		case "/exec/denied/resize":
+			w.WriteHeader(http.StatusForbidden)
+			return true
+		case "/exec/busy/resize":
+			w.WriteHeader(http.StatusConflict)
+			return true
+		}
+		return false
+	})
+	c := writeClient(t, f, engine.Config{})
+	ctx := t.Context()
+	size := engine.ConsoleSize{Rows: 24, Cols: 80}
+	t0 := time.Now()
+	require.Error(t, c.SetInitialSize(ctx, "hang", size))
+	assert.Less(t, time.Since(t0), engine.InitialSizeBudget+time.Second)
+	require.Error(t, c.SetInitialSize(ctx, "denied", size))
+	assert.Equal(t, 1, f.Count("/exec/denied/resize"))
+	require.Error(t, c.SetInitialSize(ctx, "busy", size))
+	assert.Equal(t, 5, f.Count("/exec/busy/resize"))
 }

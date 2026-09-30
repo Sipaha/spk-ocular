@@ -13,6 +13,7 @@ const DefaultStatsBytes = 256 << 10
 // with stream=false). A stopped container's has a zero Read.
 type Stats struct {
 	Read        time.Time   `json:"read"`
+	PreRead     time.Time   `json:"preread"` // of PreCPUStats (zero in one-shot)
 	OSType      string      `json:"os_type"`
 	CPUStats    CPUStats    `json:"cpu_stats"`
 	PreCPUStats CPUStats    `json:"precpu_stats"` // zero in a one-shot sample

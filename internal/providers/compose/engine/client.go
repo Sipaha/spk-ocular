@@ -229,6 +229,22 @@ func (c *Client) Close() {
 	c.tr.CloseIdleConnections()
 }
 
+// Config is the configuration the client was built with (defaults
+// applied): New(c.Config()) is an independent client of the same endpoint.
+func (c *Client) Config() Config { return c.cfg }
+
+// Endpoint is where the client connects, without credentials: the socket
+// path of a unix endpoint, host:port of a tcp one.
+func (c *Client) Endpoint() string {
+	if c.host == unixHost {
+		u, err := url.Parse(c.cfg.Host)
+		if err == nil {
+			return u.Host + u.Path
+		}
+	}
+	return c.host
+}
+
 // APIVersion is the negotiated version ("" before the first successful ping).
 func (c *Client) APIVersion() string {
 	c.mu.Lock()

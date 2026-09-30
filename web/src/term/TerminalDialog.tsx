@@ -15,7 +15,7 @@ interface Props {
 
 const errText = (e: unknown) => (e instanceof Error ? e.message : String(e))
 
-/** Choose the pod (for a workload), the container and a command. */
+/** Choose the instance, its channel (when the provider has that level) and a command. */
 export function TerminalDialog({ client, subject, onOpen, onClose }: Props) {
   const [info, setInfo] = useState<ExecInfo | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -96,18 +96,20 @@ export function TerminalDialog({ client, subject, onOpen, onClose }: Props) {
                 </select>
               </label>
             )}
-            <label className="flex flex-col gap-1 text-xs text-fg-muted">
-              {info.channelLabel ? messageText(info.channelLabel) : t('term.channel')}
-              <select value={channel} onChange={(e) => setChannel(e.target.value)} className="rounded-md border border-line bg-app px-2 py-1 text-sm text-fg outline-none focus:border-accent">
-                {inst?.channels.map((c) => (
-                  <option key={c.id} value={c.id} disabled={!c.running}>
-                    {c.title}
-                    {c.note ? ` (${c.note})` : ''}
-                    {c.running ? '' : ` — ${t('term.notRunning', { state: c.state ?? '' })}`}
-                  </option>
-                ))}
-              </select>
-            </label>
+            {inst && inst.channels.length > 0 && (
+              <label className="flex flex-col gap-1 text-xs text-fg-muted">
+                {info.channelLabel ? messageText(info.channelLabel) : t('term.channel')}
+                <select value={channel} onChange={(e) => setChannel(e.target.value)} className="rounded-md border border-line bg-app px-2 py-1 text-sm text-fg outline-none focus:border-accent">
+                  {inst.channels.map((c) => (
+                    <option key={c.id} value={c.id} disabled={!c.running}>
+                      {c.title}
+                      {c.note ? ` (${c.note})` : ''}
+                      {c.running ? '' : ` — ${t('term.notRunning', { state: c.state ?? '' })}`}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
           </>
         )}
         <label className="flex flex-col gap-1 text-xs text-fg-muted">

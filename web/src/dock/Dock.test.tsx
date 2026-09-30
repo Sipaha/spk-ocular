@@ -8,8 +8,8 @@ import { fakeClient, k8s, podRow, podsKind } from '../test/fakeClient'
 // xterm needs a real layout: the tab body is a stand-in with the same
 // focus target (a textarea inside [data-terminal]).
 vi.mock('../term/TerminalView', () => ({
-  default: ({ tab }: { tab: { open: { ref: { name: string }; command?: string[] } } }) => (
-    <div data-terminal data-testid={`term-${tab.open.ref.name}`}>
+  default: ({ tab }: { tab: { open: { ref: { name: string }; instance?: string; channel?: string; command?: string[] } } }) => (
+    <div data-terminal data-testid={`term-${tab.open.ref.name}`} data-instance={tab.open.instance ?? ''} data-channel={tab.open.channel ?? ''}>
       <textarea aria-label="terminal input" />
       {tab.open.command?.join(' ')}
     </div>
@@ -60,6 +60,29 @@ describe('terminal tabs', () => {
     await user.type(within(dialog).getByRole('textbox', { name: /Command/ }), `psql -c 'select 1'`)
     await user.click(within(dialog).getByRole('button', { name: 'Open' }))
     expect(await screen.findByTestId('term-api-2')).toHaveTextContent('psql -c select 1')
+    vi.unstubAllGlobals()
+  })
+
+  it('an instance without channels (a container) asks only for the instance', async () => {
+    const { f, grid, user } = await setup()
+    f.client.execInfo = vi.fn(async () => ({
+      instances: [
+        { id: 'c1', title: 'web-1', ready: true, channels: [], defaultChannel: '' },
+        { id: 'c2', title: 'web-2', ready: false, channels: [], defaultChannel: '' },
+      ],
+      defaultInstance: 'c1',
+      instanceLabel: { key: 'compose.level.container', text: 'Container' },
+    }))
+    await user.click(await within(grid).findByText('api-2'))
+    await user.keyboard('{Shift>}S{/Shift}')
+    const dialog = await screen.findByRole('dialog', { name: 'Open a terminal' })
+    const pick = await within(dialog).findByRole('combobox', { name: 'Container' })
+    expect(within(dialog).queryByRole('combobox', { name: 'Channel' })).not.toBeInTheDocument()
+    await user.selectOptions(pick, 'c2')
+    await user.click(within(dialog).getByRole('button', { name: 'Open' }))
+    const term = await screen.findByTestId('term-api-2')
+    expect(term).toHaveAttribute('data-instance', 'c2')
+    expect(term).toHaveAttribute('data-channel', '')
     vi.unstubAllGlobals()
   })
 

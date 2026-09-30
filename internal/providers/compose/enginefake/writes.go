@@ -22,7 +22,8 @@ import (
 // stopped one, 409 for removing a running one).
 
 // ExecFunc runs an exec's command on its hijacked stream and returns its
-// exit code. Resizes arrive on sizes (cols, rows) while it runs.
+// exit code (NotStarted(code): it never started). Resizes arrive on sizes
+// (cols, rows) while it runs.
 type ExecFunc func(cmd []string, tty bool, rw io.ReadWriter, sizes <-chan [2]uint16) int
 
 // Exec is one exec the fake created.
@@ -92,6 +93,13 @@ func (e *Engine) Execs() []Exec {
 	return out
 }
 
+// notStarted marks an ExecFunc's code as "the command never started".
+const notStarted = 1 << 16
+
+// NotStarted is what an ExecFunc returns for a command that could not be
+// started (like runc: the daemon reports code with no pid).
+func NotStarted(code int) int { return code | notStarted }
+
 // EchoShell is the default exec: a missing command (a path starting with
 // /nonexistent) fails like runc (text in the stream, code 127, no pid);
 // otherwise a prompt "$ ", each line echoed, "exit N" ends with N, the end
@@ -99,7 +107,7 @@ func (e *Engine) Execs() []Exec {
 func EchoShell(cmd []string, _ bool, rw io.ReadWriter, _ <-chan [2]uint16) int {
 	if len(cmd) > 0 && strings.HasPrefix(cmd[0], "/nonexistent") {
 		_, _ = fmt.Fprintf(rw, "OCI runtime exec failed: exec failed: unable to start container process: exec: %q: stat %s: no such file or directory\r\n", cmd[0], cmd[0])
-		return 127
+		return NotStarted(127)
 	}
 	_, _ = io.WriteString(rw, "$ ")
 	sc := bufio.NewScanner(rw)
@@ -207,25 +215,34 @@ func (e *Engine) startExec(w http.ResponseWriter, r *http.Request, id string) {
 	ws.mu.Lock()
 	x, ok := ws.execs[id]
 	fn := ws.execFn
-	if ok && x.Started {
-		ws.mu.Unlock()
+	started := ok && x.Started
+	ws.mu.Unlock()
+	switch {
+	case !ok:
+		writeError(w, http.StatusNotFound, "No such exec instance: "+id)
+		return
+	case started:
 		writeError(w, http.StatusConflict, "exec "+id+" has already started")
 		return
+	case !strings.EqualFold(r.Header.Get("Upgrade"), "tcp"):
+		writeError(w, http.StatusBadRequest, "the fake Engine starts execs only with Upgrade: tcp")
+		return
 	}
-	if ok {
-		x.Started, x.Running, x.Pid = true, true, 4242
-	}
-	ws.mu.Unlock()
-	if !ok {
-		writeError(w, http.StatusNotFound, "No such exec instance: "+id)
+	// the daemon checks the container again at the start
+	c, found := e.container(x.Container)
+	switch {
+	case !found:
+		writeError(w, http.StatusNotFound, "No such container: "+x.Container)
+		return
+	case c.State.Paused:
+		writeError(w, http.StatusConflict, fmt.Sprintf("Container %s is paused, unpause the container before exec", c.ID))
+		return
+	case !c.State.Running:
+		writeError(w, http.StatusConflict, fmt.Sprintf("container %s is not running", c.ID))
 		return
 	}
 	if fn == nil {
 		fn = EchoShell
-	}
-	if !strings.EqualFold(r.Header.Get("Upgrade"), "tcp") {
-		writeError(w, http.StatusBadRequest, "the fake Engine starts execs only with Upgrade: tcp")
-		return
 	}
 	// the start config is read before the switch: its bytes are not stdin
 	var start struct {
@@ -237,6 +254,9 @@ func (e *Engine) startExec(w http.ResponseWriter, r *http.Request, id string) {
 		return
 	}
 	_, _ = io.Copy(io.Discard, io.LimitReader(r.Body, 1<<20))
+	ws.mu.Lock()
+	x.Started, x.Running, x.Pid = true, true, 4242
+	ws.mu.Unlock()
 	conn, brw, err := w.(http.Hijacker).Hijack()
 	if err != nil {
 		return
@@ -254,8 +274,8 @@ func (e *Engine) startExec(w http.ResponseWriter, r *http.Request, id string) {
 	}{brw.Reader, conn}
 	code := fn(x.Cmd, x.Tty, rw, x.sizes)
 	ws.mu.Lock()
-	x.Running, x.ExitCode = false, code
-	if code == 127 && len(x.Cmd) > 0 && strings.HasPrefix(x.Cmd[0], "/nonexistent") {
+	x.Running, x.ExitCode = false, code&^notStarted
+	if code&notStarted != 0 {
 		x.Pid = 0
 	}
 	ws.mu.Unlock()
@@ -304,14 +324,19 @@ func (e *Engine) inspectExec(w http.ResponseWriter, id string) {
 }
 
 // DefaultStats: a running container's counters grow by 0.5 core-seconds
-// of 2 online CPUs' 1 s per request; memory 64 MiB used, 16 MiB of it
-// inactive file cache (cgroup v2). A one-shot answer has no precpu; a
-// stopped container's is all zero with a zero read time.
+// of 2 online CPUs' 1 s per sample; memory 64 MiB used, 16 MiB of it
+// inactive file cache (cgroup v2). A one-shot answer is one sample without
+// precpu; otherwise the daemon takes two (precpu is the first, 1 s
+// before), even on the first request. A stopped container's is all zero
+// with a zero read time.
 func (e *Engine) DefaultStats(id string, oneShot bool) []byte {
 	c, _ := e.container(id)
 	ws := e.writes()
 	ws.mu.Lock()
 	ws.statCount[id]++
+	if !oneShot {
+		ws.statCount[id]++ // the daemon's own second sample
+	}
 	n := int64(ws.statCount[id])
 	ws.mu.Unlock()
 	type cpu struct {
@@ -325,10 +350,14 @@ func (e *Engine) DefaultStats(id string, oneShot bool) []byte {
 	st := map[string]any{"id": c.ID, "name": c.Name, "os_type": "linux", "read": "0001-01-01T00:00:00Z"}
 	if c.State.Running {
 		cur.CPUUsage.TotalUsage, cur.SystemCPUUsage, cur.OnlineCPUs = n*5e8, n*2e9, 2
-		if !oneShot && n > 1 {
+		if !oneShot {
 			pre.CPUUsage.TotalUsage, pre.SystemCPUUsage, pre.OnlineCPUs = (n-1)*5e8, (n-1)*2e9, 2
 		}
-		st["read"] = time.Now().UTC().Format(time.RFC3339Nano)
+		now := time.Now().UTC()
+		st["read"] = now.Format(time.RFC3339Nano)
+		if !oneShot {
+			st["preread"] = now.Add(-time.Second).Format(time.RFC3339Nano)
+		}
 		st["memory_stats"] = map[string]any{"usage": 64 << 20, "limit": 1 << 30, "stats": map[string]int64{"inactive_file": 16 << 20}}
 	} else {
 		st["memory_stats"] = map[string]any{}

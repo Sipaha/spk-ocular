@@ -6,6 +6,7 @@ import type { TerminalInfo } from '../api/types'
 import type { TermTab } from '../dock/store'
 import type { TermEnd, TermSink } from './protocol'
 import TerminalView from './TerminalView'
+import { dock } from '../dock/store'
 
 // jsdom cannot run xterm (no canvas, no layout): a stand-in that keeps the
 // handlers the view installs.
@@ -227,5 +228,25 @@ describe('Ctrl with a non-Latin layout', () => {
     expect(term.keys(key('F6', 'F6'))).toBe(true)
     expect(term.keys({ type: 'keydown', code: 'KeyK', key: 'л', preventDefault() {} })).toBe(true)
     expect(h.conns[0].input).not.toHaveBeenCalled()
+  })
+})
+
+describe('tab title', () => {
+  const titled = async (target: Record<string, unknown>) => {
+    const update = vi.spyOn(dock, 'update')
+    const client = { ...fakeClient(), openTerminal: vi.fn(async () => ({ ...info('t-1'), target: { ...info('t-1').target, ...target } })) }
+    render(<TerminalView client={client as unknown as Client} tab={tab} active mode="browser" />)
+    await waitFor(() => expect(update).toHaveBeenCalled())
+    const title = update.mock.calls[0][1].title
+    update.mockRestore()
+    return title
+  }
+
+  it('is "channel · instance" where there are channels', async () => {
+    expect(await titled({ instance: 'api-1-7f9', channel: 'app' })).toBe('app · api-1-7f9')
+  })
+
+  it('is the instance alone without a channel level (a container)', async () => {
+    expect(await titled({ instance: 'shop-web-2' })).toBe('shop-web-2')
   })
 })

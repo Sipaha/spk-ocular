@@ -41,6 +41,7 @@ func (p *Provider) Open(_ context.Context, target string) (provider.Session, err
 		return nil, providerError(err)
 	}
 	s := newSession(target, c.Hash, cl)
+	s.title = c.Name
 	s.logSlots = p.logSlots
 	return s, nil
 }
@@ -79,6 +80,7 @@ var defaultProjections = projections{
 
 type session struct {
 	target string
+	title  string // the context's name
 	hash   string
 	cl     *engine.Client
 	now    func() time.Time

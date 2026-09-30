@@ -49,7 +49,8 @@ func TestKindDescriptors(t *testing.T) {
 		assert.Equal(t, c.logs, k.Logs, c.id)
 		assert.Empty(t, k.EventsKind, c.id)
 		assert.False(t, k.Hidden, c.id)
-		assert.False(t, k.Exec || k.Forward || len(k.Actions) > 0, "P7: %s", c.id)
+		assert.Equal(t, c.id == KindServices || c.id == KindContainers, k.Exec, c.id)
+		assert.False(t, k.Forward || len(k.Actions) > 0, "P7: %s", c.id)
 		var ids []string
 		scopeCol := ""
 		for _, col := range k.Columns {

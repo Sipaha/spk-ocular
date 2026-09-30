@@ -39,10 +39,11 @@ func (s *sentFlag) trace(ctx context.Context) context.Context {
 	return httptrace.WithClientTrace(ctx, &httptrace.ClientTrace{WroteHeaders: func() { s.v.Store(true) }})
 }
 
-// newChange builds a change request; body nil: none. POST and DELETE are
-// never replayed by net/http, so a bodyless change is sent with no body
-// at all (the GET trick of newRequest would send an empty chunked body,
-// which the daemon refuses for a container start).
+// newChange builds a change request; body nil: none. net/http resends a
+// POST or DELETE only when nothing of it was written (a reused connection
+// found dead first), never after — so a bodyless change is sent with no
+// body at all (the GET trick of newRequest would send an empty chunked
+// body, which the daemon refuses for a container start).
 func (c *Client) newChange(ctx context.Context, method, u string, body any) (*http.Request, error) {
 	req, err := c.newRequest(ctx, method, u)
 	if err != nil {
