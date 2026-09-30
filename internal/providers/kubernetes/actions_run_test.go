@@ -87,6 +87,7 @@ func TestRestartPatchesTheTemplateOfThatObjectOnly(t *testing.T) {
 	res, err := s.RunAction(context.Background(), provider.ActionRun{Ref: deployWebRef, Action: "restart", Expect: expectNow(t, s, deployWebRef, "restart", core.ActionParams{})})
 	require.NoError(t, err)
 	assert.Contains(t, res.Message.Text, "restart requested")
+	assertDone(t, res, "done.restart", map[string]string{"kind": "deployment", "name": "web"})
 	w := writes(c)
 	require.Len(t, w, 1)
 	p := w[0].(k8stesting.PatchAction)
@@ -129,6 +130,7 @@ func TestDeleteHasUIDAndVersionPreconditionsAndCascadesInTheBackground(t *testin
 	res, err := s.RunAction(context.Background(), provider.ActionRun{Ref: deployWebRef, Action: "delete", Expect: expectNow(t, s, deployWebRef, "delete", core.ActionParams{})})
 	require.NoError(t, err)
 	assert.Contains(t, res.Message.Text, "deletion requested")
+	assertDone(t, res, "done.delete", map[string]string{"kind": "deployment", "name": "web"})
 	w := writes(c)
 	require.Len(t, w, 1)
 	d := w[0].(k8stesting.DeleteAction)
@@ -162,21 +164,21 @@ func TestARunNotMatchingItsPlanWritesNothing(t *testing.T) {
 	_, err = c.Resource(deployGVR).Namespace("ns").Update(ctx, u, metav1.UpdateOptions{})
 	require.NoError(t, err)
 	_, err = s.RunAction(ctx, provider.ActionRun{Ref: deployWebRef, Action: "scale", Params: count(3), Expect: scale3})
-	assertClass(t, err, provider.ClassConflict)
+	assertSaid(t, err, provider.ClassConflict, "error.changed")
 	assert.Len(t, writes(c), 1, "only the test's own update")
 }
 
 func TestAPausedDeploymentIsNotRestarted(t *testing.T) {
 	s, c := actionSession(t, workload("Deployment", "web", "uid-web", "7", map[string]any{"paused": true}))
 	_, err := s.RunAction(context.Background(), provider.ActionRun{Ref: deployWebRef, Action: "restart", Expect: expectNow(t, s, deployWebRef, "restart", core.ActionParams{})})
-	assertClass(t, err, provider.ClassConflict)
+	assertSaid(t, err, provider.ClassConflict, "unavailable.paused")
 	assert.Empty(t, writes(c))
 }
 
 func TestAReplacedObjectIsGone(t *testing.T) {
 	s, c := actionSession(t, workload("Deployment", "web", "uid-new", "9", nil))
 	_, err := s.RunAction(context.Background(), provider.ActionRun{Ref: deployWebRef, Action: "delete", Expect: routeOf(deploymentsKind) + "-x"})
-	assertClass(t, err, provider.ClassGone)
+	assertSaid(t, err, provider.ClassGone, "error.replaced")
 	assert.Empty(t, writes(c))
 }
 
@@ -247,25 +249,26 @@ func TestAFailedWriteIsClassifiedByLookingAgain(t *testing.T) {
 		fail   error
 		mutate func(t *testing.T, c *dynamicfake.FakeDynamicClient) func()
 		class  provider.ErrorClass
+		key    string
 	}{
 		"replaced between read and write": {conflict409, func(t *testing.T, c *dynamicfake.FakeDynamicClient) func() {
 			return func() {
 				require.NoError(t, c.Tracker().Delete(deployGVR, "ns", "web"))
 				require.NoError(t, c.Tracker().Create(deployGVR, workload("Deployment", "web", "uid-new", "1", map[string]any{"replicas": int64(2)}), "ns"))
 			}
-		}, provider.ClassGone},
-		"deleted between read and write": {apierrors.NewNotFound(schema.GroupResource{Group: "apps", Resource: "deployments"}, "web"), nil, provider.ClassGone},
+		}, provider.ClassGone, "error.replacedMeanwhile"},
+		"deleted between read and write": {apierrors.NewNotFound(schema.GroupResource{Group: "apps", Resource: "deployments"}, "web"), nil, provider.ClassGone, "error.gone"},
 		"replicas changed between read and write": {conflict409, func(t *testing.T, c *dynamicfake.FakeDynamicClient) func() {
 			return bumpVersion(t, c, deployGVR, "web", "8", func(u *unstructured.Unstructured) {
 				_ = unstructured.SetNestedField(u.Object, int64(6), "spec", "replicas")
 			})
-		}, provider.ClassConflict},
-		"rejected, nothing changed": {invalid422, nil, provider.ClassInvalid},
-		"forbidden":                 {apierrors.NewForbidden(schema.GroupResource{Group: "apps", Resource: "deployments"}, "web", errors.New("rbac")), nil, provider.ClassForbidden},
-		"connection lost":           {errors.New("read tcp: connection reset by peer"), nil, provider.ClassUnknown},
-		"timeout":                   {context.DeadlineExceeded, nil, provider.ClassUnknown},
+		}, provider.ClassConflict, "error.changed"},
+		"rejected, nothing changed": {invalid422, nil, provider.ClassInvalid, ""},
+		"forbidden":                 {apierrors.NewForbidden(schema.GroupResource{Group: "apps", Resource: "deployments"}, "web", errors.New("rbac")), nil, provider.ClassForbidden, ""},
+		"connection lost":           {errors.New("read tcp: connection reset by peer"), nil, provider.ClassUnknown, "error.unknown"},
+		"timeout":                   {context.DeadlineExceeded, nil, provider.ClassUnknown, "error.unknown"},
 		// An answer is not a local credential failure, whatever it says.
-		"server error naming credentials": {apierrors.NewInternalError(errors.New("getting credentials: vault down")), nil, provider.ClassUnknown},
+		"server error naming credentials": {apierrors.NewInternalError(errors.New("getting credentials: vault down")), nil, provider.ClassUnknown, "error.unknown"},
 	}
 	for name, c := range cases {
 		t.Run(name, func(t *testing.T) {
@@ -276,7 +279,7 @@ func TestAFailedWriteIsClassifiedByLookingAgain(t *testing.T) {
 			}
 			calls := failWrite(cl, "patch", 5, mutate, c.fail)
 			_, err := s.RunAction(context.Background(), provider.ActionRun{Ref: deployWebRef, Action: "scale", Params: count(4), Expect: expectNow(t, s, deployWebRef, "scale", count(4))})
-			assertClass(t, err, c.class)
+			assertSaid(t, err, c.class, c.key)
 			assert.Equal(t, 1, *calls, "never retried")
 		})
 	}
@@ -290,7 +293,7 @@ func TestVersionRetriesAreBounded(t *testing.T) {
 		bumpVersion(t, cl, deployGVR, "web", "v"+string(rune('a'+n)), nil)()
 	}, conflict409)
 	_, err := s.RunAction(context.Background(), provider.ActionRun{Ref: deployWebRef, Action: "delete", Expect: expectNow(t, s, deployWebRef, "delete", core.ActionParams{})})
-	assertClass(t, err, provider.ClassConflict)
+	assertSaid(t, err, provider.ClassConflict, "error.keepsChanging")
 	assert.Equal(t, maxVersionRetries+1, *calls)
 }
 
@@ -307,7 +310,7 @@ func TestAValidationRefusalIsNotRetriedEvenWhenTheVersionMoved(t *testing.T) {
 				_ = unstructured.SetNestedField(u.Object, int64(1), "status", "readyReplicas")
 			}), invalid422)
 			_, err := s.RunAction(context.Background(), provider.ActionRun{Ref: deployWebRef, Action: c.action, Params: c.params, Expect: expectNow(t, s, deployWebRef, c.action, c.params)})
-			assertClass(t, err, provider.ClassInvalid)
+			assertSaid(t, err, provider.ClassInvalid, "")
 			assert.Equal(t, 1, *calls)
 		})
 	}

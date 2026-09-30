@@ -101,6 +101,7 @@ func TestCordonIsAMergePatchWithIdentityAndVersion(t *testing.T) {
 			res, err := s.RunAction(context.Background(), provider.ActionRun{Ref: ref, Action: tc.action, Expect: expectNow(t, s, ref, tc.action, core.ActionParams{})})
 			require.NoError(t, err)
 			assert.Contains(t, res.Message.Text, "node w1: "+tc.action+" requested")
+			assertDone(t, res, "done."+tc.action, map[string]string{"kind": "node", "name": "w1"})
 			w := writes(c)
 			require.Len(t, w, 1)
 			p := w[0].(k8stesting.PatchAction)
@@ -118,9 +119,7 @@ func TestACordonAfterThePlanIsAConflict(t *testing.T) {
 	exp := expectNow(t, s, ref, "cordon", core.ActionParams{})
 	require.NoError(t, c.Tracker().Update(nodeGVR, node("w1", "uid-w1", "6", true), ""))
 	_, err := s.RunAction(context.Background(), provider.ActionRun{Ref: ref, Action: "cordon", Expect: exp})
-	var pe *provider.Error
-	require.ErrorAs(t, err, &pe)
-	assert.Equal(t, provider.ClassConflict, pe.Class)
+	assertSaid(t, err, provider.ClassConflict, "unavailable.cordoned")
 	assert.Empty(t, writes(c))
 }
 

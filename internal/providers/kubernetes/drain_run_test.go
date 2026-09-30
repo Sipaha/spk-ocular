@@ -155,6 +155,7 @@ func TestADrainCordonsThenEvictsEachPodOnce(t *testing.T) {
 		{"a/bare", core.OutcomeSkipped, "kubernetes.drain.why.bare"},
 	}, partsOf(res))
 	assert.Equal(t, core.OutcomeSkipped, res.Outcome, "a pod stays: not everything")
+	assertDone(t, res, "done.drain", map[string]string{"name": "w1", "done": "3", "total": "4"})
 	assert.Equal(t, 1, w.patches)
 	assert.Equal(t, []evictCall{{"a", "api-1", "uid-api-1", "1"}, {"a", "web-1", "uid-web-1", "1"}}, w.calls(), "one request per pod, with the UID and version of the run's list")
 	n, err := c.Resource(nodeGVR).Get(context.Background(), "w1", metav1.GetOptions{})
@@ -416,9 +417,7 @@ func TestADrainNotMatchingItsPlanWritesNothing(t *testing.T) {
 		plan := drainPlan(t, s)
 		setPod(t, c, nodePod("a", "web-1", "uid-web-1", "w1", ownedBy("ReplicaSet", "other-rs", "uid-rs2")))
 		_, err := runDrainPlan(s, plan)
-		var pe *provider.Error
-		require.ErrorAs(t, err, &pe)
-		assert.Equal(t, provider.ClassConflict, pe.Class)
+		assertSaid(t, err, provider.ClassConflict, "drain.changed")
 		assert.Equal(t, 0, w.patches)
 		assert.Empty(t, w.calls())
 	})
@@ -429,9 +428,7 @@ func TestADrainNotMatchingItsPlanWritesNothing(t *testing.T) {
 			require.NoError(t, c.Tracker().Create(podGVR, nodePod("b", fmt.Sprintf("x-%d", i), fmt.Sprintf("uid-x-%d", i), "w1", ownedBy("ReplicaSet", "rs", "uid-rs")), "b"))
 		}
 		_, err := runDrainPlan(s, plan)
-		var pe *provider.Error
-		require.ErrorAs(t, err, &pe)
-		assert.Equal(t, provider.ClassConflict, pe.Class)
+		assertSaid(t, err, provider.ClassConflict, "drain.tooManyNotWritten")
 		assert.Equal(t, 0, w.patches)
 		assert.Empty(t, w.calls())
 	})

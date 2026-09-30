@@ -79,6 +79,7 @@ func TestDiscoveredDeleteHoldsItsRouteAndFinalizers(t *testing.T) {
 	var perr *provider.Error
 	require.True(t, errors.As(err, &perr))
 	assert.Equal(t, provider.ClassConflict, perr.Class)
+	assert.Equal(t, "error.changed", saidKey(t, err))
 	assert.Zero(t, deletes(s))
 
 	// the resource moved to another version: the reviewed plan is refused
@@ -94,6 +95,7 @@ func TestDiscoveredDeleteHoldsItsRouteAndFinalizers(t *testing.T) {
 	require.True(t, errors.As(err, &perr))
 	assert.Equal(t, provider.ClassConflict, perr.Class)
 	assert.Contains(t, perr.Message, "API resource")
+	assert.Equal(t, "error.routeChanged", saidKey(t, err))
 	assert.Zero(t, deletes(s))
 }
 
@@ -105,6 +107,7 @@ func TestDiscoveredDeleteRuns(t *testing.T) {
 	res, err := s.RunAction(context.Background(), provider.ActionRun{Ref: ref, Action: "delete", Expect: plan.Expect})
 	require.NoError(t, err)
 	assert.Equal(t, "widget alpha: deletion requested", res.Message.Text)
+	assertDone(t, res, "done.delete", map[string]string{"kind": "widget", "name": "alpha"})
 	assert.Equal(t, 1, deletes(s))
 }
 

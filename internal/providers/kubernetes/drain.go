@@ -547,7 +547,7 @@ const disruptionBudgetCause = "DisruptionBudget"
 // an error — even when the time runs out or the caller goes.
 func (s *session) runDrain(ctx context.Context, def *kindDef, run provider.ActionRun) (core.ActionResult, error) {
 	if !sameRoute(def, run.Expect) {
-		return core.ActionResult{}, &provider.Error{Class: provider.ClassConflict, Message: fmt.Sprintf("the API resource of %s changed since the action was reviewed; review it again", def.desc.Title)}
+		return core.ActionResult{}, provider.Said(provider.ClassConflict, msg("error.routeChanged", "kind", def.desc.Title))
 	}
 	ctx, cancel := context.WithTimeout(ctx, drainRunTimeout)
 	defer cancel()
@@ -575,7 +575,7 @@ func (s *session) runDrain(ctx context.Context, def *kindDef, run provider.Actio
 			break
 		}
 		if err := ctx.Err(); err != nil && !sent {
-			return core.ActionResult{}, &provider.Error{Class: provider.ClassUnavailable, Message: "nothing was written: " + err.Error()}
+			return core.ActionResult{}, provider.Said(provider.ClassUnavailable, msg("error.nothingWritten", "detail", err.Error()))
 		} else if err != nil {
 			stopped(stopWhy(ctx))
 			break
@@ -611,7 +611,7 @@ func (s *session) runDrain(ctx context.Context, def *kindDef, run provider.Actio
 			done++
 		}
 	}
-	return core.ActionResult{Message: core.Message{Text: fmt.Sprintf("node %s: drain requested (%d of %d parts done)", node.GetName(), done, len(parts))}, Outcome: out, Parts: parts}, nil
+	return core.ActionResult{Message: msg("done.drain", "name", node.GetName(), "done", done, "total", len(parts)), Outcome: out, Parts: parts}, nil
 }
 
 // drainCheck reads the node (by UID) and its pods again: they must be the
@@ -622,14 +622,14 @@ func (s *session) drainCheck(ctx context.Context, def *kindDef, run provider.Act
 		return nil, nil, err
 	}
 	if why := actionUnavailable(def, actDrain.ID, node); why != nil {
-		return nil, nil, &provider.Error{Class: provider.ClassConflict, Message: why.Text}
+		return nil, nil, provider.Said(provider.ClassConflict, *why)
 	}
 	inv, why := s.drainPods(ctx, node.GetName())
 	if why != nil {
-		return nil, nil, &provider.Error{Class: provider.ClassConflict, Message: why.Text + "; nothing was written"}
+		return nil, nil, provider.Said(provider.ClassConflict, notWritten(*why))
 	}
 	if drainExpect(def, node, inv) != run.Expect {
-		return nil, nil, &provider.Error{Class: provider.ClassConflict, Message: fmt.Sprintf("node %s or its pods changed since the drain was reviewed; review it again", node.GetName())}
+		return nil, nil, provider.Said(provider.ClassConflict, msg("drain.changed", "name", node.GetName()))
 	}
 	return node, inv, nil
 }
@@ -669,7 +669,7 @@ func (s *session) drainCordon(ctx context.Context, def *kindDef, run provider.Ac
 		part.Outcome, part.Why = core.OutcomeUnknown, ptr(msg("drain.why.unknown", "detail", shortErr(err)))
 		return part, false, nil
 	case apierrors.IsNotFound(err):
-		return part, false, &provider.Error{Class: provider.ClassGone, Message: fmt.Sprintf("node %s no longer exists", node.GetName())}
+		return part, false, provider.Said(provider.ClassGone, msg("error.gone", "kind", "node", "name", node.GetName()))
 	case apierrors.IsConflict(err) && attempt < maxVersionRetries:
 		// Checked again from the start (node and pods); a moved version
 		// with the same plan is tried again.
@@ -773,3 +773,14 @@ func stopWhy(ctx context.Context) core.Message {
 }
 
 func ptr[T any](v T) *T { return &v }
+
+// notWritten is why (a reason the node's pods cannot be drained) said at
+// a run: nothing was written.
+func notWritten(why core.Message) core.Message {
+	key := strings.TrimPrefix(why.Key, ProviderID+".") + "NotWritten"
+	kv := make([]any, 0, 2*len(why.Params))
+	for k, v := range why.Params {
+		kv = append(kv, k, v)
+	}
+	return msg(key, kv...)
+}

@@ -10,7 +10,6 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"regexp"
 	"strings"
 	"sync"
@@ -126,7 +125,7 @@ func (g runGrant) expect() string {
 // session incarnation are the caller's (a conflict, not an invalid request).
 func readRunGrant(def *kindDef, ref core.Ref, expect string) (runGrant, error) {
 	var g runGrant
-	bad := invalid("the run's review is not valid: review it again")
+	bad := provider.Said(provider.ClassInvalid, msg("run.invalid"))
 	if len(expect) > maxGrantLen {
 		return g, bad
 	}
@@ -171,7 +170,7 @@ func (sg *spentGrants) spend(g runGrant, clock func() time.Time) error {
 	now := clock()
 	exp := time.UnixMilli(g.Exp)
 	if !now.Before(exp) {
-		return &provider.Error{Class: provider.ClassConflict, Message: "the review of this run has expired; review it again"}
+		return provider.Said(provider.ClassConflict, msg("run.expired"))
 	}
 	for n, e := range sg.byNonce {
 		if !now.Before(e) {
@@ -179,10 +178,10 @@ func (sg *spentGrants) spend(g runGrant, clock func() time.Time) error {
 		}
 	}
 	if _, ok := sg.byNonce[g.Nonce]; ok {
-		return &provider.Error{Class: provider.ClassConflict, Message: "this review was already run; review it again for another Job"}
+		return provider.Said(provider.ClassConflict, msg("run.spent"))
 	}
 	if len(sg.byNonce) >= maxSpentGrants {
-		return &provider.Error{Class: provider.ClassUnavailable, Message: "too many runs reviewed at once; try again later"}
+		return provider.Said(provider.ClassUnavailable, msg("run.tooMany"))
 	}
 	sg.byNonce[g.Nonce] = exp
 	return nil
@@ -268,26 +267,26 @@ func (s *session) runNow(ctx context.Context, def *kindDef, run provider.ActionR
 		return core.ActionResult{}, err
 	}
 	if g.Inc != s.incarnation {
-		return core.ActionResult{}, &provider.Error{Class: provider.ClassConflict, Message: "the run was reviewed on an earlier connection; review it again"}
+		return core.ActionResult{}, provider.Said(provider.ClassConflict, msg("run.earlier"))
 	}
 	if !s.now().Before(time.UnixMilli(g.Exp)) {
-		return core.ActionResult{}, &provider.Error{Class: provider.ClassConflict, Message: "the review of this run has expired; review it again"}
+		return core.ActionResult{}, provider.Said(provider.ClassConflict, msg("run.expired"))
 	}
 	u, err := s.getConfirmed(ctx, def, run.Ref)
 	if err != nil {
 		return core.ActionResult{}, err
 	}
 	if why := actionUnavailable(def, run.Action, u); why != nil {
-		return core.ActionResult{}, &provider.Error{Class: provider.ClassConflict, Message: why.Text}
+		return core.ActionResult{}, provider.Said(provider.ClassConflict, *why)
 	}
 	if runState(u) != g.State {
-		return core.ActionResult{}, &provider.Error{Class: provider.ClassConflict, Message: fmt.Sprintf("cronjob %s changed since the run was reviewed; review it again", u.GetName())}
+		return core.ActionResult{}, provider.Said(provider.ClassConflict, msg("run.changed", "name", u.GetName()))
 	}
 	if s.beforeWrite != nil {
 		s.beforeWrite(run.Action, u)
 	}
 	if err := ctx.Err(); err != nil {
-		return core.ActionResult{}, &provider.Error{Class: provider.ClassUnavailable, Message: "nothing was written: " + err.Error()}
+		return core.ActionResult{}, provider.Said(provider.ClassUnavailable, msg("error.nothingWritten", "detail", err.Error()))
 	}
 	if err := s.spent.spend(g, s.now); err != nil {
 		return core.ActionResult{}, err
@@ -300,7 +299,7 @@ func (s *session) runNow(ctx context.Context, def *kindDef, run provider.ActionR
 	defer cancel()
 	err = wr.create(wctx, jobsV1GVR, u.GetNamespace(), runJob(u, g.Job))
 	if err == nil {
-		return core.ActionResult{Message: core.Message{Text: fmt.Sprintf("Job %s created from cronjob %s", g.Job, u.GetName())}}, nil
+		return core.ActionResult{Message: msg("done.run", "job", g.Job, "name", u.GetName())}, nil
 	}
 	return core.ActionResult{}, runFailed(err, g.Job)
 }
@@ -309,7 +308,7 @@ func (s *session) runNow(ctx context.Context, def *kindDef, run provider.ActionR
 func runFailed(err error, job string) error {
 	var se apierrors.APIStatus
 	unknown := func(detail string) error {
-		return &provider.Error{Class: provider.ClassUnknown, Message: fmt.Sprintf("the result is not known (%s): check whether Job %s exists before repeating", detail, job)}
+		return provider.Said(provider.ClassUnknown, msg("run.unknown", "detail", detail, "job", job))
 	}
 	switch {
 	case !errors.As(err, &se) && strings.Contains(err.Error(), "getting credentials"): // before sending
@@ -320,7 +319,7 @@ func runFailed(err error, job string) error {
 	case ambiguous(err):
 		return unknown(statusMessage(err))
 	case apierrors.IsAlreadyExists(err):
-		return &provider.Error{Class: provider.ClassConflict, Message: fmt.Sprintf("a Job named %s already exists; review again for another name", job)}
+		return provider.Said(provider.ClassConflict, msg("run.exists", "job", job))
 	case apierrors.IsForbidden(err):
 		return &provider.Error{Class: provider.ClassForbidden, Message: statusMessage(err)}
 	case apierrors.IsInvalid(err) || apierrors.IsBadRequest(err):

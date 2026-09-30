@@ -182,8 +182,9 @@ func TestCronJobSuspendAndResumeRun(t *testing.T) {
 		w := &patchRec{drainRec: drainRec{dyn: s.dyn}}
 		s.writer = w
 		plan := prepare(t, s, cronRef("nightly"), "suspend", core.ActionParams{})
-		_, err := run(s, plan)
+		res, err := run(s, plan)
 		require.NoError(t, err)
+		assertDone(t, res, "done.suspend", map[string]string{"kind": "cronjob", "name": "nightly"})
 		require.Len(t, w.bodies, 1)
 		assert.Equal(t, map[string]any{
 			"metadata": map[string]any{"uid": "uid-nightly", "resourceVersion": "5"},
@@ -198,8 +199,9 @@ func TestCronJobSuspendAndResumeRun(t *testing.T) {
 		w := &patchRec{drainRec: drainRec{dyn: s.dyn}}
 		s.writer = w
 		plan := prepare(t, s, cronRef("nightly"), "resume", core.ActionParams{})
-		_, err := run(s, plan)
+		res, err := run(s, plan)
 		require.NoError(t, err)
+		assertDone(t, res, "done.resume", map[string]string{"kind": "cronjob", "name": "nightly"})
 		require.Len(t, w.bodies, 1)
 		assert.Equal(t, false, w.bodies[0]["spec"].(map[string]any)["suspend"])
 	})
@@ -217,6 +219,7 @@ func TestCronJobSuspendAndResumeRun(t *testing.T) {
 		var pe *provider.Error
 		require.True(t, errors.As(err, &pe))
 		assert.Equal(t, provider.ClassConflict, pe.Class)
+		assert.Equal(t, "unavailable.suspended", saidKey(t, err))
 		assert.Empty(t, w.bodies)
 	})
 	t.Run("a new starting deadline after a resume review: a conflict", func(t *testing.T) {
@@ -232,6 +235,7 @@ func TestCronJobSuspendAndResumeRun(t *testing.T) {
 		var pe *provider.Error
 		require.True(t, errors.As(err, &pe))
 		assert.Equal(t, provider.ClassConflict, pe.Class)
+		assert.Equal(t, "error.changed", saidKey(t, err))
 		assert.Empty(t, w.bodies)
 	})
 }

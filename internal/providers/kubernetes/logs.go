@@ -96,7 +96,7 @@ func (s *session) readObject(ctx context.Context, def *kindDef, ref core.Ref) (*
 		return nil, err
 	}
 	if ref.UID != "" && string(u.GetUID()) != ref.UID {
-		return nil, &provider.Error{Class: provider.ClassGone, Message: fmt.Sprintf("%s was deleted and a new object took its name", ref)}
+		return nil, provider.Said(provider.ClassGone, msg("error.replaced", "ref", ref.String()))
 	}
 	return u, nil
 }

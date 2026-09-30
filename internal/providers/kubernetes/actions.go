@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -78,14 +79,15 @@ var _ provider.Actioner = (*session)(nil)
 func (s *session) actionTarget(ref core.Ref, action string, p core.ActionParams, final bool) (*kindDef, core.ActionDescriptor, error) {
 	def := s.kind(ref.Kind)
 	if def == nil {
-		return nil, core.ActionDescriptor{}, &provider.Error{Class: provider.ClassUnsupported, Message: fmt.Sprintf("unknown kind %q", ref.Kind)}
+		return nil, core.ActionDescriptor{}, provider.Said(provider.ClassUnsupported, msg("error.unknownKind", "kind", strconv.Quote(ref.Kind)))
 	}
 	d, ok := def.action(action)
 	if !ok {
-		return nil, core.ActionDescriptor{}, &provider.Error{Class: provider.ClassUnsupported, Message: fmt.Sprintf("%s cannot be %s", def.desc.Title, action)}
+		return nil, core.ActionDescriptor{}, provider.Said(provider.ClassUnsupported, msg("error.noAction", "kind", def.desc.Title, "action", action))
 	}
 	if err := d.CheckParams(p, final); err != nil {
-		return nil, core.ActionDescriptor{}, invalid("%s", err.Error())
+		// The API checked the same descriptor first: not reached from the UI.
+		return nil, core.ActionDescriptor{}, &provider.Error{Class: provider.ClassInvalid, Message: err.Error()}
 	}
 	return def, d, nil
 }
@@ -211,12 +213,12 @@ func singular(def *kindDef) string {
 // confirmation was of it).
 func (s *session) getConfirmed(ctx context.Context, def *kindDef, ref core.Ref) (*unstructured.Unstructured, error) {
 	if ref.UID == "" {
-		return nil, invalid("the object's UID is missing: act only on a confirmed object")
+		return nil, provider.Said(provider.ClassInvalid, msg("error.noUID"))
 	}
 	u, err := s.getObjectOf(ctx, def, ref)
 	var pe *provider.Error
 	if errors.As(err, &pe) && pe.Class == provider.ClassNotFound {
-		return nil, &provider.Error{Class: provider.ClassGone, Message: fmt.Sprintf("%s %s no longer exists", ref.Kind, ref.Name)}
+		return nil, provider.Said(provider.ClassGone, msg("error.gone", "kind", ref.Kind, "name", ref.Name))
 	}
 	return u, err
 }
@@ -237,7 +239,7 @@ func (s *session) RunAction(ctx context.Context, run provider.ActionRun) (core.A
 		// read or written through the current one instead. Checked, the
 		// route holds for the whole run (reads, write, retries) even if the
 		// catalog moves meanwhile.
-		return core.ActionResult{}, &provider.Error{Class: provider.ClassConflict, Message: fmt.Sprintf("the API resource of %s changed since the action was reviewed; review it again", def.desc.Title)}
+		return core.ActionResult{}, provider.Said(provider.ClassConflict, msg("error.routeChanged", "kind", def.desc.Title))
 	}
 	for attempt := 0; ; attempt++ {
 		u, err := s.getConfirmed(ctx, def, run.Ref)
@@ -245,17 +247,17 @@ func (s *session) RunAction(ctx context.Context, run provider.ActionRun) (core.A
 			return core.ActionResult{}, err
 		}
 		if why := actionUnavailable(def, run.Action, u); why != nil {
-			return core.ActionResult{}, &provider.Error{Class: provider.ClassConflict, Message: why.Text}
+			return core.ActionResult{}, provider.Said(provider.ClassConflict, *why)
 		}
 		if actionExpect(def, run.Action, run.Params, u) != run.Expect {
-			return core.ActionResult{}, &provider.Error{Class: provider.ClassConflict, Message: fmt.Sprintf("%s %s changed since the action was reviewed; review it again", singular(def), u.GetName())}
+			return core.ActionResult{}, provider.Said(provider.ClassConflict, msg("error.changed", "kind", singular(def), "name", u.GetName()))
 		}
 		if s.beforeWrite != nil {
 			s.beforeWrite(run.Action, u)
 		}
-		msg, err := s.write(ctx, def, run, u)
+		said, err := s.write(ctx, def, run, u)
 		if err == nil {
-			return core.ActionResult{Message: core.Message{Text: msg}}, nil
+			return core.ActionResult{Message: said}, nil
 		}
 		retry, err := s.failedWrite(ctx, def, run, u, err)
 		if !retry || attempt == maxVersionRetries {
@@ -266,7 +268,7 @@ func (s *session) RunAction(ctx context.Context, run provider.ActionRun) (core.A
 
 // write performs the action on u with u's UID and version as
 // preconditions.
-func (s *session) write(ctx context.Context, def *kindDef, run provider.ActionRun, u *unstructured.Unstructured) (string, error) {
+func (s *session) write(ctx context.Context, def *kindDef, run provider.ActionRun, u *unstructured.Unstructured) (core.Message, error) {
 	ctx, cancel := context.WithTimeout(ctx, getTimeout)
 	defer cancel()
 	wr := s.writer
@@ -274,7 +276,7 @@ func (s *session) write(ctx context.Context, def *kindDef, run provider.ActionRu
 		wr = dynWriter{s.dyn}
 	}
 	ns := u.GetNamespace()
-	name := fmt.Sprintf("%s %s", singular(def), u.GetName())
+	kind, name := singular(def), u.GetName()
 	switch run.Action {
 	case actRestart.ID:
 		patch, _ := json.Marshal(map[string]any{
@@ -283,7 +285,7 @@ func (s *session) write(ctx context.Context, def *kindDef, run provider.ActionRu
 			"spec": map[string]any{"template": map[string]any{"metadata": map[string]any{"annotations": map[string]any{restartedAtKey: time.Now().Format(time.RFC3339Nano)}}}},
 		})
 		err := wr.patch(ctx, def.gvr, ns, u.GetName(), types.MergePatchType, patch, "")
-		return name + ": restart requested", err
+		return msg("done.restart", "kind", kind, "name", name), err
 	case actScale.ID:
 		// The count shown was checked by Expect on this read; its version
 		// pins it: a stale version or another UID is a 409 (kind). Not a
@@ -295,27 +297,27 @@ func (s *session) write(ctx context.Context, def *kindDef, run provider.ActionRu
 			"spec":     map[string]any{"replicas": m},
 		})
 		err := wr.patch(ctx, def.gvr, ns, u.GetName(), types.MergePatchType, patch, "scale")
-		return fmt.Sprintf("%s: scale %d → %d requested", name, replicas(u.Object), m), err
+		return msg("done.scale", "kind", kind, "name", name, "from", replicas(u.Object), "to", m), err
 	case actCordon.ID, actUncordon.ID:
 		patch, _ := json.Marshal(map[string]any{
 			"metadata": map[string]any{"uid": u.GetUID(), "resourceVersion": u.GetResourceVersion()},
 			"spec":     map[string]any{"unschedulable": run.Action == actCordon.ID},
 		})
 		err := wr.patch(ctx, def.gvr, ns, u.GetName(), types.MergePatchType, patch, "")
-		return fmt.Sprintf("%s: %s requested", name, run.Action), err
+		return msg("done."+run.Action, "kind", kind, "name", name), err
 	case actSuspend.ID, actResume.ID:
 		patch, _ := json.Marshal(map[string]any{
 			"metadata": map[string]any{"uid": u.GetUID(), "resourceVersion": u.GetResourceVersion()},
 			"spec":     map[string]any{"suspend": run.Action == actSuspend.ID},
 		})
 		err := wr.patch(ctx, def.gvr, ns, u.GetName(), types.MergePatchType, patch, "")
-		return fmt.Sprintf("%s: %s requested", name, run.Action), err
+		return msg("done."+run.Action, "kind", kind, "name", name), err
 	case actDelete.ID:
 		uid, rv, bg := u.GetUID(), u.GetResourceVersion(), metav1.DeletePropagationBackground
 		err := wr.delete(ctx, def.gvr, ns, u.GetName(), metav1.DeleteOptions{Preconditions: &metav1.Preconditions{UID: &uid, ResourceVersion: &rv}, PropagationPolicy: &bg})
-		return name + ": deletion requested", err
+		return msg("done.delete", "kind", kind, "name", name), err
 	}
-	return "", &provider.Error{Class: provider.ClassUnsupported, Message: run.Action}
+	return core.Message{}, &provider.Error{Class: provider.ClassUnsupported, Message: run.Action}
 }
 
 // failedWrite classifies a failed write; retry: nothing was written and
@@ -328,14 +330,14 @@ func (s *session) failedWrite(ctx context.Context, def *kindDef, run provider.Ac
 		return false, &provider.Error{Class: class, Message: msg}
 	case !errors.As(err, &se):
 		// No answer from the API server: it may or may not have applied it.
-		return false, &provider.Error{Class: provider.ClassUnknown, Message: fmt.Sprintf("the result is not known (%v): check %s %s before repeating", err, singular(def), was.GetName())}
+		return false, provider.Said(provider.ClassUnknown, msg("error.unknown", "detail", err.Error(), "kind", singular(def), "name", was.GetName()))
 	case apierrors.IsForbidden(err):
 		return false, &provider.Error{Class: provider.ClassForbidden, Message: statusMessage(err)}
 	case apierrors.IsNotFound(err):
-		return false, &provider.Error{Class: provider.ClassGone, Message: fmt.Sprintf("%s %s no longer exists", singular(def), was.GetName())}
+		return false, provider.Said(provider.ClassGone, msg("error.gone", "kind", singular(def), "name", was.GetName()))
 	case ambiguous(err):
 		// A server or proxy failure answer: the write may have been applied.
-		return false, &provider.Error{Class: provider.ClassUnknown, Message: fmt.Sprintf("the result is not known (%s): check %s %s before repeating", statusMessage(err), singular(def), was.GetName())}
+		return false, provider.Said(provider.ClassUnknown, msg("error.unknown", "detail", statusMessage(err), "kind", singular(def), "name", was.GetName()))
 	case !apierrors.IsConflict(err) && !apierrors.IsInvalid(err):
 		class, msg := classify(err)
 		return false, &provider.Error{Class: class, Message: msg}
@@ -347,15 +349,15 @@ func (s *session) failedWrite(ctx context.Context, def *kindDef, run provider.Ac
 	case gerr != nil:
 		var pe *provider.Error
 		if errors.As(gerr, &pe) && pe.Class == provider.ClassGone {
-			return false, &provider.Error{Class: provider.ClassGone, Message: fmt.Sprintf("%s %s was deleted or replaced by a new one with the same name", singular(def), was.GetName())}
+			return false, provider.Said(provider.ClassGone, msg("error.replacedMeanwhile", "kind", singular(def), "name", was.GetName()))
 		}
 		return false, gerr
 	case actionExpect(def, run.Action, run.Params, now) != run.Expect:
-		return false, &provider.Error{Class: provider.ClassConflict, Message: fmt.Sprintf("%s %s changed since the action was reviewed; review it again", singular(def), was.GetName())}
+		return false, provider.Said(provider.ClassConflict, msg("error.changed", "kind", singular(def), "name", was.GetName()))
 	case now.GetResourceVersion() != was.GetResourceVersion() && apierrors.IsConflict(err):
 		// A failed precondition at a moved version: retry. Other refusals
 		// stay refusals.
-		return true, &provider.Error{Class: provider.ClassConflict, Message: fmt.Sprintf("%s %s keeps changing; try again", singular(def), was.GetName())}
+		return true, provider.Said(provider.ClassConflict, msg("error.keepsChanging", "kind", singular(def), "name", was.GetName()))
 	case apierrors.IsConflict(err):
 		return false, &provider.Error{Class: provider.ClassConflict, Message: statusMessage(err)}
 	}

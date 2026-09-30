@@ -172,6 +172,7 @@ func TestRunNowCreatesTheReviewedJob(t *testing.T) {
 	res, err := runNow(s, plan)
 	require.NoError(t, err)
 	assert.Contains(t, res.Message.Text, job)
+	assertDone(t, res, "done.run", map[string]string{"job": job, "name": "nightly"})
 	require.Equal(t, 1, w.creates())
 	tmpl := cronJob("nightly").Object["spec"].(map[string]any)["jobTemplate"].(map[string]any)["spec"]
 	assert.Equal(t, map[string]any{
@@ -230,7 +231,7 @@ func TestRunNowGrant(t *testing.T) {
 				plan := prepare(t, s, cronRef("nightly"), "run", core.ActionParams{})
 				plan.Expect = withPayload(t, plan.Expect, func(p map[string]any) { p[field] = v })
 				_, err := runNow(s, plan)
-				assert.Equal(t, provider.ClassInvalid, classOf(t, err))
+				assertSaid(t, err, provider.ClassInvalid, "run.invalid")
 				assert.Zero(t, w.creates())
 			})
 		}
@@ -245,7 +246,7 @@ func TestRunNowGrant(t *testing.T) {
 		}
 		plan.Expect = plan.Expect[:i] + string(flip)
 		_, err := runNow(s, plan)
-		assert.Equal(t, provider.ClassInvalid, classOf(t, err))
+		assertSaid(t, err, provider.ClassInvalid, "run.invalid")
 		assert.Zero(t, w.creates())
 	})
 	t.Run("another object's grant: invalid", func(t *testing.T) {
@@ -254,7 +255,7 @@ func TestRunNowGrant(t *testing.T) {
 		other := prepare(t, s, cronRef("hourly"), "run", core.ActionParams{})
 		plan.Expect = other.Expect
 		_, err := runNow(s, plan)
-		assert.Equal(t, provider.ClassInvalid, classOf(t, err))
+		assertSaid(t, err, provider.ClassInvalid, "run.invalid")
 		assert.Zero(t, w.creates())
 	})
 	t.Run("expired: review again", func(t *testing.T) {
@@ -262,7 +263,7 @@ func TestRunNowGrant(t *testing.T) {
 		plan := prepare(t, s, cronRef("nightly"), "run", core.ActionParams{})
 		s.now = func() time.Time { return time.Now().Add(runGrantTTL + time.Second) }
 		_, err := runNow(s, plan)
-		assert.Equal(t, provider.ClassConflict, classOf(t, err))
+		assertSaid(t, err, provider.ClassConflict, "run.expired")
 		assert.Zero(t, w.creates())
 	})
 	t.Run("expiring during the run's read: nothing created", func(t *testing.T) {
@@ -272,7 +273,7 @@ func TestRunNowGrant(t *testing.T) {
 			s.now = func() time.Time { return time.Now().Add(runGrantTTL + time.Second) }
 		}
 		_, err := runNow(s, plan)
-		assert.Equal(t, provider.ClassConflict, classOf(t, err))
+		assertSaid(t, err, provider.ClassConflict, "run.expired")
 		assert.Zero(t, w.creates())
 	})
 	t.Run("another session incarnation: review again", func(t *testing.T) {
@@ -280,7 +281,7 @@ func TestRunNowGrant(t *testing.T) {
 		plan := prepare(t, s, cronRef("nightly"), "run", core.ActionParams{})
 		s2, w2 := runSessionFor(t, cronJob("nightly"))
 		_, err := runNow(s2, plan)
-		assert.Equal(t, provider.ClassConflict, classOf(t, err))
+		assertSaid(t, err, provider.ClassConflict, "run.earlier")
 		assert.Zero(t, w2.creates())
 	})
 	t.Run("run again after the Job was created and deleted: refused, one Job", func(t *testing.T) {
@@ -290,7 +291,7 @@ func TestRunNowGrant(t *testing.T) {
 		require.NoError(t, err)
 		require.NoError(t, s.dyn.Resource(jobsGVR).Namespace("ns").Delete(context.Background(), jobOf(t, plan), metav1.DeleteOptions{}))
 		_, err = runNow(s, plan)
-		assert.Equal(t, provider.ClassConflict, classOf(t, err))
+		assertSaid(t, err, provider.ClassConflict, "run.spent")
 		assert.Equal(t, 1, w.creates())
 	})
 	t.Run("run again after an unknown outcome: refused", func(t *testing.T) {
@@ -353,7 +354,7 @@ func TestRunNowGrant(t *testing.T) {
 		}
 		plan = prepare(t, s, cronRef("nightly"), "run", core.ActionParams{})
 		_, err = runNow(s, plan)
-		assert.Equal(t, provider.ClassUnavailable, classOf(t, err))
+		assertSaid(t, err, provider.ClassUnavailable, "run.tooMany")
 		assert.Equal(t, 1, w.creates())
 	})
 }
@@ -376,6 +377,7 @@ func TestRunNowChecksWhatItsTextsRead(t *testing.T) {
 			require.NoError(t, err)
 			_, err = runNow(s, plan)
 			assert.Equal(t, provider.ClassConflict, classOf(t, err))
+			assert.Equal(t, "run.changed", saidKey(t, err))
 			assert.Zero(t, w.creates())
 		})
 	}
@@ -399,12 +401,13 @@ func TestRunNowAnswers(t *testing.T) {
 		err   error
 		class provider.ErrorClass
 		text  string
+		key   string
 	}{
-		{"already there", apierrors.NewAlreadyExists(gr, "x"), provider.ClassConflict, "already exists"},
-		{"forbidden", apierrors.NewForbidden(gr, "x", errors.New("rbac")), provider.ClassForbidden, ""},
-		{"invalid", apierrors.NewInvalid(schema.GroupKind{Group: "batch", Kind: "Job"}, "x", nil), provider.ClassInvalid, ""},
-		{"server error", apierrors.NewInternalError(errors.New("boom")), provider.ClassUnknown, "before repeating"},
-		{"no answer", errors.New("connection reset"), provider.ClassUnknown, "before repeating"},
+		{"already there", apierrors.NewAlreadyExists(gr, "x"), provider.ClassConflict, "already exists", "run.exists"},
+		{"forbidden", apierrors.NewForbidden(gr, "x", errors.New("rbac")), provider.ClassForbidden, "", ""},
+		{"invalid", apierrors.NewInvalid(schema.GroupKind{Group: "batch", Kind: "Job"}, "x", nil), provider.ClassInvalid, "", ""},
+		{"server error", apierrors.NewInternalError(errors.New("boom")), provider.ClassUnknown, "before repeating", "run.unknown"},
+		{"no answer", errors.New("connection reset"), provider.ClassUnknown, "before repeating", "run.unknown"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			s, w := runSessionFor(t, cronJob("nightly"))
@@ -412,6 +415,7 @@ func TestRunNowAnswers(t *testing.T) {
 			plan := prepare(t, s, cronRef("nightly"), "run", core.ActionParams{})
 			_, err := runNow(s, plan)
 			assert.Equal(t, tc.class, classOf(t, err))
+			assert.Equal(t, tc.key, saidKey(t, err))
 			assert.Contains(t, err.Error(), tc.text)
 			if tc.class == provider.ClassUnknown {
 				assert.Contains(t, err.Error(), jobOf(t, plan), "the name to look for")
