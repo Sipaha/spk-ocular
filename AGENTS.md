@@ -40,7 +40,8 @@ Go + Wails v3 + React. Спецификация: `docs/specs/2026-09-29-spk-ocul
   `docker save | load`, внешние `ocular-ext-net`/`ocular-ext-vol`, проекты `ocular-fixture`
   (healthy, unhealthy, crash-loop, exited 0/3, две реплики с логами, one-off) и `ocular-other`),
   `make test-dind` (Go-тесты `*Dind*`, `OCULAR_DIND_HOST`/`OCULAR_DIND_VERIFY`; **падает** без
-  демона), `make dind-down`. Перед любой мутацией — `scripts/dind-verify.sh`: записанный
+  демона), `make e2e-dind` (Playwright `dind.spec.ts`: фикстурный `~/.docker` с context-ом
+  `ocular-dind`), `make dind-down`. `/run` контейнера — tmpfs (переживает `docker stop/start`). Перед любой мутацией — `scripts/dind-verify.sh`: записанный
   контейнер наш (имя, label), запущен, публикует ровно `127.0.0.1:23750`, и `/info` на порту
   отвечает его hostname-ом; иначе отказ. Контейнер `ocular-dind` без label-а — не наш, скрипты
   его не трогают. Демон пользователя (его compose-проекты) — никогда.
@@ -124,6 +125,19 @@ Go + Wails v3 + React. Спецификация: `docs/specs/2026-09-29-spk-ocul
 - Тексты провайдера — `core.Message{key, params, text}`: английский источник в
   `kubernetes/messages.go`, русский по ключу — `providerTexts` в `web/src/i18n.ts`
   (`messageText`, неизвестный ключ — английский текст).
+- `internal/providers/compose` — Docker Compose: target-ы — Docker contexts (`contexts.go`, как
+  docker CLI 29; inotify — `watch.go`), клиент Engine (`engine/`: транспорт unix/tcp/TLS, версия
+  1.41–1.54 лениво, лимиты, классы ошибок, events, logs/stdcopy; ни одного повтора), фейковый
+  Engine для тестов (`enginefake/`: модель объектов, events с историей 256, журнал логов с
+  since/tail, hooks). Наблюдение: `feed.go` — лента на тип объекта (containers, networks,
+  volumes, images) с эпохами (info → events since −1 с → list → inspect в пуле 8 → сверка
+  грязных id; одна горутина на ленту), аренды и grace 60 с — `session.go` (`Open`, Scopes,
+  Get со свежим inspect, Resync, Stats); вид — `view.go` (пересчёт строк из `World` по
+  склеенному сигналу, разница с прошлым, статус — худший по лентам). Проекции — чистые функции
+  над `World` (`world.go`): `kinds.go`, `rows.go` (идентичность, scope, Rev без лога проверок),
+  `health.go` (таблица решения 6, сервис по приоритету), `resource.go` (факты, YAML inspect,
+  связи uses/used-by/owns). Логи — `logs.go` (каналы stdout/stderr, члены сервиса из ленты,
+  backlog-merge, курсор «время + счёт повторов», ожидание старта остановленного).
 - `internal/providers/synthetic` — тестовый провайдер (`--test-api --test-synthetic`): логи,
   эхо-терминал и порты (`live.go`), переконфигурация (`POST /api/_test/synthetic/reconfigure`),
   вид Workloads с действиями (`actions.go`; `POST /api/_test/synthetic/controls` — права, отказ,
@@ -314,6 +328,20 @@ Go + Wails v3 + React. Спецификация: `docs/specs/2026-09-29-spk-ocul
 - Поздний ответ `RunAction` (после клиентского таймаута) меняет только «неизвестно» своего
   прогона (номер прогона отдельно от поколения диалога) или становится уведомлением с target-ом;
   ничего не отправляет заново и не трогает более новый диалог. — `ActionDialog.test.tsx`.
+- Наблюдение Docker — best effort, не watch Kubernetes: событие — только подсказка, объект
+  меняет лишь inspect (404 = удалён), старое `destroy` не удаляет новую инкарнацию; ответы
+  старой эпохи не попадают в новую (одна горутина на ленту, конец потока событий обрывает
+  эпоху сразу); Ready — после сверки и при живом потоке; запрет events — error, не пустой
+  Ready; зависший inspect — stale с объяснением; пропущенную демоном доставку чинит только
+  «Перечитать» (`Resyncer`, строки не исчезают до успешного снимка). Никаких периодических
+  relist-ов. — `feed_test.go` (`TestFeed*`), dind `TestDindDaemonStopStaleRecovery`.
+- Идентичность Compose: контейнер — полный id (имя — `Ref.Title`), сервис — `project/service`,
+  том — `name@CreatedAt` (пересоздание в ту же секунду не различимо — сказано в деталях), образ
+  — id; `Rev` без `Health.Log`/`FailingStreak`. — `rows_test.go`, `resource_test.go`.
+- Логи Docker: журнал один на все перезапуски — «Предыдущий» не предлагается; продолжение —
+  позиционный `since` + пропуск по счёту (см. Things that bite), расхождение — `gap`; остановленный контейнер
+  ждёт старта в ленте, не опросом. — `logs_test.go` (`TestLogs*`), dind
+  `TestDindServiceLogsThroughRestart`.
 - Каталог данных — `~/.spk/ocular` (`SPK_OCULAR_HOME`); временные файлы агентов — в
   `.agents/tmp` solution, не в `/tmp`.
 
@@ -419,5 +447,20 @@ Go + Wails v3 + React. Спецификация: `docs/specs/2026-09-29-spk-ocul
 - **`pnpm exec tsc -b` переписывает отслеживаемый `web/tsconfig.tsbuildinfo`** — перед коммитом
   `git checkout web/tsconfig.tsbuildinfo`.
 - **Две сетки `resources`**: список событий в деталях — тоже `ResourceTable`; в e2e брать `.first()`.
+- **Фильтры `/events` Moby складываются по И между ключами**: `type=[container,network]` с
+  `label=com.docker.compose.project` отбросил бы события сети (`connect` называет контейнер
+  только в атрибутах). Лента контейнеров фильтрует compose-label на месте. `event=health_status`
+  совпадает с `health_status: healthy` (Action режется по `:`); у контейнерных событий labels —
+  в `Actor.Attributes`.
+- **`since` логов Docker позиционный** (Docker 29, измерено на dind): находит первую строку
+  журнала с меткой ≥ since и отдаёт всё после неё — в том числе строки другого потока с меткой
+  чуть раньше (stdout и stderr штампуются раздельно, в журнале метки идут не монотонно).
+  Курсор — последняя метка + число доставленных строк после строки, достигшей её; пропуск
+  повтора — по этому счёту. Нашёл dind `TestDindServiceLogsThroughRestart` (фейк это
+  моделирует).
+- **dind после `docker stop/start` не поднимается**, если pid-файлы dockerd/containerd пережили
+  перезапуск (pid переиспользован: «process with PID 40 is still running») — у `ocular-dind`
+  `/run` на tmpfs (`dind-up.sh` пересоздаёт старый контейнер без него).
+- **`t.Context()` уже отменён в `t.Cleanup`** — ожидания в cleanup-ах — с `context.Background()`.
 - Кандидат из соседей, ещё не встреченный здесь: fetch с `Blob`/`FormData`-телом через `wails://`
   роняет WebKitGTK (сохранение логов в desktop — строковым телом на loopback).
