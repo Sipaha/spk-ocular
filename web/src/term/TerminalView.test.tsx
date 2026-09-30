@@ -231,6 +231,22 @@ describe('Ctrl with a non-Latin layout', () => {
   })
 })
 
+describe('notice', () => {
+  it('belongs to its run: a reconnect clears it, a late one of the old run does not come back', async () => {
+    render(<TerminalView client={fakeClient() as unknown as Client} tab={tab} active mode="browser" />)
+    await waitFor(() => expect(h.conns).toHaveLength(1))
+    const old = h.conns[0]
+    act(() => old.sink.notice?.({ key: 'compose.exec.sizeNotSet', text: 'The terminal size could not be set' }))
+    expect(screen.getByText('The terminal size could not be set')).toBeInTheDocument()
+    act(() => old.end({ reason: 'done', code: 0 }))
+    act(() => screen.getByRole('button', { name: 'Reconnect' }).click())
+    await waitFor(() => expect(h.conns).toHaveLength(2))
+    expect(screen.queryByText('The terminal size could not be set')).not.toBeInTheDocument()
+    act(() => old.sink.notice?.({ text: 'late from the old run' }))
+    expect(screen.queryByText('late from the old run')).not.toBeInTheDocument()
+  })
+})
+
 describe('tab title', () => {
   const titled = async (target: Record<string, unknown>) => {
     const update = vi.spyOn(dock, 'update')

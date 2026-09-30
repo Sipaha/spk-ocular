@@ -96,6 +96,7 @@ export default function TerminalView({ client, tab, active, mode }: Props) {
       setEnded(null)
       setOpenError(null)
       setConfirmAgain(false)
+      setNotice(null) // a notice was about the previous run
       setPhase('opening')
       const { cols, rows } = term
       let info: TerminalInfo
