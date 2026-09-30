@@ -24,7 +24,9 @@ func (s *Server) Grants(ctx context.Context) ([]agentgrant.Target, error) {
 }
 
 // SaveGrants sets a target's grants whole. A target granted anew is bound
-// to the identity it has now (Docker: its daemon's id — asked of it).
+// to the identity it has now (Docker: its daemon's id — asked of it); one
+// granted already keeps its own, so nothing is asked of it (a daemon that
+// is down does not stop narrowing its grants).
 func (s *Server) SaveGrants(ctx context.Context, req api.SaveAgentGrantsRequest) error {
 	for _, g := range req.Grants {
 		if err := g.Validate(); err != nil {
@@ -32,7 +34,19 @@ func (s *Server) SaveGrants(ctx context.Context, req api.SaveAgentGrantsRequest)
 		}
 	}
 	t := agentgrant.Target{Provider: req.Provider, Target: req.Target, Grants: req.Grants}
-	if len(req.Grants) > 0 {
+	all, err := s.o.Store.AgentTargets(ctx)
+	if err != nil {
+		return &api.CodedError{Code: api.CodeInternal, Detail: err.Error()}
+	}
+	var had agentgrant.Target
+	for _, x := range all {
+		if x.Provider == req.Provider && x.Target == req.Target {
+			had = x
+		}
+	}
+	if len(req.Grants) > 0 && had.Identity != "" {
+		t.Identity, t.Title = had.Identity, had.Title
+	} else if len(req.Grants) > 0 {
 		call, err := s.o.Service.AgentCall(ctx, req.Provider, req.Target)
 		if err != nil {
 			return err

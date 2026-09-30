@@ -540,9 +540,15 @@ func (s *Server) problems(ctx context.Context, c caller, req *ProblemsRequest) (
 			for _, n := range names {
 				sels = append(sels, core.ScopeSel{Mode: core.ScopeOne, Name: n})
 			}
+		case slices.ContainsFunc(x.grants.Grants, func(g agentgrant.Grant) bool {
+			return g.Verb == agentgrant.VerbRead && g.Scope.Mode == agentgrant.ScopeCluster
+		}):
+			// Only objects outside namespaces: their sources alone.
+			sels = []core.ScopeSel{{Mode: core.ScopeNone}}
 		default:
-			// Only objects outside namespaces: one read, cluster rows kept.
-			sels = []core.ScopeSel{{Mode: core.ScopeAll}}
+			err := forbidden("reading is not granted on this target")
+			s.refused(c, "Problems", req.Provider, req.Target, "", "", err)
+			return nil, err
 		}
 	}
 	reads := readScopes(x, k.ID, sels)

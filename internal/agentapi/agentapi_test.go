@@ -263,6 +263,23 @@ func TestAnObjectOutsideTheScopeAskedIsRefused(t *testing.T) {
 	assert.Equal(t, store.AuditRefused, entries[0].Phase, "%+v", entries[0])
 }
 
+// Problems read only what may be read: the cluster alone opens objects
+// outside namespaces only (not every namespace, filtered); no read grant
+// at all is refused, not a watch of the whole cluster.
+func TestProblemsOfTheClusterAlone(t *testing.T) {
+	e := newEnv(t)
+	e.grant(one("a", agentgrant.VerbLogs))
+	e.refused("Problems", tgt)
+	e.grant(agentgrant.Grant{Scope: agentgrant.Scope{Mode: agentgrant.ScopeCluster}, Verb: agentgrant.VerbRead})
+	e.f.mu.Lock()
+	e.f.watched = nil
+	e.f.mu.Unlock()
+	assert.Equal(t, []string{"/n1"}, names(e.ok("Problems", tgt)))
+	e.f.mu.Lock()
+	defer e.f.mu.Unlock()
+	assert.Equal(t, []core.ScopeSel{{Mode: core.ScopeNone}}, e.f.watched)
+}
+
 func TestMetricsByRef(t *testing.T) {
 	e := newEnv(t)
 	e.grant(one("a", agentgrant.VerbRead))
@@ -495,6 +512,26 @@ func TestATargetPointedElsewhereSuspendsItsGrants(t *testing.T) {
 	e.refused("ListObjects", with(tgt, "kind", "pods", "scope", "a"))
 	require.NoError(t, e.svc.ReconfirmAgentTarget(context.Background(), api.ReconfirmAgentTargetRequest{Provider: "k", Target: "t", Observed: "https://b | ca:2 | user:u"}))
 	e.ok("ListObjects", with(tgt, "kind", "pods", "scope", "a"))
+}
+
+// A target granted already keeps its identity: changing its grants asks
+// nothing of it (a Docker daemon that is down does not stop narrowing them).
+func TestChangingGrantsAsksNotTheTarget(t *testing.T) {
+	e := newEnv(t)
+	e.f.daemon = true
+	e.grant(one("a", agentgrant.VerbRead), one("a", agentgrant.VerbLogs))
+	e.f.mu.Lock()
+	e.f.daemonErr = &provider.Error{Class: provider.ClassUnavailable, Message: "the daemon is down"}
+	e.f.mu.Unlock()
+	e.grant(one("a", agentgrant.VerbRead))
+	got, err := e.st.AgentTargets(context.Background())
+	require.NoError(t, err)
+	require.Len(t, got, 1)
+	assert.Len(t, got[0].Grants, 1)
+	assert.Contains(t, got[0].Identity, "daemon:1", "the identity it was granted for")
+	require.NoError(t, e.svc.SaveAgentGrants(context.Background(), api.SaveAgentGrantsRequest{Provider: "k", Target: "t"}), "revoked")
+	err = e.svc.SaveAgentGrants(context.Background(), api.SaveAgentGrantsRequest{Provider: "k", Target: "t", Grants: []agentgrant.Grant{one("a", agentgrant.VerbRead)}})
+	assert.Error(t, err, "granted anew: its identity is asked for")
 }
 
 func TestTheJournal(t *testing.T) {

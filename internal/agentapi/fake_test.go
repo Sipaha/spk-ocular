@@ -21,8 +21,14 @@ type fakeProv struct {
 	allDenied bool
 	// quiet: views never load (a snapshot waits for them).
 	quiet bool
-	runs  []provider.ActionRun
-	edits []provider.EditRun
+	// watched: the scopes views were opened with.
+	watched []core.ScopeSel
+	// daemon: sessions add a part of their own to the identity (as
+	// Docker's daemon id), failing with daemonErr.
+	daemon    bool
+	daemonErr error
+	runs      []provider.ActionRun
+	edits     []provider.EditRun
 	// runGate, when set, holds RunAction until it is closed or ctx ends.
 	runGate chan struct{}
 	opened  int
@@ -41,7 +47,22 @@ func (f *fakeProv) Open(context.Context, string) (provider.Session, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.opened++
+	if f.daemon {
+		return &daemonSess{&fakeSess{f: f, hash: f.hash}}, nil
+	}
 	return &fakeSess{f: f, hash: f.hash}, nil
+}
+
+// daemonSess asks its daemon for its part of the identity.
+type daemonSess struct{ *fakeSess }
+
+func (s *daemonSess) Identity(context.Context) (string, error) {
+	s.f.mu.Lock()
+	defer s.f.mu.Unlock()
+	if s.f.daemonErr != nil {
+		return "", s.f.daemonErr
+	}
+	return "daemon:1", nil
 }
 
 func (f *fakeProv) setIdentity(id string) { f.mu.Lock(); f.identity = id; f.mu.Unlock() }
@@ -96,6 +117,7 @@ func rowOf(r core.Ref) core.Row {
 func (s *fakeSess) Watch(q provider.Query, sink provider.Sink) (func(), error) {
 	s.f.mu.Lock()
 	denied, quiet := s.f.allDenied, s.f.quiet
+	s.f.watched = append(s.f.watched, q.Scope)
 	s.f.mu.Unlock()
 	if quiet {
 		return func() {}, nil
@@ -108,6 +130,8 @@ func (s *fakeSess) Watch(q provider.Query, sink provider.Sink) (func(), error) {
 		switch q.Scope.Mode {
 		case core.ScopeOne:
 			return r.Scope == q.Scope.Name || r.Scope == "" && q.Kind == "problems"
+		case core.ScopeNone:
+			return r.Scope == ""
 		}
 		return true
 	}

@@ -178,6 +178,38 @@ func TestAuditAggregatesReadsPerMinute(t *testing.T) {
 	assert.Empty(t, none)
 }
 
+// A folded read names its object (and scope) only when every read of it
+// did; its time is the minute's first read, so the order by record stays
+// the order in time.
+func TestAFoldedReadOfSeveralObjectsNamesNone(t *testing.T) {
+	ctx := context.Background()
+	s := open(t, filepath.Join(t.TempDir(), "db"))
+	at := time.Date(2026, 9, 30, 10, 0, 5, 0, time.UTC)
+	read := AuditEntry{At: at, Agent: "claude", Method: "GetObject", Provider: "k", Target: "t", Scope: "a", Object: "pods/a/one", Phase: AuditRead, Outcome: "done"}
+	require.NoError(t, s.AppendAudit(ctx, read))
+	same := read
+	same.Method, same.At = "GetLogs", at.Add(time.Second)
+	require.NoError(t, s.AppendAudit(ctx, same))
+	same.At = at.Add(2 * time.Second)
+	require.NoError(t, s.AppendAudit(ctx, same))
+	read.At, read.Object = at.Add(30*time.Second), "pods/a/two"
+	require.NoError(t, s.AppendAudit(ctx, read))
+	read.At, read.Scope, read.Object = at.Add(40*time.Second), "b", "pods/b/three"
+	require.NoError(t, s.AppendAudit(ctx, read))
+
+	all, err := s.ListAudit(ctx, AuditFilter{Limit: 10})
+	require.NoError(t, err)
+	require.Len(t, all, 2)
+	logs, objects := all[0], all[1]
+	assert.Equal(t, "GetLogs", logs.Method)
+	assert.Equal(t, 2, logs.Count)
+	assert.Equal(t, "pods/a/one", logs.Object, "every read of it named it")
+	assert.Equal(t, 3, objects.Count)
+	assert.Equal(t, AuditSeveral, objects.Object, "several objects")
+	assert.Equal(t, AuditSeveral, objects.Scope, "several scopes")
+	assert.Equal(t, at, objects.At.UTC(), "the minute's first read")
+}
+
 func TestAuditRotates(t *testing.T) {
 	ctx := context.Background()
 	s := open(t, filepath.Join(t.TempDir(), "db"))

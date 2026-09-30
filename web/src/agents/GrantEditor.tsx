@@ -343,7 +343,7 @@ function VerbRow({ option, sel, disabled, onChange }: { option: VerbOption; sel:
             {kindsText(sel, option.kinds)} ▾
           </button>
         )}
-        {on && confirmable(option.verb) && (
+        {on && confirmable(option.verb) && sel.kinds !== null && (
           <label className="flex items-center gap-1.5 text-fg-muted" title={t('agents.noConfirmHint')}>
             <input type="checkbox" checked={sel.noConfirm} disabled={disabled} onChange={(e) => onChange({ ...sel, noConfirm: e.target.checked })} />
             {t('agents.noConfirm')}

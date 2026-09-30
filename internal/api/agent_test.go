@@ -458,6 +458,28 @@ func TestTailLogs(t *testing.T) {
 	}
 }
 
+// The whole stream's state (id 0: a group showing only some of its pods)
+// reaches the agent, and a limited group is a truncated tail.
+func TestATailSaysTheGroupsState(t *testing.T) {
+	k := newAgentProvider("a")
+	p := agentWrapped{k, func(a *agentSession) provider.Session {
+		a.logs = func(_ provider.LogQuery, sink provider.LogSink) error {
+			_ = sink.State(0, provider.LogState{State: provider.LogLimited, Message: "showing 20 of 25 streams"})
+			_ = sink.Source(1, "k1", "web-1", "main")
+			_ = sink.Lines(1, []provider.LogLine{{TS: "t1", Text: "one"}})
+			return nil
+		}
+		return loggingSession{a}
+	}}
+	s, _ := newService(t, p)
+	tl, err := call(t, s, "a").TailLogs(TailRequest{Ref: row("a", "web-1").Ref, TailLines: 10})
+	require.NoError(t, err)
+	require.NotNil(t, tl.State)
+	assert.Equal(t, provider.LogState{State: provider.LogLimited, Message: "showing 20 of 25 streams"}, *tl.State)
+	assert.True(t, tl.Truncated)
+	require.Len(t, tl.Lines, 1)
+}
+
 // A provider ends a tail at the deadline with what came (the others of a
 // group) and no error: still truncated.
 func TestATailEndedByItsDeadlineIsTruncated(t *testing.T) {

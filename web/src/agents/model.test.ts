@@ -34,6 +34,14 @@ describe('grant rows ↔ scopes', () => {
     expect(sameGrants(rows, rows.slice(1))).toBe(false)
   })
 
+  it('"without confirmation" is kept for kinds named only (all kinds never skip it)', () => {
+    let s = addScope([], { mode: 'one', name: 'web' })
+    s = setVerb(s, 'one:web', 'edit', { kinds: null, noConfirm: true })
+    expect(toGrants(s)).toContainEqual({ scope: { mode: 'one', name: 'web' }, verb: 'edit', kinds: null })
+    s = setVerb(s, 'one:web', 'edit', { kinds: ['apps/deployments'], noConfirm: true })
+    expect(toGrants(s)).toContainEqual({ scope: { mode: 'one', name: 'web' }, verb: 'edit', kinds: ['apps/deployments'], noConfirm: true })
+  })
+
   it('a scope without verbs grants nothing; a new scope starts with read', () => {
     let s = addScope([], { mode: 'one', name: 'web' })
     expect(toGrants(s)).toEqual([{ scope: { mode: 'one', name: 'web' }, verb: 'read', kinds: null }])

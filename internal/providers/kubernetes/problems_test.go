@@ -199,6 +199,20 @@ func TestProblemsViewShowsCurrentProblemsAndRecentEvidence(t *testing.T) {
 	assert.Len(t, p.Status.Coverage, len(problemSources))
 }
 
+// Problems of objects outside namespaces only (an agent granted the
+// cluster alone): the namespaced sources are not opened at all.
+func TestProblemsOutsideNamespaces(t *testing.T) {
+	h := newHarness(t, fullFake(problemsFixture()...))
+	id := h.open("problems", core.ScopeSel{Mode: core.ScopeNone})
+	p := h.until(id, isReady)
+	assert.Equal(t, []string{"nodes#u-n1"}, ids(p.Upserts))
+	var sources []string
+	for _, c := range p.Status.Coverage {
+		sources = append(sources, c.Source)
+	}
+	assert.Equal(t, []string{"Nodes"}, sources)
+}
+
 func texts(cells []core.Cell) []string {
 	out := []string{}
 	for _, c := range cells {

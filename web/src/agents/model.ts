@@ -51,7 +51,8 @@ export function toGrants(scopes: ScopeGrants[]): AgentGrant[] {
     for (const verb of Object.keys(s.verbs).sort(verbOrder)) {
       const v = s.verbs[verb]
       const g: AgentGrant = { scope: s.scope.mode === 'one' ? { mode: 'one', name: s.scope.name } : { mode: s.scope.mode }, verb, kinds: v.kinds ? [...v.kinds].sort() : null }
-      if (v.noConfirm) g.noConfirm = true
+      // Only a grant of kinds named skips the confirmation (all kinds never do).
+      if (v.noConfirm && v.kinds) g.noConfirm = true
       out.push(g)
     }
   }

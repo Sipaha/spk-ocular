@@ -371,11 +371,13 @@ type TailLine struct {
 }
 
 // Tail: Truncated — older lines left out (more lines or bytes than a
-// tail keeps), or no end within tailWait.
+// tail keeps), no end within tailWait, or not every source shown; State —
+// the whole stream's last state (a group's, e.g. limited).
 type Tail struct {
-	Sources   []TailSource `json:"sources"`
-	Lines     []TailLine   `json:"lines"`
-	Truncated bool         `json:"truncated,omitempty" jsonschema_description:"Older lines were left out (a tail keeps the newest 5000 lines and 1 MiB), or not every source answered in time."`
+	Sources   []TailSource       `json:"sources"`
+	Lines     []TailLine         `json:"lines"`
+	State     *provider.LogState `json:"state,omitempty" jsonschema_description:"The whole stream's last state: for a workload, e.g. limited (only some of its pods' streams are read; the message says how many)."`
+	Truncated bool               `json:"truncated,omitempty" jsonschema_description:"Older lines were left out (a tail keeps the newest 5000 lines and 1 MiB), not every source answered in time, or not every source is read (see state)."`
 }
 
 // TailLogs reads the backlog of an object's logs, never followed (the
@@ -438,6 +440,12 @@ func (t *tailSink) Lines(id int, lines []provider.LogLine) error {
 }
 
 func (t *tailSink) State(id int, st provider.LogState) error {
+	if id == 0 { // the whole stream
+		s := st
+		t.out.State = &s
+		t.out.Truncated = t.out.Truncated || st.State == provider.LogLimited
+		return nil
+	}
 	for i := range t.out.Sources {
 		if t.out.Sources[i].ID == id {
 			s := st

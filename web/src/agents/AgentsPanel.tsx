@@ -11,6 +11,13 @@ import { ProviderIcon } from '../components/icons'
 import { GrantEditor } from './GrantEditor'
 import { agents, agentTargetKey, pendingOf, shownPending, useAgents, type AgentsTab } from './store'
 
+/** The scope or object of a journal read folded over several (store.AuditSeveral). */
+const several = '*'
+
+function severalOr(v: string | undefined, key: MessageKey): string {
+  return v === several ? t(key) : (v ?? '')
+}
+
 /** The status bar's "Agents": opens the panel; waiting plans bring their dialog back. */
 export function AgentsIndicator() {
   const n = useAgents((s) => s.pending.length)
@@ -362,8 +369,8 @@ function JournalTab({ client }: { client: Client }) {
                   {e.verb && <span className="text-fg-subtle"> · {e.verb}</span>}
                 </td>
                 <td className="px-2 py-1">
-                  {/* The object names its scope already. */}
-                  <span className="break-all">{[titleOf(e), e.object ? '' : e.scope, e.object].filter(Boolean).join(' · ')}</span>
+                  {/* The object names its scope already; a folded read of several says so ("*"). */}
+                  <span className="break-all">{[titleOf(e), e.object && e.object !== several ? '' : severalOr(e.scope, 'agents.journal.severalScopes'), severalOr(e.object, 'agents.journal.severalObjects')].filter(Boolean).join(' · ')}</span>
                   {e.detail && <span className="block break-all text-fg-subtle">{e.detail}</span>}
                 </td>
                 <td className={['px-2 py-1', e.phase === 'refused' || (e.phase === 'outcome' && e.outcome !== 'done') ? 'text-warning' : ''].join(' ')}>

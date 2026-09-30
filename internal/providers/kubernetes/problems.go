@@ -1,6 +1,7 @@
 package kubernetes
 
 import (
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -243,6 +244,11 @@ func (s *session) watchProblems(q provider.Query, sink provider.Sink) (func(), e
 		return nil, &provider.Error{Class: provider.ClassUnsupported, Message: "problems cannot be narrowed to one object"}
 	}
 	srcs := s.problemSources
+	if q.Scope.Mode == core.ScopeNone {
+		// Objects outside namespaces only (an agent granted the cluster
+		// alone): no namespaced source is opened, so none is listed.
+		srcs = slices.DeleteFunc(slices.Clone(srcs), func(src problemSource) bool { return src.def.namespaced })
+	}
 	v := &problemsView{sink: sink, cov: make([]provider.SourceCoverage, len(srcs)), emitted: make([]map[string]bool, len(srcs))}
 	for i, src := range srcs {
 		title := src.title

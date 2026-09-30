@@ -150,6 +150,9 @@ const (
 	AuditRefused = "refused"
 )
 
+// AuditSeveral is the scope or object of a folded read of several.
+const AuditSeveral = "*"
+
 // AuditEntry is one journal record.
 type AuditEntry struct {
 	ID          int64     `json:"id"`
@@ -180,7 +183,9 @@ var (
 // maxAuditDetail bounds a record's detail (characters).
 const maxAuditDetail = 500
 
-// AppendAudit records e; a read joins its minute's record.
+// AppendAudit records e; a read joins its minute's record (its time is the
+// first read's; its scope and object AuditSeveral unless every read named
+// the same).
 func (s *Store) AppendAudit(ctx context.Context, e AuditEntry) error {
 	if r := []rune(e.Detail); len(r) > maxAuditDetail {
 		e.Detail = string(r[:maxAuditDetail-1]) + "…"
@@ -192,7 +197,9 @@ func (s *Store) AppendAudit(ctx context.Context, e AuditEntry) error {
 	res, err := s.db.ExecContext(ctx,
 		`INSERT INTO agent_audit(at, agent, method, provider, target, scope, object, verb, destructive, expect_hash, phase, outcome, detail, bucket)
 		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-		 ON CONFLICT(bucket) WHERE bucket IS NOT NULL DO UPDATE SET count = count + 1, at = excluded.at, outcome = excluded.outcome, detail = excluded.detail`,
+		 ON CONFLICT(bucket) WHERE bucket IS NOT NULL DO UPDATE SET count = count + 1, outcome = excluded.outcome, detail = excluded.detail,
+		   scope = CASE WHEN scope = excluded.scope THEN scope ELSE '*' END,
+		   object = CASE WHEN object = excluded.object THEN object ELSE '*' END`,
 		e.At.UnixMilli(), e.Agent, e.Method, e.Provider, e.Target, e.Scope, e.Object, e.Verb, e.Destructive, e.ExpectHash, e.Phase, e.Outcome, e.Detail, bucket)
 	if err != nil {
 		return err

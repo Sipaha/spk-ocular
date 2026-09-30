@@ -271,4 +271,16 @@ func TestKindAgentAccessOverTheSocket(t *testing.T) {
 		out, _ := exec.Command("kubectl", "--kubeconfig", a.kc, "--context", "kind-ocular-dev", "-n", ns, "get", "deployment", "app").CombinedOutput()
 		return strings.Contains(string(out), "NotFound")
 	}, 60*time.Second, time.Second)
+
+	// The cluster alone: Problems of objects outside namespaces only.
+	require.NoError(t, a.svc.SaveAgentGrants(ctx, api.SaveAgentGrantsRequest{Provider: "kubernetes", Target: kindTarget, Grants: []agentgrant.Grant{
+		{Scope: agentgrant.Scope{Mode: agentgrant.ScopeCluster}, Verb: agentgrant.VerbRead},
+	}}))
+	var problems ObjectsView
+	require.Equal(t, http.StatusOK, a.call("Problems", ProblemsRequest{TargetRef: target}, &problems))
+	require.Len(t, problems.Scopes, 1)
+	assert.Equal(t, "ready", problems.Scopes[0].State, "%+v", problems.Scopes[0])
+	for _, r := range problems.Rows {
+		assert.Empty(t, r.Ref.Scope, "%s", r.Ref)
+	}
 }

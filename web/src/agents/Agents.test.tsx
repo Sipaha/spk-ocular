@@ -123,6 +123,8 @@ describe('agent access: grants', () => {
     await user.click(within(picker).getByRole('checkbox', { name: 'All kinds' }))
     expect(within(editor).getByRole('status')).toHaveTextContent('Cannot save: web · Delete: a destructive action is granted only for kinds named — choose them')
     expect(save).toBeDisabled()
+    // "Without confirmation" applies to kinds named only: not offered for all.
+    expect(within(web).queryByRole('checkbox', { name: 'without confirmation' })).not.toBeInTheDocument()
     await user.click(within(picker).getByRole('checkbox', { name: 'All kinds' }))
     await user.click(within(picker).getByRole('checkbox', { name: 'Deployments' }))
     expect(save).toBeEnabled()
@@ -302,6 +304,8 @@ describe('agent access: journal', () => {
     const { f, user } = await setup()
     f.state.audit = Array.from({ length: 205 }, (_, i) => entry(205 - i))
     f.state.audit[0] = entry(205, { method: 'RunAction', phase: 'outcome', outcome: 'refused', verb: 'action:delete', destructive: true, object: 'apps/deployments/api', detail: 'forbidden: not granted', count: 1 })
+    f.state.audit[2] = entry(203, { method: 'GetObject', scope: '*', object: '*', count: 10 })
+    f.state.audit[3] = entry(202, { method: 'GetLogs', object: '*', count: 4 })
     const panel = await openPanel(user)
     await user.click(within(panel).getByRole('tab', { name: 'Journal' }))
     const table = await within(panel).findByRole('table', { name: 'Journal' })
@@ -314,6 +318,9 @@ describe('agent access: journal', () => {
     expect(first).toHaveTextContent('refused by the target')
     expect(within(table).getAllByRole('row')[2]).toHaveTextContent('prod · web')
     expect(within(table).getAllByRole('row')[2]).toHaveTextContent('read ×3')
+    // Reads of several objects folded: not named as one of them.
+    expect(within(table).getAllByRole('row')[3]).toHaveTextContent('prod · several scopes · several objects')
+    expect(within(table).getAllByRole('row')[4]).toHaveTextContent('prod · web · several objects')
     await user.click(within(panel).getByRole('button', { name: 'More' }))
     await waitFor(() => expect(within(table).getAllByRole('row')).toHaveLength(206))
     expect(within(panel).queryByRole('button', { name: 'More' })).not.toBeInTheDocument()
