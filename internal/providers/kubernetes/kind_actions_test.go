@@ -648,3 +648,102 @@ spec:
 	assert.Equal(t, provider.ClassConflict, pe.Class, "the review was run once")
 	assert.Empty(t, c.kubectlNS("get", "jobs", "-o", "name"), "no second Job")
 }
+
+// revisionOf: the choice titled "Revision n" of an undo plan.
+func revisionOf(t *testing.T, plan core.ActionPlan, n string) core.ActionChoice {
+	t.Helper()
+	for _, ch := range plan.Choices {
+		if ch.Title.Params["revision"] == n {
+			return ch
+		}
+	}
+	require.Failf(t, "no revision", "revision %s among %v", n, plan.Choices)
+	return core.ActionChoice{}
+}
+
+// setEnv makes a new revision: V=v with its change-cause.
+func (c *actionCluster) setEnv(v string) {
+	c.t.Helper()
+	c.kubectlNS("set", "env", "deployment/web", "V="+v)
+	c.kubectlNS("annotate", "deployment/web", "kubernetes.io/change-cause=V="+v, "--overwrite")
+	c.kubectlNS("rollout", "status", "deployment/web", "--timeout=120s")
+}
+
+// Undo to a revision: its template and change-cause come back, it becomes
+// the newest revision; an undo sent while that rollout is still going on
+// passes (status churn is retried, not refused).
+func TestKindActionUndoToARevision(t *testing.T) {
+	c := kindActionCluster(t)
+	ref := c.deployment("web", 2) // revisions 1 (created) and 2 (annotated)
+	c.setEnv("a")                 // 3
+	c.setEnv("b")                 // 4
+	env := func() string {
+		return c.jsonpath("deployment", "web", `{.spec.template.spec.containers[0].env[?(@.name=="V")].value}`)
+	}
+
+	plan := c.prepare(ref, "undo", core.ActionParams{})
+	require.Nil(t, plan.Unavailable)
+	require.Len(t, plan.Choices, 4)
+	assert.True(t, revisionOf(t, plan, "4").Current)
+	three := revisionOf(t, plan, "3")
+	assert.Contains(t, core.Texts(three.Details), "V=a")
+	four := revisionOf(t, plan, "4").Value
+
+	p := core.ActionParams{Choice: &three.Value}
+	plan = c.prepare(ref, "undo", p)
+	require.Nil(t, plan.Unavailable)
+	assert.Equal(t, []string{"containers[nginx].env[V]: b → a"}, core.Texts(plan.Changes))
+	assert.Equal(t, "5", plan.Effects[0].Params["next"])
+	res, err := c.sess.RunAction(context.Background(), provider.ActionRun{Ref: plan.Where.Ref, Action: "undo", Params: p, Expect: plan.Expect})
+	require.NoError(t, err)
+	assert.Equal(t, "deployment web: rollback to revision 3 requested", res.Message.Text)
+	assert.Equal(t, "a", env())
+	assert.Equal(t, "V=a", c.jsonpath("deployment", "web", `{.metadata.annotations.kubernetes\.io/change-cause}`))
+	require.Eventually(t, func() bool {
+		return c.jsonpath("replicaset", three.Value, `{.metadata.annotations.deployment\.kubernetes\.io/revision}`) == "5"
+	}, 30*time.Second, 200*time.Millisecond, "the revision rolled back to becomes the newest")
+
+	// Back to V=b while that rollout goes on.
+	res, err = c.act(ref, "undo", core.ActionParams{Choice: &four})
+	require.NoError(t, err, "an undo during a rollout")
+	assert.Contains(t, res.Message.Text, "rollback to revision 4 requested")
+	assert.Equal(t, "b", env())
+	c.kubectlNS("rollout", "status", "deployment/web", "--timeout=120s")
+	assert.Equal(t, "6", c.jsonpath("replicaset", four, `{.metadata.annotations.deployment\.kubernetes\.io/revision}`))
+}
+
+// Pause: a template change makes no ReplicaSet (and undo waits for
+// resume); resume rolls it out.
+func TestKindActionPauseAndResume(t *testing.T) {
+	c := kindActionCluster(t)
+	ref := c.deployment("web", 1)
+	rss := func() int {
+		return len(strings.Fields(c.kubectlNS("get", "replicasets", "-l", "app=web", "-o", "jsonpath={.items[*].metadata.name}")))
+	}
+	before := rss()
+
+	res, err := c.act(ref, "pause", core.ActionParams{})
+	require.NoError(t, err)
+	assert.Equal(t, "deployment web: rollout pause requested", res.Message.Text)
+	assert.Equal(t, "true", c.jsonpath("deployment", "web", "{.spec.paused}"))
+	plan := c.prepare(ref, "pause", core.ActionParams{})
+	require.NotNil(t, plan.Unavailable, "already paused")
+	plan = c.prepare(ref, "undo", core.ActionParams{})
+	require.NotEmpty(t, plan.Choices)
+	undo := c.prepare(ref, "undo", core.ActionParams{Choice: &plan.Choices[len(plan.Choices)-1].Value})
+	require.NotNil(t, undo.Unavailable)
+	assert.Equal(t, ProviderID+".unavailable.paused", undo.Unavailable.Key)
+
+	c.kubectlNS("set", "env", "deployment/web", "V=paused")
+	// The controller has seen the change (observedGeneration) and made no
+	// ReplicaSet for it.
+	gen := c.jsonpath("deployment", "web", "{.metadata.generation}")
+	require.Eventually(t, func() bool { return c.jsonpath("deployment", "web", "{.status.observedGeneration}") == gen }, 30*time.Second, 200*time.Millisecond)
+	assert.Equal(t, before, rss(), "paused: no new ReplicaSet")
+
+	_, err = c.act(ref, "resume", core.ActionParams{})
+	require.NoError(t, err)
+	assert.NotEqual(t, "true", c.jsonpath("deployment", "web", "{.spec.paused}"))
+	require.Eventually(t, func() bool { return rss() == before+1 }, 60*time.Second, 200*time.Millisecond, "resumed: the change rolls out")
+	c.kubectlNS("rollout", "status", "deployment/web", "--timeout=120s")
+}

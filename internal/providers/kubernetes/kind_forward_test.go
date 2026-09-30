@@ -191,8 +191,9 @@ func TestKindForwardAReplacedServiceIsNotFollowed(t *testing.T) {
 	m := forwards.NewManager(forwards.Options{})
 	defer m.Close()
 	in := kindTunnel(t, m, s, kindRef(t, s, servicesKind, "pf-svc"), 80, false)
-	_, err := httpGet(in.Addresses[0])
-	require.NoError(t, err)
+	// A new Service's endpoints may lag its ready pod: the first answer is
+	// waited for, not assumed.
+	require.Eventually(t, func() bool { _, err := httpGet(in.Addresses[0]); return err == nil }, 30*time.Second, 200*time.Millisecond)
 
 	// the Service is replaced; a live upstream carries on until its pod
 	// goes, then a new choice meets the replacement and refuses it
