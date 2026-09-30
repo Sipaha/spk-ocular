@@ -68,14 +68,9 @@ func httpLogFetcher(cfg *rest.Config) (logFetcher, error) {
 	if err != nil {
 		return nil, err
 	}
-	base, err := url.Parse(strings.TrimRight(cfg.Host, "/"))
+	base, err := serverBase(cfg)
 	if err != nil {
 		return nil, err
-	}
-	if base.Scheme == "" { // "host:port" as kubeconfig allows
-		if base, err = url.Parse("https://" + strings.TrimRight(cfg.Host, "/")); err != nil {
-			return nil, err
-		}
 	}
 	return func(ctx context.Context, r podLogRequest) (io.ReadCloser, error) {
 		u := *base

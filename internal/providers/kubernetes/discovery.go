@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"mime"
 	"net/http"
 	"net/url"
 	"sort"
@@ -69,14 +70,9 @@ func httpGetter(cfg *rest.Config) (getter, error) {
 	if err != nil {
 		return nil, err
 	}
-	base, err := url.Parse(strings.TrimRight(cfg.Host, "/"))
+	base, err := serverBase(cfg)
 	if err != nil {
 		return nil, err
-	}
-	if base.Scheme == "" { // "host:port" as kubeconfig allows
-		if base, err = url.Parse("https://" + strings.TrimRight(cfg.Host, "/")); err != nil {
-			return nil, err
-		}
 	}
 	return func(ctx context.Context, path, accept string) ([]byte, string, error) {
 		u := *base
@@ -108,6 +104,14 @@ func httpGetter(cfg *rest.Config) (getter, error) {
 	}, nil
 }
 
+// serverBase is cfg's server the way client-go resolves it: a URL or
+// host[:port] (HTTPS by default only with TLS settings), the path prefix of
+// a fronting proxy kept.
+func serverBase(cfg *rest.Config) (*url.URL, error) {
+	u, _, err := rest.DefaultServerUrlFor(cfg)
+	return u, err
+}
+
 type discoveryError struct {
 	code int
 	path string
@@ -116,21 +120,25 @@ type discoveryError struct {
 
 func (e *discoveryError) Error() string { return fmt.Sprintf("%s: HTTP %d %s", e.path, e.code, e.body) }
 
-// discoverAPI reads what the API serves.
+// discoverAPI reads what the API serves. The two roots are read at once:
+// a hanging one must not use up the other's time.
 func discoverAPI(ctx context.Context, get getter) discovered {
 	ctx, cancel := context.WithTimeout(ctx, discoveryTimeout)
 	defer cancel()
+	roots := []string{"/api", "/apis"}
+	parts := make([]discovered, len(roots))
+	var wg sync.WaitGroup
+	for i, root := range roots {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			parts[i] = discoverRoot(ctx, get, root)
+		}()
+	}
+	wg.Wait()
 	out := discovered{unconfirmed: map[string]bool{}}
-	for _, root := range []string{"/api", "/apis"} {
-		body, ct, err := get(ctx, root, acceptDiscoveryV2)
-		switch {
-		case err != nil:
-			out.unconfirmed[rootGroups(root)] = true
-		case strings.Contains(ct, "as=APIGroupDiscoveryList"):
-			out.add(parseV2(body))
-		default: // no aggregated discovery: the classic documents
-			out.add(discoverV1(ctx, get, root, body))
-		}
+	for _, p := range parts {
+		out.add(p)
 	}
 	sort.Slice(out.resources, func(i, j int) bool {
 		a, b := out.resources[i], out.resources[j]
@@ -140,6 +148,47 @@ func discoverAPI(ctx context.Context, get getter) discovered {
 		return a.Resource < b.Resource
 	})
 	return out
+}
+
+func discoverRoot(ctx context.Context, get getter, root string) discovered {
+	body, ct, err := get(ctx, root, acceptDiscoveryV2)
+	switch {
+	case err != nil:
+		return uncertain(rootGroups(root))
+	case aggregated(ct):
+		return parseV2(body, root)
+	}
+	return discoverV1(ctx, get, root, body) // no aggregated discovery: the classic documents
+}
+
+// aggregated: the answer is an aggregated discovery document (parameters
+// may be quoted).
+func aggregated(contentType string) bool {
+	_, p, err := mime.ParseMediaType(contentType)
+	return err == nil && p["as"] == "APIGroupDiscoveryList" && p["g"] == "apidiscovery.k8s.io" && p["v"] == "v2"
+}
+
+func uncertain(group string) discovered {
+	return discovered{unconfirmed: map[string]bool{group: true}}
+}
+
+// envelope: the document is the one asked for — its kind, or (a server may
+// omit it) its list field present. Anything else (a Status, {}) says
+// nothing about what is served.
+func envelope(body []byte, kind, field string) bool {
+	var e map[string]json.RawMessage
+	if json.Unmarshal(body, &e) != nil {
+		return false
+	}
+	var k string
+	if raw, ok := e["kind"]; ok && json.Unmarshal(raw, &k) != nil {
+		return false
+	}
+	if k != "" {
+		return k == kind
+	}
+	raw, ok := e[field]
+	return ok && string(raw) != "null"
 }
 
 func rootGroups(root string) string {
@@ -187,12 +236,11 @@ type v2List struct {
 // answer) leaves the group unconfirmed, and nothing is taken from versions
 // after it: a resource must not move to a less preferred version because
 // the preferred one could not be read.
-func parseV2(body []byte) discovered {
+func parseV2(body []byte, root string) discovered {
 	out := discovered{unconfirmed: map[string]bool{}}
 	var l v2List
-	if err := json.Unmarshal(body, &l); err != nil {
-		out.unconfirmed["*"] = true
-		return out
+	if !envelope(body, "APIGroupDiscoveryList", "items") || json.Unmarshal(body, &l) != nil {
+		return uncertain(rootGroups(root))
 	}
 	for _, g := range l.Items {
 		group := g.Metadata.Name
@@ -246,9 +294,8 @@ func discoverV1(ctx context.Context, get getter, root string, rootBody []byte) d
 		var vs struct {
 			Versions []string `json:"versions"`
 		}
-		if err := json.Unmarshal(rootBody, &vs); err != nil {
-			out.unconfirmed[""] = true
-			return out
+		if !envelope(rootBody, "APIVersions", "versions") || json.Unmarshal(rootBody, &vs) != nil {
+			return uncertain("")
 		}
 		var g []gv
 		for _, v := range vs.Versions {
@@ -267,14 +314,18 @@ func discoverV1(ctx context.Context, get getter, root string, rootBody []byte) d
 				} `json:"preferredVersion"`
 			} `json:"groups"`
 		}
-		if err := json.Unmarshal(rootBody, &gl); err != nil {
-			out.unconfirmed["*"] = true
-			return out
+		if !envelope(rootBody, "APIGroupList", "groups") || json.Unmarshal(rootBody, &gl) != nil {
+			return uncertain("*")
 		}
 		for _, grp := range gl.Groups {
-			g := []gv{{grp.Name, grp.Preferred.Version}}
+			// preferredVersion first when given (it is optional), then the
+			// served versions in their order
+			var g []gv
+			if p := grp.Preferred.Version; p != "" {
+				g = append(g, gv{grp.Name, p})
+			}
 			for _, v := range grp.Versions {
-				if v.Version != grp.Preferred.Version {
+				if v.Version != "" && v.Version != grp.Preferred.Version {
 					g = append(g, gv{grp.Name, v.Version})
 				}
 			}
@@ -306,7 +357,7 @@ func discoverV1(ctx context.Context, get getter, root string, rootBody []byte) d
 					return
 				}
 				var l v1ResourceList
-				if json.Unmarshal(body, &l) == nil {
+				if envelope(body, "APIResourceList", "resources") && json.Unmarshal(body, &l) == nil {
 					docs[i][j] = &l
 				}
 			}()

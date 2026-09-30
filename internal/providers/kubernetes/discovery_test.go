@@ -221,3 +221,120 @@ func TestDiscoveryOfManyGroups(t *testing.T) {
 		t.Fatalf("%d resources in %s (%d KiB)", len(d.resources), time.Since(start), len(body)/1024)
 	}
 }
+
+// A broken aggregated /api is uncertainty about the core group, not about
+// the named groups (Codex P2-1).
+func TestDiscoveryMalformedCoreKeepsTheCoreUnconfirmed(t *testing.T) {
+	get := discoveryServer(t, map[string]func(http.ResponseWriter, *http.Request){
+		"/api":  v2([]byte(`{"kind":"APIGroupDiscoveryList","items":[`)),
+		"/apis": v2(v2doc(map[string][]v2ver{"ocular.dev": {{version: "v1", res: []v2res{{name: "widgets", kind: "Widget", scope: "Namespaced", verbs: lw}}}}}, "ocular.dev")),
+	})
+	d := discoverAPI(context.Background(), get)
+	if !d.unconfirmed[""] || d.unconfirmed["*"] || strings.Join(resNames(d), " ") != "ocular.dev/v1/widgets" {
+		t.Fatalf("%v %v", resNames(d), d.unconfirmed)
+	}
+}
+
+// The media type's parameters may be quoted (Codex P2-2).
+func TestDiscoveryV2WithAQuotedMediaTypeParameter(t *testing.T) {
+	doc := v2doc(map[string][]v2ver{"ocular.dev": {{version: "v1", res: []v2res{{name: "widgets", kind: "Widget", scope: "Namespaced", verbs: lw}}}}}, "ocular.dev")
+	get := discoveryServer(t, map[string]func(http.ResponseWriter, *http.Request){
+		"/api": v2(v2doc(nil)),
+		"/apis": func(w http.ResponseWriter, _ *http.Request) {
+			w.Header().Set("Content-Type", `application/json; g=apidiscovery.k8s.io; v=v2; as="APIGroupDiscoveryList"`)
+			_, _ = w.Write(doc)
+		},
+	})
+	d := discoverAPI(context.Background(), get)
+	if strings.Join(resNames(d), " ") != "ocular.dev/v1/widgets" || len(d.unconfirmed) != 0 {
+		t.Fatalf("%v %v", resNames(d), d.unconfirmed)
+	}
+}
+
+// A document of the wrong shape (a Status, {}) is uncertainty, never a
+// confirmed empty answer; a real empty answer is (Codex P2-2).
+func TestDiscoveryWrongShapeIsNotAConfirmedAbsence(t *testing.T) {
+	for name, h := range map[string]map[string]func(http.ResponseWriter, *http.Request){
+		"root status": {
+			"/api":  plain(`{"kind":"Status","status":"Failure"}`),
+			"/apis": plain(`{}`),
+		},
+		"group-version status": {
+			"/api":                plain(`{"kind":"APIVersions","versions":["v1"]}`),
+			"/api/v1":             plain(`{"kind":"Status","status":"Failure"}`),
+			"/apis":               plain(`{"kind":"APIGroupList","groups":[{"name":"ocular.dev","versions":[{"version":"v1"}],"preferredVersion":{"version":"v1"}}]}`),
+			"/apis/ocular.dev/v1": plain(`{}`),
+		},
+		"v2 of another kind": {
+			"/api":  v2([]byte(`{"kind":"Status"}`)),
+			"/apis": v2([]byte(`{}`)),
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			d := discoverAPI(context.Background(), discoveryServer(t, h))
+			if len(d.resources) != 0 || !d.unconfirmed[""] || (!d.unconfirmed["*"] && !d.unconfirmed["ocular.dev"]) {
+				t.Fatalf("%v %v", resNames(d), d.unconfirmed)
+			}
+		})
+	}
+	t.Run("really empty", func(t *testing.T) {
+		d := discoverAPI(context.Background(), discoveryServer(t, map[string]func(http.ResponseWriter, *http.Request){
+			"/api":    plain(`{"kind":"APIVersions","versions":["v1"]}`),
+			"/api/v1": plain(`{"kind":"APIResourceList","groupVersion":"v1","resources":[]}`),
+			"/apis":   v2([]byte(`{"kind":"APIGroupDiscoveryList","apiVersion":"apidiscovery.k8s.io/v2","items":[]}`)),
+		}))
+		if len(d.resources) != 0 || len(d.unconfirmed) != 0 {
+			t.Fatalf("%v %v", resNames(d), d.unconfirmed)
+		}
+	})
+}
+
+// preferredVersion is optional in APIGroup (Codex P2-4).
+func TestDiscoveryV1GroupWithoutPreferredVersion(t *testing.T) {
+	get := discoveryServer(t, map[string]func(http.ResponseWriter, *http.Request){
+		"/api":                plain(`{"kind":"APIVersions","versions":[]}`),
+		"/apis":               plain(`{"kind":"APIGroupList","groups":[{"name":"ocular.dev","versions":[{"version":"v1"}]}]}`),
+		"/apis/ocular.dev/v1": plain(`{"kind":"APIResourceList","resources":[{"name":"widgets","namespaced":true,"kind":"Widget","verbs":["list","watch"]}]}`),
+	})
+	d := discoverAPI(context.Background(), get)
+	if strings.Join(resNames(d), " ") != "ocular.dev/v1/widgets" || len(d.unconfirmed) != 0 {
+		t.Fatalf("%v %v", resNames(d), d.unconfirmed)
+	}
+}
+
+// A hanging core root does not starve the named groups (Codex P2-5).
+func TestDiscoverySlowCoreDoesNotStarveTheNamedGroups(t *testing.T) {
+	get := discoveryServer(t, map[string]func(http.ResponseWriter, *http.Request){
+		"/api":  func(_ http.ResponseWriter, r *http.Request) { <-r.Context().Done() },
+		"/apis": v2(v2doc(map[string][]v2ver{"ocular.dev": {{version: "v1", res: []v2res{{name: "widgets", kind: "Widget", scope: "Namespaced", verbs: lw}}}}}, "ocular.dev")),
+	})
+	ctx, cancel := context.WithTimeout(context.Background(), 300*time.Millisecond)
+	defer cancel()
+	d := discoverAPI(ctx, get)
+	if strings.Join(resNames(d), " ") != "ocular.dev/v1/widgets" || !d.unconfirmed[""] || d.unconfirmed["*"] {
+		t.Fatalf("%v %v", resNames(d), d.unconfirmed)
+	}
+}
+
+// Host as kubeconfig and client-go accept it: host:port without a scheme
+// (plain HTTP without TLS settings, like client-go) (Codex P2-3).
+func TestDiscoveryGetterAcceptsABareHostPort(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api" && r.URL.Path != "/prefix/api" {
+			http.NotFound(w, r)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"kind":"APIVersions","versions":[]}`))
+	}))
+	defer srv.Close()
+	for _, host := range []string{strings.TrimPrefix(srv.URL, "http://"), strings.Replace(srv.URL, "127.0.0.1", "localhost", 1) + "/prefix/"} {
+		get, err := httpGetter(&rest.Config{Host: host})
+		if err != nil {
+			t.Fatalf("%s: %v", host, err)
+		}
+		if _, _, err := get(context.Background(), "/api", "application/json"); err != nil {
+			t.Fatalf("%s: %v", host, err)
+		}
+	}
+}
