@@ -1,8 +1,12 @@
 package kubernetes
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
+	"io"
 	"io/fs"
+	"net/url"
 	"os"
 	"path/filepath"
 	"sort"
@@ -125,6 +129,7 @@ type kubeContext struct {
 	User      string
 	Namespace string
 	Auth      string // auth method summary: "exec: yc", "token", ...
+	Identity  string // what the context points at (core.Target.Identity)
 	Current   bool
 }
 
@@ -242,11 +247,66 @@ func describe(name string, cfg *clientcmdapi.Config) kubeContext {
 		return kc
 	}
 	kc.Cluster, kc.User, kc.Namespace = c.Cluster, c.AuthInfo, c.Namespace
-	if cl := cfg.Clusters[c.Cluster]; cl != nil {
+	cl := cfg.Clusters[c.Cluster]
+	if cl != nil {
 		kc.Server = cl.Server
 	}
 	kc.Auth = authSummary(cfg.AuthInfos[c.AuthInfo])
+	kc.Identity = identity(cl, c.AuthInfo)
 	return kc
+}
+
+// maxCAFile bounds the CA file read for an identity (a bundle is KBs).
+const maxCAFile = 1 << 20
+
+// identity: the server, the CA it trusts (a digest of its bytes: inline or
+// the file's content, so the same CA elsewhere is the same) and the
+// auth-info's name — no credential, so rotating one keeps the identity.
+func identity(cl *clientcmdapi.Cluster, user string) string {
+	if cl == nil {
+		return "no cluster | user:" + user
+	}
+	ca := "system"
+	switch {
+	case cl.InsecureSkipTLSVerify:
+		ca = "insecure"
+	case len(cl.CertificateAuthorityData) > 0:
+		ca = caDigest(cl.CertificateAuthorityData)
+	case cl.CertificateAuthority != "":
+		ca = "unreadable " + cl.CertificateAuthority
+		if f, err := os.Open(cl.CertificateAuthority); err == nil {
+			b, err := io.ReadAll(io.LimitReader(f, maxCAFile))
+			_ = f.Close()
+			if err == nil {
+				ca = caDigest(b)
+			}
+		}
+	}
+	return withoutUserinfo(cl.Server) + " | ca:" + ca + " | tls-server-name:" + cl.TLSServerName +
+		" | proxy:" + withoutUserinfo(cl.ProxyURL) + " | user:" + user
+}
+
+// withoutUserinfo drops credentials from a URL (they may sit in a proxy
+// URL): the identity is shown and stored; a new password is the same
+// target. An unparsable URL is kept only up to any "@".
+func withoutUserinfo(s string) string {
+	u, err := url.Parse(s)
+	if err != nil {
+		if i := strings.LastIndex(s, "@"); i >= 0 {
+			return "***@" + s[i+1:]
+		}
+		return s
+	}
+	if u.User == nil {
+		return s
+	}
+	u.User = nil
+	return u.String()
+}
+
+func caDigest(b []byte) string {
+	sum := sha256.Sum256(b)
+	return hex.EncodeToString(sum[:8])
 }
 
 // authSummary names the auth method without any secret material.

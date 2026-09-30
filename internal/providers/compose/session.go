@@ -103,6 +103,7 @@ type session struct {
 
 	mu     sync.Mutex
 	osType string // the daemon's, once asked (metrics.go)
+	daemon string // the daemon's id, once asked (Identity)
 	feeds  [feedCount]*feed
 	timer  *time.Timer
 	closed bool
@@ -459,4 +460,29 @@ func (s *session) Stats() map[string]int {
 		st["feed_inspects"] += int(f.inspects.Load())
 	}
 	return st
+}
+
+var _ provider.Identifier = (*session)(nil)
+
+// Identity is the daemon's id, asked once per session (a failed ask is not
+// kept): another daemon behind the same endpoint is another target.
+func (s *session) Identity(ctx context.Context) (string, error) {
+	s.mu.Lock()
+	id := s.daemon
+	s.mu.Unlock()
+	if id != "" {
+		return id, nil
+	}
+	info, err := s.cl.Info(ctx)
+	if err != nil {
+		return "", providerError(err)
+	}
+	if info.ID == "" {
+		return "", &provider.Error{Class: provider.ClassUnavailable, Message: "the Docker Engine did not say its id"}
+	}
+	id = "daemon:" + info.ID
+	s.mu.Lock()
+	s.daemon = id
+	s.mu.Unlock()
+	return id, nil
 }

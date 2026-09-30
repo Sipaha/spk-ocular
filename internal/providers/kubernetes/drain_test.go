@@ -148,6 +148,15 @@ func TestADrainPlanSortsTheNodesPods(t *testing.T) {
 	}, itemsOf(left))
 	for _, l := range plan.Lists {
 		assert.NotContains(t, itemsOf(l), "a/elsewhere", "a pod of another node (a server ignoring the field selector)")
+		// Each item names its pod: an agent's run is checked against the
+		// scopes it was granted (P14).
+		for _, it := range l.Items {
+			if assert.NotNil(t, it.Ref, it.Name) {
+				assert.Equal(t, it.Name, it.Ref.Scope+"/"+it.Ref.Name)
+				assert.Equal(t, core.Ref{Provider: ProviderID, Target: s.target, Scope: it.Ref.Scope, Kind: podsKind.desc.ID, Name: it.Ref.Name, UID: it.Ref.UID}, *it.Ref)
+				assert.NotEmpty(t, it.Ref.UID, it.Name)
+			}
+		}
 	}
 }
 
@@ -340,7 +349,9 @@ func TestDrainRightsAreOnlyThoseOfItsWrites(t *testing.T) {
 		plan := prepare(t, s, nodeRef("w1", ""), "drain", core.ActionParams{})
 		assert.Equal(t, core.RightsDenied, plan.Rights.State)
 		assert.Contains(t, plan.Rights.Reason, "you may not evict 1 of the pods")
-		assert.Equal(t, []string{"a/api-1"}, itemsOf(listTitled(t, plan, "drain.list.denied")))
+		denied := listTitled(t, plan, "drain.list.denied")
+		assert.Equal(t, []string{"a/api-1"}, itemsOf(denied))
+		assert.Equal(t, &core.Ref{Provider: ProviderID, Target: s.target, Scope: "a", Kind: "pods", Name: "api-1", UID: "uid-api-1"}, denied.Items[0].Ref)
 		assert.Len(t, r.askedAbout("nodes"), 1)
 		assert.Equal(t, "w1", r.askedAbout("nodes")[0]["name"])
 	})

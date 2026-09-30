@@ -83,6 +83,10 @@ type KindDescriptor struct {
 	// Secret's): listed with sizes, shown one at a time on request (the
 	// session is a ValueHolder).
 	Values bool `json:"values,omitempty"`
+	// Sensitive: editing objects of this kind grants access beyond them (a
+	// Secret's values, a ServiceAccount's token, RBAC): an agent's grant of
+	// "all kinds" never covers editing them (agent access, P14).
+	Sensitive bool `json:"sensitive,omitempty"`
 	// Aliases are short names of the kind in palette commands (":po"),
 	// besides its id and title.
 	Aliases []string `json:"aliases,omitempty"`

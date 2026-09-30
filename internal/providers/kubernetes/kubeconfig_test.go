@@ -204,3 +204,67 @@ func TestExtraContextIDIsStableWhenPrimaryGainsSameName(t *testing.T) {
 	assert.Equal(t, filepath.Join(kube, "extra.yaml"), detail(extra, "file"))
 	assert.NotEqual(t, before, byTitle(t, ts, "prod")[0].ID)
 }
+
+// A target's identity is what it points at — the server, the CA it trusts
+// and the auth-info it names — never a credential: a rotated token is the
+// same target, another server or CA is not.
+func TestTargetIdentity(t *testing.T) {
+	oneAs := func(t *testing.T, userName, cluster, user string, files map[string]string) core.Target {
+		t.Helper()
+		home := t.TempDir()
+		for name, body := range files {
+			write(t, filepath.Join(home, name), body)
+		}
+		cfg := "apiVersion: v1\nkind: Config\nclusters:\n- name: c\n  cluster:\n" + cluster +
+			"users:\n- name: " + userName + "\n  user:\n" + user +
+			"contexts:\n- name: ctx\n  context:\n    cluster: c\n    user: " + userName + "\n"
+		cfg = strings.ReplaceAll(cfg, "HOME", home)
+		write(t, filepath.Join(home, ".kube", "config"), cfg)
+		ts, _ := discover(t, NewWith(env(nil), home))
+		require.Len(t, ts, 1)
+		return ts[0]
+	}
+	one := func(t *testing.T, cluster, user string, files map[string]string) core.Target {
+		t.Helper()
+		return oneAs(t, "u", cluster, user, files)
+	}
+	base := one(t, "    server: https://a.example:6443\n    certificate-authority-data: Q0EtMQ==\n", "    token: T1\n", nil)
+	assert.Contains(t, base.Identity, "https://a.example:6443")
+	assert.Contains(t, base.Identity, "u")
+	assert.NotContains(t, base.Identity, "T1")
+	assert.NotContains(t, base.Identity, "Q0EtMQ==", "a digest of the CA, not the CA")
+	assert.NotEmpty(t, base.ConfigHash)
+	assert.Empty(t, detail(base, "identity"), "not a displayed detail")
+
+	rotated := one(t, "    server: https://a.example:6443\n    certificate-authority-data: Q0EtMQ==\n", "    token: T2\n", nil)
+	assert.Equal(t, base.Identity, rotated.Identity, "a new token: the same target")
+	assert.NotEqual(t, base.ConfigHash, rotated.ConfigHash)
+
+	for name, other := range map[string]core.Target{
+		"server":   one(t, "    server: https://b.example:6443\n    certificate-authority-data: Q0EtMQ==\n", "    token: T1\n", nil),
+		"ca":       one(t, "    server: https://a.example:6443\n    certificate-authority-data: Q0EtMg==\n", "    token: T1\n", nil),
+		"insecure": one(t, "    server: https://a.example:6443\n    insecure-skip-tls-verify: true\n", "    token: T1\n", nil),
+		"tls name": one(t, "    server: https://a.example:6443\n    certificate-authority-data: Q0EtMQ==\n    tls-server-name: other.example\n", "    token: T1\n", nil),
+		"proxy":    one(t, "    server: https://a.example:6443\n    certificate-authority-data: Q0EtMQ==\n    proxy-url: http://proxy.example:3128\n", "    token: T1\n", nil),
+		"user":     oneAs(t, "v", "    server: https://a.example:6443\n    certificate-authority-data: Q0EtMQ==\n", "    token: T1\n", nil),
+	} {
+		assert.NotEqual(t, base.Identity, other.Identity, name)
+	}
+
+	// Credentials in a URL never enter the identity; changing them keeps it.
+	withPass := one(t, "    server: https://adm:SRVPASS@a.example:6443\n    certificate-authority-data: Q0EtMQ==\n    proxy-url: http://pu:PXPASS@proxy.example:3128\n", "    token: T1\n", nil)
+	otherPass := one(t, "    server: https://adm:OTHER@a.example:6443\n    certificate-authority-data: Q0EtMQ==\n    proxy-url: http://pu:OTHER2@proxy.example:3128\n", "    token: T1\n", nil)
+	for _, secret := range []string{"SRVPASS", "PXPASS", "adm", "pu:"} {
+		assert.NotContains(t, withPass.Identity, secret)
+	}
+	assert.Contains(t, withPass.Identity, "proxy.example:3128")
+	assert.Equal(t, withPass.Identity, otherPass.Identity)
+
+	// A CA file: its content counts, not its path.
+	f1 := one(t, "    server: https://a.example:6443\n    certificate-authority: HOME/ca.crt\n", "    token: T1\n", map[string]string{"ca.crt": "CA-1"})
+	f1same := one(t, "    server: https://a.example:6443\n    certificate-authority: HOME/ca.crt\n", "    token: T1\n", map[string]string{"ca.crt": "CA-1"})
+	f2 := one(t, "    server: https://a.example:6443\n    certificate-authority: HOME/ca.crt\n", "    token: T1\n", map[string]string{"ca.crt": "CA-2"})
+	assert.Equal(t, f1.Identity, f1same.Identity, "the same CA in another directory")
+	assert.NotEqual(t, f1.Identity, f2.Identity)
+	assert.Equal(t, base.Identity, f1.Identity, "the same CA inline (base64 of CA-1) and in a file")
+}

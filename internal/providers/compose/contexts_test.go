@@ -13,6 +13,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/spk/spk-ocular/internal/core"
+	"github.com/spk/spk-ocular/internal/provider"
+	"github.com/spk/spk-ocular/internal/providers/compose/enginefake"
 )
 
 // env returns a getenv over vars (nothing else is set).
@@ -305,4 +307,34 @@ func TestWatchAwaitsAConfigDirCreatedLaterAndIgnoresTheRest(t *testing.T) {
 	waitMore(t, n, k)
 	ts, _ := discover(t, p)
 	assert.Equal(t, []string{"default", "late"}, titles(ts))
+}
+
+// A target's identity is its endpoint (no credentials); the daemon's id
+// comes from the session (provider.Identifier), asked once.
+func TestTargetIdentityIsTheEndpoint(t *testing.T) {
+	cfg := filepath.Join(t.TempDir(), "cfg")
+	addContext(t, cfg, "remote", "ssh://ops:PASS@host.example", false, nil)
+	p := NewWith(env(map[string]string{"DOCKER_CONFIG": cfg}), t.TempDir())
+	ts, _ := discover(t, p)
+	id := byTitle(ts)["remote"].Identity
+	assert.Equal(t, "ssh://host.example", id)
+}
+
+func TestSessionIdentityIsTheDaemonsID(t *testing.T) {
+	e := newTestEnv(t)
+	var s provider.Session = e.s
+	idf, ok := s.(provider.Identifier)
+	require.True(t, ok)
+	e.fe.AddHook(enginefake.Fail("/info", 500, "daemon is restarting"))
+	_, err := idf.Identity(context.Background())
+	require.Error(t, err, "an unreachable daemon is not an identity")
+	e.fe.ClearHooks()
+	got, err := idf.Identity(context.Background())
+	require.NoError(t, err)
+	assert.Equal(t, "daemon:FAKE:ENGINE", got)
+	n := e.fe.Count("/info")
+	again, err := idf.Identity(context.Background())
+	require.NoError(t, err)
+	assert.Equal(t, got, again)
+	assert.Equal(t, n, e.fe.Count("/info"), "asked once per session")
 }

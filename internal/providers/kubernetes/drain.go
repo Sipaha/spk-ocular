@@ -72,6 +72,13 @@ type drainPod struct {
 
 func (p drainPod) name() string { return p.u.GetNamespace() + "/" + p.u.GetName() }
 
+// item is the pod as an entry of a plan's list, with its ref.
+func (p drainPod) item(target string, note *core.Message) core.ActionItem {
+	return core.ActionItem{Name: p.name(), Note: note, Ref: &core.Ref{
+		Provider: ProviderID, Target: target, Scope: p.u.GetNamespace(), Kind: podsKind.desc.ID, Name: p.u.GetName(), UID: string(p.u.GetUID()),
+	}}
+}
+
 func classifyPod(u *unstructured.Unstructured) drainPod {
 	p := drainPod{u: u, owner: metav1.GetControllerOf(u)}
 	for _, v := range slice(u.Object, "spec", "volumes") {
@@ -193,7 +200,7 @@ func (s *session) prepareDrain(ctx context.Context, def *kindDef, plan core.Acti
 	if len(inv.bare) > 0 {
 		plan.Warnings = append(plan.Warnings, countMsg("drain.bareOne", "drain.bare", len(inv.bare)))
 	}
-	plan.Lists = drainLists(inv)
+	plan.Lists = drainLists(s.target, inv)
 	if plan.Unavailable != nil {
 		return plan
 	}
@@ -232,8 +239,8 @@ wait:
 	plan.Rights = r
 	if len(denied) > 0 {
 		l := core.ActionList{Title: msg("drain.list.denied"), Destructive: true}
-		for _, n := range denied {
-			l.Items = append(l.Items, core.ActionItem{Name: n})
+		for _, p := range denied {
+			l.Items = append(l.Items, p.item(s.target, nil))
 		}
 		plan.Lists = append(plan.Lists, l)
 	}
@@ -246,17 +253,17 @@ wait:
 // drainLists: the pods evicted (their controllers), those losing emptyDir
 // data, those left without a controller, and — collapsed — those a drain
 // leaves alone and why.
-func drainLists(inv *drainInventory) []core.ActionList {
+func drainLists(target string, inv *drainInventory) []core.ActionList {
 	var out []core.ActionList
 	if len(inv.evict) > 0 {
 		l := core.ActionList{Title: msg("drain.list.evict"), Destructive: true}
 		var lost core.ActionList
 		for _, p := range inv.evict {
 			n := msg("drain.item.owner", "ownerKind", p.owner.Kind, "owner", p.owner.Name)
-			l.Items = append(l.Items, core.ActionItem{Name: p.name(), Note: &n})
+			l.Items = append(l.Items, p.item(target, &n))
 			if len(p.emptyDirs) > 0 {
 				v := msg("drain.item.volumes", "volumes", strings.Join(p.emptyDirs, ", "))
-				lost.Items = append(lost.Items, core.ActionItem{Name: p.name(), Note: &v})
+				lost.Items = append(lost.Items, p.item(target, &v))
 			}
 		}
 		out = append(out, l)
@@ -268,7 +275,7 @@ func drainLists(inv *drainInventory) []core.ActionList {
 	if len(inv.bare) > 0 {
 		l := core.ActionList{Title: msg("drain.list.bare")}
 		for _, p := range inv.bare {
-			l.Items = append(l.Items, core.ActionItem{Name: p.name()})
+			l.Items = append(l.Items, p.item(target, nil))
 		}
 		out = append(out, l)
 	}
@@ -276,7 +283,7 @@ func drainLists(inv *drainInventory) []core.ActionList {
 		l := core.ActionList{Title: msg("drain.list.left"), Collapsed: true}
 		for _, p := range inv.left {
 			n := msg("drain.skip." + string(p.class))
-			l.Items = append(l.Items, core.ActionItem{Name: p.name(), Note: &n})
+			l.Items = append(l.Items, p.item(target, &n))
 		}
 		out = append(out, l)
 	}
@@ -312,12 +319,12 @@ func (s *session) access(ctx context.Context, attrs map[string]any) (core.Rights
 // what is known can be read at any moment (a deadline).
 type rightsTally struct {
 	mu         sync.Mutex
-	denied     []string // pods
+	denied     []drainPod
 	nodeDenied string
 	unknown    bool
 }
 
-func (t *rightsTally) note(st core.RightsState, pod string) {
+func (t *rightsTally) note(st core.RightsState, pod drainPod) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	switch st {
@@ -330,11 +337,11 @@ func (t *rightsTally) note(st core.RightsState, pod string) {
 
 // result: denied when any known check refused (with the pods refused),
 // else unknown when any was unknown or not all answered (complete false).
-func (t *rightsTally) result(complete bool) (core.Rights, []string) {
+func (t *rightsTally) result(complete bool) (core.Rights, []drainPod) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	denied := slices.Clone(t.denied)
-	sort.Strings(denied)
+	sort.Slice(denied, func(i, j int) bool { return denied[i].name() < denied[j].name() })
 	switch {
 	case t.nodeDenied != "" || len(denied) > 0:
 		reason := t.nodeDenied
@@ -415,7 +422,7 @@ func (s *session) drainRights(ctx context.Context, node *unstructured.Unstructur
 				go func() {
 					defer pw.Done()
 					st, _ := ask(eviction(p.u.GetName()))
-					t.note(st, p.name())
+					t.note(st, p)
 				}()
 			}
 			pw.Wait()

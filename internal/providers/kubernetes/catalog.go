@@ -347,6 +347,17 @@ func navOrder(static, defs []*kindDef) []*kindDef {
 	return append(out, rest...)
 }
 
+// sensitiveResources: editing them grants access beyond themselves
+// (core.KindDescriptor.Sensitive).
+var sensitiveResources = map[schema.GroupResource]bool{
+	{Resource: "secrets"}:                                                 true,
+	{Resource: "serviceaccounts"}:                                         true,
+	{Group: "rbac.authorization.k8s.io", Resource: "roles"}:               true,
+	{Group: "rbac.authorization.k8s.io", Resource: "rolebindings"}:        true,
+	{Group: "rbac.authorization.k8s.io", Resource: "clusterroles"}:        true,
+	{Group: "rbac.authorization.k8s.io", Resource: "clusterrolebindings"}: true,
+}
+
 // discoveredDef describes a served resource generically: name, scope, age
 // (the table's columns come with its first answer — Table, P8 Task 2).
 func discoveredDef(r apiResource) *kindDef {
@@ -384,6 +395,7 @@ func discoveredDef(r apiResource) *kindDef {
 		desc: core.KindDescriptor{
 			ID: id, Title: pluralTitle(r.Kind, r.Resource), Singular: singular, Group: group, Subgroup: sub,
 			Columns: cols, Scoped: r.Namespaced, Aliases: aliases,
+			Sensitive: sensitiveResources[schema.GroupResource{Group: r.Group, Resource: r.Resource}],
 		},
 		place:      place,
 		gvr:        schema.GroupVersionResource{Group: r.Group, Version: r.Version, Resource: r.Resource},

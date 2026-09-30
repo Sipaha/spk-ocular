@@ -745,3 +745,31 @@ func indexOf(l []string, x string) int {
 	}
 	return -1
 }
+
+// Sensitive kinds: editing them grants access beyond themselves (a
+// Secret's values, a ServiceAccount's token, RBAC) — agents get them only
+// by name.
+func TestSensitiveKinds(t *testing.T) {
+	assert.True(t, secretsKind.desc.Sensitive)
+	for _, d := range allKinds.list {
+		if d != secretsKind {
+			assert.False(t, d.desc.Sensitive, d.desc.ID)
+		}
+	}
+	for _, r := range []apiResource{
+		{Version: "v1", Resource: "serviceaccounts", Kind: "ServiceAccount", Namespaced: true},
+		{Group: "rbac.authorization.k8s.io", Version: "v1", Resource: "roles", Kind: "Role", Namespaced: true},
+		{Group: "rbac.authorization.k8s.io", Version: "v1", Resource: "rolebindings", Kind: "RoleBinding", Namespaced: true},
+		{Group: "rbac.authorization.k8s.io", Version: "v1", Resource: "clusterroles", Kind: "ClusterRole"},
+		{Group: "rbac.authorization.k8s.io", Version: "v1", Resource: "clusterrolebindings", Kind: "ClusterRoleBinding"},
+		{Version: "v1", Resource: "secrets", Kind: "Secret", Namespaced: true},
+	} {
+		assert.True(t, discoveredDef(r).desc.Sensitive, r.Resource)
+	}
+	for _, r := range []apiResource{
+		{Version: "v1", Resource: "configmaps", Kind: "ConfigMap", Namespaced: true},
+		{Group: "example.com", Version: "v1", Resource: "roles", Kind: "Role", Namespaced: true},
+	} {
+		assert.False(t, discoveredDef(r).desc.Sensitive, r.Group+"/"+r.Resource)
+	}
+}

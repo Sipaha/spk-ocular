@@ -88,6 +88,8 @@ func target(c dockerContext) core.Target {
 		Subtitle:   endpointShown(c.Host),
 		Current:    c.Current,
 		ConfigHash: c.Hash,
+		// The daemon's id completes it (session.Identity).
+		Identity: endpointShown(c.Host),
 	}
 	add := func(key, value string) {
 		if value != "" {

@@ -91,7 +91,9 @@
    плану, который видел агент, а не по тому, что он прислал; подделать `Expect`/токен нельзя.
    Устаревший план по-прежнему ловит провайдер (`Expect`, подписанная база) — `conflict`.
 5. **Списки плана — с `Ref`.** `core.ActionItem` получает `Ref *core.Ref` (`omitempty`):
-   drain (pod-ы) и синтетический провайдер заполняют. Run агента отказывает (`forbidden`), если
+   drain (pod-ы) заполняет. Синтетический провайдер — нет: его список (evacuate) у несcoped-вида,
+   агенту недоступен; «элемент без `Ref` = вне выдачи» проверяется на фейковом провайдере тестов
+   `agentapi`. Run агента отказывает (`forbidden`), если
    элемент списка без `Ref` или его scope/вид вне выданного этому глаголу. Сегодня списки есть
    только у drain (кластерное действие — агенту недоступно), правило — на будущее.
 6. **Кластерные записи — отказ по каталогу.** Действие/правка вида с `Scoped == false` агенту
@@ -236,16 +238,17 @@ scopes[{name, state, class?}]}` — при обходе у каждого scope 
   миграция поверх базы P13 (0002).
 
 ### Task 2. Опознание цели и каталог (Go)
-- [ ] `core.Target.Identity` (`json:"-"`); kubernetes `describe` считает его (решение 2);
+- [x] `core.Target.Identity` (`json:"-"`); kubernetes `describe` считает его (решение 2);
   тесты: смена `server`, CA (данные и файл), `insecure`, `tls-server-name`, `proxy-url`,
-  auth-info — другое; смена токена/exec, тот же CA в другом файле или inline — то же.
-- [ ] compose: `Target.Identity` = endpoint; `provider.Identifier` на сессии (id демона,
+  auth-info — другое; смена токена/exec, тот же CA в другом файле или inline — то же;
+  userinfo в URL сервера и прокси не попадает в опознание (ревью плана, P3 к реализации).
+- [x] compose: `Target.Identity` = endpoint; `provider.Identifier` на сессии (id демона,
   кэш); тест на фейковом движке (ошибка → повтор, не кэшируется).
 - [ ] `api.Service.TargetIdentity`; тест: kube без сети, compose с id демона.
-- [ ] `core.KindDescriptor.Sensitive` — kubernetes описанные и обнаруженные (RBAC, SA, Secret);
+- [x] `core.KindDescriptor.Sensitive` — kubernetes описанные и обнаруженные (RBAC, SA, Secret);
   тест каталога.
-- [ ] `core.ActionItem.Ref`; drain и синтетический заполняют; тесты drain (ref pod-а у каждого
-  элемента).
+- [x] `core.ActionItem.Ref`; drain заполняет (и в списке «отказано»); тесты drain (ref pod-а у
+  каждого элемента).
 
 ### Task 3. Сервис для агента (Go, `internal/api`)
 - [ ] `sessionEntry.agentUntil`, `agentCalls`; `agentCall`; `closeOtherSessions` и сборщик
@@ -358,3 +361,6 @@ scopes[{name, state, class?}]}` — при обходе у каждого scope 
 - P3-5 — `tls-server-name` и `proxy-url` в опознании → решение 2.
 - P3-6 — тесты: «Проблемы» и `ListKinds` с перечнем видов, `action:delete` без названных видов,
   отзыв во время ожидания → Task 4, Task 5.
+
+Перепроверка ревизии 2 (`c842a9e`): **закрыто**. P3 к реализации: userinfo в URL (`proxy-url`,
+`server`) не должен попадать в опознание — учтено в Task 2.

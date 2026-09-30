@@ -49,7 +49,7 @@ var configMapsKind = &kindDef{
 // Secrets: values never enter the list cache — only key names.
 var secretsKind = &kindDef{
 	desc: core.KindDescriptor{
-		ID: "secrets", Title: "Secrets", Group: "Config", Scoped: true,
+		ID: "secrets", Title: "Secrets", Group: "Config", Scoped: true, Sensitive: true,
 		Columns: []core.Column{colName, colNS, {ID: "type", Title: "Type", Type: core.ColText}, {ID: "keys", Title: "Keys", Type: core.ColText}, colAge},
 	},
 	gvr:        schema.GroupVersionResource{Version: "v1", Resource: "secrets"},

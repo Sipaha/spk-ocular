@@ -74,6 +74,14 @@ type ViewDescriber interface {
 	DescribeView(ctx context.Context, q Query) (core.KindDescriptor, Query, error)
 }
 
+// Identifier is implemented by sessions whose target's identity needs the
+// target itself (Docker: the daemon's id). Identity may ask it (bounded by
+// ctx) once per session; an unreachable target is an error, never another
+// identity. It completes core.Target.Identity, it does not replace it.
+type Identifier interface {
+	Identity(ctx context.Context) (string, error)
+}
+
 // Query is what a view shows. It is immutable for the view's lifetime.
 type Query struct {
 	Kind  string        `json:"kind"`

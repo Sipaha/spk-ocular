@@ -126,10 +126,13 @@ type ActionList struct {
 	Items     []ActionItem `json:"items"`
 }
 
-// ActionItem is one object of a list, with a note about it.
+// ActionItem is one object of a list, with a note about it. Ref names the
+// object when the provider can (an agent's run is refused when an item lies
+// outside its grants; an item without Ref counts as outside).
 type ActionItem struct {
 	Name string   `json:"name"`
 	Note *Message `json:"note,omitempty"`
+	Ref  *Ref     `json:"ref,omitempty"`
 }
 
 // ActionOutcome: what became of a run or of one of its parts.

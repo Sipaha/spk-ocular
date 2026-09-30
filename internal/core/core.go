@@ -25,6 +25,12 @@ type Target struct {
 	// ConfigRev is the UI's opaque stand-in for ConfigHash (set by the API,
 	// keyed per process): equal revisions = the same configuration.
 	ConfigRev string `json:"configRev,omitempty"`
+	// Identity says what the target points at (k8s: the server, a digest
+	// of the CA it trusts, the auth-info it names; Docker: the endpoint),
+	// never a credential: agents' grants are bound to it, so a context
+	// pointed at another cluster suspends them while a rotated token does
+	// not. Readable, not secret; the agent API sends it itself.
+	Identity string `json:"-"`
 }
 
 // Detail is one labelled fact. Key is stable (for UI translation and tests),

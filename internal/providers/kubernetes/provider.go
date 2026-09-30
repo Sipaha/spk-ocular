@@ -86,6 +86,7 @@ func target(kc kubeContext) core.Target {
 		Subtitle:     kc.Cluster,
 		Current:      kc.Current,
 		ConfigHash:   kc.Hash,
+		Identity:     kc.Identity,
 		DefaultScope: kc.Namespace,
 	}
 	add := func(key, value string) {
