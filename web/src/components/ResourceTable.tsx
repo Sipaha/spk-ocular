@@ -70,9 +70,12 @@ export function cellText(c: Column, cell: MetricCell | undefined, now: number): 
   return cell.text ?? ''
 }
 
-/** How many values a metrics answer has (0 while none: the snapshot waits for them). */
-function metricsFilled(m: MetricsView | null | undefined): number {
-  return m?.status === 'ok' ? Object.keys(m.values).length : 0
+/** How many values of a metric an answer has (0 while none: a sort by it waits for them). */
+function metricKnown(m: MetricsView | null | undefined, c: Column | undefined): number {
+  if (m?.status !== 'ok' || !c?.metric) return 0
+  let n = 0
+  for (const u of Object.values(m.values)) if ((c.type === 'cpu' ? u.cpu : u.memory) !== undefined) n++
+  return n
 }
 
 /** An order-independent fingerprint of a set of row ids. */
@@ -88,7 +91,10 @@ function idSetKey(rows: Row[]): string {
   return `${rows.length}:${x >>> 0}:${sum}`
 }
 
-/** Sort key: numbers and times numerically, text case-insensitively; empty last. */
+/** A cell with nothing to show (an unknown metric, an empty text). */
+const isEmpty = (c: Cell | undefined) => !c || (c.num === undefined && c.time === undefined && !c.text)
+
+/** Sort key: numbers and times numerically, text case-insensitively (empty: see isEmpty). */
 function cmp(c: Column, a: Cell | undefined, b: Cell | undefined): number {
   if (c.type === 'age') return (b?.time ?? -Infinity) - (a?.time ?? -Infinity) // older = bigger age
   const an = a?.num
@@ -149,7 +155,7 @@ export function ResourceTable({ columns, rows, hideScope, filter, selected, onSe
     const cells = frozen.current.cells
     return (r: Row, i: number) => (i === sort.col ? cells.get(r.id) : cellOf(r, i))
     // eslint-disable-next-line react-hooks/exhaustive-deps -- cellOf (new metrics) re-sorts only an empty snapshot
-  }, [columns, sort, rowSet, filter, rows, columns[sort.col]?.metric ? metricsFilled(metrics) : 0])
+  }, [columns, sort, rowSet, filter, rows, metricKnown(metrics, columns[sort.col])])
   const sorted = useMemo(() => {
     const f = filter.trim()
     const list = f ? rows.filter((r) => matchesRow(r, f)) : rows.slice()
@@ -157,7 +163,12 @@ export function ResourceTable({ columns, rows, hideScope, filter, selected, onSe
     if (col) {
       const then = thenCol >= 0 && thenCol !== sort.col ? columns[thenCol] : null
       list.sort((a, b) => {
-        const d = cmp(col, sortCell(a, sort.col), sortCell(b, sort.col))
+        const ca = sortCell(a, sort.col)
+        const cb = sortCell(b, sort.col)
+        // Empty last in both directions: an unknown is not a zero.
+        const ea = isEmpty(ca)
+        if (ea !== isEmpty(cb)) return ea ? 1 : -1
+        const d = cmp(col, ca, cb)
         if (d) return sort.desc ? -d : d
         return (then ? cmp(then, sortCell(a, thenCol), sortCell(b, thenCol)) : 0) || a.ref.name.localeCompare(b.ref.name)
       })

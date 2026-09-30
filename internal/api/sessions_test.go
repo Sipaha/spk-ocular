@@ -198,6 +198,10 @@ type metricSession struct {
 	rows int
 	// block: Metrics waits for its ctx to end
 	block bool
+	// started/ended (optional): each call's start and, when blocking, its
+	// context's end
+	started chan []string
+	ended   chan error
 
 	mu     sync.Mutex
 	asked  [][]string
@@ -208,11 +212,17 @@ func (m *metricSession) Metrics(ctx context.Context, _ provider.Query, rowIDs []
 	m.mu.Lock()
 	m.asked = append(m.asked, rowIDs)
 	m.mu.Unlock()
+	if m.started != nil {
+		m.started <- rowIDs
+	}
 	if m.block {
 		<-ctx.Done()
 		m.mu.Lock()
 		m.ctxErr = ctx.Err()
 		m.mu.Unlock()
+		if m.ended != nil {
+			m.ended <- ctx.Err()
+		}
 		return provider.Metrics{}, ctx.Err()
 	}
 	return m.m, m.err
@@ -261,19 +271,19 @@ func TestGetMetricsJoinsCurrentRowsAndReportsStatus(t *testing.T) {
 	info, err := s.OpenView(ctx, OpenViewRequest{Provider: "k", Target: "a", Query: provider.Query{Kind: "pods", Scope: allScopes}})
 	require.NoError(t, err)
 
-	mv, err := s.GetMetrics(ctx, info.ViewID, []string{"deleted", "1", "1"})
+	mv, err := s.GetMetrics(ctx, MetricsRequest{ViewID: info.ViewID, RowIDs: []string{"deleted", "1", "1"}})
 	require.NoError(t, err)
 	assert.Equal(t, "ok", mv.Status)
 	assert.Equal(t, map[string]provider.Usage{"1": {CPU: provider.Num(0.1), Memory: provider.Num(1024)}}, mv.Values, "keyed by row id; objects not in the view get nothing")
 	assert.Equal(t, []string{"1"}, ms.lastAsked(), "only the view's rows are asked for, once")
 
 	ms.err = &provider.Error{Class: provider.ClassUnsupported, Message: "metrics.k8s.io is not installed"}
-	mv, err = s.GetMetrics(ctx, info.ViewID, []string{"1"})
+	mv, err = s.GetMetrics(ctx, MetricsRequest{ViewID: info.ViewID, RowIDs: []string{"1"}})
 	require.NoError(t, err, "a missing metrics API is a status, not a failed call")
 	assert.Equal(t, "unsupported", mv.Status)
 	assert.Empty(t, mv.Values)
 
-	_, err = s.GetMetrics(ctx, "v-unknown", []string{"1"})
+	_, err = s.GetMetrics(ctx, MetricsRequest{ViewID: "v-unknown", RowIDs: []string{"1"}})
 	assert.True(t, IsCoded(err, CodeGone))
 }
 
@@ -295,14 +305,14 @@ func TestGetMetricsAsksForTheShownRowsOnly(t *testing.T) {
 	for i := 149; i >= 0; i-- {
 		ask = append(ask, fmt.Sprintf("r%d", i))
 	}
-	mv, err := s.GetMetrics(ctx, info.ViewID, append([]string{"foreign"}, ask...))
+	mv, err := s.GetMetrics(ctx, MetricsRequest{ViewID: info.ViewID, RowIDs: append([]string{"foreign"}, ask...)})
 	require.NoError(t, err)
 	assert.Equal(t, ask[:MaxMetricRows], ms.lastAsked())
-	assert.Contains(t, mv.Message, "first 100")
+	assert.Equal(t, MaxMetricRows, mv.Limit, "the cut is said")
 	assert.Equal(t, map[string]provider.Usage{"r120": {Memory: provider.Num(1)}}, mv.Values, "the memory known, the CPU unknown")
 
 	n := len(ms.asked)
-	mv, err = s.GetMetrics(ctx, info.ViewID, []string{"foreign"})
+	mv, err = s.GetMetrics(ctx, MetricsRequest{ViewID: info.ViewID, RowIDs: []string{"foreign"}})
 	require.NoError(t, err)
 	assert.Equal(t, "ok", mv.Status)
 	assert.Empty(t, mv.Values)
@@ -319,7 +329,7 @@ func TestGetMetricsEndsWithTheCaller(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	time.AfterFunc(50*time.Millisecond, cancel)
 	t0 := time.Now()
-	_, _ = s.GetMetrics(ctx, info.ViewID, []string{"1"})
+	_, _ = s.GetMetrics(ctx, MetricsRequest{ViewID: info.ViewID, RowIDs: []string{"1"}})
 	assert.Less(t, time.Since(t0), 2*time.Second)
 	ms.mu.Lock()
 	assert.ErrorIs(t, ms.ctxErr, context.Canceled)
@@ -328,9 +338,86 @@ func TestGetMetricsEndsWithTheCaller(t *testing.T) {
 	old := metricsTimeout
 	metricsTimeout = 50 * time.Millisecond
 	defer func() { metricsTimeout = old }()
-	mv, err := s.GetMetrics(context.Background(), info.ViewID, []string{"1"})
+	mv, err := s.GetMetrics(context.Background(), MetricsRequest{ViewID: info.ViewID, RowIDs: []string{"1"}})
 	require.NoError(t, err)
 	assert.Equal(t, "unavailable", mv.Status, "the deadline is the request's")
+}
+
+// One metrics request per view runs: a newer one (by the page's seq), a
+// CancelMetrics or closing the view ends the one in flight, and a request
+// the page gave up before it started (a cancel that overtook it, or a
+// newer request that did) never reaches the provider — whatever order the
+// transport delivers them in.
+func TestGetMetricsOneRequestPerView(t *testing.T) {
+	ms := &metricSession{block: true, started: make(chan []string, 8), ended: make(chan error, 8)}
+	k := &metricOpenable{openable: newOpenable("a"), ms: ms}
+	s, _ := newService(t, k)
+	ctx := context.Background()
+	info, err := s.OpenView(ctx, OpenViewRequest{Provider: "k", Target: "a", Query: provider.Query{Kind: "pods", Scope: allScopes}})
+	require.NoError(t, err)
+	ask := func(seq uint64) chan MetricsView {
+		out := make(chan MetricsView, 1)
+		go func() {
+			mv, err := s.GetMetrics(ctx, MetricsRequest{ViewID: info.ViewID, RowIDs: []string{"1"}, Seq: seq})
+			assert.NoError(t, err)
+			out <- mv
+		}()
+		return out
+	}
+	wait := func(what string, ch any) {
+		t.Helper()
+		switch c := ch.(type) {
+		case chan []string:
+			select {
+			case <-c:
+			case <-time.After(5 * time.Second):
+				t.Fatal(what)
+			}
+		case chan error:
+			select {
+			case err := <-c:
+				assert.ErrorIs(t, err, context.Canceled, what)
+			case <-time.After(5 * time.Second):
+				t.Fatal(what)
+			}
+		case chan MetricsView:
+			select {
+			case mv := <-c:
+				assert.Equal(t, "unavailable", mv.Status, what)
+			case <-time.After(5 * time.Second):
+				t.Fatal(what)
+			}
+		}
+	}
+
+	first := ask(1)
+	wait("seq 1 starts", ms.started)
+	second := ask(2)
+	wait("seq 2 starts", ms.started)
+	wait("seq 1 ends when seq 2 starts", ms.ended)
+	wait("seq 1 answers", first)
+
+	require.NoError(t, s.CancelMetrics(ctx, info.ViewID, 2))
+	wait("CancelMetrics ends seq 2", ms.ended)
+	wait("seq 2 answers", second)
+
+	// Given up before it started: a cancel that overtook the call, and a
+	// call a newer one overtook.
+	require.NoError(t, s.CancelMetrics(ctx, info.ViewID, 3))
+	wait("seq 3 is refused at once", ask(3))
+	fifth := ask(5)
+	wait("seq 5 starts", ms.started)
+	wait("seq 4 is refused at once", ask(4))
+	ms.mu.Lock()
+	assert.Len(t, ms.asked, 3, "seq 3 and 4 never reached the provider")
+	ms.mu.Unlock()
+
+	require.NoError(t, s.CloseView(ctx, info.ViewID))
+	wait("closing the view ends seq 5", ms.ended)
+	wait("seq 5 answers", fifth)
+	s.metricsMu.Lock()
+	assert.Empty(t, s.metricGates, "nothing kept for a closed view")
+	s.metricsMu.Unlock()
 }
 
 func TestIdleSessionsAreReaped(t *testing.T) {
@@ -372,9 +459,9 @@ func TestViewsBelongToOneSessionIncarnation(t *testing.T) {
 	require.NoError(t, err)
 	assert.NotEqual(t, oldOwner, s.sessions[ownerKey("k", "a")].owner, "a new incarnation, a new owner")
 
-	_, err = s.GetMetrics(ctx, old.ViewID, []string{"1"})
+	_, err = s.GetMetrics(ctx, MetricsRequest{ViewID: old.ViewID, RowIDs: []string{"1"}})
 	assert.True(t, IsCoded(err, CodeGone), "the old view went with its session")
-	mv, err := s.GetMetrics(ctx, fresh.ViewID, []string{"1"})
+	mv, err := s.GetMetrics(ctx, MetricsRequest{ViewID: fresh.ViewID, RowIDs: []string{"1"}})
 	require.NoError(t, err)
 	assert.Equal(t, "ok", mv.Status)
 }

@@ -124,6 +124,30 @@ describe('Workspace details and state', () => {
     expect(f.client.getMetrics).toHaveBeenCalledWith('v-pods', ['uid-web-api-1'], expect.any(AbortSignal))
   })
 
+  it('says when metrics cover only the first rows', async () => {
+    const f = fakeClient([k8s('prod')])
+    const withMetrics = { ...podsKindWithMetrics }
+    f.client.listKinds = vi.fn(async () => [withMetrics])
+    f.client.openView = vi.fn(async () => ({ viewId: 'v-pods', kind: withMetrics }))
+    f.state.rows = [podRow('api-1', 'web')]
+    f.client.getMetrics = vi.fn(async () => ({ status: 'ok', limit: 100, values: { 'uid-web-api-1': { cpu: 0.25 } } }))
+    await openProd(f)
+    expect(await screen.findByRole('note', { name: 'CPU/Memory' })).toHaveTextContent('first 100')
+  })
+
+  it('explains empty metric columns', async () => {
+    const f = fakeClient([k8s('prod')])
+    const withMetrics = { ...podsKindWithMetrics }
+    f.client.listKinds = vi.fn(async () => [withMetrics])
+    f.client.openView = vi.fn(async () => ({ viewId: 'v-pods', kind: withMetrics }))
+    f.state.rows = [podRow('api-1', 'web')]
+    f.client.getMetrics = vi.fn(async () => ({ status: 'forbidden', message: 'pods.metrics.k8s.io is forbidden', values: {} }))
+    await openProd(f)
+    const note = await screen.findByRole('note', { name: 'CPU/Memory' })
+    expect(note).toHaveTextContent('access denied')
+    expect(note).toHaveAttribute('title', 'pods.metrics.k8s.io is forbidden')
+  })
+
   it('restores the last kind and scope of the target', async () => {
     const f = fakeClient([k8s('prod')])
     f.client.getTargetState = vi.fn(async () => ({ kind: '"pods"', scope: '{"mode":"one","name":"data"}' }))

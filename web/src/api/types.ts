@@ -322,8 +322,10 @@ export interface Usage {
 export interface MetricsView {
   /** "ok" or an error class: unsupported (no metrics API), forbidden, ... */
   status: string
-  /** With "ok": a note (only the first rows were asked for); else the error. */
+  /** The error's detail (not "ok"). */
   message?: string
+  /** With "ok": only this many of the asked rows were (the first ones). */
+  limit?: number
   timestamp?: string
   window?: string
   values: Record<string, Usage>

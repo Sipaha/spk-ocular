@@ -148,11 +148,14 @@ func (h *HTTP) routes() {
 	h.mux.HandleFunc("POST /api/GetResource", handle(func(ctx context.Context, r *core.Ref) (any, error) {
 		return h.api.GetResource(ctx, *r)
 	}))
-	h.mux.HandleFunc("POST /api/GetMetrics", handle(func(ctx context.Context, r *struct {
-		ViewID string   `json:"viewId"`
-		RowIDs []string `json:"rowIds"`
+	h.mux.HandleFunc("POST /api/GetMetrics", handle(func(ctx context.Context, r *api.MetricsRequest) (any, error) {
+		return h.api.GetMetrics(ctx, *r)
+	}))
+	h.mux.HandleFunc("POST /api/CancelMetrics", handle(func(ctx context.Context, r *struct {
+		ViewID string `json:"viewId"`
+		Seq    uint64 `json:"seq"`
 	}) (any, error) {
-		return h.api.GetMetrics(ctx, r.ViewID, r.RowIDs)
+		return nil, h.api.CancelMetrics(ctx, r.ViewID, r.Seq)
 	}))
 	h.mux.HandleFunc("POST /api/LogInfo", handle(func(ctx context.Context, r *core.Ref) (any, error) {
 		return h.api.LogInfo(ctx, *r)

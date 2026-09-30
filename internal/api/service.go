@@ -54,6 +54,11 @@ type Service struct {
 	cancel context.CancelFunc
 	wg     sync.WaitGroup
 
+	// metricGates: per view, the metrics request in flight and the oldest
+	// seq still accepted (see GetMetrics).
+	metricsMu   sync.Mutex
+	metricGates map[string]*metricGate
+
 	// revKey keys ConfigRev: configuration hashes cover credentials, so the
 	// page gets only a keyed digest it cannot test guesses against.
 	revKey []byte

@@ -97,6 +97,14 @@ async function post<T>(method: string, body: unknown, signal?: AbortSignal): Pro
   return (isJSON ? await r.json() : undefined) as T
 }
 
+/**
+ * Orders the page's metrics requests (per view in Go: an older one never
+ * starts after a newer one or its own cancel). Starts at the clock so a
+ * reloaded page is ahead too.
+ */
+let metricsSeq = Date.now()
+const nextMetricsSeq = () => ++metricsSeq
+
 const done = async (p: Promise<unknown>) => {
   await p
 }
@@ -113,7 +121,7 @@ export const httpClient: Client = {
   resyncView: (viewId) => done(post('ResyncView', { viewId })),
   touchViews: (viewIds) => post('TouchViews', { viewIds }),
   getResource: (ref) => post('GetResource', ref),
-  getMetrics: (viewId, rowIds, signal) => post('GetMetrics', { viewId, rowIds }, signal),
+  getMetrics: (viewId, rowIds, signal) => post('GetMetrics', { viewId, rowIds, seq: nextMetricsSeq() }, signal),
   getTargetState: (provider, target) => post('GetTargetState', { provider, target }),
   setTargetState: (provider, target, key, value) => done(post('SetTargetState', { provider, target, key, value })),
   recentObjects: (provider, target) => post('RecentObjects', { provider, target }),
@@ -168,10 +176,17 @@ async function wcall<T>(method: string, ...args: unknown[]): Promise<T> {
 async function wcallAbortable<T>(signal: AbortSignal | undefined, method: string, ...args: unknown[]): Promise<T> {
   if (signal?.aborted) throw new DOMException('aborted', 'AbortError')
   const p = Call.ByName(FQN + method, ...args)
-  const onAbort = () => void p.cancel()
+  // An abort answers at once, whenever the runtime settles the call.
+  let onAbort = () => {}
+  const aborted = new Promise<never>((_, reject) => {
+    onAbort = () => {
+      void p.cancel()
+      reject(new DOMException('aborted', 'AbortError'))
+    }
+  })
   signal?.addEventListener('abort', onAbort, { once: true })
   try {
-    return (await p) as T
+    return (await Promise.race([p, aborted])) as T
   } catch (e) {
     if (signal?.aborted) throw new DOMException('aborted', 'AbortError')
     throw parseWailsError(e)
@@ -194,7 +209,13 @@ export const wailsClient: Client = {
   resyncView: (viewId) => wcall('ResyncView', viewId),
   touchViews: (viewIds) => wcall('TouchViews', viewIds),
   getResource: (ref) => wcall('GetResource', ref),
-  getMetrics: (viewId, rowIds, signal) => wcallAbortable(signal, 'GetMetrics', viewId, rowIds),
+  getMetrics: (viewId, rowIds, signal) => {
+    const seq = nextMetricsSeq()
+    // The runtime's cancel is lost if it overtakes the call: Go is told too.
+    const onAbort = () => void wcall('CancelMetrics', viewId, seq).catch(() => {})
+    signal?.addEventListener('abort', onAbort, { once: true })
+    return wcallAbortable<MetricsView>(signal, 'GetMetrics', { viewId, rowIds, seq }).finally(() => signal?.removeEventListener('abort', onAbort))
+  },
   getTargetState: (provider, target) => wcall('GetTargetState', provider, target),
   setTargetState: (provider, target, key, value) => wcall('SetTargetState', provider, target, key, value),
   recentObjects: (provider, target) => wcall('RecentObjects', provider, target),

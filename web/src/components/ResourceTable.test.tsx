@@ -72,6 +72,28 @@ describe('ResourceTable metrics', () => {
     expect(names()).toEqual(['b', 'a'])
   })
 
+  it('a metric sort waiting for its first sample is not filled by the other metric', async () => {
+    const rows = [row('a'), row('b')]
+    const { rerender } = render(table(rows, ok({ 'id-a': { memory: 1 }, 'id-b': { memory: 2 } })))
+    const user = userEvent.setup()
+    await user.click(screen.getByRole('columnheader', { name: /CPU/ }))
+    await user.click(screen.getByRole('columnheader', { name: /CPU/ }))
+    act(() => rerender(table(rows, ok({ 'id-a': { cpu: 0.1, memory: 1 }, 'id-b': { cpu: 0.2, memory: 2 } }))))
+    expect(names()).toEqual(['b', 'a']) // the first CPU sample orders
+    act(() => rerender(table(rows, ok({ 'id-a': { cpu: 0.5, memory: 1 }, 'id-b': { cpu: 0.2, memory: 2 } }))))
+    expect(names()).toEqual(['b', 'a']) // later ones only update the cells
+  })
+
+  it('unknown sorts last in both directions', async () => {
+    render(table([row('a'), row('b'), row('c')], ok({ 'id-a': { cpu: 0 }, 'id-c': { cpu: 0.5 } })))
+    const user = userEvent.setup()
+    await user.click(screen.getByRole('columnheader', { name: /CPU/ }))
+    const asc = names()
+    await user.click(screen.getByRole('columnheader', { name: /CPU/ }))
+    const desc = names()
+    expect([asc, desc].sort()).toEqual([['a', 'c', 'b'], ['c', 'a', 'b']])
+  })
+
   it('reports a new visible set only when it changes', () => {
     const rows = [row('a'), row('b')]
     const seen = vi.fn()

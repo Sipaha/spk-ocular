@@ -53,12 +53,18 @@ type API interface {
 	RecentObjects(ctx context.Context, provider, target string) ([]RecentObject, error)
 	// TouchRecent records a successful open of an object's details.
 	TouchRecent(ctx context.Context, req TouchRecentRequest) error
-	// GetMetrics: usage for rowIDs — the rows of an open view the page
+	// GetMetrics: usage for req.RowIDs — the rows of an open view the page
 	// shows (ids not of the view are ignored; at most MaxMetricRows, more
 	// are cut and said). Status is "ok" or an error class (unsupported = no
-	// metrics API) — never an empty success. Ends with ctx (the page
-	// stopped waiting) or after 10 s.
-	GetMetrics(ctx context.Context, viewID string, rowIDs []string) (MetricsView, error)
+	// metrics API) — never an empty success. One request per view runs: it
+	// ends with ctx, after 10 s, when the view closes, when a request with
+	// a higher Seq starts or CancelMetrics covers its Seq; one whose Seq was
+	// already passed (cancelled or overtaken before it started) is refused
+	// without asking the provider.
+	GetMetrics(ctx context.Context, req MetricsRequest) (MetricsView, error)
+	// CancelMetrics: the page gave up the view's requests up to seq — also
+	// one not started yet (a transport's own cancel can overtake the call).
+	CancelMetrics(ctx context.Context, viewID string, seq uint64) error
 
 	// LogInfo: what logs an object has (channels = containers).
 	LogInfo(ctx context.Context, ref core.Ref) (core.LogInfo, error)
@@ -99,12 +105,24 @@ type API interface {
 }
 
 type MetricsView struct {
-	Status    string    `json:"status"`
-	Message   string    `json:"message,omitempty"`
+	Status string `json:"status"`
+	// Message: the error's detail (Status is not "ok").
+	Message string `json:"message,omitempty"`
+	// Limit: with "ok", only the first Limit of the asked rows were (more
+	// than MaxMetricRows asked).
+	Limit     int       `json:"limit,omitempty"`
 	Timestamp time.Time `json:"timestamp,omitzero"`
 	Window    string    `json:"window,omitempty"`
 	// Values by row id; rows without a sample are absent (unknown).
 	Values map[string]provider.Usage `json:"values"`
+}
+
+type MetricsRequest struct {
+	ViewID string   `json:"viewId"`
+	RowIDs []string `json:"rowIds"`
+	// Seq orders the page's requests for the view (higher = newer); 0 —
+	// unordered (still one at a time).
+	Seq uint64 `json:"seq,omitempty"`
 }
 
 type OpenViewRequest struct {

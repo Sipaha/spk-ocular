@@ -6,7 +6,7 @@ export const METRICS_INTERVAL_MS = 15_000
 export const METRICS_ABSENT_RETRY_MS = 120_000
 /** A new visible area is asked for once scrolling settles this long. */
 export const METRICS_SETTLE_MS = 300
-/** Values of rows no longer asked for are dropped after this long. */
+/** A sample is shown at most this long (rows scrolled away keep theirs). */
 export const METRICS_KEEP_MS = 10 * 60_000
 
 const sameIds = (a: string[], b: string[]) => a.length === b.length && a.every((x, i) => x === b[i])
@@ -18,8 +18,9 @@ const sameIds = (a: string[], b: string[]) => a.length === b.length && a.every((
  * a newer visible set waits for it (only the latest is kept), and leaving
  * the view or hiding the page aborts it — in the app's Go side too.
  * Values of rows scrolled away are kept (with their sample time) until
- * asked for again or METRICS_KEEP_MS pass; results of an older view or an
- * aborted request are dropped.
+ * asked for again or METRICS_KEEP_MS pass (checked at every request, also
+ * after a long hide); results of an older view or an aborted request are
+ * dropped. A failed request shows no values: its error is the status.
  */
 export function useMetrics(client: Client, viewId: string | null, enabled: boolean, visible: string[]): MetricsView | null {
   const [state, setState] = useState<{ viewId: string; m: MetricsView } | null>(null)
@@ -42,12 +43,24 @@ export function useMetrics(client: Client, viewId: string | null, enabled: boole
     let absentUntil = 0
     let asked: string[] = []
     const values = new Map<string, { u: Usage; seen: number }>()
+    let shown: MetricsView | null = null // the last "ok" answer
+    const publish = (m: MetricsView) => setState({ viewId, m: { ...m, values: Object.fromEntries([...values].map(([id, v]) => [id, v.u])) } })
+    const expire = (now: number) => {
+      let dropped = false
+      for (const [id, v] of values)
+        if (now - v.seen > METRICS_KEEP_MS) {
+          values.delete(id)
+          dropped = true
+        }
+      return dropped
+    }
 
     const schedule = (ms: number) => {
       if (timer) clearTimeout(timer)
       timer = live ? setTimeout(tick, ms) : null
     }
     const tick = async () => {
+      if (timer) clearTimeout(timer) // an ask between polls replaces the poll
       timer = null
       if (!live || document.hidden) return // resumed by visibilitychange
       if (inFlight) {
@@ -56,6 +69,7 @@ export function useMetrics(client: Client, viewId: string | null, enabled: boole
       }
       const ids = visibleRef.current
       if (!ids.length) return // asked for when rows show
+      if (expire(Date.now()) && shown) publish(shown)
       asked = ids
       const ac = new AbortController()
       inFlight = ac
@@ -70,10 +84,12 @@ export function useMetrics(client: Client, viewId: string | null, enabled: boole
             if (u) values.set(id, { u, seen: now })
             else values.delete(id) // asked and unknown now
           }
-          for (const [id, v] of values) if (now - v.seen > METRICS_KEEP_MS) values.delete(id)
-          setState({ viewId, m: { ...m, values: Object.fromEntries([...values].map(([id, v]) => [id, v.u])) } })
+          expire(now)
+          shown = m
+          publish(m)
         } else {
           values.clear()
+          shown = null
           setState({ viewId, m })
           if (m.status === 'unsupported') {
             // No metrics API (yet): ask rarely, metrics-server may be installed.
@@ -81,9 +97,14 @@ export function useMetrics(client: Client, viewId: string | null, enabled: boole
             next = METRICS_ABSENT_RETRY_MS
           }
         }
-      } catch {
+      } catch (e) {
         if (ac.signal.aborted || !live) return
-        // gone/unavailable: the view reopens with a new id and a new effect
+        // No answer: nothing is current. (gone: the view reopens with a new
+        // id and a new effect.)
+        values.clear()
+        shown = null
+        const message = (e as { detail?: string }).detail || (e instanceof Error ? e.message : String(e))
+        setState({ viewId, m: { status: 'unavailable', message, values: {} } })
       } finally {
         if (inFlight === ac) inFlight = null
       }

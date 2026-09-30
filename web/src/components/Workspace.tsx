@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { Client } from '../api/client'
-import type { ActionDescriptor, KindDescriptor, Ref, Row, ScopeSel, ScopesView, SourceCoverage, Target } from '../api/types'
+import type { ActionDescriptor, KindDescriptor, MetricsView, Ref, Row, ScopeSel, ScopesView, SourceCoverage, Target } from '../api/types'
 import { ApiError } from '../api/client'
 import { actionLabel, classLabel, t } from '../i18n'
 import { showNotice } from '../store'
@@ -345,6 +345,7 @@ function ResourcePage(props: {
       </header>
       <StatusBanner state={view.status.state} cls={view.status.class} message={view.status.message} empty={view.rows.length === 0} coverage={view.status.coverage} />
       {view.status.coverage && <CoverageNote coverage={view.status.coverage} notCovered={view.kind?.notCovered ?? kind.notCovered} />}
+      {metrics && <MetricsNote metrics={metrics} />}
       <div className="relative flex min-h-0 flex-1 flex-col">
         <div data-area="table" className="flex min-h-0 flex-1 flex-col">
         <ResourceTable
@@ -507,6 +508,17 @@ function StatusBanner({ state, cls, message, empty, coverage }: { state: string;
 
 /** What a view of several sources looks at and what not (always, quietly),
  * and — apart and more visible — the sources it could not observe now. */
+/** Why metric columns are empty, or that they cover only the first rows. */
+function MetricsNote({ metrics }: { metrics: MetricsView }) {
+  if (metrics.status === 'ok' && !metrics.limit) return null
+  const failed = metrics.status !== 'ok'
+  return (
+    <p role="note" aria-label={t('metrics.label')} className="mx-4 my-1 text-xs text-fg-subtle" title={failed ? metrics.message : undefined}>
+      {failed ? t('metrics.failed', { reason: classLabel(metrics.status) }) : t('metrics.limited', { n: metrics.limit ?? 0 })}
+    </p>
+  )
+}
+
 function CoverageNote({ coverage, notCovered }: { coverage: SourceCoverage[]; notCovered?: string[] }) {
   const missing = coverage.filter((c) => c.state !== 'ready')
   const why = (c: SourceCoverage) =>

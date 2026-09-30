@@ -216,6 +216,7 @@ func (s *Service) GetRows(_ context.Context, viewID string, since uint64) (views
 
 func (s *Service) CloseView(_ context.Context, viewID string) error {
 	s.views.Close(viewID)
+	s.dropMetricGate(viewID)
 	return nil
 }
 
@@ -267,7 +268,103 @@ const MaxMetricRows = 100
 // metricsTimeout bounds a metrics request as a whole (a var for tests).
 var metricsTimeout = 10 * time.Second
 
-func (s *Service) GetMetrics(ctx context.Context, viewID string, rowIDs []string) (MetricsView, error) {
+// metricGate: a view's metrics request in flight (cancel, by its seq) and
+// the lowest seq a request may still start with.
+type metricGate struct {
+	next   uint64
+	seq    uint64
+	cancel context.CancelFunc
+	call   *int // identifies the request in flight
+}
+
+// canceledMetrics: what a request the page gave up gets.
+func canceledMetrics() MetricsView {
+	return MetricsView{Status: string(provider.ClassUnavailable), Message: "the request was canceled", Values: map[string]provider.Usage{}}
+}
+
+// enterMetrics makes the request the view's one in flight (ending an
+// older one), or refuses it (false) when its seq was already passed. The
+// returned release ends it and forgets it.
+func (s *Service) enterMetrics(ctx context.Context, viewID string, seq uint64) (context.Context, func(), bool) {
+	s.metricsMu.Lock()
+	defer s.metricsMu.Unlock()
+	if s.metricGates == nil {
+		s.metricGates = map[string]*metricGate{}
+	}
+	s.sweepMetricGatesLocked()
+	g := s.metricGates[viewID]
+	if g == nil {
+		g = &metricGate{}
+		s.metricGates[viewID] = g
+	}
+	if seq != 0 && seq < g.next {
+		return nil, nil, false
+	}
+	if g.cancel != nil {
+		g.cancel() // superseded
+	}
+	ctx, cancel := context.WithCancel(ctx)
+	call := new(int)
+	g.seq, g.cancel, g.call = seq, cancel, call
+	if seq != 0 {
+		g.next = seq + 1
+	}
+	return ctx, func() {
+		cancel()
+		s.metricsMu.Lock()
+		if g.call == call { // not replaced by a newer request
+			g.cancel, g.call = nil, nil
+		}
+		s.metricsMu.Unlock()
+	}, true
+}
+
+// sweepMetricGatesLocked forgets the gates of views that are gone
+// (expired rather than closed) with nothing in flight.
+func (s *Service) sweepMetricGatesLocked() {
+	for id, g := range s.metricGates {
+		if g.cancel == nil {
+			if _, _, _, err := s.views.Info(id); errors.Is(err, views.ErrGone) {
+				delete(s.metricGates, id)
+			}
+		}
+	}
+}
+
+func (s *Service) dropMetricGate(viewID string) {
+	s.metricsMu.Lock()
+	defer s.metricsMu.Unlock()
+	if g := s.metricGates[viewID]; g != nil {
+		if g.cancel != nil {
+			g.cancel()
+		}
+		delete(s.metricGates, viewID)
+	}
+}
+
+func (s *Service) CancelMetrics(_ context.Context, viewID string, seq uint64) error {
+	s.metricsMu.Lock()
+	defer s.metricsMu.Unlock()
+	if _, _, _, err := s.views.Info(viewID); errors.Is(err, views.ErrGone) {
+		return nil // nothing runs for a gone view: its gate went with it
+	}
+	if s.metricGates == nil {
+		s.metricGates = map[string]*metricGate{}
+	}
+	g := s.metricGates[viewID]
+	if g == nil {
+		g = &metricGate{}
+		s.metricGates[viewID] = g
+	}
+	g.next = max(g.next, seq+1)
+	if g.cancel != nil && g.seq != 0 && g.seq <= seq {
+		g.cancel()
+	}
+	return nil
+}
+
+func (s *Service) GetMetrics(ctx context.Context, req MetricsRequest) (MetricsView, error) {
+	viewID, rowIDs := req.ViewID, req.RowIDs
 	owner, q, rows, err := s.views.Info(viewID)
 	if errors.Is(err, views.ErrGone) {
 		return MetricsView{}, coded(CodeGone, err)
@@ -303,6 +400,11 @@ func (s *Service) GetMetrics(ctx context.Context, viewID string, rowIDs []string
 	if len(asked) == 0 {
 		return MetricsView{Status: "ok", Values: map[string]provider.Usage{}}, nil
 	}
+	ctx, release, ok := s.enterMetrics(ctx, viewID, req.Seq)
+	if !ok {
+		return canceledMetrics(), nil
+	}
+	defer release()
 	ctx, cancel := context.WithTimeout(ctx, metricsTimeout)
 	defer cancel()
 	m, err := src.Metrics(ctx, q, asked)
@@ -321,7 +423,7 @@ func (s *Service) GetMetrics(ctx context.Context, viewID string, rowIDs []string
 	}
 	out := MetricsView{Status: "ok", Timestamp: m.Timestamp, Window: m.Window, Values: map[string]provider.Usage{}}
 	if cut {
-		out.Message = fmt.Sprintf("usage of the first %d rows shown only", MaxMetricRows)
+		out.Limit = MaxMetricRows
 	}
 	for _, id := range asked {
 		if u, ok := m.Values[id]; ok {

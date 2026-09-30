@@ -41,8 +41,8 @@ type metricsAPI struct {
 	ended  chan error
 }
 
-func (m *metricsAPI) GetMetrics(ctx context.Context, _ string, rowIDs []string) (api.MetricsView, error) {
-	m.rowIDs <- rowIDs
+func (m *metricsAPI) GetMetrics(ctx context.Context, req api.MetricsRequest) (api.MetricsView, error) {
+	m.rowIDs <- req.RowIDs
 	<-ctx.Done()
 	m.ended <- ctx.Err()
 	return api.MetricsView{}, ctx.Err()

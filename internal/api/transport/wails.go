@@ -50,9 +50,14 @@ func (w *API) GetResource(ref core.Ref) (*core.Resource, error) {
 }
 
 // GetMetrics takes the call's context: the page cancels a request it no
-// longer waits for (the Wails runtime's CancellablePromise.cancel).
-func (w *API) GetMetrics(ctx context.Context, viewID string, rowIDs []string) (api.MetricsView, error) {
-	return w.a.GetMetrics(ctx, viewID, rowIDs)
+// longer waits for (the Wails runtime's CancellablePromise.cancel). That
+// cancel is lost when it overtakes the call, so the page also sends
+// CancelMetrics, and each request carries its seq.
+func (w *API) GetMetrics(ctx context.Context, req api.MetricsRequest) (api.MetricsView, error) {
+	return w.a.GetMetrics(ctx, req)
+}
+func (w *API) CancelMetrics(viewID string, seq uint64) error {
+	return w.a.CancelMetrics(context.Background(), viewID, seq)
 }
 func (w *API) GetTargetState(provider, target string) (map[string]string, error) {
 	return w.a.GetTargetState(context.Background(), provider, target)

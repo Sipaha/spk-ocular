@@ -2,7 +2,7 @@ import { act, renderHook } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Client } from '../api/client'
 import type { MetricsView } from '../api/types'
-import { METRICS_ABSENT_RETRY_MS, METRICS_INTERVAL_MS, METRICS_SETTLE_MS, useMetrics } from './useMetrics'
+import { METRICS_ABSENT_RETRY_MS, METRICS_INTERVAL_MS, METRICS_KEEP_MS, METRICS_SETTLE_MS, useMetrics } from './useMetrics'
 
 beforeEach(() => vi.useFakeTimers())
 afterEach(() => {
@@ -111,5 +111,55 @@ describe('useMetrics', () => {
     expect(result.current).toBeNull()
     unmount()
     expect(m.calls[2].signal?.aborted).toBe(true)
+  })
+
+  it('a request asked for between polls replaces the scheduled poll: one chain', async () => {
+    const m = slowMetrics()
+    const { rerender } = renderHook(({ ids }) => useMetrics(m.client, 'v1', true, ids), { initialProps: { ids: ['a'] } })
+    await act(async () => {})
+    await m.answer(0, ok({ a: { cpu: 1 } })) // the next poll is due in 15 s
+    await act(async () => vi.advanceTimersByTimeAsync(5_000))
+    rerender({ ids: ['b'] })
+    await act(async () => vi.advanceTimersByTimeAsync(METRICS_SETTLE_MS))
+    expect(m.calls).toHaveLength(2)
+    await m.answer(1, ok({ b: { cpu: 2 } }))
+    for (let i = 0; i < 4; i++) {
+      await act(async () => vi.advanceTimersByTimeAsync(METRICS_INTERVAL_MS - 1))
+      expect(m.calls).toHaveLength(2 + i) // not the old chain's poll
+      await act(async () => vi.advanceTimersByTimeAsync(1))
+      expect(m.calls).toHaveLength(3 + i)
+      await m.answer(2 + i, ok({ b: { cpu: 2 } }))
+    }
+  })
+
+  it('a failed request shows no values as current and says why', async () => {
+    const getMetrics = vi.fn()
+      .mockResolvedValueOnce(ok({ a: { cpu: 1 } }))
+      .mockRejectedValueOnce(Object.assign(new Error('connection refused'), { detail: 'connection refused' }))
+      .mockResolvedValue(ok({ a: { cpu: 3 } }))
+    const client = { getMetrics } as unknown as Client
+    const { result } = renderHook(() => useMetrics(client, 'v1', true, ['a']))
+    await act(async () => {})
+    expect(result.current?.values).toEqual({ a: { cpu: 1 } })
+    await act(async () => vi.advanceTimersByTimeAsync(METRICS_INTERVAL_MS))
+    expect(result.current?.status).toBe('unavailable')
+    expect(result.current?.message).toBe('connection refused')
+    expect(result.current?.values).toEqual({})
+    await act(async () => vi.advanceTimersByTimeAsync(METRICS_INTERVAL_MS))
+    expect(result.current).toEqual(ok({ a: { cpu: 3 } }))
+  })
+
+  it('values older than METRICS_KEEP_MS are not shown after a long hide', async () => {
+    const m = slowMetrics()
+    const { result } = renderHook(() => useMetrics(m.client, 'v1', true, ['a']))
+    await act(async () => {})
+    await m.answer(0, ok({ a: { cpu: 1 } }))
+    Object.defineProperty(document, 'hidden', { value: true, configurable: true })
+    await act(async () => document.dispatchEvent(new Event('visibilitychange')))
+    await act(async () => vi.advanceTimersByTimeAsync(METRICS_KEEP_MS + 1))
+    Object.defineProperty(document, 'hidden', { value: false, configurable: true })
+    await act(async () => document.dispatchEvent(new Event('visibilitychange')))
+    expect(m.calls).toHaveLength(2)
+    expect(result.current?.values).toEqual({}) // not the 10-minute-old sample while asking again
   })
 })
