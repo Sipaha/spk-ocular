@@ -568,6 +568,10 @@ type seenLog struct {
 	// anchorN: records equal to the anchor read up to it (kept apart from
 	// the ring, which may drop them).
 	anchorN int
+	// last, run: the last record read and how many equal ones were read in
+	// a row up to it — a run longer than the ring keeps its whole count.
+	last recordID
+	run  int
 	// partial: the anchor was delivered without its newline (the
 	// container stopped mid-line); the journal may continue it.
 	partial bool
@@ -635,6 +639,11 @@ func (s *seenLog) read(l logLine, partial, move bool) {
 		s.next = (s.next + 1) % maxSeen
 	}
 	s.count[id]++
+	if s.run > 0 && id == s.last {
+		s.run++
+	} else {
+		s.last, s.run = id, 1
+	}
 	if move {
 		s.moveAnchor(id, l.at, l.end, partial)
 	}
@@ -644,7 +653,9 @@ func (s *seenLog) read(l logLine, partial, move bool) {
 }
 
 // moveAnchor: id is the new anchor; its count is of the records equal to
-// it that were read (the ring's, at least one).
+// it that were read: the ring's, or the run's when the anchor ends a run of
+// equal records longer than the ring (at least one). Equal records apart
+// from each other beyond the ring are not counted: those may repeat.
 func (s *seenLog) moveAnchor(id recordID, at, end time.Time, partial bool) {
 	if at.IsZero() {
 		return
@@ -654,6 +665,9 @@ func (s *seenLog) moveAnchor(id recordID, at, end time.Time, partial bool) {
 	}
 	s.anchor, s.anchorAt, s.anchorEnd, s.hasAnchor, s.partial = id, at, end, true, partial
 	s.anchorN = max(s.count[id], 1)
+	if s.run > 0 && s.last == id {
+		s.anchorN = max(s.anchorN, s.run)
+	}
 }
 
 // tear notes a line whose read was cut before its end.

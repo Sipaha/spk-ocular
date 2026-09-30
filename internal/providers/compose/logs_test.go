@@ -1115,3 +1115,27 @@ func TestLogsAnchorEqualToAnEarlierRecord(t *testing.T) {
 		t.Fatalf("stdout %v, stderr %v, gap %v", sk.texts("p-web-1"), sk.texts("p-web-1 (stderr)"), sk.hadState("p-web-1", provider.LogGap))
 	}
 }
+
+// More equal records in a row than the ring holds (same stamp, stream and
+// text): the resume after a restart drops them all, repeats none (Codex,
+// P6 round-5 re-review).
+func TestLogsARunOfEqualRecordsLongerThanTheRingRepeatsNothing(t *testing.T) {
+	e := newLogEnv(t)
+	for range maxSeen + 1 {
+		e.fe.Journal(e.c.ID, 1, e.at(2), "X")
+	}
+	q := follow()
+	q.Channel = channelStdout
+	sk, _ := e.stream(e.containerRef(), q)
+	sk.waitFor(t, "the backlog", func() bool { return sk.isReady() && len(sk.texts("p-web-1")) == maxSeen+1 })
+	e.stopContainer(sk, "p-web-1")
+	e.fe.Journal(e.c.ID, 1, e.at(3), "D")
+	e.startContainer()
+	sk.waitFor(t, "D", func() bool {
+		ts := sk.texts("p-web-1")
+		return len(ts) > 0 && ts[len(ts)-1] == "D"
+	})
+	if n := len(sk.texts("p-web-1")); n != maxSeen+2 || sk.hadState("p-web-1", provider.LogGap) {
+		t.Fatalf("%d records (want %d), gap %v", n, maxSeen+2, sk.hadState("p-web-1", provider.LogGap))
+	}
+}
