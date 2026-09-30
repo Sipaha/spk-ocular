@@ -38,11 +38,15 @@ const (
 	// maxGroupMembers bounds the containers of one log tab.
 	maxGroupMembers = 20
 	backlogWorkers  = 4
-	// backlogBudget is split between a group's members.
+	logRetryFirst   = time.Second
+	logRetryCap     = 10 * time.Second
+)
+
+// Backlog memory (vars for tests): the budget is split between a group's
+// members.
+var (
 	backlogBudget       = 16 << 20
 	backlogMinPerMember = 512 << 10
-	logRetryFirst       = time.Second
-	logRetryCap         = 10 * time.Second
 )
 
 // Timeouts (vars for tests).
@@ -274,6 +278,9 @@ func (g *logGroup) run(ctx context.Context) (err error) {
 	}
 	if !g.q.Follow {
 		for _, m := range initial {
+			if m.sent.State == provider.LogError {
+				continue // its error stays its last word
+			}
 			if err := m.state(provider.LogEnded, "", ""); err != nil {
 				return err
 			}
@@ -455,8 +462,8 @@ func (g *logGroup) backlog(ctx context.Context, ms []*member) error {
 	var lists [][]provider.LogLine
 	var ids []int
 	for _, m := range ms {
-		for _, l := range m.backlogLines {
-			m.cur.add(l.at)
+		for i, l := range m.backlogLines {
+			m.seen.read(l, m.backlogPartial && i == len(m.backlogLines)-1)
 		}
 		m.opened = m.backlogErr == nil || len(m.backlogLines) > 0
 		out, errs := m.split(m.backlogLines)
@@ -531,51 +538,146 @@ func errText(err error) string {
 	return err.Error()
 }
 
-// cursor is what a member delivered, for resuming with since. The
-// Engine's since is positional: it finds the first journal line stamped at
-// or after since and answers everything after it in journal order —
-// including lines of the other stream stamped a little earlier (stdout
-// and stderr are stamped apart; measured on Docker 29). So the cursor
-// keeps the latest time and how many delivered lines follow, in journal
-// order, the line that reached it: the replay starts with exactly those.
-type cursor struct {
-	last time.Time
-	n    int
+// seenLog is what a member read of its journal, for resuming with since.
+// The Engine's since is positional (measured on Docker 29): it finds the
+// first journal line stamped at or after since and answers everything
+// after it in journal order — including lines stamped a little earlier
+// (stdout and stderr are stamped apart), lines outside the user's tail
+// window and lines of the other stream. So neither a time nor a count
+// proves where a replay is: a resume asks since the time of the last line
+// read (the anchor — the answer surely holds it), drops the records it
+// read before (known by time, stream and text) until the anchor, and
+// delivers the rest; an unknown record before the anchor is delivered with
+// a gap (a repeat or an old line beats a loss).
+type seenLog struct {
+	ring []recordID // the last maxSeen records read, circular
+	next int
+	// anchor: the last record read that had a time.
+	anchor    recordID
+	anchorAt  time.Time
+	hasAnchor bool
+	// partial: the anchor was delivered without its newline (the
+	// container stopped mid-line); the journal may continue it.
+	partial bool
+	// torn: the start of a line whose read was cut (its damaged prefix was
+	// not delivered): the resume reads from it.
+	torn       time.Time
+	tornStream engine.Stream
 }
 
-func (c *cursor) add(t time.Time) {
-	switch {
-	case t.After(c.last):
-		c.last, c.n = t, 1
-	case !c.last.IsZero():
-		c.n++
+// maxSeen bounds the records a member remembers: a replay's known part is
+// what was written within the stamps' skew before the anchor.
+const maxSeen = 512
+
+// recordID tells records apart: time, stream, and the text's length and
+// hash.
+type recordID struct {
+	at     int64
+	stream engine.Stream
+	n      int
+	sum    uint64
+}
+
+func idOf(stream engine.Stream, at time.Time, text string) recordID {
+	id := recordID{stream: stream, n: len(text), sum: textSum(text)}
+	if !at.IsZero() {
+		id.at = at.UnixNano()
+	}
+	return id
+}
+
+// textSum is FNV-1a.
+func textSum(text string) uint64 {
+	h := uint64(14695981039346656037)
+	for i := 0; i < len(text); i++ {
+		h ^= uint64(text[i])
+		h *= 1099511628211
+	}
+	return h
+}
+
+// read records a delivered record.
+func (s *seenLog) read(l logLine, partial bool) {
+	id := idOf(l.stream, l.at, l.line.Text)
+	if len(s.ring) < maxSeen {
+		s.ring = append(s.ring, id)
+	} else {
+		s.ring[s.next] = id
+		s.next = (s.next + 1) % maxSeen
+	}
+	s.moveAnchor(id, l.at, partial)
+	if !s.torn.IsZero() && l.stream == s.tornStream && l.at.Equal(s.torn) {
+		s.torn = time.Time{} // the cut line came whole
 	}
 }
 
-// skipper drops the replayed prefix of a resumed stream: its first line
-// must be stamped at the cursor's time, the rest no later. The first line
-// that is not the expected replay ends skipping (a possible repeat beats a
-// possible loss) and a mismatch is a gap.
-type skipper struct {
-	at       time.Time
-	left     int
-	started  bool
-	done     bool
-	mismatch bool
+func (s *seenLog) moveAnchor(id recordID, at time.Time, partial bool) {
+	if !at.IsZero() {
+		s.anchor, s.anchorAt, s.hasAnchor, s.partial = id, at, true, partial
+	}
 }
 
-func (s *skipper) drop(t time.Time) bool {
-	if s == nil || s.done {
-		return false
+// tear notes a line whose read was cut before its end.
+func (s *seenLog) tear(stream engine.Stream, at time.Time) {
+	if !at.IsZero() && (s.torn.IsZero() || at.Before(s.torn)) {
+		s.torn, s.tornStream = at, stream
 	}
-	if s.left > 0 && (!s.started && t.Equal(s.at) || s.started && !t.After(s.at)) {
-		s.started = true
-		s.left--
-		return true
+}
+
+// resumable: there is a position to resume from.
+func (s *seenLog) resumable() bool { return s.hasAnchor || !s.torn.IsZero() }
+
+func (s *seenLog) since() time.Time {
+	if !s.torn.IsZero() && (!s.hasAnchor || s.torn.Before(s.anchorAt)) {
+		return s.torn
 	}
-	s.done = true
-	s.mismatch = s.left > 0
-	return false
+	return s.anchorAt
+}
+
+// replay starts matching an answer since since().
+func (s *seenLog) replay() *replay {
+	r := &replay{s: s, done: !s.hasAnchor, anchor: s.anchor, partial: s.partial, known: make(map[recordID]int, len(s.ring))}
+	for _, id := range s.ring {
+		r.known[id]++
+	}
+	return r
+}
+
+// replay matches the start of a resumed answer against what was read.
+type replay struct {
+	s       *seenLog
+	known   map[recordID]int
+	anchor  recordID
+	partial bool
+	done    bool // the anchor was met: the rest is new
+	gapped  bool
+}
+
+// check decides a record of the answer: drop (read before), or deliver
+// its text from skip on (a continued partial anchor: its new part);
+// unknown: delivered before the anchor was met.
+func (r *replay) check(l logLine) (drop bool, skip int, unknown bool) {
+	if r == nil || r.done {
+		return false, 0, false
+	}
+	id := idOf(l.stream, l.at, l.line.Text)
+	if r.known[id] > 0 {
+		r.known[id]--
+		if id == r.anchor && r.known[id] == 0 {
+			r.done = true
+		}
+		r.s.moveAnchor(id, l.at, r.s.partial && id == r.anchor)
+		return true, 0, false
+	}
+	a := r.anchor
+	if r.partial && id.stream == a.stream && id.at == a.at && len(l.line.Text) > a.n && textSum(l.line.Text[:a.n]) == a.sum {
+		r.done = true
+		return false, a.n, false
+	}
+	if !r.s.torn.IsZero() && l.stream == r.s.tornStream && l.at.Equal(r.s.torn) {
+		return false, 0, false // the cut line, expected
+	}
+	return false, 0, true
 }
 
 // logLine is a record as delivered: the line and its stream and time.
@@ -593,13 +695,14 @@ type member struct {
 	outID, errID int // 0: not shown
 	late         bool
 	opened       bool // a request was answered
-	cur          cursor
+	seen         seenLog
 	sent         provider.LogState
 
-	backlogLines []logLine
-	backlogCut   bool
-	backlogErr   error
-	backlogGaps  []string
+	backlogLines   []logLine
+	backlogPartial bool // the last backlog line is a clean partial one
+	backlogCut     bool
+	backlogErr     error
+	backlogGaps    []string
 }
 
 func (m *member) ids() []int {
@@ -732,16 +835,22 @@ func (m *member) readBacklog(ctx context.Context, per int64) {
 			continue
 		}
 		if rec.Partial && !lr.EndedCleanly() {
+			m.seen.tear(rec.Stream, rec.Time)
 			continue // a damaged prefix: the follow reads the line whole
 		}
 		m.backlogLines = append(m.backlogLines, toLine(rec))
-		size += int64(len(rec.Line))
+		m.backlogPartial = rec.Partial
+		size += int64(len(rec.Line)) + lineKeep
 		if size >= per {
 			m.backlogCut = true
 			return
 		}
 	}
 }
+
+// lineKeep is what keeping a backlog line costs besides its text (the
+// record, its time text, the merge's copies).
+const lineKeep = 192
 
 func toLine(rec engine.LogRecord) logLine {
 	l := provider.LogLine{Text: string(rec.Line)}
@@ -778,11 +887,11 @@ func (m *member) followLoop(ctx context.Context) error {
 			return m.finish(provider.LogError, provider.ClassUnsupported, "the container's log driver (none) keeps no logs")
 		}
 		o := m.options(true)
-		var sk *skipper
+		var rp *replay
 		switch {
-		case m.opened && !m.cur.last.IsZero():
-			o.Since = m.cur.last
-			sk = &skipper{at: m.cur.last, left: m.cur.n}
+		case m.opened && m.seen.resumable():
+			o.Since = m.seen.since()
+			rp = m.seen.replay()
 		case m.opened:
 			o.Tail, o.Since = tailOf(m.g.q), m.g.q.SinceTime // nothing delivered yet: the same window
 		case m.late:
@@ -815,13 +924,26 @@ func (m *member) followLoop(ctx context.Context) error {
 			closeFn()
 			return err
 		}
-		n, err := m.pump(ctx, lr, sk)
+		n, failed, err := m.pump(ctx, lr, rp)
 		closeFn()
 		if err != nil {
 			return err
 		}
 		if n > 0 {
 			backoff = logRetryFirst
+		}
+		if failed {
+			// the error stays said; the journal is read again whatever
+			// the container's state (a stopped one's rest is still there)
+			obj, snap, changed := m.g.f.lookup(m.cid)
+			if snap && obj == nil {
+				return m.finish(provider.LogEnded, "", "the container was removed")
+			}
+			if err := wait(ctx, changed, jitter(backoff)); err != nil {
+				return err
+			}
+			backoff = min(backoff*2, logRetryCap)
+			continue
 		}
 		if err := m.afterEnd(ctx, &backoff); err != nil {
 			return err
@@ -867,9 +989,10 @@ func stoppedText(c *engine.ContainerInspect) string {
 	return "the container is " + c.State.Status + "; its log continues when it starts again"
 }
 
-// pump reads one response into the sink; it returns the lines delivered
-// and an error only when the sink or ctx failed.
-func (m *member) pump(ctx context.Context, lr *engine.LogReader, sk *skipper) (int, error) {
+// pump reads one response into the sink; it returns the lines delivered,
+// whether the read failed (said), and an error only when the sink or ctx
+// failed.
+func (m *member) pump(ctx context.Context, lr *engine.LogReader, rp *replay) (int, bool, error) {
 	// One batch of one source at a time: stdout and stderr lines reach
 	// the sink in the order they arrived.
 	var batch []provider.LogLine
@@ -883,64 +1006,66 @@ func (m *member) pump(ctx context.Context, lr *engine.LogReader, sk *skipper) (i
 		batch, size = nil, 0
 		return nil
 	}
-	reported := false
 	for {
 		rec, err := lr.Next()
 		if err != nil {
 			if ferr := flush(); ferr != nil {
-				return n, ferr
+				return n, false, ferr
 			}
 			if ctx.Err() != nil {
-				return n, ctx.Err()
+				return n, false, ctx.Err()
 			}
 			if !errors.Is(err, io.EOF) {
 				// a broken read or the daemon's own error in the stream: said,
 				// then decided like any end (the cursor stays)
 				if serr := m.state(provider.LogError, engine.ClassOf(err), errText(err)); serr != nil {
-					return n, serr
+					return n, false, serr
 				}
-				return n, nil
+				return n, true, nil
 			}
-			if sk != nil && !sk.done && sk.left > 0 && !reported {
+			if rp != nil && !rp.done && !rp.gapped {
 				// the answer ended before replaying what was delivered
 				if gerr := m.gap("lines around the reconnect may be missing or repeated (the log was rotated?)"); gerr != nil {
-					return n, gerr
+					return n, false, gerr
 				}
 			}
-			return n, nil
+			return n, false, nil
 		}
 		if rec.Gap != "" {
 			if err := flush(); err != nil {
-				return n, err
+				return n, false, err
 			}
 			if err := m.gap(rec.Gap); err != nil {
-				return n, err
+				return n, false, err
 			}
 			if err := m.state(provider.LogStreaming, "", ""); err != nil {
-				return n, err
+				return n, false, err
 			}
 			continue
 		}
 		if rec.Partial && !lr.EndedCleanly() {
+			m.seen.tear(rec.Stream, rec.Time)
 			continue // the next request replays it whole
 		}
-		if sk.drop(rec.Time) {
+		l := toLine(rec)
+		drop, skip, unknown := rp.check(l)
+		if drop {
 			continue
 		}
-		if sk != nil && sk.mismatch && !reported {
-			reported = true
+		if unknown && !rp.gapped {
+			rp.gapped = true
 			if err := flush(); err != nil {
-				return n, err
+				return n, false, err
 			}
-			if err := m.gap("lines around the reconnect may be missing or repeated (the log was rotated?)"); err != nil {
-				return n, err
+			if err := m.gap("lines around the reconnect may be missing, repeated or out of order (the log was rotated?)"); err != nil {
+				return n, false, err
 			}
 			if err := m.state(provider.LogStreaming, "", ""); err != nil {
-				return n, err
+				return n, false, err
 			}
 		}
-		l := toLine(rec)
-		m.cur.add(l.at)
+		m.seen.read(l, rec.Partial)
+		l.line.Text = l.line.Text[skip:]
 		to := m.outID
 		if l.stream == engine.Stderr && !m.tty {
 			to = m.errID
@@ -948,7 +1073,7 @@ func (m *member) pump(ctx context.Context, lr *engine.LogReader, sk *skipper) (i
 		if to != 0 {
 			if to != batchID {
 				if err := flush(); err != nil {
-					return n, err
+					return n, false, err
 				}
 				batchID = to
 			}
@@ -960,7 +1085,7 @@ func (m *member) pump(ctx context.Context, lr *engine.LogReader, sk *skipper) (i
 		// (bytes of an incomplete frame do not count) — deliver now.
 		if len(batch) >= batchLines || size >= batchBytes || lr.Pending() == 0 {
 			if err := flush(); err != nil {
-				return n, err
+				return n, false, err
 			}
 		}
 	}

@@ -88,6 +88,10 @@ type logEntry struct {
 	stream byte
 	at     time.Time
 	text   string
+	// partial: a message without its newline (the driver's last one of a
+	// container that stopped mid-line); the next message of the stream
+	// continues the line when read.
+	partial bool
 }
 
 // logOpts: what a logs request asked for.
@@ -106,6 +110,9 @@ func (o logOpts) wants(e logEntry) bool {
 
 func (o logOpts) format(e logEntry) []byte {
 	text := e.text + "\n"
+	if e.partial {
+		text = e.text
+	}
 	if o.stamps {
 		text = e.at.UTC().Format(time.RFC3339Nano) + " " + text
 	}
@@ -433,11 +440,19 @@ func (e *Engine) AppendLogs(id string, data []byte) {
 // stderr) and sends it to the followers that asked for its stream. A
 // container with a journal is served from it (see logState.journal).
 func (e *Engine) Journal(id string, stream byte, at time.Time, text string) {
+	e.journal(id, logEntry{stream: stream, at: at, text: text})
+}
+
+// JournalPartial adds a message without its newline (see logEntry.partial).
+func (e *Engine) JournalPartial(id string, stream byte, at time.Time, text string) {
+	e.journal(id, logEntry{stream: stream, at: at, text: text, partial: true})
+}
+
+func (e *Engine) journal(id string, ent logEntry) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	st := e.logState(id)
 	st.journal = true
-	ent := logEntry{stream: stream, at: at, text: text}
 	st.entries = append(st.entries, ent)
 	for ch, o := range st.followers {
 		if !o.wants(ent) {
@@ -463,6 +478,15 @@ func (e *Engine) RotateJournal(id string, t time.Time) {
 		}
 	}
 	st.entries = keep
+}
+
+// DropJournal drops the first n journal lines (a rotation that cut
+// between lines stamped alike).
+func (e *Engine) DropJournal(id string, n int) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	st := e.logState(id)
+	st.entries = append([]logEntry(nil), st.entries[min(n, len(st.entries)):]...)
 }
 
 // ResumeLogs lets follows of the container follow again (it started).

@@ -840,14 +840,26 @@ func TestFeedFirstReadyWaitsForReconciliation(t *testing.T) {
 	sk.waitFor(t, "both", hasRows(a.ID, b.ID))
 	sk.mu.Lock()
 	defer sk.mu.Unlock()
+	// replay the deltas in order: b is a row when Ready first comes
+	rows := map[string]bool{}
 	for _, d := range sk.deltas {
+		if d.Reset {
+			clear(rows)
+		}
+		for _, r := range d.Upserts {
+			rows[r.ID] = true
+		}
+		for _, id := range d.Deletes {
+			delete(rows, id)
+		}
 		if d.Status != nil && d.Status.State == provider.StatusReady {
-			if _, ok := sk.rows[b.ID]; !ok {
+			if !rows[b.ID] {
 				t.Fatal("Ready without b")
 			}
-			break
+			return
 		}
 	}
+	t.Fatal("no Ready")
 }
 
 // Review P2: a read that succeeds after a failed one recovers the view

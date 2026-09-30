@@ -722,3 +722,207 @@ func TestLogsResumeWithStreamsStampedOutOfOrder(t *testing.T) {
 		t.Fatalf("stdout %v, gap %v", sk.texts("p-web-1"), sk.hadState("p-web-1", provider.LogGap))
 	}
 }
+
+// stopContainer: the container exits and its follows end; the sink shows
+// the member waiting.
+func (e *logEnv) stopContainer(sk *logSink, label string) {
+	e.t.Helper()
+	e.c.State = engine.ContainerState{Status: "exited"}
+	e.fe.PutContainer(e.c)
+	e.fe.EndLogs(e.c.ID)
+	e.fe.Emit(containerEvent("die", e.c))
+	sk.waitFor(e.t, "waiting", func() bool { return sk.lastState(label).State == provider.LogWaiting })
+}
+
+func (e *logEnv) startContainer() {
+	e.c.State = engine.ContainerState{Status: "running", Running: true}
+	e.fe.PutContainer(e.c)
+	e.fe.ResumeLogs(e.c.ID)
+	e.fe.Emit(containerEvent("start", e.c))
+}
+
+// Re-review P2: the container stopped mid-line ("A" was delivered as its
+// last line); after the restart the journal continues that line, and the
+// replay reads it joined ("AB") with A's time. What follows A is new.
+func TestLogsPartialLastLineContinuesAfterRestart(t *testing.T) {
+	e := newLogEnv(t)
+	e.fe.Journal(e.c.ID, 1, e.at(1), "first")
+	e.fe.JournalPartial(e.c.ID, 1, e.at(2), "A")
+	e.c.State = engine.ContainerState{Status: "exited"}
+	e.fe.PutContainer(e.c)
+	e.fe.EndLogs(e.c.ID)
+	q := follow()
+	q.Channel = channelStdout
+	sk, _ := e.stream(e.containerRef(), q)
+	sk.waitFor(t, "the backlog", func() bool {
+		return sk.isReady() && eq(sk.texts("p-web-1"), "first", "A") && sk.lastState("p-web-1").State == provider.LogWaiting
+	})
+	e.fe.Journal(e.c.ID, 1, e.at(3), "B")
+	e.fe.Journal(e.c.ID, 1, e.at(4), "C")
+	e.startContainer()
+	sk.waitFor(t, "the rest of the line", func() bool { return eq(sk.texts("p-web-1"), "first", "A", "B", "C") })
+	if sk.hadState("p-web-1", provider.LogGap) {
+		t.Fatal("a clean continuation reported a gap")
+	}
+}
+
+// Re-review P2: a stdout line began (t1), a stderr line was delivered (t2),
+// then the stream was cut inside the stdout line's next frame. The resume
+// must read from the line's start, not from the latest delivered time.
+func TestLogsCutInsideAnInterleavedLineResumesFromItsStart(t *testing.T) {
+	e := newLogEnv(t)
+	e.fe.JournalPartial(e.c.ID, 1, e.at(1), "A")
+	e.fe.Journal(e.c.ID, 2, e.at(2), "E")
+	e.fe.Journal(e.c.ID, 1, e.at(3), "B")
+	cont := enginefake.Frame(1, append(stamped(e.at(3), "B"), '\n'))
+	body := append(append(enginefake.Frame(1, stamped(e.at(1), "A")), enginefake.Frame(2, append(stamped(e.at(2), "E"), '\n'))...), cont[:8+10]...)
+	e.fe.AddHook(logsHook(e.c.ID, false, 1, nil, false)) // an empty backlog
+	e.fe.AddHook(logsHook(e.c.ID, true, 1, body, false))
+	sk, _ := e.stream(e.containerRef(), follow())
+	sk.waitFor(t, "the whole line", func() bool {
+		return eq(sk.texts("p-web-1"), "AB") && eq(sk.texts("p-web-1 (stderr)"), "E")
+	})
+}
+
+// Re-review P2: the backlog window (tail 1) left out a line written before
+// it but stamped later; the positional replay starts with that line. The
+// delivered line is not repeated.
+func TestLogsResumeAfterATailWindowRepeatsNothing(t *testing.T) {
+	e := newLogEnv(t)
+	e.fe.Journal(e.c.ID, 1, e.at(3), "A")
+	e.fe.Journal(e.c.ID, 2, e.at(2), "B") // written after A, stamped before it
+	q := follow()
+	q.TailLines = 1
+	sk, _ := e.stream(e.containerRef(), q)
+	sk.waitFor(t, "the backlog", func() bool { return sk.isReady() && eq(sk.texts("p-web-1 (stderr)"), "B") })
+	e.stopContainer(sk, "p-web-1 (stderr)")
+	e.fe.Journal(e.c.ID, 2, e.at(4), "C")
+	e.startContainer()
+	sk.waitFor(t, "C", func() bool { return len(sk.texts("p-web-1 (stderr)")) >= 2 })
+	if got := sk.texts("p-web-1 (stderr)"); !eq(got, "B", "C") {
+		t.Fatalf("stderr %v", got)
+	}
+}
+
+// Re-review P2: lines stamped alike, a tail window of the last one: the
+// replay's first line has the cursor's time but is not the delivered one.
+func TestLogsResumeAfterATailWindowOfEqualStampsRepeatsNothing(t *testing.T) {
+	e := newLogEnv(t)
+	e.fe.Journal(e.c.ID, 1, e.at(2), "A")
+	e.fe.Journal(e.c.ID, 1, e.at(2), "B")
+	q := follow()
+	q.TailLines = 1
+	q.Channel = channelStdout
+	sk, _ := e.stream(e.containerRef(), q)
+	sk.waitFor(t, "the backlog", func() bool { return sk.isReady() && eq(sk.texts("p-web-1"), "B") })
+	e.stopContainer(sk, "p-web-1")
+	e.fe.Journal(e.c.ID, 1, e.at(3), "C")
+	e.startContainer()
+	sk.waitFor(t, "C", func() bool {
+		ts := sk.texts("p-web-1")
+		return len(ts) > 0 && ts[len(ts)-1] == "C"
+	})
+	n := 0
+	for _, s := range sk.texts("p-web-1") {
+		if s == "B" {
+			n++
+		}
+	}
+	if n != 1 {
+		t.Fatalf("B delivered %d times: %v", n, sk.texts("p-web-1"))
+	}
+}
+
+// Re-review P2: one channel (stderr); the journal has a later-stamped
+// stdout line before the stderr ones. The replay repeats nothing.
+func TestLogsResumeOfOneChannelRepeatsNothing(t *testing.T) {
+	e := newLogEnv(t)
+	e.fe.Journal(e.c.ID, 1, e.at(3), "out")
+	e.fe.Journal(e.c.ID, 2, e.at(1), "e1")
+	e.fe.Journal(e.c.ID, 2, e.at(2), "e2")
+	q := follow()
+	q.Channel = channelStderr
+	sk, _ := e.stream(e.containerRef(), q)
+	sk.waitFor(t, "the backlog", func() bool { return sk.isReady() && eq(sk.texts("p-web-1"), "e1", "e2") })
+	e.stopContainer(sk, "p-web-1")
+	e.fe.Journal(e.c.ID, 2, e.at(4), "e3")
+	e.startContainer()
+	sk.waitFor(t, "e3", func() bool { return len(sk.texts("p-web-1")) >= 3 })
+	if got := sk.texts("p-web-1"); !eq(got, "e1", "e2", "e3") || sk.hadState("p-web-1", provider.LogGap) {
+		t.Fatalf("stderr %v, gap %v", got, sk.hadState("p-web-1", provider.LogGap))
+	}
+}
+
+// Re-review P2: a rotation cut between two lines stamped alike (A gone, B
+// kept) and new lines came with the same stamp: none is lost.
+func TestLogsRotationBetweenEqualStampsLosesNothing(t *testing.T) {
+	e := newLogEnv(t)
+	e.fe.Journal(e.c.ID, 1, e.at(2), "A")
+	e.fe.Journal(e.c.ID, 1, e.at(2), "B")
+	q := follow()
+	q.Channel = channelStdout
+	sk, _ := e.stream(e.containerRef(), q)
+	sk.waitFor(t, "the backlog", func() bool { return sk.isReady() && eq(sk.texts("p-web-1"), "A", "B") })
+	e.stopContainer(sk, "p-web-1")
+	e.fe.DropJournal(e.c.ID, 1)
+	e.fe.Journal(e.c.ID, 1, e.at(2), "C")
+	e.fe.Journal(e.c.ID, 1, e.at(3), "D")
+	e.startContainer()
+	sk.waitFor(t, "C and D", func() bool { return eq(sk.texts("p-web-1"), "A", "B", "C", "D") })
+}
+
+// Re-review P2: a read that failed on a stopped container is said and
+// retried — the rest of its journal is still there to read; waiting for
+// a start would hide both the error and the lines.
+func TestLogsFailedReadOfAStoppedContainerIsRetried(t *testing.T) {
+	e := newLogEnv(t)
+	e.fe.Journal(e.c.ID, 1, e.at(1), "a")
+	e.fe.Journal(e.c.ID, 1, e.at(2), "b")
+	e.c.State = engine.ContainerState{Status: "exited"}
+	e.fe.PutContainer(e.c)
+	e.fe.EndLogs(e.c.ID)
+	e.fe.AddHook(logsHook(e.c.ID, false, 1, enginefake.Frame(1, append(stamped(e.at(1), "a"), '\n')), false))
+	e.fe.AddHook(logsHook(e.c.ID, true, 1, enginefake.Frame(3, []byte("the log file is corrupt")), false))
+	q := follow()
+	q.Channel = channelStdout
+	sk, _ := e.stream(e.containerRef(), q)
+	sk.waitFor(t, "the error", func() bool { return sk.hadState("p-web-1", provider.LogError) })
+	if st := sk.lastState("p-web-1"); st.State != provider.LogError {
+		t.Fatalf("the error was replaced by %v", st)
+	}
+	sk.waitFor(t, "the rest after a retry", func() bool { return eq(sk.texts("p-web-1"), "a", "b") })
+}
+
+// Re-review P2: a finite read's error stays the member's last state (not
+// replaced by "ended").
+func TestLogsOnceKeepsItsError(t *testing.T) {
+	e := newLogEnv(t)
+	e.fe.AddHook(logsHook(e.c.ID, false, 1, enginefake.Frame(3, []byte("the log file is corrupt")), false))
+	sk := newLogSink()
+	if err := e.s.StreamLogs(t.Context(), e.containerRef(), provider.LogQuery{TailLines: 10, Channel: channelStdout}, sk); err != nil {
+		t.Fatal(err)
+	}
+	if st := sk.lastState("p-web-1"); st.State != provider.LogError || !strings.Contains(st.Message, "corrupt") {
+		t.Fatalf("last state %v", st)
+	}
+}
+
+// Re-review P2: the backlog budget counts each line's keeping, not only
+// its text: many empty lines are bounded too (and said).
+func TestLogsBacklogBudgetCountsEmptyLines(t *testing.T) {
+	old := backlogBudget
+	backlogBudget, backlogMinPerMember = 64<<10, 64<<10
+	t.Cleanup(func() { backlogBudget, backlogMinPerMember = old, 512<<10 })
+	e := newLogEnv(t)
+	for i := range 5000 {
+		e.fe.Journal(e.c.ID, 1, e.at(1).Add(time.Duration(i)), "")
+	}
+	q := provider.LogQuery{TailLines: provider.TailAll, Channel: channelStdout}
+	sk := newLogSink()
+	if err := e.s.StreamLogs(t.Context(), e.containerRef(), q, sk); err != nil {
+		t.Fatal(err)
+	}
+	if n := len(sk.texts("p-web-1")); n >= 5000 || !sk.hadState("p-web-1", provider.LogTruncated) {
+		t.Fatalf("%d lines kept, truncated said: %v", n, sk.hadState("p-web-1", provider.LogTruncated))
+	}
+}

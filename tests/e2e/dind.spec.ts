@@ -62,7 +62,10 @@ test('a stop and a start on the daemon show live; Read again keeps the rows', as
     docker('start', 'ocular-other-idle-1')
   }
   await expect(idle).toContainText('running')
+  // Read again reaches the provider and succeeds (not unsupported or gone)
+  const resync = page.waitForResponse((r) => r.url().endsWith('/api/ResyncView'))
   await page.getByRole('button', { name: /Read again/ }).click()
+  expect((await resync).status()).toBe(200)
   await expect(idle).toContainText('running')
   await expect(page.getByRole('alert')).toHaveCount(0)
 })
@@ -82,4 +85,11 @@ test('logs of a service: both replicas, stdout and stderr, live', async ({ page 
   await expect(logRows(page).filter({ hasText: /^\s*2\s+line \d+/ }).first()).toBeAttached()
   await expect(logRows(page).filter({ hasText: /2 \(stderr\)\s*err \d+/ }).first()).toBeAttached()
   await expect(panel.getByRole('combobox').first()).toHaveValue('*') // stdout and stderr by default
+  // live: a line newer than any shown now arrives (the logger prints one a second)
+  const newest = async () => {
+    const texts = await logRows(page).allInnerTexts()
+    return Math.max(0, ...texts.map((t) => Number(/^\s*1\s+line (\d+)/.exec(t)?.[1] ?? 0)))
+  }
+  const seen = await newest()
+  await expect.poll(newest, { timeout: 15_000 }).toBeGreaterThan(seen)
 })
