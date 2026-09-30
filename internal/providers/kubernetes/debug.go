@@ -27,9 +27,10 @@ import (
 // as kubectl debug -it --image --target does, and a terminal attached to
 // it. The container's name is chosen at the review and carried in a signed
 // grant (the plan's Expect), spent before the write: one review adds at
-// most one container. stdinOnce: the end of the first attach (exit, a
-// closed tab, a lost connection) closes the shell's stdin — an abandoned
-// debugger does not live on in the pod.
+// most one container. No stdinOnce (as kubectl debug): with a tty the end
+// of an attach never reaches the shell (checked on kind) — a closed tab
+// ends it by the terminal's hang-up keys (streams), and after a lost
+// connection to the cluster the debugger keeps running for "Reconnect".
 
 const (
 	defaultDebugImage = "busybox:1.36"
@@ -271,8 +272,9 @@ func (g debugGrant) ours(c map[string]any) bool {
 	if target == noTarget {
 		target = ""
 	}
-	once, _ := c["stdinOnce"].(bool)
-	return str(c, "image") == g.Image && str(c, "targetContainerName") == target && once
+	stdin, _ := c["stdin"].(bool)
+	tty, _ := c["tty"].(bool)
+	return str(c, "image") == g.Image && str(c, "targetContainerName") == target && stdin && tty
 }
 
 // runDebug: the grant checked, the pod read by UID; a container of the
@@ -359,7 +361,7 @@ func (s *session) runDebug(ctx context.Context, def *kindDef, run provider.Actio
 func (s *session) writeDebug(ctx context.Context, def *kindDef, u *unstructured.Unstructured, g debugGrant) error {
 	ctx, cancel := context.WithTimeout(ctx, getTimeout)
 	defer cancel()
-	c := map[string]any{"name": g.Container, "image": g.Image, "stdin": true, "stdinOnce": true, "tty": true, "imagePullPolicy": "IfNotPresent"}
+	c := map[string]any{"name": g.Container, "image": g.Image, "stdin": true, "tty": true, "imagePullPolicy": "IfNotPresent"}
 	if g.Target != noTarget {
 		c["targetContainerName"] = g.Target
 	}

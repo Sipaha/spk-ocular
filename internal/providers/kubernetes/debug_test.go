@@ -222,7 +222,7 @@ func TestDebugAddsOneEphemeralContainerAndOpensItsTerminal(t *testing.T) {
 	assert.Equal(t, "7", bodies[0].Metadata.ResourceVersion)
 	assert.Equal(t, []map[string]any{{
 		"name": name, "image": "busybox:1.36", "targetContainerName": "side",
-		"stdin": true, "stdinOnce": true, "tty": true, "imagePullPolicy": "IfNotPresent",
+		"stdin": true, "tty": true, "imagePullPolicy": "IfNotPresent",
 	}}, bodies[0].Spec.EphemeralContainers)
 
 	// One review, one container: the same plan again is refused.
@@ -278,12 +278,12 @@ func TestDebugFailedWritesAreClassifiedByLookingAgain(t *testing.T) {
 		}, 2, "", ""},
 		"ours landed": {conflictPod, func(t *testing.T, c *dynamicfake.FakeDynamicClient, n string) func() {
 			return bumpVersion(t, c, podGVR, "web-1", "8", func(u *unstructured.Unstructured) {
-				u.Object["spec"].(map[string]any)["ephemeralContainers"] = []any{map[string]any{"name": n, "image": "busybox:1.36", "targetContainerName": "app", "stdinOnce": true}}
+				u.Object["spec"].(map[string]any)["ephemeralContainers"] = []any{map[string]any{"name": n, "image": "busybox:1.36", "targetContainerName": "app", "stdin": true, "tty": true}}
 			})
 		}, 1, "", ""},
 		"another of that name": {conflictPod, func(t *testing.T, c *dynamicfake.FakeDynamicClient, n string) func() {
 			return bumpVersion(t, c, podGVR, "web-1", "8", func(u *unstructured.Unstructured) {
-				u.Object["spec"].(map[string]any)["ephemeralContainers"] = []any{map[string]any{"name": n, "image": "other", "targetContainerName": "app", "stdinOnce": true}} // the image alone differs
+				u.Object["spec"].(map[string]any)["ephemeralContainers"] = []any{map[string]any{"name": n, "image": "other", "targetContainerName": "app", "stdin": true, "tty": true}} // the image alone differs
 			})
 		}, 1, provider.ClassConflict, "debug.nameTaken"},
 		"replaced": {invalid422, func(t *testing.T, c *dynamicfake.FakeDynamicClient, _ string) func() {

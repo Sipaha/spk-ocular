@@ -131,7 +131,7 @@ var messageTexts = map[string]string{
 	"debug.effect":                   "Debug container {container} with image {image} is added to pod {name}.",
 	"debug.sees":                     "It sees the processes of container {target} and shares the pod's network.",
 	"debug.seesAll":                  "It sees the processes of all the pod's containers and shares the pod's network.",
-	"debug.stays":                    "It cannot be removed: it stays in the pod's spec until the pod is recreated. It ends when its terminal ends — exit, a closed tab or a lost connection — and cannot be reconnected then.",
+	"debug.stays":                    "It cannot be removed: it stays in the pod's spec until the pod is recreated. It ends when you leave its shell or close its tab (Ctrl-C and Ctrl-D are sent). After a lost connection, or with a nested shell or a program ignoring those keys, it keeps running: “Reconnect” reaches it again. An ended debugger cannot be restarted.",
 	"debug.terminal":                 "A terminal opens in it. If the image takes longer than 2 minutes to pull, the tab stops waiting: the container starts later and waits for “Reconnect”.",
 	"debug.registry":                 "The node pulls the image from its registry: in a closed network use an image the node can reach.",
 	"debug.restricted":               "Namespace {namespace} enforces the restricted Pod Security level: a debug container without a securityContext is rejected.",

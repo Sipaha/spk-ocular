@@ -29,7 +29,7 @@ import (
 // status yet).
 func withDebugger(st map[string]any) func(map[string]any) {
 	return func(o map[string]any) {
-		o["spec"].(map[string]any)["ephemeralContainers"] = []any{map[string]any{"name": "debugger", "image": "busybox:1.36", "stdin": true, "stdinOnce": true, "tty": true}}
+		o["spec"].(map[string]any)["ephemeralContainers"] = []any{map[string]any{"name": "debugger", "image": "busybox:1.36", "stdin": true, "tty": true}}
 		if st != nil {
 			o["status"].(map[string]any)["ephemeralContainerStatuses"] = []any{map[string]any{"name": "debugger", "state": st}}
 		}
