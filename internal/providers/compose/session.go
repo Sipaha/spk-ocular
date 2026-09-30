@@ -100,6 +100,7 @@ type session struct {
 	backoff       []time.Duration
 
 	mu     sync.Mutex
+	osType string // the daemon's, once asked (metrics.go)
 	feeds  [feedCount]*feed
 	timer  *time.Timer
 	closed bool

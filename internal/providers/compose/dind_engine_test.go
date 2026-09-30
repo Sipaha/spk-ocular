@@ -204,3 +204,48 @@ func TestDindExec(t *testing.T) {
 		t.Fatal("Run outlived its context")
 	}
 }
+
+// Usage of the fixture's logger replicas and of the service: CPU in cores
+// from the daemon's two points, memory > 0, the sum of both replicas.
+func TestDindMetrics(t *testing.T) {
+	host := dindHost(t)
+	s := dindSession(t, host)
+	ctx, cancel := context.WithTimeout(t.Context(), time.Minute)
+	defer cancel()
+	ref := core.Ref{Provider: ProviderID, Target: "context:dind", Scope: "ocular-fixture", Kind: KindServices, Name: "ocular-fixture/logger"}
+	info, err := s.ExecInfo(ctx, ref) // the running replicas
+	if err != nil || len(info.Instances) != 2 {
+		t.Fatalf("logger replicas: %+v %v", info, err)
+	}
+	q := provider.Query{Kind: KindContainers, Scope: core.ScopeSel{Mode: core.ScopeAll}}
+	ids := []string{info.Instances[0].ID, info.Instances[1].ID}
+	t0 := time.Now()
+	m, err := s.Metrics(ctx, q, ids)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Logf("two containers sampled in %s, window %s", time.Since(t0), m.Window)
+	var cpu, mem float64
+	for _, id := range ids {
+		u, ok := m.Values[id]
+		if !ok || u.CPU == nil || u.Memory == nil || *u.CPU < 0 || *u.CPU > 16 || *u.Memory <= 0 {
+			t.Fatalf("usage of %s: %+v", id, u)
+		}
+		cpu += *u.CPU
+		mem += *u.Memory
+	}
+	sq := provider.Query{Kind: KindServices, Scope: core.ScopeSel{Mode: core.ScopeAll}}
+	sm, err := s.Metrics(ctx, sq, []string{"ocular-fixture/logger"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	u := sm.Values["ocular-fixture/logger"]
+	if u.CPU == nil || u.Memory == nil || u.CPUPartial || u.MemoryPartial {
+		t.Fatalf("service usage: %+v", u)
+	}
+	t.Logf("members: %.4f cores, %.0f bytes; service: %.4f cores, %.0f bytes", cpu, mem, *u.CPU, *u.Memory)
+	// another second: the sum is of the same order, not equal
+	if *u.Memory < mem/2 || *u.Memory > mem*2 {
+		t.Errorf("service memory %v vs members %v", *u.Memory, mem)
+	}
+}

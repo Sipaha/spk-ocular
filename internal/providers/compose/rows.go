@@ -368,6 +368,7 @@ func (x *index) containerRow(c *engine.ContainerInspect, now time.Time) (core.Ro
 		core.TextCell(c.Config.Image),
 		textOrNull(strings.Join(publishedPorts(c), ", ")),
 		timeCell(c.Created.Time),
+		{}, {}, // metrics come from GetMetrics
 	}
 	return core.Row{ID: c.ID, Rev: x.containerRev(c), Ref: containerRef(c), Cells: cells, Health: h}, next
 }
@@ -381,6 +382,7 @@ func (x *index) serviceRow(s *service, now time.Time) (core.Row, time.Time) {
 		ratio(running, len(s.members)),
 		core.TextCell(groupStatus(h, running)),
 		core.TextCell(strings.Join(memberImages(s.members), ", ")),
+		{}, {}, // metrics come from GetMetrics
 	}
 	return core.Row{ID: s.key, Rev: x.membersRev(s.members), Ref: serviceRef(s.project, s.name), Cells: cells, Health: h}, next
 }

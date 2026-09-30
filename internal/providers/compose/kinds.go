@@ -38,6 +38,8 @@ func kindDescriptors() []core.KindDescriptor {
 				{ID: "running", Title: "Running", Type: core.ColRatio, Width: 80},
 				{ID: "status", Title: "Status", Type: core.ColStatus, Width: 150},
 				{ID: "images", Title: "Images", Type: core.ColText},
+				{ID: "cpu", Title: "CPU", Type: core.ColCPU, Width: 70, Metric: true},
+				{ID: "memory", Title: "Memory", Type: core.ColBytes, Width: 80, Metric: true},
 			},
 		},
 		{
@@ -55,6 +57,8 @@ func kindDescriptors() []core.KindDescriptor {
 				{ID: "image", Title: "Image", Type: core.ColText},
 				{ID: "ports", Title: "Ports", Type: core.ColText},
 				{ID: "age", Title: "Age", Type: core.ColAge, Width: 70},
+				{ID: "cpu", Title: "CPU", Type: core.ColCPU, Width: 70, Metric: true},
+				{ID: "memory", Title: "Memory", Type: core.ColBytes, Width: 80, Metric: true},
 			},
 		},
 		{

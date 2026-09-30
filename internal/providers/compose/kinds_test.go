@@ -31,8 +31,8 @@ func TestKindDescriptors(t *testing.T) {
 		scopeCol            string
 	}{
 		{KindProjects, "Compose", "Project", false, false, false, []string{"name", "services", "containers", "running", "workingDir", "configFiles"}, ""},
-		{KindServices, "Compose", "Service", true, true, true, []string{"name", "project", "running", "status", "images"}, "project"},
-		{KindContainers, "Compose", "Container", true, false, true, []string{"name", "project", "service", "number", "status", "health", "restarts", "image", "ports", "age"}, "project"},
+		{KindServices, "Compose", "Service", true, true, true, []string{"name", "project", "running", "status", "images", "cpu", "memory"}, "project"},
+		{KindContainers, "Compose", "Container", true, false, true, []string{"name", "project", "service", "number", "status", "health", "restarts", "image", "ports", "age", "cpu", "memory"}, "project"},
 		{KindNetworks, "Engine", "Network", true, false, false, []string{"name", "project", "driver", "netScope", "containers", "age"}, "project"},
 		{KindVolumes, "Engine", "Volume", true, false, false, []string{"name", "project", "driver", "usedBy", "age"}, "project"},
 		{KindImages, "Engine", "Image", false, false, false, []string{"tags", "id", "size", "usedBy", "age"}, ""},
