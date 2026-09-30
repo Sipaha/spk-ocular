@@ -5,9 +5,11 @@ package transport
 import (
 	"context"
 
+	"github.com/spk/spk-ocular/internal/agentgrant"
 	"github.com/spk/spk-ocular/internal/api"
 	"github.com/spk/spk-ocular/internal/core"
 	"github.com/spk/spk-ocular/internal/forwards"
+	"github.com/spk/spk-ocular/internal/store"
 	"github.com/spk/spk-ocular/internal/views"
 )
 
@@ -131,3 +133,25 @@ func (w *API) ListForwards() ([]forwards.Info, error) {
 	return w.a.ListForwards(context.Background())
 }
 func (w *API) StreamBase() (string, error) { return w.a.StreamBase(context.Background()) }
+func (w *API) AgentAccessStatus() (api.AgentAccessStatus, error) {
+	return w.a.AgentAccessStatus(context.Background())
+}
+func (w *API) ListAgentGrants() ([]agentgrant.Target, error) {
+	return w.a.ListAgentGrants(context.Background())
+}
+func (w *API) SaveAgentGrants(req api.SaveAgentGrantsRequest) error {
+	return w.a.SaveAgentGrants(context.Background(), req)
+}
+func (w *API) RevokeAllAgentGrants() error { return w.a.RevokeAllAgentGrants(context.Background()) }
+func (w *API) ReconfirmAgentTarget(provider, target string) error {
+	return w.a.ReconfirmAgentTarget(context.Background(), provider, target)
+}
+func (w *API) ListAgentPending() ([]api.AgentPending, error) {
+	return w.a.ListAgentPending(context.Background())
+}
+func (w *API) DecideAgentPending(req api.DecideAgentPendingRequest) error {
+	return w.a.DecideAgentPending(context.Background(), req)
+}
+func (w *API) ListAgentAudit(f store.AuditFilter) ([]store.AuditEntry, error) {
+	return w.a.ListAgentAudit(context.Background(), f)
+}

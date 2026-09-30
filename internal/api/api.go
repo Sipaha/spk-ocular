@@ -8,10 +8,12 @@ import (
 	"errors"
 	"time"
 
+	"github.com/spk/spk-ocular/internal/agentgrant"
 	"github.com/spk/spk-ocular/internal/core"
 	"github.com/spk/spk-ocular/internal/events"
 	"github.com/spk/spk-ocular/internal/forwards"
 	"github.com/spk/spk-ocular/internal/provider"
+	"github.com/spk/spk-ocular/internal/store"
 	"github.com/spk/spk-ocular/internal/views"
 )
 
@@ -121,6 +123,20 @@ type API interface {
 	// StreamBase: where streams are served (desktop: a loopback URL with a
 	// token; browser: a path on this server).
 	StreamBase(ctx context.Context) (string, error)
+
+	// Agent access (P14, agentaccess.go): the socket's state and the line
+	// for an agent's instructions; the grants per target (saved whole;
+	// Reconfirm grants them for the identity the target has now); the
+	// agents' destructive plans waiting for the user and the decision; the
+	// journal, newest first. EventAgent*Changed say when to reload.
+	AgentAccessStatus(ctx context.Context) (AgentAccessStatus, error)
+	ListAgentGrants(ctx context.Context) ([]agentgrant.Target, error)
+	SaveAgentGrants(ctx context.Context, req SaveAgentGrantsRequest) error
+	RevokeAllAgentGrants(ctx context.Context) error
+	ReconfirmAgentTarget(ctx context.Context, provider, target string) error
+	ListAgentPending(ctx context.Context) ([]AgentPending, error)
+	DecideAgentPending(ctx context.Context, req DecideAgentPendingRequest) error
+	ListAgentAudit(ctx context.Context, f store.AuditFilter) ([]store.AuditEntry, error)
 }
 
 type MetricsView struct {

@@ -62,6 +62,11 @@ type Service struct {
 	// its metrics gate.
 	beforeMetricsGate func()
 
+	// agent is the agent socket's side the UI manages (nil: not served).
+	agent AgentControl
+	// agentWatches: the slots of agents' snapshot watches (AgentCall).
+	agentWatches chan struct{}
+
 	// revKey keys ConfigRev: configuration hashes cover credentials, so the
 	// page gets only a keyed digest it cannot test guesses against.
 	revKey []byte
@@ -74,7 +79,7 @@ func NewService(reg *provider.Registry, st *store.Store, em *events.Emitter, o O
 	if _, err := rand.Read(key); err != nil {
 		panic(err) // crypto/rand does not fail on supported platforms
 	}
-	return &Service{reg: reg, store: st, em: em, opts: o, views: views.NewManager(em), streams: streams.NewRegistry(), fwd: newForwards(em), sessions: map[string]*sessionEntry{}, now: time.Now, revKey: key}
+	return &Service{reg: reg, store: st, em: em, opts: o, views: views.NewManager(em), streams: streams.NewRegistry(), fwd: newForwards(em), sessions: map[string]*sessionEntry{}, now: time.Now, revKey: key, agentWatches: make(chan struct{}, maxAgentWatches)}
 }
 
 // configRev is the opaque revision of a configuration hash ("" for none).

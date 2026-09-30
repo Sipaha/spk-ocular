@@ -25,6 +25,10 @@ type sessionEntry struct {
 	// for one of its replacement.
 	owner string
 	seq   uint64 // the incarnation's number (KindsView.Session)
+	// agentCalls: agents' calls holding the session now; agentUntil: it
+	// stays spared until then after the last one (AgentCall).
+	agentCalls map[*AgentCall]struct{}
+	agentUntil time.Time
 }
 
 // sessionIdle: a session without views is closed after this long (a page
@@ -116,6 +120,9 @@ func (s *Service) closeSessionLocked(key string) {
 		return
 	}
 	delete(s.sessions, key)
+	for c := range e.agentCalls {
+		c.cancel() // their work ends: gone
+	}
 	s.views.CloseOwner(e.owner)
 	s.streams.CloseOwner(e.owner)
 	e.sess.Close()
@@ -155,12 +162,14 @@ func keyProvider(key string) string {
 	return p
 }
 
-// closeOtherSessions keeps only the selected target's session.
+// closeOtherSessions keeps only the selected target's session — and those
+// agents are using (AgentCall).
 func (s *Service) closeOtherSessions(keep string) {
 	s.sessMu.Lock()
 	defer s.sessMu.Unlock()
-	for key := range s.sessions {
-		if key != keep {
+	now := s.now()
+	for key, e := range s.sessions {
+		if key != keep && !e.spared(now) {
 			s.closeSessionLocked(key)
 		}
 	}
@@ -513,7 +522,7 @@ func (s *Service) reapIdleSessions() {
 	s.sessMu.Lock()
 	defer s.sessMu.Unlock()
 	for key, e := range s.sessions {
-		if owners[e.owner] > 0 {
+		if owners[e.owner] > 0 || len(e.agentCalls) > 0 {
 			e.lastUsed = now
 			continue
 		}

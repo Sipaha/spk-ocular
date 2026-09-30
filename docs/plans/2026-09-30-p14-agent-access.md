@@ -245,28 +245,32 @@ scopes[{name, state, class?}]}` — при обходе у каждого scope 
   userinfo в URL сервера и прокси не попадает в опознание (ревью плана, P3 к реализации).
 - [x] compose: `Target.Identity` = endpoint; `provider.Identifier` на сессии (id демона,
   кэш); тест на фейковом движке (ошибка → повтор, не кэшируется).
-- [ ] `api.Service.TargetIdentity`; тест: kube без сети, compose с id демона.
+- [x] Опознание в сервисе — `AgentCall.Identity()` (Task 3); тест: без `Identifier` — только
+  `Target.Identity`, с ним — плюс id демона, недоступность — ошибка.
 - [x] `core.KindDescriptor.Sensitive` — kubernetes описанные и обнаруженные (RBAC, SA, Secret);
   тест каталога.
 - [x] `core.ActionItem.Ref`; drain заполняет (и в списке «отказано»); тесты drain (ref pod-а у
   каждого элемента).
 
 ### Task 3. Сервис для агента (Go, `internal/api`)
-- [ ] `sessionEntry.agentUntil`, `agentCalls`; `agentCall`; `closeOtherSessions` и сборщик
+- [x] `sessionEntry.agentUntil`, `agentCalls`; `agentCall`; `closeOtherSessions` и сборщик
   щадят (решение 8). Тесты: `SelectTarget` другой цели во время снимка, во время `TailLogs` и
   в пределах 60 с после вызова — сессия жива; после — закрыта сборщиком; смена конфигурации
   закрывает и отменяет идущий вызов (`gone`).
-- [ ] `Snapshot` (решение 7): синтетический провайдер — готово/ошибка/таймаут/закрытие сессии
+- [x] `Snapshot` (решение 7): синтетический провайдер — готово/ошибка/таймаут/закрытие сессии
   во время снимка (`gone`), семафор 4 (пятый ждёт, по сроку — `limit`), `limit`/`truncated`;
   `Delta` с `Reset`/`Deletes` применяются по контракту; вид с `ViewDescriber` — колонки и
   `Schema` из `DescribeView`, `schema_changed` — один повтор; исчезнувший вид — `removed`;
   в UI нет событий `view_changed` (подписчик эмиттера ничего не получает).
-- [ ] `TailLogs` (решение 10): фейковый `LogSource` — хвост, потолок байт, таймаут, `Follow`
+- [x] `TailLogs` (решение 10): фейковый `LogSource` — хвост, потолок байт, таймаут, `Follow`
   никогда не `true`.
-- [ ] `AgentMetrics` (решение 9): выбор строк по ссылкам, ≤ 100, нет `MetricsSource` —
+- [x] `AgentMetrics` (решение 9): выбор строк по ссылкам, ≤ 100, нет `MetricsSource` —
   `unsupported`.
-- [ ] UI-методы решения 18 в `API`, HTTP- и Wails-транспорте, `routes_test`/`routes_wails_test`
+- [x] UI-методы решения 18 в `API`, HTTP- и Wails-транспорте, `routes_test`/`routes_wails_test`
   (все методы интерфейса есть в обоих), `AgentControl` интерфейс; без него — `unsupported`.
+  Опознание цели — `AgentCall.Identity()` (`Target.Identity` + часть сессии `Identifier`), а не
+  отдельный метод сервиса. Снимок фиксирует строки на момент первого статуса не-`loading`
+  (поздние дельты — уже изменения после снимка).
 
 ### Task 4. Сокет и методы (Go, `internal/agentapi`)
 - [ ] Сокет (решение 17): тесты — 0600, второй экземпляр на том же каталоге получает

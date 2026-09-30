@@ -14,6 +14,7 @@ import (
 	"github.com/spk/spk-ocular/internal/api"
 	"github.com/spk/spk-ocular/internal/core"
 	"github.com/spk/spk-ocular/internal/events"
+	"github.com/spk/spk-ocular/internal/store"
 )
 
 const (
@@ -232,6 +233,30 @@ func (h *HTTP) routes() {
 	}))
 	h.mux.HandleFunc("POST /api/StreamBase", handle(func(ctx context.Context, _ *struct{}) (any, error) {
 		return h.api.StreamBase(ctx)
+	}))
+	h.mux.HandleFunc("POST /api/AgentAccessStatus", handle(func(ctx context.Context, _ *struct{}) (any, error) {
+		return h.api.AgentAccessStatus(ctx)
+	}))
+	h.mux.HandleFunc("POST /api/ListAgentGrants", handle(func(ctx context.Context, _ *struct{}) (any, error) {
+		return h.api.ListAgentGrants(ctx)
+	}))
+	h.mux.HandleFunc("POST /api/SaveAgentGrants", handle(func(ctx context.Context, r *api.SaveAgentGrantsRequest) (any, error) {
+		return nil, h.api.SaveAgentGrants(ctx, *r)
+	}))
+	h.mux.HandleFunc("POST /api/RevokeAllAgentGrants", handle(func(ctx context.Context, _ *struct{}) (any, error) {
+		return nil, h.api.RevokeAllAgentGrants(ctx)
+	}))
+	h.mux.HandleFunc("POST /api/ReconfirmAgentTarget", handle(func(ctx context.Context, r *targetReq) (any, error) {
+		return nil, h.api.ReconfirmAgentTarget(ctx, r.Provider, r.Target)
+	}))
+	h.mux.HandleFunc("POST /api/ListAgentPending", handle(func(ctx context.Context, _ *struct{}) (any, error) {
+		return h.api.ListAgentPending(ctx)
+	}))
+	h.mux.HandleFunc("POST /api/DecideAgentPending", handle(func(ctx context.Context, r *api.DecideAgentPendingRequest) (any, error) {
+		return nil, h.api.DecideAgentPending(ctx, *r)
+	}))
+	h.mux.HandleFunc("POST /api/ListAgentAudit", handle(func(ctx context.Context, r *store.AuditFilter) (any, error) {
+		return h.api.ListAgentAudit(ctx, *r)
 	}))
 	h.mux.HandleFunc("GET /api/events", h.serveEvents)
 }
