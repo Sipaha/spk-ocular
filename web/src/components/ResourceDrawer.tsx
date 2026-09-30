@@ -414,14 +414,14 @@ function Details(props: { client: Client; hub: ViewHub; target: { provider: stri
         {r.facts.map((f) => (
           <div key={f.key} className="contents">
             <dt className="text-fg-muted">{detailLabel(f.key)}</dt>
-            <dd className="min-w-0 font-mono text-[12px] break-all whitespace-pre-line">{f.value}</dd>
+            <dd className="min-w-0 font-mono text-[13px] break-all whitespace-pre-line">{f.value}</dd>
           </div>
         ))}
       </dl>
       {ports}
       {(groups.length > 0 || r.relationsError) && (
         <section aria-label={t('drawer.related')}>
-          <h3 className="mb-1.5 text-[11px] font-semibold uppercase tracking-wider text-fg-subtle">{t('drawer.related')}</h3>
+          <h3 className="mb-1.5 text-[12px] font-semibold uppercase tracking-wider text-fg-subtle">{t('drawer.related')}</h3>
           {groups.map(([type, rels]) => (
             <div key={type} className="mb-2">
               <p className="text-xs text-fg-subtle">{relationLabel(type)}</p>
@@ -483,7 +483,7 @@ function ObjectEvents({ hub, kind, subject }: { hub: ViewHub; kind: string; subj
   const cols = view.kind?.columns ?? []
   return (
     <section aria-label={t('drawer.events')} className="flex h-72 flex-col">
-      <h3 className="mb-1.5 text-[11px] font-semibold uppercase tracking-wider text-fg-subtle">
+      <h3 className="mb-1.5 text-[12px] font-semibold uppercase tracking-wider text-fg-subtle">
         {t('drawer.events')} <span className="font-normal">{view.rows.length}</span>
       </h3>
       {view.status.state === 'error' ? (

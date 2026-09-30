@@ -419,7 +419,7 @@ export function LogViewport({
         // everywhere else during a drag.
         data-log-viewport
         tabIndex={0}
-        className="h-full w-full select-text overflow-auto bg-app px-3 py-1 font-mono text-[12px] leading-[18px] outline-none"
+        className="h-full w-full select-text overflow-auto bg-app px-3 py-1 font-mono text-[13px] leading-[18px] outline-none"
         // Wheel-up is unambiguous user intent to stop following. Unlike the
         // onScroll heuristic it cannot be swallowed by the programmatic-scroll
         // gate, which on a bursty stream is high a large fraction of the time

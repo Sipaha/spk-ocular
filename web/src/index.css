@@ -53,14 +53,16 @@ body {
   background-color: var(--color-app);
   color: var(--color-fg);
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-  font-size: 13px;
+  font-size: 14px;
   line-height: 1.4;
   -webkit-font-smoothing: antialiased;
   /* Live numbers must not twitch sideways as they update. */
   font-variant-numeric: tabular-nums;
 }
 
-html { color-scheme: dark; }
+/* The whole interface a notch larger than the browser's default (rem-based
+   spacing and text follow); the body text is 14px (user, 2026-09-30). */
+html { color-scheme: dark; font-size: 17px; }
 
 /* WebKitGTK draws <select> as a native GTK button (light gradient) whatever
    the page's colours: every select gets the app's own field look and arrow.

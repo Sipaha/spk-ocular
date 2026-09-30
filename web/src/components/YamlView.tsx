@@ -11,7 +11,7 @@ import { useEffect, useRef } from 'react'
 
 const theme = EditorView.theme(
   {
-    '&': { height: '100%', fontSize: '12px', backgroundColor: 'var(--color-app)', color: 'var(--color-fg)' },
+    '&': { height: '100%', fontSize: '13px', backgroundColor: 'var(--color-app)', color: 'var(--color-fg)' },
     '.cm-scroller': { fontFamily: 'var(--font-mono)', lineHeight: '1.5' },
     '.cm-gutters': { backgroundColor: 'var(--color-sidebar)', color: 'var(--color-fg-subtle)', border: 'none' },
     '.cm-activeLine': { backgroundColor: 'color-mix(in srgb, var(--color-hover) 70%, transparent)' },

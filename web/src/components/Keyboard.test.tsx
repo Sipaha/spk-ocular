@@ -62,11 +62,12 @@ describe('keyboard', () => {
   })
 
   it('table: PageDown/PageUp by a page, Home and End', async () => {
-    const { grid, scroll } = await openProd(40)
-    Object.defineProperty(scroll, 'clientHeight', { value: 10 * 28 }) // jsdom has no layout: ten rows fit
+    // jsdom renders what fits its 800px box plus the overscan (38 rows of 30px).
+    const { grid, scroll } = await openProd(38)
+    Object.defineProperty(scroll, 'clientHeight', { value: 10 * 30 }) // jsdom has no layout: ten rows fit
     scroll.focus()
     await userEvent.keyboard('{End}')
-    expect(selectedName(grid)).toBe('p-39')
+    expect(selectedName(grid)).toBe('p-37')
     await userEvent.keyboard('{Home}')
     expect(selectedName(grid)).toBe('p-00')
     await userEvent.keyboard('{PageDown}')

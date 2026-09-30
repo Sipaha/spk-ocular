@@ -31,11 +31,11 @@ export function EditDiff({ before, after, label }: { before: string; after: stri
   const rest = rows.length - shown
   return (
     <section aria-label={label ?? t('edit.diff')} className="flex min-h-0 flex-col gap-1">
-      <h3 className="text-[11px] font-semibold uppercase tracking-wider text-fg-subtle">
+      <h3 className="text-[12px] font-semibold uppercase tracking-wider text-fg-subtle">
         {label ?? t('edit.diff')} <span className="font-normal normal-case tracking-normal">· {t('edit.diffSummary', { removed, added })}</span>
       </h3>
       {d.approximate && <p className="text-xs text-warning">{t('edit.diffApprox')}</p>}
-      <div className="overflow-auto rounded-md border border-line font-mono text-[12px] leading-[1.45]">
+      <div className="overflow-auto rounded-md border border-line font-mono text-[13px] leading-[1.45]">
         {rows.slice(0, shown).map((r, i) =>
           'skipped' in r ? (
             <div key={i} className="border-y border-line bg-sidebar/60 px-2 py-0.5 text-fg-subtle">
@@ -67,7 +67,7 @@ function DiffRow({ line, whole, onWhole }: { line: DiffLine; whole: boolean; onW
       <span className="min-w-0 whitespace-pre-wrap break-all">
         {long && !whole ? line.text.slice(0, LONG_LINE) + '…' : line.text}
         {long && (
-          <button type="button" className="ml-2 rounded border border-line px-1 font-sans text-[11px] text-fg-muted hover:bg-hover" onClick={() => onWhole(!whole)}>
+          <button type="button" className="ml-2 rounded border border-line px-1 font-sans text-[12px] text-fg-muted hover:bg-hover" onClick={() => onWhole(!whole)}>
             {whole ? t('edit.lineFold') : t('edit.lineWhole', { n: line.text.length })}
           </button>
         )}

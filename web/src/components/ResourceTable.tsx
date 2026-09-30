@@ -7,7 +7,7 @@ import { Menu, type MenuItem } from '../actions/Menu'
 import { t } from '../i18n'
 import { useNow } from '../views/useView'
 
-const ROW_H = 28
+const ROW_H = 30
 
 export interface Sort {
   col: number
@@ -252,7 +252,7 @@ export function ResourceTable({ columns, rows, hideScope, filter, selected, onSe
     <div className="flex min-h-0 min-w-0 flex-1 flex-col" role="grid" aria-rowcount={sorted.length} aria-label="resources">
       {/* The header scrolls sideways with the rows (a narrow window), never the page. */}
       <div ref={headRef} className="shrink-0 overflow-hidden border-b border-line bg-sidebar [scrollbar-gutter:stable]">
-        <div className="grid text-[11px] font-semibold uppercase tracking-wide text-fg-subtle" style={{ gridTemplateColumns: template, minWidth }} role="row">
+        <div className="grid text-[12px] font-semibold uppercase tracking-wide text-fg-subtle" style={{ gridTemplateColumns: template, minWidth }} role="row">
           {visibleCols.map(({ c, i }) => (
             <button
               key={c.id}
@@ -314,7 +314,7 @@ export function ResourceTable({ columns, rows, hideScope, filter, selected, onSe
                       role="gridcell"
                       className={[
                         'truncate px-3',
-                        isNumeric(c) ? 'text-right font-mono text-[12px]' : '',
+                        isNumeric(c) ? 'text-right font-mono text-[13px]' : '',
                         c.type === 'status' ? (cell?.muted ? 'text-fg-subtle' : healthText[r.health.state]) : '',
                         !hasStatus && i === 0 && r.health.state === 'terminating' ? healthText.terminating : '',
                         i === 0 ? 'font-medium' : '',

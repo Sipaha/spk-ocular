@@ -357,7 +357,7 @@ export function ActionDialog({ client, req, onClose, runTimeoutMs = RUN_TIMEOUT_
             )}
             {!!plan.effects?.length && (
               <section aria-label={t('action.effects')}>
-                <h3 className="mb-1 text-[11px] font-semibold uppercase tracking-wider text-fg-subtle">{t('action.effects')}</h3>
+                <h3 className="mb-1 text-[12px] font-semibold uppercase tracking-wider text-fg-subtle">{t('action.effects')}</h3>
                 <ul className="list-disc space-y-0.5 pl-5">
                   {plan.effects.map((x, i) => (
                     <li key={i}>{messageText(x)}</li>
@@ -367,7 +367,7 @@ export function ActionDialog({ client, req, onClose, runTimeoutMs = RUN_TIMEOUT_
             )}
             {!!plan.warnings?.length && (
               <section aria-label={t('action.warnings')} className="text-warning">
-                <h3 className="mb-1 text-[11px] font-semibold uppercase tracking-wider">{t('action.warnings')}</h3>
+                <h3 className="mb-1 text-[12px] font-semibold uppercase tracking-wider">{t('action.warnings')}</h3>
                 <ul className="list-disc space-y-0.5 pl-5">
                   {plan.warnings.map((x, i) => (
                     <li key={i}>{messageText(x)}</li>

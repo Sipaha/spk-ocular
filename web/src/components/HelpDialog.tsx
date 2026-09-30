@@ -41,13 +41,13 @@ export function HelpDialog({ onClose }: { onClose: () => void }) {
         <div className="grid grid-cols-2 gap-x-6 gap-y-4">
           {SCOPES.map((scope) => (
             <section key={scope} aria-label={t(`keys.scope.${scope}` as MessageKey)}>
-              <h3 className="mb-1 text-[11px] font-semibold uppercase tracking-wider text-fg-subtle">{t(`keys.scope.${scope}` as MessageKey)}</h3>
+              <h3 className="mb-1 text-[12px] font-semibold uppercase tracking-wider text-fg-subtle">{t(`keys.scope.${scope}` as MessageKey)}</h3>
               <dl className="grid grid-cols-[max-content_1fr] gap-x-3 gap-y-1 text-xs">
                 {KEYS.filter((k) => k.scope === scope).map((k) => (
                   <div key={k.id} className="contents">
                     <dt>
                       {k.keys.split(' ').map((key) => (
-                        <kbd key={key} className="mr-1 rounded border border-line bg-app px-1 font-mono text-[11px] text-fg">
+                        <kbd key={key} className="mr-1 rounded border border-line bg-app px-1 font-mono text-[12px] text-fg">
                           {key}
                         </kbd>
                       ))}

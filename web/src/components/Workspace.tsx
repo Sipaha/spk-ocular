@@ -248,9 +248,9 @@ export function Workspace({ client, hub, target }: { client: Client; hub: ViewHu
                       toggleSub(groupKey(g.group), !open)
                     }
                   }}
-                  className="flex w-full items-center gap-1 rounded-md px-2 pb-1 text-left text-[11px] font-semibold uppercase tracking-wider text-fg-subtle hover:text-fg"
+                  className="flex w-full items-center gap-1 rounded-md px-2 pb-1 text-left text-[12px] font-semibold uppercase tracking-wider text-fg-subtle hover:text-fg"
                 >
-                  <span aria-hidden className={['inline-block w-2.5 shrink-0 text-[8px] transition-transform', open ? 'rotate-90' : ''].join(' ')}>
+                  <span aria-hidden className={['inline-block w-2.5 shrink-0 text-[9px] transition-transform', open ? 'rotate-90' : ''].join(' ')}>
                     ▶
                   </span>
                   <span className="min-w-0 flex-1 truncate">{g.group}</span>
@@ -259,7 +259,7 @@ export function Workspace({ client, hub, target }: { client: Client; hub: ViewHu
                   </span>
                 </button>
               ) : (
-                <h3 className="flex px-2 pb-1 text-[11px] font-semibold uppercase tracking-wider text-fg-subtle">
+                <h3 className="flex px-2 pb-1 text-[12px] font-semibold uppercase tracking-wider text-fg-subtle">
                   <span className="min-w-0 flex-1 truncate">{g.group}</span>
                 </h3>
               )}
@@ -458,11 +458,11 @@ function NavSubgroup(props: {
         }}
         className="flex w-full items-center gap-1 rounded-md px-2 py-1 text-left text-fg-muted hover:bg-hover hover:text-fg"
       >
-        <span aria-hidden className={['inline-block w-2.5 shrink-0 text-[9px] transition-transform', open ? 'rotate-90' : ''].join(' ')}>
+        <span aria-hidden className={['inline-block w-2.5 shrink-0 text-[10px] transition-transform', open ? 'rotate-90' : ''].join(' ')}>
           ▶
         </span>
         <span className="min-w-0 flex-1 truncate">{label}</span>
-        <span className="shrink-0 text-[11px] text-fg-subtle">{kinds.length}</span>
+        <span className="shrink-0 text-[12px] text-fg-subtle">{kinds.length}</span>
       </button>
       {shown.map((k) => (
         <NavItem key={k.id} nested active={active === k.id} onClick={() => onPick(k.id)} label={k.title} hint={label} />
@@ -559,7 +559,7 @@ function ResourcePage(props: {
   return (
     <>
       <header className="flex shrink-0 items-center gap-3 border-b border-line px-4 py-2">
-        <h1 className="text-[15px] font-semibold">{kind.title}</h1>
+        <h1 className="text-[16px] font-semibold">{kind.title}</h1>
         <span className="text-xs text-fg-subtle" aria-label="count">
           {view.rows.length}
         </span>

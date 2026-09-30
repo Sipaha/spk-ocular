@@ -44,9 +44,9 @@ export function Sidebar({ act }: { act: Actions }) {
     <aside data-area="targets" className="flex h-full w-60 shrink-0 flex-col border-r border-line bg-sidebar">
       <div className="flex items-center gap-2 px-4 pt-4 pb-3">
         <EyeIcon className="h-5 w-5 text-accent" />
-        <span className="text-[15px] font-semibold tracking-tight">SPK Ocular</span>
+        <span className="text-[16px] font-semibold tracking-tight">SPK Ocular</span>
         <button
-          className="ml-auto rounded border border-line px-1.5 py-0.5 text-[11px] text-fg-subtle hover:bg-hover hover:text-fg"
+          className="ml-auto rounded border border-line px-1.5 py-0.5 text-[12px] text-fg-subtle hover:bg-hover hover:text-fg"
           onClick={openPalette}
           title={t('palette.label')}
           aria-label={`${t('palette.label')} (Ctrl+K)`}
@@ -87,7 +87,7 @@ function Group({ group, act }: { group: TargetGroup; act: Actions }) {
   const visible = group.targets.filter((x) => matchesFilter(x, filter))
   return (
     <section className="mt-2" aria-label={group.title}>
-      <h2 className="flex items-center gap-1.5 px-2 pb-1 text-[11px] font-semibold uppercase tracking-wider text-fg-subtle">
+      <h2 className="flex items-center gap-1.5 px-2 pb-1 text-[12px] font-semibold uppercase tracking-wider text-fg-subtle">
         <ProviderIcon provider={group.provider} className="h-3.5 w-3.5" />
         <span className="flex-1">{group.title}</span>
         <span className="font-normal">{group.targets.length}</span>
@@ -96,7 +96,7 @@ function Group({ group, act }: { group: TargetGroup; act: Actions }) {
       {group.problems.length > 0 && (
         <Notice text={t('sidebar.problems', { count: group.problems.length })}>
           {group.problems.map((p) => (
-            <span key={p.source} title={`${p.source}: ${p.message}`} className="block truncate font-mono text-[11px] opacity-80">
+            <span key={p.source} title={`${p.source}: ${p.message}`} className="block truncate font-mono text-[12px] opacity-80">
               {p.source.split('/').pop()}: {p.message}
             </span>
           ))}
@@ -139,7 +139,7 @@ function TargetRow({ target, act }: { target: Target; act: Actions }) {
         <span className="flex items-center gap-1.5">
           <span className="truncate">{target.title}</span>
           {target.current && (
-            <span title={providerText('target.currentHint', target.provider)} className="shrink-0 rounded bg-panel px-1 text-[10px] text-fg-muted">
+            <span title={providerText('target.currentHint', target.provider)} className="shrink-0 rounded bg-panel px-1 text-[11px] text-fg-muted">
               {t('target.current')}
             </span>
           )}

@@ -27,7 +27,7 @@ export function TargetDetails() {
         {(target.details ?? []).map((d) => (
           <div key={d.key} className="contents">
             <dt className="text-fg-muted">{detailLabel(d.key)}</dt>
-            <dd className="min-w-0 font-mono text-[12px] break-all whitespace-pre-line">{d.value}</dd>
+            <dd className="min-w-0 font-mono text-[13px] break-all whitespace-pre-line">{d.value}</dd>
           </div>
         ))}
       </dl>

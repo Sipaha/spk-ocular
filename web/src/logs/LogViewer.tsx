@@ -317,7 +317,7 @@ function Stream({ client, subject, active, query, toolbar, view }: { client: Cli
         selectAllRef={selectAllRef}
         onSelectingChange={setSelecting}
       />
-      <div className="flex shrink-0 items-center gap-3 border-t border-line px-3 py-0.5 text-[11px] text-fg-subtle">
+      <div className="flex shrink-0 items-center gap-3 border-t border-line px-3 py-0.5 text-[12px] text-fg-subtle">
         <span aria-label="line count">
           {f.filtered.length !== win.entries.length
             ? t('logs.linesOf', { count: f.filtered.length, total: win.entries.length })
@@ -344,7 +344,7 @@ function Problems({ problems, notice, labels }: { problems: LogSource[]; notice?
   const shown = problems.slice(0, 3)
   const tone = (s: string) => (s === 'error' ? 'text-danger' : s === 'ended' ? 'text-fg-muted' : 'text-warning')
   return (
-    <div role="status" className="shrink-0 space-y-0.5 border-b border-line bg-panel/60 px-3 py-1 text-[11px]">
+    <div role="status" className="shrink-0 space-y-0.5 border-b border-line bg-panel/60 px-3 py-1 text-[12px]">
       {notice && <p className={tone(notice.state)}>{notice.msg}</p>}
       {shown.map((s) => {
         const st = s.state && s.state.state !== 'streaming' ? s.state : s.warn!

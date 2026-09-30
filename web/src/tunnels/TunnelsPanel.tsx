@@ -88,7 +88,7 @@ function TunnelRow({ tn, client, mode }: { tn: Tunnel; client: Client; mode: 'de
         <span className="min-w-0 truncate text-fg-muted" title={tn.target.endpoint ? `${tn.target.targetTitle} · ${tn.target.endpoint}` : tn.target.targetTitle}>
           {what}
         </span>
-        <span className="shrink-0 rounded bg-hover px-1 text-[10px] text-fg-muted">{tn.target.targetTitle}</span>
+        <span className="shrink-0 rounded bg-hover px-1 text-[11px] text-fg-muted">{tn.target.targetTitle}</span>
         {stale && <Reconfigured />}
         <span className="ml-auto flex shrink-0 gap-1">
           <button

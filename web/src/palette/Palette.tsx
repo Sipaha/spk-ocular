@@ -145,7 +145,7 @@ function PaletteDialog({ client, act }: { client: Client; act: Actions }) {
             placeholder={placeholder}
             spellCheck={false}
             autoComplete="off"
-            className="w-full bg-transparent text-[15px] outline-none placeholder:text-fg-subtle"
+            className="w-full bg-transparent text-[16px] outline-none placeholder:text-fg-subtle"
           />
         </label>
         <div ref={list} id="palette-list" role="listbox" aria-label={t('palette.label')} className="min-h-0 flex-1 overflow-y-auto py-1">
@@ -160,7 +160,7 @@ function PaletteDialog({ client, act }: { client: Client; act: Actions }) {
               onMouseMove={() => item.key !== cursor && setMoved(item.key)}
               className={['flex cursor-pointer items-baseline gap-3 px-3 py-1.5', i === index ? 'bg-active text-fg' : 'text-fg-muted'].join(' ')}
             >
-              <span className="w-20 shrink-0 truncate text-[11px] uppercase tracking-wide text-fg-subtle">{item.section === 'scope' ? sources.scopeWords?.singular : t(`palette.section.${item.section}` as MessageKey)}</span>
+              <span className="w-20 shrink-0 truncate text-[12px] uppercase tracking-wide text-fg-subtle">{item.section === 'scope' ? sources.scopeWords?.singular : t(`palette.section.${item.section}` as MessageKey)}</span>
               <span className="min-w-0 flex-1 truncate text-fg">{item.label}</span>
               {item.hint && <span className="max-w-[45%] shrink-0 truncate text-xs text-fg-subtle">{item.hint}</span>}
             </div>

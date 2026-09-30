@@ -148,7 +148,7 @@ export default function TerminalView({ client, tab, active, mode }: Props) {
       scrollback: 5000,
       theme,
       fontFamily: FONT,
-      fontSize: 13,
+      fontSize: 14,
       cursorBlink: true,
       allowProposedApi: false,
       // Links in the output are never opened (untrusted data).
@@ -267,7 +267,7 @@ export default function TerminalView({ client, tab, active, mode }: Props) {
   return (
     <div className="flex h-full min-h-0 flex-col" data-terminal>
       {(phase === 'opening' || phase === 'connecting') && !openError && (
-        <div className="shrink-0 border-b border-line px-3 py-0.5 text-[11px] text-fg-subtle" role="status">
+        <div className="shrink-0 border-b border-line px-3 py-0.5 text-[12px] text-fg-subtle" role="status">
           {t('term.connecting')}
         </div>
       )}

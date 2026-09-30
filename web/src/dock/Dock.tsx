@@ -69,7 +69,7 @@ export function Dock({ client, current, mode, onHeightDone }: Props) {
         ))}
         {/* In a terminal Ctrl+K is the program's: the palette is here. */}
         <button
-          className="ml-auto mb-0.5 shrink-0 rounded border border-line px-1.5 text-[11px] text-fg-subtle hover:bg-hover hover:text-fg"
+          className="ml-auto mb-0.5 shrink-0 rounded border border-line px-1.5 text-[12px] text-fg-subtle hover:bg-hover hover:text-fg"
           onClick={openPalette}
           aria-label={`${t('palette.label')} (Ctrl+K)`}
           title={t('palette.label')}
@@ -103,13 +103,13 @@ function TabHandle({ tab, active, foreign, stale }: { tab: DockTab; active: bool
       data-tab-kind={tab.kind}
       className={['group flex max-w-72 items-center gap-1 rounded-t-md border border-b-0 px-2 py-0.5 text-xs', active ? 'border-line bg-app text-fg' : 'border-transparent text-fg-muted hover:text-fg'].join(' ')}
     >
-      {tab.kind === 'term' && <span aria-hidden className="font-mono text-[10px] text-fg-subtle">{'>_'}</span>}
+      {tab.kind === 'term' && <span aria-hidden className="font-mono text-[11px] text-fg-subtle">{'>_'}</span>}
       <button className="min-w-0 truncate" onClick={() => dock.activate(tab.id)} title={tip} data-area-focus={active ? '' : undefined}>
         {tab.title}
       </button>
       {foreign && (
         // Not only a tooltip: a shell in another cluster must be visible as such.
-        <span className="shrink-0 rounded bg-warning/15 px-1 text-[10px] text-warning" title={t('dock.otherTarget')}>
+        <span className="shrink-0 rounded bg-warning/15 px-1 text-[11px] text-warning" title={t('dock.otherTarget')}>
           {tab.targetTitle}
         </span>
       )}
@@ -124,7 +124,7 @@ function TabHandle({ tab, active, foreign, stale }: { tab: DockTab; active: bool
 /** A live resource still using the configuration it was opened with. */
 export function Reconfigured() {
   return (
-    <span className="shrink-0 rounded bg-warning/15 px-1 text-[10px] text-warning" title={t('live.reconfiguredHint')}>
+    <span className="shrink-0 rounded bg-warning/15 px-1 text-[11px] text-warning" title={t('live.reconfiguredHint')}>
       {t('live.reconfigured')}
     </span>
   )
