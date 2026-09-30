@@ -15,7 +15,21 @@ elif existing=$(docker inspect -f '{{.Id}} {{index .Config.Labels "ocular.test"}
   [ "$elabel" = "${DIND_LABEL#*=}" ] || die "a container named $DIND_NAME exists without label $DIND_LABEL — not ours; remove or rename it yourself"
   id=$eid # ours (label), only the record was lost
 else
-  id=$(docker run -d --name "$DIND_NAME" --label "$DIND_LABEL" --privileged \
+  id=""
+fi
+# /run on tmpfs: dockerd's and containerd's pid files must not survive a
+# stop/start of the container (a stale pid file, its pid reused, makes the
+# daemon refuse to start — the stop/start test does exactly that). An
+# older container of ours without it is re-created.
+if [ -n "$id" ] && ! docker inspect -f '{{json .HostConfig.Tmpfs}}' "$id" 2>/dev/null | grep -q '"/run"'; then
+  facts=$(docker inspect -f '{{.Name}} {{index .Config.Labels "ocular.test"}}' "$id")
+  [ "$facts" = "/$DIND_NAME ${DIND_LABEL#*=}" ] || die "recorded container $id is not ours ($facts): refusing to re-create it"
+  echo "dind: re-creating $DIND_NAME with /run on tmpfs"
+  docker rm -f -v "$id" >/dev/null
+  id=""
+fi
+if [ -z "$id" ]; then
+  id=$(docker run -d --name "$DIND_NAME" --label "$DIND_LABEL" --privileged --tmpfs /run \
     -e DOCKER_TLS_CERTDIR= -p "127.0.0.1:$DIND_PORT:2375" "$DIND_IMAGE")
 fi
 echo "$id" > "$DIND_ID_FILE"
