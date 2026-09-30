@@ -83,6 +83,8 @@ func effects(def *kindDef, action string, p core.ActionParams, u *unstructured.U
 			fx.effects = append(fx.effects, msg("delete.finalizers", "finalizers", strings.Join(sorted, ", ")))
 		}
 		fx.effects = append(fx.effects, msg("delete.requested"))
+	case actForceDelete.ID:
+		fx = forceDeleteEffects(u)
 	case actCordon.ID:
 		fx.effects = append(fx.effects, msg("node.cordon", "name", u.GetName()), msg("node.cordonBypass"))
 	case actUncordon.ID:
@@ -325,7 +327,7 @@ func (s *session) writeRights(ctx context.Context, def *kindDef, action string, 
 		sub = "scale"
 	case actDebug.ID:
 		sub = "ephemeralcontainers"
-	case actDelete.ID:
+	case actDelete.ID, actForceDelete.ID:
 		verb = "delete"
 	}
 	attrs := map[string]any{"verb": verb, "group": def.gvr.Group, "resource": def.gvr.Resource, "namespace": u.GetNamespace(), "name": u.GetName()}

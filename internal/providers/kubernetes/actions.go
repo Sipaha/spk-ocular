@@ -52,7 +52,7 @@ var kindActions = map[*kindDef][]core.ActionDescriptor{
 	statefulSetsKind: {actRestart, actScale, actDelete},
 	daemonSetsKind:   {actRestart, actDelete},
 	replicaSetsKind:  {actDelete},
-	podsKind:         {actDebug, actDelete},
+	podsKind:         {actDebug, actDelete, actForceDelete},
 	servicesKind:     {actDelete},
 	ingressesKind:    {actDelete},
 	configMapsKind:   {actDelete},
@@ -147,6 +147,13 @@ func effectState(def *kindDef, action string, u *unstructured.Unstructured) map[
 		} else {
 			cronJobEffectState(action, o, st)
 		}
+	case actForceDelete.ID:
+		// What its effects read: the finalizers (held or not), the owner; the
+		// node's readiness is advice, not bound.
+		st["finalizers"], st["node"] = sortedFinalizers(u), str(o, "spec", "nodeName")
+		if c := metav1.GetControllerOf(u); c != nil {
+			st["controller"] = c.Kind + "/" + c.Name + "/" + string(c.UID)
+		}
 	case actDelete.ID:
 		if sts {
 			st["claims"], st["whenDeleted"] = len(slice(o, "spec", "volumeClaimTemplates")), str(o, "spec", "persistentVolumeClaimRetentionPolicy", "whenDeleted")
@@ -185,6 +192,14 @@ func replicas(o map[string]any) int {
 
 // actionUnavailable: why action cannot run on u in its state (nil — it can).
 func actionUnavailable(def *kindDef, action string, u *unstructured.Unstructured) *core.Message {
+	if action == actForceDelete.ID {
+		// A deleting pod is its main case; a static one comes back.
+		if u.GetAnnotations()[mirrorKey] != "" {
+			m := msg("forceDelete.mirror", "name", u.GetName())
+			return &m
+		}
+		return nil
+	}
 	if u.GetDeletionTimestamp() != nil {
 		m := msg("unavailable.deleting", "kind", singular(def), "name", u.GetName())
 		return &m
@@ -340,6 +355,11 @@ func (s *session) write(ctx context.Context, def *kindDef, run provider.ActionRu
 		uid, rv, bg := u.GetUID(), u.GetResourceVersion(), metav1.DeletePropagationBackground
 		err := wr.delete(ctx, def.gvr, ns, u.GetName(), metav1.DeleteOptions{Preconditions: &metav1.Preconditions{UID: &uid, ResourceVersion: &rv}, PropagationPolicy: &bg})
 		return msg("done.delete", "kind", kind, "name", name), err
+	case actForceDelete.ID:
+		// The UID only: a deleting pod's version moves while its kubelet stops it.
+		uid, zero, bg := u.GetUID(), int64(0), metav1.DeletePropagationBackground
+		err := wr.delete(ctx, def.gvr, ns, u.GetName(), metav1.DeleteOptions{GracePeriodSeconds: &zero, Preconditions: &metav1.Preconditions{UID: &uid}, PropagationPolicy: &bg})
+		return msg("done.forceDelete", "name", name), err
 	}
 	return core.Message{}, &provider.Error{Class: provider.ClassUnsupported, Message: run.Action}
 }
@@ -453,11 +473,19 @@ func (s *session) PrepareAction(ctx context.Context, ref core.Ref, action string
 	if waitPods {
 		go func() { podCount <- s.podsOf(ectx, def, u) }()
 	}
+	nodeWarn := make(chan *core.Message, 1)
+	waitNode := action == actForceDelete.ID
+	if waitNode {
+		go func() { nodeWarn <- s.nodeWarning(ectx, u) }()
+	}
 	waitRights := true
 	var podFx []core.Message
+	var nodeFx *core.Message
 wait:
-	for waitRights || waitHPAs || waitPods {
+	for waitRights || waitHPAs || waitPods || waitNode {
 		select {
+		case nodeFx = <-nodeWarn:
+			waitNode = false
 		case plan.Rights = <-rights:
 			waitRights = false
 		case w := <-hpas:
@@ -476,7 +504,10 @@ wait:
 		plan.Warnings = append(plan.Warnings, msg("hpa.checkLate"))
 	}
 	plan.Effects = append(plan.Effects, podFx...) // a late pod count is left out
-	if def == podsKind && action == actDelete.ID {
+	if nodeFx != nil {
+		plan.Warnings = append(plan.Warnings, *nodeFx)
+	}
+	if def == podsKind && (action == actDelete.ID || action == actForceDelete.ID) {
 		plan.Effects = append(plan.Effects, s.podController(ctx, u))
 	}
 	return plan, nil

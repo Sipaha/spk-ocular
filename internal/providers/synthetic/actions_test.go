@@ -89,7 +89,7 @@ func TestWorkloadsOfferActionsAndServicesDoNot(t *testing.T) {
 	for _, a := range kinds[1].Actions {
 		ids = append(ids, a.ID)
 	}
-	assert.Equal(t, []string{"restart", "scale", "undo", "pause", "resume", "delete", "evacuate", "debug"}, ids)
+	assert.Equal(t, []string{"restart", "scale", "undo", "pause", "resume", "delete", "forceDelete", "evacuate", "debug"}, ids)
 }
 
 func TestActionsChangeTheLiveView(t *testing.T) {
@@ -408,3 +408,55 @@ func TestWorkloadDebugOpensAnAttachedTerminal(t *testing.T) {
 }
 
 func strp(v string) *string { return &v }
+
+// Only: a failure (or a denial) of one object among several, for a bulk
+// run's mixed outcome.
+func TestControlsOnlyOneObject(t *testing.T) {
+	p, s := open(t)
+	p.SetControls(Controls{Fail: provider.ClassConflict, Only: "db"})
+	_, err := act(t, s, "db", "restart", core.ActionParams{})
+	assert.Equal(t, provider.ClassConflict, class(t, err))
+	_, err = act(t, s, "web", "restart", core.ActionParams{})
+	assert.NoError(t, err)
+	p.SetControls(Controls{Rights: core.RightsDenied, Only: "db"})
+	plan, err := s.PrepareAction(context.Background(), wref("web"), "restart", core.ActionParams{})
+	require.NoError(t, err)
+	assert.Equal(t, core.RightsAllowed, plan.Rights.State)
+	plan, err = s.PrepareAction(context.Background(), wref("db"), "restart", core.ActionParams{})
+	require.NoError(t, err)
+	assert.Equal(t, core.RightsDenied, plan.Rights.State)
+}
+
+// Stuck: a delete leaves the workload Terminating (its row stays, nothing
+// but a forced deletion is offered); force delete removes it at once.
+func TestStuckDeleteAndForceDelete(t *testing.T) {
+	p, s := open(t)
+	view := &rowSink{}
+	stop, err := s.Watch(provider.Query{Kind: WorkloadKind}, view)
+	require.NoError(t, err)
+	defer stop()
+	plan, err := s.PrepareAction(context.Background(), wref("web"), "forceDelete", core.ActionParams{})
+	require.NoError(t, err)
+	assert.Nil(t, plan.Unavailable)
+	assert.Equal(t, []string{"It is not being deleted: a plain delete lets its instances stop; force delete is for one stuck in Terminating."}, core.Texts(plan.Warnings))
+
+	p.SetControls(Controls{Stuck: true})
+	_, err = act(t, s, "web", "delete", core.ActionParams{})
+	require.NoError(t, err)
+	view.mu.Lock()
+	r := view.rows["uid-web"]
+	view.mu.Unlock()
+	assert.Equal(t, core.HealthTerminating, r.Health.State, "still there, terminating")
+	plan, err = s.PrepareAction(context.Background(), wref("web"), "restart", core.ActionParams{})
+	require.NoError(t, err)
+	assert.Equal(t, "web is being deleted", plan.Unavailable.Text)
+	plan, err = s.PrepareAction(context.Background(), wref("web"), "forceDelete", core.ActionParams{})
+	require.NoError(t, err)
+	assert.Nil(t, plan.Unavailable)
+	assert.Empty(t, plan.Warnings)
+	assert.Equal(t, []string{"It is removed at once, without waiting for its instances to stop."}, core.Texts(plan.Effects))
+	res, err := s.RunAction(context.Background(), provider.ActionRun{Ref: plan.Where.Ref, Action: "forceDelete", Expect: plan.Expect})
+	require.NoError(t, err)
+	assert.Equal(t, "workload web: forced deletion requested", res.Message.Text)
+	assert.Nil(t, view.cells("web"))
+}

@@ -747,3 +747,64 @@ func TestKindActionPauseAndResume(t *testing.T) {
 	require.Eventually(t, func() bool { return rss() == before+1 }, 60*time.Second, 200*time.Millisecond, "resumed: the change rolls out")
 	c.kubectlNS("rollout", "status", "deployment/web", "--timeout=120s")
 }
+
+// stubbornPod: a pod that ignores TERM for 5 minutes (a plain delete leaves
+// it Terminating), with the given finalizers.
+func (c *actionCluster) stubbornPod(name string, finalizers ...string) {
+	c.t.Helper()
+	fin := ""
+	if len(finalizers) > 0 {
+		fin = fmt.Sprintf("  finalizers: [%s]\n", strings.Join(finalizers, ", "))
+	}
+	c.apply(fmt.Sprintf(`apiVersion: v1
+kind: Pod
+metadata:
+  name: %s
+%sspec:
+  terminationGracePeriodSeconds: 300
+  containers:
+  - name: main
+    image: busybox:1.36
+    imagePullPolicy: IfNotPresent
+    command: [sh, -c, "trap '' TERM; sleep 3600 & wait"]
+`, name, fin))
+	c.kubectlNS("wait", "--for=condition=Ready", "pod/"+name, "--timeout=120s")
+}
+
+func TestKindActionForceDeleteOfAPodStuckTerminating(t *testing.T) {
+	c := kindActionCluster(t)
+	c.stubbornPod("stubborn")
+	ref := c.ref("pods", "stubborn")
+	c.kubectlNS("delete", "pod", "stubborn", "--wait=false")
+	require.NotEmpty(t, c.jsonpath("pod", "stubborn", "{.metadata.deletionTimestamp}"), "a plain delete leaves it Terminating")
+
+	plan := c.prepare(ref, "forceDelete", core.ActionParams{})
+	require.Nil(t, plan.Unavailable, "a deleting pod is force delete's case")
+	assert.Contains(t, msgKeys(plan.Effects), ProviderID+".forceDelete.now")
+	assert.Empty(t, plan.Warnings, "deleting, no finalizers, its node Ready")
+	c.runPlan(plan)
+	require.Eventually(t, func() bool {
+		_, err := c.run("-n", c.ns, "get", "pod", "stubborn")
+		return err != nil
+	}, 10*time.Second, 200*time.Millisecond, "gone from the API at once, not after 300 s")
+}
+
+// A finalizer keeps a pod even from a forced deletion: the plan says so.
+func TestKindActionForceDeleteIsHeldByAFinalizer(t *testing.T) {
+	c := kindActionCluster(t)
+	c.stubbornPod("held", "ocular.test/hold")
+	t.Cleanup(func() {
+		_, _ = c.run("-n", c.ns, "patch", "pod", "held", "--type=merge", "-p", `{"metadata":{"finalizers":null}}`)
+	})
+	ref := c.ref("pods", "held")
+	plan := c.prepare(ref, "forceDelete", core.ActionParams{})
+	require.Nil(t, plan.Unavailable)
+	require.NotEmpty(t, plan.Effects)
+	assert.Equal(t, ProviderID+".forceDelete.held", plan.Effects[0].Key)
+	assert.Equal(t, "ocular.test/hold", plan.Effects[0].Params["finalizers"])
+	assert.Equal(t, []string{ProviderID + ".forceDelete.heldWarn", ProviderID + ".forceDelete.notStuck"}, msgKeys(plan.Warnings))
+	c.runPlan(plan)
+	time.Sleep(2 * time.Second) // what a forced deletion would have removed by now
+	assert.NotEmpty(t, c.jsonpath("pod", "held", "{.metadata.deletionTimestamp}"), "still there, deleting")
+	assert.Equal(t, "0", c.jsonpath("pod", "held", "{.metadata.deletionGracePeriodSeconds}"), "the forced deletion was recorded")
+}

@@ -23,6 +23,8 @@ var (
 	actRestart = core.ActionDescriptor{ID: "restart", Title: "Restart"}
 	actScale   = core.ActionDescriptor{ID: "scale", Title: "Scale", Param: &core.ActionParam{Kind: core.ParamCount, Min: 0, Max: 10}}
 	actDelete  = core.ActionDescriptor{ID: "delete", Title: "Delete", Destructive: true}
+	// actForceDelete removes a workload at once (one stuck in Terminating).
+	actForceDelete = core.ActionDescriptor{ID: "forceDelete", Title: "Force delete", Destructive: true}
 	// actEvacuate moves a workload's instances off (Controls.Items of them)
 	// and leaves its helper: the generic UI's lists and parts.
 	actEvacuate = core.ActionDescriptor{ID: "evacuate", Title: "Evacuate", Destructive: true}
@@ -45,7 +47,7 @@ var workloadKind = core.KindDescriptor{
 		{ID: "replicas", Title: "Replicas", Type: core.ColNumber},
 		{ID: "restarts", Title: "Restarts", Type: core.ColNumber},
 	},
-	Actions: []core.ActionDescriptor{actRestart, actScale, actUndo, actPause, actResume, actDelete, actEvacuate, actDebug},
+	Actions: []core.ActionDescriptor{actRestart, actScale, actUndo, actPause, actResume, actDelete, actForceDelete, actEvacuate, actDebug},
 }
 
 type workload struct {
@@ -53,6 +55,8 @@ type workload struct {
 	uid                string
 	replicas, restarts int
 	paused, autoscaled bool
+	// terminating: deleted while Controls.Stuck — its row stays.
+	terminating bool
 	// revs: the revisions, newest (the current one) first.
 	revs []revision
 	// debuggers added (by name); debugSeq numbers them.
@@ -123,7 +127,14 @@ type Controls struct {
 	// many are refused.
 	Items  int `json:"items,omitempty"`
 	Refuse int `json:"refuse,omitempty"`
+	// Only: Rights and Fail apply to this workload alone ("" — to all).
+	Only string `json:"only,omitempty"`
+	// Stuck: a delete leaves the workload Terminating (force delete removes it).
+	Stuck bool `json:"stuck,omitempty"`
 }
+
+// on: the controls' Rights and Fail apply to o.
+func (c Controls) on(o *workload) bool { return c.Only == "" || c.Only == o.name }
 
 // evacuated: the instances evacuate moves.
 func (c Controls) evacuated(o *workload) []string {
@@ -179,7 +190,7 @@ func (w *workloads) find(name string) *workload {
 func (o *workload) row() core.Row {
 	r, n := float64(o.replicas), float64(o.restarts)
 	return core.Row{
-		ID: o.uid, Rev: fmt.Sprintf("%d.%d.%d.%t", o.replicas, o.restarts, o.revs[0].n, o.paused),
+		ID: o.uid, Rev: fmt.Sprintf("%d.%d.%d.%t.%t", o.replicas, o.restarts, o.revs[0].n, o.paused, o.terminating),
 		Ref:    core.Ref{Provider: ID, Target: Target, Kind: WorkloadKind, Name: o.name, UID: o.uid},
 		Cells:  []core.Cell{core.TextCell(o.name), core.NumCell(r, fmt.Sprint(o.replicas)), core.NumCell(n, fmt.Sprint(o.restarts))},
 		Health: health(o),
@@ -187,6 +198,9 @@ func (o *workload) row() core.Row {
 }
 
 func health(o *workload) core.Health {
+	if o.terminating {
+		return core.Health{State: core.HealthTerminating, Reason: "Terminating"}
+	}
 	if o.paused {
 		return core.Health{State: core.HealthOK, Reason: "Paused"}
 	}
@@ -317,7 +331,7 @@ func expect(action string, p core.ActionParams, o *workload) string {
 	for _, r := range o.revs {
 		revs += fmt.Sprintf("%s:%d,", r.name, r.n)
 	}
-	return fmt.Sprintf("%s|%d|%s|%s|%s|%d|%t|%s|%d", action, count, choice, text, o.uid, o.replicas, o.paused, revs, o.debugSeq)
+	return fmt.Sprintf("%s|%d|%s|%s|%s|%d|%t|%t|%s|%d", action, count, choice, text, o.uid, o.replicas, o.paused, o.terminating, revs, o.debugSeq)
 }
 
 // prepareDebug: the provider's defaults filled in (the UI reviews them at
@@ -351,6 +365,10 @@ func prepareDebug(plan core.ActionPlan, o *workload) core.ActionPlan {
 
 func unavailable(action string, o *workload) *core.Message {
 	switch {
+	case action == actForceDelete.ID:
+		return nil // a Terminating one is its case
+	case o.terminating:
+		return &core.Message{Text: o.name + " is being deleted"}
 	case (action == actRestart.ID || action == actUndo.ID) && o.paused:
 		return &core.Message{Text: o.name + " is paused: resume it first"}
 	case action == actPause.ID && o.paused:
@@ -441,7 +459,11 @@ func (s *session) PrepareAction(_ context.Context, ref core.Ref, action string, 
 		Expect:      expect(action, p, o),
 		Rights:      core.Rights{State: core.RightsAllowed},
 	}
-	switch w.controls.Rights {
+	rights := w.controls.Rights
+	if !w.controls.on(o) {
+		rights = ""
+	}
+	switch rights {
 	case core.RightsDenied:
 		plan.Rights = core.Rights{State: core.RightsDenied, Reason: fmt.Sprintf("you may not %s workloads (synthetic)", action)}
 	case core.RightsUnknown:
@@ -482,6 +504,11 @@ func (s *session) PrepareAction(_ context.Context, ref core.Ref, action string, 
 		plan.Effects = texts("Its rollout goes on: changes made while paused (if any) are rolled out.")
 	case actDelete.ID:
 		plan.Effects = texts(fmt.Sprintf("Its %s removed too.", instanceCount(o.replicas)))
+	case actForceDelete.ID:
+		plan.Effects = texts("It is removed at once, without waiting for its instances to stop.")
+		if !o.terminating {
+			plan.Warnings = texts("It is not being deleted: a plain delete lets its instances stop; force delete is for one stuck in Terminating.")
+		}
 	case actEvacuate.ID:
 		moved := core.ActionList{Title: core.Message{Text: "Moved"}, Destructive: true}
 		for _, n := range w.controls.evacuated(o) {
@@ -528,6 +555,9 @@ func (s *session) RunAction(ctx context.Context, run provider.ActionRun) (core.A
 		return core.ActionResult{}, &provider.Error{Class: provider.ClassConflict, Message: "workload " + o.name + " changed since the action was reviewed; review it again"}
 	}
 	c := w.controls
+	if !c.on(o) {
+		c.Rights, c.Fail = "", ""
+	}
 	if c.Rights == core.RightsDenied {
 		return core.ActionResult{}, &provider.Error{Class: provider.ClassForbidden, Message: fmt.Sprintf("you may not %s workloads (synthetic)", run.Action)}
 	}
@@ -581,14 +611,21 @@ func (s *session) RunAction(ctx context.Context, run provider.ActionRun) (core.A
 		o.paused = run.Action == actPause.ID
 		msg = "workload " + o.name + ": " + map[bool]string{true: "rollout pause", false: "resume"}[o.paused] + " requested"
 		w.changed(o, false)
-	case actDelete.ID:
+	case actDelete.ID, actForceDelete.ID:
+		msg = "workload " + o.name + ": deletion requested"
+		if run.Action == actForceDelete.ID {
+			msg = "workload " + o.name + ": forced deletion requested"
+		} else if c.Stuck {
+			o.terminating = true
+			w.changed(o, false)
+			break
+		}
 		for i, x := range w.objs {
 			if x == o {
 				w.objs = append(w.objs[:i:i], w.objs[i+1:]...)
 				break
 			}
 		}
-		msg = "workload " + o.name + ": deletion requested"
 		w.changed(o, true)
 	case actEvacuate.ID:
 		names := c.evacuated(o)

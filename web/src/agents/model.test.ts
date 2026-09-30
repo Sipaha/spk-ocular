@@ -103,5 +103,7 @@ describe('warnings', () => {
     ).toEqual(['editLogs', 'operators', 'sensitiveByName', 'noConfirm'])
     // A rollback puts back any earlier pod template (its images, commands, volumes, ServiceAccount).
     expect(w('kubernetes', [{ scope: { mode: 'one', name: 'web' }, verb: 'action:undo', kinds: null }])).toEqual(['undo'])
+    // A forced deletion skips the kubelet's wait: two copies of a StatefulSet's pod.
+    expect(w('kubernetes', [{ scope: { mode: 'one', name: 'web' }, verb: 'action:forceDelete', kinds: null }])).toEqual(['forceDelete'])
   })
 })

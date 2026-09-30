@@ -371,13 +371,41 @@ test('Delete on a pod row: the ReplicaSet creates a new one', async ({ page }) =
   }
 })
 
+test('bulk: the marked pods of a deployment deleted in one review; each replaced', async ({ page }) => {
+  const cleanup = ownDeployment('act-bulk', 3)
+  try {
+    const old = kubectl('-n', 'ocular-demo', 'get', 'pods', '-l', 'app=act-bulk', '-o', 'jsonpath={.items[*].metadata.name}').trim().split(/\s+/)
+    expect(old).toHaveLength(3)
+    await openTarget(page, 'kind-ocular-dev')
+    const grid = await kindPage(page, 'Pods')
+    const filter = page.getByRole('textbox', { name: 'Filter rows' })
+    await filter.fill('act-bulk')
+    for (const n of old) await expect(row(grid, n)).toBeVisible()
+    await filter.press('ArrowDown') // into the table
+    await page.keyboard.press('ControlOrMeta+a')
+    await expect(page.getByRole('toolbar', { name: 'Marked' })).toContainText('Marked: 3 of 3')
+    await page.keyboard.press('Delete')
+    const dialog = page.getByRole('dialog', { name: 'Delete 3 objects' })
+    await expect(dialog).toContainText('Will run: 3; skipped: 0')
+    await expect(dialog).toContainText(/This is not an eviction.* — 3 objects/)
+    await expect(dialog.getByRole('button', { name: 'Cancel' })).toBeFocused()
+    await dialog.getByRole('button', { name: 'Delete 3' }).click()
+    await expect(dialog.getByRole('status')).toHaveText('3 of 3 done')
+    await dialog.getByRole('button', { name: 'Close' }).click()
+    for (const n of old) await expect(row(grid, n)).toHaveCount(0, { timeout: 90_000 })
+    await expect(row(grid, /^act-bulk-/)).toHaveCount(3, { timeout: 90_000 })
+  } finally {
+    cleanup()
+  }
+})
+
 test('a user without the right sees it in the review', async ({ page }) => {
   await openTarget(page, 'ocular-viewer')
   const grid = page.getByRole('grid', { name: 'resources' })
   const pod = row(grid, /^web-/).first()
   const name = (await pod.getByRole('gridcell').nth(1).textContent())!.trim() // past the mark's cell
   await pod.click({ button: 'right' })
-  await page.getByRole('menu', { name: 'Row actions' }).getByRole('menuitem', { name: 'Delete' }).click()
+  await page.getByRole('menu', { name: 'Row actions' }).getByRole('menuitem', { name: 'Delete', exact: true }).click()
   const dialog = page.getByRole('dialog', { name: `Delete ${name}` })
   await expect(dialog).toContainText('Permission: not allowed: you may not delete pods in ocular-demo')
   await expect(dialog.getByRole('button', { name: 'Delete' })).toBeDisabled()
@@ -471,7 +499,7 @@ test('deleting a custom resource with a finalizer: the review says so, deletion 
     await openTarget(page, 'kind-ocular-dev')
     const grid = await apiKind(page, 'ocular.dev', 'Widgets', 'ocular-crd')
     await row(grid, 'delta').click({ button: 'right' })
-    await page.getByRole('menu', { name: 'Row actions' }).getByRole('menuitem', { name: 'Delete' }).click()
+    await page.getByRole('menu', { name: 'Row actions' }).getByRole('menuitem', { name: 'Delete', exact: true }).click()
     const dialog = page.getByRole('dialog', { name: 'Delete delta' })
     await expect(dialog).toContainText('Deletion waits for its finalizers: ocular.dev/hold.')
     await expect(dialog.getByRole('button', { name: 'Cancel' })).toBeFocused()
