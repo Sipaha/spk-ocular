@@ -85,6 +85,7 @@ describe('editing an object in the details', () => {
     expect(f.client.getEditSource).toHaveBeenCalledWith(expect.objectContaining({ kind: 'pods', name: 'api-1', uid: 'uid-web-api-1' }))
     expect(within(drawer).getByRole('tab', { name: 'YAML' })).toHaveAttribute('aria-selected', 'true')
     expect(v.state.doc.toString()).toBe(docText('api-1'))
+    expect(within(drawer).getByRole('button', { name: 'Edit' })).toBeDisabled() // editing already
     type(v, 'x: 1', 'x: 2')
     fireEvent.keyDown(v.contentDOM, { key: 'Enter', code: 'Enter', ctrlKey: true })
     const review = await screen.findByRole('dialog', { name: 'Edit api-1' })

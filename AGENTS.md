@@ -12,6 +12,7 @@ Go + Wails v3 + React. Спецификация: `docs/specs/2026-09-29-spk-ocul
 готов: P6 — просмотр и логи (`docs/plans/2026-09-30-p6-docker-compose.md`), P7 — терминал,
 статистика и действия (`docs/plans/2026-09-30-p7-compose-exec-stats-actions.md`). P8 — все
 ресурсы API (discovery + server-side Table: CRD, Jobs, PVC…) — `docs/plans/2026-09-30-p8-generic-resources.md`.
+P9 — правка YAML объекта Kubernetes с просмотром и одной записью — `docs/plans/2026-09-30-p9-edit-yaml.md`.
 
 ## Сборка и тесты
 
@@ -121,6 +122,15 @@ Go + Wails v3 + React. Спецификация: `docs/specs/2026-09-29-spk-ocul
   политика PVC, контроллер pod-а, HPA, SSAR). Клиент — `web/src/actions/` (`Menu`,
   `ActionDialog`), меню строки и `Delete` — `ResourceTable` (`rowMenu`, `onDelete`), «Действия ▾»
   — `ResourceDrawer`, уведомление — `showNotice` в `store.ts`.
+- Правка YAML (P9): `provider.Editor` (`EditSource`, `PrepareEdit`, `RunEdit`),
+  `KindDescriptor.Editable`; `internal/api/edit.go` (база и грант — HMAC-конверты с
+  `configRev`); Kubernetes — `edit_doc.go` (строгий разбор YAML 1.2 в `json.Number`, merge
+  patch), `edit_patch.go` (патч от показанного текста к изменённому, скрытые пути, Secret —
+  только `metadata`, столкновения, `editView` с точными десятичными), `edit_dryrun.go`
+  (доказательство dry-run на маршрут), `edit.go` (просмотр: dry-run или локальное наложение,
+  последствия, права; запись — один PATCH с uid+resourceVersion просмотра), `edit_errors.go`
+  (`secretSafe`). Клиент — `web/src/edit/` (`diff.ts`, `EditDiff`, `EditDialog`, `guard.ts` +
+  `DiscardPrompt`), редактор — `YamlView` (`editable`), кнопка/`E`/полоса — `ResourceDrawer`.
 - Problems: `internal/providers/kubernetes/problems.go` — вид `problems` как набор обычных
   `viewWatch` (pods, workloads, services, ingresses, nodes, Warning events) через фильтрующие
   адаптеры `problemsFeed` в один sink (Reset источника → явные удаления), ID строки
@@ -339,6 +349,19 @@ Go + Wails v3 + React. Спецификация: `docs/specs/2026-09-29-spk-ocul
   Esc не закрывает во время выполнения; цель меню — строка под курсором / текущий объект деталей;
   `Delete` — только в теле таблицы. — `ActionDialog.test.tsx`, `WorkspaceActions.test.tsx`,
   `tests/e2e/actions.spec.ts`.
+- Правка YAML пишет только просмотренное: `RunEdit` заново выводит патч из original+edited,
+  сверяет хэш с грантом и пишет один раз с uid+resourceVersion просмотра (без перечитывания и
+  повторов); `PATCH` с `dryRun` — только по доказанному маршруту (точный GVR описанного вида,
+  локальный APIService, `dryRun` в OpenAPI PATCH), иначе локальное наложение без единого
+  изменяющего запроса, план опасный; просмотр ограничен сроком и кончается с сессией. —
+  `edit_session_test.go`, `edit_dryrun_test.go`, `TestKindEdit*`.
+- Правка Secret — только `metadata`; строки сервера об объекте Secret (message, reason,
+  cause) не показываются никогда — только известные значения перечислений своими словами. —
+  `TestSecretRefusalsNeverPrintServerStrings`, `TestASecretsReadRefusalsAreHidden`.
+- Несохранённые правки не теряются молча: всё, что уводит от редактора (закрытие деталей, Esc,
+  связи, вкладка, другой объект, вид, scope, target, палитра), идёт через `mayLeave`
+  (`web/src/edit/guard.ts`) — «Отбросить правки?» с фокусом на «Продолжить правку». —
+  `WorkspaceEdit.test.tsx`, `guard.test.ts`, e2e-kind «edit a ConfigMap».
 - Версии `github.com/wailsapp/wails/v3` и `@wailsio/runtime` совпадают (сейчас `3.0.0-beta.26`).
 - `go build ./...` без тега `wails` обязан проходить: desktop-код за тегом.
 - Стартовый JS-чанк < 300 КБ gz (сейчас вход 86 КБ + общие ~18 КБ), xterm (~87 КБ gz)/CodeMirror — только ленивые чанки. — `web/scripts/check-bundle.mjs`
@@ -490,6 +513,13 @@ Go + Wails v3 + React. Спецификация: `docs/specs/2026-09-29-spk-ocul
   (поэтому `?` и `/` сопоставляются по коду или по символу).
 - **`pnpm exec tsc -b` переписывает отслеживаемый `web/tsconfig.tsbuildinfo`** — перед коммитом
   `git checkout web/tsconfig.tsbuildinfo`.
+- **`rest.Result.Raw()` не разбирает `Status`**: ошибка из `Raw()` — голая «the server
+  rejected our request…» без message и causes; разбор делает только `Result.Error()` —
+  брать ошибку из него, тело — из `Raw()`. Нашёл kind-тест P9.
+- **`sigs.k8s.io/yaml.Marshal` читает числа обратно через float64** (JSON → YAML):
+  `json.Number("9007199254740993.0")` выходит как `9.007199254740992e+15`. Точный вывод —
+  `exactDecimals` в `edit_patch.go`. kube-apiserver сам хранит нецелый JSON-литерал как float64
+  (dry-run на kind: …992), целые — точно.
 - **Две сетки `resources`**: список событий в деталях — тоже `ResourceTable`; в e2e брать `.first()`.
 - **Фильтры `/events` Moby складываются по И между ключами**: `type=[container,network]` с
   `label=com.docker.compose.project` отбросил бы события сети (`connect` называет контейнер

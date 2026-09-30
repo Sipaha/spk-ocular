@@ -5,7 +5,8 @@
 туннели) и P4 (действия) — 2026-09-30 (`docs/plans/`); P5 (Problems, палитра, клавиатура,
 полировка) — 2026-09-30 (soak памяти принят на сборке P7); P6 (Docker
 Compose: просмотр и логи) и P7 (Compose: терминал, статистика, действия) — 2026-09-30; P8
-(все ресурсы API: CRD и встроенные без проекции) — 2026-09-30.
+(все ресурсы API: CRD и встроенные без проекции) — 2026-09-30; P9 (правка YAML объекта
+Kubernetes) — 2026-09-30.
 Решения приняты пользователем в переписке; документ фиксирует итог, а не варианты.
 
 ## Зачем
@@ -59,7 +60,8 @@ MVP — быстрый operational viewer для Kubernetes: понять, чт�
 ## Не делаем в MVP
 
 CI/CD, GitOps, создание кластеров, Helm UI, monitoring/alerting-платформа, централизованное
-хранение логов, collaboration, свой cloud backend, редактирование/apply YAML,
+хранение логов, collaboration, свой cloud backend, создание объектов и apply
+многодокументного YAML (правка одного существующего объекта — P9),
 read-only/protected-пометка contexts, трей, несколько активных кластеров одновременно.
 
 ## Kubernetes MVP — функции
@@ -73,7 +75,7 @@ read-only/protected-пометка contexts, трей, несколько акт
 - Виды: Pods, Deployments, StatefulSets, DaemonSets, Services, Ingresses, ConfigMaps, Secrets,
   Nodes, Events. Живое обновление через watch.
 - Состояние и проблемы с первого взгляда: health каждой строки + сводный вид **Problems**.
-- Details: поля, YAML (read-only, CodeMirror 6), связанные Events, связанные объекты
+- Details: поля, YAML (CodeMirror 6; правка объекта с просмотром — P9), связанные Events, связанные объекты
   (owner вверх, pods вниз, service → pods).
 - Логи: stream/follow, tail, выбор контейнера, previous, since, агрегация всех pod-ов workload
   в один поток с префиксом, поиск/фильтр, ANSI-цвета.
@@ -580,6 +582,16 @@ target, kind, scope, name, uid, title, opened_at; ≤ 50 на target, ≤ 500 в
   (свёрнуты, `target_state`), заметки каталога, точка health у таблиц без колонки статуса,
   палитра по коротким именам. Проверено: httptest, kind (Go и e2e-kind 22), vitest,
   desktop под Xvfb в русской раскладке; Private_Dirty с открытыми CR-видами — 86.8 МБ.
+- **P9** ✅ — Kubernetes: правка YAML одного объекта (2026-09-30,
+  `docs/plans/2026-09-30-p9-edit-yaml.md`). Редактор в деталях (`E`, `Ctrl+Enter`), строгий
+  разбор YAML 1.2 с точными числами, свой merge patch от показанного текста к изменённому (не
+  трёхстороннее слияние: столкновения с изменениями после открытия перечислены, план
+  опасный), скрытые поля (status, managedFields, last-applied) не меняются. Просмотр: dry-run
+  сервера только по доказанному маршруту, иначе локальное наложение без изменяющих запросов;
+  последствия, права, разница порциями. Запись — ровно одна, того же патча, с uid +
+  resourceVersion просмотра (база и грант — подписанные токены). Secret — только `metadata`.
+  Проверено: фейки и httptest, kind (Go и e2e-kind 23), vitest, desktop под Xvfb в русской
+  раскладке; Private_Dirty с открытым редактором — 110.8 МБ.
 
 ## Документация и процесс
 
