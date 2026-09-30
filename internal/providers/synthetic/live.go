@@ -54,6 +54,9 @@ func instances(object string) []string {
 }
 
 func (s *session) ExecInfo(_ context.Context, ref core.Ref) (core.ExecInfo, error) {
+	if ref.Kind == CrateKind {
+		return core.ExecInfo{Instances: []core.ExecInstance{}}, nil // nowhere to run
+	}
 	insts := instances(ref.Name)
 	if len(insts) == 0 {
 		return core.ExecInfo{}, &provider.Error{Class: provider.ClassNotFound, Message: ref.Name}

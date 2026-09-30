@@ -31,8 +31,9 @@ var objects = map[string][]string{
 
 // Provider holds the live log feeds tests push into.
 type Provider struct {
-	live live
-	wl   workloads
+	live   live
+	wl     workloads
+	crates crates
 	// rev is the configuration revision (Reconfigure bumps it); changed
 	// wakes Watch.
 	rev     atomic.Int64
@@ -93,7 +94,18 @@ func (p *Provider) ID() string    { return ID }
 func (p *Provider) Title() string { return "Synthetic (test)" }
 
 func (p *Provider) Discover(context.Context) (provider.Discovery, error) {
-	return provider.Discovery{Targets: []core.Target{{Provider: ID, ID: Target, Title: Target, Subtitle: "test provider", ConfigHash: p.hash()}}}, nil
+	return provider.Discovery{Targets: []core.Target{{Provider: ID, ID: Target, Title: Target, Subtitle: "test provider", ConfigHash: p.hash(), DefaultScope: DefaultScope}}}, nil
+}
+
+var _ provider.ScopeNamer = (*Provider)(nil)
+
+// ScopeNames: zones, not namespaces (no translations: the English is shown).
+func (p *Provider) ScopeNames() core.ScopeNames {
+	return core.ScopeNames{
+		Singular: core.Message{Key: ID + ".scope.singular", Text: "Zone"},
+		Plural:   core.Message{Key: ID + ".scope.plural", Text: "zones"},
+		All:      core.Message{Key: ID + ".scope.all", Text: "All zones"},
+	}
 }
 
 func (p *Provider) Open(context.Context, string) (provider.Session, error) {
@@ -138,14 +150,21 @@ var kind = core.KindDescriptor{
 
 func (s *session) ConfigHash() string { return s.hash }
 func (s *session) Kinds() []core.KindDescriptor {
-	return []core.KindDescriptor{kind, workloadKind, problemsKind}
+	return []core.KindDescriptor{kind, workloadKind, problemsKind, crateKind}
 }
-func (s *session) Scopes(context.Context) ([]core.Scope, error) { return nil, nil }
-func (s *session) ScopeKind() string                            { return "" }
-func (s *session) Close()                                       {}
+
+// Scopes cannot be listed: the UI takes a typed one.
+func (s *session) Scopes(context.Context) ([]core.Scope, error) {
+	return nil, &provider.Error{Class: provider.ClassForbidden, Message: "zones cannot be listed"}
+}
+func (s *session) ScopeKind() string { return "" }
+func (s *session) Close()            {}
 func (s *session) Get(_ context.Context, ref core.Ref) (*core.Resource, error) {
-	if ref.Kind == WorkloadKind {
+	switch ref.Kind {
+	case WorkloadKind:
 		return s.getWorkload(ref.Name)
+	case CrateKind:
+		return s.getCrate(ref)
 	}
 	if _, ok := objects[ref.Name]; !ok {
 		return nil, &provider.Error{Class: provider.ClassNotFound, Message: ref.Name}
@@ -163,6 +182,8 @@ func (s *session) Watch(q provider.Query, sink provider.Sink) (func(), error) {
 		return s.watchWorkloads(q, sink)
 	case ProblemsKind:
 		return s.watchProblems(sink)
+	case CrateKind:
+		return s.watchCrates(q, sink)
 	}
 	var rows []core.Row
 	for _, name := range []string{"api", "workers"} {
