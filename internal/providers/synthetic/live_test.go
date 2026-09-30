@@ -80,6 +80,11 @@ func start(tb testing.TB, argv ...string) (*Provider, *term) {
 	h, err := s.(provider.Execer).PrepareExec(context.Background(), core.Ref{Provider: ID, Target: Target, Kind: Kind, Name: "workers"}, provider.ExecRequest{Instance: "worker-2", Command: argv})
 	require.NoError(tb, err)
 	assert.Equal(tb, "worker-2", h.Describe().Instance)
+	return p, runTerm(h)
+}
+
+// runTerm runs h in a fake terminal 80x24.
+func runTerm(h provider.ExecHandle) *term {
 	inR, inW := io.Pipe()
 	t := &term{in: inW, sizes: &sizes{ch: make(chan provider.TermSize, 4), done: make(chan struct{})}, res: make(chan result, 1)}
 	t.sizes.ch <- provider.TermSize{Cols: 80, Rows: 24}
@@ -90,7 +95,7 @@ func start(tb testing.TB, argv ...string) (*Provider, *term) {
 		close(t.sizes.done)
 		h.Close()
 	}()
-	return p, t
+	return t
 }
 
 func TestEchoTerminal(t *testing.T) {

@@ -1,5 +1,5 @@
 import { expect, test, type Locator, type Page } from '@playwright/test'
-import { reconfigure, token } from './synth'
+import { activePanel, expectScreen, reconfigure, token } from './synth'
 
 // Actions on the synthetic Workloads (web: 2 replicas; db: 1 and an
 // autoscaler; paused: restart unavailable), steered by /api/_test/synthetic.
@@ -60,7 +60,7 @@ test('scale from the row menu in two steps: the count, then its review', async (
   const grid = await openWorkloads(page)
   await row(grid, 'db').click({ button: 'right' })
   const menu = page.getByRole('menu', { name: 'Row actions' })
-  await expect(menu.getByRole('menuitem')).toHaveText(['Details', 'Restart', 'Scale…', 'Roll back…', 'Pause rollout', 'Resume', 'Delete', 'Evacuate'])
+  await expect(menu.getByRole('menuitem')).toHaveText(['Details', 'Restart', 'Scale…', 'Roll back…', 'Pause rollout', 'Resume', 'Delete', 'Evacuate', 'Debug…'])
   await menu.getByRole('menuitem', { name: 'Scale…' }).click()
   const dialog = page.getByRole('dialog', { name: 'Scale db' })
   const count = dialog.getByRole('textbox')
@@ -288,4 +288,55 @@ test('a plan with long lists and a run of many parts: every name reachable, the 
   await result.getByRole('listitem').nth(120).scrollIntoViewIfNeeded()
   await framed()
   await expect.poll(() => cells(grid, 'web')).toEqual(['web', '2', '1'])
+})
+
+test('debug: the image and the target are reviewed at once; the debugger’s terminal opens attached; an ended one says so', async ({ page }) => {
+  const grid = await openWorkloads(page)
+  // Nothing remembered (a retry runs on the same data): through the page's own API token.
+  const forgot = await page.evaluate(async () => {
+    const token = document.querySelector<HTMLMetaElement>('meta[name="spk-ocular-api-token"]')!.content
+    const res = await fetch('/api/SetTargetState', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ provider: 'synthetic', target: 'demo', key: 'actionText.debug', value: '' }),
+    })
+    return res.status
+  })
+  expect(forgot).toBe(200)
+  await row(grid, 'web').click({ button: 'right' })
+  await page.getByRole('menu', { name: 'Row actions' }).getByRole('menuitem', { name: 'Debug…' }).click()
+  const dialog = page.getByRole('dialog', { name: 'Debug web' })
+  const image = dialog.getByRole('textbox', { name: 'Image' })
+  await expect(image).toHaveValue('busybox:1.36')
+  await expect(dialog.getByRole('radio', { name: /main/ })).toBeChecked()
+  await expect(dialog).toContainText('Debug container debugger-00001 with image busybox:1.36 is added to web.')
+  await expect(dialog.getByRole('button', { name: 'Debug' })).toBeFocused()
+
+  await image.fill('alpine:3')
+  await expect(dialog.getByRole('button', { name: 'Debug' })).toBeDisabled()
+  await image.press('Enter') // reviews, never runs
+  await expect(dialog).toContainText('with image alpine:3')
+  await dialog.getByRole('radio', { name: /helper/ }).click()
+  await expect(dialog).toContainText('It sees the processes of container helper.')
+  await expect(image).toHaveValue('alpine:3')
+  await dialog.getByRole('button', { name: 'Debug' }).click()
+  await expect(dialog).toBeHidden()
+  await expect(page.getByRole('status')).toHaveText('workload web: debug container debugger-00001 added')
+
+  await expect(page.getByRole('tab', { name: /debugger-00001 · web/ })).toBeVisible()
+  await expectScreen(page, 'debugger debugger-00001 (alpine:3) on web')
+  await page.keyboard.type('exit 3')
+  await page.keyboard.press('Enter')
+  const alert = activePanel(page).getByRole('alert')
+  await expect(alert).toContainText('process exited with code 3')
+  await alert.getByRole('button', { name: 'Reconnect' }).click()
+  await expect(alert).toContainText('has ended; open a new one (Debug…)')
+  await expect(alert.getByRole('button')).toHaveCount(0) // it cannot restart
+
+  // The image last run on this target comes first next time.
+  await row(grid, 'web').click({ button: 'right' })
+  await page.getByRole('menu', { name: 'Row actions' }).getByRole('menuitem', { name: 'Debug…' }).click()
+  await expect(dialog.getByRole('textbox', { name: 'Image' })).toHaveValue('alpine:3')
+  await expect(dialog).toContainText('debugger-00002')
+  await page.keyboard.press('Escape')
 })

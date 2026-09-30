@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { ApiError, type Client } from '../api/client'
-import type { ActionChoice, ActionDescriptor, ActionParams, ActionPart, ActionPlan, ActionResult, Ref } from '../api/types'
+import type { ActionChoice, ActionDescriptor, ActionParams, ActionPart, ActionPlan, ActionResult, Ref, TerminalOpen } from '../api/types'
 import { actionLabel, classLabel, messageText, t } from '../i18n'
 import { refTitle } from '../refs'
 import { useScopeWords } from '../scopeNames'
@@ -23,9 +23,16 @@ interface Props {
   client: Client
   req: ActionRequest
   onClose: () => void
+  /** A done run asks for a terminal (a debug container's). */
+  onTerminal?: (open: TerminalOpen) => void
   /** How long a run may take before its outcome is called unknown. */
   runTimeoutMs?: number
 }
+
+/** The target_state key of the text an action last ran with on a target. */
+const textKey = (actionId: string) => `actionText.${actionId}`
+
+const byteLength = (s: string) => new TextEncoder().encode(s).length
 
 type Outcome =
   | { type: 'prepareFailed'; text: string }
@@ -93,14 +100,21 @@ const codeOf = (e: unknown) => (e instanceof ApiError ? e.code : 'internal')
  * first and reviewed before it can run (a choice is reviewed as it is made). One run per confirmation; while it runs the
  * dialog stays.
  */
-export function ActionDialog({ client, req, onClose, runTimeoutMs = RUN_TIMEOUT_MS }: Props) {
+export function ActionDialog({ client, req, onClose, onTerminal, runTimeoutMs = RUN_TIMEOUT_MS }: Props) {
   const { ref, action, kindTitle } = req
   // The object's own provider names its scopes (not the target selected now).
   const scopeWords = useScopeWords(ref.provider)
   const param = action.param
   const counted = !!param && param.kind !== 'choice'
   const choosing = param?.kind === 'choice'
+  // A text value next to the param (a debug container's image).
+  const textDesc = action.text
   const [plan, setPlan] = useState<ActionPlan | null>(null)
+  // The text typed; null until the first plan says the provider's default.
+  const [text, setText] = useState<string | null>(null)
+  const textTouched = useRef(false)
+  const chosenTouched = useRef(false)
+  const [textError, setTextError] = useState<string | null>(null)
   const [count, setCount] = useState('')
   // The value chosen (a choice parameter).
   const [chosen, setChosen] = useState<string | null>(null)
@@ -120,6 +134,7 @@ export function ActionDialog({ client, req, onClose, runTimeoutMs = RUN_TIMEOUT_
   const confirmRef = useRef<HTMLButtonElement>(null)
   const cancelRef = useRef<HTMLButtonElement>(null)
   const countRef = useRef<HTMLInputElement>(null)
+  const textRef = useRef<HTMLInputElement>(null)
   const choicesRef = useRef<HTMLDivElement>(null)
   const outcomeRef = useRef<HTMLParagraphElement>(null)
   const [mark] = useState(focusMark)
@@ -143,6 +158,10 @@ export function ActionDialog({ client, req, onClose, runTimeoutMs = RUN_TIMEOUT_
         setPlan(pl)
         setBusy(null)
         if (counted && p.count === undefined && pl.current !== undefined) setCount(String(pl.current))
+        // The provider's defaults (the image, the target) are this plan's:
+        // taken as if chosen, so the plan is reviewed at once.
+        if (textDesc && !textTouched.current && pl.params.text !== undefined) setText(pl.params.text)
+        if (choosing && !chosenTouched.current && pl.params.choice !== undefined) setChosen(pl.params.choice)
       },
       (e) => {
         if (!live.current || g !== gen.current) return
@@ -161,13 +180,37 @@ export function ActionDialog({ client, req, onClose, runTimeoutMs = RUN_TIMEOUT_
     fetchPlan(p)
   }
 
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => fetchPlan({}), [])
+  useEffect(() => {
+    if (!textDesc) return fetchPlan({})
+    // The text last run on this target is the first reviewed.
+    client.getTargetState(ref.provider, ref.target).then(
+      (st) => {
+        let last: unknown
+        try {
+          last = JSON.parse(st[textKey(action.id)] ?? 'null')
+        } catch {
+          last = null
+        }
+        fetchPlan(typeof last === 'string' && last.trim() && byteLength(last) <= textDesc.max ? { text: last } : {})
+      },
+      () => fetchPlan({}),
+    )
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // The values under review: the text typed and the choice made.
+  const values = (extra: ActionParams = {}): ActionParams => ({
+    ...(chosen !== null ? { choice: chosen } : {}),
+    ...(textDesc && text !== null ? { text: text.trim() } : {}),
+    ...extra,
+  })
 
   const planned = plan?.params.count
-  // A count other than the reviewed one must be reviewed first; a choice
-  // runs only with its own plan.
-  const reviewed = !param || (choosing ? chosen !== null && plan?.params.choice === chosen : planned !== undefined && count.trim() === String(planned))
+  // A count or a text other than the reviewed one must be reviewed first; a
+  // choice runs only with its own plan.
+  const textReviewed = !textDesc || (text !== null && plan?.params.text === text.trim())
+  const reviewed =
+    textReviewed && (!param || (choosing ? chosen !== null && plan?.params.choice === chosen : planned !== undefined && count.trim() === String(planned)))
   const canRun = !!plan && reviewed && !busy && !sent && !plan.unavailable && plan.rights.state !== 'denied'
   const destructive = !!plan?.destructive
 
@@ -182,6 +225,8 @@ export function ActionDialog({ client, req, onClose, runTimeoutMs = RUN_TIMEOUT_
       const first = choicesRef.current?.querySelector<HTMLInputElement>('input:not(:disabled)')
       if (first) first.focus()
       else cancelRef.current?.focus() // nothing to choose: Esc and Enter still reach the dialog
+    } else if (textDesc && !textReviewed) {
+      textRef.current?.focus()
     } else if (choosing && !reviewed) {
       return // a choice's review is on its way
     } else if (counted && !reviewed) {
@@ -198,14 +243,31 @@ export function ActionDialog({ client, req, onClose, runTimeoutMs = RUN_TIMEOUT_
     if (outcome) outcomeRef.current?.scrollIntoView({ block: 'start' })
   }, [outcome])
 
+  // Why the text cannot be reviewed (null: it can).
+  const textProblem = () => {
+    if (!textDesc) return null
+    const s = (text ?? '').trim()
+    return !s ? t('action.textEmpty') : byteLength(s) > textDesc.max ? t('action.textTooLong', { max: textDesc.max }) : null
+  }
+
   const choose = (v: string) => {
     if (busy === 'run' || sent) return
+    chosenTouched.current = true
     setChosen(v)
-    prepare({ choice: v })
+    const bad = textProblem()
+    setTextError(bad)
+    if (!bad) prepare(values({ choice: v }))
   }
 
   const review = () => {
-    if (!param || !counted || busy === 'run') return
+    if (busy === 'run') return
+    if (textDesc) {
+      const bad = textProblem()
+      setTextError(bad)
+      if (bad) return
+      if (!counted) return prepare(values())
+    }
+    if (!param || !counted) return
     const s = count.trim()
     const n = Number(s)
     if (!/^\d+$/.test(s) || n < param.min || n > param.max) {
@@ -213,7 +275,7 @@ export function ActionDialog({ client, req, onClose, runTimeoutMs = RUN_TIMEOUT_
       return
     }
     setCountError(null)
-    prepare({ count: n })
+    prepare(values({ count: n }))
   }
 
   const run = async () => {
@@ -273,7 +335,11 @@ export function ActionDialog({ client, req, onClose, runTimeoutMs = RUN_TIMEOUT_
         setBusy(null)
       } else {
         showNotice(told(res))
+        if (textDesc && plan.params.text !== undefined) {
+          void client.setTargetState(ref.provider, ref.target, textKey(action.id), JSON.stringify(plan.params.text)).catch(() => {})
+        }
         onClose()
+        if (res.terminal) onTerminal?.(res.terminal)
       }
     } catch (e) {
       const out: Outcome = e instanceof RunTimeout ? { type: 'unknown', text: t('action.timeout', { sec: Math.round(runTimeoutMs / 1000) }) } : outcomeOf(e)
@@ -366,6 +432,28 @@ export function ActionDialog({ client, req, onClose, runTimeoutMs = RUN_TIMEOUT_
 
         {/* Only the middle scrolls: a long plan or result never hides what and where, nor the buttons. */}
         <div className="-mx-1 flex min-h-0 flex-col gap-3 overflow-y-auto px-1">
+
+          {textDesc && (
+            <label className="flex flex-wrap items-center gap-2 text-xs text-fg-muted">
+              {messageText(textDesc.title)}
+              <input
+                ref={textRef}
+                value={text ?? ''}
+                placeholder={textDesc.default}
+                disabled={busy === 'run' || sent}
+                spellCheck={false}
+                autoComplete="off"
+                onChange={(e) => {
+                  textTouched.current = true
+                  setText(e.target.value)
+                  setTextError(null)
+                }}
+                aria-invalid={!!textError}
+                className="min-w-0 flex-1 rounded-md border border-line bg-app px-2 py-1 font-mono text-sm text-fg outline-none focus:border-accent"
+              />
+              {textError && <span className="text-danger">{textError}</span>}
+            </label>
+          )}
 
           {choosing && !!plan?.choices?.length && (
             <Choices choices={plan.choices} chosen={chosen} disabled={busy === 'run' || sent || (chosen === null && !!plan.unavailable)} onChoose={choose} boxRef={choicesRef} />
@@ -489,11 +577,11 @@ export function ActionDialog({ client, req, onClose, runTimeoutMs = RUN_TIMEOUT_
             {sent || outcome?.type === 'prepareFailed' ? t('action.close') : t('action.cancel')}
           </button>
           {(outcome?.type === 'conflict' || outcome?.type === 'prepareFailed' || (choosing && chosen !== null && reviewed && !!plan?.unavailable && !sent)) && (
-            <button type="button" className={`${btn} border border-line hover:bg-hover`} onClick={() => (choosing ? prepare(chosen === null ? {} : { choice: chosen }) : counted && count.trim() ? review() : prepare({}))}>
+            <button type="button" className={`${btn} border border-line hover:bg-hover`} onClick={() => ((counted && count.trim()) || (textDesc && text !== null) ? review() : prepare(values()))}>
               {t('action.reviewAgain')}
             </button>
           )}
-          {counted && !reviewed && !sent && (
+          {(counted || (textDesc && !textReviewed)) && !reviewed && !sent && (
             // Enabled while a review is read: a disabled default button would swallow Enter in the count.
             <button type="submit" disabled={busy === 'run'} className={`${btn} bg-accent text-accent-fg`}>
               {t('action.review')}

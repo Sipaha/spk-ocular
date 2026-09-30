@@ -295,7 +295,8 @@ export default function TerminalView({ client, tab, active, mode }: Props) {
                   {t('term.reconnect')}
                 </button>
               )}
-              {gone && (
+              {/* An ended debugger cannot restart: its text says to debug again. */}
+              {gone && !tab.open.attach && (
                 <button className="rounded-md bg-accent px-2 py-0.5 text-accent-fg" onClick={openNew}>
                   {t('term.openNew')}
                 </button>

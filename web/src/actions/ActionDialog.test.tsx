@@ -692,6 +692,107 @@ describe('ActionDialog', () => {
     })
   })
 
+  describe('a text value (a debug container’s image)', () => {
+    const debug: ActionDescriptor = {
+      id: 'debug',
+      title: 'Debug',
+      param: { kind: 'choice', min: 0, max: 0 },
+      text: { title: { key: 'kubernetes.debug.image', text: 'Image' }, default: 'busybox:1.36', max: 20 },
+      noAgents: true,
+    }
+    // The provider fills its defaults into the plan's params.
+    const debugPlan = (p: ActionParams) => {
+      const params = { choice: p.choice ?? 'app', text: p.text ?? 'busybox:1.36' }
+      return planOf(debug, params, {
+        choices: [
+          { value: 'app', title: { text: 'app' } },
+          { value: 'side', title: { text: 'side' } },
+        ],
+        effects: [{ text: `debugger with ${params.text} sees ${params.choice}` }],
+        expect: `exp-${params.text}-${params.choice}`,
+      })
+    }
+    const terminal = { ref: { ...ref, kind: 'pods', name: 'web-1' }, channel: 'debugger-x1y2z', attach: true }
+    function setupDebug(remembered: Record<string, string> = {}) {
+      const f = fakeClient([k8s('prod')])
+      f.client.getTargetState = vi.fn(async () => remembered)
+      f.client.prepareAction = vi.fn(async (_r: Ref, _a: string, p: ActionParams) => debugPlan(p))
+      f.client.runAction = vi.fn(async () => ({ message: { text: 'debug container added' }, terminal }))
+      const onClose = vi.fn()
+      const onTerminal = vi.fn()
+      render(<ActionDialog client={f.client} req={{ ref, action: debug, kindTitle: 'Pod' }} onClose={onClose} onTerminal={onTerminal} />)
+      return { f, onClose, onTerminal, dialog: screen.getByRole('dialog') }
+    }
+
+    it('the provider’s defaults are reviewed at once: Enter runs them, the terminal opens, the text is remembered', async () => {
+      const { f, onClose, onTerminal, dialog } = setupDebug()
+      const confirm = within(dialog).getByRole('button', { name: 'Debug' })
+      await waitFor(() => expect(confirm).toHaveFocus())
+      expect(within(dialog).getByRole('textbox', { name: 'Image' })).toHaveValue('busybox:1.36')
+      expect(within(dialog).getByRole('radio', { name: /app/ })).toBeChecked()
+      expect(dialog).toHaveTextContent('debugger with busybox:1.36 sees app')
+      expect(f.client.prepareAction).toHaveBeenCalledTimes(1)
+      await userEvent.keyboard('{Enter}')
+      await waitFor(() => expect(onClose).toHaveBeenCalled())
+      const sent = vi.mocked(f.client.runAction).mock.calls[0][0]
+      expect(sent.params).toEqual({ choice: 'app', text: 'busybox:1.36' })
+      expect(sent.expect).toBe('exp-busybox:1.36-app')
+      expect(onTerminal).toHaveBeenCalledWith(terminal)
+      expect(f.client.setTargetState).toHaveBeenCalledWith('kubernetes', 'prod', 'actionText.debug', JSON.stringify('busybox:1.36'))
+    })
+
+    it('a changed text is reviewed first — Enter in the field — and only the reviewed text runs', async () => {
+      const { f, dialog } = setupDebug()
+      const field = within(dialog).getByRole('textbox', { name: 'Image' })
+      await waitFor(() => expect(field).toHaveValue('busybox:1.36'))
+      await userEvent.clear(field)
+      await userEvent.type(field, 'alpine:3')
+      expect(within(dialog).getByRole('button', { name: 'Debug' })).toBeDisabled()
+      expect(within(dialog).getByRole('button', { name: 'Review' })).toBeEnabled()
+      expect(within(dialog).queryByText(/debugger with busybox/)).not.toBeInTheDocument() // the plan of another text is not shown
+      await userEvent.type(field, '{Enter}')
+      await within(dialog).findByText('debugger with alpine:3 sees app')
+      expect(f.client.prepareAction).toHaveBeenLastCalledWith(ref, 'debug', { choice: 'app', text: 'alpine:3' })
+      const confirm = within(dialog).getByRole('button', { name: 'Debug' })
+      await waitFor(() => expect(confirm).toBeEnabled())
+      await userEvent.click(confirm)
+      expect(vi.mocked(f.client.runAction).mock.calls[0][0].params).toEqual({ choice: 'app', text: 'alpine:3' })
+    })
+
+    it('choosing a target keeps the text reviewed with it', async () => {
+      const { f, dialog } = setupDebug()
+      const field = within(dialog).getByRole('textbox', { name: 'Image' })
+      await waitFor(() => expect(field).toHaveValue('busybox:1.36'))
+      await userEvent.clear(field)
+      await userEvent.type(field, 'alpine:3{Enter}')
+      await within(dialog).findByText('debugger with alpine:3 sees app')
+      await userEvent.click(within(dialog).getByRole('radio', { name: /side/ }))
+      await within(dialog).findByText('debugger with alpine:3 sees side')
+      expect(f.client.prepareAction).toHaveBeenLastCalledWith(ref, 'debug', { choice: 'side', text: 'alpine:3' })
+    })
+
+    it('an empty or too long text is explained, not sent', async () => {
+      const { f, dialog } = setupDebug()
+      const field = within(dialog).getByRole('textbox', { name: 'Image' })
+      await waitFor(() => expect(field).toHaveValue('busybox:1.36'))
+      await userEvent.clear(field)
+      await userEvent.type(field, '  {Enter}')
+      expect(within(dialog).getByText('Enter a value')).toBeInTheDocument()
+      await userEvent.type(field, 'x'.repeat(21) + '{Enter}')
+      expect(within(dialog).getByText('At most 20 bytes')).toBeInTheDocument()
+      expect(field).toHaveAttribute('aria-invalid', 'true')
+      expect(f.client.prepareAction).toHaveBeenCalledTimes(1)
+    })
+
+    it('the text last run on this target is the first one reviewed', async () => {
+      const { f, dialog } = setupDebug({ 'actionText.debug': JSON.stringify('nicolaka/netshoot') })
+      await within(dialog).findByText('debugger with nicolaka/netshoot sees app')
+      expect(f.client.prepareAction).toHaveBeenCalledTimes(1)
+      expect(f.client.prepareAction).toHaveBeenCalledWith(ref, 'debug', { text: 'nicolaka/netshoot' })
+      expect(f.client.getTargetState).toHaveBeenCalledWith('kubernetes', 'prod')
+    })
+  })
+
   it('Tab stays in the dialog', async () => {
     const { dialog } = setup(restart)
     await within(dialog).findByRole('button', { name: 'Restart' })

@@ -266,3 +266,29 @@ describe('tab title', () => {
     expect(await titled({ instance: 'shop-web-2' })).toBe('shop-web-2')
   })
 })
+
+describe('a debugger’s tab (attach)', () => {
+  const attachTab = { ...tab, open: { ...tab.open, channel: 'debugger-x1y2z', attach: true } } as unknown as TermTab
+
+  it('opens as an attach and reconnects the same way', async () => {
+    const client = fakeClient()
+    render(<TerminalView client={client as unknown as Client} tab={attachTab} active mode="browser" />)
+    await waitFor(() => expect(h.conns).toHaveLength(1))
+    expect(client.openTerminal).toHaveBeenCalledWith(expect.objectContaining({ channel: 'debugger-x1y2z', attach: true }))
+    act(() => h.conns[0].end({ reason: 'closed', message: 'connection lost' }))
+    act(() => screen.getByRole('button', { name: 'Reconnect' }).click())
+    await waitFor(() => expect(client.reopenTerminal).toHaveBeenCalled())
+  })
+
+  it('an ended debugger offers no new terminal (it cannot restart): its text says to debug again', async () => {
+    const open = vi.spyOn(dock, 'openTerminal')
+    render(<TerminalView client={fakeClient() as unknown as Client} tab={attachTab} active mode="browser" />)
+    await waitFor(() => expect(h.conns).toHaveLength(1))
+    act(() => h.conns[0].end({ reason: 'error', class: 'gone', message: 'debugger debugger-x1y2z has ended; open a new one (Debug…)' }))
+    expect(screen.getByRole('alert')).toHaveTextContent('has ended')
+    expect(screen.queryByRole('button', { name: 'Open a new terminal' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Reconnect' })).not.toBeInTheDocument()
+    expect(open).not.toHaveBeenCalled()
+    open.mockRestore()
+  })
+})

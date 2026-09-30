@@ -13,6 +13,8 @@ export interface TermOpen {
   channel?: string
   /** argv; empty = the provider's interactive shell */
   command?: string[]
+  /** to the container's own process (a debugger), not a new one */
+  attach?: boolean
 }
 
 interface TabBase {
@@ -63,9 +65,9 @@ export const dock = {
     activate({ kind: 'logs', id: `logs:${targetKey(target)}:${refKey(ref)}`, target, targetTitle, ref, title: `${ref.kind.split('/').pop()}/${refTitle(ref)}` })
   },
   /** Every open is a new terminal (two shells in one pod are normal). */
-  openTerminal(target: TargetRef, targetTitle: string, open: TermOpen) {
+  openTerminal(target: TargetRef, targetTitle: string, open: TermOpen, title = refTitle(open.ref)) {
     termSeq++
-    activate({ kind: 'term', id: `term:${targetKey(target)}:${refKey(open.ref)}:${termSeq}`, target, targetTitle, open, title: refTitle(open.ref) })
+    activate({ kind: 'term', id: `term:${targetKey(target)}:${refKey(open.ref)}:${termSeq}`, target, targetTitle, open, title })
   },
   update(id: string, patch: Partial<Pick<TermTab, 'title' | 'hint' | 'rev'>>) {
     useDock.setState((s) => ({ tabs: s.tabs.map((t) => (t.id === id ? { ...t, ...patch } : t)) }))

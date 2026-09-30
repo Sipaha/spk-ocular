@@ -3,6 +3,8 @@ package synthetic
 import (
 	"context"
 	"fmt"
+	"slices"
+	"strings"
 	"sync"
 	"time"
 
@@ -28,6 +30,12 @@ var (
 	actUndo   = core.ActionDescriptor{ID: "undo", Title: "Roll back", Param: &core.ActionParam{Kind: core.ParamChoice}}
 	actPause  = core.ActionDescriptor{ID: "pause", Title: "Pause rollout"}
 	actResume = core.ActionDescriptor{ID: "resume", Title: "Resume"}
+	// actDebug adds a debugger (a pod's debug container): an image (text)
+	// and a target (choice); its terminal attaches (the echo shell).
+	actDebug = core.ActionDescriptor{
+		ID: "debug", Title: "Debug", Param: &core.ActionParam{Kind: core.ParamChoice}, NoAgents: true,
+		Text: &core.ActionText{Title: core.Message{Text: "Image"}, Default: "busybox:1.36", Max: 64},
+	}
 )
 
 var workloadKind = core.KindDescriptor{
@@ -37,7 +45,7 @@ var workloadKind = core.KindDescriptor{
 		{ID: "replicas", Title: "Replicas", Type: core.ColNumber},
 		{ID: "restarts", Title: "Restarts", Type: core.ColNumber},
 	},
-	Actions: []core.ActionDescriptor{actRestart, actScale, actUndo, actPause, actResume, actDelete, actEvacuate},
+	Actions: []core.ActionDescriptor{actRestart, actScale, actUndo, actPause, actResume, actDelete, actEvacuate, actDebug},
 }
 
 type workload struct {
@@ -47,7 +55,22 @@ type workload struct {
 	paused, autoscaled bool
 	// revs: the revisions, newest (the current one) first.
 	revs []revision
+	// debuggers added (by name); debugSeq numbers them.
+	debuggers map[string]*debugger
+	debugSeq  int
 }
+
+// debugger: a debug container added to a workload; it cannot restart
+// once its shell ended.
+type debugger struct {
+	image, target string
+	ended         bool
+}
+
+// debugTargets: the containers a debugger may see.
+var debugTargets = []string{"main", "helper"}
+
+func debuggerName(n int) string { return fmt.Sprintf("debugger-%05d", n) }
 
 // revision: a workload's template at a revision (its image alone).
 type revision struct {
@@ -280,18 +303,50 @@ func (s *session) getWorkload(name string) (*core.Resource, error) {
 var _ provider.Actioner = (*session)(nil)
 
 func expect(action string, p core.ActionParams, o *workload) string {
-	count, choice := -1, ""
+	count, choice, text := -1, "", ""
 	if p.Count != nil {
 		count = *p.Count
 	}
 	if p.Choice != nil {
 		choice = *p.Choice
 	}
+	if p.Text != nil {
+		text = *p.Text
+	}
 	revs := ""
 	for _, r := range o.revs {
 		revs += fmt.Sprintf("%s:%d,", r.name, r.n)
 	}
-	return fmt.Sprintf("%s|%d|%s|%s|%d|%t|%s", action, count, choice, o.uid, o.replicas, o.paused, revs)
+	return fmt.Sprintf("%s|%d|%s|%s|%s|%d|%t|%s|%d", action, count, choice, text, o.uid, o.replicas, o.paused, revs, o.debugSeq)
+}
+
+// prepareDebug: the provider's defaults filled in (the UI reviews them at
+// once), the targets, the debugger's name.
+func prepareDebug(plan core.ActionPlan, o *workload) core.ActionPlan {
+	if plan.Params.Text == nil {
+		img := actDebug.Text.Default
+		plan.Params.Text = &img
+	}
+	if plan.Params.Choice == nil {
+		target := debugTargets[0]
+		plan.Params.Choice = &target
+	}
+	for _, c := range debugTargets {
+		plan.Choices = append(plan.Choices, core.ActionChoice{Value: c, Title: core.Message{Text: c}, Details: texts("Image: app:1")})
+	}
+	img, target := *plan.Params.Text, *plan.Params.Choice
+	switch {
+	case strings.ContainsAny(img, " \t") || img == "":
+		plan.Unavailable = &core.Message{Text: "the image reference is empty or has spaces"}
+	case !slices.Contains(debugTargets, target):
+		plan.Unavailable = &core.Message{Text: "there is no container " + target + " to target"}
+	}
+	plan.Effects = texts(
+		fmt.Sprintf("Debug container %s with image %s is added to %s.", debuggerName(o.debugSeq+1), img, o.name),
+		"It sees the processes of container "+target+".",
+		"It cannot be removed; it ends when its terminal ends.",
+	)
+	return plan
 }
 
 func unavailable(action string, o *workload) *core.Message {
@@ -418,6 +473,9 @@ func (s *session) PrepareAction(_ context.Context, ref core.Ref, action string, 
 		}
 	case actUndo.ID:
 		plan = prepareUndo(plan, o)
+	case actDebug.ID:
+		plan = prepareDebug(plan, o)
+		plan.Expect = expect(action, plan.Params, o)
 	case actPause.ID:
 		plan.Effects = texts("Template changes are not rolled out until it is resumed.")
 	case actResume.ID:
@@ -503,6 +561,22 @@ func (s *session) RunAction(ctx context.Context, run provider.ActionRun) (core.A
 		}
 		o.revs = revs
 		w.changed(o, false)
+	case actDebug.ID:
+		img, target := *run.Params.Text, *run.Params.Choice
+		if img == "" || strings.ContainsAny(img, " \t") || !slices.Contains(debugTargets, target) {
+			return core.ActionResult{}, &provider.Error{Class: provider.ClassInvalid, Message: "bad image or target"}
+		}
+		o.debugSeq++
+		name := debuggerName(o.debugSeq)
+		if o.debuggers == nil {
+			o.debuggers = map[string]*debugger{}
+		}
+		o.debuggers[name] = &debugger{image: img, target: target}
+		w.changed(o, false)
+		return core.ActionResult{
+			Message:  core.Message{Text: fmt.Sprintf("workload %s: debug container %s added", o.name, name)},
+			Terminal: &core.TerminalOpen{Ref: o.row().Ref, Instance: o.name, Channel: name, Attach: true},
+		}, nil
 	case actPause.ID, actResume.ID:
 		o.paused = run.Action == actPause.ID
 		msg = "workload " + o.name + ": " + map[bool]string{true: "rollout pause", false: "resume"}[o.paused] + " requested"

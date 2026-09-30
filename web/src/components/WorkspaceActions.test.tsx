@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { App } from '../App'
 import type { ActionDescriptor, ActionParams, KindDescriptor, Ref } from '../api/types'
 import { initialState, useStore } from '../store'
+import { useDock } from '../dock/store'
 import { kindsView, fakeClient, k8s, podRow, podsKind } from '../test/fakeClient'
 
 beforeEach(() => useStore.setState({ ...initialState }))
@@ -119,6 +120,21 @@ describe('actions in the workspace', () => {
     await userEvent.click(await within(dialog).findByRole('button', { name: 'Delete' }))
     await waitFor(() => expect(dialog).not.toBeInTheDocument())
     expect(screen.getByRole('status')).toHaveTextContent('pod api-2: deletion requested')
+  })
+
+  it('a result asking for a terminal (a debugger) opens its tab, attached, named by the container and the pod', async () => {
+    useDock.setState({ tabs: [], active: null })
+    const { f, grid } = await openProd()
+    const podRef = { provider: 'kubernetes', target: 'prod', scope: 'web', kind: 'pods', name: 'api-2', uid: 'uid-web-api-2' }
+    f.client.runAction = vi.fn(async () => ({ message: { text: 'debugger added' }, terminal: { ref: podRef, channel: 'debugger-x1y2z', attach: true } }))
+    fireEvent.contextMenu(within(grid).getByText('api-2'))
+    await userEvent.click(within(screen.getByRole('menu')).getByRole('menuitem', { name: 'Delete' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Delete api-2' })
+    await userEvent.click(await within(dialog).findByRole('button', { name: 'Delete' }))
+    await waitFor(() => expect(useDock.getState().tabs).toHaveLength(1))
+    const tab = useDock.getState().tabs[0]
+    expect(tab).toMatchObject({ kind: 'term', title: 'debugger-x1y2z · api-2', open: { ref: podRef, channel: 'debugger-x1y2z', attach: true } })
+    expect(useDock.getState().active).toBe(tab.id)
   })
 
   it('a deleted object in the drawer is said so, not an error', async () => {

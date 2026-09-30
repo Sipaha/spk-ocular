@@ -72,6 +72,9 @@ func (s *session) ExecInfo(_ context.Context, ref core.Ref) (core.ExecInfo, erro
 }
 
 func (s *session) PrepareExec(_ context.Context, ref core.Ref, req provider.ExecRequest) (provider.ExecHandle, error) {
+	if ref.Kind == WorkloadKind || req.Attach {
+		return s.prepareAttach(ref, req)
+	}
 	insts := instances(ref.Name)
 	if len(insts) == 0 {
 		return nil, &provider.Error{Class: provider.ClassNotFound, Message: ref.Name}
@@ -97,6 +100,37 @@ func liveTarget(ref core.Ref, hash string) core.LiveTarget {
 	return core.LiveTarget{Provider: ID, Target: Target, TargetTitle: Target, Endpoint: "synthetic.local", ConfigHash: hash, Ref: ref}
 }
 
+// prepareAttach: a workload's debugger (added by debug) — its echo shell.
+func (s *session) prepareAttach(ref core.Ref, req provider.ExecRequest) (provider.ExecHandle, error) {
+	if ref.Kind != WorkloadKind || !req.Attach || len(req.Command) > 0 {
+		return nil, &provider.Error{Class: provider.ClassInvalid, Message: "only a workload's debuggers attach, and they run no command"}
+	}
+	w := &s.p.wl
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	o := w.find(ref.Name)
+	if o == nil || (ref.UID != "" && ref.UID != o.uid) {
+		return nil, &provider.Error{Class: provider.ClassNotFound, Message: "workload " + ref.Name + " not found"}
+	}
+	if o.debuggers[req.Channel] == nil {
+		return nil, &provider.Error{Class: provider.ClassNotFound, Message: "no debugger " + req.Channel}
+	}
+	h := s.p.newExecHandle(s.ref(ref.Name), s.hash, o.name, nil)
+	h.ref, h.debugger = o.row().Ref, req.Channel
+	return h, nil
+}
+
+// debuggerOf: the workload's debugger h attaches to (nil: gone).
+func (h *execHandle) debuggerOf() *debugger {
+	w := &h.p.wl
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if o := w.find(h.ref.Name); o != nil && o.uid == h.ref.UID {
+		return o.debuggers[h.debugger]
+	}
+	return nil
+}
+
 // execHandle runs the echo terminal (see run).
 type execHandle struct {
 	p      *Provider
@@ -105,6 +139,8 @@ type execHandle struct {
 	inst   string
 	argv   []string
 	closed atomic.Bool
+	// debugger: the workload's debugger attached to ("": a command).
+	debugger string
 }
 
 func (p *Provider) newExecHandle(ref core.Ref, hash, inst string, argv []string) *execHandle {
@@ -115,11 +151,16 @@ func (p *Provider) newExecHandle(ref core.Ref, hash, inst string, argv []string)
 func (h *execHandle) Describe() core.LiveTarget {
 	t := liveTarget(h.ref, h.hash)
 	t.Instance, t.Channel, t.Command = h.inst, "main", h.argv
+	if h.debugger != "" {
+		t.Channel = h.debugger
+	}
 	return t
 }
 
 func (h *execHandle) Again() (provider.ExecHandle, error) {
-	return h.p.newExecHandle(h.ref, h.hash, h.inst, h.argv), nil
+	c := h.p.newExecHandle(h.ref, h.hash, h.inst, h.argv)
+	c.debugger = h.debugger
+	return c, nil
 }
 
 func (h *execHandle) Close() {
@@ -134,7 +175,7 @@ func (h *execHandle) Close() {
 // "exit N" ends with code N, anything else is answered "you said: …". Each
 // size change prints "size CxR". A non-empty argv runs as one line and the
 // command then ends (0 unless it was an exit).
-func (h *execHandle) Run(ctx context.Context, t provider.Terminal) (provider.ExitStatus, error) {
+func (h *execHandle) Run(ctx context.Context, t provider.Terminal) (st provider.ExitStatus, err error) {
 	h.p.live.execs.Add(1)
 	defer h.p.live.execs.Add(-1)
 	ctx, cancel := context.WithCancel(ctx)
@@ -168,6 +209,25 @@ func (h *execHandle) Run(ctx context.Context, t provider.Terminal) (provider.Exi
 	}()
 
 	sh := &echoShell{out: out, input: input}
+	greeting := "synthetic terminal on " + h.inst
+	if h.debugger != "" {
+		d := h.debuggerOf()
+		switch {
+		case d == nil:
+			return provider.ExitStatus{}, &provider.Error{Class: provider.ClassGone, Message: "workload " + h.ref.Name + " was deleted or replaced"}
+		case d.ended:
+			return provider.ExitStatus{}, &provider.Error{Class: provider.ClassGone, Message: "debugger " + h.debugger + " has ended; open a new one (Debug…)"}
+		}
+		greeting = fmt.Sprintf("debugger %s (%s) on %s", h.debugger, d.image, h.inst)
+		// Its shell ending ends the debugger (it cannot restart).
+		defer func() {
+			if st.Known {
+				h.p.wl.mu.Lock()
+				d.ended = true
+				h.p.wl.mu.Unlock()
+			}
+		}()
+	}
 	if len(h.argv) > 0 {
 		code, exited, err := sh.exec(ctx, strings.Join(h.argv, " "))
 		if err != nil {
@@ -178,7 +238,7 @@ func (h *execHandle) Run(ctx context.Context, t provider.Terminal) (provider.Exi
 		}
 		return provider.ExitStatus{Code: code, Known: true}, nil
 	}
-	if _, err := io.WriteString(out, "synthetic terminal on "+h.inst+"\r\n$ "); err != nil {
+	if _, err := io.WriteString(out, greeting+"\r\n$ "); err != nil {
 		return provider.ExitStatus{}, err
 	}
 	var line []byte

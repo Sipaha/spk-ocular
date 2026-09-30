@@ -309,6 +309,43 @@ test('roll a deployment back to its first revision from the table', async ({ pag
   }
 })
 
+test('debug a pod: the debugger’s terminal opens with its prompt, sees the target, ends with its exit code', async ({ page }) => {
+  const cleanup = ownDeployment('act-debug', 1) // the debugger stays in the pod's spec: the pod goes with the deployment
+  try {
+    const pod = kubectl('-n', 'ocular-demo', 'get', 'pods', '-l', 'app=act-debug', '-o', 'jsonpath={.items[0].metadata.name}').trim()
+    await openTarget(page, 'kind-ocular-dev')
+    const grid = await kindPage(page, 'Pods')
+    await page.getByRole('textbox', { name: 'Filter rows' }).fill('act-debug')
+    await row(grid, pod).click({ button: 'right' })
+    await page.getByRole('menu', { name: 'Row actions' }).getByRole('menuitem', { name: 'Debug…' }).click()
+    const dialog = page.getByRole('dialog', { name: `Debug ${pod}` })
+    await expect(dialog.getByRole('textbox', { name: 'Image' })).toHaveValue('busybox:1.36')
+    await expect(dialog.getByRole('radio', { name: /nginx/ })).toBeChecked()
+    await expect(dialog).toContainText(/Debug container debugger-[a-z0-9]{5} with image busybox:1\.36 is added to pod/)
+    await expect(dialog).toContainText('Permission: checked: allowed')
+    await dialog.getByRole('button', { name: 'Debug' }).click()
+    await expect(dialog).toBeHidden()
+    await expect(page.getByRole('tab', { name: new RegExp(`^debugger-[a-z0-9]{5} · ${pod}`) })).toBeVisible()
+    await expect(termScreen(page)).toContainText('/ #', { timeout: 60_000 }) // the prompt, no key pressed
+    // busybox ash may swallow what is typed right after its prompt (see the terminal test).
+    const prompts = async () => ((await termScreen(page).textContent()) ?? '').split('#').length
+    await expect(async () => {
+      const n = await prompts()
+      await page.keyboard.press('Enter')
+      await expect.poll(prompts, { timeout: 1000 }).toBeGreaterThan(n)
+    }).toPass({ timeout: 15_000 })
+    await page.keyboard.type("ps | grep '[n]ginx: master'") // the target's processes (its many workers would scroll it away)
+    await page.keyboard.press('Enter')
+    await expect(termScreen(page)).toContainText('nginx: master process')
+    await page.keyboard.type('exit 3')
+    await page.keyboard.press('Enter')
+    await expect(logPanel(page).getByRole('alert')).toContainText('process exited with code 3')
+    expect(kubectl('-n', 'ocular-demo', 'get', 'pod', pod, '-o', 'jsonpath={.status.ephemeralContainerStatuses[0].state.terminated.exitCode}')).toBe('3')
+  } finally {
+    cleanup()
+  }
+})
+
 test('Delete on a pod row: the ReplicaSet creates a new one', async ({ page }) => {
   const cleanup = ownDeployment('act-del', 1)
   try {

@@ -159,7 +159,7 @@ debug-контейнеры (`kubectl debug`) и attach без exec»). Прин�
   права без `pods/ephemeralcontainers` — «запрещено»; namespace теста удаляется.
 
 ### Task 5. UI, синтетика, e2e, агенты
-- [ ] `ActionDialog` — поле текста; открытие терминала по `Terminal`; `target_state.debugImage`;
+- [x] `ActionDialog` — поле текста; открытие терминала по `Terminal`; `target_state.debugImage`;
   синтетический `debug`; агенты — `debug` не выдаётся (тест agentapi и редактора); e2e synth и
   kind (отладчик из UI, `ps`, выход).
 

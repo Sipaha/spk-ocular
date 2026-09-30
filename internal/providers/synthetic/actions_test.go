@@ -89,7 +89,7 @@ func TestWorkloadsOfferActionsAndServicesDoNot(t *testing.T) {
 	for _, a := range kinds[1].Actions {
 		ids = append(ids, a.ID)
 	}
-	assert.Equal(t, []string{"restart", "scale", "undo", "pause", "resume", "delete", "evacuate"}, ids)
+	assert.Equal(t, []string{"restart", "scale", "undo", "pause", "resume", "delete", "evacuate", "debug"}, ids)
 }
 
 func TestActionsChangeTheLiveView(t *testing.T) {
@@ -353,3 +353,58 @@ func TestWorkloadUndoPauseResume(t *testing.T) {
 	_, err = act(t, s, "web", "undo", core.ActionParams{Choice: &two})
 	require.NoError(t, err)
 }
+
+// Debug (as a pod's debug container): the defaults come back in the plan,
+// the run asks for an attached terminal to the new debugger — an echo shell
+// that ends with its exit code and cannot be reattached then.
+func TestWorkloadDebugOpensAnAttachedTerminal(t *testing.T) {
+	ctx := context.Background()
+	p, s := open(t)
+	plan, err := s.PrepareAction(ctx, wref("web"), "debug", core.ActionParams{})
+	require.NoError(t, err)
+	require.NotNil(t, plan.Params.Text)
+	require.NotNil(t, plan.Params.Choice)
+	assert.Equal(t, "busybox:1.36", *plan.Params.Text)
+	assert.Equal(t, "main", *plan.Params.Choice)
+	assert.Len(t, plan.Choices, 2)
+	assert.Contains(t, plan.Effects[0].Text, "debugger-00001 with image busybox:1.36")
+	assert.True(t, workloadKind.Actions[len(workloadKind.Actions)-1].NoAgents)
+
+	bad, err := s.PrepareAction(ctx, wref("web"), "debug", core.ActionParams{Text: strp("a b")})
+	require.NoError(t, err)
+	require.NotNil(t, bad.Unavailable)
+
+	img := "alpine:3"
+	plan, err = s.PrepareAction(ctx, wref("web"), "debug", core.ActionParams{Text: &img})
+	require.NoError(t, err)
+	res, err := s.RunAction(ctx, provider.ActionRun{Ref: plan.Where.Ref, Action: "debug", Params: plan.Params, Expect: plan.Expect})
+	require.NoError(t, err)
+	require.NotNil(t, res.Terminal)
+	to := *res.Terminal
+	assert.Equal(t, core.TerminalOpen{Ref: plan.Where.Ref, Instance: "web", Channel: "debugger-00001", Attach: true}, to)
+
+	_, err = s.PrepareExec(ctx, to.Ref, provider.ExecRequest{Instance: to.Instance, Channel: to.Channel})
+	assert.Error(t, err, "a workload runs no commands: only its debuggers attach")
+	_, err = s.PrepareExec(ctx, to.Ref, provider.ExecRequest{Channel: "debugger-99999", Attach: true})
+	assert.Equal(t, provider.ClassNotFound, class(t, err))
+
+	h, err := s.PrepareExec(ctx, to.Ref, provider.ExecRequest{Instance: to.Instance, Channel: to.Channel, Attach: true})
+	require.NoError(t, err)
+	assert.Equal(t, "debugger-00001", h.Describe().Channel)
+	again, err := h.Again()
+	require.NoError(t, err)
+	tm := runTerm(h)
+	tm.waitFor(t, "debugger debugger-00001 (alpine:3) on web\r\n$ ")
+	_, _ = tm.in.Write([]byte("exit 3\r"))
+	r := tm.wait(t)
+	require.NoError(t, r.err)
+	assert.Equal(t, provider.ExitStatus{Code: 3, Known: true}, r.st)
+
+	r = runTerm(again).wait(t)
+	assert.Equal(t, provider.ClassGone, class(t, r.err), "an ended debugger cannot restart")
+	assert.Contains(t, r.err.Error(), "has ended")
+	again.Close()
+	assert.Equal(t, 0, p.LiveStats()["syn_handles"])
+}
+
+func strp(v string) *string { return &v }

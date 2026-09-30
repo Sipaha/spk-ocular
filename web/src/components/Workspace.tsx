@@ -5,6 +5,7 @@ import { ApiError } from '../api/client'
 import { actionLabel, classLabel, t } from '../i18n'
 import { showNotice } from '../store'
 import { useScopeWords } from '../scopeNames'
+import { refTitle } from '../refs'
 import { ActionDialog, type ActionRequest } from '../actions/ActionDialog'
 import type { MenuItem } from '../actions/Menu'
 import { ScopeSelect } from './ScopeSelect'
@@ -372,6 +373,9 @@ export function Workspace({ client, hub, target }: { client: Client; hub: ViewHu
             client={client}
             req={actionReq}
             onClose={() => setActionReq(null)}
+            onTerminal={(open) =>
+              dock.openTerminal(targetRef, target.title, { ref: open.ref, instance: open.instance, channel: open.channel, attach: open.attach }, open.channel ? `${open.channel} · ${refTitle(open.ref)}` : undefined)
+            }
           />
         )}
       </main>
