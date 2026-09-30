@@ -6,6 +6,12 @@ export const METRICS_INTERVAL_MS = 15_000
 export const METRICS_ABSENT_RETRY_MS = 120_000
 /** A new visible area is asked for once scrolling settles this long. */
 export const METRICS_SETTLE_MS = 300
+/**
+ * A visible row's change asks for the view again at once, but at most this
+ * often after the previous request (a crashlooping row must not keep the
+ * whole screen's stats busy); its old value is dropped at once regardless.
+ */
+export const METRICS_REFRESH_MIN_MS = 5_000
 /** A sample is shown at most this long (rows scrolled away keep theirs). */
 export const METRICS_KEEP_MS = 10 * 60_000
 
@@ -31,7 +37,8 @@ const sameIds = (a: string[], b: string[]) => a.length === b.length && a.every((
  * dropped. A failed request shows no values: its error is the status.
  * `states` (parallel to `visible`) is each row's state: a sample taken in
  * another state (a container since stopped) is not shown — the row loses
- * it and is asked for again at once.
+ * it at once and the view is asked for again soon (METRICS_REFRESH_MIN_MS
+ * after the previous request at the earliest; changes meanwhile coalesce).
  */
 export function useMetrics(client: Client, viewId: string | null, enabled: boolean, visible: string[], states?: string[]): MetricsView | null {
   const [state, setState] = useState<{ viewId: string; m: MetricsView } | null>(null)
@@ -55,6 +62,9 @@ export function useMetrics(client: Client, viewId: string | null, enabled: boole
     let inFlight: AbortController | null = null
     let again = false // a newer visible set waits for the request in flight
     let timer: ReturnType<typeof setTimeout> | null = null
+    let timerAt = 0
+    let restale = false // a row changed state while a request was in flight
+    let lastSent = -Infinity
     let absentUntil = 0
     let asked: string[] = []
     let askedStates = new Map<string, string | undefined>() // the visible rows' states when asked
@@ -89,7 +99,15 @@ export function useMetrics(client: Client, viewId: string | null, enabled: boole
 
     const schedule = (ms: number) => {
       if (timer) clearTimeout(timer)
+      timerAt = Date.now() + ms
       timer = live ? setTimeout(tick, ms) : null
+    }
+    // A refresh for changed rows: not before METRICS_REFRESH_MIN_MS after
+    // the last request; an earlier scheduled request already serves.
+    const soon = () => {
+      const at = Math.max(Date.now(), lastSent + METRICS_REFRESH_MIN_MS)
+      if (timer !== null && timerAt <= at) return
+      schedule(at - Date.now())
     }
     const tick = async () => {
       if (timer) clearTimeout(timer) // an ask between polls replaces the poll
@@ -105,10 +123,12 @@ export function useMetrics(client: Client, viewId: string | null, enabled: boole
       asked = ids
       askedStates = new Map(ids.map((id) => [id, statesRef.current.get(id)]))
       const sent = askedStates
+      lastSent = Date.now()
+      restale = false
       const ac = new AbortController()
       inFlight = ac
       let next = METRICS_INTERVAL_MS
-      let stale = false // a row changed state while asked for: ask again now
+      let stale = false // a row changed state while asked for: ask again soon
       try {
         const m = await client.getMetrics(viewId, ids, ac.signal)
         if (!live || ac.signal.aborted) return
@@ -126,6 +146,7 @@ export function useMetrics(client: Client, viewId: string | null, enabled: boole
             else values.delete(id) // asked and unknown now
           }
           expire(now)
+          absentUntil = 0 // the API answers (again)
           shown = m
           publish(m)
         } else {
@@ -150,24 +171,29 @@ export function useMetrics(client: Client, viewId: string | null, enabled: boole
         if (inFlight === ac) inFlight = null
       }
       if (!live) return
-      if (stale || (again && Date.now() >= absentUntil && !sameIds(asked, visibleRef.current))) {
+      if (again && Date.now() >= absentUntil && !sameIds(asked, visibleRef.current)) {
         again = false
         void tick()
         return
       }
       again = false
       schedule(next)
+      if ((stale || restale) && Date.now() >= absentUntil) soon() // not past the absent back-off
     }
     const ask = () => {
-      if (!live || Date.now() < absentUntil) return
+      if (!live) return
+      // A value of a past state goes at once, whatever is asked for.
       const { dropped, changed } = restate()
       if (dropped && shown) publish(shown)
-      if (!changed && !inFlight && timer !== null && sameIds(asked, visibleRef.current)) return // nothing new to ask
+      if (Date.now() < absentUntil) return
+      const moved = !sameIds(asked, visibleRef.current)
       if (inFlight) {
-        again = true
+        if (moved) again = true
+        else if (changed) restale = true
         return
       }
-      void tick()
+      if (moved || timer === null) void tick()
+      else if (changed) soon()
     }
     askRef.current = ask
     const onVisible = () => {

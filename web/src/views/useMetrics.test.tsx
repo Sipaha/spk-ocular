@@ -2,7 +2,7 @@ import { act, renderHook } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Client } from '../api/client'
 import type { MetricsView, Row } from '../api/types'
-import { METRICS_ABSENT_RETRY_MS, METRICS_INTERVAL_MS, METRICS_KEEP_MS, METRICS_SETTLE_MS, metricsState, useMetrics } from './useMetrics'
+import { METRICS_ABSENT_RETRY_MS, METRICS_INTERVAL_MS, METRICS_KEEP_MS, METRICS_REFRESH_MIN_MS, METRICS_SETTLE_MS, metricsState, useMetrics } from './useMetrics'
 
 beforeEach(() => vi.useFakeTimers())
 afterEach(() => {
@@ -149,7 +149,7 @@ describe('useMetrics', () => {
     expect(result.current).toEqual(ok({ a: { cpu: 3 } }))
   })
 
-  it('a row whose state changed loses its value at once and is asked for again', async () => {
+  it('a row whose state changed loses its value at once and is asked for again soon', async () => {
     const m = slowMetrics()
     const { result, rerender } = renderHook(({ states }) => useMetrics(m.client, 'v1', true, ['a', 'b'], states), {
       initialProps: { states: ['ok', 'ok'] },
@@ -159,15 +159,29 @@ describe('useMetrics', () => {
     rerender({ states: ['error', 'ok'] }) // a stopped
     await act(async () => vi.advanceTimersByTimeAsync(METRICS_SETTLE_MS + 10))
     expect(result.current?.values).toEqual({ b: { cpu: 2 } }) // not a's sample of when it ran
+    await act(async () => vi.advanceTimersByTimeAsync(METRICS_REFRESH_MIN_MS))
     expect(m.calls).toHaveLength(2) // not in 15 s
     await m.answer(1, ok({ b: { cpu: 3 } }))
     expect(result.current?.values).toEqual({ b: { cpu: 3 } })
     rerender({ states: ['error', 'ok'] }) // the same states: nothing new to ask
-    await act(async () => vi.advanceTimersByTimeAsync(METRICS_SETTLE_MS + 10))
+    await act(async () => vi.advanceTimersByTimeAsync(METRICS_REFRESH_MIN_MS))
     expect(m.calls).toHaveLength(2)
   })
 
-  it('a row without a value that changed state (started) is asked for at once', async () => {
+  it('a change after a quiet while is asked for once scrolling-like settling passes', async () => {
+    const m = slowMetrics()
+    const { rerender } = renderHook(({ states }) => useMetrics(m.client, 'v1', true, ['a'], states), {
+      initialProps: { states: ['ok'] },
+    })
+    await act(async () => {})
+    await m.answer(0, ok({ a: { cpu: 1 } }))
+    await act(async () => vi.advanceTimersByTimeAsync(METRICS_REFRESH_MIN_MS))
+    rerender({ states: ['error'] })
+    await act(async () => vi.advanceTimersByTimeAsync(METRICS_SETTLE_MS + 10))
+    expect(m.calls).toHaveLength(2) // the last request is old enough: at once
+  })
+
+  it('a row without a value that changed state (started) is asked for soon', async () => {
     const m = slowMetrics()
     const { result, rerender } = renderHook(({ states }) => useMetrics(m.client, 'v1', true, ['a', 'b'], states), {
       initialProps: { states: ['error', 'ok'] },
@@ -175,7 +189,7 @@ describe('useMetrics', () => {
     await act(async () => {})
     await m.answer(0, ok({ b: { cpu: 2 } })) // a is stopped: no usage
     rerender({ states: ['ok', 'ok'] }) // a started
-    await act(async () => vi.advanceTimersByTimeAsync(METRICS_SETTLE_MS + 10))
+    await act(async () => vi.advanceTimersByTimeAsync(METRICS_REFRESH_MIN_MS))
     expect(m.calls).toHaveLength(2)
     await m.answer(1, ok({ a: { cpu: 1 }, b: { cpu: 2 } }))
     expect(result.current?.values).toEqual({ a: { cpu: 1 }, b: { cpu: 2 } })
@@ -190,6 +204,7 @@ describe('useMetrics', () => {
     rerender({ states: ['ok'] })
     await act(async () => vi.advanceTimersByTimeAsync(METRICS_SETTLE_MS + 10))
     await m.answer(0, ok({})) // read while it was stopped
+    await act(async () => vi.advanceTimersByTimeAsync(METRICS_REFRESH_MIN_MS))
     expect(m.calls).toHaveLength(2)
   })
 
@@ -204,9 +219,74 @@ describe('useMetrics', () => {
     expect(m.calls).toHaveLength(1)
     await m.answer(0, ok({ a: { cpu: 1 }, b: { cpu: 2 } }))
     expect(result.current?.values).toEqual({ b: { cpu: 2 } })
+    await act(async () => vi.advanceTimersByTimeAsync(METRICS_REFRESH_MIN_MS))
     expect(m.calls).toHaveLength(2)
     await m.answer(1, ok({ b: { cpu: 2 } }))
     expect(result.current?.values).toEqual({ b: { cpu: 2 } })
+  })
+
+  it('a row whose state keeps changing refreshes the view at most once per METRICS_REFRESH_MIN_MS', async () => {
+    const m = slowMetrics()
+    const { result, rerender } = renderHook(({ states }) => useMetrics(m.client, 'v1', true, ['churning', 'stable'], states), {
+      initialProps: { states: ['s0', 'ok'] },
+    })
+    await act(async () => {})
+    const answerPending = async () => {
+      for (let j = 0; j < m.calls.length; j++)
+        if (!(m.calls[j] as { done?: boolean }).done && !m.calls[j].signal?.aborted) await m.answer(j, ok({ churning: { cpu: 9 }, stable: { cpu: 1 } }))
+    }
+    // 30 s: a change every 500 ms, each while a request is pending, answers quick
+    for (let i = 1; i <= 60; i++) {
+      rerender({ states: [`s${i}`, 'ok'] })
+      await act(async () => vi.advanceTimersByTimeAsync(200))
+      await answerPending()
+      await act(async () => vi.advanceTimersByTimeAsync(300))
+      expect(m.inFlight()).toBeLessThanOrEqual(1)
+    }
+    expect(m.calls.length).toBeLessThanOrEqual(30_000 / METRICS_REFRESH_MIN_MS + 2)
+    expect(result.current?.values.stable).toEqual({ cpu: 1 })
+    expect(result.current?.values.churning).toBeUndefined() // never a sample of a past state
+    // quiet again: the churning row gets its value
+    await act(async () => vi.advanceTimersByTimeAsync(METRICS_REFRESH_MIN_MS))
+    await answerPending()
+    expect(result.current?.values.churning).toEqual({ cpu: 9 })
+  })
+
+  it('a row changing while the API is found missing does not cut the absent back-off short', async () => {
+    const m = slowMetrics()
+    const { rerender } = renderHook(({ states }) => useMetrics(m.client, 'v1', true, ['a'], states), {
+      initialProps: { states: ['ok'] },
+    })
+    await act(async () => {})
+    rerender({ states: ['error'] })
+    await act(async () => vi.advanceTimersByTimeAsync(METRICS_SETTLE_MS + 10))
+    await m.answer(0, { status: 'unsupported', values: {} })
+    await act(async () => vi.advanceTimersByTimeAsync(METRICS_ABSENT_RETRY_MS - 1))
+    expect(m.calls).toHaveLength(1)
+    await act(async () => vi.advanceTimersByTimeAsync(1))
+    expect(m.calls).toHaveLength(2)
+  })
+
+  it('after the metrics API appears, a changed row still loses its value and is asked for', async () => {
+    const getMetrics = vi.fn()
+      .mockResolvedValueOnce({ status: 'unsupported', values: {} })
+      .mockResolvedValue(ok({ a: { cpu: 1 } }))
+    const client = { getMetrics } as unknown as Client
+    const { result, rerender } = renderHook(({ states }) => useMetrics(client, 'v1', true, ['a'], states), {
+      initialProps: { states: ['ok'] },
+    })
+    await act(async () => {})
+    Object.defineProperty(document, 'hidden', { value: true, configurable: true })
+    await act(async () => document.dispatchEvent(new Event('visibilitychange')))
+    Object.defineProperty(document, 'hidden', { value: false, configurable: true })
+    await act(async () => document.dispatchEvent(new Event('visibilitychange')))
+    expect(result.current?.values).toEqual({ a: { cpu: 1 } })
+    getMetrics.mockResolvedValue(ok({}))
+    rerender({ states: ['error'] })
+    await act(async () => vi.advanceTimersByTimeAsync(METRICS_SETTLE_MS + 10))
+    expect(result.current?.values).toEqual({})
+    await act(async () => vi.advanceTimersByTimeAsync(METRICS_REFRESH_MIN_MS))
+    expect(getMetrics).toHaveBeenCalledTimes(3) // not after the 120 s absent back-off
   })
 
   it('values older than METRICS_KEEP_MS are not shown after a long hide', async () => {
