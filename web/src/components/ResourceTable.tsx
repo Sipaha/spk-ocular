@@ -40,6 +40,9 @@ interface Props {
   onDelete?: (row: Row | undefined) => void
   /** The kind's first sort (else by the first column). */
   defaultSort?: SortSpec
+  /** The sort the table was left with (a column id), before defaultSort; onSort hears each chosen. */
+  initialSort?: { col: string; desc: boolean }
+  onSort?: (s: { col: string; desc: boolean }) => void
   /** The table of its area (F6 focuses it); not a table inside details. */
   areaFocus?: boolean
   /**
@@ -117,7 +120,7 @@ export function matchesRow(r: Row, f: string): boolean {
   return r.cells.some((c) => (c.text ?? '').toLowerCase().includes(needle)) || (r.health.reason ?? '').toLowerCase().includes(needle)
 }
 
-export function ResourceTable({ columns, rows, hideScope, filter, selected, onSelect, onOpen, onLogs, onTerminal, metrics, onVisibleRows, rowMenu, onDelete, defaultSort, areaFocus, marked, onMarked }: Props) {
+export function ResourceTable({ columns, rows, hideScope, filter, selected, onSelect, onOpen, onLogs, onTerminal, metrics, onVisibleRows, rowMenu, onDelete, defaultSort, initialSort, onSort, areaFocus, marked, onMarked }: Props) {
   const now = useNow(10_000)
   const [menu, setMenu] = useState<{ items: MenuItem[]; label: string; at: { x: number; y: number } } | null>(null)
   const openMenu = (r: Row, at: { x: number; y: number }) => {
@@ -126,9 +129,16 @@ export function ResourceTable({ columns, rows, hideScope, filter, selected, onSe
     if (items.length) setMenu({ items, label, at })
   }
   const [sort, setSort] = useState<Sort & { clicks: number }>(() => {
+    const left = initialSort ? columns.findIndex((c) => c.id === initialSort.col) : -1
+    if (left >= 0) return { col: left, desc: initialSort!.desc, clicks: 0 }
     const col = defaultSort ? columns.findIndex((c) => c.id === defaultSort.column) : -1
     return col < 0 ? { col: 0, desc: false, clicks: 0 } : { col, desc: !!defaultSort?.desc, clicks: 0 }
   })
+  const sortCol = columns[sort.col]?.id
+  useEffect(() => {
+    if (sort.clicks && sortCol) onSort?.({ col: sortCol, desc: sort.desc })
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- told of the user's choices, not of a new onSort
+  }, [sortCol, sort.desc, sort.clicks])
   // Ties: the kind's second key (ascending), then the name.
   const thenCol = defaultSort?.then ? columns.findIndex((c) => c.id === defaultSort.then) : -1
   const hasStatus = columns.some((c) => c.type === 'status')

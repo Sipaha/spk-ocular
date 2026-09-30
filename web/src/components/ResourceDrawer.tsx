@@ -24,6 +24,9 @@ interface Props {
   target: { provider: string; id: string }
   /** The object shown; history is kept for relation navigation. */
   subject: Ref
+  /** The tab shown first ('details' — none given); onTab hears each shown. */
+  initialTab?: string
+  onTab?: (tab: string) => void
   onClose: () => void
   /** Kinds with logs get a Logs button. */
   hasLogs?: (kindId: string) => boolean
@@ -55,9 +58,10 @@ const toolBtn = 'rounded-md border border-line px-2 py-0.5 text-xs text-fg-muted
 
 type Tab = 'details' | 'yaml'
 
-export function ResourceDrawer({ client, hub, target, subject, onClose, hasLogs, onLogs, hasExec, onTerminal, hasForward, actionsOf, onAction, eventsKindOf, editableOf, valuesOf, kindTitleOf }: Props) {
+export function ResourceDrawer({ client, hub, target, subject, initialTab, onTab, onClose, hasLogs, onLogs, hasExec, onTerminal, hasForward, actionsOf, onAction, eventsKindOf, editableOf, valuesOf, kindTitleOf }: Props) {
   const [stack, setStack] = useState<Ref[]>([subject])
-  const [tab, setTab] = useState<Tab>('details')
+  const [tab, setTab] = useState<Tab>(initialTab === 'yaml' ? 'yaml' : 'details')
+  useEffect(() => onTab?.(tab), [onTab, tab])
   const [res, setRes] = useState<{ key: string; r?: Resource; error?: string; gone?: boolean } | null>(null)
   const [menuAt, setMenuAt] = useState<{ x: number; y: number } | null>(null)
   const actionsBtn = useRef<HTMLButtonElement>(null)

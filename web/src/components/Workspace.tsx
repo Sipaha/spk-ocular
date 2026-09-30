@@ -3,7 +3,8 @@ import type { Client } from '../api/client'
 import type { ActionDescriptor, KindDescriptor, KindsView, MetricsView, Ref, Row, ScopeSel, ScopesView, SourceCoverage, Target } from '../api/types'
 import { ApiError } from '../api/client'
 import { actionLabel, classLabel, t } from '../i18n'
-import { showNotice } from '../store'
+import { showNotice, targetKey } from '../store'
+import { memoOf, pageMemoKey, remember as rememberPage, rememberSort } from './pageMemo'
 import { useScopeWords } from '../scopeNames'
 import { refTitle } from '../refs'
 import { ActionDialog, type ActionRequest } from '../actions/ActionDialog'
@@ -73,17 +74,32 @@ export function Workspace({ client, hub, target }: { client: Client; hub: ViewHu
   const kinds = catalog.view?.kinds ?? null
   const kindsError = catalog.error
   const [scopes, setScopes] = useState<ScopesView | null>(null)
+  // The target as it was left in this run (P18): shown at once, before
+  // target_state answers.
+  const tkey = targetKey({ provider: target.provider, id: target.id })
   // Expanded navigation subgroups (collapsed by default; target_state).
-  const [navOpen, setNavOpen] = useState<string[]>([])
+  const [navOpen, setNavOpen] = useState<string[]>(() => memoOf(tkey).navOpen ?? [])
   const toggleSub = (key: string, open: boolean) => {
     const next = open ? [...new Set([...navOpen, key])] : navOpen.filter((k) => k !== key)
     setNavOpen(next)
+    rememberPage(tkey, { navOpen: next })
     void client.setTargetState(target.provider, target.id, 'navOpen', JSON.stringify(next)).catch(() => {})
   }
   const defaultScope = target.defaultScope
   // Last kind and scope per target (SQLite target_state); null until loaded,
   // so the default view is not opened only to be replaced.
-  const [ui, setUI] = useState<UIState | null>(null)
+  const [ui, setUI] = useState<UIState | null>(() => memoOf(tkey).ui ?? null)
+  // A remembered kind the target no longer serves (a CRD removed while the
+  // target was left) is not forced: its default kind instead (P18).
+  const [checkLeft, setCheckLeft] = useState(() => !!memoOf(tkey).ui)
+  if (checkLeft && ui && kinds && catalog.view?.state !== 'discovering') {
+    setCheckLeft(false)
+    if (ui.kind && ui.kind !== OVERVIEW && !kinds.some((k) => k.id === ui.kind)) {
+      const next = { ...ui, kind: '' }
+      rememberPage(tkey, { ui: next })
+      setUI(next)
+    }
+  }
   // Per kind, how many times its page was started anew (the page key).
   const [renewed, setRenewed] = useState<ReadonlyMap<string, number>>(new Map())
   const renew = useCallback((k: string) => setRenewed((old) => new Map(old).set(k, (old.get(k) ?? 0) + 1)), [])
@@ -119,6 +135,7 @@ export function Workspace({ client, hub, target }: { client: Client; hub: ViewHu
     setFilterReq(null)
     setOpenReq(null)
     setUI(next)
+    rememberPage(tkey, { ui: next })
     void client.setTargetState(target.provider, target.id, 'kind', JSON.stringify(next.kind)).catch(() => {})
     void client.setTargetState(target.provider, target.id, 'scope', JSON.stringify(next.scope)).catch(() => {})
   }
@@ -177,14 +194,19 @@ export function Workspace({ client, hub, target }: { client: Client; hub: ViewHu
     // Workspace is keyed by target: state starts fresh for each one.
     let live = true
     const fallback: UIState = { kind: '', scope: defaultScope ? { mode: 'one', name: defaultScope } : { mode: 'all' } }
-    client.getTargetState(target.provider, target.id).then(
-      (st) => {
-        if (!live) return
-        setUI(parseState(st, fallback))
-        setNavOpen(parseOpen(st))
-      },
-      () => live && setUI(fallback),
-    )
+    // What this run remembers of the target beats target_state (P18).
+    if (!memoOf(tkey).ui)
+      client.getTargetState(target.provider, target.id).then(
+        (st) => {
+          if (!live) return
+          const ui = parseState(st, fallback)
+          const nav = parseOpen(st)
+          setUI(ui)
+          setNavOpen(nav)
+          rememberPage(tkey, { ui, navOpen: nav })
+        },
+        () => live && setUI(fallback),
+      )
     client.listScopes(target.provider, target.id).then(
       (s) => live && setScopes(s),
       () => live && setScopes({ scopes: [], error: { code: 'unavailable', detail: '' } }),
@@ -192,7 +214,7 @@ export function Workspace({ client, hub, target }: { client: Client; hub: ViewHu
     return () => {
       live = false
     }
-  }, [client, target.provider, target.id, defaultScope])
+  }, [client, target.provider, target.id, defaultScope, tkey])
 
   // A page whose view gave up while a listing serves its kind (a new session
   // that discovered it again, one it opened too early in, a kind deleted and
@@ -362,6 +384,7 @@ export function Workspace({ client, hub, target }: { client: Client; hub: ViewHu
             kindTitleOf={kindTitleOf}
             filterReq={filterReq}
             openReq={openReq}
+            memoKey={tkey}
           />
         )}
         </div>
@@ -560,8 +583,10 @@ function ResourcePage(props: {
   kindTitleOf: (kindId: string) => string
   filterReq?: PageReq<string> | null
   openReq?: PageReq<Ref> | null
+  /** The target's key in pageMemo (P18): this page's part is restored once. */
+  memoKey: string
 }) {
-  const { pageKey, onHalted, client, hub, target, kind, scope, scopes, onScope, hasLogs, onLogs, hasExec, onTerminal, hasForward, actionsOf, onAction, onBulk, eventsKindOf, editableOf, valuesOf, kindTitleOf, filterReq, openReq } = props
+  const { pageKey, onHalted, client, hub, target, kind, scope, scopes, onScope, hasLogs, onLogs, hasExec, onTerminal, hasForward, actionsOf, onAction, onBulk, eventsKindOf, editableOf, valuesOf, kindTitleOf, filterReq, openReq, memoKey: tkey } = props
   const scopeKey = JSON.stringify(scope)
   const query = useMemo(() => ({ kind: kind.id, scope: JSON.parse(scopeKey) as ScopeSel }), [kind.id, scopeKey])
   const view = useView(hub, target.provider, target.id, query)
@@ -569,9 +594,17 @@ function ResourcePage(props: {
     onHalted(pageKey, view.halted)
     return () => onHalted(pageKey, false)
   }, [onHalted, pageKey, view.halted])
-  const [filter, setFilter] = useState(filterReq?.value ?? '')
-  const [selected, setSelected] = useState<string | null>(null)
-  const [open, setOpenNow] = useState<Ref | null>(openReq?.value ?? null)
+  // The page as it was left, when this is that page (its kind and scope).
+  const memoKey = pageMemoKey(kind.id, query.scope)
+  const [left] = useState(() => ((p) => (p?.key === memoKey ? p : undefined))(memoOf(tkey).page))
+  const [filter, setFilter] = useState(filterReq?.value ?? left?.filter ?? '')
+  const [selected, setSelected] = useState<string | null>(left?.selected ?? null)
+  const [open, setOpenNow] = useState<Ref | null>(openReq?.value ?? left?.open ?? null)
+  const [drawerTab, setDrawerTab] = useState(left?.tab)
+  useEffect(() => {
+    rememberPage(tkey, { page: { key: memoKey, filter, selected, open, tab: drawerTab } })
+  }, [tkey, memoKey, filter, selected, open, drawerTab])
+  const [leftSort] = useState(() => memoOf(tkey).sorts[kind.id])
   // Another object's details drop the open editor's edits: asked first.
   const setOpen = (ref: Ref | null) => mayLeave(() => setOpenNow(ref))
   // A palette request applies once, also to a page already open.
@@ -726,6 +759,8 @@ function ResourcePage(props: {
           marked={marked}
           onMarked={setMarked}
           defaultSort={view.kind?.sort ?? kind.sort}
+          initialSort={leftSort}
+          onSort={(s) => rememberSort(tkey, kind.id, s)}
         />
         </div>
         {open && (
@@ -735,6 +770,8 @@ function ResourcePage(props: {
             hub={hub}
             target={{ provider: target.provider, id: target.id }}
             subject={open}
+            initialTab={drawerTab}
+            onTab={setDrawerTab}
             onClose={() => setOpenNow(null)}
             hasLogs={hasLogs}
             onLogs={onLogs}

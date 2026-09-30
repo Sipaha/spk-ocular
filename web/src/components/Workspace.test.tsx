@@ -290,3 +290,68 @@ describe('Workspace logs', () => {
     vi.unstubAllGlobals()
   })
 })
+
+describe('switching targets (P18)', () => {
+  const nameHead = (grid: HTMLElement) => within(grid).getByRole('columnheader', { name: /^Name[^a-z]*$/ })
+  const rowOf = (grid: HTMLElement, name: string) => within(grid).getByText(name).closest('[role="row"]') as HTMLElement
+
+  it('back to a target: its page as left — filter, sort, cursor, details and their tab; marks are not kept', async () => {
+    const f = fakeClient([k8s('prod'), k8s('stage')])
+    f.state.rows = [podRow('api-1', 'web'), podRow('api-2', 'web'), podRow('db-0', 'data')]
+    let grid = await openProd(f)
+    await within(grid).findByText('db-0')
+    await userEvent.click(nameHead(grid))
+    const sorted = nameHead(grid).getAttribute('aria-sort')
+    await userEvent.keyboard('/')
+    await userEvent.keyboard('api')
+    await userEvent.click(within(rowOf(grid, 'api-1')).getByRole('checkbox'))
+    await userEvent.click(within(grid).getByText('api-2'))
+    const drawer = await screen.findByRole('dialog', { name: 'pods api-2' })
+    await userEvent.click(within(drawer).getByRole('tab', { name: 'YAML' }))
+
+    await userEvent.click(screen.getByRole('option', { name: /stage/ }))
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'pods api-2' })).toBeNull())
+    expect(screen.getByRole('textbox', { name: 'Filter rows' })).toHaveValue('')
+    await userEvent.click(screen.getByRole('option', { name: /prod/ }))
+
+    grid = await screen.findByRole('grid', { name: 'resources' })
+    await within(grid).findByText('api-2')
+    expect(screen.getByRole('textbox', { name: 'Filter rows' })).toHaveValue('api')
+    expect(within(grid).queryByText('db-0')).toBeNull()
+    expect(nameHead(grid)).toHaveAttribute('aria-sort', sorted!)
+    expect(rowOf(grid, 'api-2')).toHaveAttribute('aria-selected', 'true')
+    expect(rowOf(grid, 'api-1')).not.toHaveAttribute('data-marked')
+    const again = await screen.findByRole('dialog', { name: 'pods api-2' })
+    expect(within(again).getByRole('tab', { name: 'YAML' })).toHaveAttribute('aria-selected', 'true')
+  })
+
+  it('a kind keeps its sort while another kind is shown; a new page of the target starts clean', async () => {
+    const f = fakeClient([k8s('prod')])
+    f.state.rows = [podRow('api-1', 'web'), podRow('db-0', 'data')]
+    f.client.listKinds = vi.fn(async () => kindsView([podsKind, { id: 'services', title: 'Services', group: 'Network', scoped: true, columns: [{ id: 'name', title: 'Name', type: 'text' as const }] }]))
+    let grid = await openProd(f)
+    await within(grid).findByText('db-0')
+    await userEvent.click(nameHead(grid))
+    const sorted = nameHead(grid).getAttribute('aria-sort')
+    await userEvent.keyboard('/')
+    await userEvent.keyboard('db')
+    await userEvent.click(screen.getByRole('button', { name: 'Services' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Pods' }))
+    grid = await screen.findByRole('grid', { name: 'resources' })
+    await within(grid).findByText('api-1')
+    expect(nameHead(grid)).toHaveAttribute('aria-sort', sorted!)
+    expect(screen.getByRole('textbox', { name: 'Filter rows' })).toHaveValue('')
+  })
+
+  it('a remembered page of a kind no longer served is not forced: the target shows what it has', async () => {
+    const f = fakeClient([k8s('prod'), k8s('stage')])
+    f.client.listKinds = vi.fn(async () => kindsView([podsKind, { id: 'widgets', title: 'Widgets', group: 'Other', scoped: false, columns: [{ id: 'name', title: 'Name', type: 'text' as const }] }]))
+    await openProd(f)
+    await userEvent.click(await screen.findByRole('button', { name: 'Widgets' }))
+    await screen.findByRole('heading', { name: 'Widgets' })
+    await userEvent.click(screen.getByRole('option', { name: /stage/ }))
+    f.client.listKinds = vi.fn(async () => kindsView([podsKind])) // the CRD went meanwhile
+    await userEvent.click(screen.getByRole('option', { name: /prod/ }))
+    expect(await screen.findByRole('heading', { name: 'Pods' })).toBeInTheDocument()
+  })
+})

@@ -35,3 +35,7 @@ if (!Range.prototype.getBoundingClientRect) Range.prototype.getBoundingClientRec
 import { beforeEach } from 'vitest'
 import { useDock } from './src/dock/store'
 beforeEach(() => useDock.setState({ tabs: [], active: null, height: 320 }))
+
+// What targets were left looking like (P18) is app-wide too.
+import { forgetPages } from './src/components/pageMemo'
+beforeEach(() => forgetPages())
