@@ -143,7 +143,7 @@ debug-контейнеры (`kubectl debug`) и attach без exec»). Прин�
   `ActionResult.Terminal`, `ExecRequest.Attach`; `web/src/api/types.ts`.
 
 ### Task 2. План и запись отладчика (Go)
-- [ ] `debug` у pods: варианты цели, эффекты, предупреждения, Unavailable, права, грант (имя),
+- [x] `debug` у pods: варианты цели, эффекты, предупреждения, Unavailable, права, грант (имя),
   strategic merge patch `ephemeralcontainers`, повторы/итоги (решения 4–7); проверка 409/422 на
   kind dry-run; сообщения и переводы.
 

@@ -219,6 +219,8 @@ export interface ActionDescriptor {
   param?: ActionParam
   /** a text value next to the param (a debug container's image) */
   text?: ActionText
+  /** exec-level access: never granted to agents */
+  noAgents?: boolean
 }
 
 export interface ActionText {

@@ -295,6 +295,13 @@ func shortErr(err error) string {
 // cannot vouch for admission or quotas, and rights may change meanwhile.
 func (s *session) rights(ctx context.Context, def *kindDef, action string, u *unstructured.Unstructured) core.Rights {
 	r := s.writeRights(ctx, def, action, u)
+	if action == actDebug.ID && r.State != core.RightsDenied {
+		// The terminal attaches to it (a WebSocket attach needs create).
+		a := s.rightsTo(ctx, "create", map[string]any{"verb": "create", "group": "", "resource": "pods", "subresource": "attach", "namespace": u.GetNamespace(), "name": u.GetName()}, "attach", u)
+		if a.State != core.RightsAllowed {
+			return a
+		}
+	}
 	if action == actUndo.ID && r.State != core.RightsDenied {
 		// The revisions are read at the run as well.
 		l := s.rightsTo(ctx, "list", map[string]any{"verb": "list", "group": replicaSetsKind.gvr.Group, "resource": replicaSetsKind.gvr.Resource, "namespace": u.GetNamespace()}, "", u)
@@ -311,6 +318,8 @@ func (s *session) writeRights(ctx context.Context, def *kindDef, action string, 
 	switch action {
 	case actScale.ID:
 		sub = "scale"
+	case actDebug.ID:
+		sub = "ephemeralcontainers"
 	case actDelete.ID:
 		verb = "delete"
 	}

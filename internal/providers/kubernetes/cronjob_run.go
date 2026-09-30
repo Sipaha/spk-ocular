@@ -160,6 +160,14 @@ type spentGrants struct {
 	byNonce map[string]time.Time // → expiry
 }
 
+// has: g's nonce was spent (a replay of a review already run).
+func (sg *spentGrants) has(nonce string) bool {
+	sg.mu.Lock()
+	defer sg.mu.Unlock()
+	_, ok := sg.byNonce[nonce]
+	return ok
+}
+
 // spend decides, as one step, whether g may send its Job now: not
 // expired, not spent, room to remember it; then it is spent — whatever the
 // write's outcome. The clock is read under the lock: a time sampled before

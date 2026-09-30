@@ -52,7 +52,7 @@ var kindActions = map[*kindDef][]core.ActionDescriptor{
 	statefulSetsKind: {actRestart, actScale, actDelete},
 	daemonSetsKind:   {actRestart, actDelete},
 	replicaSetsKind:  {actDelete},
-	podsKind:         {actDelete},
+	podsKind:         {actDebug, actDelete},
 	servicesKind:     {actDelete},
 	ingressesKind:    {actDelete},
 	configMapsKind:   {actDelete},
@@ -248,6 +248,8 @@ func (s *session) RunAction(ctx context.Context, run provider.ActionRun) (core.A
 		return s.runNow(ctx, def, run)
 	case actUndo.ID:
 		return s.runUndo(ctx, def, run)
+	case actDebug.ID:
+		return s.runDebug(ctx, def, run)
 	}
 	if !sameRoute(def, run.Expect) {
 		// Reviewed through another version or scope of the resource: never
@@ -430,6 +432,9 @@ func (s *session) PrepareAction(ctx context.Context, ref core.Ref, action string
 	}
 	if action == actUndo.ID {
 		plan = s.prepareUndo(ctx, def, plan, u)
+	}
+	if action == actDebug.ID {
+		plan = s.prepareDebug(ctx, def, plan, u)
 	}
 
 	// The optional parts, in parallel within one deadline; an answer that

@@ -728,3 +728,19 @@ func TestAPausedObjectSaysSoInItsRow(t *testing.T) {
 	require.Len(t, rows, 1)
 	assert.Equal(t, map[string]any{"state": "ok", "reason": "Paused"}, rows[0].(map[string]any)["health"])
 }
+
+// An exec-level action (a debug container) is never an agent's: not
+// listed, refused before the provider is asked, even when granted.
+func TestAnActionForUsersOnlyIsNotAnAgents(t *testing.T) {
+	e := newEnv(t)
+	e.grant(one("a", "read"), one("a", "action:debug"))
+	out := e.ok("ListKinds", tgt)
+	for _, k := range out["kinds"].([]any) {
+		km := k.(map[string]any)
+		if km["id"] == "pods" {
+			assert.NotContains(t, km, "actions")
+		}
+	}
+	assert.Contains(t, e.refused("PrepareAction", map[string]any{"ref": ref("a", "pods", "web-1"), "action": "debug"}), "not for agents")
+	assert.Empty(t, e.runs())
+}

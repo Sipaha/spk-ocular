@@ -174,7 +174,7 @@ func (s *Server) listKinds(ctx context.Context, c caller, req *ListKindsRequest)
 		}
 		kv := KindView{ID: k.ID, Title: k.Title, Singular: k.Singular, Scoped: k.Scoped, Columns: columnsOf(k), Logs: k.Logs, Editable: k.Editable, Verbs: verbs}
 		for _, a := range k.Actions {
-			if slices.Contains(verbs, agentgrant.ActionVerb(a.ID)) && k.Scoped {
+			if slices.Contains(verbs, agentgrant.ActionVerb(a.ID)) && k.Scoped && !a.NoAgents {
 				kv.Actions = append(kv.Actions, ActionView{ID: a.ID, Title: a.Title, Destructive: a.Destructive, Param: a.Param})
 			}
 		}

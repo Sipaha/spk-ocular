@@ -97,6 +97,7 @@ export function verbOptions(kinds: KindDescriptor[], mode: AgentScope['mode']): 
   const actions = new Map<string, VerbOption>()
   for (const k of scoped) {
     for (const a of k.actions ?? []) {
+      if (a.noAgents) continue // exec-level: never an agent's
       let o = actions.get(a.id)
       if (!o) {
         o = { verb: actionVerb(a.id), action: a, destructive: false, kinds: [] }

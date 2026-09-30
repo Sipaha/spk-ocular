@@ -78,10 +78,11 @@ var (
 	actDelete  = core.ActionDescriptor{ID: "delete", Title: "Delete", Destructive: true}
 	actCordon  = core.ActionDescriptor{ID: "cordon", Title: "Cordon"}
 	actUndo    = core.ActionDescriptor{ID: "undo", Title: "Roll back", Param: &core.ActionParam{Kind: core.ParamChoice}}
+	actDebug   = core.ActionDescriptor{ID: "debug", Title: "Debug", NoAgents: true}
 )
 
 var fakeKinds = []core.KindDescriptor{
-	{ID: "pods", Title: "Pods", Scoped: true, Logs: true, Columns: []core.Column{{ID: "name", Title: "Name"}, {ID: "cpu", Title: "CPU", Metric: true}, {ID: "age", Title: "Age", Type: core.ColAge}}},
+	{ID: "pods", Title: "Pods", Scoped: true, Logs: true, Actions: []core.ActionDescriptor{actDebug}, Columns: []core.Column{{ID: "name", Title: "Name"}, {ID: "cpu", Title: "CPU", Metric: true}, {ID: "age", Title: "Age", Type: core.ColAge}}},
 	{ID: "apps/deployments", Title: "Deployments", Scoped: true, Editable: true, Actions: []core.ActionDescriptor{actRestart, actScale, actUndo, actDelete}, Columns: []core.Column{{ID: "name", Title: "Name"}}},
 	{ID: "secrets", Title: "Secrets", Scoped: true, Editable: true, Sensitive: true, Actions: []core.ActionDescriptor{actDelete}, Columns: []core.Column{{ID: "name", Title: "Name"}}},
 	{ID: "events", Title: "Events", Scoped: true, Columns: []core.Column{{ID: "name", Title: "Name"}}},

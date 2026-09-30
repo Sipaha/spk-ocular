@@ -99,8 +99,8 @@ func TestEveryActionHasItsDoneText(t *testing.T) {
 		assert.True(t, ok, "no done.%s", a.ID)
 	}
 	// Every action write and the drain, run paths handle is enumerated.
-	assert.Len(t, ids, 11)
-	for _, id := range []string{"restart", "scale", "undo", "pause", "delete", "cordon", "uncordon", "drain", "suspend", "resume", "run"} {
+	assert.Len(t, ids, 12)
+	for _, id := range []string{"restart", "scale", "undo", "pause", "debug", "delete", "cordon", "uncordon", "drain", "suspend", "resume", "run"} {
 		assert.True(t, ids[id], id)
 	}
 }

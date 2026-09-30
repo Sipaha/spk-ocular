@@ -19,6 +19,9 @@ type ActionDescriptor struct {
 	// Text: a text value the action takes next to its Param (a debug
 	// container's image).
 	Text *ActionText `json:"text,omitempty"`
+	// NoAgents: exec-level access (a debug container) — never granted to
+	// agents, whatever their grants say.
+	NoAgents bool `json:"noAgents,omitempty"`
 }
 
 // ActionText describes an action's text value.

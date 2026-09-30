@@ -208,6 +208,11 @@ func (s *Server) prepareAction(ctx context.Context, c caller, req *PrepareAction
 	if err != nil {
 		return nil, badRequest("%v", err)
 	}
+	if d.NoAgents {
+		err := forbidden("%s is not for agents: it gives access like a terminal", d.ID)
+		s.refused(c, "PrepareAction", ref.Provider, ref.Target, ref.Scope, objectOf(ref), err)
+		return nil, err
+	}
 	p := &plan{agent: c.agent, method: "RunAction", provider: ref.Provider, target: ref.Target, title: x.call.Title(), ref: ref, kind: k, verb: agentgrant.ActionVerb(d.ID), destructive: d.Destructive}
 	if _, err := s.judge(c, x, "PrepareAction", p); err != nil {
 		return nil, err

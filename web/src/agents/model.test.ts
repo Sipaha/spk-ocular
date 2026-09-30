@@ -79,6 +79,13 @@ describe('problems', () => {
   })
 })
 
+describe('actions for users only', () => {
+  it('are not offered to agents', () => {
+    const ks = [{ id: 'pods', title: 'Pods', scoped: true, columns: [], actions: [{ id: 'debug', title: 'Debug', noAgents: true }, { id: 'delete', title: 'Delete', destructive: true }] }] as unknown as KindDescriptor[]
+    expect(verbOptions(ks, 'one').map((o) => o.verb)).toEqual(['read', 'action:delete'])
+  })
+})
+
 describe('warnings', () => {
   const w = (provider: string, rows: AgentGrant[]) => warnings(provider, fromGrants(rows), kinds)
   it('says what the grants mean', () => {
