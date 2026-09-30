@@ -520,6 +520,11 @@ P14 — доступ агентов (Claude/Codex) через unix-сокет `$
   именам (`ScopeAll` — только у выдачи «все namespace-ы»); строки и связи ещё раз фильтруются
   по scope. — `TestMethodsNeedTheirGrant`, `TestScopedKindsNeedTheirScope`,
   `TestFanOutOverTheNamespacesGranted`, `TestRelationsAndProblemsAreFiltered`.
+- Ссылка со scope называет только объект этого scope: провайдер, нашедший объект с тем же
+  ключом в другом scope, отвечает not_found (права агента судятся по scope ссылки; Compose
+  искал по имени — агент с правом на проект A читал проект B). `GetObject` ещё раз сверяет
+  scope найденного. — compose `TestAnotherProjectsObjectIsNotFound`, `TestLogsRefusals`,
+  agentapi `TestAnObjectOutsideTheScopeAskedIsRefused`, dind `TestDindAgentAccessOverTheSocket`.
 - Агенту не выдаются id UI (`viewId`, `terminalId`, …) и внутренности плана (`Expect`, база и
   токен правки): только `planId`/`sourceId`/`runId` из реестров `agentapi`. Права и опознание
   цели проверяются снова в момент записи. — `TestGrantsAreCheckedAgainAtEveryStep`,
@@ -696,3 +701,5 @@ P14 — доступ агентов (Claude/Codex) через unix-сокет `$
   в тестах `sockDir`/`shortHome`.
 - **Desktop в `dbus-run-session` показывает окно через ~25 с** (частная шина без portal-а:
   ожидание активации), в обычной сессии — сразу; не регрессия — так же у сборки до P14.
+- **`EditDiff` «a change past the first page» (vitest, 5 с) падает по таймауту под нагрузкой**
+  (load ~10: диф 2 × 3000 строк в jsdom) — отдельно проходит; не регрессия, повторить `make check`.
