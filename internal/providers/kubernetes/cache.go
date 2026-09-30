@@ -121,9 +121,15 @@ type cacheManager struct {
 	onSchema func(old *tableSchema)
 	// onNotTable is told the resource showed it does not serve Tables.
 	onNotTable func(old *tableSchema)
-	now        func() time.Time
-	grace      time.Duration
-	maxIdle    int
+	// onFailed is told the class of every failed list or watch (the
+	// session's background: an unauthorized one is lost).
+	onFailed func(provider.ErrorClass)
+	now      func() time.Time
+	grace    time.Duration
+	maxIdle  int
+	// background: idle caches are kept past grace (only maxIdle bounds
+	// them); set by the session (P18).
+	background bool
 
 	mu     sync.Mutex
 	caches map[cacheKey]*informerCache
@@ -169,9 +175,16 @@ func (m *cacheManager) start(key cacheKey, def *kindDef) *informerCache {
 	if key.namespace != "" {
 		ri = res.Namespace(key.namespace)
 	}
-	var lw cache.ListerWatcher = &statusListWatch{res: ri, selector: key.selector, report: c.setTransport, ended: c.streamEnded, watchList: m.watchList, refused: &m.noWatchList, counts: &m.counts}
+	report := func(err error) {
+		c.setTransport(err)
+		if err != nil && m.onFailed != nil {
+			class, _ := classify(err)
+			m.onFailed(class)
+		}
+	}
+	var lw cache.ListerWatcher = &statusListWatch{res: ri, selector: key.selector, report: report, ended: c.streamEnded, watchList: m.watchList, refused: &m.noWatchList, counts: &m.counts}
 	if sch := key.sch; sch != nil && sch.table && m.tables != nil {
-		lw = &tableListWatch{c: m.tables, gvr: key.gvr, namespace: key.namespace, selector: key.selector, report: c.setTransport, ended: c.streamEnded, counts: &m.counts,
+		lw = &tableListWatch{c: m.tables, gvr: key.gvr, namespace: key.namespace, selector: key.selector, report: report, ended: c.streamEnded, counts: &m.counts,
 			check: func(cols []metav1.TableColumnDefinition) error {
 				if sch.retired.Load() || !sch.matches(cols) {
 					if m.onSchema != nil {
@@ -238,12 +251,15 @@ func (m *cacheManager) evictLocked() {
 	}
 	var soonest time.Time
 	for i, c := range idle {
-		if now.Sub(c.idleAt) >= m.grace || len(idle)-i > m.maxIdle {
+		expired := !m.background && now.Sub(c.idleAt) >= m.grace
+		if expired || len(idle)-i > m.maxIdle {
 			delete(m.caches, c.key)
 			close(c.stop)
 			continue
 		}
-		soonest = earliest(soonest, c.idleAt.Add(m.grace))
+		if !m.background {
+			soonest = earliest(soonest, c.idleAt.Add(m.grace))
+		}
 	}
 	if m.timer != nil {
 		m.timer.Stop()
@@ -256,6 +272,28 @@ func (m *cacheManager) evictLocked() {
 			m.evictLocked()
 		})
 	}
+}
+
+// setBackground keeps idle caches past grace while on; off, the grace of
+// each idle cache counts from now (the return).
+func (m *cacheManager) setBackground(on bool) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.background == on {
+		return
+	}
+	m.background = on
+	if !on {
+		now := m.now()
+		for _, c := range m.caches {
+			c.mu.Lock()
+			if c.leases == 0 {
+				c.idleAt = now
+			}
+			c.mu.Unlock()
+		}
+	}
+	m.evictLocked()
 }
 
 // lookup finds an object by name in any cache of gvr that covers ns (a

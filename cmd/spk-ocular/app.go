@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"path/filepath"
 
 	"k8s.io/klog/v2"
 
@@ -47,7 +48,9 @@ func newCore(ctx context.Context, mode string, withSynthetic bool) (*appCore, er
 		return nil, fmt.Errorf("open db: %w", err)
 	}
 	self, _ := os.Executable() // runs kubeconfig exec plugins with a timeout (internal/execshim)
-	providers := []provider.Provider{kubernetes.New().WithExecShim(self), compose.New()}
+	// Background sessions' plugins run headless while their hold file is
+	// in run/ (P18).
+	providers := []provider.Provider{kubernetes.New().WithExecShim(self, filepath.Join(p.DataDir, "run")), compose.New()}
 	var syn *synthetic.Provider
 	if withSynthetic {
 		syn = synthetic.New()

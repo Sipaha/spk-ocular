@@ -155,7 +155,15 @@ func (c *AgentCall) fail(err error) error {
 	if c.ctx.Err() != nil && c.s.entryByOwner(c.e.owner) != c.e {
 		return coded(CodeGone, errors.New("the target's session closed (its configuration changed); retry"))
 	}
-	return fromProvider(err)
+	ce := fromProvider(err)
+	c.s.sessMu.Lock()
+	background := c.e.background
+	c.s.sessMu.Unlock()
+	if ce.Code == string(provider.ClassUnauthorized) && background {
+		// Its target is not selected: a login it needs is a person's (P18).
+		return said(ce.Code, "loginByPerson")
+	}
+	return ce
 }
 
 // spared: an agent's call holds e, or held it within sessionIdle.

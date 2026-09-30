@@ -21,6 +21,9 @@ type Provider struct {
 	getenv   func(string) string
 	home     string
 	shimPath string // this binary, run as a bounded exec credential plugin
+	// holdDir keeps the hold files of background sessions (the shim runs
+	// their plugins headless, P18); "" — no holds.
+	holdDir string
 	// logSlots bounds pods/log requests open at once across all sessions.
 	logSlots chan struct{}
 
@@ -35,9 +38,10 @@ func New() *Provider {
 }
 
 // WithExecShim makes sessions run kubeconfig exec plugins through the shim
-// at path (internal/execshim); "" disables it.
-func (p *Provider) WithExecShim(path string) *Provider {
-	p.shimPath = path
+// at path (internal/execshim); "" disables it. holdDir keeps the hold files
+// of background sessions ("" — none: plugins run as in the foreground).
+func (p *Provider) WithExecShim(path, holdDir string) *Provider {
+	p.shimPath, p.holdDir = path, holdDir
 	return p
 }
 

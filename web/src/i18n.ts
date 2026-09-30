@@ -1508,6 +1508,7 @@ const providerTexts: Partial<Record<Language, Record<string, string>>> = {
     'api.configChanged': 'конфигурация {target} изменилась после просмотра — посмотрите снова',
     'api.loginNeeded': 'для продолжения нужен вход в кластер — выберите цель',
     'api.closedByUser': 'подключение к цели закрыто',
+    'api.loginByPerson': 'вход в кластер выполняет человек: выберите цель в Ocular',
   },
 }
 

@@ -137,8 +137,24 @@ func defaultChannel(annotations map[string]string, chs []core.LogChannel) string
 	return ""
 }
 
-// StreamLogs streams ref's logs into sink.
+// StreamLogs streams ref's logs into sink. A stream of a background session
+// that needs a login (P18) ends it: lost.
 func (s *session) StreamLogs(ctx context.Context, ref core.Ref, q provider.LogQuery, sink provider.LogSink) error {
+	err := s.streamLogs(ctx, ref, q, sink)
+	if err != nil {
+		var pe *provider.Error
+		class := provider.ErrorClass("")
+		if errors.As(err, &pe) {
+			class = pe.Class
+		} else {
+			class, _ = classify(err)
+		}
+		s.authFailed(class)
+	}
+	return err
+}
+
+func (s *session) streamLogs(ctx context.Context, ref core.Ref, q provider.LogQuery, sink provider.LogSink) error {
 	if s.logs == nil {
 		return &provider.Error{Class: provider.ClassUnsupported, Message: "logs are not available for this context"}
 	}

@@ -101,3 +101,90 @@ func TestClientGoRequestWithHangingPluginFails(t *testing.T) {
 	assert.Contains(t, err.Error(), "getting credentials") // the plugin's own stderr goes to the app log
 	assert.False(t, alive(t, pidFile))
 }
+
+// guiEnv: what a plugin could reach a person with.
+var guiEnv = map[string]string{
+	"DISPLAY": ":9", "WAYLAND_DISPLAY": "wayland-9", "DBUS_SESSION_BUS_ADDRESS": "unix:path=/x",
+	"BROWSER": "firefox", "GPG_TTY": "/dev/pts/9", "SSH_ASKPASS": "/usr/bin/askpass",
+}
+
+const seesAll = `echo "stdin=$(cat)"; for v in DISPLAY WAYLAND_DISPLAY DBUS_SESSION_BUS_ADDRESS BROWSER GPG_TTY SSH_ASKPASS KEEP; do echo "$v=$(printenv $v)"; done; echo "info=$KUBERNETES_EXEC_INFO"`
+
+// Under a hold (the session is in the background) the plugin runs
+// headless: nothing to ask on stdin, nowhere to open a browser, told it is
+// not interactive. Without the hold file it gets everything, as before.
+func TestShimRunsThePluginHeadlessUnderAHold(t *testing.T) {
+	plugin, _ := script(t, seesAll+"\n")
+	for k, v := range guiEnv {
+		t.Setenv(k, v)
+	}
+	t.Setenv("KEEP", "kept")
+	t.Setenv("KUBERNETES_EXEC_INFO", `{"apiVersion":"client.authentication.k8s.io/v1","kind":"ExecCredential","spec":{"interactive":true,"cluster":{"server":"https://x"}}}`)
+	hold := filepath.Join(t.TempDir(), "bg-1")
+
+	var out, errb bytes.Buffer
+	code := Main([]string{"--timeout", "5s", "--hold", hold, "--", plugin}, strings.NewReader("typed\n"), &out, &errb)
+	require.Equal(t, 0, code, errb.String())
+	assert.Contains(t, out.String(), "stdin=typed\nDISPLAY=:9\n", "no hold file: in the foreground")
+	assert.Contains(t, out.String(), `"interactive":true`)
+
+	require.NoError(t, os.WriteFile(hold, nil, 0o600))
+	out.Reset()
+	code = Main([]string{"--timeout", "5s", "--hold", hold, "--", plugin}, strings.NewReader("typed\n"), &out, &errb)
+	require.Equal(t, 0, code, errb.String())
+	assert.Equal(t, "stdin=\nDISPLAY=\nWAYLAND_DISPLAY=\nDBUS_SESSION_BUS_ADDRESS=\nBROWSER=\nGPG_TTY=\nSSH_ASKPASS=\nKEEP=kept\n"+
+		`info={"apiVersion":"client.authentication.k8s.io/v1","kind":"ExecCredential","spec":{"cluster":{"server":"https://x"},"interactive":false}}`+"\n", out.String())
+}
+
+// A plugin that would open a browser for a login ends fast under a hold:
+// no display, and a short deadline if it waits anyway.
+func TestShimUnderAHoldEndsALoginFast(t *testing.T) {
+	opener, _ := script(t, `if [ -n "$DISPLAY" ]; then exec sleep 3600; fi; echo "cannot open a browser" >&2; exit 1`+"\n")
+	waiter, pidFile := script(t, "exec sleep 3600\n") // prints a URL and waits for its callback
+	t.Setenv("DISPLAY", ":9")
+	hold := filepath.Join(t.TempDir(), "bg-1")
+	require.NoError(t, os.WriteFile(hold, nil, 0o600))
+
+	var out, errb bytes.Buffer
+	start := time.Now()
+	assert.Equal(t, 1, Main([]string{"--timeout", "5s", "--hold", hold, "--", opener}, strings.NewReader(""), &out, &errb))
+	assert.Less(t, time.Since(start), 2*time.Second)
+
+	start = time.Now()
+	assert.Equal(t, 1, Main([]string{"--timeout", "5s", "--hold", hold, "--hold-timeout", "300ms", "--", waiter}, strings.NewReader(""), &out, &errb))
+	assert.Less(t, time.Since(start), 3*time.Second)
+	assert.Contains(t, errb.String(), "in the background")
+	assert.False(t, alive(t, pidFile))
+}
+
+func TestWrapPassesTheHold(t *testing.T) {
+	cfg := &rest.Config{ExecProvider: &clientcmdapi.ExecConfig{Command: "/usr/bin/yc", Args: []string{"k8s", "create-token"}}}
+	WrapHeld(cfg, "/opt/ocular", time.Minute, "/data/tmp/bg-1")
+	assert.Equal(t, []string{Subcommand, "--timeout", "1m0s", "--hold", "/data/tmp/bg-1", "--", "/usr/bin/yc", "k8s", "create-token"}, cfg.ExecProvider.Args)
+}
+
+// Through client-go: a background request whose plugin needs a person
+// fails fast instead of waiting for a login.
+func TestClientGoRequestUnderAHoldFailsFast(t *testing.T) {
+	plugin, _ := script(t, `if [ -n "$DISPLAY" ]; then exec sleep 3600; fi; exit 1`+"\n")
+	t.Setenv("DISPLAY", ":9")
+	self, err := os.Executable()
+	require.NoError(t, err)
+	hold := filepath.Join(t.TempDir(), "bg-1")
+	require.NoError(t, os.WriteFile(hold, nil, 0o600))
+	cfg := &rest.Config{
+		Host: "https://127.0.0.1:1",
+		ExecProvider: &clientcmdapi.ExecConfig{
+			APIVersion: "client.authentication.k8s.io/v1beta1", Command: plugin,
+			InteractiveMode: clientcmdapi.NeverExecInteractiveMode,
+		},
+	}
+	WrapHeld(cfg, self, time.Minute, hold)
+	dc, err := dynamic.NewForConfig(cfg)
+	require.NoError(t, err)
+	start := time.Now()
+	_, err = dc.Resource(schema.GroupVersionResource{Version: "v1", Resource: "pods"}).List(context.Background(), metav1.ListOptions{})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "getting credentials")
+	assert.Less(t, time.Since(start), 5*time.Second)
+}

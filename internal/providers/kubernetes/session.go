@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"path/filepath"
 	"sort"
 	"sync"
 	"sync/atomic"
@@ -81,11 +82,16 @@ func (p *Provider) Open(_ context.Context, target string) (provider.Session, err
 	if err != nil {
 		return nil, &provider.Error{Class: provider.ClassInternal, Message: err.Error()}
 	}
-	execshim.Wrap(cfg, p.shimPath, execshim.DefaultTimeout)
+	hold := ""
+	if cfg.ExecProvider != nil && p.shimPath != "" && p.holdDir != "" {
+		hold = filepath.Join(p.holdDir, "bg-"+randomHex(8))
+	}
+	execshim.WrapHeld(cfg, p.shimPath, execshim.DefaultTimeout, hold)
 	sess, err := sessionFor(cfg, target, kc.Name, kc.Hash)
 	if err != nil {
 		return nil, &provider.Error{Class: provider.ClassInternal, Message: err.Error()}
 	}
+	sess.hold = hold
 	sess.slots = p.logSlots
 	return sess, nil
 }
@@ -191,6 +197,10 @@ type session struct {
 	// spent: the run grants already sent.
 	incarnation string
 	spent       spentGrants
+	// hold: the shim's hold file while in the background ("" — no exec
+	// plugin shim); bg: the background state (P18).
+	hold string
+	bg   background
 }
 
 func newSession(target, hash string, dyn dynamic.Interface, watchList bool) *session {
@@ -203,6 +213,7 @@ func newSession(target, hash string, dyn dynamic.Interface, watchList bool) *ses
 	s.cat = newCatalog(ctx, allKinds, nil)
 	s.caches.onSchema = s.schemaChanged
 	s.caches.onNotTable = s.tablesUnsupported
+	s.caches.onFailed = s.authFailed
 	return s
 }
 
@@ -258,6 +269,7 @@ func (s *session) ConfigHash() string           { return s.hash }
 func (s *session) ScopeKind() string            { return namespacesKind.desc.ID }
 func (s *session) Kinds() []core.KindDescriptor { return s.cat.snap().reg.descriptors() }
 func (s *session) Close() {
+	s.setHold(false)
 	s.cancel()
 	s.cat.wait()
 	s.caches.closeAll()

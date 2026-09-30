@@ -814,3 +814,42 @@ func TestCloseTargetWaitsForAgentsCalls(t *testing.T) {
 	c.Done()
 	assert.True(t, k.opened[0].isClosed())
 }
+
+// identBg: a background-aware session whose target's identity needs a login.
+type identBg struct{ *bgSession }
+
+func (identBg) Identity(context.Context) (string, error) {
+	return "", &provider.Error{Class: provider.ClassUnauthorized, Message: "the kubeconfig credential plugin failed or did not answer"}
+}
+
+type identBgOpenable struct{ *bgOpenable }
+
+func (o identBgOpenable) Open(ctx context.Context, target string) (provider.Session, error) {
+	s, _ := o.bgOpenable.Open(ctx, target)
+	return identBg{s.(*bgSession)}, nil
+}
+
+// An agent's call on a target not selected that needs a login is told a
+// person does it (the plugin ran headless); on the selected one, as before.
+func TestAnAgentsCallNeedingALoginInTheBackgroundIsAPersons(t *testing.T) {
+	ctx := context.Background()
+	k := identBgOpenable{newBgOpenable("a", "b")}
+	s, _ := newService(t, k)
+	visit(t, s, "a")
+	c, err := s.AgentCall(ctx, "k", "b")
+	require.NoError(t, err)
+	defer c.Done()
+	_, err = c.Identity()
+	var ce *CodedError
+	require.ErrorAs(t, err, &ce)
+	assert.Equal(t, "unauthorized", ce.Code)
+	require.NotNil(t, ce.Why)
+	assert.Equal(t, "api.loginByPerson", ce.Why.Key)
+
+	ca, err := s.AgentCall(ctx, "k", "a")
+	require.NoError(t, err)
+	defer ca.Done()
+	_, err = ca.Identity()
+	require.ErrorAs(t, err, &ce)
+	assert.Nil(t, ce.Why, "the selected target: the provider's own words")
+}

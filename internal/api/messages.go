@@ -17,6 +17,7 @@ var messageTexts = map[string]string{
 	"configChanged": "the configuration of {target} changed since the action was reviewed; review it again",
 	"loginNeeded":   "a login to the cluster is needed to go on: select the target",
 	"closedByUser":  "the connection to the target was closed",
+	"loginByPerson": "a login to the cluster is done by a person: select the target in Ocular",
 }
 
 // apiMessage is the API's sentence key as a message (no params).
