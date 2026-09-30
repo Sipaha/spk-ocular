@@ -1,6 +1,6 @@
-// Read-only YAML viewer (CodeMirror 6). Loaded lazily: CodeMirror must never
-// be in the entry chunk (scripts/check-bundle.mjs).
-import { defaultKeymap } from '@codemirror/commands'
+// YAML viewer and editor (CodeMirror 6). Loaded lazily: CodeMirror must
+// never be in the entry chunk (scripts/check-bundle.mjs).
+import { defaultKeymap, history, historyKeymap } from '@codemirror/commands'
 import { yaml } from '@codemirror/lang-yaml'
 import { HighlightStyle, syntaxHighlighting } from '@codemirror/language'
 import { highlightSelectionMatches, search, searchKeymap } from '@codemirror/search'
@@ -30,16 +30,41 @@ const highlight = HighlightStyle.define([
   { tag: [tags.meta, tags.punctuation], color: 'var(--color-fg-muted)' },
 ])
 
-export default function YamlView({ text }: { text: string }) {
+interface Props {
+  text: string
+  /** Editable (fixed for the view's life: remount to switch); text is then
+   * only the start — onChange gets every edit. */
+  editable?: boolean
+  onChange?: (text: string) => void
+  /** Ctrl+Enter (⌘+Enter) in the editor. */
+  onSubmit?: () => void
+  autoFocus?: boolean
+  label?: string
+}
+
+export default function YamlView({ text, editable, onChange, onSubmit, autoFocus, label }: Props) {
   const host = useRef<HTMLDivElement>(null)
   const view = useRef<EditorView | null>(null)
+  const calls = useRef({ onChange, onSubmit })
+  useEffect(() => {
+    calls.current = { onChange, onSubmit }
+  })
   useEffect(() => {
     view.current = new EditorView({
       parent: host.current!,
       state: EditorState.create({
         doc: text,
         extensions: [
-          EditorState.readOnly.of(true),
+          editable
+            ? [
+                history(),
+                // Before the default keymap: Mod-Enter there inserts a line.
+                keymap.of([{ key: 'Mod-Enter', run: () => (calls.current.onSubmit?.(), true) }, ...historyKeymap]),
+                EditorView.updateListener.of((u) => {
+                  if (u.docChanged) calls.current.onChange?.(u.state.doc.toString())
+                }),
+              ]
+            : EditorState.readOnly.of(true),
           lineNumbers(),
           highlightActiveLine(),
           yaml(),
@@ -51,15 +76,18 @@ export default function YamlView({ text }: { text: string }) {
         ],
       }),
     })
+    if (autoFocus) view.current.focus()
     return () => view.current?.destroy()
     // text updates are applied below without recreating the editor
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
   useEffect(() => {
     const v = view.current
-    if (v && v.state.doc.toString() !== text) {
+    // An editor's text is its own after the start (a late echo of onChange
+    // must never overwrite what was typed meanwhile).
+    if (v && !editable && v.state.doc.toString() !== text) {
       v.dispatch({ changes: { from: 0, to: v.state.doc.length, insert: text } })
     }
-  }, [text])
-  return <div ref={host} className="h-full min-h-0" aria-label="yaml" />
+  }, [text, editable])
+  return <div ref={host} className="h-full min-h-0" aria-label={label ?? 'yaml'} />
 }

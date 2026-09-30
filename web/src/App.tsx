@@ -15,6 +15,7 @@ import { Palette } from './palette/Palette'
 import { openPalette } from './palette/store'
 import { cycleArea, globalShortcut } from './shortcuts'
 import { HelpDialog } from './components/HelpDialog'
+import { DiscardPrompt } from './edit/DiscardPrompt'
 
 export function App({ client }: { client: Client }) {
   const act = useMemo(() => actions(client), [client])
@@ -127,6 +128,7 @@ export function App({ client }: { client: Client }) {
       <TunnelsPanel client={client} mode={info?.mode === 'desktop' ? 'desktop' : 'browser'} />
       <Palette client={client} act={act} />
       {help && <HelpDialog onClose={() => setHelp(false)} />}
+      <DiscardPrompt />
       <StatusBar />
     </div>
   )

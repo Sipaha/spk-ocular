@@ -161,6 +161,7 @@ func TestEditSourceShowsTheObjectAndPinsItsVersion(t *testing.T) {
 	}))
 	doc, base := source(t, s, cmRef("cfg"))
 	assert.Equal(t, "uid-cfg", doc.Ref.UID)
+	assert.Equal(t, "7", doc.Version, "the live row's revision form")
 	assert.NotContains(t, doc.Text, "managedFields:")
 	assert.NotContains(t, doc.Text, lastAppliedKey)
 	assert.Equal(t, provider.EditBase{Route: editRoute(configMapsKind), APIVersion: "v1", Kind: "ConfigMap", Namespace: "ns", Name: "cfg", UID: "uid-cfg",

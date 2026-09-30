@@ -16,6 +16,7 @@ import { ResourceTable } from './ResourceTable'
 import { TargetDetails } from './TargetDetails'
 import { SearchIcon, WarningIcon } from './icons'
 import { dock } from '../dock/store'
+import { mayLeave } from '../edit/guard'
 import { TerminalDialog } from '../term/TerminalDialog'
 import { lend, type PaletteHost } from '../palette/store'
 
@@ -109,11 +110,15 @@ export function Workspace({ client, hub, target }: { client: Client; hub: ViewHu
   const again = (k: string) => {
     if (k === kind && halted === pageKey && kinds?.some((d) => d.id === k)) renew(k)
   }
-  const setKind = (k: string) => {
-    again(k)
-    remember({ kind: k, scope })
-  }
-  const setScope = (s: ScopeSel) => remember({ kind, scope: s })
+  // Another page drops the open editor's edits: asked first (edit/guard).
+  const newPage = (k: string) => k !== kind || halted === pageKey
+  const leaveFor = (k: string, go: () => void) => (newPage(k) ? mayLeave(go) : go())
+  const setKind = (k: string) =>
+    leaveFor(k, () => {
+      again(k)
+      remember({ kind: k, scope })
+    })
+  const setScope = (s: ScopeSel) => (JSON.stringify(s) === JSON.stringify(scope) ? remember({ kind, scope: s }) : mayLeave(() => remember({ kind, scope: s })))
   // Palette requests to the page (a filter for its table, an object to open);
   // the page applies each once (by seq).
   const [filterReq, setFilterReq] = useState<PageReq<string> | null>(null)
@@ -134,12 +139,14 @@ export function Workspace({ client, hub, target }: { client: Client; hub: ViewHu
   const hasForward = useCallback((kindId: string) => !!kinds?.find((k) => k.id === kindId)?.forward, [kinds])
   const actionsOf = useCallback((kindId: string) => kinds?.find((k) => k.id === kindId)?.actions ?? [], [kinds])
   const eventsKindOf = useCallback((kindId: string) => kinds?.find((k) => k.id === kindId)?.eventsKind, [kinds])
+  const editableOf = useCallback((kindId: string) => !!kinds?.find((k) => k.id === kindId)?.editable, [kinds])
+  const kindTitleOf = useCallback((kindId: string) => ((k) => k?.singular ?? k?.title ?? kindId)(kinds?.find((k) => k.id === kindId)), [kinds])
   const [actionReq, setActionReq] = useState<(ActionRequest & { seq: number }) | null>(null)
   const actionSeq = useRef(0)
   const openAction = useCallback(
     (ref: Ref, action: ActionDescriptor) =>
-      setActionReq({ ref, action, kindTitle: ((k) => k?.singular ?? k?.title ?? ref.kind)(kinds?.find((k) => k.id === ref.kind)), seq: ++actionSeq.current }),
-    [kinds],
+      setActionReq({ ref, action, kindTitle: kindTitleOf(ref.kind), seq: ++actionSeq.current }),
+    [kindTitleOf],
   )
 
   useEffect(() => {
@@ -180,17 +187,25 @@ export function Workspace({ client, hub, target }: { client: Client; hub: ViewHu
   const paletteActs = useRef<Pick<PaletteHost, 'openKind' | 'setScope' | 'openObject'> | null>(null)
   useEffect(() => {
     paletteActs.current = {
-      openKind: (k, filter) => {
-        if (k !== kind) setKind(k)
-        else again(k)
-        setFilterReq({ value: filter, seq: ++reqSeq.current })
-      },
+      openKind: (k, filter) =>
+        leaveFor(k, () => {
+          if (k !== kind) {
+            again(k)
+            remember({ kind: k, scope })
+          } else again(k)
+          setFilterReq({ value: filter, seq: ++reqSeq.current })
+        }),
       setScope,
-      openObject: (ref) => {
-        // The overview has no table to open details over: the object's kind's table.
-        if (kind === OVERVIEW || !current) setKind(kinds?.some((k) => k.id === ref.kind) ? ref.kind : (kinds?.find((k) => !k.hidden)?.id ?? kind))
-        setOpenReq({ value: ref, seq: ++reqSeq.current })
-      },
+      openObject: (ref) =>
+        mayLeave(() => {
+          // The overview has no table to open details over: the object's kind's table.
+          if (kind === OVERVIEW || !current) {
+            const k = kinds?.some((d) => d.id === ref.kind) ? ref.kind : (kinds?.find((d) => !d.hidden)?.id ?? kind)
+            again(k)
+            remember({ kind: k, scope })
+          }
+          setOpenReq({ value: ref, seq: ++reqSeq.current })
+        }),
     }
   })
   // null: scopes cannot be listed (the palette takes a typed one as is).
@@ -279,6 +294,8 @@ export function Workspace({ client, hub, target }: { client: Client; hub: ViewHu
             actionsOf={actionsOf}
             onAction={openAction}
             eventsKindOf={eventsKindOf}
+            editableOf={editableOf}
+            kindTitleOf={kindTitleOf}
             filterReq={filterReq}
             openReq={openReq}
           />
@@ -461,10 +478,12 @@ function ResourcePage(props: {
   actionsOf: (kindId: string) => ActionDescriptor[]
   onAction: (ref: Ref, action: ActionDescriptor) => void
   eventsKindOf: (kindId: string) => string | undefined
+  editableOf: (kindId: string) => boolean
+  kindTitleOf: (kindId: string) => string
   filterReq?: PageReq<string> | null
   openReq?: PageReq<Ref> | null
 }) {
-  const { pageKey, onHalted, client, hub, target, kind, scope, scopes, onScope, hasLogs, onLogs, hasExec, onTerminal, hasForward, actionsOf, onAction, eventsKindOf, filterReq, openReq } = props
+  const { pageKey, onHalted, client, hub, target, kind, scope, scopes, onScope, hasLogs, onLogs, hasExec, onTerminal, hasForward, actionsOf, onAction, eventsKindOf, editableOf, kindTitleOf, filterReq, openReq } = props
   const scopeKey = JSON.stringify(scope)
   const query = useMemo(() => ({ kind: kind.id, scope: JSON.parse(scopeKey) as ScopeSel }), [kind.id, scopeKey])
   const view = useView(hub, target.provider, target.id, query)
@@ -474,12 +493,15 @@ function ResourcePage(props: {
   }, [onHalted, pageKey, view.halted])
   const [filter, setFilter] = useState(filterReq?.value ?? '')
   const [selected, setSelected] = useState<string | null>(null)
-  const [open, setOpen] = useState<Ref | null>(openReq?.value ?? null)
+  const [open, setOpenNow] = useState<Ref | null>(openReq?.value ?? null)
+  // Another object's details drop the open editor's edits: asked first.
+  const setOpen = (ref: Ref | null) => mayLeave(() => setOpenNow(ref))
   // A palette request applies once, also to a page already open.
   const [applied, setApplied] = useState({ filter: filterReq?.seq ?? 0, open: openReq?.seq ?? 0 })
   if ((filterReq && filterReq.seq !== applied.filter) || (openReq && openReq.seq !== applied.open)) {
     if (filterReq && filterReq.seq !== applied.filter) setFilter(filterReq.value)
-    if (openReq && openReq.seq !== applied.open) setOpen(openReq.value)
+    // Asked for already (the palette's openObject): applied as is.
+    if (openReq && openReq.seq !== applied.open) setOpenNow(openReq.value)
     setApplied({ filter: filterReq?.seq ?? applied.filter, open: openReq?.seq ?? applied.open })
   }
   // The palette offers this table's rows.
@@ -574,7 +596,7 @@ function ResourcePage(props: {
             hub={hub}
             target={{ provider: target.provider, id: target.id }}
             subject={open}
-            onClose={() => setOpen(null)}
+            onClose={() => setOpenNow(null)}
             hasLogs={hasLogs}
             onLogs={onLogs}
             hasExec={hasExec}
@@ -583,6 +605,8 @@ function ResourcePage(props: {
             actionsOf={actionsOf}
             onAction={onAction}
             eventsKindOf={eventsKindOf}
+            editableOf={editableOf}
+            kindTitleOf={kindTitleOf}
           />
         )}
       </div>

@@ -163,6 +163,8 @@ export interface KindDescriptor {
   exec?: boolean
   /** Ports of objects of this kind can be forwarded. */
   forward?: boolean
+  /** Objects of this kind can be edited as text (GetEditSource). */
+  editable?: boolean
   /** Actions objects of this kind offer (restart, scale, delete, …). */
   actions?: ActionDescriptor[]
   /** How a table of this kind is first sorted (else by the first column). */
@@ -241,6 +243,8 @@ export interface EditDoc {
   /** the object, with the UID read */
   ref: Ref
   text: string
+  /** the object's revision as read (Row.rev's form) */
+  version?: string
   /** signed by the backend: sent back with the original text */
   base: string
 }

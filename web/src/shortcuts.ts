@@ -51,6 +51,8 @@ export const KEYS: KeyDef[] = [
   { id: 'menu', scope: 'table', keys: 'Shift+F10', help: 'keys.menu' },
   { id: 'back', scope: 'details', keys: 'Alt+←', help: 'keys.back' },
   { id: 'close', scope: 'details', keys: 'Esc', help: 'keys.close' },
+  { id: 'edit', scope: 'details', keys: 'E', help: 'keys.edit' },
+  { id: 'editReview', scope: 'details', keys: 'Ctrl+Enter', help: 'keys.editReview' },
   { id: 'search', scope: 'logs', keys: 'Ctrl+F', help: 'keys.logSearch' },
   { id: 'next', scope: 'logs', keys: 'F3 Shift+F3', help: 'keys.logNext' },
   { id: 'save', scope: 'logs', keys: 'Ctrl+S', help: 'keys.logSave' },

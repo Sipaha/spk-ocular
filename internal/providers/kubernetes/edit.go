@@ -107,7 +107,7 @@ func (s *session) EditSource(ctx context.Context, ref core.Ref) (core.EditDoc, p
 		Namespace: u.GetNamespace(), Name: u.GetName(), UID: string(u.GetUID()), Version: u.GetResourceVersion(),
 		DocHash: sha([]byte(text)), Format: editFormat,
 	}
-	return core.EditDoc{Ref: ref, Text: text}, base, nil
+	return core.EditDoc{Ref: ref, Text: text, Version: u.GetResourceVersion()}, base, nil
 }
 
 // editCheck is a request checked against its base: the kind, the original

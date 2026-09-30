@@ -1,8 +1,11 @@
 import { lazy, Suspense, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { ApiError, type Client } from '../api/client'
-import type { ActionDescriptor, Relation, Ref, Resource } from '../api/types'
+import type { ActionDescriptor, EditDoc, Relation, Ref, Resource } from '../api/types'
 import { Menu } from '../actions/Menu'
+import { EditDialog } from '../edit/EditDialog'
+import { holdEdits, mayLeave } from '../edit/guard'
 import { actionLabel, classLabel, detailLabel, relationLabel, t } from '../i18n'
+import { showNotice } from '../store'
 import { inTerminal } from '../keyboard'
 import { consumed, focusMark, isTyping, overlayOpen, restoreFocus } from '../shortcuts'
 import { refTitle } from '../refs'
@@ -31,11 +34,25 @@ interface Props {
   onAction?: (ref: Ref, action: ActionDescriptor) => void
   /** The kind listing events about objects of a kind (KindDescriptor.eventsKind); none: no events section. */
   eventsKindOf?: (kindId: string) => string | undefined
+  /** Objects of the kind can be edited as text (KindDescriptor.editable). */
+  editableOf?: (kindId: string) => boolean
+  /** The kind's name for one object (the review names it). */
+  kindTitleOf?: (kindId: string) => string
 }
+
+/** An edit in progress: the text as given (doc) and as edited now. */
+interface Editing {
+  key: string
+  doc: EditDoc
+  text: string
+}
+
+const toolBtn = 'rounded-md border border-line px-2 py-0.5 text-xs text-fg-muted hover:bg-hover hover:text-fg'
+const errDetail = (e: unknown) => (e instanceof ApiError ? e.detail || e.code : e instanceof Error ? e.message : String(e))
 
 type Tab = 'details' | 'yaml'
 
-export function ResourceDrawer({ client, hub, target, subject, onClose, hasLogs, onLogs, hasExec, onTerminal, hasForward, actionsOf, onAction, eventsKindOf }: Props) {
+export function ResourceDrawer({ client, hub, target, subject, onClose, hasLogs, onLogs, hasExec, onTerminal, hasForward, actionsOf, onAction, eventsKindOf, editableOf, kindTitleOf }: Props) {
   const [stack, setStack] = useState<Ref[]>([subject])
   const [tab, setTab] = useState<Tab>('details')
   const [res, setRes] = useState<{ key: string; r?: Resource; error?: string; gone?: boolean } | null>(null)
@@ -68,28 +85,84 @@ export function ResourceDrawer({ client, hub, target, subject, onClose, hasLogs,
     // revision: refetch when the object changes (any field, not only table cells)
   }, [client, current, key, revision, target.provider, target.id])
 
+  // The edit of the object shown (its text as edited), by key: another
+  // object never shows it. The editor opens on the YAML tab.
+  const [edit, setEdit] = useState<Editing | null>(null)
+  const [editLoad, setEditLoad] = useState<{ key: string; error?: string } | null>(null)
+  const [reviewing, setReviewing] = useState(false)
+  const editing = edit?.key === key ? edit : null
+  const editRef = useRef(editing)
+  const keyRef = useRef(key)
+  useEffect(() => {
+    editRef.current = editing
+    keyRef.current = key
+  })
+  const host = useRef<HTMLDivElement>(null)
+  const focusEditor = () => host.current?.querySelector<HTMLElement>('.cm-content')?.focus()
+  const endEdit = () => {
+    setEdit(null)
+    setReviewing(false)
+  }
+  // Edits not written are held: leaving asks first (edit/guard).
+  const editingKey = editing ? key : null
+  useEffect(() => {
+    if (!editingKey) return
+    return holdEdits({ dirty: () => !!editRef.current && editRef.current.text !== editRef.current.doc.text, discard: endEdit, focus: focusEditor })
+  }, [editingKey])
+
   // Closing gives focus back to where details were opened from (else the table).
   const [mark] = useState(focusMark)
-  const close = () => {
-    onClose()
-    restoreFocus(mark)
+  const close = () =>
+    mayLeave(() => {
+      onClose()
+      restoreFocus(mark)
+    })
+  const canEdit = !!editableOf?.(current.kind) && !!res?.r && res.key === key && !res.gone
+  const loadingEdit = editLoad?.key === key && !editLoad.error
+  const startEdit = () => {
+    if (!canEdit || editing || loadingEdit) return
+    setTab('yaml')
+    const k = key
+    setEditLoad({ key: k })
+    client.getEditSource({ ...(res?.r?.ref ?? current), provider: target.provider, target: target.id }).then(
+      (doc) => {
+        if (keyRef.current !== k) return
+        setEdit({ key: k, doc, text: doc.text })
+        setEditLoad(null)
+      },
+      (e) => keyRef.current === k && setEditLoad({ key: k, error: t('edit.loadFailed', { class: classLabel(e instanceof ApiError ? e.code : 'internal'), detail: errDetail(e) }) }),
+    )
   }
-  const keys = useRef({ close, depth: stack.length })
+  const review = () => {
+    if (editRef.current && !reviewing) setReviewing(true)
+  }
+  const cancelEdit = () => mayLeave(endEdit)
+  const keys = useRef({ close, depth: stack.length, startEdit, review, cancelEdit, editing: !!editing })
   useEffect(() => {
-    keys.current = { close, depth: stack.length }
+    keys.current = { close, depth: stack.length, startEdit, review, cancelEdit, editing: !!editing }
   })
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (consumed(e) || inTerminal(e.target) || overlayOpen()) return
-      if (e.key === 'Escape' && !(e.target instanceof HTMLElement && e.target.closest('.cm-panels'))) keys.current.close()
+      const k = keys.current
+      // Esc steps out of the editor first (asking when edits would be lost).
+      if (e.key === 'Escape' && !(e.target instanceof HTMLElement && e.target.closest('.cm-panels'))) (k.editing ? k.cancelEdit : k.close)()
       else if (e.key === 'ArrowLeft' && e.altKey && !e.ctrlKey && !e.shiftKey && !e.metaKey && !isTyping(e.target)) {
         // Alt+←: back along the relations (never Backspace: it edits text);
         // never the page's history (browser mode would leave the app).
         e.preventDefault()
-        if (keys.current.depth > 1) {
-          setStack((s) => s.slice(0, -1))
-          setTab('details')
-        }
+        if (k.depth > 1)
+          mayLeave(() => {
+            setStack((s) => s.slice(0, -1))
+            setTab('details')
+          })
+      } else if (e.code === 'KeyE' && !e.repeat && !e.altKey && !e.ctrlKey && !e.metaKey && !e.shiftKey && !isTyping(e.target) && !k.editing) {
+        // By the physical key: a Russian layout types "у".
+        e.preventDefault()
+        k.startEdit()
+      } else if (e.key === 'Enter' && (e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey && k.editing) {
+        e.preventDefault()
+        k.review()
       }
     }
     window.addEventListener('keydown', onKey)
@@ -101,14 +174,18 @@ export function ResourceDrawer({ client, hub, target, subject, onClose, hasLogs,
   const actions = actionsOf?.(current.kind) ?? []
   // The object shown now (after relation navigation: that one), with the UID read.
   // A deleted object has nothing to open or act on.
-  const hasTools = !shown?.gone && ((!!onLogs && !!hasLogs?.(current.kind)) || (!!onTerminal && !!hasExec?.(current.kind)) || (!!onAction && actions.length > 0))
+  const hasTools = !shown?.gone && ((!!onLogs && !!hasLogs?.(current.kind)) || (!!onTerminal && !!hasExec?.(current.kind)) || (!!onAction && actions.length > 0) || !!editableOf?.(current.kind))
   // Shown by its title (a container's name) once read; the key stays the name.
   const title = refTitle(r?.ref ?? current)
   const shownRef = (): Ref => ({ ...(r?.ref ?? current), provider: target.provider, target: target.id })
-  const go = (ref: Ref) => {
-    setStack((s) => [...s, ref])
-    setTab('details')
-  }
+  const go = (ref: Ref) =>
+    mayLeave(() => {
+      setStack((s) => [...s, ref])
+      setTab('details')
+    })
+  const pickTab = (tb: Tab) => (tb === tab ? undefined : mayLeave(() => setTab(tb)))
+  // The live object moved on since its text was read.
+  const moved = !!editing?.doc.version && !!revision && revision !== editing.doc.version
 
   return (
     <aside role="dialog" aria-label={`${current.kind} ${title}`} data-area="details" tabIndex={-1} className="absolute inset-y-0 right-0 z-10 flex w-[min(720px,55%)] flex-col border-l border-line bg-app shadow-2xl outline-none">
@@ -122,10 +199,12 @@ export function ResourceDrawer({ client, hub, target, subject, onClose, hasLogs,
                 <button
                   className="max-w-48 truncate rounded px-1 hover:bg-hover hover:text-fg"
                   title={`${ref.kind} ${refTitle(ref)}`}
-                  onClick={() => {
-                    setStack((s) => s.slice(0, i + 1))
-                    setTab('details')
-                  }}
+                  onClick={() =>
+                    mayLeave(() => {
+                      setStack((s) => s.slice(0, i + 1))
+                      setTab('details')
+                    })
+                  }
                 >
                   {refTitle(ref)}
                 </button>
@@ -139,7 +218,7 @@ export function ResourceDrawer({ client, hub, target, subject, onClose, hasLogs,
         )}
         <div className="flex items-center gap-2">
           {stack.length > 1 && (
-            <button className="rounded px-1.5 text-fg-muted hover:bg-hover hover:text-fg" onClick={() => setStack((s) => s.slice(0, -1))} aria-label={t('drawer.back')} title={`${t('drawer.back')} (Alt+←)`}>
+            <button className="rounded px-1.5 text-fg-muted hover:bg-hover hover:text-fg" onClick={() => mayLeave(() => setStack((s) => s.slice(0, -1)))} aria-label={t('drawer.back')} title={`${t('drawer.back')} (Alt+←)`}>
               ←
             </button>
           )}
@@ -181,6 +260,11 @@ export function ResourceDrawer({ client, hub, target, subject, onClose, hasLogs,
                 </button>
               </>
             )}
+            {editableOf?.(current.kind) && (
+              <button className={toolBtn} disabled={!canEdit || !!editing || loadingEdit} onClick={startEdit} title={t('edit.openHint')}>
+                {t('edit.open')}
+              </button>
+            )}
             {onAction && actions.length > 0 && (
               <button
                 ref={actionsBtn}
@@ -213,7 +297,7 @@ export function ResourceDrawer({ client, hub, target, subject, onClose, hasLogs,
             key={tb}
             role="tab"
             aria-selected={tab === tb}
-            onClick={() => setTab(tb)}
+            onClick={() => pickTab(tb)}
             className={['border-b-2 px-3 py-1.5', tab === tb ? 'border-accent text-fg' : 'border-transparent text-fg-muted hover:text-fg'].join(' ')}
           >
             {t(tb === 'details' ? 'drawer.details' : 'drawer.yaml')}
@@ -232,11 +316,47 @@ export function ResourceDrawer({ client, hub, target, subject, onClose, hasLogs,
               {shown.error}
             </p>
           ))}
-        {r && tab === 'yaml' && (
+        {r && tab === 'yaml' && editLoad?.key === key && (
+          <p role={editLoad.error ? 'alert' : 'status'} className={['m-4 rounded-md px-3 py-2', editLoad.error ? 'bg-danger/10 text-danger' : 'text-fg-subtle'].join(' ')}>
+            {editLoad.error ?? t('edit.loading')}
+          </p>
+        )}
+        {r && tab === 'yaml' && !editing && (
           <div className="h-full">
             <Suspense fallback={<pre className="p-4 font-mono text-xs text-fg-muted">{r.yaml}</pre>}>
-              <YamlView text={r.yaml} />
+              <YamlView key="view" text={r.yaml} />
             </Suspense>
+          </div>
+        )}
+        {tab === 'yaml' && editing && (
+          <div ref={host} className="flex h-full min-h-0 flex-col">
+            {moved && (
+              <p role="status" className="border-b border-line bg-warning/10 px-3 py-1.5 text-xs text-warning">
+                {t('edit.changedOnServer')}
+              </p>
+            )}
+            <div className="min-h-0 flex-1">
+              <Suspense fallback={<pre className="p-4 font-mono text-xs text-fg-muted">{editing.doc.text}</pre>}>
+                <YamlView
+                  key={`edit/${editing.doc.base}`}
+                  editable
+                  autoFocus
+                  label={t('edit.editor')}
+                  text={editing.doc.text}
+                  onChange={(text) => setEdit((ed) => (ed && ed.key === editing.key ? { ...ed, text } : ed))}
+                  onSubmit={review}
+                />
+              </Suspense>
+            </div>
+            <div className="flex shrink-0 items-center gap-2 border-t border-line px-3 py-2">
+              <span className="min-w-0 flex-1 truncate text-xs text-fg-subtle">{editing.text === editing.doc.text ? t('edit.unchanged') : t('edit.hint')}</span>
+              <button className={toolBtn} onClick={cancelEdit}>
+                {t('edit.cancel')}
+              </button>
+              <button className="rounded-md bg-accent px-2 py-0.5 text-xs text-accent-fg disabled:opacity-50" onClick={review} title="Ctrl+Enter">
+                {t('edit.review')} <span className="opacity-70">Ctrl+Enter</span>
+              </button>
+            </div>
           </div>
         )}
         {r && tab === 'details' && (
@@ -252,6 +372,20 @@ export function ResourceDrawer({ client, hub, target, subject, onClose, hasLogs,
           />
         )}
       </div>
+      {reviewing && editing && (
+        <EditDialog
+          client={client}
+          req={{ ref: editing.doc.ref, base: editing.doc.base, original: editing.doc.text, edited: editing.text, kindTitle: kindTitleOf?.(current.kind) ?? current.kind }}
+          onBack={() => {
+            setReviewing(false)
+            requestAnimationFrame(focusEditor)
+          }}
+          onDone={(res) => {
+            showNotice(res.message)
+            endEdit()
+          }}
+        />
+      )}
     </aside>
   )
 }

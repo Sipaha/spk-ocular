@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import type { Client } from './api/client'
+import { mayLeave } from './edit/guard'
 import type { AppInfo, Target, TargetRef, TargetsView } from './api/types'
 
 export interface State {
@@ -107,6 +108,33 @@ export function actions(client: Client) {
     }
   }
 
+  async function select(ref: TargetRef) {
+    // Optimistic: the old target's pages unmount now instead of reacting
+    // to their session being closed (and reopening it) meanwhile.
+    useStore.setState((st) => ({
+      cursor: targetKey(ref),
+      actionError: null,
+      view: st.view ? { ...st.view, selected: { provider: ref.provider, id: ref.id } } : st.view,
+    }))
+    nextSelect = { provider: ref.provider, id: ref.id }
+    if (selecting) return
+    selecting = true
+    try {
+      while (nextSelect) {
+        const r = nextSelect
+        nextSelect = null
+        try {
+          await client.selectTarget(r.provider, r.id)
+        } catch (e) {
+          useStore.setState({ actionError: errText(e) })
+        }
+      }
+    } finally {
+      selecting = false
+    }
+    await reload()
+  }
+
   return {
     async init() {
       try {
@@ -117,31 +145,11 @@ export function actions(client: Client) {
       await reload()
     },
     reload,
-    async select(ref: TargetRef) {
-      // Optimistic: the old target's pages unmount now instead of reacting
-      // to their session being closed (and reopening it) meanwhile.
-      useStore.setState((st) => ({
-        cursor: targetKey(ref),
-        actionError: null,
-        view: st.view ? { ...st.view, selected: { provider: ref.provider, id: ref.id } } : st.view,
-      }))
-      nextSelect = { provider: ref.provider, id: ref.id }
-      if (selecting) return
-      selecting = true
-      try {
-        while (nextSelect) {
-          const r = nextSelect
-          nextSelect = null
-          try {
-            await client.selectTarget(r.provider, r.id)
-          } catch (e) {
-            useStore.setState({ actionError: errText(e) })
-          }
-        }
-      } finally {
-        selecting = false
-      }
-      await reload()
+    // Another target drops the open editor's edits: asked first (edit/guard).
+    select(ref: TargetRef): Promise<void> {
+      const now = useStore.getState().view?.selected
+      if (now?.provider === ref.provider && now.id === ref.id) return select(ref)
+      return new Promise((resolve) => mayLeave(() => resolve(select(ref)), resolve))
     },
     setFilter(filter: string) {
       useStore.setState((s) => {

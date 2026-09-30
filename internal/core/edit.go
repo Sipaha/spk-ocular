@@ -7,6 +7,9 @@ type EditDoc struct {
 	// Text is the document shown: what the editor does not change is left
 	// out (the provider says what in a header comment).
 	Text string `json:"text"`
+	// Version is the object's revision as read, in Row.Rev's form: the UI
+	// says when the live object moves on while its text is edited.
+	Version string `json:"version,omitempty"`
 	// Base is the signed stand-in of the object and text read (set by the
 	// API); PrepareEdit and RunEdit carry it back with the original text.
 	Base string `json:"base"`
