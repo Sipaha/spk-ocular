@@ -3,14 +3,20 @@ import userEvent from '@testing-library/user-event'
 import { EditorView } from '@codemirror/view'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { App } from '../App'
-import type { KindDescriptor, Query, Ref } from '../api/types'
+import type { KindDescriptor, Query, Ref, Value } from '../api/types'
 import { editsHeld, resetGuard } from '../edit/guard'
 import { initialState, useStore } from '../store'
 import { kindsView, fakeClient, k8s, podRow, podsKind } from '../test/fakeClient'
+import { ApiError } from '../api/client'
+import { resetCopies } from '../values/copy'
 
+let writeText: ReturnType<typeof vi.fn>
 beforeEach(() => {
   useStore.setState({ ...initialState })
   resetGuard()
+  resetCopies()
+  writeText = vi.fn(async () => {})
+  Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true })
 })
 
 const MARKER = 'MARKER-0d4b-value'
@@ -94,4 +100,54 @@ describe('values in the details', () => {
     expect(within(screen.getByRole('dialog', { name: /Change value/ })).getByLabelText('Value')).toHaveValue('draft')
     expect(editsHeld()).toBe(true)
   })
+
+  // The object gone for good (deleted, or its name now another object's):
+  // what was shown is hidden and a pending copy is given up, while an open
+  // draft stays (the user leaves it).
+  const deleted = async (f: Awaited<ReturnType<typeof openDrawer>>['f']) => {
+    f.client.getResource = vi.fn(async () => {
+      throw new ApiError('not_found', 'gone')
+    })
+    f.state.rowsByKind['pods-api-1'] = []
+    await act(async () => f.emit({ type: 'view_changed', payload: { viewId: 'v-pods-api-1', version: 99 } }))
+    expect(await screen.findByText('This object no longer exists.', undefined, { timeout: 3000 })).toBeInTheDocument()
+  }
+  const replaced = async (f: Awaited<ReturnType<typeof openDrawer>>['f']) => {
+    f.client.getResource = vi.fn(async (ref: Ref) => ({ ref: { ...ref, uid: 'uid-new' }, health: { state: 'ok' as const }, yaml: '', facts: [], relations: [] }))
+    f.state.rowsByKind['pods-api-1'] = [{ ...podRow('api-1', 'web'), ref: { ...podRow('api-1', 'web').ref, uid: 'uid-new' }, rev: '5' }]
+    await act(async () => f.emit({ type: 'view_changed', payload: { viewId: 'v-pods-api-1', version: 99 } }))
+    await vi.waitFor(() => expect(f.client.getResource).toHaveBeenCalled(), { timeout: 3000 })
+    await act(async () => {})
+  }
+
+  for (const [name, end] of [['deleted', deleted], ['replaced by another object of the name', replaced]] as const) {
+    it(`an object ${name}: a shown value is hidden, an open draft stays`, async () => {
+      const { f, values } = await openDrawer()
+      await userEvent.click(within(values).getByRole('button', { name: 'Show' }))
+      await within(values).findByText(MARKER)
+      await userEvent.click(within(values).getByRole('button', { name: 'Change' }))
+      const dialog = screen.getByRole('dialog', { name: /Change value/ })
+      await userEvent.type(within(dialog).getByLabelText('Value'), 'new')
+      await vi.waitFor(() => expect(vi.mocked(f.client.getResource).mock.calls.length).toBe(2), { timeout: 2000 })
+      await end(f)
+      await waitFor(() => expect(values.querySelector('[data-value]')).toBeNull())
+      expect(within(values).queryByText(MARKER)).toBeNull()
+      expect(within(screen.getByRole('dialog', { name: /Change value/ })).getByLabelText('Value')).toHaveValue(MARKER + 'new')
+      expect(editsHeld()).toBe(true)
+      for (const b of ['Show', 'Copy', 'Change', 'Delete', 'Add key']) expect(within(values).getByRole('button', { name: b })).toBeDisabled()
+    })
+
+    it(`an object ${name}: a pending copy is given up`, async () => {
+      const { f, values } = await openDrawer()
+      await vi.waitFor(() => expect(vi.mocked(f.client.getResource).mock.calls.length).toBe(2), { timeout: 2000 })
+      let answer!: (v: Value) => void
+      f.client.revealValue = vi.fn(() => new Promise<Value>((res) => (answer = res)))
+      await userEvent.click(within(values).getByRole('button', { name: 'Copy' }))
+      await vi.waitFor(() => expect(f.client.revealValue).toHaveBeenCalled())
+      await end(f)
+      await act(async () => answer({ key: 'password', value: MARKER, text: true, size: MARKER.length, uid: 'uid-web-api-1', version: '1' }))
+      await act(async () => {})
+      expect(writeText).not.toHaveBeenCalled()
+    })
+  }
 })

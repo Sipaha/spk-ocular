@@ -72,6 +72,24 @@ function setup(version = '7') {
 }
 
 describe('ValuesSection', () => {
+  it('an object once gone stays over: what was shown does not come back', async () => {
+    const { f, row, rerender, container } = setup()
+    await userEvent.click(within(await waitFor(() => row('password'))).getByRole('button', { name: 'Show' }))
+    await within(row('password')).findByText(MARKER)
+    const at = (gone: boolean) => (
+      <>
+        <ValuesSection client={f.client} subject={subject} revision="7" gone={gone} kindTitle="Secret" />
+        <DiscardPrompt />
+      </>
+    )
+    rerender(at(true))
+    expect(container).not.toHaveTextContent(MARKER)
+    // Read again (the same UID): still over.
+    rerender(at(false))
+    expect(container).not.toHaveTextContent(MARKER)
+    expect(within(row('password')).getByRole('button', { name: 'Show' })).toBeDisabled()
+  })
+
   it('lists keys with sizes and no value; Show reads one key now, Hide drops it', async () => {
     const { f, row, container } = setup()
     await screen.findByText('password')

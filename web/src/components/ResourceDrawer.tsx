@@ -385,7 +385,7 @@ export function ResourceDrawer({ client, hub, target, subject, onClose, hasLogs,
             // Keyed by the object: its values never show for another one.
             values={
               valuesOf?.(current.kind) &&
-              r.ref.uid && <ValuesSection key={key} client={client} subject={{ ...r.ref, provider: target.provider, target: target.id }} revision={revision} kindTitle={kindTitleOf?.(current.kind) ?? current.kind} />
+              r.ref.uid && <ValuesSection key={key} client={client} subject={{ ...r.ref, provider: target.provider, target: target.id }} revision={revision} gone={shown?.gone} kindTitle={kindTitleOf?.(current.kind) ?? current.kind} />
             }
             // Right under the facts: the events list below is a fixed-height box.
             ports={hasForward?.(current.kind) && <PortsSection key={key} client={client} subject={{ ...r.ref, provider: target.provider, target: target.id }} />}

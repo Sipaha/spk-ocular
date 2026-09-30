@@ -12,6 +12,12 @@ interface Props {
   subject: Ref
   /** The object's revision now (the details' live view): a change hides what is shown. */
   revision?: string
+  /**
+   * The object is known to be gone (deleted): nothing is shown or copied any
+   * more, an open dialog keeps its draft. Not the same as an unknown revision
+   * (the live view not read yet).
+   */
+  gone?: boolean
   /** The kind's name for one object (the review names it). */
   kindTitle: string
 }
@@ -31,10 +37,12 @@ type Line = { state: 'reading' } | { state: 'shown'; v: Value; whole: boolean } 
  * an explicit action on one key (show, copy) and lives only in this
  * section's state — hidden when the details close, move to another object,
  * tab, view or target (the section unmounts), when the object's revision
- * changes, and by Hide. A late answer is dropped: by generation (per key and
- * for the section), liveness, and its origin (UID and version asked about).
+ * changes, when the object is gone or its name comes to mean another object
+ * (another UID), and by Hide. A late answer is dropped: by generation (per
+ * key and for the section), liveness, the object's end, and its origin (UID
+ * and version asked about).
  */
-export function ValuesSection({ client, subject, revision, kindTitle }: Props) {
+export function ValuesSection({ client, subject: given, revision, gone, kindTitle }: Props) {
   const [list, setList] = useState<{ data?: ValueList; error?: string } | null>(null)
   const [lines, setLines] = useState<Record<string, Line>>({})
   const [dialog, setDialog] = useState<ValueDialogMode | null>(null)
@@ -50,7 +58,18 @@ export function ValuesSection({ client, subject, revision, kindTitle }: Props) {
   // are read again).
   const listed = useRef<string | undefined>(undefined)
   const seen = useRef(revision)
+  // The object is the one first given (by UID): the same name read later as
+  // another UID is another object, and this one is over.
+  const [subject] = useState(given)
   const uid = subject.uid ?? ''
+  // Once over, for good: what was shown never comes back.
+  const [ended, setEnded] = useState(false)
+  if (!ended && (!!gone || (given.uid ?? '') !== uid)) {
+    setEnded(true)
+    setLines({})
+  }
+  const over = ended || !!gone || (given.uid ?? '') !== uid
+  const overRef = useRef(over)
 
   useLayoutEffect(() => {
     live.current = true
@@ -61,6 +80,11 @@ export function ValuesSection({ client, subject, revision, kindTitle }: Props) {
   useLayoutEffect(() => {
     seen.current = revision
   }, [revision])
+  // The object's end gives up every answer pending.
+  useLayoutEffect(() => {
+    overRef.current = over
+    if (over) gen.current++
+  }, [over])
 
   // Keys are read on opening, again when the object's revision moves away
   // from the listed one (each new revision once), and after a write.
@@ -120,7 +144,7 @@ export function ValuesSection({ client, subject, revision, kindTitle }: Props) {
     })
 
   /** Nothing moved since asking at version asked: still listed, and no other revision seen. */
-  const still = (asked: string | undefined) => listed.current === asked && (!seen.current || seen.current === asked)
+  const still = (asked: string | undefined) => !overRef.current && listed.current === asked && (!seen.current || seen.current === asked)
   /** The answer is for the object and version shown now. */
   const fits = (v: Value, asked: string | undefined) => v.uid === uid && v.version === asked && still(asked)
 
@@ -195,6 +219,7 @@ export function ValuesSection({ client, subject, revision, kindTitle }: Props) {
   const lineOf = (key: string): Line | undefined => {
     const l = lines[key]
     if (l?.state !== 'shown') return l
+    if (over) return undefined
     return l.v.version === version && (!revision || revision === l.v.version) ? l : { state: 'changed' }
   }
   const shownOf = (key: string): Value | undefined => {
@@ -213,7 +238,7 @@ export function ValuesSection({ client, subject, revision, kindTitle }: Props) {
             {t('values.hideAll')}
           </button>
         )}
-        <button className={toolBtn} disabled={!data} onClick={() => setDialog({ op: 'set' })}>
+        <button className={toolBtn} disabled={!data || over} onClick={() => setDialog({ op: 'set' })}>
           {t('values.add')}
         </button>
       </div>
@@ -231,6 +256,7 @@ export function ValuesSection({ client, subject, revision, kindTitle }: Props) {
               key={k.key}
               k={k}
               line={lineOf(k.key)}
+              over={over}
               onShow={() => reveal(k.key)}
               onHide={() => hide(k.key)}
               onWhole={() => setLines((ls) => (ls[k.key]?.state === 'shown' ? { ...ls, [k.key]: { ...(ls[k.key] as Line & { state: 'shown' }), whole: true } } : ls))}
@@ -265,6 +291,8 @@ class StaleValue extends Error {}
 function KeyLine(props: {
   k: ValueKey
   line?: Line
+  /** The object is gone: nothing more is read or changed. */
+  over: boolean
   onShow: () => void
   onHide: () => void
   onWhole: () => void
@@ -272,7 +300,7 @@ function KeyLine(props: {
   onEdit: () => void
   onDelete: () => void
 }) {
-  const { k, line, onShow, onHide, onWhole, onCopy, onEdit, onDelete } = props
+  const { k, line, over, onShow, onHide, onWhole, onCopy, onEdit, onDelete } = props
   const shown = line?.state === 'shown' ? line : null
   const text = shown ? (shown.whole || shown.v.value.length <= SHOWN_CHARS ? shown.v.value : shown.v.value.slice(0, SHOWN_CHARS)) : ''
   return (
@@ -294,17 +322,17 @@ function KeyLine(props: {
             {t('values.hide')}
           </button>
         ) : (
-          <button className={toolBtn} onClick={onShow} title={t('values.showHint')}>
+          <button className={toolBtn} disabled={over} onClick={onShow} title={t('values.showHint')}>
             {t('values.show')}
           </button>
         )}
-        <button className={toolBtn} onClick={onCopy} title={t('values.copyHint')}>
+        <button className={toolBtn} disabled={over} onClick={onCopy} title={t('values.copyHint')}>
           {t('values.copy')}
         </button>
-        <button className={toolBtn} onClick={onEdit} title={t('values.editHint')}>
+        <button className={toolBtn} disabled={over} onClick={onEdit} title={t('values.editHint')}>
           {t('values.edit')}
         </button>
-        <button className={`${toolBtn} hover:text-danger`} onClick={onDelete} title={t('values.deleteHint')}>
+        <button className={`${toolBtn} hover:text-danger`} disabled={over} onClick={onDelete} title={t('values.deleteHint')}>
           {t('values.delete')}
         </button>
         </div>
