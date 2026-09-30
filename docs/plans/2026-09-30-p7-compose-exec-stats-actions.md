@@ -200,10 +200,29 @@ Actions: restart/stop/start/rm), «Ключевые технические ре�
   removing or force remove»; restart остановленного — 204 (запускает).
 
 ### Task 1. Клиент Engine: POST, exec, stats, действия (решение 1)
-- [ ] `engine/calls.go`/`exec.go`/`stats.go`; классы «до/после отправки», 304; `enginefake`
+- [x] `engine/calls.go`/`exec.go`/`stats.go`; классы «до/после отправки», 304; `enginefake`
   exec/stats/действия с hooks. Тесты клиента на фейке: 101 с байтами в том же чтении,
   зависший 101 (дедлайн заголовков), отказ до 101, отмена после 101, обрыв после записи POST
   → `unknown`, 304.
+
+  **Сделано** (`engine/writes.go`, `exec.go`, `stats.go`; `enginefake/writes.go`): изменения
+  через `change` (граница «отправлено» — `WroteHeaders`; после неё обрыв, отмена, ожидание
+  сверх лимита, 5xx — `unknown` с причиной; 304 — `notModified`); `StopContainer/
+  RestartContainer(ctx, id, t int)` — `t` секунд как есть (0, −1), ожидание клиента
+  `StopWait(t)` = t + RequestTimeout, для −1 — минута; `RemoveContainer` без force/v;
+  `ExecInspect.ExitCode *int`; `ExecConn` (жизнь — ctx или `Close`, `Client.Close` его не
+  трогает); первый размер — `ConsoleSize` при API ≥ 1.42 и всегда `ResizeExec` после 101
+  (несколько быстрых попыток, как у docker CLI: TTY процесса может ещё не быть; resize
+  идемпотентен); `ContainerStats(one-shot)`. Тесты на фейке (в т. ч. ревью: null-код против
+  0, 127 с Pid 0 и Pid ≠ 0, поток переживает дедлайн заголовков, `Close` рвёт чтение,
+  отмена до 101 — быстро и `unknown`, первый размер на API 1.41, stop сверх ожидания) и
+  `TestDindEngineWrites` на dind (одноразовый контейнер: `stty size` = 40 132, exit 3,
+  отсутствующая команда 127/Pid 0, stats обоих видов, 409 remove, 304 start/stop, restart
+  остановленного, stop t=0, remove).
+  **Находка dind:** POST без тела должен уходить **без тела** (`http.NoBody`): пустое тело
+  `newRequest` (защита GET от повтора) уходит chunked, и демон отказывает `start` («starting
+  container with non-empty request body … removed in v1.24»); POST/DELETE `net/http` и так не
+  повторяет. Фейк теперь отказывает так же.
 
 ### Task 2. Терминал Compose (решение 2)
 - [ ] `compose/exec.go` (Execer), `Exec: true`; общие подписи. Тесты на фейке: контейнер и
@@ -263,10 +282,10 @@ Actions: restart/stop/start/rm), «Ключевые технические ре�
 2. **Удалённый exec не отменяется** (демон после 101 запускает процесс с фоновым
    контекстом). Гарантии: локальные соединения и горутины заканчиваются быстро; остановка
    процесса в контейнере — best effort (закрытие потока → SIGHUP у TTY-shell); неоднозначный
-   start → `unknown` без повтора и нового exec. `StartExec` принимает контекст **рукопожатия**
-   (с дедлайном заголовков); после 101 возвращённый `ExecConn` живёт до своего `Close` —
-   `AfterFunc` рукопожатия снимается при передаче владения, дальше соединение закрывает
-   только `Close` хэндла (и контекст жизни хэндла, который передаёт вызывающий в Task 2).
+   start → `unknown` без повтора и нового exec. Контекст `StartExec` — **контекст жизни**
+   потока; дедлайн заголовков — свой таймер `HeaderTimeout` на контексте запроса и после
+   101 уже не действует; после 101 `context.AfterFunc(ctx)` закрывает `ExecConn`, а
+   `ExecConn.Close` закрывает соединение (и снимает `AfterFunc`).
    `Client.Close` закрывает только простаивающие соединения — активный hijack закрывает
    `ExecConn.Close`. Тесты: 101 задержан после принятого start → отмена клиента → быстрый
    возврат; живой поток переживает дедлайн заголовков; `Close` рвёт чтение.

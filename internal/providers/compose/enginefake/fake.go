@@ -2,7 +2,8 @@
 // a unix socket (or loopback TCP, optionally TLS) that serves enough of the
 // Engine API from an in-memory model — ping, info, container/network/
 // volume/image lists and inspects, events (pushed by the test, the stream
-// held open) and logs (bytes given by the test, optionally followed) — and
+// held open), logs (bytes given by the test, optionally followed), exec,
+// stats and the container actions (writes.go) — and
 // lets a test count requests "on the wire", fail, stall or hang up on them.
 package enginefake
 
@@ -72,6 +73,9 @@ type Engine struct {
 	hooks      []Hook
 	counts     map[string]int
 	requests   []Request
+
+	wOnce sync.Once
+	w     *writeState // writes.go
 }
 
 type logState struct {
@@ -646,8 +650,11 @@ func (e *Engine) serve(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, fmt.Sprintf("client version %s is too new. Maximum supported API version is %s", ver, apiVersion))
 		return
 	}
+	if e.serveWrite(w, r, path) {
+		return
+	}
 	if r.Method != http.MethodGet && r.Method != http.MethodHead {
-		writeError(w, http.StatusMethodNotAllowed, "the fake Engine is read-only")
+		writeError(w, http.StatusMethodNotAllowed, "not a path of the fake Engine")
 		return
 	}
 	switch {
