@@ -1,0 +1,6 @@
+# A second, quiet project: "all projects" views have more than one.
+name: ocular-other
+services:
+  idle:
+    image: busybox:latest
+    command: ["sleep", "infinity"]

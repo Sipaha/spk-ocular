@@ -34,6 +34,16 @@ Go + Wails v3 + React. Спецификация: `docs/specs/2026-09-29-spk-ocul
   `scripts/kind-load.sh <kubeconfig> [up|down]`, замер — `node tests/e2e/measure-kind.mjs <bin>
   <kind kubeconfig> <viewer kubeconfig> <scratch>` (печатает тайминги, счётчики `/api/_test/stats`
   и Private_Dirty). Синтетика памяти кэша: `OCULAR_SYNTH=1 go test -run Synthetic -v ./internal/providers/kubernetes/`.
+- Тестовый Docker Engine (аналог kind для Compose): `make dind-up` (контейнер `ocular-dind`,
+  `docker:29-dind` с label-ом `ocular.test=dind` в docker пользователя, API `tcp://127.0.0.1:23750`
+  без TLS; id записан в `build/ocular-dind.id`; сид — `scripts/dind-seed.sh`: busybox через
+  `docker save | load`, внешние `ocular-ext-net`/`ocular-ext-vol`, проекты `ocular-fixture`
+  (healthy, unhealthy, crash-loop, exited 0/3, две реплики с логами, one-off) и `ocular-other`),
+  `make test-dind` (Go-тесты `*Dind*`, `OCULAR_DIND_HOST`/`OCULAR_DIND_VERIFY`; **падает** без
+  демона), `make dind-down`. Перед любой мутацией — `scripts/dind-verify.sh`: записанный
+  контейнер наш (имя, label), запущен, публикует ровно `127.0.0.1:23750`, и `/info` на порту
+  отвечает его hostname-ом; иначе отказ. Контейнер `ocular-dind` без label-а — не наш, скрипты
+  его не трогают. Демон пользователя (его compose-проекты) — никогда.
 - Soak: `scripts/kind-churn.sh <kind kubeconfig> up|run|pause|break|down` (namespace `ocular-churn`,
   ограниченный набор постоянно меняющихся объектов; отказывается работать не с kind-ocular-dev),
   desktop с `--test-api` (test-маршруты на отдельном loopback-порту, адрес и токен — в

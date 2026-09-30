@@ -1,0 +1,36 @@
+# The Compose fixture on the isolated test daemon (scripts/dind-seed.sh).
+# One service per health case of the P6 plan (decision 6), replicas with
+# logs, a project-owned and an external network and volume; the one-off
+# container (compose run) is added by the seed script.
+name: ocular-fixture
+services:
+  web: # running + healthy, published port, external network and volume
+    image: busybox:latest
+    command: ["sh", "-c", "mkdir -p /www && echo ok > /www/index.html && exec httpd -f -p 8080 -h /www"]
+    ports: ["18080:8080"]
+    healthcheck: {test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8080/"], interval: 5s, retries: 2}
+    networks: [default, ext]
+    volumes: ["data:/data", "ext-vol:/ext"]
+  sick: # running + unhealthy
+    image: busybox:latest
+    command: ["sleep", "infinity"]
+    healthcheck: {test: ["CMD", "sh", "-c", "echo probe failed >&2; false"], interval: 3s, retries: 1}
+  crash: # crash loop under the restart manager
+    image: busybox:latest
+    command: ["sh", "-c", "echo boom; sleep 3; exit 1"]
+    restart: always
+  logger: # two replicas, stdout and stderr every second
+    image: busybox:latest
+    command: ["sh", "-c", "i=0; while true; do i=$$((i+1)); echo line $$i; echo err $$i >&2; sleep 1; done"]
+    deploy: {replicas: 2}
+  done: # exited 0
+    image: busybox:latest
+    command: ["true"]
+  fail: # exited 3, no restart
+    image: busybox:latest
+    command: ["sh", "-c", "echo failing; exit 3"]
+networks:
+  ext: {external: true, name: ocular-ext-net}
+volumes:
+  data: {}
+  ext-vol: {external: true, name: ocular-ext-vol}

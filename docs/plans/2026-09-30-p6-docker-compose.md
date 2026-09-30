@@ -302,8 +302,12 @@ inspect, старый API 1.41, обрыв кадра stdcopy).
   сети, compose-проект фикстур работает — `docs/spikes/2026-09-30-dind.md`.
 - [x] Живой API: формат `/events`, healthcheck шумит `exec_*`, мультиплекс логов,
   `stats?stream=false` ~1 с; приоритет `DOCKER_HOST` над `DOCKER_CONTEXT` (CLI 29).
-- [ ] `scripts/dind-up.sh`/`dind-seed.sh`/`dind-down.sh` с проверкой владения (решение 9),
-  цели `make dind-up`/`dind-down`; `make test-dind`/`e2e-dind` падают без демона.
+- [x] `scripts/dind-up.sh`/`dind-seed.sh`/`dind-down.sh` + `dind-verify.sh`/`dind-lib.sh` с
+  проверкой владения (решение 9), цели `make dind-up`/`dind-down`; `make test-dind` падает без
+  демона. Проверено: чужой контейнер в записи (`ocular-probe`) — отказ и verify, и down (зонд
+  жив); другой порт — отказ; одноимённый контейнер без label-а — отказ `dind-up`. Фикстуры —
+  `scripts/dind-fixture/{compose,other}.yaml`. `e2e-dind` — вместе с `playwright.dind.config.ts`
+  в Task 6 (сейчас нечего запускать).
 
 ### Task 1. Общий UI без Kubernetes-знания (решение 8)
 - [ ] Поля `Target.DefaultScope`, `KindDescriptor.Default`/`EventsKind`, `ScopeNames`,

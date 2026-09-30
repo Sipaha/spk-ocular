@@ -1,4 +1,4 @@
-.PHONY: kind-up kind-down test-kind e2e-kind build build-web build-go build-desktop release run run-browser test test-go test-web test-e2e lint lint-go lint-web check fmt tidy clean pss
+.PHONY: kind-up kind-down test-kind e2e-kind dind-up dind-down test-dind build build-web build-go build-desktop release run run-browser test test-go test-web test-e2e lint lint-go lint-web check fmt tidy clean pss
 
 BIN_DIR := build/bin
 BIN     := $(BIN_DIR)/spk-ocular
@@ -113,3 +113,19 @@ e2e-kind: build
 	bash scripts/kind-rbac.sh $(KIND_KUBECONFIG) $(CURDIR)/build/rbac >/dev/null
 	bash scripts/kind-metrics.sh $(KIND_KUBECONFIG) >/dev/null
 	cd tests/e2e && OCULAR_KIND_KUBECONFIG=$(KIND_KUBECONFIG) OCULAR_KIND_RBAC_DIR=$(CURDIR)/build/rbac pnpm exec playwright test -c playwright.kind.config.ts && rm -rf .run
+
+# Isolated test Docker Engine (docker:29-dind in your docker, 127.0.0.1:23750).
+# Only the container recorded in build/ocular-dind.id is ever touched; every
+# mutation inside it is preceded by scripts/dind-verify.sh.
+dind-up:
+	bash scripts/dind-up.sh
+	bash scripts/dind-seed.sh
+
+dind-down:
+	bash scripts/dind-down.sh
+
+# Real-daemon tests. Fails (not skips) when the test daemon is not there.
+test-dind:
+	@bash scripts/dind-verify.sh >/dev/null || { echo "the test daemon is not up: run make dind-up"; exit 1; }
+	bash scripts/dind-seed.sh >/dev/null
+	OCULAR_DIND_HOST=$$(bash scripts/dind-verify.sh) OCULAR_DIND_VERIFY=$(CURDIR)/scripts/dind-verify.sh go test -race -count=1 -run Dind ./internal/...
