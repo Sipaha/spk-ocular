@@ -11,8 +11,14 @@ type Ref struct {
 	Target   string `json:"target"`
 	Scope    string `json:"scope,omitempty"`
 	Kind     string `json:"kind"`
-	Name     string `json:"name"`
-	UID      string `json:"uid,omitempty"`
+	// Name is the object's key within its kind and scope: it never changes
+	// for the object (Docker: a container's full id).
+	Name string `json:"name"`
+	UID  string `json:"uid,omitempty"`
+	// Title is how the object is shown when it differs from Name (Docker:
+	// a container's name). Display only: never part of identity, Expect or
+	// the keys of recent objects.
+	Title string `json:"title,omitempty"`
 }
 
 func (r Ref) String() string {

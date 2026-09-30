@@ -31,6 +31,15 @@ func (s *session) LogInfo(ctx context.Context, ref core.Ref) (core.LogInfo, erro
 }
 
 func logInfoOf(def *kindDef, u *unstructured.Unstructured) (core.LogInfo, error) {
+	info, err := logChannelsOf(def, u)
+	if err == nil {
+		container, all := msg("level.container"), msg("logs.allContainers")
+		info.ChannelLabel, info.AllChannelsLabel = &container, &all
+	}
+	return info, err
+}
+
+func logChannelsOf(def *kindDef, u *unstructured.Unstructured) (core.LogInfo, error) {
 	switch {
 	case def == podsKind:
 		info := core.LogInfo{Channels: podChannels(u.Object, "spec"), Previous: true}

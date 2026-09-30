@@ -202,7 +202,8 @@ func (s *Service) OpenView(ctx context.Context, req OpenViewRequest) (ViewInfo, 
 	if err != nil {
 		return ViewInfo{}, fromProvider(err)
 	}
-	return ViewInfo{ViewID: id, Kind: *kind}, nil
+	_, resync := e.sess.(provider.Resyncer)
+	return ViewInfo{ViewID: id, Kind: *kind, Resync: resync}, nil
 }
 
 func (s *Service) GetRows(_ context.Context, viewID string, since uint64) (views.Page, error) {
@@ -215,6 +216,28 @@ func (s *Service) GetRows(_ context.Context, viewID string, since uint64) (views
 
 func (s *Service) CloseView(_ context.Context, viewID string) error {
 	s.views.Close(viewID)
+	return nil
+}
+
+// ResyncView resolves the view through its owner — the session incarnation
+// that opened it — so a view of a retired session never reaches the
+// current one.
+func (s *Service) ResyncView(_ context.Context, viewID string) error {
+	owner, q, _, err := s.views.Info(viewID)
+	if errors.Is(err, views.ErrGone) {
+		return coded(CodeGone, err)
+	}
+	e := s.entryByOwner(owner)
+	if e == nil {
+		return coded(CodeGone, errors.New("session closed"))
+	}
+	r, ok := e.sess.(provider.Resyncer)
+	if !ok {
+		return coded(CodeUnsupported, errors.New("this target's views are not read again on request"))
+	}
+	if err := r.Resync(q); err != nil {
+		return fromProvider(err)
+	}
 	return nil
 }
 

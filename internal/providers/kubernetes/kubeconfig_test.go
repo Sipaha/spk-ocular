@@ -92,6 +92,7 @@ func TestDefaultKubeconfigWhenKUBECONFIGUnset(t *testing.T) {
 	assert.Equal(t, "a-cluster", ts[0].Subtitle)
 	assert.Equal(t, "https://a.example:6443", detail(ts[0], "server"))
 	assert.Equal(t, "ns-a", detail(ts[0], "defaultNamespace"))
+	assert.Equal(t, "ns-a", ts[0].DefaultScope, "the first visit opens the context's namespace")
 	assert.Equal(t, "token", detail(ts[0], "auth"))
 }
 

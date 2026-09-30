@@ -38,6 +38,16 @@ type Session interface {
 	Close()
 }
 
+// Resyncer is implemented by sessions whose observation is best effort
+// (Docker: events can be lost without a break): the user can ask to read a
+// view's sources again. Resync starts a new observation of what q depends
+// on and returns at once; concurrent requests coalesce, rows stay until
+// the new reading succeeds (a failed one leaves them, stale). Not polling:
+// only on the user's request.
+type Resyncer interface {
+	Resync(q Query) error
+}
+
 // Query is what a view shows. It is immutable for the view's lifetime.
 type Query struct {
 	Kind  string        `json:"kind"`

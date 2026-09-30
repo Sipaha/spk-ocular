@@ -28,6 +28,9 @@ type ExecInfo struct {
 	// nil: the UI's generic words.
 	InstanceLabel *Message `json:"instanceLabel,omitempty"`
 	ChannelLabel  *Message `json:"channelLabel,omitempty"`
+	// NoInstances says there is nowhere to run now (k8s: "No running
+	// pods"); nil: the UI's generic words.
+	NoInstances *Message `json:"noInstances,omitempty"`
 }
 
 // LiveTarget describes what a live resource (terminal, tunnel) is

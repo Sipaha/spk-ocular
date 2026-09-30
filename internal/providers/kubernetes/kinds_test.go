@@ -341,3 +341,24 @@ func TestKindAliasesAreKubectlShortNamesAndUnique(t *testing.T) {
 	p := NewWith(func(string) string { return "" }, t.TempDir())
 	assert.Equal(t, provider.CommandAliases{Scope: []string{"ns", "namespace"}, Target: []string{"ctx", "context"}}, p.CommandAliases())
 }
+
+// The generic UI learns from the descriptors what to open first and where
+// an object's events are; it knows neither pods nor events.
+func TestKindsSayWhichOpensFirstAndWhereEventsAre(t *testing.T) {
+	var defaults []string
+	for _, d := range allKinds.descriptors() {
+		if d.Default {
+			defaults = append(defaults, d.ID)
+		}
+		if d.ID == "events" {
+			assert.Empty(t, d.EventsKind, "events have no events")
+		} else {
+			assert.Equal(t, "events", d.EventsKind, d.ID)
+		}
+	}
+	assert.Equal(t, []string{"pods"}, defaults)
+	p := NewWith(func(string) string { return "" }, t.TempDir())
+	names := p.ScopeNames()
+	assert.Equal(t, []string{"Namespace", "namespaces", "All namespaces"}, []string{names.Singular.Text, names.Plural.Text, names.All.Text})
+	assert.Equal(t, "kubernetes.scope.all", names.All.Key)
+}

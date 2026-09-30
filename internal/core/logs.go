@@ -18,4 +18,8 @@ type LogInfo struct {
 	// Previous: logs of the previous (last terminated) instance exist as a
 	// concept for this object (one pod).
 	Previous bool `json:"previous"`
+	// ChannelLabel names a channel (k8s: Container) and AllChannelsLabel
+	// the choice of all of them; nil: the UI's generic words.
+	ChannelLabel     *Message `json:"channelLabel,omitempty"`
+	AllChannelsLabel *Message `json:"allChannelsLabel,omitempty"`
 }

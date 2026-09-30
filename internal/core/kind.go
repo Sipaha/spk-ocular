@@ -57,6 +57,13 @@ type KindDescriptor struct {
 	// Hidden kinds are not in the navigation but can be opened (a
 	// ReplicaSet reached from a Deployment).
 	Hidden bool `json:"hidden,omitempty"`
+	// Default marks the kind a first visit of a target opens (none: the
+	// first one in the navigation).
+	Default bool `json:"default,omitempty"`
+	// EventsKind: the kind whose view with Query.Subject = an object of
+	// this kind lists the events about it (the details show them); empty:
+	// such objects have no events.
+	EventsKind string `json:"eventsKind,omitempty"`
 	// Logs: objects of this kind have logs (the session is a LogSource).
 	Logs bool `json:"logs,omitempty"`
 	// Exec: a command can run in objects of this kind (the session is an
@@ -77,6 +84,14 @@ type KindDescriptor struct {
 	// lists them) names what it does not look at by design, so "nothing
 	// found" is never read as "nothing wrong anywhere".
 	NotCovered []string `json:"notCovered,omitempty"`
+}
+
+// ScopeNames say what the provider's scopes are called (k8s: "Namespace",
+// "namespaces", "All namespaces"): the generic UI names no scope itself.
+type ScopeNames struct {
+	Singular Message `json:"singular"`
+	Plural   Message `json:"plural"`
+	All      Message `json:"all"`
 }
 
 // SortSpec: sort by Column (descending if Desc), ties by Then (ascending).

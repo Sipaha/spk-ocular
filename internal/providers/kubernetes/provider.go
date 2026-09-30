@@ -55,6 +55,12 @@ func (p *Provider) CommandAliases() provider.CommandAliases {
 	return provider.CommandAliases{Scope: []string{"ns", "namespace"}, Target: []string{"ctx", "context"}}
 }
 
+var _ provider.ScopeNamer = (*Provider)(nil)
+
+func (p *Provider) ScopeNames() core.ScopeNames {
+	return core.ScopeNames{Singular: msg("scope.singular"), Plural: msg("scope.plural"), All: msg("scope.all")}
+}
+
 func (p *Provider) sources() Sources { return ResolveSources(p.getenv, p.home) }
 
 func (p *Provider) Discover(context.Context) (provider.Discovery, error) {
@@ -74,12 +80,13 @@ func (p *Provider) Discover(context.Context) (provider.Discovery, error) {
 
 func target(kc kubeContext) core.Target {
 	t := core.Target{
-		Provider:   ProviderID,
-		ID:         kc.ID,
-		Title:      kc.Name,
-		Subtitle:   kc.Cluster,
-		Current:    kc.Current,
-		ConfigHash: kc.Hash,
+		Provider:     ProviderID,
+		ID:           kc.ID,
+		Title:        kc.Name,
+		Subtitle:     kc.Cluster,
+		Current:      kc.Current,
+		ConfigHash:   kc.Hash,
+		DefaultScope: kc.Namespace,
 	}
 	add := func(key, value string) {
 		if value != "" {

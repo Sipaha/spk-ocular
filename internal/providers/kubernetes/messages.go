@@ -13,6 +13,11 @@ import (
 // (web/src/i18n.ts, providerTexts) with the same parameters, the rest in
 // this English.
 var messageTexts = map[string]string{
+	"scope.singular":       "Namespace",
+	"scope.plural":         "namespaces",
+	"scope.all":            "All namespaces",
+	"logs.allContainers":   "All containers",
+	"exec.noPods":          "No running pods",
 	"level.pod":            "Pod",
 	"level.container":      "Container",
 	"restart.noPods":       "It runs no pods: only the pod template changes.",

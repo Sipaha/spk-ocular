@@ -148,7 +148,8 @@ func (s *session) ExecInfo(ctx context.Context, ref core.Ref) (core.ExecInfo, er
 		return core.ExecInfo{}, err
 	}
 	pod, container := msg("level.pod"), msg("level.container")
-	info := core.ExecInfo{InstanceLabel: &pod, ChannelLabel: &container}
+	none := msg("exec.noPods")
+	info := core.ExecInfo{InstanceLabel: &pod, ChannelLabel: &container, NoInstances: &none}
 	for _, p := range pods {
 		info.Instances = append(info.Instances, execInstance(p))
 	}

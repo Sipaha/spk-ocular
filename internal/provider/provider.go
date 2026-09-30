@@ -38,6 +38,12 @@ type CommandAliaser interface {
 	CommandAliases() CommandAliases
 }
 
+// ScopeNamer is implemented by providers that name their scopes (the
+// generic UI's words otherwise).
+type ScopeNamer interface {
+	ScopeNames() core.ScopeNames
+}
+
 type CommandAliases struct {
 	Scope  []string `json:"scope,omitempty"`
 	Target []string `json:"target,omitempty"`

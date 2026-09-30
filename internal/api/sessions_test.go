@@ -281,3 +281,70 @@ func TestViewsBelongToOneSessionIncarnation(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "ok", mv.Status)
 }
+
+// resyncSession records the queries Resync was asked for, per incarnation.
+type resyncSession struct {
+	*fakeSession
+	mu  sync.Mutex
+	got []provider.Query
+	err error
+}
+
+func (r *resyncSession) Resync(q provider.Query) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.got = append(r.got, q)
+	return r.err
+}
+
+type resyncOpenable struct {
+	*openable
+	sessions []*resyncSession
+}
+
+func (o *resyncOpenable) Open(ctx context.Context, target string) (provider.Session, error) {
+	s, _ := o.openable.Open(ctx, target)
+	rs := &resyncSession{fakeSession: s.(*fakeSession)}
+	o.sessions = append(o.sessions, rs)
+	return rs, nil
+}
+
+func TestResyncGoesToTheViewsOwnSession(t *testing.T) {
+	ctx := context.Background()
+	k := &resyncOpenable{openable: newOpenable("a")}
+	s, _ := newService(t, k)
+	q := provider.Query{Kind: "pods", Scope: core.ScopeSel{Mode: core.ScopeOne, Name: "demo"}}
+	old, err := s.OpenView(ctx, OpenViewRequest{Provider: "k", Target: "a", Query: q})
+	require.NoError(t, err)
+	assert.True(t, old.Resync, "the session can read again: the UI offers it")
+
+	require.NoError(t, s.ResyncView(ctx, old.ViewID))
+	require.Len(t, k.sessions, 1)
+	assert.Equal(t, []provider.Query{q}, k.sessions[0].got, "the view's own query")
+
+	// A new incarnation: the old view is gone and never reaches the new session.
+	k.setHash("a", "h2")
+	s.revalidateSessions(ctx, "k")
+	fresh, err := s.OpenView(ctx, OpenViewRequest{Provider: "k", Target: "a", Query: q})
+	require.NoError(t, err)
+	require.Len(t, k.sessions, 2)
+	err = s.ResyncView(ctx, old.ViewID)
+	assert.True(t, IsCoded(err, CodeGone), "%v", err)
+	assert.Empty(t, k.sessions[1].got)
+
+	k.sessions[1].err = &provider.Error{Class: provider.ClassUnavailable, Message: "daemon down"}
+	err = s.ResyncView(ctx, fresh.ViewID)
+	assert.True(t, IsCoded(err, "unavailable"), "%v", err)
+
+	require.NoError(t, s.CloseView(ctx, fresh.ViewID))
+	assert.True(t, IsCoded(s.ResyncView(ctx, fresh.ViewID), CodeGone))
+}
+
+func TestResyncIsUnsupportedWithoutAResyncer(t *testing.T) {
+	ctx := context.Background()
+	s, _ := newService(t, newOpenable("a"))
+	info, err := s.OpenView(ctx, OpenViewRequest{Provider: "k", Target: "a", Query: provider.Query{Kind: "pods", Scope: allScopes}})
+	require.NoError(t, err)
+	assert.False(t, info.Resync)
+	assert.True(t, IsCoded(s.ResyncView(ctx, info.ViewID), CodeUnsupported))
+}

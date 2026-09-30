@@ -118,6 +118,11 @@ func (h *HTTP) routes() {
 	}) (any, error) {
 		return nil, h.api.CloseView(ctx, r.ViewID)
 	}))
+	h.mux.HandleFunc("POST /api/ResyncView", handle(func(ctx context.Context, r *struct {
+		ViewID string `json:"viewId"`
+	}) (any, error) {
+		return nil, h.api.ResyncView(ctx, r.ViewID)
+	}))
 	h.mux.HandleFunc("POST /api/TouchViews", handle(func(ctx context.Context, r *struct {
 		ViewIDs []string `json:"viewIds"`
 	}) (any, error) {

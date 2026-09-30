@@ -40,7 +40,8 @@ func (w *API) OpenView(req api.OpenViewRequest) (api.ViewInfo, error) {
 func (w *API) GetRows(viewID string, since uint64) (views.Page, error) {
 	return w.a.GetRows(context.Background(), viewID, since)
 }
-func (w *API) CloseView(viewID string) error { return w.a.CloseView(context.Background(), viewID) }
+func (w *API) CloseView(viewID string) error  { return w.a.CloseView(context.Background(), viewID) }
+func (w *API) ResyncView(viewID string) error { return w.a.ResyncView(context.Background(), viewID) }
 func (w *API) TouchViews(viewIDs []string) ([]string, error) {
 	return w.a.TouchViews(context.Background(), viewIDs)
 }

@@ -148,6 +148,10 @@ func (s *Service) ListTargets(ctx context.Context) (TargetsView, error) {
 		if a, ok := p.(provider.CommandAliaser); ok {
 			g.Aliases = a.CommandAliases()
 		}
+		if n, ok := p.(provider.ScopeNamer); ok {
+			names := n.ScopeNames()
+			g.ScopeNames = &names
+		}
 		d, err := p.Discover(ctx)
 		if err != nil {
 			g.Error = err.Error()

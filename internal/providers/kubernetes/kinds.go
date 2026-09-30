@@ -134,6 +134,10 @@ func (r *kindRegistry) descriptors() []core.KindDescriptor {
 		desc.Actions = kindActions[d]
 		desc.Aliases = kindAliases[d]
 		desc.Singular = kindSingular[d]
+		desc.Default = d == podsKind
+		if d != eventsKind {
+			desc.EventsKind = eventsKind.desc.ID
+		}
 		out = append(out, desc)
 	}
 	return out

@@ -35,6 +35,10 @@ type API interface {
 	// closed/unknown view is CodeGone: reopen it.
 	GetRows(ctx context.Context, viewID string, since uint64) (views.Page, error)
 	CloseView(ctx context.Context, viewID string) error
+	// ResyncView asks the view's own session (not the current target's) to
+	// read its sources again (ViewInfo.Resync); a closed view or one of a
+	// retired session is CodeGone.
+	ResyncView(ctx context.Context, viewID string) error
 	// TouchViews renews the leases of the UI's open views and returns the
 	// ids that are gone.
 	TouchViews(ctx context.Context, viewIDs []string) ([]string, error)
@@ -109,6 +113,9 @@ type OpenViewRequest struct {
 type ViewInfo struct {
 	ViewID string              `json:"viewId"`
 	Kind   core.KindDescriptor `json:"kind"`
+	// Resync: the session can read the view's sources again on request
+	// (ResyncView, F5).
+	Resync bool `json:"resync,omitempty"`
 }
 
 type ScopesView struct {
@@ -137,6 +144,9 @@ type TargetGroup struct {
 	Error string `json:"error,omitempty"`
 	// Aliases name the provider's scopes and targets in palette commands.
 	Aliases provider.CommandAliases `json:"aliases"`
+	// ScopeNames: what the provider's scopes are called; nil: the UI's
+	// generic words.
+	ScopeNames *core.ScopeNames `json:"scopeNames,omitempty"`
 }
 
 type TargetRef struct {

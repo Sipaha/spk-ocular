@@ -15,6 +15,9 @@ type Target struct {
 	Current bool `json:"current,omitempty"`
 	// Details are human-readable, non-secret facts in display order.
 	Details []Detail `json:"details,omitempty"`
+	// DefaultScope is the scope a first visit shows (k8s: the context's
+	// namespace); empty: all scopes.
+	DefaultScope string `json:"defaultScope,omitempty"`
 	// ConfigHash identifies the configuration the target resolves to; an
 	// open session built from another hash is stale. Never sent to the UI:
 	// it covers credentials.
