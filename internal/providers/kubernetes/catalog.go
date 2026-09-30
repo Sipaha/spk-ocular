@@ -20,12 +20,12 @@ import (
 // group keeps what it had (merge): only a successful answer without a
 // resource removes its kind.
 
-// Catalog states.
+// Catalog states (core.KindCatalog.State).
 const (
-	catalogDiscovering = "discovering"
-	catalogReady       = "ready"
-	catalogPartial     = "partial" // some groups unconfirmed
-	catalogFailed      = "failed"  // no discovery answer yet
+	catalogDiscovering = core.CatalogDiscovering
+	catalogReady       = core.CatalogReady
+	catalogPartial     = core.CatalogPartial // some groups unconfirmed
+	catalogFailed      = core.CatalogFailed  // no discovery answer yet
 )
 
 // discoveredGroup is the navigation group of discovered kinds (neutral:
@@ -37,6 +37,9 @@ type catalogSnap struct {
 	rev         uint64
 	state       string
 	unconfirmed []string // groups ("core" for the core group)
+	// removed: kinds this session offered that are not served any more
+	// (a successful discovery without them).
+	removed map[string]bool
 }
 
 type catalog struct {
@@ -47,6 +50,7 @@ type catalog struct {
 	wg     sync.WaitGroup
 
 	mu       sync.Mutex
+	known    map[string]bool // every discovered kind ever offered
 	last     discovered
 	have     bool // a discovery answered at least once
 	running  bool
@@ -55,7 +59,7 @@ type catalog struct {
 }
 
 func newCatalog(ctx context.Context, static *kindRegistry, get getter) *catalog {
-	c := &catalog{static: static, get: get, ctx: ctx}
+	c := &catalog{static: static, get: get, ctx: ctx, known: map[string]bool{}}
 	state := catalogReady
 	if get != nil {
 		state = catalogDiscovering
@@ -73,8 +77,15 @@ func (c *catalog) setOnChange(f func(rev uint64)) {
 	c.mu.Unlock()
 }
 
-// refresh runs a discovery in the background; one at a time — a refresh
-// asked meanwhile runs once more after it (the latest answer wins).
+// maxSuperseded: after this many answers in a row overtaken by a newer
+// refresh, the next one is published anyway (a stream of refreshes must
+// not hold the catalog back forever).
+const maxSuperseded = 4
+
+// refresh runs a discovery in the background; one at a time. A refresh
+// asked meanwhile supersedes the running discovery: its answer (possibly
+// read before the change the refresh is about) is not published, the
+// discovery runs again and the latest answer wins.
 func (c *catalog) refresh() {
 	if c.get == nil {
 		return
@@ -93,9 +104,16 @@ func (c *catalog) refresh() {
 	go c.run()
 }
 
+// run discovers until no refresh is pending. It stays the only runner
+// while it tells a revision, so revisions are told one at a time, in
+// order (a listener asking for a refresh only marks another round).
 func (c *catalog) run() {
 	defer c.wg.Done()
+	superseded := 0
 	for {
+		c.mu.Lock()
+		c.again = false
+		c.mu.Unlock()
 		d := discoverAPI(c.ctx, c.get)
 		if c.ctx.Err() != nil {
 			c.mu.Lock()
@@ -104,28 +122,33 @@ func (c *catalog) run() {
 			return
 		}
 		c.mu.Lock()
-		if c.have {
-			d = merge(c.last, d)
+		var rev uint64
+		if c.again && superseded < maxSuperseded {
+			superseded++
+		} else {
+			superseded = 0
+			if c.have {
+				d = merge(c.last, d)
+			}
+			answered := len(d.resources) > 0 || !d.unconfirmed[""] || !d.unconfirmed["*"]
+			if answered {
+				c.last, c.have = d, true
+			}
+			rev = c.publish(d, answered)
 		}
-		answered := len(d.resources) > 0 || !d.unconfirmed[""] || !d.unconfirmed["*"]
-		if answered {
-			c.last, c.have = d, true
-		}
-		rev := c.publish(d, answered)
-		onChange, again := c.onChange, c.again
-		c.again = false
-		if !again {
-			c.running = false
-		}
+		onChange := c.onChange
 		c.mu.Unlock()
-		// Told outside the lock (the listener may ask for a refresh). Runs
-		// are one at a time, so revisions are told in order.
+		// Told outside the lock (the listener may ask for a refresh).
 		if rev != 0 && onChange != nil {
 			onChange(rev)
 		}
-		if !again {
+		c.mu.Lock()
+		if !c.again {
+			c.running = false
+			c.mu.Unlock()
 			return
 		}
+		c.mu.Unlock()
 	}
 }
 
@@ -153,10 +176,19 @@ func (c *catalog) publish(d discovered, answered bool) uint64 {
 		state = catalogPartial
 	}
 	reg := newKindRegistry(append(append([]*kindDef{}, c.static.list...), defs...)...)
+	removed := map[string]bool{}
+	for _, d := range defs {
+		c.known[d.desc.ID] = true
+	}
+	for id := range c.known {
+		if reg.byID[id] == nil {
+			removed[id] = true
+		}
+	}
 	if old.state == state && strings.Join(old.unconfirmed, ",") == strings.Join(unconfirmed, ",") && sameKinds(old.reg, reg) {
 		return 0
 	}
-	n := &catalogSnap{reg: reg, rev: old.rev + 1, state: state, unconfirmed: unconfirmed}
+	n := &catalogSnap{reg: reg, rev: old.rev + 1, state: state, unconfirmed: unconfirmed, removed: removed}
 	c.cur.Store(n)
 	return n.rev
 }

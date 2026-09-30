@@ -6,7 +6,7 @@ import type { KindDescriptor } from '../api/types'
 import { useDock } from '../dock/store'
 import { usePalette } from '../palette/store'
 import { initialState, useStore } from '../store'
-import { fakeClient, k8s, podRow, podsKind } from '../test/fakeClient'
+import { kindsView, fakeClient, k8s, podRow, podsKind } from '../test/fakeClient'
 
 beforeEach(() => {
   useStore.setState({ ...initialState })
@@ -19,7 +19,7 @@ const nodesKind: KindDescriptor = { id: 'nodes', title: 'Nodes', group: 'Cluster
 async function openProd(rows = 3) {
   const f = fakeClient([k8s('prod')])
   f.state.view.selected = { provider: 'kubernetes', id: 'prod' }
-  f.client.listKinds = vi.fn(async () => [{ ...podsKind, logs: true }, nodesKind])
+  f.client.listKinds = vi.fn(async () => kindsView([{ ...podsKind, logs: true }, nodesKind]))
   f.state.rows = Array.from({ length: rows }, (_, i) => podRow(`p-${String(i).padStart(2, '0')}`, 'web'))
   render(<App client={f.client} />)
   const grid = await screen.findByRole('grid', { name: 'resources' })

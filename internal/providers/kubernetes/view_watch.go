@@ -41,6 +41,7 @@ type viewWatch struct {
 	mu        sync.Mutex
 	synced    bool
 	stopped   bool
+	removed   bool                // the kind is no longer served: final
 	deadlines map[string]deadline // object key -> when to re-project which incarnation
 	timer     *time.Timer
 	timerGen  uint64
@@ -143,9 +144,11 @@ func metaKey(u metav1.Object) string {
 func (w *viewWatch) status() provider.ViewStatus {
 	tr := w.c.transport()
 	w.mu.Lock()
-	synced := w.synced
+	synced, removed := w.synced, w.removed
 	w.mu.Unlock()
 	switch {
+	case removed:
+		return provider.ViewStatus{State: provider.StatusError, Class: provider.ClassRemoved, Message: w.def.desc.Title + " are no longer served by the API"}
 	case !synced && tr.failing:
 		return provider.ViewStatus{State: provider.StatusError, Class: tr.class, Message: tr.message}
 	case !synced:
@@ -167,6 +170,18 @@ func (w *viewWatch) pushStatus() {
 	}
 	st := w.status()
 	w.sink.Apply(provider.Delta{Status: &st}) // the view drops an unchanged status
+}
+
+func (w *viewWatch) setRemoved() {
+	w.mu.Lock()
+	w.removed = true
+	w.mu.Unlock()
+}
+
+// markRemoved ends the view: its kind is not served any more.
+func (w *viewWatch) markRemoved() {
+	w.setRemoved()
+	w.pushStatus()
 }
 
 // waitSynced pushes Ready once every initial object reached the handler.

@@ -110,7 +110,7 @@ export function Workspace({ client, hub, target }: { client: Client; hub: ViewHu
       () => live && setUI(fallback),
     )
     client.listKinds(target.provider, target.id).then(
-      (k) => live && setKinds(k),
+      (k) => live && setKinds(k.kinds),
       (e) => live && setKindsError(e instanceof Error ? e.message : String(e)),
     )
     client.listScopes(target.provider, target.id).then(

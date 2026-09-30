@@ -23,8 +23,12 @@ type API interface {
 	// the sessions of other targets (one active context).
 	SelectTarget(ctx context.Context, provider, id string) error
 
-	// ListKinds: what the target's session can show.
-	ListKinds(ctx context.Context, provider, target string) ([]core.KindDescriptor, error)
+	// ListKinds: what the target's session can show now, with the
+	// catalog's revision (EventKindsChanged tells of a new one).
+	ListKinds(ctx context.Context, provider, target string) (KindsView, error)
+	// RefreshKinds reads the target's kinds again in the background (F5 in
+	// the navigation); a change comes as EventKindsChanged.
+	RefreshKinds(ctx context.Context, provider, target string) error
 	// ListScopes lists namespaces / projects. A permission error is not a
 	// failure of the call: ScopesView.Error says so and the UI lets the user
 	// type a scope.
@@ -188,6 +192,10 @@ const (
 	EventTargetsChanged = "targets_changed"
 	// EventResync (events.TypeResync): the UI fell behind; reload all state.
 	EventResync = events.TypeResync
+	// EventKindsChanged: {provider, target, session, rev} — the session's
+	// catalog has a new revision; call ListKinds (a hint: the UI re-lists
+	// on resync and F5 as well).
+	EventKindsChanged = "kinds_changed"
 	// EventViewChanged: {viewId, version} or {viewId, gone: true}.
 	EventViewChanged = views.EventViewChanged
 )
@@ -196,10 +204,12 @@ const (
 // Provider error classes (provider.ErrorClass) travel as codes unchanged:
 // forbidden, unauthorized, unavailable, gone, not_found, unsupported, ...
 const (
-	CodeInternal    = "internal"
-	CodeBadRequest  = "bad_request"
-	CodeNotFound    = "not_found"
-	CodeGone        = "gone"
+	CodeInternal   = "internal"
+	CodeBadRequest = "bad_request"
+	CodeNotFound   = "not_found"
+	CodeGone       = "gone"
+	// CodeRemoved: the kind is no longer served; reopening cannot help.
+	CodeRemoved     = "removed"
 	CodeUnsupported = "unsupported"
 	// CodeConflict: the object or the target's configuration changed since
 	// the user saw it; look again.
@@ -207,6 +217,13 @@ const (
 	// CodeLimit: too many open streams or tunnels.
 	CodeLimit = "limit"
 )
+
+// KindsView is a session's kind catalog. Session identifies the session
+// incarnation: a new one (the target was reconfigured) starts its Rev anew.
+type KindsView struct {
+	core.KindCatalog
+	Session uint64 `json:"session"`
+}
 
 // CodedError is what API methods return: a stable code for the UI plus a
 // human-readable detail. Over Wails it travels as the string "code: detail".

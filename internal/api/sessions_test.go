@@ -90,7 +90,7 @@ func TestViewLifecycleThroughTheService(t *testing.T) {
 
 	kinds, err := s.ListKinds(ctx, "k", "a")
 	require.NoError(t, err)
-	assert.Equal(t, "pods", kinds[0].ID)
+	assert.Equal(t, "pods", kinds.Kinds[0].ID)
 
 	info, err := s.OpenView(ctx, OpenViewRequest{Provider: "k", Target: "a", Query: provider.Query{Kind: "pods", Scope: allScopes}})
 	require.NoError(t, err)

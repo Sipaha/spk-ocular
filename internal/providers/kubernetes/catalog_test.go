@@ -10,6 +10,14 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
+	dynamicfake "k8s.io/client-go/dynamic/fake"
+	k8stesting "k8s.io/client-go/testing"
+
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/spk/spk-ocular/internal/core"
 	"github.com/spk/spk-ocular/internal/provider"
@@ -41,10 +49,13 @@ func (a *scriptedAPI) set(path string, doc []byte) {
 	a.docs[path] = doc
 }
 
+// get answers with the document as it is when asked (a held request
+// answers what it read before a later change).
 func (a *scriptedAPI) get(ctx context.Context, path, _ string) ([]byte, string, error) {
 	a.calls.Add(1)
 	a.mu.Lock()
 	gate := a.gate
+	doc, ok := a.docs[path]
 	a.mu.Unlock()
 	if gate != nil {
 		select {
@@ -53,14 +64,13 @@ func (a *scriptedAPI) get(ctx context.Context, path, _ string) ([]byte, string, 
 			return nil, "", ctx.Err()
 		}
 	}
-	a.mu.Lock()
-	defer a.mu.Unlock()
-	doc, ok := a.docs[path]
 	if !ok {
 		return nil, "", &discoveryError{code: 503, path: path, body: "unavailable"}
 	}
 	return doc, v2ContentType, nil
 }
+
+func (a *scriptedAPI) setGate(g chan struct{}) { a.mu.Lock(); a.gate = g; a.mu.Unlock() }
 
 var (
 	coreDoc = v2doc(map[string][]v2ver{"": {{version: "v1", res: []v2res{
@@ -294,4 +304,209 @@ func TestSessionServesDiscoveredKinds(t *testing.T) {
 	assert.Equal(t, provider.ClassUnsupported, perr.Class)
 	_, _, err = s.actionTarget(core.Ref{Kind: "ocular.dev/gadgets", Name: "g"}, "delete", core.ActionParams{}, false)
 	require.True(t, errors.As(err, &perr), "no delete verb, no delete")
+}
+
+// Review 2026-09-30 (Codex, P2): an answer read before a refresh asked
+// meanwhile is superseded — publishing it would drop a kind the newer
+// discovery sees (and end its views removed).
+func TestCatalogDoesNotPublishASupersededAnswer(t *testing.T) {
+	api := &scriptedAPI{}
+	api.set("/api", coreDoc)
+	good := apisDoc(map[string][]v2ver{"ocular.dev": {widgets}}, "ocular.dev")
+	api.set("/apis", good)
+	c := newCatalog(context.Background(), allKinds, api.get)
+	var mu sync.Mutex
+	var seen []bool // widgets in each told revision
+	c.setOnChange(func(uint64) {
+		mu.Lock()
+		seen = append(seen, c.snap().reg.byID["ocular.dev/widgets"] != nil)
+		mu.Unlock()
+	})
+	c.refresh()
+	c.wait()
+	require.NotNil(t, c.snap().reg.byID["ocular.dev/widgets"])
+
+	gate := make(chan struct{})
+	api.setGate(gate)
+	api.set("/apis", apisDoc(nil)) // widgets gone for a moment
+	before := api.calls.Load()
+	c.refresh()
+	require.Eventually(t, func() bool { return api.calls.Load() >= before+2 }, 5*time.Second, 5*time.Millisecond)
+	api.set("/apis", good) // back; a refresh asked about it
+	c.refresh()
+	api.setGate(nil)
+	close(gate)
+	c.wait()
+	assert.NotNil(t, c.snap().reg.byID["ocular.dev/widgets"])
+	assert.Equal(t, uint64(2), c.snap().rev, "nothing changed in the end")
+	mu.Lock()
+	defer mu.Unlock()
+	assert.Equal(t, []bool{true}, seen, "the superseded absence was never told")
+}
+
+// Review 2026-09-30 (Codex, P3): revisions are told one at a time, in order,
+// even when the listener asks for a refresh.
+func TestCatalogTellsRevisionsOneAtATimeInOrder(t *testing.T) {
+	api := &scriptedAPI{}
+	api.set("/api", coreDoc)
+	api.set("/apis", apisDoc(map[string][]v2ver{"batch": {jobsV1}}, "batch"))
+	c := newCatalog(context.Background(), allKinds, api.get)
+	var mu sync.Mutex
+	var told []uint64
+	var inside atomic.Int32
+	overlap := false
+	hold := make(chan struct{})
+	c.setOnChange(func(rev uint64) {
+		if inside.Add(1) > 1 {
+			mu.Lock()
+			overlap = true
+			mu.Unlock()
+		}
+		defer inside.Add(-1)
+		if rev == 2 {
+			api.set("/apis", apisDoc(map[string][]v2ver{"batch": {jobsV1}, "ocular.dev": {widgets}}, "batch", "ocular.dev"))
+			c.refresh()
+			<-hold
+		}
+		mu.Lock()
+		told = append(told, rev)
+		mu.Unlock()
+	})
+	c.refresh()
+	require.Eventually(t, func() bool { return c.snap().rev == 2 }, 5*time.Second, 5*time.Millisecond)
+	time.Sleep(50 * time.Millisecond) // a concurrent runner would publish rev 3 now
+	assert.Equal(t, uint64(2), c.snap().rev, "no next round while a revision is being told")
+	close(hold)
+	c.wait()
+	mu.Lock()
+	defer mu.Unlock()
+	assert.Equal(t, []uint64{2, 3}, told)
+	assert.False(t, overlap)
+}
+
+var (
+	widgetsGVR = schema.GroupVersionResource{Group: "ocular.dev", Version: "v1", Resource: "widgets"}
+	crdGVR     = schema.GroupVersionResource{Group: "apiextensions.k8s.io", Version: "v1", Resource: "customresourcedefinitions"}
+	crdsV1     = v2ver{version: "v1", res: []v2res{{name: "customresourcedefinitions", kind: "CustomResourceDefinition", singular: "customresourcedefinition", scope: "Cluster", verbs: lw, short: []string{"crd"}}}}
+)
+
+func catalogClient(objs ...runtime.Object) *dynamicfake.FakeDynamicClient {
+	return dynamicfake.NewSimpleDynamicClientWithCustomListKinds(runtime.NewScheme(), map[schema.GroupVersionResource]string{
+		podGVR: "PodList", namespacesGVR: "NamespaceList", widgetsGVR: "WidgetList", crdGVR: "CustomResourceDefinitionList",
+	}, objs...)
+}
+
+// A view of a kind that stops being served ends removed (final); opening
+// it again says removed, not unknown.
+func TestViewOfAKindNoLongerServedEndsRemoved(t *testing.T) {
+	api := &scriptedAPI{}
+	api.set("/api", coreDoc)
+	api.set("/apis", apisDoc(map[string][]v2ver{"ocular.dev": {widgets}}, "ocular.dev"))
+	w := &unstructured.Unstructured{Object: map[string]any{"apiVersion": "ocular.dev/v1", "kind": "Widget",
+		"metadata": map[string]any{"name": "alpha", "namespace": "ns", "uid": "w1", "creationTimestamp": "2026-09-30T10:00:00Z"}}}
+	s := newSession("ctx", "h", catalogClient(w), false)
+	defer s.Close()
+	var told atomic.Int32
+	s.OnKindsChanged(func(uint64) { told.Add(1) })
+	s.startCatalog(api.get)
+	waitRev(t, s.cat, 2)
+	s.cat.wait()
+	assert.Equal(t, int32(1), told.Load())
+	assert.Equal(t, uint64(2), s.Catalog().Rev)
+
+	sink := &recordingStatusSink{}
+	stop, err := s.Watch(provider.Query{Kind: "ocular.dev/widgets", Scope: core.ScopeSel{Mode: core.ScopeAll}}, sink)
+	require.NoError(t, err)
+	defer stop()
+	require.Eventually(t, func() bool { return sink.last().State == provider.StatusReady }, 5*time.Second, 5*time.Millisecond)
+
+	api.set("/apis", apisDoc(nil))
+	s.RefreshKinds()
+	s.cat.wait()
+	require.Eventually(t, func() bool { return sink.last().Class == provider.ClassRemoved }, 5*time.Second, 5*time.Millisecond)
+	assert.Equal(t, provider.StatusError, sink.last().State)
+	assert.True(t, s.KindRemoved("ocular.dev/widgets"))
+	assert.False(t, s.KindRemoved("pods"))
+	assert.Equal(t, int32(2), told.Load())
+
+	_, err = s.Watch(provider.Query{Kind: "ocular.dev/widgets", Scope: core.ScopeSel{Mode: core.ScopeAll}}, &recordingStatusSink{})
+	var perr *provider.Error
+	require.True(t, errors.As(err, &perr))
+	assert.Equal(t, provider.ClassRemoved, perr.Class)
+	_, err = s.Watch(provider.Query{Kind: "never.example/things", Scope: core.ScopeSel{Mode: core.ScopeAll}}, &recordingStatusSink{})
+	require.True(t, errors.As(err, &perr))
+	assert.Equal(t, provider.ClassUnsupported, perr.Class)
+}
+
+type recordingStatusSink struct {
+	mu sync.Mutex
+	st provider.ViewStatus
+}
+
+func (r *recordingStatusSink) Apply(d provider.Delta) {
+	if d.Status != nil {
+		r.mu.Lock()
+		r.st = *d.Status
+		r.mu.Unlock()
+	}
+}
+
+func (r *recordingStatusSink) last() provider.ViewStatus {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.st
+}
+
+func crd(name string) *unstructured.Unstructured {
+	return &unstructured.Unstructured{Object: map[string]any{"apiVersion": "apiextensions.k8s.io/v1", "kind": "CustomResourceDefinition",
+		"metadata": map[string]any{"name": name}}}
+}
+
+// A CRD created is the trigger of the next discovery (no timer).
+func TestACRDChangeTriggersDiscovery(t *testing.T) {
+	old := crdDebounce
+	crdDebounce = 10 * time.Millisecond
+	t.Cleanup(func() { crdDebounce = old })
+	api := &scriptedAPI{}
+	api.set("/api", coreDoc)
+	api.set("/apis", apisDoc(map[string][]v2ver{"apiextensions.k8s.io": {crdsV1}}, "apiextensions.k8s.io"))
+	client := catalogClient()
+	s := newSession("ctx", "h", client, false)
+	defer s.Close()
+	s.startCatalog(api.get)
+	waitRev(t, s.cat, 2)
+	require.Eventually(t, func() bool {
+		for _, a := range client.Actions() {
+			if a.GetVerb() == "watch" && a.GetResource() == crdGVR {
+				return true
+			}
+		}
+		return false
+	}, 5*time.Second, 5*time.Millisecond)
+
+	api.set("/apis", apisDoc(map[string][]v2ver{"apiextensions.k8s.io": {crdsV1}, "ocular.dev": {widgets}}, "apiextensions.k8s.io", "ocular.dev"))
+	_, err := client.Resource(crdGVR).Create(context.Background(), crd("widgets.ocular.dev"), metav1.CreateOptions{})
+	require.NoError(t, err)
+	snap := waitRev(t, s.cat, 3)
+	assert.NotNil(t, snap.reg.byID["ocular.dev/widgets"])
+}
+
+// Without the right to list CRDs there is no trigger, and no retrying.
+func TestNoCRDTriggerWithoutTheRight(t *testing.T) {
+	api := &scriptedAPI{}
+	api.set("/api", coreDoc)
+	api.set("/apis", apisDoc(map[string][]v2ver{"apiextensions.k8s.io": {crdsV1}}, "apiextensions.k8s.io"))
+	client := catalogClient()
+	var lists atomic.Int32
+	client.PrependReactor("list", "customresourcedefinitions", func(k8stesting.Action) (bool, runtime.Object, error) {
+		lists.Add(1)
+		return true, nil, apierrors.NewForbidden(crdGVR.GroupResource(), "", errors.New("rbac"))
+	})
+	s := newSession("ctx", "h", client, false)
+	defer s.Close()
+	s.startCatalog(api.get)
+	waitRev(t, s.cat, 2)
+	require.Eventually(t, func() bool { return lists.Load() == 1 }, 5*time.Second, 5*time.Millisecond)
+	time.Sleep(1500 * time.Millisecond) // past the first backoff
+	assert.Equal(t, int32(1), lists.Load())
 }

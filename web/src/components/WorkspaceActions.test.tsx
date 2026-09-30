@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { App } from '../App'
 import type { ActionDescriptor, ActionParams, KindDescriptor, Ref } from '../api/types'
 import { initialState, useStore } from '../store'
-import { fakeClient, k8s, podRow, podsKind } from '../test/fakeClient'
+import { kindsView, fakeClient, k8s, podRow, podsKind } from '../test/fakeClient'
 
 beforeEach(() => useStore.setState({ ...initialState }))
 
@@ -18,7 +18,7 @@ async function openProd() {
   const f = fakeClient([k8s('prod')])
   f.state.view.selected = { provider: 'kubernetes', id: 'prod' }
   f.state.rows = [{ ...podRow('api-1', 'web'), rev: '1' }, { ...podRow('api-2', 'web'), rev: '1' }]
-  f.client.listKinds = vi.fn(async () => [pods, nodes])
+  f.client.listKinds = vi.fn(async () => kindsView([pods, nodes]))
   f.client.prepareAction = vi.fn(async (ref: Ref, action: string, params: ActionParams) => ({
     where: { provider: 'kubernetes', target: 'prod', targetTitle: 'prod', configRev: '1', ref: { ...ref, uid: ref.uid ?? 'pinned' } },
     action: [del, restart, scale].find((a) => a.id === action)!,

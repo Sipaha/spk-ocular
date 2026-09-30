@@ -5,7 +5,7 @@ import { App } from '../App'
 import { ApiError } from '../api/client'
 import type { KindDescriptor, Row, Target } from '../api/types'
 import { initialState, useStore } from '../store'
-import { fakeClient } from '../test/fakeClient'
+import { kindsView, fakeClient } from '../test/fakeClient'
 
 // A provider that is not Kubernetes: no pods, no events, its own default
 // view and scope, its own scope words (or none). The generic UI must take
@@ -42,7 +42,7 @@ function otherProvider(opts: { scopeNames?: boolean; resync?: boolean; scopesDen
     ],
     selected: { provider: 'other', id: 'site' },
   }
-  f.client.listKinds = vi.fn(async () => [boxes, crates])
+  f.client.listKinds = vi.fn(async () => kindsView([boxes, crates]))
   f.state.kinds = { boxes, crates }
   f.client.listScopes = vi.fn(async () =>
     opts.scopesDenied ? { scopes: [], error: { code: 'forbidden', detail: 'no list' } } : { scopes: [{ name: 'blue' }, { name: 'green' }] },
@@ -67,7 +67,7 @@ describe('a provider without Kubernetes knowledge', () => {
 
   it('without a default kind or scope: the first view, all scopes, generic words', async () => {
     const f = otherProvider()
-    f.client.listKinds = vi.fn(async () => [boxes, { ...crates, default: false }])
+    f.client.listKinds = vi.fn(async () => kindsView([boxes, { ...crates, default: false }]))
     render(<App client={f.client} />)
     await screen.findByRole('grid', { name: 'resources' })
     expect(f.client.openView).toHaveBeenCalledWith('other', 'site', { kind: 'boxes', scope: { mode: 'all' } })

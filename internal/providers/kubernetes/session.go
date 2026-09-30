@@ -7,6 +7,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"sort"
+	"sync"
+	"sync/atomic"
 	"time"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -154,12 +156,15 @@ type session struct {
 	hash   string
 	dyn    dynamic.Interface
 	caches *cacheManager
-	// cat holds the kinds the session offers (described + discovered).
-	cat     *catalog
-	now     func() time.Time
-	metrics metricsCache
-	logs    logFetcher    // nil: no logs (tests without a server)
-	slots   chan struct{} // the provider's logSlots; nil: unlimited
+	// cat holds the kinds the session offers (described + discovered);
+	// kindsListener is told of its revisions (the API), crdWatch starts once.
+	cat           *catalog
+	kindsListener atomic.Pointer[func(rev uint64)]
+	crdWatch      sync.Once
+	now           func() time.Time
+	metrics       metricsCache
+	logs          logFetcher    // nil: no logs (tests without a server)
+	slots         chan struct{} // the provider's logSlots; nil: unlimited
 	// conn is the connection snapshot live resources (terminals, tunnels)
 	// keep; it outlives the session.
 	conn *conn
@@ -185,8 +190,39 @@ func newSession(target, hash string, dyn dynamic.Interface, watchList bool) *ses
 // described kinds (in the background: Kinds never waits for it).
 func (s *session) startCatalog(get getter) {
 	s.cat = newCatalog(s.ctx, allKinds, get)
+	s.cat.setOnChange(s.kindsChanged)
 	s.cat.refresh()
 }
+
+// kindsChanged: views of kinds no longer served end removed; CRDs, once
+// served and watchable, trigger the next discoveries; the API is told.
+func (s *session) kindsChanged(rev uint64) {
+	snap := s.cat.snap()
+	if len(snap.removed) > 0 {
+		for _, w := range s.caches.allWatchers() {
+			if snap.removed[w.def.desc.ID] {
+				w.markRemoved()
+			}
+		}
+	}
+	if d := snap.reg.byID[crdKindID]; d != nil && d.discovered {
+		s.crdWatch.Do(func() { go s.watchCRDs(d.gvr) })
+	}
+	if l := s.kindsListener.Load(); l != nil {
+		(*l)(rev)
+	}
+}
+
+var _ provider.Cataloger = (*session)(nil)
+
+func (s *session) Catalog() core.KindCatalog {
+	snap := s.cat.snap()
+	return core.KindCatalog{Kinds: snap.reg.descriptors(), Rev: snap.rev, State: snap.state, Unconfirmed: snap.unconfirmed}
+}
+
+func (s *session) OnKindsChanged(f func(rev uint64)) { s.kindsListener.Store(&f) }
+func (s *session) RefreshKinds()                     { s.cat.refresh() }
+func (s *session) KindRemoved(id string) bool        { return s.cat.snap().removed[id] }
 
 // kind is the current catalog's kind with that id (nil: none).
 func (s *session) kind(id string) *kindDef { return s.cat.snap().reg.byID[id] }
@@ -219,6 +255,8 @@ func (s *session) Scopes(ctx context.Context) ([]core.Scope, error) {
 func (s *session) Watch(q provider.Query, sink provider.Sink) (func(), error) {
 	def := s.kind(q.Kind)
 	switch {
+	case def == nil && s.KindRemoved(q.Kind):
+		return nil, &provider.Error{Class: provider.ClassRemoved, Message: fmt.Sprintf("%s is no longer served", q.Kind)}
 	case def == nil:
 		return nil, &provider.Error{Class: provider.ClassUnsupported, Message: fmt.Sprintf("unknown kind %q", q.Kind)}
 	case !q.Scope.Valid():
@@ -265,6 +303,10 @@ func (s *session) watchDef(def *kindDef, q provider.Query, selector string, sink
 	c.mu.Lock()
 	c.watchers[w] = struct{}{}
 	c.mu.Unlock()
+	if s.cat.snap().removed[def.desc.ID] {
+		// removed while opening: the catalog's walk may not have seen it
+		w.setRemoved()
+	}
 	w.pushStatus() // loading, or an error the cache already knows
 	reg, err := c.inf.AddEventHandler(w.handlers())
 	if err != nil {

@@ -28,8 +28,11 @@ func (w *API) SelectTarget(provider, id string) error {
 	return w.a.SelectTarget(context.Background(), provider, id)
 }
 
-func (w *API) ListKinds(provider, target string) ([]core.KindDescriptor, error) {
+func (w *API) ListKinds(provider, target string) (api.KindsView, error) {
 	return w.a.ListKinds(context.Background(), provider, target)
+}
+func (w *API) RefreshKinds(provider, target string) error {
+	return w.a.RefreshKinds(context.Background(), provider, target)
 }
 func (w *API) ListScopes(provider, target string) (api.ScopesView, error) {
 	return w.a.ListScopes(context.Background(), provider, target)

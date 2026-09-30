@@ -6,7 +6,7 @@ import { ApiError } from '../api/client'
 import type { Tunnel } from '../api/types'
 import { App } from '../App'
 import { initialState, useStore } from '../store'
-import { fakeClient, k8s, podRow, podsKind } from '../test/fakeClient'
+import { kindsView, fakeClient, k8s, podRow, podsKind } from '../test/fakeClient'
 import { useTunnels } from './store'
 
 beforeEach(() => {
@@ -35,7 +35,7 @@ const tunnel = (id: string, extra: Partial<Tunnel> = {}): Tunnel => ({
 async function setup(mode: 'desktop' | 'browser' = 'browser') {
   const f = fakeClient([k8s('prod')])
   f.client.appInfo = vi.fn(async () => ({ name: 'SPK Ocular', version: 'test', mode, language: 'en' as const }))
-  f.client.listKinds = vi.fn(async () => [{ ...podsKind, forward: true }])
+  f.client.listKinds = vi.fn(async () => kindsView([{ ...podsKind, forward: true }]))
   f.state.rows = [podRow('api-1', 'web')]
   f.state.view.selected = { provider: 'kubernetes', id: 'prod' }
   render(<App client={f.client} />)

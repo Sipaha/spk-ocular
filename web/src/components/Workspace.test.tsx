@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { App } from '../App'
 import { initialState, useStore } from '../store'
-import { fakeClient, k8s, podRow, podsKind, scopeRow } from '../test/fakeClient'
+import { kindsView, fakeClient, k8s, podRow, podsKind, scopeRow } from '../test/fakeClient'
 
 beforeEach(() => useStore.setState({ ...initialState }))
 
@@ -113,7 +113,7 @@ describe('Workspace details and state', () => {
   it('shows metrics in CPU/Memory columns by row id', async () => {
     const f = fakeClient([k8s('prod')])
     const withMetrics = { ...podsKindWithMetrics }
-    f.client.listKinds = vi.fn(async () => [withMetrics])
+    f.client.listKinds = vi.fn(async () => kindsView([withMetrics]))
     f.client.openView = vi.fn(async () => ({ viewId: 'v-pods', kind: withMetrics }))
     f.state.rows = [podRow('api-1', 'web')]
     f.client.getMetrics = vi.fn(async () => ({ status: 'ok', values: { 'uid-web-api-1': { cpu: 0.25, memory: 64 * 1024 * 1024 } } }))
@@ -127,7 +127,7 @@ describe('Workspace details and state', () => {
   it('says when metrics cover only the first rows', async () => {
     const f = fakeClient([k8s('prod')])
     const withMetrics = { ...podsKindWithMetrics }
-    f.client.listKinds = vi.fn(async () => [withMetrics])
+    f.client.listKinds = vi.fn(async () => kindsView([withMetrics]))
     f.client.openView = vi.fn(async () => ({ viewId: 'v-pods', kind: withMetrics }))
     f.state.rows = [podRow('api-1', 'web')]
     f.client.getMetrics = vi.fn(async () => ({ status: 'ok', limit: 100, values: { 'uid-web-api-1': { cpu: 0.25 } } }))
@@ -138,7 +138,7 @@ describe('Workspace details and state', () => {
   it('explains empty metric columns', async () => {
     const f = fakeClient([k8s('prod')])
     const withMetrics = { ...podsKindWithMetrics }
-    f.client.listKinds = vi.fn(async () => [withMetrics])
+    f.client.listKinds = vi.fn(async () => kindsView([withMetrics]))
     f.client.openView = vi.fn(async () => ({ viewId: 'v-pods', kind: withMetrics }))
     f.state.rows = [podRow('api-1', 'web')]
     f.client.getMetrics = vi.fn(async () => ({ status: 'forbidden', message: 'pods.metrics.k8s.io is forbidden', values: {} }))
@@ -213,7 +213,7 @@ describe('drawer follows its object', () => {
 describe('Workspace logs', () => {
   it('opens logs from the drawer and with L on a row, one tab per object', async () => {
     const f = fakeClient([k8s('prod')])
-    f.client.listKinds = vi.fn(async () => [{ ...podsKind, logs: true }])
+    f.client.listKinds = vi.fn(async () => kindsView([{ ...podsKind, logs: true }]))
     f.state.rows = [podRow('api-1', 'web'), podRow('api-2', 'web')]
     // streams are not the point here: a body that never sends anything
     vi.stubGlobal('fetch', vi.fn(async () => new Response(new ReadableStream())))

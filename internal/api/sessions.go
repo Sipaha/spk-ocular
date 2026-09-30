@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/spk/spk-ocular/internal/core"
+	"github.com/spk/spk-ocular/internal/events"
 	"github.com/spk/spk-ocular/internal/provider"
 	"github.com/spk/spk-ocular/internal/views"
 )
@@ -23,6 +24,7 @@ type sessionEntry struct {
 	// view (or an in-flight Open) of a retired session can never be taken
 	// for one of its replacement.
 	owner string
+	seq   uint64 // the incarnation's number (KindsView.Session)
 }
 
 // sessionIdle: a session without views is closed after this long (a page
@@ -79,7 +81,16 @@ func (s *Service) session(ctx context.Context, providerID, target string) (provi
 		return nil, fromProvider(err)
 	}
 	s.sessSeq++
-	s.sessions[key] = &sessionEntry{sess: sess, provider: providerID, target: target, hash: sess.ConfigHash(), lastUsed: s.now(), owner: fmt.Sprintf("%s#%d", key, s.sessSeq)}
+	seq := s.sessSeq
+	s.sessions[key] = &sessionEntry{sess: sess, provider: providerID, target: target, hash: sess.ConfigHash(), lastUsed: s.now(), owner: fmt.Sprintf("%s#%d", key, seq), seq: seq}
+	if c, ok := sess.(provider.Cataloger); ok {
+		// Set before anyone reads the catalog: a revision published
+		// earlier is in the first ListKinds, a later one is an event.
+		c.OnKindsChanged(func(rev uint64) {
+			s.em.Emit(events.Event{Type: EventKindsChanged, Key: key,
+				Payload: map[string]any{"provider": providerID, "target": target, "session": seq, "rev": rev}})
+		})
+	}
 	s.armReaperLocked()
 	return sess, nil
 }
@@ -155,12 +166,31 @@ func (s *Service) closeOtherSessions(keep string) {
 	}
 }
 
-func (s *Service) ListKinds(ctx context.Context, providerID, target string) ([]core.KindDescriptor, error) {
+func (s *Service) ListKinds(ctx context.Context, providerID, target string) (KindsView, error) {
+	e, err := s.sessionFor(ctx, providerID, target)
+	if err != nil {
+		return KindsView{}, err
+	}
+	return KindsView{KindCatalog: catalogOf(e.sess), Session: e.seq}, nil
+}
+
+// catalogOf: a session without a catalog has one revision of fixed kinds.
+func catalogOf(sess provider.Session) core.KindCatalog {
+	if c, ok := sess.(provider.Cataloger); ok {
+		return c.Catalog()
+	}
+	return core.KindCatalog{Kinds: sess.Kinds(), Rev: 1, State: core.CatalogReady}
+}
+
+func (s *Service) RefreshKinds(ctx context.Context, providerID, target string) error {
 	sess, err := s.session(ctx, providerID, target)
 	if err != nil {
-		return nil, err
+		return err
 	}
-	return sess.Kinds(), nil
+	if c, ok := sess.(provider.Cataloger); ok {
+		c.RefreshKinds()
+	}
+	return nil
 }
 
 func (s *Service) ListScopes(ctx context.Context, providerID, target string) (ScopesView, error) {
@@ -193,6 +223,9 @@ func (s *Service) OpenView(ctx context.Context, req OpenViewRequest) (ViewInfo, 
 		}
 	}
 	if kind == nil {
+		if c, ok := e.sess.(provider.Cataloger); ok && c.KindRemoved(req.Query.Kind) {
+			return ViewInfo{}, coded(CodeRemoved, fmt.Errorf("%s is no longer served", req.Query.Kind))
+		}
 		return ViewInfo{}, coded(CodeUnsupported, fmt.Errorf("unknown kind %q", req.Query.Kind))
 	}
 	id, err := s.views.Open(e.owner, e.sess, req.Query)

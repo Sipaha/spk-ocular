@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { App } from '../App'
 import { initialState, useStore } from '../store'
-import { fakeClient, k8s, podRow, podsKind } from '../test/fakeClient'
+import { kindsView, fakeClient, k8s, podRow, podsKind } from '../test/fakeClient'
 
 // xterm needs a real layout: the tab body is a stand-in with the same
 // focus target (a textarea inside [data-terminal]).
@@ -22,7 +22,7 @@ const dockTabs = () => [...document.querySelectorAll<HTMLElement>('[data-tab-kin
 
 async function setup() {
   const f = fakeClient([k8s('prod'), k8s('dev')])
-  f.client.listKinds = vi.fn(async () => [{ ...podsKind, logs: true, exec: true }])
+  f.client.listKinds = vi.fn(async () => kindsView([{ ...podsKind, logs: true, exec: true }]))
   f.state.rows = [podRow('api-1', 'web'), podRow('api-2', 'web')]
   f.state.view.selected = { provider: 'kubernetes', id: 'prod' }
   vi.stubGlobal('fetch', vi.fn(async () => new Response(new ReadableStream())))

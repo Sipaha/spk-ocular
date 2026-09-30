@@ -16,7 +16,7 @@ const page = (p: Partial<Page>): Page => ({
 
 function client(over: Partial<Client> = {}): Client {
   return {
-    appInfo: vi.fn(), listTargets: vi.fn(), selectTarget: vi.fn(), listKinds: vi.fn(), listScopes: vi.fn(),
+    appInfo: vi.fn(), listTargets: vi.fn(), selectTarget: vi.fn(), listKinds: vi.fn(), refreshKinds: vi.fn(), listScopes: vi.fn(),
     openView: vi.fn(async () => ({ viewId: 'v1', kind: { id: 'pods', title: 'Pods', group: 'W', columns: [], scoped: true } })),
     getRows: vi.fn(async () => page({ reset: true, version: 1 })),
     closeView: vi.fn(async () => {}),

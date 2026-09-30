@@ -48,6 +48,24 @@ type Resyncer interface {
 	Resync(q Query) error
 }
 
+// Cataloger is implemented by sessions whose kinds change while they live
+// (Kubernetes: discovery of served resources).
+type Cataloger interface {
+	// Catalog: the kinds now with their revision (one snapshot; Kinds()
+	// is its Kinds).
+	Catalog() core.KindCatalog
+	// OnKindsChanged sets what is told of each new revision (set once, by
+	// the API, before anyone reads the catalog). Called outside the
+	// session's locks; must not block.
+	OnKindsChanged(func(rev uint64))
+	// RefreshKinds reads the kinds again in the background (F5); a new
+	// revision, if any, is told.
+	RefreshKinds()
+	// KindRemoved: the kind was offered by this session and is not served
+	// any more (a view of it ends ClassRemoved, and is not reopened).
+	KindRemoved(id string) bool
+}
+
 // Query is what a view shows. It is immutable for the view's lifetime.
 type Query struct {
 	Kind  string        `json:"kind"`
@@ -94,9 +112,12 @@ const (
 	ClassUnauthorized ErrorClass = "unauthorized"
 	ClassUnavailable  ErrorClass = "unavailable"
 	ClassGone         ErrorClass = "gone"
-	ClassNotFound     ErrorClass = "not_found"
-	ClassUnsupported  ErrorClass = "unsupported"
-	ClassConflict     ErrorClass = "conflict"
+	// ClassRemoved: the kind is no longer served (a CRD deleted); unlike
+	// gone, reopening the view cannot help.
+	ClassRemoved     ErrorClass = "removed"
+	ClassNotFound    ErrorClass = "not_found"
+	ClassUnsupported ErrorClass = "unsupported"
+	ClassConflict    ErrorClass = "conflict"
 	// ClassUnknown: a change was sent but its outcome is not known (the
 	// connection ended before the answer); never retried automatically.
 	ClassUnknown ErrorClass = "unknown"

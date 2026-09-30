@@ -271,6 +271,21 @@ func (m *cacheManager) stats() (active, idle int) {
 	return active, idle
 }
 
+// allWatchers: the views on every cache now.
+func (m *cacheManager) allWatchers() []*viewWatch {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	var out []*viewWatch
+	for _, c := range m.caches {
+		c.mu.Lock()
+		for w := range c.watchers {
+			out = append(out, w)
+		}
+		c.mu.Unlock()
+	}
+	return out
+}
+
 // watchStats counts the views watching caches and their pending deadlines.
 func (m *cacheManager) watchStats() (watchers, deadlines int) {
 	m.mu.Lock()

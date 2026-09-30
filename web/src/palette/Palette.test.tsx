@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { App } from '../App'
 import type { KindDescriptor, RecentObject } from '../api/types'
 import { initialState, useStore } from '../store'
-import { fakeClient, k8s, podRow, podsKind } from '../test/fakeClient'
+import { kindsView, fakeClient, k8s, podRow, podsKind } from '../test/fakeClient'
 import { usePalette } from './store'
 
 beforeEach(() => {
@@ -18,7 +18,7 @@ function setup() {
   const f = fakeClient([k8s('prod'), k8s('dev')])
   f.state.view.groups[0].aliases = { scope: ['ns'], target: ['ctx'] }
   f.state.view.selected = { provider: 'kubernetes', id: 'prod' }
-  f.client.listKinds = vi.fn(async () => [{ ...podsKind, aliases: ['po'] }, deployKind])
+  f.client.listKinds = vi.fn(async () => kindsView([{ ...podsKind, aliases: ['po'] }, deployKind]))
   f.state.kinds['apps/deployments'] = deployKind
   f.state.rows = [podRow('api-1', 'web'), podRow('db-0', 'web')]
   f.state.rowsByKind['apps/deployments'] = [

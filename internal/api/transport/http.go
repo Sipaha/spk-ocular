@@ -101,6 +101,9 @@ func (h *HTTP) routes() {
 	h.mux.HandleFunc("POST /api/ListKinds", handle(func(ctx context.Context, r *targetReq) (any, error) {
 		return h.api.ListKinds(ctx, r.Provider, r.Target)
 	}))
+	h.mux.HandleFunc("POST /api/RefreshKinds", handle(func(ctx context.Context, r *targetReq) (any, error) {
+		return nil, h.api.RefreshKinds(ctx, r.Provider, r.Target)
+	}))
 	h.mux.HandleFunc("POST /api/ListScopes", handle(func(ctx context.Context, r *targetReq) (any, error) {
 		return h.api.ListScopes(ctx, r.Provider, r.Target)
 	}))

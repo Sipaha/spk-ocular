@@ -1,6 +1,6 @@
 import { vi } from 'vitest'
 import type { Client } from '../api/client'
-import type { ApiEvent, KindDescriptor, Query, RecentObject, Ref, Row, Target, TargetsView, TerminalRequest, ViewStatus } from '../api/types'
+import type { ApiEvent, KindDescriptor, KindsView, Query, RecentObject, Ref, Row, Target, TargetsView, TerminalRequest, ViewStatus } from '../api/types'
 
 export const k8s = (id: string, extra: Partial<Target> = {}): Target => ({
   provider: 'kubernetes',
@@ -20,6 +20,9 @@ export const k8sScopeNames = {
   plural: { key: 'kubernetes.scope.plural', text: 'namespaces' },
   all: { key: 'kubernetes.scope.all', text: 'All namespaces' },
 }
+
+/** A session's catalog of fixed kinds (ListKinds). */
+export const kindsView = (kinds: KindDescriptor[]): KindsView => ({ kinds, rev: 1, state: 'ready', session: 1 })
 
 /** An in-memory Client: tests mutate `view` and call `emit`. */
 export function fakeClient(targets: Target[]) {
@@ -42,7 +45,8 @@ export function fakeClient(targets: Target[]) {
       if (!all.some((x) => x.provider === provider && x.id === id)) throw new Error('not_found: no target')
       state.view.selected = { provider, id }
     }),
-    listKinds: vi.fn(async () => [podsKind]),
+    listKinds: vi.fn(async () => kindsView([podsKind])),
+    refreshKinds: vi.fn(async () => {}),
     listScopes: vi.fn(async () => ({ scopes: [{ name: 'default' }, { name: 'web' }] })),
     // One view per kind: v-<kind>; rows from state.rowsByKind, pods default to state.rows.
     openView: vi.fn(async (_p: string, _t: string, q: Query) => ({

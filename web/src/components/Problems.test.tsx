@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { App } from '../App'
 import type { ActionDescriptor, KindDescriptor, Row } from '../api/types'
 import { initialState, useStore } from '../store'
-import { fakeClient, k8s, podsKind } from '../test/fakeClient'
+import { kindsView, fakeClient, k8s, podsKind } from '../test/fakeClient'
 
 beforeEach(() => useStore.setState({ ...initialState }))
 
@@ -54,7 +54,7 @@ async function openProblems(rows: Row[], status: object = { state: 'ready' }) {
   f.state.kinds = { problems }
   f.state.rowsByKind = { problems: rows }
   f.state.statusByKind = { problems: status as never }
-  f.client.listKinds = vi.fn(async () => [problems, pods, events])
+  f.client.listKinds = vi.fn(async () => kindsView([problems, pods, events]))
   f.client.getTargetState = vi.fn(async () => ({ kind: '"problems"' }))
   render(<App client={f.client} />)
   const grid = await screen.findByRole('grid', { name: 'resources' })

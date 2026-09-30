@@ -1,5 +1,6 @@
 import { Call, Events } from '@wailsio/runtime'
-import type { ActionParams, ActionPlan, ActionResult, ApiEvent, AppInfo, EventType, ExecInfo, KindDescriptor, LogInfo, LogQuery, LogStreamInfo, MetricsView, Page, Query, RecentObject, Ref, Resource, ScopesView, TargetsView, TerminalInfo, TerminalRequest, ViewInfo, ForwardInfo, StartForwardRequest, Tunnel } from './types'
+import type { ActionParams, ActionPlan, ActionResult, ApiEvent, AppInfo, EventType, ExecInfo,
+  KindsView, LogInfo, LogQuery, LogStreamInfo, MetricsView, Page, Query, RecentObject, Ref, Resource, ScopesView, TargetsView, TerminalInfo, TerminalRequest, ViewInfo, ForwardInfo, StartForwardRequest, Tunnel } from './types'
 
 export class ApiError extends Error {
   constructor(
@@ -18,7 +19,10 @@ export interface Client {
   listTargets(): Promise<TargetsView>
   /** Remembers the choice across restarts; not_found if the target is gone. */
   selectTarget(provider: string, id: string): Promise<void>
-  listKinds(provider: string, target: string): Promise<KindDescriptor[]>
+  /** The session's kinds with the catalog's revision (a "kinds_changed" event tells of a new one). */
+  listKinds(provider: string, target: string): Promise<KindsView>
+  /** Reads the target's kinds again in the background (F5); a change comes as "kinds_changed". */
+  refreshKinds(provider: string, target: string): Promise<void>
   /** Permission problems come back in ScopesView.error, not as a rejection. */
   listScopes(provider: string, target: string): Promise<ScopesView>
   openView(provider: string, target: string, query: Query): Promise<ViewInfo>
@@ -114,6 +118,7 @@ export const httpClient: Client = {
   listTargets: () => post('ListTargets', {}),
   selectTarget: (provider, id) => done(post('SelectTarget', { provider, id })),
   listKinds: (provider, target) => post('ListKinds', { provider, target }),
+  refreshKinds: (provider, target) => done(post('RefreshKinds', { provider, target })),
   listScopes: (provider, target) => post('ListScopes', { provider, target }),
   openView: (provider, target, query) => post('OpenView', { provider, target, query }),
   getRows: (viewId, since) => post('GetRows', { viewId, since }),
@@ -195,13 +200,14 @@ async function wcallAbortable<T>(signal: AbortSignal | undefined, method: string
   }
 }
 
-const EVENT_TYPES: EventType[] = ['targets_changed', 'resync', 'view_changed', 'forwards_changed']
+const EVENT_TYPES: EventType[] = ['targets_changed', 'resync', 'view_changed', 'forwards_changed', 'kinds_changed']
 
 export const wailsClient: Client = {
   appInfo: () => wcall('AppInfo'),
   listTargets: () => wcall('ListTargets'),
   selectTarget: (provider, id) => wcall('SelectTarget', provider, id),
   listKinds: (provider, target) => wcall('ListKinds', provider, target),
+  refreshKinds: (provider, target) => wcall('RefreshKinds', provider, target),
   listScopes: (provider, target) => wcall('ListScopes', provider, target),
   openView: (provider, target, query) => wcall('OpenView', { provider, target, query }),
   getRows: (viewId, since) => wcall('GetRows', viewId, since),

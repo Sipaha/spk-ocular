@@ -88,6 +88,29 @@ type KindDescriptor struct {
 	NotCovered []string `json:"notCovered,omitempty"`
 }
 
+// KindCatalog is what a session offers now (a session whose kinds change
+// while it lives — Kubernetes discovery — revises it).
+type KindCatalog struct {
+	Kinds []KindDescriptor `json:"kinds"`
+	// Rev grows with every change within the session.
+	Rev uint64 `json:"rev"`
+	// State: "ready"; "discovering" (more kinds may come); "partial" (the
+	// kinds of Unconfirmed groups are the last known); "failed" (no
+	// discovery answered: only the described kinds).
+	State string `json:"state"`
+	// Unconfirmed are the groups whose kinds could not be confirmed ("*":
+	// every named group).
+	Unconfirmed []string `json:"unconfirmed,omitempty"`
+}
+
+// Catalog states.
+const (
+	CatalogReady       = "ready"
+	CatalogDiscovering = "discovering"
+	CatalogPartial     = "partial"
+	CatalogFailed      = "failed"
+)
+
 // ScopeNames say what the provider's scopes are called (k8s: "Namespace",
 // "namespaces", "All namespaces"): the generic UI names no scope itself.
 type ScopeNames struct {

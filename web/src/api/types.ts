@@ -71,7 +71,7 @@ export interface AppInfo {
  * view_changed: {viewId, version} — pull; {viewId, gone: true} — reopen.
  * forwards_changed: the tunnels changed (counters at most once a second); call listForwards.
  */
-export type EventType = 'targets_changed' | 'resync' | 'view_changed' | 'forwards_changed'
+export type EventType = 'targets_changed' | 'resync' | 'view_changed' | 'forwards_changed' | 'kinds_changed'
 
 export interface ApiEvent {
   type: EventType
@@ -143,6 +143,8 @@ export interface KindDescriptor {
   id: string
   title: string
   group: string
+  /** A collapsible level inside the group (its label), if any. */
+  subgroup?: string
   columns: Column[]
   scoped: boolean
   /** Not in the navigation (reached through relations). */
@@ -167,6 +169,17 @@ export interface KindDescriptor {
   sort?: SortSpec
   /** A view of several sources: what it does not look at by design. */
   notCovered?: string[]
+}
+
+/** A session's kinds now (ListKinds). Rev grows within a session; a new session (reconfigured target) starts anew. */
+export interface KindsView {
+  kinds: KindDescriptor[]
+  rev: number
+  /** ready | discovering (more kinds may come) | partial (unconfirmed groups keep their last known kinds) | failed */
+  state: 'ready' | 'discovering' | 'partial' | 'failed'
+  /** Groups whose kinds could not be confirmed ("*": every named group). */
+  unconfirmed?: string[]
+  session: number
 }
 
 /** Sort by column (descending if desc), ties by then (ascending). */
