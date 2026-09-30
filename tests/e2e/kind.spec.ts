@@ -437,7 +437,8 @@ test('custom resources: API groups in the navigation, the CRD columns, live chan
   await expect(section.getByRole('button', { name: /^ocular\.dev/ })).toBeHidden()
   const grid = await apiKind(page, 'ocular.dev', 'Widgets', 'ocular-crd')
   // kubectl get's columns (Detail is wide: a fact of the details)
-  await expect(grid.getByRole('columnheader')).toHaveText([/Name/, /Size/, /Phase/, /Ready/, /Since/])
+  // The marks' column (P17) comes first, its header a checkbox without text.
+  await expect(grid.getByRole('columnheader')).toHaveText(['', /Name/, /Size/, /Phase/, /Ready/, /Since/])
   await expect(row(grid, 'alpha')).toContainText('Running')
   await expect(row(grid, 'beta')).toContainText('Failing')
   // health from the conditions: a dot by the name, the reason on hover
@@ -477,7 +478,7 @@ test('built-ins without a described view: Jobs in Workloads with the server colu
   await openTarget(page, 'kind-ocular-dev')
   const grid = await kindPage(page, 'Jobs', 'ocular-crd')
   await expect(page.getByRole('navigation', { name: 'resources' }).getByRole('region', { name: 'Workloads' }).getByRole('button', { name: 'Jobs', exact: true })).toBeVisible()
-  await expect(grid.getByRole('columnheader')).toHaveText([/Name/, /Status/, /Completions/, /Duration/, /Age/])
+  await expect(grid.getByRole('columnheader')).toHaveText(['', /Name/, /Status/, /Completions/, /Duration/, /Age/])
   await expect(row(grid, 'once')).toContainText('Complete')
   await expect(row(grid, 'once')).toContainText('1/1')
 })
