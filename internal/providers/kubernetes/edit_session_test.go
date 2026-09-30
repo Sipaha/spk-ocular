@@ -7,6 +7,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -18,6 +19,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/dynamic"
 	dynamicfake "k8s.io/client-go/dynamic/fake"
+	k8stesting "k8s.io/client-go/testing"
 
 	"github.com/spk/spk-ocular/internal/core"
 	"github.com/spk/spk-ocular/internal/provider"
@@ -39,6 +41,8 @@ type editRec struct {
 	fail  func(dry bool) error
 	// dryAnswer, if set, edits the dry run's answer (server-side changes).
 	dryAnswer func(o map[string]any)
+	// hold, if set, runs first with the request's context (a slow server).
+	hold func(ctx context.Context) error
 }
 
 func (w *editRec) patch(context.Context, schema.GroupVersionResource, string, string, types.PatchType, []byte, string) error {
@@ -58,8 +62,13 @@ func (w *editRec) editPatch(ctx context.Context, gvr schema.GroupVersionResource
 	}
 	w.mu.Lock()
 	w.calls = append(w.calls, editCall{dry: dry, name: name, body: body})
-	fail, dryAnswer := w.fail, w.dryAnswer
+	fail, dryAnswer, hold := w.fail, w.dryAnswer, w.hold
 	w.mu.Unlock()
+	if hold != nil {
+		if err := hold(ctx); err != nil {
+			return nil, err
+		}
+	}
 	if fail != nil {
 		if err := fail(dry); err != nil {
 			return nil, err
@@ -192,7 +201,7 @@ func TestPrepareEditOfAnUnprovenRouteSendsNothing(t *testing.T) {
 	api.set("/api", coreDoc)
 	editable := v2ver{version: "v1", res: []v2res{{name: "widgets", kind: "Widget", singular: "widget", scope: "Namespaced", verbs: append(append([]string{}, lw...), "patch")}}}
 	api.set("/apis", apisDoc(map[string][]v2ver{"ocular.dev": {editable}}, "ocular.dev"))
-	api.set("/apis/apiregistration.k8s.io/v1/apiservices/v1.ocular.dev", []byte(`{"spec":{"service":{"name":"agg","namespace":"x"}}}`))
+	api.set("/apis/apiregistration.k8s.io/v1/apiservices/v1.ocular.dev", []byte(`{"apiVersion":"apiregistration.k8s.io/v1","kind":"APIService","metadata":{"name":"v1.ocular.dev"},"spec":{"group":"ocular.dev","version":"v1","service":{"name":"agg","namespace":"x"}}}`))
 	api.set("/openapi/v3/apis/ocular.dev/v1", []byte(`{"paths":{"/apis/ocular.dev/v1/namespaces/{namespace}/widgets/{name}":{"patch":{"parameters":[{"name":"force","in":"query"}]}}}}`))
 	c := catalogClient(widget("w1"))
 	s := newSession("ctx", "h", c, false)
@@ -292,6 +301,21 @@ func TestPrepareEditRefusalsAndFallbacks(t *testing.T) {
 		require.NotNil(t, grant)
 		assert.Equal(t, "local", grant.Mode)
 	})
+	t.Run("a webhook's denial that speaks of dry run is not a fallback", func(t *testing.T) {
+		for _, text := range []string{
+			`admission webhook "x.io" denied the request: this object does not support dry run`,
+			`admission webhook "x.io" denied the request: admission webhook "y.io" does not support dry run`,
+			`policy: does not support dry run`,
+		} {
+			s, w := editSession(t, cm())
+			w.fail = func(bool) error { return apierrors.NewBadRequest(text) }
+			doc, base := source(t, s, cmRef("cfg"))
+			plan, grant, err := s.PrepareEdit(context.Background(), request(doc, base, edited(doc)))
+			require.NoError(t, err)
+			require.NotNil(t, plan.Unavailable, text)
+			assert.Nil(t, grant, text)
+		}
+	})
 	t.Run("another bad request is not a fallback", func(t *testing.T) {
 		s, w := editSession(t, cm())
 		w.fail = func(bool) error { return apierrors.NewBadRequest("strict decoding error: unknown field \"datta\"") }
@@ -374,9 +398,12 @@ func TestRunEditOutcomesAreNeverRetried(t *testing.T) {
 	}{
 		"server error": {apierrors.NewInternalError(errors.New("boom")), provider.ClassUnknown},
 		"no answer":    {errors.New("connection reset"), provider.ClassUnknown},
-		"invalid":      {apierrors.NewInvalid(schema.GroupKind{Kind: "ConfigMap"}, "cfg", nil), provider.ClassInvalid},
-		"forbidden":    {apierrors.NewForbidden(schema.GroupResource{Resource: "configmaps"}, "cfg", errors.New("no")), provider.ClassForbidden},
-		"gone":         {apierrors.NewNotFound(schema.GroupResource{Resource: "configmaps"}, "cfg"), provider.ClassGone},
+		// An answer is not a local credential failure, whatever it says.
+		"server error naming credentials": {apierrors.NewInternalError(errors.New("getting credentials: vault down")), provider.ClassUnknown},
+		"credential plugin failed":        {errors.New(`getting credentials: exec: executable kubelogin not found`), provider.ClassUnauthorized},
+		"invalid":                         {apierrors.NewInvalid(schema.GroupKind{Kind: "ConfigMap"}, "cfg", nil), provider.ClassInvalid},
+		"forbidden":                       {apierrors.NewForbidden(schema.GroupResource{Resource: "configmaps"}, "cfg", errors.New("no")), provider.ClassForbidden},
+		"gone":                            {apierrors.NewNotFound(schema.GroupResource{Resource: "configmaps"}, "cfg"), provider.ClassGone},
 	} {
 		t.Run(name, func(t *testing.T) {
 			s, w := editSession(t, configMap("cfg", "7", map[string]any{"a": "1"}, nil))
@@ -436,6 +463,40 @@ func TestASecretIsEditedOnlyInItsMetadataAndItsRefusalsAreHidden(t *testing.T) {
 	_, err = s.RunEdit(context.Background(), run(req, grant))
 	require.Error(t, err)
 	assert.NotContains(t, err.Error(), "123")
+
+	// An answer naming credentials is still the server's: hidden, unknown.
+	w.fail = func(dry bool) error {
+		if dry {
+			return nil
+		}
+		return apierrors.NewInternalError(errors.New("getting credentials: PIN 123"))
+	}
+	_, err = s.RunEdit(context.Background(), run(req, grant))
+	assertClass(t, err, provider.ClassUnknown)
+	assert.NotContains(t, err.Error(), "123")
+}
+
+func TestASecretsReadRefusalsAreHidden(t *testing.T) {
+	sec := &unstructured.Unstructured{Object: map[string]any{"apiVersion": "v1", "kind": "Secret", "type": "Opaque",
+		"metadata": map[string]any{"name": "s", "namespace": "ns", "uid": "uid-s", "resourceVersion": "3"},
+		"data":     map[string]any{"pin": "MTIz"}}}
+	c := editClient(sec)
+	s := newSession("ctx", "h", c, false)
+	t.Cleanup(s.Close)
+	s.writer = &editRec{dyn: c}
+	ref := core.Ref{Provider: ProviderID, Target: "ctx", Scope: "ns", Kind: "secrets", Name: "s"}
+	doc, base := source(t, s, ref)
+	labelled := strings.Replace(doc.Text, "  name: s\n", "  labels:\n    team: a\n  name: s\n", 1)
+
+	c.PrependReactor("get", "secrets", func(k8stesting.Action) (bool, runtime.Object, error) {
+		return true, nil, apierrors.NewForbidden(schema.GroupResource{Resource: "secrets"}, "s", errors.New("webhook: PIN 123 is weak"))
+	})
+	_, _, err := s.EditSource(context.Background(), ref)
+	assertClass(t, err, provider.ClassForbidden)
+	assert.NotContains(t, err.Error(), "123")
+	_, _, err = s.PrepareEdit(context.Background(), request(doc, base, labelled))
+	assertClass(t, err, provider.ClassForbidden)
+	assert.NotContains(t, err.Error(), "123")
 }
 
 func TestEditEffectsThatCannotBeUndone(t *testing.T) {
@@ -486,4 +547,77 @@ func TestEditKeepsNumbersExactToTheRequestAndStatusChurnIsNoCollision(t *testing
 	assert.Empty(t, plan.Collisions, "status is not the editor's")
 	sent := w.writes(true)[0].body["spec"].(map[string]any)
 	assert.Equal(t, json.Number("9007199254740995"), sent["big"])
+
+	// A decimal literal too: as written, not through float64.
+	_, _, err = s.PrepareEdit(context.Background(), request(doc, base, strings.Replace(doc.Text, "big: 9007199254740993", "big: 9007199254740993.0", 1)))
+	require.NoError(t, err)
+	sent = w.writes(true)[1].body["spec"].(map[string]any)
+	assert.Equal(t, json.Number("9007199254740993.0"), sent["big"])
+}
+
+// holdUntilDone: a server that answers only when the request is given up.
+func holdUntilDone(ctx context.Context) error {
+	<-ctx.Done()
+	return ctx.Err()
+}
+
+func TestPrepareEditIsBoundedAndEndsWithTheSession(t *testing.T) {
+	cm := configMap("cfg", "7", map[string]any{"a": "1"}, nil)
+	edited := func(doc core.EditDoc) string { return strings.Replace(doc.Text, "a: \"1\"", "a: \"2\"", 1) }
+	prepare := func(s *session, req provider.EditRequest) <-chan error {
+		done := make(chan error, 1)
+		go func() {
+			_, grant, err := s.PrepareEdit(context.Background(), req)
+			if err == nil && grant != nil {
+				done <- errors.New("a grant")
+				return
+			}
+			done <- err
+		}()
+		return done
+	}
+	wait := func(t *testing.T, done <-chan error) error {
+		t.Helper()
+		select {
+		case err := <-done:
+			return err
+		case <-time.After(5 * time.Second):
+			t.Fatal("the review did not end")
+			return nil
+		}
+	}
+
+	t.Run("a deadline", func(t *testing.T) {
+		old := prepareEditTimeout
+		prepareEditTimeout = 50 * time.Millisecond
+		t.Cleanup(func() { prepareEditTimeout = old })
+		s, w := editSession(t, cm.DeepCopy())
+		w.hold = holdUntilDone
+		doc, base := source(t, s, cmRef("cfg"))
+		err := wait(t, prepare(s, request(doc, base, edited(doc))))
+		assertClass(t, err, provider.ClassUnavailable)
+	})
+	t.Run("the session closes", func(t *testing.T) {
+		s, w := editSession(t, cm.DeepCopy())
+		started := make(chan struct{})
+		w.hold = func(ctx context.Context) error {
+			close(started)
+			return holdUntilDone(ctx)
+		}
+		doc, base := source(t, s, cmRef("cfg"))
+		done := prepare(s, request(doc, base, edited(doc)))
+		<-started
+		s.cancel()
+		assertClass(t, wait(t, done), provider.ClassUnavailable)
+	})
+	t.Run("no grant after the session closed", func(t *testing.T) {
+		s, w := editSession(t, cm.DeepCopy())
+		// The dry run answers, but the session ends meanwhile.
+		w.hold = func(context.Context) error {
+			s.cancel()
+			return nil
+		}
+		doc, base := source(t, s, cmRef("cfg"))
+		assertClass(t, wait(t, prepare(s, request(doc, base, edited(doc)))), provider.ClassUnavailable)
+	})
 }

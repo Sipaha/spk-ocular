@@ -77,12 +77,23 @@ func (s *session) getObject(ctx context.Context, ref core.Ref) (*unstructured.Un
 // getObjectOf reads ref through def's route (an operation that pinned its
 // route never reads through a newer one).
 func (s *session) getObjectOf(ctx context.Context, def *kindDef, ref core.Ref) (*unstructured.Unstructured, error) {
+	u, err := s.readObject(ctx, def, ref)
+	var pe *provider.Error
+	if err != nil && !errors.As(err, &pe) {
+		class, msg := classify(err)
+		return nil, &provider.Error{Class: class, Message: msg}
+	}
+	return u, err
+}
+
+// readObject is getObjectOf with the client's error as it is (a
+// *provider.Error only for a replaced object).
+func (s *session) readObject(ctx context.Context, def *kindDef, ref core.Ref) (*unstructured.Unstructured, error) {
 	ctx, cancel := context.WithTimeout(ctx, getTimeout)
 	defer cancel()
 	u, err := s.dyn.Resource(def.gvr).Namespace(ref.Scope).Get(ctx, ref.Name, metav1.GetOptions{})
 	if err != nil {
-		class, msg := classify(err)
-		return nil, &provider.Error{Class: class, Message: msg}
+		return nil, err
 	}
 	if ref.UID != "" && string(u.GetUID()) != ref.UID {
 		return nil, &provider.Error{Class: provider.ClassGone, Message: fmt.Sprintf("%s was deleted and a new object took its name", ref)}

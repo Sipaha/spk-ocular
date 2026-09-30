@@ -32,7 +32,7 @@ func routeDef(group, version, resource string, namespaced bool) *kindDef {
 	return &kindDef{discovered: true, gvr: schema.GroupVersionResource{Group: group, Version: version, Resource: resource}, namespaced: namespaced, verbs: []string{"get", "list", "watch", "patch"}}
 }
 
-const remoteAPIService = `{"spec":{"group":"networking.k8s.io","version":"v99","service":{"name":"agg","namespace":"kube-system"}}}`
+const remoteAPIService = `{"apiVersion":"apiregistration.k8s.io/v1","kind":"APIService","metadata":{"name":"v99.networking.k8s.io"},"spec":{"group":"networking.k8s.io","version":"v99","service":{"name":"agg","namespace":"kube-system"}}}`
 
 func TestDryRunIsProvenPerRouteNeverPerGroup(t *testing.T) {
 	ctx := context.Background()
@@ -60,7 +60,7 @@ func TestDryRunProofByLocalAPIServiceOrOpenAPI(t *testing.T) {
 	ctx := context.Background()
 	var p dryRunProofs
 	g := &docGetter{docs: map[string]string{
-		"/apis/apiregistration.k8s.io/v1/apiservices/v1.ocular.dev": `{"spec":{"group":"ocular.dev","version":"v1"}}`,
+		"/apis/apiregistration.k8s.io/v1/apiservices/v1.ocular.dev": localAPIService("ocular.dev", "v1"),
 	}}
 	if !p.proven(ctx, g.get, routeDef("ocular.dev", "v1", "widgets", true)) {
 		t.Fatal("a local APIService proves it")
@@ -73,7 +73,7 @@ func TestDryRunProofByLocalAPIServiceOrOpenAPI(t *testing.T) {
 
 	// Aggregated, with dryRun through a $ref (path-level) on the exact path.
 	g = &docGetter{docs: map[string]string{
-		"/apis/apiregistration.k8s.io/v1/apiservices/v1beta1.agg.io": `{"spec":{"service":{"name":"s","namespace":"n"}}}`,
+		"/apis/apiregistration.k8s.io/v1/apiservices/v1beta1.agg.io": `{"apiVersion":"apiregistration.k8s.io/v1","kind":"APIService","metadata":{"name":"v1beta1.agg.io"},"spec":{"group":"agg.io","version":"v1beta1","service":{"name":"s","namespace":"n"}}}`,
 		"/openapi/v3/apis/agg.io/v1beta1": `{"paths":{
 			"/apis/agg.io/v1beta1/things/{name}":{"parameters":[{"$ref":"#/components/parameters/dryRun-x"}],"patch":{}},
 			"/apis/agg.io/v1beta1/namespaces/{namespace}/others/{name}":{"patch":{"parameters":[{"name":"force","in":"query"}]}}},
@@ -90,4 +90,36 @@ func TestDryRunProofByLocalAPIServiceOrOpenAPI(t *testing.T) {
 			t.Fatalf("unexpected request %s", path)
 		}
 	}
+}
+
+func TestDryRunProofTakesOnlyTheGroupVersionsOwnAPIService(t *testing.T) {
+	ctx := context.Background()
+	const at = "/apis/apiregistration.k8s.io/v1/apiservices/v1.ocular.dev"
+	for name, body := range map[string]string{
+		"a Deployment":       `{"apiVersion":"apps/v1","kind":"Deployment","metadata":{"name":"v1.ocular.dev"},"spec":{}}`,
+		"no envelope":        `{"spec":{"group":"ocular.dev","version":"v1"}}`,
+		"another name":       `{"apiVersion":"apiregistration.k8s.io/v1","kind":"APIService","metadata":{"name":"v2.ocular.dev"},"spec":{"group":"ocular.dev","version":"v1"}}`,
+		"another group":      `{"apiVersion":"apiregistration.k8s.io/v1","kind":"APIService","metadata":{"name":"v1.ocular.dev"},"spec":{"group":"x.io","version":"v1"}}`,
+		"another version":    `{"apiVersion":"apiregistration.k8s.io/v1","kind":"APIService","metadata":{"name":"v1.ocular.dev"},"spec":{"group":"ocular.dev","version":"v2"}}`,
+		"an old API version": `{"apiVersion":"apiregistration.k8s.io/v1beta1","kind":"APIService","metadata":{"name":"v1.ocular.dev"},"spec":{"group":"ocular.dev","version":"v1"}}`,
+		"not an object":      `[1]`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			var p dryRunProofs
+			g := &docGetter{docs: map[string]string{at: body}}
+			if p.proven(ctx, g.get, routeDef("ocular.dev", "v1", "widgets", true)) {
+				t.Fatal("proven by an answer that is not the group-version's APIService")
+			}
+			// Not a definite answer: asked again, never kept as local.
+			g.docs[at] = localAPIService("ocular.dev", "v1")
+			if !p.proven(ctx, g.get, routeDef("ocular.dev", "v1", "widgets", true)) {
+				t.Fatal("a later valid answer must prove it")
+			}
+		})
+	}
+}
+
+func localAPIService(group, version string) string {
+	return `{"apiVersion":"apiregistration.k8s.io/v1","kind":"APIService","metadata":{"name":"` + version + "." + group +
+		`"},"spec":{"group":"` + group + `","version":"` + version + `"}}`
 }

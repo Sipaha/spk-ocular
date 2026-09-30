@@ -54,11 +54,21 @@ func (p *dryRunProofs) apiServiceLocal(ctx context.Context, get getter, gv schem
 		return false, false
 	}
 	var doc struct {
+		APIVersion string `json:"apiVersion"`
+		Kind       string `json:"kind"`
+		Metadata   struct {
+			Name string `json:"name"`
+		} `json:"metadata"`
 		Spec *struct {
+			Group   string           `json:"group"`
+			Version string           `json:"version"`
 			Service *json.RawMessage `json:"service"`
 		} `json:"spec"`
 	}
-	if json.Unmarshal(body, &doc) != nil || doc.Spec == nil {
+	// Only the group-version's own APIService is an answer: anything else
+	// (a proxy's page, another object) proves nothing and is not kept.
+	if json.Unmarshal(body, &doc) != nil || doc.APIVersion != "apiregistration.k8s.io/v1" || doc.Kind != "APIService" ||
+		doc.Metadata.Name != gv.Version+"."+gv.Group || doc.Spec == nil || doc.Spec.Group != gv.Group || doc.Spec.Version != gv.Version {
 		return false, false
 	}
 	local = doc.Spec.Service == nil || string(*doc.Spec.Service) == "null"

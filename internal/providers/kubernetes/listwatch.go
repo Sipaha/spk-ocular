@@ -176,9 +176,10 @@ func classify(err error) (provider.ErrorClass, string) {
 		return provider.ClassForbidden, statusMessage(err)
 	case apierrors.IsUnauthorized(err):
 		return provider.ClassUnauthorized, statusMessage(err)
-	case strings.Contains(err.Error(), "getting credentials"):
+	case !errors.As(err, &se) && strings.Contains(err.Error(), "getting credentials"):
 		// exec credential plugin failed or timed out (internal/execshim);
-		// its own stderr is in the app log.
+		// its own stderr is in the app log. (Only before sending: a
+		// server's answer is its own, whatever it says.)
 		return provider.ClassUnauthorized, "the kubeconfig credential plugin failed or did not answer"
 	case apierrors.IsNotFound(err):
 		return provider.ClassNotFound, statusMessage(err)

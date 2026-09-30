@@ -5,8 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"math"
 	"reflect"
+	"regexp"
 	"strconv"
 	"strings"
 
@@ -113,16 +113,44 @@ func editScalar(n *yaml.Node) (any, error) {
 		}
 		return json.Number(strconv.FormatInt(i, 10)), nil
 	case "!!float":
-		var f float64
-		if err := n.Decode(&f); err != nil {
-			return nil, fmt.Errorf("line %d: %w", n.Line, err)
-		}
-		if math.IsInf(f, 0) || math.IsNaN(f) {
-			return nil, fmt.Errorf("line %d: %s is not a finite number", n.Line, n.Value)
-		}
-		return json.Number(strconv.FormatFloat(f, 'g', -1, 64)), nil
+		return editFloat(n)
 	}
 	return nil, fmt.Errorf("line %d: the tag %s is not supported here", n.Line, n.Tag)
+}
+
+// yamlFloat is a YAML 1.2 decimal literal: sign, digits, a point, digits
+// on either side, an exponent.
+var yamlFloat = regexp.MustCompile(`^([-+]?)(?:0*([0-9]+)|)(?:\.([0-9]*))?([eE][-+]?[0-9]+)?$`)
+
+// editFloat keeps a decimal literal as written, in JSON's form (never
+// through float64: 9007199254740993.0 must stay …993). A value float64
+// cannot hold (the API server's JSON reads it so) is refused, as are
+// infinities and NaN.
+func editFloat(n *yaml.Node) (any, error) {
+	m := yamlFloat.FindStringSubmatch(n.Value)
+	if m == nil || (m[2] == "" && m[3] == "") {
+		switch strings.ToLower(strings.TrimLeft(n.Value, "+-")) {
+		case ".inf", ".nan":
+			return nil, fmt.Errorf("line %d: %s is not a finite number", n.Line, n.Value)
+		}
+		return nil, fmt.Errorf("line %d: %s is not a decimal number", n.Line, n.Value)
+	}
+	sign, whole, frac, exp := m[1], m[2], m[3], m[4]
+	if sign == "+" {
+		sign = ""
+	}
+	if whole == "" {
+		whole = "0"
+	}
+	lit := sign + whole
+	if frac != "" {
+		lit += "." + frac
+	}
+	lit += exp
+	if _, err := strconv.ParseFloat(lit, 64); err != nil {
+		return nil, fmt.Errorf("line %d: the number %s is out of range", n.Line, n.Value)
+	}
+	return json.Number(lit), nil
 }
 
 // mergePatch is the JSON merge patch (RFC 7386) that turns orig into

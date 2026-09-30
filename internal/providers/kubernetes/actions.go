@@ -283,7 +283,7 @@ func (s *session) write(ctx context.Context, def *kindDef, run provider.ActionRu
 func (s *session) failedWrite(ctx context.Context, def *kindDef, run provider.ActionRun, was *unstructured.Unstructured, err error) (bool, error) {
 	var se apierrors.APIStatus
 	switch {
-	case strings.Contains(err.Error(), "getting credentials"): // before sending
+	case !errors.As(err, &se) && strings.Contains(err.Error(), "getting credentials"): // before sending
 		class, msg := classify(err)
 		return false, &provider.Error{Class: class, Message: msg}
 	case !errors.As(err, &se):

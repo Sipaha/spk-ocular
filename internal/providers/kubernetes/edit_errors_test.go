@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/spk/spk-ocular/internal/core"
+	"github.com/spk/spk-ocular/internal/provider"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -51,4 +52,13 @@ func paramValues(m core.Message) []string {
 		out = append(out, v)
 	}
 	return out
+}
+
+func TestOnlyALocalFailureIsACredentialFailure(t *testing.T) {
+	if class, _ := classify(errors.New("getting credentials: exec: exit status 1")); class != provider.ClassUnauthorized {
+		t.Fatalf("a credential plugin failure: %s", class)
+	}
+	if class, _ := classify(apierrors.NewInternalError(errors.New("getting credentials: vault down"))); class == provider.ClassUnauthorized {
+		t.Fatal("a server's answer is not a local credential failure")
+	}
 }

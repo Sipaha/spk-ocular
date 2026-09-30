@@ -90,3 +90,20 @@ func TestMergePatchIsRFC7386AndExact(t *testing.T) {
 		t.Fatalf("got %s", got)
 	}
 }
+
+func TestEditParseKeepsDecimalLiteralsExactly(t *testing.T) {
+	// Through float64 9007199254740993.0 would be …992: the literal is sent
+	// as written, in JSON's form.
+	// (An untagged 1e400 is a string in YAML: yaml.v3 resolves it so.)
+	v := mustParse(t, "a: 9007199254740993.0\nb: +1.5\nc: .5\nd: -.5e3\ne: 1.\nf: 007.25\ng: 1E+300\nh: 1.e5\ni: !!float 3\n")
+	got := toJSON(t, v)
+	want := `{"a":9007199254740993.0,"b":1.5,"c":0.5,"d":-0.5e3,"e":1,"f":7.25,"g":1E+300,"h":1e5,"i":3}`
+	if got != want {
+		t.Fatalf("got %s, want %s", got, want)
+	}
+	for _, text := range []string{"n: -.INF\n", "n: .NaN\n", "n: !!float 0x10\n", "n: !!float abc\n", "n: !!float 1e400\n", "n: !!float -2e308\n"} {
+		if _, err := parseEditDoc(text); err == nil {
+			t.Fatalf("%q: accepted", text)
+		}
+	}
+}

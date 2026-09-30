@@ -264,6 +264,8 @@ func TestAFailedWriteIsClassifiedByLookingAgain(t *testing.T) {
 		"forbidden":                 {apierrors.NewForbidden(schema.GroupResource{Group: "apps", Resource: "deployments"}, "web", errors.New("rbac")), nil, provider.ClassForbidden},
 		"connection lost":           {errors.New("read tcp: connection reset by peer"), nil, provider.ClassUnknown},
 		"timeout":                   {context.DeadlineExceeded, nil, provider.ClassUnknown},
+		// An answer is not a local credential failure, whatever it says.
+		"server error naming credentials": {apierrors.NewInternalError(errors.New("getting credentials: vault down")), nil, provider.ClassUnknown},
 	}
 	for name, c := range cases {
 		t.Run(name, func(t *testing.T) {

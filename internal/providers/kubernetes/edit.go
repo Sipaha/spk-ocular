@@ -9,8 +9,10 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
+	"regexp"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/spk/spk-ocular/internal/core"
 	"github.com/spk/spk-ocular/internal/provider"
@@ -21,6 +23,10 @@ import (
 // editFormat is the version of editView: a base made by another one does
 // not match the text it would show now.
 const editFormat = 1
+
+// prepareEditTimeout bounds a review: reads, proofs and the dry run (a
+// variable for tests).
+var prepareEditTimeout = 30 * time.Second
 
 // maxEditText bounds an edited document (an object in etcd is ≤ 1.5 MB).
 const maxEditText = 3 << 20
@@ -53,6 +59,26 @@ func sha(b []byte) string {
 	return hex.EncodeToString(sum[:])
 }
 
+// editGet reads the object to edit. A Secret's refusal is said without the
+// server's strings (secretSafe): a message may carry a value.
+func (s *session) editGet(ctx context.Context, def *kindDef, ref core.Ref) (*unstructured.Unstructured, error) {
+	u, err := s.readObject(ctx, def, ref)
+	if err == nil {
+		return u, nil
+	}
+	var se apierrors.APIStatus
+	if def == secretsKind && errors.As(err, &se) {
+		class, _ := classify(err)
+		return nil, &provider.Error{Class: class, Message: secretSafe(err).Text}
+	}
+	var pe *provider.Error
+	if errors.As(err, &pe) {
+		return nil, err
+	}
+	class, text := classify(err)
+	return nil, &provider.Error{Class: class, Message: text}
+}
+
 func (s *session) editTarget(ref core.Ref) (*kindDef, error) {
 	def := s.kind(ref.Kind)
 	if !editable(def) {
@@ -67,7 +93,7 @@ func (s *session) EditSource(ctx context.Context, ref core.Ref) (core.EditDoc, p
 	if err != nil {
 		return core.EditDoc{}, provider.EditBase{}, err
 	}
-	u, err := s.getObjectOf(ctx, def, ref)
+	u, err := s.editGet(ctx, def, ref)
 	if err != nil {
 		return core.EditDoc{}, provider.EditBase{}, err
 	}
@@ -176,8 +202,26 @@ func (s *session) PrepareEdit(ctx context.Context, req provider.EditRequest) (co
 	if err != nil {
 		return core.EditPlan{}, nil, err
 	}
+	// A review ends in time and with the session: its reads, proofs and dry
+	// run are given up, and no grant outlives the connection it was made on.
+	ctx, cancel := context.WithTimeout(ctx, prepareEditTimeout)
+	defer cancel()
+	defer context.AfterFunc(s.ctx, cancel)()
+	plan, grant, err := s.prepareEdit(ctx, c, req)
+	switch {
+	case s.ctx.Err() != nil:
+		return core.EditPlan{}, nil, &provider.Error{Class: provider.ClassUnavailable, Message: "the connection was closed during the review: review it again"}
+	case errors.Is(ctx.Err(), context.DeadlineExceeded):
+		return core.EditPlan{}, nil, &provider.Error{Class: provider.ClassUnavailable, Message: "the review took too long: try again"}
+	case ctx.Err() != nil:
+		return core.EditPlan{}, nil, &provider.Error{Class: provider.ClassUnavailable, Message: "the review was cancelled"}
+	}
+	return plan, grant, err
+}
+
+func (s *session) prepareEdit(ctx context.Context, c *editCheck, req provider.EditRequest) (core.EditPlan, *provider.EditGrant, error) {
 	def, secret := c.def, c.def == secretsKind
-	cur, err := s.getObjectOf(ctx, def, c.ref)
+	cur, err := s.editGet(ctx, def, c.ref)
 	if err != nil {
 		return core.EditPlan{}, nil, err
 	}
@@ -332,7 +376,7 @@ func editWriteError(err error, name string, secret bool) error {
 	}
 	var se apierrors.APIStatus
 	switch {
-	case strings.Contains(err.Error(), "getting credentials"): // before sending
+	case !errors.As(err, &se) && strings.Contains(err.Error(), "getting credentials"): // before sending
 		class, msg := classify(err)
 		return &provider.Error{Class: class, Message: msg}
 	case !errors.As(err, &se):
@@ -364,8 +408,13 @@ func refusal(err error, secret bool) core.Message {
 // noDryRun: an admission webhook with side effects cannot take a dry run
 // (the API server's own refusal; nothing else falls back to local).
 func noDryRun(err error) bool {
-	return apierrors.IsBadRequest(err) && strings.Contains(statusMessage(err), "does not support dry run")
+	return apierrors.IsBadRequest(err) && dryRunUnsupported.MatchString(statusMessage(err))
 }
+
+// dryRunUnsupported is the API server's refusal, exactly
+// (webhookerrors.NewDryRunUnsupportedErr); a webhook's own denial may say
+// the same words.
+var dryRunUnsupported = regexp.MustCompile(`^admission webhook "(?:[^"\\]|\\.)*" does not support dry run$`)
 
 func (s *session) editWriter() actionWriter {
 	if s.writer != nil {
