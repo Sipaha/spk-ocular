@@ -31,7 +31,8 @@ export interface Client {
   touchViews(viewIds: string[]): Promise<string[]>
   getResource(ref: Ref): Promise<Resource>
   /** Usage for an open view's rows; a missing metrics API is a status, not a rejection. */
-  getMetrics(viewId: string): Promise<MetricsView>
+  /** Usage of the rows the page shows; signal abandons the request (the server stops waiting too). */
+  getMetrics(viewId: string, rowIds: string[], signal?: AbortSignal): Promise<MetricsView>
   getTargetState(provider: string, target: string): Promise<Record<string, string>>
   setTargetState(provider: string, target: string, key: string, value: string): Promise<void>
   /** The target's objects whose details were opened, newest first. */
@@ -76,14 +77,15 @@ const CodeInternal = 'internal'
 
 const tokenMeta = () => document.querySelector('meta[name="spk-ocular-api-token"]')?.getAttribute('content') ?? ''
 
-async function post<T>(method: string, body: unknown): Promise<T> {
+async function post<T>(method: string, body: unknown, signal?: AbortSignal): Promise<T> {
   const headers: Record<string, string> = { 'content-type': 'application/json' }
   const token = tokenMeta()
   if (token) headers.Authorization = `Bearer ${token}`
   let r: Response
   try {
-    r = await fetch(`/api/${method}`, { method: 'POST', headers, body: JSON.stringify(body ?? {}) })
+    r = await fetch(`/api/${method}`, { method: 'POST', headers, body: JSON.stringify(body ?? {}), signal })
   } catch (e) {
+    if (signal?.aborted) throw e // the caller's own abort, not a transport failure
     throw new ApiError(CodeInternal, e instanceof Error ? e.message : String(e), true)
   }
   const isJSON = r.headers.get('content-type')?.includes('application/json')
@@ -111,7 +113,7 @@ export const httpClient: Client = {
   resyncView: (viewId) => done(post('ResyncView', { viewId })),
   touchViews: (viewIds) => post('TouchViews', { viewIds }),
   getResource: (ref) => post('GetResource', ref),
-  getMetrics: (viewId) => post('GetMetrics', { viewId }),
+  getMetrics: (viewId, rowIds, signal) => post('GetMetrics', { viewId, rowIds }, signal),
   getTargetState: (provider, target) => post('GetTargetState', { provider, target }),
   setTargetState: (provider, target, key, value) => done(post('SetTargetState', { provider, target, key, value })),
   recentObjects: (provider, target) => post('RecentObjects', { provider, target }),
@@ -162,6 +164,22 @@ async function wcall<T>(method: string, ...args: unknown[]): Promise<T> {
   }
 }
 
+/** A call the page may abandon: an abort cancels it in Go (the method's context). */
+async function wcallAbortable<T>(signal: AbortSignal | undefined, method: string, ...args: unknown[]): Promise<T> {
+  if (signal?.aborted) throw new DOMException('aborted', 'AbortError')
+  const p = Call.ByName(FQN + method, ...args)
+  const onAbort = () => void p.cancel()
+  signal?.addEventListener('abort', onAbort, { once: true })
+  try {
+    return (await p) as T
+  } catch (e) {
+    if (signal?.aborted) throw new DOMException('aborted', 'AbortError')
+    throw parseWailsError(e)
+  } finally {
+    signal?.removeEventListener('abort', onAbort)
+  }
+}
+
 const EVENT_TYPES: EventType[] = ['targets_changed', 'resync', 'view_changed', 'forwards_changed']
 
 export const wailsClient: Client = {
@@ -176,7 +194,7 @@ export const wailsClient: Client = {
   resyncView: (viewId) => wcall('ResyncView', viewId),
   touchViews: (viewIds) => wcall('TouchViews', viewIds),
   getResource: (ref) => wcall('GetResource', ref),
-  getMetrics: (viewId) => wcall('GetMetrics', viewId),
+  getMetrics: (viewId, rowIds, signal) => wcallAbortable(signal, 'GetMetrics', viewId, rowIds),
   getTargetState: (provider, target) => wcall('GetTargetState', provider, target),
   setTargetState: (provider, target, key, value) => wcall('SetTargetState', provider, target, key, value),
   recentObjects: (provider, target) => wcall('RecentObjects', provider, target),

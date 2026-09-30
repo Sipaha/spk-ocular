@@ -262,14 +262,15 @@ func TestKindMetrics(t *testing.T) {
 	}
 	var m provider.Metrics
 	require.Eventually(t, func() bool {
-		m, err = src.Metrics(context.Background(), provider.Query{Kind: "pods", Scope: core.ScopeSel{Mode: core.ScopeOne, Name: "ocular-demo"}})
+		m, err = src.Metrics(context.Background(), provider.Query{Kind: "pods", Scope: core.ScopeSel{Mode: core.ScopeOne, Name: "ocular-demo"}}, nil)
 		return err == nil && len(m.Values) > 0
 	}, 90*time.Second, 5*time.Second, "err: %v", err)
 	for _, u := range m.Values {
-		assert.Greater(t, u.Memory, 0.0)
+		require.NotNil(t, u.Memory)
+		assert.Greater(t, *u.Memory, 0.0)
 		assert.False(t, u.At.IsZero())
 	}
-	nodes, err := src.Metrics(context.Background(), provider.Query{Kind: "nodes", Scope: core.ScopeSel{Mode: core.ScopeNone}})
+	nodes, err := src.Metrics(context.Background(), provider.Query{Kind: "nodes", Scope: core.ScopeSel{Mode: core.ScopeNone}}, nil)
 	require.NoError(t, err)
 	assert.Len(t, nodes.Values, 1, "the control-plane node, keyed by its UID")
 }

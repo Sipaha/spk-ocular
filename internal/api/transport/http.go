@@ -149,9 +149,10 @@ func (h *HTTP) routes() {
 		return h.api.GetResource(ctx, *r)
 	}))
 	h.mux.HandleFunc("POST /api/GetMetrics", handle(func(ctx context.Context, r *struct {
-		ViewID string `json:"viewId"`
+		ViewID string   `json:"viewId"`
+		RowIDs []string `json:"rowIds"`
 	}) (any, error) {
-		return h.api.GetMetrics(ctx, r.ViewID)
+		return h.api.GetMetrics(ctx, r.ViewID, r.RowIDs)
 	}))
 	h.mux.HandleFunc("POST /api/LogInfo", handle(func(ctx context.Context, r *core.Ref) (any, error) {
 		return h.api.LogInfo(ctx, *r)

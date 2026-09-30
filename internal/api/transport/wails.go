@@ -48,8 +48,11 @@ func (w *API) TouchViews(viewIDs []string) ([]string, error) {
 func (w *API) GetResource(ref core.Ref) (*core.Resource, error) {
 	return w.a.GetResource(context.Background(), ref)
 }
-func (w *API) GetMetrics(viewID string) (api.MetricsView, error) {
-	return w.a.GetMetrics(context.Background(), viewID)
+
+// GetMetrics takes the call's context: the page cancels a request it no
+// longer waits for (the Wails runtime's CancellablePromise.cancel).
+func (w *API) GetMetrics(ctx context.Context, viewID string, rowIDs []string) (api.MetricsView, error) {
+	return w.a.GetMetrics(ctx, viewID, rowIDs)
 }
 func (w *API) GetTargetState(provider, target string) (map[string]string, error) {
 	return w.a.GetTargetState(context.Background(), provider, target)

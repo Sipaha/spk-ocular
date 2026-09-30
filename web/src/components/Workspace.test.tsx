@@ -120,6 +120,8 @@ describe('Workspace details and state', () => {
     const grid = await openProd(f)
     expect(await within(grid).findByText('250m')).toBeInTheDocument()
     expect(within(grid).getByText('64Mi')).toBeInTheDocument()
+    // asked for the rows in view, abortable
+    expect(f.client.getMetrics).toHaveBeenCalledWith('v-pods', ['uid-web-api-1'], expect.any(AbortSignal))
   })
 
   it('restores the last kind and scope of the target', async () => {

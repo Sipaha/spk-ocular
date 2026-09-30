@@ -73,7 +73,12 @@ read-only/protected-пометка contexts, трей, несколько акт
 - Действия: restart (как `kubectl rollout restart`), scale, delete (+ delete pod для пересоздания).
   Подтверждение с явным context/namespace/объектом.
 - Метрики CPU/RAM для pods и nodes через `metrics.k8s.io` — если API есть, только для видимой
-  таблицы, опрос ~15 с (решение пользователя 2026-09-29: в MVP).
+  таблицы, опрос ~15 с (решение пользователя 2026-09-29: в MVP). С P7 спрашиваются только
+  **видимые строки** (≤ 100, без overscan), сразу при смене видимого набора (300 мс покоя),
+  один запрос в полёте на вид (новый набор ждёт, выигрывает последний), уход/скрытие
+  страницы отменяют запрос и в Go; сортировка по метрике держит порядок до нового выбора
+  сортировки или смены набора строк; каждая метрика отдельно может быть неизвестна или
+  частична («≥»).
 - Навигация: `Ctrl+K` — палитра с fuzzy-поиском по объектам и видам; команды в стиле k9s
   (`:pods`, `:deploy`); `/` — фильтр таблицы; хлебные крошки drill-down; полная клавиатурная
   навигация. Горячие клавиши по `KeyboardEvent.code` — работают в русской раскладке.
@@ -260,7 +265,9 @@ type Session interface {
 }
 
 // Опциональные возможности — type assertion.
-type MetricsSource interface { Metrics(ctx, q Query) (Metrics, error) }
+// rowIDs — строки, которые страница показывает; Usage{CPU, Memory *float64,
+// CPUPartial, MemoryPartial}: nil — неизвестно (не 0), partial — сумма не всех частей.
+type MetricsSource interface { Metrics(ctx, q Query, rowIDs []string) (Metrics, error) }
 type LogSource interface {
     LogInfo(ctx, ref Ref) (LogInfo, error)   // каналы (контейнеры), default, агрегат, previous
     // StreamLogs пишет в LogSink (Source/Lines/State/Ready; может блокировать —

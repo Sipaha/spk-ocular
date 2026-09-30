@@ -291,7 +291,8 @@ function ResourcePage(props: {
   // The palette offers this table's rows.
   useEffect(() => lend('rows', view.rows), [view.rows])
   const columns = view.kind?.columns ?? kind.columns
-  const metrics = useMetrics(client, view.viewId, columns.some((c) => c.metric))
+  const [visibleRows, setVisibleRows] = useState<string[]>([])
+  const metrics = useMetrics(client, view.viewId, columns.some((c) => c.metric), visibleRows)
   // What a row offers is its object's kind's (a Problems row is a pod, a
   // deployment, an event…), not the table's.
   const deleteOf = (r: Row) => actionsOf(r.ref.kind).find((a) => a.id === 'delete')
@@ -358,6 +359,7 @@ function ResourcePage(props: {
           onLogs={(r: Row) => hasLogs(r.ref.kind) && onLogs(r.ref)}
           onTerminal={(r: Row, dialog: boolean) => hasExec(r.ref.kind) && onTerminal(r.ref, dialog)}
           metrics={metrics}
+          onVisibleRows={setVisibleRows}
           rowMenu={rowMenu}
           onDelete={(r: Row) => {
             const del = deleteOf(r)

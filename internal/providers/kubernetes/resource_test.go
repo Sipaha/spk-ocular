@@ -175,15 +175,17 @@ func TestMetricsAreKeyedByIncarnationAndCached(t *testing.T) {
 		return podMetricsList(podMetric("web", "a", time.Now().UTC().Format(time.RFC3339)), podMetric("web", "unknown", time.Now().UTC().Format(time.RFC3339)))
 	})
 	q := provider.Query{Kind: "pods", Scope: core.ScopeSel{Mode: core.ScopeOne, Name: "web"}}
-	m, err := s.Metrics(context.Background(), q)
+	m, err := s.Metrics(context.Background(), q, nil)
 	require.NoError(t, err)
 	require.Len(t, m.Values, 1, "a sample for an object no view observes is unknown")
 	u := m.Values["uid-a"]
-	assert.InDelta(t, 0.3, u.CPU, 1e-9)
-	assert.InDelta(t, 80*1024*1024, u.Memory, 1)
+	require.NotNil(t, u.CPU)
+	require.NotNil(t, u.Memory)
+	assert.InDelta(t, 0.3, *u.CPU, 1e-9)
+	assert.InDelta(t, 80*1024*1024, *u.Memory, 1)
 	assert.False(t, u.At.IsZero())
 	assert.Equal(t, "15s", m.Window)
-	_, _ = s.Metrics(context.Background(), q)
+	_, _ = s.Metrics(context.Background(), q, nil)
 	assert.Equal(t, 1, *calls, "reused within the TTL")
 }
 
@@ -196,14 +198,14 @@ func TestMetricsSampleOlderThanTheObjectIsNotAttributed(t *testing.T) {
 	s, _ := metricsHarness(t, []runtime.Object{fresh}, func() *unstructured.UnstructuredList {
 		return podMetricsList(podMetric("web", "a", time.Now().Add(-time.Minute).UTC().Format(time.RFC3339)))
 	})
-	m, err := s.Metrics(context.Background(), provider.Query{Kind: "pods", Scope: core.ScopeSel{Mode: core.ScopeOne, Name: "web"}})
+	m, err := s.Metrics(context.Background(), provider.Query{Kind: "pods", Scope: core.ScopeSel{Mode: core.ScopeOne, Name: "web"}}, nil)
 	require.NoError(t, err)
 	assert.Empty(t, m.Values, "the sample belongs to the previous incarnation")
 }
 
 func TestMetricsAbsenceIsPerResource(t *testing.T) {
 	var pe *provider.Error
-	_, err := newSession("t", "h", fullFake(), false).Metrics(context.Background(), provider.Query{Kind: "services", Scope: core.ScopeSel{Mode: core.ScopeAll}})
+	_, err := newSession("t", "h", fullFake(), false).Metrics(context.Background(), provider.Query{Kind: "services", Scope: core.ScopeSel{Mode: core.ScopeAll}}, nil)
 	require.ErrorAs(t, err, &pe)
 	assert.Equal(t, provider.ClassUnsupported, pe.Class)
 
@@ -222,10 +224,10 @@ func TestMetricsAbsenceIsPerResource(t *testing.T) {
 	})
 	s := newSession("t", "h", noNodes, false)
 	defer s.Close()
-	_, err = s.Metrics(context.Background(), provider.Query{Kind: "nodes", Scope: core.ScopeSel{Mode: core.ScopeNone}})
+	_, err = s.Metrics(context.Background(), provider.Query{Kind: "nodes", Scope: core.ScopeSel{Mode: core.ScopeNone}}, nil)
 	require.ErrorAs(t, err, &pe)
 	assert.Equal(t, provider.ClassUnsupported, pe.Class)
-	_, err = s.Metrics(context.Background(), provider.Query{Kind: "pods", Scope: core.ScopeSel{Mode: core.ScopeAll}})
+	_, err = s.Metrics(context.Background(), provider.Query{Kind: "pods", Scope: core.ScopeSel{Mode: core.ScopeAll}}, nil)
 	assert.NoError(t, err, "a missing nodes resource says nothing about pods")
 }
 
@@ -243,7 +245,7 @@ func TestMetricsCallerCanStopWaiting(t *testing.T) {
 	defer func() { close(block); s.Close() }()
 	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
 	defer cancel()
-	_, err := s.Metrics(ctx, provider.Query{Kind: "pods", Scope: core.ScopeSel{Mode: core.ScopeAll}})
+	_, err := s.Metrics(ctx, provider.Query{Kind: "pods", Scope: core.ScopeSel{Mode: core.ScopeAll}}, nil)
 	assert.ErrorIs(t, err, context.DeadlineExceeded)
 }
 

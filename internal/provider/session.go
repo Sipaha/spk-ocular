@@ -164,13 +164,18 @@ type Error struct {
 func (e *Error) Error() string { return string(e.Class) + ": " + e.Message }
 
 // MetricsSource is implemented by sessions that can report resource usage
-// for a query's rows (k8s: metrics.k8s.io for pods and nodes).
+// for a query's rows (k8s: metrics.k8s.io for pods and nodes; Compose: the
+// stats of containers).
 type MetricsSource interface {
-	// Metrics returns usage keyed by row id. Samples are attributed only
-	// when the provider can tell which incarnation they belong to. A missing
-	// metrics API is *Error{ClassUnsupported}; objects without a sample are
-	// absent from Values (unknown, never zero).
-	Metrics(ctx context.Context, q Query) (Metrics, error)
+	// Metrics returns usage keyed by row id for rowIDs — the rows the page
+	// shows now (a provider may return more; the API keeps those asked
+	// for). Samples are attributed only when the provider can tell which
+	// incarnation they belong to. A missing metrics API is
+	// *Error{ClassUnsupported}; objects without a sample are absent from
+	// Values (unknown, never zero). ctx ends when the page stops waiting:
+	// the caller must not be kept waiting (work shared with other callers
+	// may go on).
+	Metrics(ctx context.Context, q Query, rowIDs []string) (Metrics, error)
 }
 
 type Metrics struct {
@@ -179,9 +184,16 @@ type Metrics struct {
 	Values    map[string]Usage `json:"-"`
 }
 
-// Usage: CPU in cores, Memory in bytes.
+// Usage: CPU in cores, Memory in bytes; nil — that metric is unknown (the
+// other may be known). A partial value is a sum over parts of which some
+// did not answer (or were not asked): at least that much.
 type Usage struct {
-	CPU    float64   `json:"cpu"`
-	Memory float64   `json:"memory"`
-	At     time.Time `json:"at,omitzero"` // when the sample was taken
+	CPU           *float64  `json:"cpu,omitempty"`
+	Memory        *float64  `json:"memory,omitempty"`
+	CPUPartial    bool      `json:"cpuPartial,omitempty"`
+	MemoryPartial bool      `json:"memoryPartial,omitempty"`
+	At            time.Time `json:"at,omitzero"` // when the sample was taken
 }
+
+// Num is a known metric value.
+func Num(v float64) *float64 { return &v }

@@ -1,5 +1,5 @@
 import { useVirtualizer } from '@tanstack/react-virtual'
-import { useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type { Cell, Column, HealthState, MetricsView, Row, SortSpec } from '../api/types'
 import { formatAge, formatBytes, formatCPU } from '../format'
 import { isShortcut } from '../keyboard'
@@ -29,6 +29,8 @@ interface Props {
   onTerminal?: (row: Row, dialog: boolean) => void
   /** Usage for metric columns (CPU/Memory), by row id. */
   metrics?: MetricsView | null
+  /** The rows in view (not the overscan), in order, whenever they change. */
+  onVisibleRows?: (ids: string[]) => void
   /**
    * The context menu of a row (right click, the Menu key, Shift+F10): built
    * for that row when it opens.
@@ -51,17 +53,39 @@ export const healthText: Record<HealthState, string> = {
   unknown: 'text-fg-muted',
 }
 
-export function cellText(c: Column, cell: Cell | undefined, now: number): string {
+/** A metric's cell: partial — a sum some parts are missing from. */
+export type MetricCell = Cell & { partial?: boolean }
+
+export function cellText(c: Column, cell: MetricCell | undefined, now: number): string {
   if (!cell) return ''
+  const atLeast = cell.partial ? '≥ ' : ''
   switch (c.type) {
     case 'age':
       return cell.time ? formatAge(now - cell.time) : ''
     case 'cpu':
-      return cell.num !== undefined ? formatCPU(cell.num) : ''
+      return cell.num !== undefined ? atLeast + formatCPU(cell.num) : ''
     case 'bytes':
-      return cell.num !== undefined ? formatBytes(cell.num) : ''
+      return cell.num !== undefined ? atLeast + formatBytes(cell.num) : ''
   }
   return cell.text ?? ''
+}
+
+/** How many values a metrics answer has (0 while none: the snapshot waits for them). */
+function metricsFilled(m: MetricsView | null | undefined): number {
+  return m?.status === 'ok' ? Object.keys(m.values).length : 0
+}
+
+/** An order-independent fingerprint of a set of row ids. */
+function idSetKey(rows: Row[]): string {
+  let x = 0
+  let sum = 0
+  for (const r of rows) {
+    let h = 2166136261
+    for (let i = 0; i < r.id.length; i++) h = Math.imul(h ^ r.id.charCodeAt(i), 16777619)
+    x ^= h
+    sum = (sum + (h >>> 0)) % 4294967296
+  }
+  return `${rows.length}:${x >>> 0}:${sum}`
 }
 
 /** Sort key: numbers and times numerically, text case-insensitively; empty last. */
@@ -79,16 +103,16 @@ export function matchesRow(r: Row, f: string): boolean {
   return r.cells.some((c) => (c.text ?? '').toLowerCase().includes(needle)) || (r.health.reason ?? '').toLowerCase().includes(needle)
 }
 
-export function ResourceTable({ columns, rows, hideScope, filter, selected, onSelect, onOpen, onLogs, onTerminal, metrics, rowMenu, onDelete, defaultSort, areaFocus }: Props) {
+export function ResourceTable({ columns, rows, hideScope, filter, selected, onSelect, onOpen, onLogs, onTerminal, metrics, onVisibleRows, rowMenu, onDelete, defaultSort, areaFocus }: Props) {
   const now = useNow(10_000)
   const [menu, setMenu] = useState<{ items: MenuItem[]; at: { x: number; y: number } } | null>(null)
   const openMenu = (r: Row, at: { x: number; y: number }) => {
     const items = rowMenu?.(r) ?? []
     if (items.length) setMenu({ items, at })
   }
-  const [sort, setSort] = useState<Sort>(() => {
+  const [sort, setSort] = useState<Sort & { clicks: number }>(() => {
     const col = defaultSort ? columns.findIndex((c) => c.id === defaultSort.column) : -1
-    return col < 0 ? { col: 0, desc: false } : { col, desc: !!defaultSort?.desc }
+    return col < 0 ? { col: 0, desc: false, clicks: 0 } : { col, desc: !!defaultSort?.desc, clicks: 0 }
   })
   // Ties: the kind's second key (ascending), then the name.
   const thenCol = defaultSort?.then ? columns.findIndex((c) => c.id === defaultSort.then) : -1
@@ -99,14 +123,33 @@ export function ResourceTable({ columns, rows, hideScope, filter, selected, onSe
   // Metric columns take their values from the metrics poll, not the row.
   const cellOf = useMemo(() => {
     const values = metrics?.status === 'ok' ? metrics.values : null
-    return (r: Row, i: number): Cell | undefined => {
+    return (r: Row, i: number): MetricCell | undefined => {
       const c = columns[i]
       if (!c?.metric) return r.cells[i]
       const u = values?.[r.id]
-      if (!u) return undefined
-      return { num: c.type === 'cpu' ? u.cpu : u.memory }
+      const num = c.type === 'cpu' ? u?.cpu : u?.memory
+      if (num === undefined) return undefined // unknown, never 0
+      return { num, partial: c.type === 'cpu' ? u?.cpuPartial : u?.memoryPartial }
     }
   }, [metrics, columns])
+  // Sorting by a metric orders by the values known when the sort was
+  // chosen (or the set of rows or the filter changed): new samples update
+  // the cells, not the order — else rows would move under the reader and
+  // the visible (asked-for) rows with them, in a loop.
+  const rowSet = useMemo(() => idSetKey(rows), [rows])
+  const frozen = useRef<{ key: string; cells: Map<string, MetricCell | undefined> } | null>(null)
+  const sortCell = useMemo(() => {
+    const col = columns[sort.col]
+    if (!col?.metric) return cellOf
+    const key = `${sort.col}:${sort.desc}:${sort.clicks}:${rowSet}:${filter}`
+    // Until some value is known (the sort chosen before the first sample)
+    // the snapshot is retaken: filling it once is not a loop.
+    const empty = frozen.current && ![...frozen.current.cells.values()].some((c) => c !== undefined)
+    if (frozen.current?.key !== key || empty) frozen.current = { key, cells: new Map(rows.map((r) => [r.id, cellOf(r, sort.col)])) }
+    const cells = frozen.current.cells
+    return (r: Row, i: number) => (i === sort.col ? cells.get(r.id) : cellOf(r, i))
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- cellOf (new metrics) re-sorts only an empty snapshot
+  }, [columns, sort, rowSet, filter, rows, columns[sort.col]?.metric ? metricsFilled(metrics) : 0])
   const sorted = useMemo(() => {
     const f = filter.trim()
     const list = f ? rows.filter((r) => matchesRow(r, f)) : rows.slice()
@@ -114,13 +157,13 @@ export function ResourceTable({ columns, rows, hideScope, filter, selected, onSe
     if (col) {
       const then = thenCol >= 0 && thenCol !== sort.col ? columns[thenCol] : null
       list.sort((a, b) => {
-        const d = cmp(col, cellOf(a, sort.col), cellOf(b, sort.col))
+        const d = cmp(col, sortCell(a, sort.col), sortCell(b, sort.col))
         if (d) return sort.desc ? -d : d
-        return (then ? cmp(then, cellOf(a, thenCol), cellOf(b, thenCol)) : 0) || a.ref.name.localeCompare(b.ref.name)
+        return (then ? cmp(then, sortCell(a, thenCol), sortCell(b, thenCol)) : 0) || a.ref.name.localeCompare(b.ref.name)
       })
     }
     return list
-  }, [rows, filter, sort, columns, cellOf, thenCol])
+  }, [rows, filter, sort, columns, sortCell, thenCol])
 
   const scrollRef = useRef<HTMLDivElement>(null)
   const headRef = useRef<HTMLDivElement>(null)
@@ -134,6 +177,20 @@ export function ResourceTable({ columns, rows, hideScope, filter, selected, onSe
     // layout) render a screenful rather than nothing.
     initialRect: { width: 1000, height: 800 },
   })
+
+  const items = virt.getVirtualItems()
+  // The rows in view, without the overscan (what metrics are asked for).
+  const first = virt.range?.startIndex ?? 0
+  const last = virt.range?.endIndex ?? -1
+  const shown = useRef('')
+  useEffect(() => {
+    if (!onVisibleRows) return
+    const ids = sorted.slice(first, last + 1).map((r) => r.id)
+    const key = ids.join('\n')
+    if (key === shown.current) return
+    shown.current = key
+    onVisibleRows(ids)
+  }, [first, last, sorted, onVisibleRows])
 
   // A flexible name — the row's identity (a container's or pod's name, long
   // and alike in its prefix) — gets a double share, the others one.
@@ -189,7 +246,7 @@ export function ResourceTable({ columns, rows, hideScope, filter, selected, onSe
               key={c.id}
               role="columnheader"
               aria-sort={sort.col === i ? (sort.desc ? 'descending' : 'ascending') : 'none'}
-              onClick={() => setSort((s) => ({ col: i, desc: s.col === i ? !s.desc : false }))}
+              onClick={() => setSort((s) => ({ col: i, desc: s.col === i ? !s.desc : false, clicks: s.clicks + 1 }))}
               className={['truncate px-3 py-1.5 text-left hover:text-fg', isNumeric(c) ? 'text-right' : ''].join(' ')}
             >
               {c.title}
@@ -208,7 +265,7 @@ export function ResourceTable({ columns, rows, hideScope, filter, selected, onSe
         data-table-scroll
       >
         <div style={{ height: virt.getTotalSize(), minWidth, position: 'relative' }}>
-          {virt.getVirtualItems().map((vi) => {
+          {items.map((vi) => {
             const r = sorted[vi.index]
             const isSel = r.id === selected
             return (

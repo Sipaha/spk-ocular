@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"fmt"
 	"sync"
 	"testing"
 	"time"
@@ -193,10 +194,49 @@ type metricSession struct {
 	*fakeSession
 	m   provider.Metrics
 	err error
+	// rows: the view's rows are r0…r<rows-1> (0: fakeSession's one row)
+	rows int
+	// block: Metrics waits for its ctx to end
+	block bool
+
+	mu     sync.Mutex
+	asked  [][]string
+	ctxErr error
 }
 
-func (m *metricSession) Metrics(context.Context, provider.Query) (provider.Metrics, error) {
+func (m *metricSession) Metrics(ctx context.Context, _ provider.Query, rowIDs []string) (provider.Metrics, error) {
+	m.mu.Lock()
+	m.asked = append(m.asked, rowIDs)
+	m.mu.Unlock()
+	if m.block {
+		<-ctx.Done()
+		m.mu.Lock()
+		m.ctxErr = ctx.Err()
+		m.mu.Unlock()
+		return provider.Metrics{}, ctx.Err()
+	}
 	return m.m, m.err
+}
+
+func (m *metricSession) Watch(q provider.Query, sink provider.Sink) (func(), error) {
+	if m.rows == 0 {
+		return m.fakeSession.Watch(q, sink)
+	}
+	var rows []core.Row
+	for i := range m.rows {
+		rows = append(rows, core.Row{ID: fmt.Sprintf("r%d", i), Ref: core.Ref{Name: fmt.Sprintf("p%d", i)}})
+	}
+	sink.Apply(provider.Delta{Upserts: rows, Status: &provider.ViewStatus{State: provider.StatusReady}})
+	return func() {}, nil
+}
+
+func (m *metricSession) lastAsked() []string {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if len(m.asked) == 0 {
+		return nil
+	}
+	return m.asked[len(m.asked)-1]
 }
 
 type metricOpenable struct {
@@ -213,27 +253,84 @@ func (o *metricOpenable) Open(ctx context.Context, target string) (provider.Sess
 func TestGetMetricsJoinsCurrentRowsAndReportsStatus(t *testing.T) {
 	ctx := context.Background()
 	ms := &metricSession{m: provider.Metrics{Values: map[string]provider.Usage{
-		"1":       {CPU: 0.1, Memory: 1024}, // fakeSession's row id
-		"deleted": {CPU: 9},
+		"1":       {CPU: provider.Num(0.1), Memory: provider.Num(1024)}, // fakeSession's row id
+		"deleted": {CPU: provider.Num(9)},
 	}}}
 	k := &metricOpenable{openable: newOpenable("a"), ms: ms}
 	s, _ := newService(t, k)
 	info, err := s.OpenView(ctx, OpenViewRequest{Provider: "k", Target: "a", Query: provider.Query{Kind: "pods", Scope: allScopes}})
 	require.NoError(t, err)
 
-	mv, err := s.GetMetrics(ctx, info.ViewID)
+	mv, err := s.GetMetrics(ctx, info.ViewID, []string{"deleted", "1", "1"})
 	require.NoError(t, err)
 	assert.Equal(t, "ok", mv.Status)
-	assert.Equal(t, map[string]provider.Usage{"1": {CPU: 0.1, Memory: 1024}}, mv.Values, "keyed by row id; objects not in the view get nothing")
+	assert.Equal(t, map[string]provider.Usage{"1": {CPU: provider.Num(0.1), Memory: provider.Num(1024)}}, mv.Values, "keyed by row id; objects not in the view get nothing")
+	assert.Equal(t, []string{"1"}, ms.lastAsked(), "only the view's rows are asked for, once")
 
 	ms.err = &provider.Error{Class: provider.ClassUnsupported, Message: "metrics.k8s.io is not installed"}
-	mv, err = s.GetMetrics(ctx, info.ViewID)
+	mv, err = s.GetMetrics(ctx, info.ViewID, []string{"1"})
 	require.NoError(t, err, "a missing metrics API is a status, not a failed call")
 	assert.Equal(t, "unsupported", mv.Status)
 	assert.Empty(t, mv.Values)
 
-	_, err = s.GetMetrics(ctx, "v-unknown")
+	_, err = s.GetMetrics(ctx, "v-unknown", []string{"1"})
 	assert.True(t, IsCoded(err, CodeGone))
+}
+
+// The page asks for the rows it shows: at most MaxMetricRows of the
+// view's, in its order; more are cut and said; none — no provider call.
+func TestGetMetricsAsksForTheShownRowsOnly(t *testing.T) {
+	ctx := context.Background()
+	ms := &metricSession{rows: 150, m: provider.Metrics{Values: map[string]provider.Usage{"r120": {Memory: provider.Num(1)}}}}
+	k := &metricOpenable{openable: newOpenable("a"), ms: ms}
+	s, _ := newService(t, k)
+	info, err := s.OpenView(ctx, OpenViewRequest{Provider: "k", Target: "a", Query: provider.Query{Kind: "pods", Scope: allScopes}})
+	require.NoError(t, err)
+	require.Eventually(t, func() bool {
+		p, err := s.GetRows(ctx, info.ViewID, 0)
+		return err == nil && len(p.Upserts) == 150
+	}, 5*time.Second, 5*time.Millisecond)
+
+	var ask []string
+	for i := 149; i >= 0; i-- {
+		ask = append(ask, fmt.Sprintf("r%d", i))
+	}
+	mv, err := s.GetMetrics(ctx, info.ViewID, append([]string{"foreign"}, ask...))
+	require.NoError(t, err)
+	assert.Equal(t, ask[:MaxMetricRows], ms.lastAsked())
+	assert.Contains(t, mv.Message, "first 100")
+	assert.Equal(t, map[string]provider.Usage{"r120": {Memory: provider.Num(1)}}, mv.Values, "the memory known, the CPU unknown")
+
+	n := len(ms.asked)
+	mv, err = s.GetMetrics(ctx, info.ViewID, []string{"foreign"})
+	require.NoError(t, err)
+	assert.Equal(t, "ok", mv.Status)
+	assert.Empty(t, mv.Values)
+	assert.Len(t, ms.asked, n, "nothing to ask for")
+}
+
+// The provider's wait ends with the page's request, or at the deadline.
+func TestGetMetricsEndsWithTheCaller(t *testing.T) {
+	ms := &metricSession{block: true}
+	k := &metricOpenable{openable: newOpenable("a"), ms: ms}
+	s, _ := newService(t, k)
+	info, err := s.OpenView(context.Background(), OpenViewRequest{Provider: "k", Target: "a", Query: provider.Query{Kind: "pods", Scope: allScopes}})
+	require.NoError(t, err)
+	ctx, cancel := context.WithCancel(context.Background())
+	time.AfterFunc(50*time.Millisecond, cancel)
+	t0 := time.Now()
+	_, _ = s.GetMetrics(ctx, info.ViewID, []string{"1"})
+	assert.Less(t, time.Since(t0), 2*time.Second)
+	ms.mu.Lock()
+	assert.ErrorIs(t, ms.ctxErr, context.Canceled)
+	ms.mu.Unlock()
+
+	old := metricsTimeout
+	metricsTimeout = 50 * time.Millisecond
+	defer func() { metricsTimeout = old }()
+	mv, err := s.GetMetrics(context.Background(), info.ViewID, []string{"1"})
+	require.NoError(t, err)
+	assert.Equal(t, "unavailable", mv.Status, "the deadline is the request's")
 }
 
 func TestIdleSessionsAreReaped(t *testing.T) {
@@ -262,7 +359,7 @@ func TestIdleSessionsAreReaped(t *testing.T) {
 
 func TestViewsBelongToOneSessionIncarnation(t *testing.T) {
 	ctx := context.Background()
-	ms := &metricSession{m: provider.Metrics{Values: map[string]provider.Usage{"1": {CPU: 1}}}}
+	ms := &metricSession{m: provider.Metrics{Values: map[string]provider.Usage{"1": {CPU: provider.Num(1)}}}}
 	k := &metricOpenable{openable: newOpenable("a"), ms: ms}
 	s, _ := newService(t, k)
 	old, err := s.OpenView(ctx, OpenViewRequest{Provider: "k", Target: "a", Query: provider.Query{Kind: "pods", Scope: allScopes}})
@@ -275,9 +372,9 @@ func TestViewsBelongToOneSessionIncarnation(t *testing.T) {
 	require.NoError(t, err)
 	assert.NotEqual(t, oldOwner, s.sessions[ownerKey("k", "a")].owner, "a new incarnation, a new owner")
 
-	_, err = s.GetMetrics(ctx, old.ViewID)
+	_, err = s.GetMetrics(ctx, old.ViewID, []string{"1"})
 	assert.True(t, IsCoded(err, CodeGone), "the old view went with its session")
-	mv, err := s.GetMetrics(ctx, fresh.ViewID)
+	mv, err := s.GetMetrics(ctx, fresh.ViewID, []string{"1"})
 	require.NoError(t, err)
 	assert.Equal(t, "ok", mv.Status)
 }

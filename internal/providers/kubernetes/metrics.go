@@ -51,7 +51,10 @@ var errNoMetricsAPI = &provider.Error{Class: provider.ClassUnsupported, Message:
 // sample was taken — a same-named replacement gets nothing until the next
 // sample. Missing API → unsupported; denied → forbidden; nothing is ever
 // reported as a zero it did not measure.
-func (s *session) Metrics(ctx context.Context, q provider.Query) (provider.Metrics, error) {
+//
+// rowIDs are not needed: one list answers for every row of the query (and
+// is shared by the callers of the same query for metricsTTL).
+func (s *session) Metrics(ctx context.Context, q provider.Query, _ []string) (provider.Metrics, error) {
 	var gvr, objGVR schema.GroupVersionResource
 	ns := ""
 	switch q.Kind {
@@ -135,14 +138,15 @@ func (s *session) fetchMetrics(gvr, objGVR schema.GroupVersionResource, ns strin
 	out := provider.Metrics{Values: map[string]provider.Usage{}}
 	for _, it := range list.Items {
 		var cpu, mem float64
-		var have bool
+		var haveCPU, haveMem bool
 		addUsage := func(u map[string]any) {
 			if q, err := resource.ParseQuantity(str(u, "cpu")); err == nil {
 				cpu += q.AsApproximateFloat64()
-				have = true
+				haveCPU = true
 			}
 			if q, err := resource.ParseQuantity(str(u, "memory")); err == nil {
 				mem += q.AsApproximateFloat64()
+				haveMem = true
 			}
 		}
 		if gvr == podMetricsGVR {
@@ -154,7 +158,7 @@ func (s *session) fetchMetrics(gvr, objGVR schema.GroupVersionResource, ns strin
 		} else if u, ok := it.Object["usage"].(map[string]any); ok {
 			addUsage(u)
 		}
-		if !have {
+		if !haveCPU && !haveMem {
 			continue // no sample: unknown, not zero
 		}
 		at := timeAt(it.Object, "timestamp")
@@ -169,7 +173,14 @@ func (s *session) fetchMetrics(gvr, objGVR schema.GroupVersionResource, ns strin
 			out.Timestamp = at
 		}
 		out.Window = str(it.Object, "window")
-		out.Values[string(obj.GetUID())] = provider.Usage{CPU: cpu, Memory: mem, At: at}
+		u := provider.Usage{At: at}
+		if haveCPU {
+			u.CPU = provider.Num(cpu)
+		}
+		if haveMem {
+			u.Memory = provider.Num(mem)
+		}
+		out.Values[string(obj.GetUID())] = u
 	}
 	return out, nil
 }

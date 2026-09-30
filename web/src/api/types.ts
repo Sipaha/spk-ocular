@@ -308,9 +308,13 @@ export interface Resource {
   relationsTruncated?: boolean
 }
 
+/** CPU in cores, memory in bytes; absent — that metric is unknown. */
 export interface Usage {
-  cpu: number
-  memory: number
+  cpu?: number
+  memory?: number
+  /** A sum of which some parts did not answer: at least this much. */
+  cpuPartial?: boolean
+  memoryPartial?: boolean
   /** When the sample was taken. */
   at?: string
 }
@@ -318,6 +322,7 @@ export interface Usage {
 export interface MetricsView {
   /** "ok" or an error class: unsupported (no metrics API), forbidden, ... */
   status: string
+  /** With "ok": a note (only the first rows were asked for); else the error. */
   message?: string
   timestamp?: string
   window?: string

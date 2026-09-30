@@ -34,6 +34,49 @@ func (f *fakeAPI) SelectTarget(_ context.Context, provider, id string) error {
 	return nil
 }
 
+// metricsAPI answers GetMetrics once the request's context ends.
+type metricsAPI struct {
+	fakeAPI
+	rowIDs chan []string
+	ended  chan error
+}
+
+func (m *metricsAPI) GetMetrics(ctx context.Context, _ string, rowIDs []string) (api.MetricsView, error) {
+	m.rowIDs <- rowIDs
+	<-ctx.Done()
+	m.ended <- ctx.Err()
+	return api.MetricsView{}, ctx.Err()
+}
+
+// The page's rows reach GetMetrics, and the page abandoning the request
+// ends its context (the provider stops waiting).
+func TestGetMetricsTakesTheRowsAndEndsWithThePage(t *testing.T) {
+	m := &metricsAPI{rowIDs: make(chan []string, 1), ended: make(chan error, 1)}
+	h := NewHTTP(m, events.NewEmitter())
+	ts := httptest.NewServer(h)
+	defer ts.Close()
+	ctx, cancel := context.WithCancel(context.Background())
+	req, _ := http.NewRequestWithContext(ctx, http.MethodPost, ts.URL+"/api/GetMetrics", strings.NewReader(`{"viewId":"v1","rowIds":["a","b"]}`))
+	req.Header.Set("Authorization", "Bearer "+h.AuthToken())
+	req.Header.Set("Origin", ts.URL)
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		if resp, err := http.DefaultClient.Do(req); err == nil {
+			_ = resp.Body.Close()
+		}
+	}()
+	assert.Equal(t, []string{"a", "b"}, <-m.rowIDs)
+	cancel()
+	select {
+	case err := <-m.ended:
+		assert.ErrorIs(t, err, context.Canceled)
+	case <-time.After(5 * time.Second):
+		t.Fatal("the server kept waiting for a page that left")
+	}
+	<-done
+}
+
 func call(t *testing.T, h *HTTP, srvURL, method, body string) *http.Response {
 	t.Helper()
 	req, _ := http.NewRequest(http.MethodPost, srvURL+"/api/"+method, strings.NewReader(body))

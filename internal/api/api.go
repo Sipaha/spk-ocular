@@ -53,9 +53,12 @@ type API interface {
 	RecentObjects(ctx context.Context, provider, target string) ([]RecentObject, error)
 	// TouchRecent records a successful open of an object's details.
 	TouchRecent(ctx context.Context, req TouchRecentRequest) error
-	// GetMetrics: usage for the rows of an open view. Status is "ok" or an
-	// error class (unsupported = no metrics API) — never an empty success.
-	GetMetrics(ctx context.Context, viewID string) (MetricsView, error)
+	// GetMetrics: usage for rowIDs — the rows of an open view the page
+	// shows (ids not of the view are ignored; at most MaxMetricRows, more
+	// are cut and said). Status is "ok" or an error class (unsupported = no
+	// metrics API) — never an empty success. Ends with ctx (the page
+	// stopped waiting) or after 10 s.
+	GetMetrics(ctx context.Context, viewID string, rowIDs []string) (MetricsView, error)
 
 	// LogInfo: what logs an object has (channels = containers).
 	LogInfo(ctx context.Context, ref core.Ref) (core.LogInfo, error)

@@ -261,7 +261,13 @@ func (s *Service) GetResource(ctx context.Context, ref core.Ref) (*core.Resource
 	return r, nil
 }
 
-func (s *Service) GetMetrics(ctx context.Context, viewID string) (MetricsView, error) {
+// MaxMetricRows: the rows one metrics request asks for (a screenful).
+const MaxMetricRows = 100
+
+// metricsTimeout bounds a metrics request as a whole (a var for tests).
+var metricsTimeout = 10 * time.Second
+
+func (s *Service) GetMetrics(ctx context.Context, viewID string, rowIDs []string) (MetricsView, error) {
 	owner, q, rows, err := s.views.Info(viewID)
 	if errors.Is(err, views.ErrGone) {
 		return MetricsView{}, coded(CodeGone, err)
@@ -274,19 +280,52 @@ func (s *Service) GetMetrics(ctx context.Context, viewID string) (MetricsView, e
 	if !ok {
 		return MetricsView{Status: CodeUnsupported, Values: map[string]provider.Usage{}}, nil
 	}
-	m, err := src.Metrics(ctx, q)
+	// The asked rows that are the view's current rows (ids are
+	// incarnations), in the page's order, at most MaxMetricRows.
+	inView := make(map[string]bool, len(rows))
+	for _, r := range rows {
+		inView[r.ID] = true
+	}
+	asked := make([]string, 0, min(len(rowIDs), MaxMetricRows))
+	seen := map[string]bool{}
+	cut := false
+	for _, id := range rowIDs {
+		if !inView[id] || seen[id] {
+			continue
+		}
+		if len(asked) == MaxMetricRows {
+			cut = true
+			break
+		}
+		seen[id] = true
+		asked = append(asked, id)
+	}
+	if len(asked) == 0 {
+		return MetricsView{Status: "ok", Values: map[string]provider.Usage{}}, nil
+	}
+	ctx, cancel := context.WithTimeout(ctx, metricsTimeout)
+	defer cancel()
+	m, err := src.Metrics(ctx, q, asked)
 	if s.entryByOwner(owner) != e {
 		return MetricsView{}, coded(CodeGone, errors.New("session closed")) // retired while fetching
 	}
 	if err != nil {
 		ce := fromProvider(err)
+		if ctx.Err() != nil { // the provider gave up with the request
+			ce = &CodedError{Code: string(provider.ClassUnavailable), Detail: fmt.Sprintf("no usage within %s", metricsTimeout)}
+			if errors.Is(ctx.Err(), context.Canceled) {
+				ce.Detail = "the request was canceled"
+			}
+		}
 		return MetricsView{Status: ce.Code, Message: ce.Detail, Values: map[string]provider.Usage{}}, nil
 	}
 	out := MetricsView{Status: "ok", Timestamp: m.Timestamp, Window: m.Window, Values: map[string]provider.Usage{}}
-	// Values are keyed by row id (incarnation); keep the view's current rows.
-	for _, r := range rows {
-		if u, ok := m.Values[r.ID]; ok {
-			out.Values[r.ID] = u
+	if cut {
+		out.Message = fmt.Sprintf("usage of the first %d rows shown only", MaxMetricRows)
+	}
+	for _, id := range asked {
+		if u, ok := m.Values[id]; ok {
+			out.Values[id] = u
 		}
 	}
 	return out, nil
