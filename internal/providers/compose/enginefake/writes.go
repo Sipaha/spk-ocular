@@ -143,13 +143,13 @@ func (e *Engine) serveWrite(w http.ResponseWriter, r *http.Request, path string)
 			writeError(w, http.StatusBadRequest, "starting container with non-empty request body was deprecated since API v1.22 and removed in v1.24")
 			return true
 		}
-		e.containerAction(w, strings.TrimSuffix(rest, "/start"), "start")
+		e.containerAction(w, r, strings.TrimSuffix(rest, "/start"), "start")
 	case isCtr && r.Method == http.MethodPost && strings.HasSuffix(rest, "/stop"):
-		e.containerAction(w, strings.TrimSuffix(rest, "/stop"), "stop")
+		e.containerAction(w, r, strings.TrimSuffix(rest, "/stop"), "stop")
 	case isCtr && r.Method == http.MethodPost && strings.HasSuffix(rest, "/restart"):
-		e.containerAction(w, strings.TrimSuffix(rest, "/restart"), "restart")
+		e.containerAction(w, r, strings.TrimSuffix(rest, "/restart"), "restart")
 	case isCtr && r.Method == http.MethodDelete && !strings.Contains(rest, "/"):
-		e.containerAction(w, rest, "remove")
+		e.containerAction(w, r, rest, "remove")
 	default:
 		return false
 	}
@@ -393,8 +393,10 @@ func (e *Engine) serveStats(w http.ResponseWriter, r *http.Request, ref string) 
 }
 
 // containerAction does start/stop/restart/remove on the model and emits
-// the daemon's events.
-func (e *Engine) containerAction(w http.ResponseWriter, ref, action string) {
+// the daemon's events. A stop exits with 128 + the stop signal's number
+// (SIGKILL with t=0); an AutoRemove container is removed once stopped; a
+// paused one cannot be started (409).
+func (e *Engine) containerAction(w http.ResponseWriter, r *http.Request, ref, action string) {
 	c, ok := e.container(ref)
 	if !ok {
 		writeError(w, http.StatusNotFound, "No such container: "+ref)
@@ -404,6 +406,10 @@ func (e *Engine) containerAction(w http.ResponseWriter, ref, action string) {
 	var events []string
 	switch action {
 	case "start":
+		if c.State.Paused {
+			writeError(w, http.StatusConflict, "cannot start a paused container, try unpause instead")
+			return
+		}
 		if c.State.Running {
 			w.WriteHeader(http.StatusNotModified)
 			return
@@ -415,8 +421,21 @@ func (e *Engine) containerAction(w http.ResponseWriter, ref, action string) {
 			w.WriteHeader(http.StatusNotModified)
 			return
 		}
-		c.State = engine.ContainerState{Status: "exited", ExitCode: 143, StartedAt: c.State.StartedAt, FinishedAt: engine.TimeOf(now)}
+		code := 128 + signalNumber(c.Config.StopSignal)
+		if r.URL.Query().Get("t") == "0" {
+			code = 137
+		}
+		c.State = engine.ContainerState{Status: "exited", ExitCode: code, StartedAt: c.State.StartedAt, FinishedAt: engine.TimeOf(now)}
 		events = []string{"kill", "die", "stop"}
+		if c.HostConfig.AutoRemove {
+			e.RemoveContainer(c.ID)
+			e.EndLogs(c.ID)
+			for _, ev := range append(events, "destroy") {
+				e.Emit(containerActionEvent(ev, c))
+			}
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
 	case "restart":
 		c.State = engine.ContainerState{Status: "running", Running: true, StartedAt: engine.TimeOf(now), Health: c.State.Health}
 		events = []string{"die", "start", "restart"}
@@ -443,6 +462,25 @@ func (e *Engine) containerAction(w http.ResponseWriter, ref, action string) {
 		e.Emit(containerActionEvent(ev, c))
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// signalNumber of a stop signal ("" — SIGTERM; unknown ones as SIGTERM).
+func signalNumber(sig string) int {
+	switch strings.TrimPrefix(strings.ToUpper(sig), "SIG") {
+	case "HUP", "1":
+		return 1
+	case "INT", "2":
+		return 2
+	case "QUIT", "3":
+		return 3
+	case "KILL", "9":
+		return 9
+	case "USR1", "10":
+		return 10
+	case "USR2", "12":
+		return 12
+	}
+	return 15
 }
 
 func containerActionEvent(action string, c engine.ContainerInspect) engine.Event {

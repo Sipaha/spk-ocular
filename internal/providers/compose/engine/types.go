@@ -124,6 +124,10 @@ type ContainerConfig struct {
 	Image    string            `json:"Image"` // as asked (a reference)
 	Labels   map[string]string `json:"Labels"`
 	Tty      bool              `json:"Tty"` // logs: one raw stream, no stdcopy
+	// StopSignal: "" — the daemon's default (SIGTERM).
+	StopSignal string `json:"StopSignal,omitempty"`
+	// StopTimeout in seconds; nil — the daemon's default (10).
+	StopTimeout *int `json:"StopTimeout,omitempty"`
 }
 
 type HostConfig struct {
@@ -131,6 +135,8 @@ type HostConfig struct {
 	PortBindings  map[string][]PortBinding `json:"PortBindings"`
 	RestartPolicy RestartPolicy            `json:"RestartPolicy"`
 	LogConfig     LogConfig                `json:"LogConfig"`
+	// AutoRemove: the daemon removes the container once it stops.
+	AutoRemove bool `json:"AutoRemove"`
 }
 
 type PortBinding struct {

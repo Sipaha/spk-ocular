@@ -47,6 +47,9 @@ func (a *actionSession) RunAction(_ context.Context, run provider.ActionRun) (co
 	if h != nil {
 		h()
 	}
+	if r := a.o.result; r != nil {
+		return *r, nil
+	}
 	return core.ActionResult{Message: run.Action + " requested"}, nil
 }
 
@@ -61,6 +64,8 @@ type actionOpenable struct {
 	runs          []ranAction
 	duringPrepare func()
 	duringRun     func()
+	// result: what runs return (nil: done, \"<action> requested\")
+	result *core.ActionResult
 }
 
 func (o *actionOpenable) Open(ctx context.Context, target string) (provider.Session, error) {
@@ -178,6 +183,28 @@ func TestARunStaysOnTheSessionItWasCheckedAgainst(t *testing.T) {
 	runs := k.ran()
 	require.Len(t, runs, 1)
 	assert.Equal(t, "h1", runs[0].on.hash, "ran on the checked session")
+}
+
+// A run's own outcome is its result, not an error: a partial one keeps
+// its parts; a provider that says nothing has done it.
+func TestARunReportsItsOutcomeAndParts(t *testing.T) {
+	ctx := context.Background()
+	s, k := newActionService(t)
+	plan, err := s.PrepareAction(ctx, ActionRequest{Ref: deployRef, Action: "restart"})
+	require.NoError(t, err)
+	res, err := s.RunAction(ctx, runFor(plan, nil))
+	require.NoError(t, err)
+	assert.Equal(t, core.OutcomeDone, res.Outcome)
+
+	partial := core.ActionResult{Message: "1 of 3 restarted", Outcome: core.OutcomeUnknown, Parts: []core.ActionPart{
+		{ID: "a", Title: "web-1", Outcome: core.OutcomeDone},
+		{ID: "b", Title: "web-2", Outcome: core.OutcomeUnknown, Message: "no answer within 25s"},
+		{ID: "c", Title: "web-3", Outcome: core.OutcomeSkipped},
+	}}
+	k.result = &partial
+	res, err = s.RunAction(ctx, runFor(plan, nil))
+	require.NoError(t, err)
+	assert.Equal(t, partial, res)
 }
 
 // A session reaped and opened again with the same configuration keeps the

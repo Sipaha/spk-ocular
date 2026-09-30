@@ -101,6 +101,9 @@ func (s *Service) RunAction(ctx context.Context, req ActionRunRequest) (core.Act
 	if err != nil {
 		return core.ActionResult{}, fromProvider(err)
 	}
+	if res.Outcome == "" {
+		res.Outcome = core.OutcomeDone
+	}
 	return res, nil
 }
 

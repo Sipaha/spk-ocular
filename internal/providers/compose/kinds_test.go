@@ -50,7 +50,20 @@ func TestKindDescriptors(t *testing.T) {
 		assert.Empty(t, k.EventsKind, c.id)
 		assert.False(t, k.Hidden, c.id)
 		assert.Equal(t, c.id == KindServices || c.id == KindContainers, k.Exec, c.id)
-		assert.False(t, k.Forward || len(k.Actions) > 0, "P7: %s", c.id)
+		assert.False(t, k.Forward, c.id)
+		var acts []string
+		for _, a := range k.Actions {
+			acts = append(acts, a.ID)
+			assert.Equal(t, a.ID == "delete", a.Destructive, "%s %s", c.id, a.ID)
+		}
+		switch c.id {
+		case KindContainers:
+			assert.Equal(t, []string{"restart", "stop", "start", "delete"}, acts)
+		case KindServices:
+			assert.Equal(t, []string{"restart", "stop", "start"}, acts)
+		default:
+			assert.Empty(t, acts, c.id)
+		}
 		var ids []string
 		scopeCol := ""
 		for _, col := range k.Columns {

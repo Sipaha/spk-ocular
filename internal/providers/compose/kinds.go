@@ -31,7 +31,7 @@ func kindDescriptors() []core.KindDescriptor {
 		},
 		{
 			ID: KindServices, Title: "Services", Singular: "Service", Group: groupCompose,
-			Scoped: true, Default: true, Logs: true, Exec: true, Aliases: []string{"svc", "service"},
+			Scoped: true, Default: true, Logs: true, Exec: true, Aliases: []string{"svc", "service"}, Actions: serviceKindActions,
 			Columns: []core.Column{
 				{ID: "name", Title: "Name", Type: core.ColText},
 				projectColumn,
@@ -44,7 +44,7 @@ func kindDescriptors() []core.KindDescriptor {
 		},
 		{
 			ID: KindContainers, Title: "Containers", Singular: "Container", Group: groupCompose,
-			Scoped: true, Logs: true, Exec: true, Aliases: []string{"ct", "container"},
+			Scoped: true, Logs: true, Exec: true, Aliases: []string{"ct", "container"}, Actions: containerKindActions,
 			NotCovered: []string{msg("notCovered.unlabelled").Text},
 			Columns: []core.Column{
 				{ID: "name", Title: "Name", Type: core.ColText},

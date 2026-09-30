@@ -112,9 +112,36 @@ type ActionPlan struct {
 	Expect string `json:"expect"`
 }
 
+// ActionOutcome: what became of a run or of one of its parts.
+type ActionOutcome string
+
+const (
+	OutcomeDone ActionOutcome = "done"
+	// OutcomeRefused: the target refused it (nothing changed by it).
+	OutcomeRefused ActionOutcome = "refused"
+	// OutcomeUnknown: sent, the outcome is not known.
+	OutcomeUnknown ActionOutcome = "unknown"
+	// OutcomeSkipped: not run (an earlier part was refused or unknown).
+	OutcomeSkipped ActionOutcome = "skipped"
+)
+
 // ActionResult: the change was requested (its progress shows in views).
+// A run of several writes (a service's containers) reports each in Parts
+// and returns its result, not an error, once any write was sent: Outcome
+// is done only when every part is.
 type ActionResult struct {
-	Message string `json:"message"`
+	Message string        `json:"message"`
+	Outcome ActionOutcome `json:"outcome"`
+	Parts   []ActionPart  `json:"parts,omitempty"`
+}
+
+// ActionPart is one write of a run: its object (ID: the full id, Title:
+// its name), its outcome and why.
+type ActionPart struct {
+	ID      string        `json:"id"`
+	Title   string        `json:"title"`
+	Outcome ActionOutcome `json:"outcome"`
+	Message string        `json:"message,omitempty"`
 }
 
 // ErrNoAction: the kind has no such action.
