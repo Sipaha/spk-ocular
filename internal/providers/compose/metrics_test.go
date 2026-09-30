@@ -335,3 +335,42 @@ func TestMetricsEndWithTheCaller(t *testing.T) {
 	assert.ErrorIs(t, err, context.Canceled, "nothing read: the caller's end, not an empty success")
 	assert.Less(t, time.Since(t0), 2*time.Second)
 }
+
+// A caller that gave up gives its slots back, whichever way the wait ended.
+func TestMetricsGiveTheSlotsBack(t *testing.T) {
+	e := newTestEnv(t)
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	for range 200 {
+		_, err := e.s.sampleAll(ctx, []string{"a", "b", "c"})
+		assert.ErrorIs(t, err, context.Canceled)
+	}
+	assert.Zero(t, len(e.s.statsSlots), "no slot kept")
+	c := replica("aaaa1111", "p", "web", "1", "running")
+	e.fe.PutContainer(c)
+	m, err := e.s.Metrics(t.Context(), metricsQuery(KindContainers), []string{c.ID})
+	require.NoError(t, err)
+	assert.NotNil(t, m.Values[c.ID].CPU)
+}
+
+// The inspect proving the incarnation fails: with no value left the
+// failure is the answer, not an empty success.
+func TestMetricsInspectFailureIsSaid(t *testing.T) {
+	e := newTestEnv(t)
+	c := replica("aaaa1111", "p", "web", "1", "running")
+	e.fe.PutContainer(c)
+	_, err := e.s.Metrics(t.Context(), metricsQuery(KindContainers), []string{c.ID}) // the feed is read
+	require.NoError(t, err)
+	e.fe.SetStats(func(string, bool) []byte { return statsJSON(9e8, 1e8, 4e9, 2e9, 2, 0, nil) }) // CPU only
+	e.fe.AddHook(func(w http.ResponseWriter, r *http.Request, p string) bool {
+		if r.Method != http.MethodGet || p != "/containers/"+c.ID+"/json" {
+			return false
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusForbidden)
+		_, _ = io.WriteString(w, `{"message":"denied by plugin"}`)
+		return true
+	})
+	_, err = e.s.Metrics(t.Context(), metricsQuery(KindContainers), []string{c.ID})
+	assert.Equal(t, provider.ClassForbidden, errClass(err))
+}

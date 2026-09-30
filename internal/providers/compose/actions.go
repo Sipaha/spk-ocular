@@ -134,6 +134,13 @@ func actionExpect(action string, cs []*engine.ContainerInspect) string {
 	return hex.EncodeToString(sum[:12])
 }
 
+// removesOnStop: a stop of an AutoRemove container removes it (and its
+// anonymous volumes) — the plan is destructive. A restart does not (the
+// daemon keeps a manually restarted container).
+func removesOnStop(action string, c *engine.ContainerInspect) bool {
+	return action == actStop.ID && c.HostConfig.AutoRemove
+}
+
 // actionEffects: what action does to c (it can run).
 func actionEffects(action string, c *engine.ContainerInspect) []core.Message {
 	name, sig, t := containerName(c), stopSignal(c), stopTimeout(c)
@@ -175,8 +182,9 @@ func actionEffects(action string, c *engine.ContainerInspect) []core.Message {
 }
 
 // actionObjects are the containers ref names, read afresh: the container,
-// or the service's (listed by the containers feed, each inspected now; one
-// removed meanwhile is left out — the fingerprint tells).
+// or the service's — listed now by its labels (not from the feed, which
+// may not have seen a container created a moment ago) and each inspected
+// now; one removed meanwhile is left out (the fingerprint tells).
 func (s *session) actionObjects(ctx context.Context, ref core.Ref) ([]*engine.ContainerInspect, error) {
 	if ref.Kind == KindContainers {
 		c, err := s.container(ctx, ref)
@@ -185,12 +193,15 @@ func (s *session) actionObjects(ctx context.Context, ref core.Ref) ([]*engine.Co
 		}
 		return []*engine.ContainerInspect{c}, nil
 	}
-	listed, err := s.serviceMembers(ctx, ref)
-	if err != nil {
-		return nil, err
+	project, service, ok := strings.Cut(ref.Name, "/")
+	if !ok {
+		return nil, &provider.Error{Class: provider.ClassInvalid, Message: fmt.Sprintf("%q is not a service key (project/service)", ref.Name)}
 	}
-	project, service, _ := strings.Cut(ref.Name, "/")
-	out := make([]*engine.ContainerInspect, 0, len(listed))
+	listed, err := s.cl.ListContainers(ctx, engine.Filters{"label": {LabelProject + "=" + project, LabelService + "=" + service}})
+	if err != nil {
+		return nil, providerError(err)
+	}
+	objs := map[string]any{}
 	for _, m := range listed {
 		c, err := s.cl.InspectContainer(ctx, m.ID)
 		switch {
@@ -199,11 +210,11 @@ func (s *session) actionObjects(ctx context.Context, ref core.Ref) ([]*engine.Co
 		case err != nil:
 			return nil, providerError(err)
 		}
-		l := c.Config.Labels
-		if l[LabelProject] != project || l[LabelService] != service || l[LabelOneoff] == "True" {
-			continue
-		}
-		out = append(out, &c)
+		objs[c.ID] = &c
+	}
+	out := membersOf(objs, project, service) // not one-off, in replica order
+	if len(out) == 0 {
+		return nil, &provider.Error{Class: provider.ClassNotFound, Message: "the service has no containers"}
 	}
 	return out, nil
 }
@@ -248,6 +259,7 @@ func (s *session) PrepareAction(ctx context.Context, ref core.Ref, action string
 			return plan, nil
 		}
 		plan.Effects = actionEffects(action, c)
+		plan.Destructive = plan.Destructive || removesOnStop(action, c)
 		return plan, nil
 	}
 	project, service, _ := strings.Cut(ref.Name, "/")
@@ -262,6 +274,7 @@ func (s *session) PrepareAction(ctx context.Context, ref core.Ref, action string
 	}
 	for _, c := range on {
 		plan.Effects = append(plan.Effects, actionEffects(action, c)...)
+		plan.Destructive = plan.Destructive || removesOnStop(action, c)
 	}
 	plan.Effects = append(plan.Effects, left...)
 	return plan, nil

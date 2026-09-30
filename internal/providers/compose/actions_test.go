@@ -69,7 +69,7 @@ func TestStopPlanShowsTheContainersOwnStop(t *testing.T) {
 	assert.Equal(t, map[string]string{"name": "p-web-1", "signal": "SIGQUIT", "timeout": "30"}, plan.Effects[0].Params)
 	assert.Equal(t, []string{"act.noPrecondition"}, keys(plan.Warnings))
 	assert.Equal(t, core.RightsUnknown, plan.Rights.State)
-	assert.False(t, plan.Destructive)
+	assert.True(t, plan.Destructive, "an AutoRemove container is removed by the stop")
 	assert.Equal(t, c.ID, plan.Where.Ref.UID)
 	assert.Equal(t, "p-web-1", plan.Where.Ref.Title)
 	assert.Equal(t, e.s.cl.Endpoint(), plan.Where.Endpoint)
@@ -86,6 +86,7 @@ func TestStopPlanShowsTheContainersOwnStop(t *testing.T) {
 		plan, err := e.s.PrepareAction(t.Context(), ctrRef(c), "stop", core.ActionParams{})
 		require.NoError(t, err)
 		assert.Equal(t, []string{x.key}, keys(plan.Effects))
+		assert.False(t, plan.Destructive, "a plain stop removes nothing")
 		if x.key == "act.stop" {
 			assert.Equal(t, "10", plan.Effects[0].Params["timeout"], "the daemon's default")
 			assert.Equal(t, "SIGTERM", plan.Effects[0].Params["signal"])
@@ -95,6 +96,17 @@ func TestStopPlanShowsTheContainersOwnStop(t *testing.T) {
 	plan, err = e.s.PrepareAction(t.Context(), ctrRef(c), "restart", core.ActionParams{})
 	require.NoError(t, err)
 	assert.Equal(t, []string{"act.restart"}, keys(plan.Effects))
+
+	// a service with one AutoRemove member: its stop is destructive too
+	c.HostConfig.AutoRemove = true
+	e.fe.PutContainer(c)
+	e.fe.PutContainer(replica("bbbb2222", "p", "web", "2", "running"))
+	plan, err = e.s.PrepareAction(t.Context(), svcRef("p", "web"), "stop", core.ActionParams{})
+	require.NoError(t, err)
+	assert.True(t, plan.Destructive)
+	plan, err = e.s.PrepareAction(t.Context(), svcRef("p", "web"), "restart", core.ActionParams{})
+	require.NoError(t, err)
+	assert.False(t, plan.Destructive, "a restart keeps an AutoRemove container")
 }
 
 func TestActionsUnavailableInTheContainersState(t *testing.T) {
@@ -295,6 +307,20 @@ func TestServiceRunRefusesAChangedSet(t *testing.T) {
 		p, err := e.s.PrepareAction(t.Context(), svcRef("p", "web"), "restart", core.ActionParams{})
 		return err == nil && len(p.Effects) == 2
 	}, 5*time.Second, 20*time.Millisecond)
+	_, err = e.s.RunAction(t.Context(), runOf(plan, svcRef("p", "web")))
+	assert.Equal(t, provider.ClassConflict, errClass(err))
+	assert.Empty(t, writes(e))
+}
+
+// A container the service got before the run is a conflict even when the
+// feed has not seen it (the run lists the service anew).
+func TestServiceRunRefusesASetChangedUnseen(t *testing.T) {
+	e := newTestEnv(t)
+	one := replica("aaaa1111", "p", "web", "1", "running")
+	e.fe.PutContainer(one)
+	plan, err := e.s.PrepareAction(t.Context(), svcRef("p", "web"), "restart", core.ActionParams{})
+	require.NoError(t, err)
+	e.fe.PutContainer(replica("bbbb2222", "p", "web", "2", "running")) // no event
 	_, err = e.s.RunAction(t.Context(), runOf(plan, svcRef("p", "web")))
 	assert.Equal(t, provider.ClassConflict, errClass(err))
 	assert.Empty(t, writes(e))

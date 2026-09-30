@@ -211,12 +211,16 @@ func (s *session) sampleAll(ctx context.Context, ids []string) (map[string]sampl
 		}
 		mu.Unlock()
 	}
+ids:
 	for _, id := range ids {
 		select {
 		case s.statsSlots <- struct{}{}:
 		case <-ctx.Done():
+			fail(ctx.Err())
+			break ids
 		}
-		if ctx.Err() != nil {
+		if ctx.Err() != nil { // taken as ctx ended: given back
+			<-s.statsSlots
 			fail(ctx.Err())
 			break
 		}
@@ -230,7 +234,8 @@ func (s *session) sampleAll(ctx context.Context, ids []string) (map[string]sampl
 				fail(ctx.Err())
 			case err != nil:
 				fail(providerError(err))
-			case ok:
+			}
+			if ok {
 				mu.Lock()
 				out[id] = sm
 				mu.Unlock()
@@ -243,7 +248,8 @@ func (s *session) sampleAll(ctx context.Context, ids []string) (map[string]sampl
 
 // sampleOne reads a container's two-point sample; its CPU only when a
 // fresh inspect after it shows the running incarnation began before the
-// first point (else the two counters may be of two processes).
+// first point (else the two counters may be of two processes). A failed
+// inspect is returned with what is left of the sample (its memory).
 func (s *session) sampleOne(ctx context.Context, id string) (sample, bool, error) {
 	st, err := s.cl.ContainerStats(ctx, id, false)
 	switch {
@@ -258,6 +264,9 @@ func (s *session) sampleOne(ctx context.Context, id string) (sample, bool, error
 		if err != nil || !c.State.Running || !c.State.StartedAt.Before(st.PreRead) {
 			sm.cpu = nil
 			ok = sm.mem != nil
+		}
+		if err != nil && !engine.IsNotFound(err) {
+			return sm, ok, err
 		}
 	}
 	return sm, ok, nil
