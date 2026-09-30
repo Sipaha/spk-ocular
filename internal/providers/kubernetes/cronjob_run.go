@@ -162,11 +162,13 @@ type spentGrants struct {
 }
 
 // spend decides, as one step, whether g may send its Job now: not
-// expired (at this moment), not spent, room to remember it; then it is
-// spent — whatever the write's outcome.
-func (sg *spentGrants) spend(g runGrant, now time.Time) error {
+// expired, not spent, room to remember it; then it is spent — whatever the
+// write's outcome. The clock is read under the lock: a time sampled before
+// it could be older than a prune another spend already made.
+func (sg *spentGrants) spend(g runGrant, clock func() time.Time) error {
 	sg.mu.Lock()
 	defer sg.mu.Unlock()
+	now := clock()
 	exp := time.UnixMilli(g.Exp)
 	if !now.Before(exp) {
 		return &provider.Error{Class: provider.ClassConflict, Message: "the review of this run has expired; review it again"}
@@ -287,7 +289,7 @@ func (s *session) runNow(ctx context.Context, def *kindDef, run provider.ActionR
 	if err := ctx.Err(); err != nil {
 		return core.ActionResult{}, &provider.Error{Class: provider.ClassUnavailable, Message: "nothing was written: " + err.Error()}
 	}
-	if err := s.spent.spend(g, s.now()); err != nil {
+	if err := s.spent.spend(g, s.now); err != nil {
 		return core.ActionResult{}, err
 	}
 	wr := s.writer

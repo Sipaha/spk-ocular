@@ -420,3 +420,32 @@ func TestRunNowAnswers(t *testing.T) {
 		})
 	}
 }
+
+// The time a spend judges expiry by is read under the spent table's lock:
+// a replay that sampled the clock before another spend pruned its record
+// would otherwise look live and send a second Job.
+func TestRunNowSpendReadsTheClockUnderItsLock(t *testing.T) {
+	sg := &spentGrants{byNonce: map[string]time.Time{}}
+	t0 := time.Now()
+	g := runGrant{Nonce: "n1", Exp: t0.Add(runGrantTTL).UnixMilli()}
+	var held bool
+	clock := func() time.Time {
+		if sg.mu.TryLock() {
+			sg.mu.Unlock()
+		} else {
+			held = true
+		}
+		return t0
+	}
+	require.NoError(t, sg.spend(g, clock))
+	assert.True(t, held, "the clock was read inside the critical section")
+
+	// Past the expiry another spend prunes n1; a replay of n1 judged at the
+	// current time is expired, not unknown to the table.
+	later := func() time.Time { return t0.Add(runGrantTTL + time.Second) }
+	require.NoError(t, sg.spend(runGrant{Nonce: "n2", Exp: t0.Add(2 * runGrantTTL).UnixMilli()}, later))
+	_, kept := sg.byNonce["n1"]
+	require.False(t, kept, "pruned")
+	err := sg.spend(g, later)
+	assert.Equal(t, provider.ClassConflict, classOf(t, err))
+}
