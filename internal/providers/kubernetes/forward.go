@@ -35,7 +35,7 @@ func (s *session) ForwardInfo(ctx context.Context, ref core.Ref) (core.ForwardIn
 
 // forwardInfo reads the object once: its ports and the object itself.
 func (s *session) forwardInfo(ctx context.Context, ref core.Ref) (core.ForwardInfo, *unstructured.Unstructured, error) {
-	def := s.kinds.byID[ref.Kind]
+	def := s.kind(ref.Kind)
 	if def != podsKind && def != servicesKind && !logWorkloads[def] {
 		return core.ForwardInfo{}, nil, &provider.Error{Class: provider.ClassUnsupported, Message: fmt.Sprintf("ports of %s cannot be forwarded", ref.Kind)}
 	}
@@ -186,7 +186,7 @@ func (s *session) PrepareForward(ctx context.Context, ref core.Ref, req provider
 	case !found && !info.AnyPort:
 		return nil, invalid("%s has no port %d", ref.Name, req.Port)
 	}
-	def := s.kinds.byID[ref.Kind]
+	def := s.kind(ref.Kind)
 	return &forwardHandle{conn: s.conn, def: def, ref: ref, ns: u.GetNamespace(), name: u.GetName(), uid: u.GetUID(), port: req.Port,
 		dialer: &forwardDialer{c: s.conn, deadAfter: pfDeadAfter, ws: true}}, nil
 }

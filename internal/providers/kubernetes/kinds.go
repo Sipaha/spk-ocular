@@ -27,6 +27,12 @@ type kindDef struct {
 	project func(u *unstructured.Unstructured, now time.Time) (cells []core.Cell, h core.Health, next time.Time)
 	// virtual: a view made of other kinds (Problems), not an API resource.
 	virtual bool
+	// discovered: a served resource without a described projection (P8);
+	// kind is its API Kind, verbs its discovery verbs, actions what it offers.
+	discovered bool
+	kind       string
+	verbs      []string
+	actions    []core.ActionDescriptor
 }
 
 // fields is a whitelist tree: true keeps a value whole; a nested fields
@@ -131,9 +137,13 @@ func (r *kindRegistry) descriptors() []core.KindDescriptor {
 	out := make([]core.KindDescriptor, 0, len(r.list))
 	for _, d := range r.list {
 		desc := d.desc
-		desc.Actions = kindActions[d]
-		desc.Aliases = kindAliases[d]
-		desc.Singular = kindSingular[d]
+		if !d.discovered {
+			desc.Actions = kindActions[d]
+			desc.Aliases = kindAliases[d]
+			desc.Singular = kindSingular[d]
+		} else {
+			desc.Actions = d.actions
+		}
 		desc.Default = d == podsKind
 		if d != eventsKind {
 			desc.EventsKind = eventsKind.desc.ID

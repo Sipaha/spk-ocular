@@ -55,7 +55,11 @@ var kindActions = map[*kindDef][]core.ActionDescriptor{
 }
 
 func (d *kindDef) action(id string) (core.ActionDescriptor, bool) {
-	for _, a := range kindActions[d] {
+	acts := kindActions[d]
+	if d.discovered {
+		acts = d.actions
+	}
+	for _, a := range acts {
 		if a.ID == id {
 			return a, true
 		}
@@ -67,7 +71,7 @@ var _ provider.Actioner = (*session)(nil)
 
 // actionTarget resolves and checks what an action names.
 func (s *session) actionTarget(ref core.Ref, action string, p core.ActionParams, final bool) (*kindDef, core.ActionDescriptor, error) {
-	def := s.kinds.byID[ref.Kind]
+	def := s.kind(ref.Kind)
 	if def == nil {
 		return nil, core.ActionDescriptor{}, &provider.Error{Class: provider.ClassUnsupported, Message: fmt.Sprintf("unknown kind %q", ref.Kind)}
 	}

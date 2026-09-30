@@ -50,8 +50,10 @@ type KindDescriptor struct {
 	// plural of the navigation).
 	Singular string `json:"singular,omitempty"`
 	// Group is the navigation group ("Workloads", "Network", ...).
-	Group   string   `json:"group"`
-	Columns []Column `json:"columns"`
+	Group string `json:"group"`
+	// Subgroup, if any, is a collapsible level inside the group (its label).
+	Subgroup string   `json:"subgroup,omitempty"`
+	Columns  []Column `json:"columns"`
 	// Scoped: objects live in a scope (namespace / compose project).
 	Scoped bool `json:"scoped"`
 	// Hidden kinds are not in the navigation but can be opened (a

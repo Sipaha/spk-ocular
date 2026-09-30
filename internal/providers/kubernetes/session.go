@@ -97,6 +97,12 @@ func sessionFor(cfg *rest.Config, target, title, hash string) (*session, error) 
 	}
 	sess := newSession(target, hash, dyn, true)
 	sess.conn = newConn(cfg, dyn, target, title, hash)
+	get, err := httpGetter(cfg)
+	if err != nil {
+		sess.Close()
+		return nil, err
+	}
+	sess.startCatalog(get)
 	if sess.logs, err = httpLogFetcher(cfg); err != nil {
 		sess.Close()
 		return nil, err
@@ -144,11 +150,12 @@ type session struct {
 	ctx    context.Context
 	cancel context.CancelFunc
 
-	target  string
-	hash    string
-	dyn     dynamic.Interface
-	caches  *cacheManager
-	kinds   *kindRegistry
+	target string
+	hash   string
+	dyn    dynamic.Interface
+	caches *cacheManager
+	// cat holds the kinds the session offers (described + discovered).
+	cat     *catalog
 	now     func() time.Time
 	metrics metricsCache
 	logs    logFetcher    // nil: no logs (tests without a server)
@@ -166,17 +173,30 @@ type session struct {
 
 func newSession(target, hash string, dyn dynamic.Interface, watchList bool) *session {
 	ctx, cancel := context.WithCancel(context.Background())
-	return &session{
-		ctx: ctx, cancel: cancel, target: target, hash: hash, dyn: dyn, caches: newCacheManager(dyn, watchList), kinds: allKinds, now: time.Now, problemSources: problemSources,
+	s := &session{
+		ctx: ctx, cancel: cancel, target: target, hash: hash, dyn: dyn, caches: newCacheManager(dyn, watchList), now: time.Now, problemSources: problemSources,
 		conn: newConn(&rest.Config{Host: "https://cluster.invalid"}, dyn, target, target, hash),
 	}
+	s.cat = newCatalog(ctx, allKinds, nil)
+	return s
 }
+
+// startCatalog makes the session discover what the API serves beyond the
+// described kinds (in the background: Kinds never waits for it).
+func (s *session) startCatalog(get getter) {
+	s.cat = newCatalog(s.ctx, allKinds, get)
+	s.cat.refresh()
+}
+
+// kind is the current catalog's kind with that id (nil: none).
+func (s *session) kind(id string) *kindDef { return s.cat.snap().reg.byID[id] }
 
 func (s *session) ConfigHash() string           { return s.hash }
 func (s *session) ScopeKind() string            { return namespacesKind.desc.ID }
-func (s *session) Kinds() []core.KindDescriptor { return s.kinds.descriptors() }
+func (s *session) Kinds() []core.KindDescriptor { return s.cat.snap().reg.descriptors() }
 func (s *session) Close() {
 	s.cancel()
+	s.cat.wait()
 	s.caches.closeAll()
 }
 
@@ -197,7 +217,7 @@ func (s *session) Scopes(ctx context.Context) ([]core.Scope, error) {
 }
 
 func (s *session) Watch(q provider.Query, sink provider.Sink) (func(), error) {
-	def := s.kinds.byID[q.Kind]
+	def := s.kind(q.Kind)
 	switch {
 	case def == nil:
 		return nil, &provider.Error{Class: provider.ClassUnsupported, Message: fmt.Sprintf("unknown kind %q", q.Kind)}

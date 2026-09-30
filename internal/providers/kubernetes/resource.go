@@ -32,7 +32,7 @@ const maxRelated = 200
 // relations. Relations are best effort: a denied or slow relation lookup is
 // reported in RelationsError and never fails the resource itself.
 func (s *session) Get(ctx context.Context, ref core.Ref) (*core.Resource, error) {
-	def := s.kinds.byID[ref.Kind]
+	def := s.kind(ref.Kind)
 	if def == nil || def.virtual {
 		return nil, &provider.Error{Class: provider.ClassUnsupported, Message: fmt.Sprintf("unknown kind %q", ref.Kind)}
 	}

@@ -63,7 +63,7 @@ func expectNow(t *testing.T, s *session, ref core.Ref, action string, p core.Act
 	t.Helper()
 	u, err := s.getObject(context.Background(), ref)
 	require.NoError(t, err)
-	return actionExpect(s.kinds.byID[ref.Kind], action, p, u)
+	return actionExpect(s.kind(ref.Kind), action, p, u)
 }
 
 func writes(c *dynamicfake.FakeDynamicClient) []k8stesting.Action {

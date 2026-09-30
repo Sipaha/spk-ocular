@@ -162,7 +162,7 @@ func (s *session) ExecInfo(ctx context.Context, ref core.Ref) (core.ExecInfo, er
 // execPods: ref itself for a pod (UID-checked); a workload's running,
 // not deleting pods in preference order.
 func (s *session) execPods(ctx context.Context, ref core.Ref) ([]*unstructured.Unstructured, error) {
-	def := s.kinds.byID[ref.Kind]
+	def := s.kind(ref.Kind)
 	if def == podsKind {
 		u, err := s.getObject(ctx, ref)
 		if err != nil {
@@ -421,7 +421,7 @@ func (s *session) explicitInstance(ctx context.Context, ref core.Ref, instance s
 	if !ok || name == "" || uid == "" {
 		return nil, invalid("bad instance %q", instance)
 	}
-	def := s.kinds.byID[ref.Kind]
+	def := s.kind(ref.Kind)
 	switch {
 	case def == podsKind:
 		if name != ref.Name || (ref.UID != "" && uid != ref.UID) {

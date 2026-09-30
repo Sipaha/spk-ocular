@@ -27,7 +27,7 @@ func (s *session) LogInfo(ctx context.Context, ref core.Ref) (core.LogInfo, erro
 	if err != nil {
 		return core.LogInfo{}, err
 	}
-	return logInfoOf(s.kinds.byID[ref.Kind], u)
+	return logInfoOf(s.kind(ref.Kind), u)
 }
 
 func logInfoOf(def *kindDef, u *unstructured.Unstructured) (core.LogInfo, error) {
@@ -67,7 +67,7 @@ func init() {
 
 // getObject GETs ref's object and checks its UID.
 func (s *session) getObject(ctx context.Context, ref core.Ref) (*unstructured.Unstructured, error) {
-	def := s.kinds.byID[ref.Kind]
+	def := s.kind(ref.Kind)
 	if def == nil || def.virtual {
 		return nil, &provider.Error{Class: provider.ClassUnsupported, Message: fmt.Sprintf("unknown kind %q", ref.Kind)}
 	}
@@ -125,7 +125,7 @@ func (s *session) StreamLogs(ctx context.Context, ref core.Ref, q provider.LogQu
 	if s.logs == nil {
 		return &provider.Error{Class: provider.ClassUnsupported, Message: "logs are not available for this context"}
 	}
-	switch def := s.kinds.byID[ref.Kind]; {
+	switch def := s.kind(ref.Kind); {
 	case def == podsKind:
 		return s.streamPod(ctx, ref, q, sink)
 	case logWorkloads[def]:
