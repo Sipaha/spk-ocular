@@ -153,6 +153,7 @@ export function Workspace({ client, hub, target }: { client: Client; hub: ViewHu
   const actionsOf = useCallback((kindId: string) => kinds?.find((k) => k.id === kindId)?.actions ?? [], [kinds])
   const eventsKindOf = useCallback((kindId: string) => kinds?.find((k) => k.id === kindId)?.eventsKind, [kinds])
   const editableOf = useCallback((kindId: string) => !!kinds?.find((k) => k.id === kindId)?.editable, [kinds])
+  const valuesOf = useCallback((kindId: string) => !!kinds?.find((k) => k.id === kindId)?.values, [kinds])
   const kindTitleOf = useCallback((kindId: string) => ((k) => k?.singular ?? k?.title ?? kindId)(kinds?.find((k) => k.id === kindId)), [kinds])
   const [actionReq, setActionReq] = useState<(ActionRequest & { seq: number }) | null>(null)
   const actionSeq = useRef(0)
@@ -346,6 +347,7 @@ export function Workspace({ client, hub, target }: { client: Client; hub: ViewHu
             onAction={openAction}
             eventsKindOf={eventsKindOf}
             editableOf={editableOf}
+            valuesOf={valuesOf}
             kindTitleOf={kindTitleOf}
             filterReq={filterReq}
             openReq={openReq}
@@ -530,11 +532,12 @@ function ResourcePage(props: {
   onAction: (ref: Ref, action: ActionDescriptor) => void
   eventsKindOf: (kindId: string) => string | undefined
   editableOf: (kindId: string) => boolean
+  valuesOf: (kindId: string) => boolean
   kindTitleOf: (kindId: string) => string
   filterReq?: PageReq<string> | null
   openReq?: PageReq<Ref> | null
 }) {
-  const { pageKey, onHalted, client, hub, target, kind, scope, scopes, onScope, hasLogs, onLogs, hasExec, onTerminal, hasForward, actionsOf, onAction, eventsKindOf, editableOf, kindTitleOf, filterReq, openReq } = props
+  const { pageKey, onHalted, client, hub, target, kind, scope, scopes, onScope, hasLogs, onLogs, hasExec, onTerminal, hasForward, actionsOf, onAction, eventsKindOf, editableOf, valuesOf, kindTitleOf, filterReq, openReq } = props
   const scopeKey = JSON.stringify(scope)
   const query = useMemo(() => ({ kind: kind.id, scope: JSON.parse(scopeKey) as ScopeSel }), [kind.id, scopeKey])
   const view = useView(hub, target.provider, target.id, query)
@@ -657,6 +660,7 @@ function ResourcePage(props: {
             onAction={onAction}
             eventsKindOf={eventsKindOf}
             editableOf={editableOf}
+            valuesOf={valuesOf}
             kindTitleOf={kindTitleOf}
           />
         )}

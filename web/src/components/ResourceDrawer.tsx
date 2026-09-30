@@ -10,6 +10,7 @@ import { inTerminal } from '../keyboard'
 import { consumed, focusMark, isTyping, overlayOpen, restoreFocus } from '../shortcuts'
 import { refTitle } from '../refs'
 import { PortsSection } from '../tunnels/Ports'
+import { ValuesSection } from '../values/ValuesSection'
 import { useView } from '../views/useView'
 import type { ViewHub } from '../views/viewSync'
 import { HealthDot, ResourceTable, healthText } from './ResourceTable'
@@ -36,6 +37,8 @@ interface Props {
   eventsKindOf?: (kindId: string) => string | undefined
   /** Objects of the kind can be edited as text (KindDescriptor.editable). */
   editableOf?: (kindId: string) => boolean
+  /** Objects of the kind keep protected values by key (KindDescriptor.values). */
+  valuesOf?: (kindId: string) => boolean
   /** The kind's name for one object (the review names it). */
   kindTitleOf?: (kindId: string) => string
 }
@@ -52,7 +55,7 @@ const errDetail = (e: unknown) => (e instanceof ApiError ? e.detail || e.code : 
 
 type Tab = 'details' | 'yaml'
 
-export function ResourceDrawer({ client, hub, target, subject, onClose, hasLogs, onLogs, hasExec, onTerminal, hasForward, actionsOf, onAction, eventsKindOf, editableOf, kindTitleOf }: Props) {
+export function ResourceDrawer({ client, hub, target, subject, onClose, hasLogs, onLogs, hasExec, onTerminal, hasForward, actionsOf, onAction, eventsKindOf, editableOf, valuesOf, kindTitleOf }: Props) {
   const [stack, setStack] = useState<Ref[]>([subject])
   const [tab, setTab] = useState<Tab>('details')
   const [res, setRes] = useState<{ key: string; r?: Resource; error?: string; gone?: boolean } | null>(null)
@@ -372,6 +375,11 @@ export function ResourceDrawer({ client, hub, target, subject, onClose, hasLogs,
             r={r}
             onGo={go}
             eventsKind={eventsKindOf?.(current.kind)}
+            // Keyed by the object: its values never show for another one.
+            values={
+              valuesOf?.(current.kind) &&
+              r.ref.uid && <ValuesSection key={key} client={client} subject={{ ...r.ref, provider: target.provider, target: target.id }} revision={revision} kindTitle={kindTitleOf?.(current.kind) ?? current.kind} />
+            }
             // Right under the facts: the events list below is a fixed-height box.
             ports={hasForward?.(current.kind) && <PortsSection key={key} client={client} subject={{ ...r.ref, provider: target.provider, target: target.id }} />}
           />
@@ -395,8 +403,8 @@ export function ResourceDrawer({ client, hub, target, subject, onClose, hasLogs,
   )
 }
 
-function Details(props: { client: Client; hub: ViewHub; target: { provider: string; id: string }; r: Resource; onGo: (ref: Ref) => void; eventsKind?: string; ports?: ReactNode }) {
-  const { hub, target, r, onGo, eventsKind, ports } = props
+function Details(props: { client: Client; hub: ViewHub; target: { provider: string; id: string }; r: Resource; onGo: (ref: Ref) => void; eventsKind?: string; ports?: ReactNode; values?: ReactNode }) {
+  const { hub, target, r, onGo, eventsKind, ports, values } = props
   const groups = useMemo(() => {
     const m = new Map<string, Relation[]>()
     for (const rel of r.relations ?? []) m.set(rel.type, [...(m.get(rel.type) ?? []), rel])
@@ -423,6 +431,7 @@ function Details(props: { client: Client; hub: ViewHub; target: { provider: stri
           </div>
         ))}
       </dl>
+      {values}
       {ports}
       {(groups.length > 0 || r.relationsError) && (
         <section aria-label={t('drawer.related')}>

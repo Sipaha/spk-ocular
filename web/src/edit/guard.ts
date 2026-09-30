@@ -1,6 +1,7 @@
-// Unsaved edits are never lost silently. The one open editor holds them;
-// whatever would drop it (closing the details, another object, tab, view or
-// target) goes through mayLeave, which asks first (DiscardPrompt).
+// Unsaved edits are never lost silently. Open editors hold them (the YAML
+// editor and a value dialog may both be open); whatever would drop them
+// (closing the details, another object, tab, view or target) goes through
+// mayLeave, which asks first (DiscardPrompt).
 import { useSyncExternalStore } from 'react'
 
 export interface EditHolder {
@@ -17,21 +18,24 @@ interface Pending {
   stay?: () => void
 }
 
-let holder: EditHolder | null = null
+// Replaced, never changed in place: its identity is useEditHolder's snapshot.
+let holders: readonly EditHolder[] = []
 let pending: Pending | null = null
 const listeners = new Set<() => void>()
 const emit = () => listeners.forEach((l) => l())
 
+const anyDirty = () => holders.some((h) => h.dirty())
+
 /** The editor holds its edits until the returned release is called. */
 export function holdEdits(h: EditHolder): () => void {
-  holder = h
+  holders = [...holders, h]
   emit()
   return () => {
-    if (holder !== h) return
-    holder = null
+    if (!holders.includes(h)) return
+    holders = holders.filter((x) => x !== h)
     emit()
-    if (pending) {
-      // The editor went on its own (its object was deleted, say): nothing to ask.
+    if (pending && !anyDirty()) {
+      // The editors went on their own (the object was deleted, say): nothing to ask.
       const p = pending
       pending = null
       emit()
@@ -44,14 +48,14 @@ export function holdEdits(h: EditHolder): () => void {
 export const leaveAsked = () => pending !== null
 
 /** Unsaved edits are held now. */
-export const editsHeld = () => !!holder?.dirty()
+export const editsHeld = anyDirty
 
 /**
  * Runs go now when no edits would be lost; else asks, and runs go only if
  * the user discards them (stay, if given, when they keep editing).
  */
 export function mayLeave(go: () => void, stay?: () => void): void {
-  if (!holder?.dirty()) {
+  if (!anyDirty()) {
     go()
     return
   }
@@ -61,14 +65,14 @@ export function mayLeave(go: () => void, stay?: () => void): void {
   emit()
 }
 
-/** The prompt's answer: drop the edits and go on. */
+/** The prompt's answer: drop the edits (of every editor) and go on. */
 export function discardEdits() {
   const p = pending
-  const h = holder
+  const hs = holders
   pending = null
-  holder = null
+  holders = []
   emit()
-  h?.discard()
+  for (const h of hs) h.discard()
   p?.go()
 }
 
@@ -78,7 +82,9 @@ export function keepEditing() {
   pending = null
   emit()
   p?.stay?.()
-  holder?.focus?.()
+  // The latest editor with edits: the one the question was about.
+  const latest = [...holders].reverse().find((h) => h.dirty())
+  latest?.focus?.()
 }
 
 const subscribe = (l: () => void) => {
@@ -86,16 +92,16 @@ const subscribe = (l: () => void) => {
   return () => listeners.delete(l)
 }
 
-/** The editor holding edits now (changes when one starts or ends; its
+/** The editors holding edits now (changes when one starts or ends; their
  * edits may be clean): what waits for edits re-checks editsHeld on change. */
-export const useEditHolder = () => useSyncExternalStore(subscribe, () => holder)
+export const useEditHolder = () => useSyncExternalStore(subscribe, () => holders)
 
 /** The prompt is asked now. */
 export const useLeaveAsked = () => useSyncExternalStore(subscribe, () => pending !== null)
 
 /** Tests: nothing held, nothing asked. */
 export function resetGuard() {
-  holder = null
+  holders = []
   pending = null
   emit()
 }
