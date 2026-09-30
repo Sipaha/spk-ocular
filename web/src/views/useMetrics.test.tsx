@@ -1,8 +1,8 @@
 import { act, renderHook } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Client } from '../api/client'
-import type { MetricsView } from '../api/types'
-import { METRICS_ABSENT_RETRY_MS, METRICS_INTERVAL_MS, METRICS_KEEP_MS, METRICS_SETTLE_MS, useMetrics } from './useMetrics'
+import type { MetricsView, Row } from '../api/types'
+import { METRICS_ABSENT_RETRY_MS, METRICS_INTERVAL_MS, METRICS_KEEP_MS, METRICS_SETTLE_MS, metricsState, useMetrics } from './useMetrics'
 
 beforeEach(() => vi.useFakeTimers())
 afterEach(() => {
@@ -149,6 +149,66 @@ describe('useMetrics', () => {
     expect(result.current).toEqual(ok({ a: { cpu: 3 } }))
   })
 
+  it('a row whose state changed loses its value at once and is asked for again', async () => {
+    const m = slowMetrics()
+    const { result, rerender } = renderHook(({ states }) => useMetrics(m.client, 'v1', true, ['a', 'b'], states), {
+      initialProps: { states: ['ok', 'ok'] },
+    })
+    await act(async () => {})
+    await m.answer(0, ok({ a: { cpu: 1 }, b: { cpu: 2 } }))
+    rerender({ states: ['error', 'ok'] }) // a stopped
+    await act(async () => vi.advanceTimersByTimeAsync(METRICS_SETTLE_MS + 10))
+    expect(result.current?.values).toEqual({ b: { cpu: 2 } }) // not a's sample of when it ran
+    expect(m.calls).toHaveLength(2) // not in 15 s
+    await m.answer(1, ok({ b: { cpu: 3 } }))
+    expect(result.current?.values).toEqual({ b: { cpu: 3 } })
+    rerender({ states: ['error', 'ok'] }) // the same states: nothing new to ask
+    await act(async () => vi.advanceTimersByTimeAsync(METRICS_SETTLE_MS + 10))
+    expect(m.calls).toHaveLength(2)
+  })
+
+  it('a row without a value that changed state (started) is asked for at once', async () => {
+    const m = slowMetrics()
+    const { result, rerender } = renderHook(({ states }) => useMetrics(m.client, 'v1', true, ['a', 'b'], states), {
+      initialProps: { states: ['error', 'ok'] },
+    })
+    await act(async () => {})
+    await m.answer(0, ok({ b: { cpu: 2 } })) // a is stopped: no usage
+    rerender({ states: ['ok', 'ok'] }) // a started
+    await act(async () => vi.advanceTimersByTimeAsync(METRICS_SETTLE_MS + 10))
+    expect(m.calls).toHaveLength(2)
+    await m.answer(1, ok({ a: { cpu: 1 }, b: { cpu: 2 } }))
+    expect(result.current?.values).toEqual({ a: { cpu: 1 }, b: { cpu: 2 } })
+  })
+
+  it('a row that started while asked for is asked for again after the answer', async () => {
+    const m = slowMetrics()
+    const { rerender } = renderHook(({ states }) => useMetrics(m.client, 'v1', true, ['a'], states), {
+      initialProps: { states: ['error'] },
+    })
+    await act(async () => {})
+    rerender({ states: ['ok'] })
+    await act(async () => vi.advanceTimersByTimeAsync(METRICS_SETTLE_MS + 10))
+    await m.answer(0, ok({})) // read while it was stopped
+    expect(m.calls).toHaveLength(2)
+  })
+
+  it('an answer asked for before a row changed state is not shown for it; the row is asked for again', async () => {
+    const m = slowMetrics()
+    const { result, rerender } = renderHook(({ states }) => useMetrics(m.client, 'v1', true, ['a', 'b'], states), {
+      initialProps: { states: ['ok', 'ok'] },
+    })
+    await act(async () => {})
+    rerender({ states: ['error', 'ok'] }) // while the first request is in flight
+    await act(async () => vi.advanceTimersByTimeAsync(METRICS_SETTLE_MS + 10))
+    expect(m.calls).toHaveLength(1)
+    await m.answer(0, ok({ a: { cpu: 1 }, b: { cpu: 2 } }))
+    expect(result.current?.values).toEqual({ b: { cpu: 2 } })
+    expect(m.calls).toHaveLength(2)
+    await m.answer(1, ok({ b: { cpu: 2 } }))
+    expect(result.current?.values).toEqual({ b: { cpu: 2 } })
+  })
+
   it('values older than METRICS_KEEP_MS are not shown after a long hide', async () => {
     const m = slowMetrics()
     const { result } = renderHook(() => useMetrics(m.client, 'v1', true, ['a']))
@@ -161,5 +221,23 @@ describe('useMetrics', () => {
     await act(async () => document.dispatchEvent(new Event('visibilitychange')))
     expect(m.calls).toHaveLength(2)
     expect(result.current?.values).toEqual({}) // not the 10-minute-old sample while asking again
+  })
+})
+
+describe('metricsState', () => {
+  const row = (running: string, age: number, health: Row['health']['state'] = 'error'): Row => ({
+    id: 'p/logger',
+    ref: { provider: 'compose', target: 't', kind: 'services', name: 'p/logger' },
+    cells: [{ text: 'logger' }, { text: running }, { text: 'Exited' }, { num: 0 }, { time: age }, {}, {}],
+    health: { state: health },
+  })
+
+  it('changes when a service loses its last running replica under the same health', () => {
+    expect(metricsState(row('1/2', 1))).not.toBe(metricsState(row('0/2', 1)))
+  })
+
+  it('does not change with time alone', () => {
+    expect(metricsState(row('1/2', 1))).toBe(metricsState(row('1/2', 2)))
+    expect(metricsState(row('1/2', 1, 'ok'))).not.toBe(metricsState(row('1/2', 1)))
   })
 })

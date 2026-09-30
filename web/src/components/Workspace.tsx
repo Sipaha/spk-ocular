@@ -7,7 +7,7 @@ import { showNotice } from '../store'
 import { useScopeWords } from '../scopeNames'
 import { ActionDialog, type ActionRequest } from '../actions/ActionDialog'
 import type { MenuItem } from '../actions/Menu'
-import { useMetrics } from '../views/useMetrics'
+import { metricsState, useMetrics } from '../views/useMetrics'
 import { useView } from '../views/useView'
 import type { ViewHub } from '../views/viewSync'
 import { ResourceDrawer } from './ResourceDrawer'
@@ -292,7 +292,11 @@ function ResourcePage(props: {
   useEffect(() => lend('rows', view.rows), [view.rows])
   const columns = view.kind?.columns ?? kind.columns
   const [visibleRows, setVisibleRows] = useState<string[]>([])
-  const metrics = useMetrics(client, view.viewId, columns.some((c) => c.metric), visibleRows)
+  // A sample of a row since changed (a service's last replica stopped) is
+  // not shown as current.
+  const stateOf = useMemo(() => new Map(view.rows.map((r) => [r.id, metricsState(r)])), [view.rows])
+  const visibleStates = visibleRows.map((id) => stateOf.get(id) ?? '')
+  const metrics = useMetrics(client, view.viewId, columns.some((c) => c.metric), visibleRows, visibleStates)
   // What a row offers is its object's kind's (a Problems row is a pod, a
   // deployment, an event…), not the table's.
   const deleteOf = (r: Row) => actionsOf(r.ref.kind).find((a) => a.id === 'delete')
