@@ -181,7 +181,10 @@ func (s *session) probeRoute(ctx context.Context, def *kindDef, ns string, o met
 	if err != nil {
 		return nil, err
 	}
-	if !table {
+	if !table { // evidence: the plain format for the rest of the session
+		s.schemas.mu.Lock()
+		s.setPlainLocked(def.gvr)
+		s.schemas.mu.Unlock()
 		return newTableSchema(def, 0, false, nil, nil), nil
 	}
 	var crd crdColumns
@@ -332,16 +335,33 @@ func (s *session) endViews(match func(*viewWatch) bool, class provider.ErrorClas
 }
 
 // tablesUnsupported: old's resource showed it does not serve Tables (a
-// 406 or a plain list to a Table list or watch). The plain format sticks
-// for the session; old's epoch ends and its views open again in it.
-func (s *session) tablesUnsupported(old *tableSchema) {
+// 406 or a plain list to a Table list or watch, in the stream too).
+func (s *session) tablesUnsupported(old *tableSchema) { s.markPlain(old.gvr) }
+
+// markPlain: gvr showed it does not serve Tables. The plain format sticks
+// for the session (recorded even without an epoch); a Table probe in
+// flight is fenced, a Table epoch ends and its views open again plain.
+func (s *session) markPlain(gvr schema.GroupVersionResource) {
 	s.schemas.mu.Lock()
+	s.setPlainLocked(gvr)
+	var cur *tableSchema
+	if e := s.schemas.by[gvr]; e != nil {
+		if e.probe != nil {
+			e.gen++
+		}
+		cur = e.cur
+	}
+	s.schemas.mu.Unlock()
+	if cur != nil && cur.table {
+		s.schemaChanged(cur)
+	}
+}
+
+func (s *session) setPlainLocked(gvr schema.GroupVersionResource) {
 	if s.schemas.plain == nil {
 		s.schemas.plain = map[schema.GroupVersionResource]bool{}
 	}
-	s.schemas.plain[old.gvr] = true
-	s.schemas.mu.Unlock()
-	s.schemaChanged(old)
+	s.schemas.plain[gvr] = true
 }
 
 // revalidate checks the schemas in use again (a CRD changed, F5): one whose

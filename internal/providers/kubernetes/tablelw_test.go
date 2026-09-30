@@ -394,3 +394,27 @@ func TestTableListWatchTellsWhenTablesAreNotServed(t *testing.T) {
 	assert.True(t, apierrors.IsNotAcceptable(err), "%v", err)
 	assert.Equal(t, 1, told, "a watch refused 406")
 }
+
+// A 406 inside the stream (an ERROR event) is the same evidence: told,
+// and the Status still delivered (Codex re-review of 5ab7a17).
+func TestTableWatchErrorNotAcceptableIsEvidence(t *testing.T) {
+	ts := &tableServer{hold: 2 * time.Second, events: []map[string]any{
+		{"type": "ERROR", "object": map[string]any{"kind": "Status", "apiVersion": "v1", "status": "Failure", "reason": "NotAcceptable", "code": 406, "message": "no tables"}},
+	}}
+	lw := widgetsLW(ts.start(t), nil, nil)
+	var mu sync.Mutex
+	told := 0
+	lw.notTable = func() { mu.Lock(); told++; mu.Unlock() }
+	w, err := lw.Watch(metav1.ListOptions{ResourceVersion: "10"})
+	require.NoError(t, err)
+	defer w.Stop()
+	select {
+	case ev := <-w.ResultChan():
+		assert.Equal(t, watch.Error, ev.Type)
+	case <-time.After(5 * time.Second):
+		t.Fatal("no event")
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	assert.Equal(t, 1, told)
+}

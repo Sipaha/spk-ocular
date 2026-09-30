@@ -263,7 +263,7 @@ func withCells(u *unstructured.Unstructured, cells []any) *unstructured.Unstruct
 
 // watch opens a Table watch stream. check sees the columns of the first
 // event that carries them; an error ends the stream (reported by mismatch).
-func (c *tableClient) watch(ctx context.Context, gvr schema.GroupVersionResource, ns string, o metav1.ListOptions, check func([]metav1.TableColumnDefinition) error, mismatch func(error)) (watch.Interface, error) {
+func (c *tableClient) watch(ctx context.Context, gvr schema.GroupVersionResource, ns string, o metav1.ListOptions, check func([]metav1.TableColumnDefinition) error, mismatch, tell func(error)) (watch.Interface, error) {
 	o.Watch = true
 	q := listQuery(o)
 	q.Set("watch", "true")
@@ -271,7 +271,7 @@ func (c *tableClient) watch(ctx context.Context, gvr schema.GroupVersionResource
 	if err != nil {
 		return nil, err
 	}
-	w := &tableWatch{body: resp.Body, out: make(chan watch.Event), stop: make(chan struct{}), check: check, mismatch: mismatch}
+	w := &tableWatch{body: resp.Body, out: make(chan watch.Event), stop: make(chan struct{}), check: check, mismatch: mismatch, tell: tell}
 	go w.run()
 	return w, nil
 }
@@ -283,6 +283,8 @@ type tableWatch struct {
 	once     sync.Once
 	check    func([]metav1.TableColumnDefinition) error
 	mismatch func(error)
+	// tell sees the stream's errors (a 406 in it is evidence of no Tables).
+	tell func(error)
 }
 
 func (w *tableWatch) run() {
@@ -315,6 +317,9 @@ func (w *tableWatch) event(t watch.EventType, raw json.RawMessage) (watch.Event,
 		var st metav1.Status
 		if err := json.Unmarshal(raw, &st); err != nil {
 			st = metav1.Status{Status: metav1.StatusFailure, Message: "an unreadable watch error", Code: http.StatusInternalServerError}
+		}
+		if w.tell != nil {
+			w.tell(apierrors.FromObject(&st))
 		}
 		return watch.Event{Type: t, Object: &st}, true
 	}
@@ -411,7 +416,7 @@ func (lw *tableListWatch) WatchWithContext(ctx context.Context, o metav1.ListOpt
 	ctx, cancel := context.WithCancel(ctx)
 	lw.counts.watchStarts.Add(1)
 	timer := time.AfterFunc(watchEstablishTimeout, cancel)
-	w, err := lw.c.watch(ctx, lw.gvr, lw.namespace, lw.opts(o), lw.check, lw.report)
+	w, err := lw.c.watch(ctx, lw.gvr, lw.namespace, lw.opts(o), lw.check, lw.report, lw.tell)
 	if !timer.Stop() && err == nil {
 		w.Stop()
 		err = context.DeadlineExceeded

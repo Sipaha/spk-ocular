@@ -557,3 +557,66 @@ func TestTableGetKeepsTheObjectAsIs(t *testing.T) {
 	assert.Contains(t, r.YAML, "ocularCells:\n  real: payload")
 	assert.Contains(t, r.Facts, core.Detail{Key: "Detail", Value: "wide text"})
 }
+
+// Evidence that a resource serves no Tables sticks wherever it is seen:
+// the first probe, a revalidation, details read before any view (Codex
+// re-review of 5ab7a17: Task 2 #2).
+func TestNoTablesEvidenceSticksOnEveryPath(t *testing.T) {
+	serveTables := func(api *widgetsAPI, on bool) {
+		api.mu.Lock()
+		api.plain = !on
+		api.mu.Unlock()
+	}
+	plainCols := []core.Column{colName, colNS, colAge}
+	t.Run("probe", func(t *testing.T) {
+		api := newWidgetsAPI()
+		api.plain = true
+		s, _ := tableSession(t, api)
+		d, _, err := s.DescribeView(context.Background(), provider.Query{Kind: "ocular.dev/widgets", Scope: allNS})
+		require.NoError(t, err)
+		require.Equal(t, plainCols, d.Columns)
+		serveTables(api, true)
+		s.revalidate(nil) // no view uses it: forgotten
+		probes := api.probes.Load()
+		d, _, err = s.DescribeView(context.Background(), provider.Query{Kind: "ocular.dev/widgets", Scope: allNS})
+		require.NoError(t, err)
+		assert.Equal(t, plainCols, d.Columns)
+		assert.Equal(t, probes, api.probes.Load())
+	})
+	t.Run("revalidation", func(t *testing.T) {
+		api := newWidgetsAPI()
+		s, _ := tableSession(t, api)
+		_, q, err := s.DescribeView(context.Background(), provider.Query{Kind: "ocular.dev/widgets", Scope: allNS})
+		require.NoError(t, err)
+		sink := &deltaSink{}
+		stop, err := s.Watch(q, sink)
+		require.NoError(t, err)
+		defer stop()
+		require.Eventually(t, func() bool { st := sink.status(); return st != nil && st.State == provider.StatusReady }, 5*time.Second, 5*time.Millisecond)
+		serveTables(api, false)
+		s.revalidate(nil)
+		require.Eventually(t, func() bool { st := sink.status(); return st != nil && st.Class == provider.ClassSchemaChanged }, 5*time.Second, 5*time.Millisecond)
+		serveTables(api, true)
+		d, _, err := s.DescribeView(context.Background(), provider.Query{Kind: "ocular.dev/widgets", Scope: allNS})
+		require.NoError(t, err)
+		assert.Equal(t, plainCols, d.Columns)
+	})
+	t.Run("details", func(t *testing.T) {
+		api := newWidgetsAPI()
+		api.plain = true
+		s, _ := tableSession(t, api)
+		s.dyn.(interface {
+			PrependReactor(string, string, k8stesting.ReactionFunc)
+		}).PrependReactor("get", "widgets", func(k8stesting.Action) (bool, runtime.Object, error) {
+			return true, widget("alpha"), nil
+		})
+		_, err := s.Get(context.Background(), core.Ref{Kind: "ocular.dev/widgets", Scope: "ns", Name: "alpha"})
+		require.NoError(t, err)
+		serveTables(api, true)
+		probes := api.probes.Load()
+		d, _, err := s.DescribeView(context.Background(), provider.Query{Kind: "ocular.dev/widgets", Scope: allNS})
+		require.NoError(t, err)
+		assert.Equal(t, plainCols, d.Columns)
+		assert.Equal(t, probes, api.probes.Load())
+	})
+}

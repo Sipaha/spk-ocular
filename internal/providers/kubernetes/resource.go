@@ -192,9 +192,7 @@ func (s *session) getTable(ctx context.Context, def *kindDef, ref core.Ref) (*un
 	s.schemas.mu.Unlock()
 	switch {
 	case servesNoTables(err):
-		if cur != nil && cur.table {
-			go s.tablesUnsupported(cur)
-		}
+		go s.markPlain(def.gvr)
 		return nil, nil, nil
 	case errors.Is(err, errNotTable):
 		return nil, nil, nil
