@@ -15,6 +15,7 @@ Go + Wails v3 + React. Спецификация: `docs/specs/2026-09-29-spk-ocul
 P9 — правка YAML объекта Kubernetes с просмотром и одной записью — `docs/plans/2026-09-30-p9-edit-yaml.md`.
 P10 — значения Secret: показать, скопировать, изменить/добавить/удалить ключ — `docs/plans/2026-09-30-p10-secret-values.md`.
 P11 — узлы: cordon, uncordon, drain — `docs/plans/2026-09-30-p11-node-operations.md`.
+P12 — CronJob: приостановить, возобновить, запустить сейчас — `docs/plans/2026-09-30-p12-cronjob-actions.md`.
 
 ## Сборка и тесты
 
@@ -130,7 +131,9 @@ P11 — узлы: cordon, uncordon, drain — `docs/plans/2026-09-30-p11-node-op
   предусловиями, повторы, классификация) и `actions_effects.go` (последствия по стратегии,
   политика PVC, контроллер pod-а, HPA, SSAR); узлы (P11): cordon/uncordon — в `actions.go`,
   drain — `drain.go` (классы pod-ов, отпечатки в `Expect`, прогноз PDB, права записей, прогон
-  с частями; выселение — `actionWriter.evict`). Клиент — `web/src/actions/` (`Menu`,
+  с частями; выселение — `actionWriter.evict`); CronJob (P12, обнаруженный вид): `cronjob.go`
+  (`discoveredActions` — действия по точному GR и глаголам, suspend/resume), `cronjob_run.go`
+  (Run now: имя, подписанный грант, `spentGrants`, Job как у kubectl, `actionWriter.create`). Клиент — `web/src/actions/` (`Menu`,
   `ActionDialog`, `ActionLists` — списки плана `ActionPlan.Lists` и части результата порциями по
   50, без усечения; итог частей — `core.PartsOutcome`: unknown > refused > skipped > done),
   меню строки и `Delete` — `ResourceTable` (`rowMenu`, `onDelete`), «Действия ▾»
@@ -375,6 +378,20 @@ P11 — узлы: cordon, uncordon, drain — `docs/plans/2026-09-30-p11-node-op
   видны всегда, появившийся итог прокручивается в вид — иначе длинный план drain уводил цель
   действия из вида (фокус на «Отмена»), а итог оставался под планом. — e2e synth «a plan with
   long lists…» (`toBeInViewport`).
+- CronJob (P12): действия — только у `batch/v1` `cronjobs` (suspend/resume — с глаголом
+  `patch`, run — с `get`); suspend/resume — merge patch `spec.suspend` с uid + rv. Run now
+  создаёт Job как `kubectl create job --from=cronjob` (метки шаблона; `instantiate: manual`,
+  аннотации шаблона поверх; ownerReference controller; spec шаблона как есть) с именем
+  `<≤50, без хвостовых .->-manual-<5>`, выбранным в просмотре. `Expect` run — подписанный грант
+  (HMAC ключом процесса со своим доменным тегом: действие, маршрут, объект, хэш состояния —
+  шаблон, `suspend`, `concurrencyPolicy`, пределы истории, имя Job, срок 10 мин, инкарнация
+  сессии, nonce); подмена — `invalid`; срок, другая сессия, изменённое состояние — `conflict`.
+  Грант расходуется до POST одним решением под мьютексом (срок текущим временем, чистка
+  истёкших, повтор, предел 1000) и не возвращается — ни при `unknown`, ни после удаления Job:
+  один просмотр — не больше одной Job. Один POST (`MaxRetries(0)`), без повторов; 409
+  AlreadyExists — `conflict`, 5xx/обрыв — `unknown` с именем Job. `status.active` — наблюдение
+  на момент просмотра, не в `Expect`. — `cronjob_test.go`, `cronjob_run_test.go`,
+  `TestACreateIsOneRequestOnTheWire`, `TestKindActionCronJob*`, e2e-kind «a CronJob…».
 - Drain (P11) — как `kubectl drain` без `--force` и без ожидания: pod-ы узла — list по
   `spec.nodeName` с пределом 500; не узнать всех (ошибка, > 500, `continue`) — `Unavailable` и в
   плане, и в прогоне (ноль записей). Без контроллера — остаются и названы (части `skipped`),

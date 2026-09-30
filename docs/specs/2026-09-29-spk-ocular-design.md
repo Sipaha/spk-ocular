@@ -7,7 +7,8 @@
 Compose: просмотр и логи) и P7 (Compose: терминал, статистика, действия) — 2026-09-30; P8
 (все ресурсы API: CRD и встроенные без проекции) — 2026-09-30; P9 (правка YAML объекта
 Kubernetes) — 2026-09-30; P10 (значения Secret: показать, скопировать, изменить) — 2026-09-30;
-P11 (узлы: cordon, uncordon, drain) — 2026-09-30.
+P11 (узлы: cordon, uncordon, drain) — 2026-09-30; P12 (CronJob: приостановить, возобновить,
+запустить сейчас) — 2026-09-30.
 Решения приняты пользователем в переписке; документ фиксирует итог, а не варианты.
 
 ## Зачем
@@ -88,7 +89,8 @@ read-only/protected-пометка contexts, трей, несколько акт
 - Exec в контейнер (xterm.js, TTY, resize). Сделано в P3.
 - Port-forward: список активных туннелей, все закрываются при выходе. Сделано в P3.
 - Действия: restart (как `kubectl rollout restart`), scale, delete (+ delete pod для пересоздания);
-  у узла — cordon, uncordon, drain (P11). Подтверждение с явным context/namespace/объектом.
+  у узла — cordon, uncordon, drain (P11); у CronJob — приостановить, возобновить, запустить
+  сейчас (P12). Подтверждение с явным context/namespace/объектом.
 - Метрики CPU/RAM для pods и nodes через `metrics.k8s.io` — если API есть, только для видимой
   таблицы, опрос ~15 с (решение пользователя 2026-09-29: в MVP). С P7 спрашиваются только
   **видимые строки** (≤ 100, без overscan), сразу при смене видимого набора (300 мс покоя),
@@ -626,6 +628,16 @@ target, kind, scope, name, uid, title, opened_at; ≤ 50 на target, ≤ 500 в
   целиком, порциями по 50. Проверено: фейки и httptest (счёт POST на каждую попытку), kind с
   tainted-узлом (настоящий 429 `DisruptionBudget`; Go и e2e-kind 26), vitest, desktop под Xvfb в
   русской раскладке; Private_Dirty — 98.8 МБ.
+- **P12** ✅ — Kubernetes: CronJob — приостановить, возобновить, запустить сейчас (2026-09-30,
+  `docs/plans/2026-09-30-p12-cronjob-actions.md`). Действия обнаруженного вида по точному
+  `batch/v1` `cronjobs`. Suspend/resume — merge patch `spec.suspend` с uid + resourceVersion
+  («пропущенный запуск может начаться сразу» — по `startingDeadlineSeconds`). Run now — Job как
+  у `kubectl create job --from`, имя показано в просмотре и подписано в гранте, грант
+  расходуется до единственного POST (один просмотр — не больше одной Job). Слова о контроллере
+  проверены на kind до реализации (ручная Job не в `status.active`, `Forbid`/`Replace` её не
+  касаются, пределы истории её удаляют, Warning `UnexpectedJob`, пока она идёт). Проверено:
+  фейки и httptest (один POST, подмена/повтор/одновременность гранта), kind (Go и e2e-kind),
+  desktop под Xvfb в русской раскладке; Private_Dirty — 109.2 МБ.
 
 ## Документация и процесс
 

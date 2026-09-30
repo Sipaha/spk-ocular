@@ -710,3 +710,60 @@ test('drain a node: its pods listed, evictions requested, a PodDisruptionBudget 
     cleanup()
   }
 })
+
+test('a CronJob: suspend and resume from its row, run now names the Job it makes', async ({ page }) => {
+  const ns = `ocular-cron-${Date.now() % 1_000_000}`
+  kubectl('create', 'namespace', ns)
+  execFileSync('kubectl', ['--kubeconfig', kc, '--context', 'kind-ocular-dev', '-n', ns, 'apply', '-f', '-'], {
+    encoding: 'utf8',
+    input: `apiVersion: batch/v1
+kind: CronJob
+metadata: {name: yearly}
+spec:
+  schedule: "0 0 1 1 *"
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          restartPolicy: Never
+          terminationGracePeriodSeconds: 1
+          containers: [{name: app, image: "busybox:1.36", command: ["true"]}]
+`,
+  })
+  try {
+    await openTarget(page, 'kind-ocular-dev')
+    const grid = await kindPage(page, 'CronJobs', ns)
+    await expect(row(grid, 'yearly')).toContainText('False')
+    const menuOf = async () => {
+      await row(grid, 'yearly').click({ button: 'right' })
+      return page.getByRole('menu', { name: 'Row actions' })
+    }
+    const menu = await menuOf()
+    await expect(menu.getByRole('menuitem')).toHaveText(['Details', 'Suspend', 'Resume', 'Run now', 'Delete'])
+    await menu.getByRole('menuitem', { name: 'Suspend' }).click()
+    const suspend = page.getByRole('dialog', { name: 'Suspend yearly' })
+    await expect(suspend).toContainText('No new runs of CronJob yearly start on schedule; Jobs already running go on.')
+    await expect(suspend).toContainText('Permission: checked: allowed')
+    await suspend.getByRole('button', { name: 'Suspend' }).click()
+    await expect(page.getByRole('status')).toHaveText('cronjob yearly: suspend requested')
+    await expect(row(grid, 'yearly')).toContainText('True')
+
+    await (await menuOf()).getByRole('menuitem', { name: 'Run now' }).click()
+    const run = page.getByRole('dialog', { name: 'Run now yearly' })
+    await expect(run).toContainText('The CronJob is suspended: this run starts anyway.')
+    const job = /Job (yearly-manual-[a-z0-9]{5}) is created/.exec(await run.innerText())?.[1]
+    expect(job).toBeTruthy()
+    await run.getByRole('button', { name: 'Run now' }).click()
+    await expect(page.getByRole('status')).toHaveText(`Job ${job} created from cronjob yearly`)
+    const jobs = await kindPage(page, 'Jobs', ns)
+    await expect(row(jobs, job!)).toBeVisible()
+
+    const crons = await kindPage(page, 'CronJobs', ns)
+    await row(crons, 'yearly').click({ button: 'right' })
+    await page.getByRole('menu', { name: 'Row actions' }).getByRole('menuitem', { name: 'Resume' }).click()
+    await page.getByRole('dialog', { name: 'Resume yearly' }).getByRole('button', { name: 'Resume' }).click()
+    await expect(row(crons, 'yearly')).toContainText('False')
+  } finally {
+    kubectl('delete', 'namespace', ns, '--wait=false')
+  }
+})

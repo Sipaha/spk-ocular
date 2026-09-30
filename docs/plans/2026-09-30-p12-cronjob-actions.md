@@ -170,14 +170,27 @@
   `TestKindActionCronJobRunNow` (Job как у kubectl, предел истории 0 удалил её, повтор — `conflict`).
 
 ### Task 5. UI и e2e
-- [ ] vitest: меню CronJob (Suspend/Resume/Run now/Delete), просмотр run с именем.
-- [ ] e2e-kind: suspend → колонка Suspend `True` вживую, resume → `False`; Run now → в
-  уведомлении имя, Job с этим именем появляется в Jobs.
+- [x] UI общий: новых компонентов нет, только подписи `act.suspend`/`act.resume`/`act.run` и
+  русские тексты (vitest меню и диалога — общие, P4/P11); меню и просмотр проверяет e2e.
+- [x] e2e-kind «a CronJob: suspend and resume from its row, run now names the Job it makes»:
+  suspend → колонка Suspend `True` вживую, resume → `False`; Run now → в уведомлении имя, Job с
+  этим именем в Jobs.
 
 ### Task 6. Desktop, документы, ревью
-- [ ] Desktop под Xvfb в русской раскладке (просмотр Run now, итог), Private_Dirty.
-- [ ] AGENTS.md (правила CronJob-действий), спецификация P12 ✅, backlog, «Итоги» плана.
+- [x] Desktop под Xvfb в русской раскладке: меню строки, просмотр Run now (имя Job,
+  предупреждение о приостановке), Job в таблице, `UnexpectedJob` в «Проблемах»;
+  Private_Dirty — 109.2 МБ.
+- [x] AGENTS.md (правила CronJob-действий), спецификация P12 ✅, backlog, «Итоги» плана.
 - [ ] Ревью реализации Codex до закрытия.
+
+## Итоги (2026-09-30)
+
+- Сделано: действия `suspend`, `resume`, `run` у `batch/v1` CronJob (`cronjob.go`,
+  `cronjob_run.go`), `actionWriter.create`, инкарнация сессии и израсходованные гранты в сессии.
+- Решения по ходу: поведение контроллера проверено на kind до реализации (Task 4) и определило
+  тексты; уведомление об успехе — как у остальных простых действий (английский текст
+  провайдера, в бэклоге).
+- Проверено: `make check`, `make test-kind`, `make e2e-kind` (27/27), desktop под Xvfb.
 
 ## Ревью плана
 
