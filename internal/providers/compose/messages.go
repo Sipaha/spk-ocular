@@ -10,10 +10,18 @@ import (
 // knows in its language (web/src/i18n.ts, providerTexts) with the same
 // parameters, the rest in this English.
 var messageTexts = map[string]string{
-	"scope.singular":        "Project",
-	"scope.plural":          "projects",
-	"scope.all":             "All projects",
-	"notCovered.unlabelled": "containers without Compose labels",
+	"scope.singular":                  "Project",
+	"scope.plural":                    "projects",
+	"scope.all":                       "All projects",
+	"notCovered.unlabelled":           "containers without Compose labels",
+	"container.exited":                "exit code {code}",
+	"container.exitedOOM":             "exit code {code}, killed for running out of memory",
+	"container.restarting":            "restarting after exit code {code}",
+	"container.unknownState":          "unknown state {state}",
+	"container.restartedByPolicy":     "restarted by its restart policy ({count} restarts in total)",
+	"container.restartedByPolicyOnce": "restarted by its restart policy ({count} restart in total)",
+	"service.members":                 "{count} of {total} containers",
+	"service.membersExample":          "{count} of {total} containers; {example}",
 }
 
 // msg builds the message key with params given as name, value pairs.
