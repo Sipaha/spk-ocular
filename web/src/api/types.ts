@@ -236,6 +236,8 @@ export interface ActionPlan {
   rights: { state: RightsState; reason?: string }
   /** why it cannot run in the object's state */
   unavailable?: Message
+  /** the objects the plan concerns, by group (whole: never cut for display) */
+  lists?: ActionList[]
   /** opaque: sent back with the run */
   expect: string
 }
@@ -393,6 +395,23 @@ export interface ActionPart {
   title: string
   outcome: ActionOutcome
   message?: string
+  /** why, in the provider's words (preferred over message) */
+  why?: Message
+}
+
+/** A group of objects a plan concerns (to be evicted, left alone, …). */
+export interface ActionList {
+  title: Message
+  /** what happens to them may lose something */
+  destructive?: boolean
+  /** shown on request (what the action leaves alone) */
+  collapsed?: boolean
+  items: ActionItem[]
+}
+
+export interface ActionItem {
+  name: string
+  note?: Message
 }
 
 /**
@@ -401,7 +420,8 @@ export interface ActionPart {
  */
 export interface ActionResult {
   message: string
-  outcome?: Exclude<ActionOutcome, 'skipped'>
+  /** skipped: not everything was done (parts left or not started) */
+  outcome?: ActionOutcome
   parts?: ActionPart[]
 }
 

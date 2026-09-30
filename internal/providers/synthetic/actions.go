@@ -21,6 +21,9 @@ var (
 	actRestart = core.ActionDescriptor{ID: "restart", Title: "Restart"}
 	actScale   = core.ActionDescriptor{ID: "scale", Title: "Scale", Param: &core.ActionParam{Kind: core.ParamCount, Min: 0, Max: 10}}
 	actDelete  = core.ActionDescriptor{ID: "delete", Title: "Delete", Destructive: true}
+	// actEvacuate moves a workload's instances off (Controls.Items of them)
+	// and leaves its helper: the generic UI's lists and parts.
+	actEvacuate = core.ActionDescriptor{ID: "evacuate", Title: "Evacuate", Destructive: true}
 )
 
 var workloadKind = core.KindDescriptor{
@@ -30,7 +33,7 @@ var workloadKind = core.KindDescriptor{
 		{ID: "replicas", Title: "Replicas", Type: core.ColNumber},
 		{ID: "restarts", Title: "Restarts", Type: core.ColNumber},
 	},
-	Actions: []core.ActionDescriptor{actRestart, actScale, actDelete},
+	Actions: []core.ActionDescriptor{actRestart, actScale, actDelete, actEvacuate},
 }
 
 type workload struct {
@@ -59,6 +62,23 @@ type Controls struct {
 	Fail provider.ErrorClass `json:"fail,omitempty"`
 	// DelayMS: a run takes this long (a cancelled one changes nothing).
 	DelayMS int `json:"delay_ms,omitempty"`
+	// Items: the instances evacuate moves (0: 3); Refuse: the last this
+	// many are refused.
+	Items  int `json:"items,omitempty"`
+	Refuse int `json:"refuse,omitempty"`
+}
+
+// evacuated: the instances evacuate moves.
+func (c Controls) evacuated(o *workload) []string {
+	n := c.Items
+	if n == 0 {
+		n = 3
+	}
+	out := make([]string, n)
+	for i := range out {
+		out[i] = fmt.Sprintf("%s-%d", o.name, i+1)
+	}
+	return out
 }
 
 // Mutation is a change by another actor.
@@ -313,6 +333,13 @@ func (s *session) PrepareAction(_ context.Context, ref core.Ref, action string, 
 		}
 	case actDelete.ID:
 		plan.Effects = texts(fmt.Sprintf("Its %s removed too.", instanceCount(o.replicas)))
+	case actEvacuate.ID:
+		moved := core.ActionList{Title: core.Message{Text: "Moved"}, Destructive: true}
+		for _, n := range w.controls.evacuated(o) {
+			moved.Items = append(moved.Items, core.ActionItem{Name: n})
+		}
+		plan.Effects = texts("Its instances are moved off, one by one.")
+		plan.Lists = []core.ActionList{moved, {Title: core.Message{Text: "Left alone"}, Collapsed: true, Items: []core.ActionItem{{Name: o.name + "-helper", Note: &core.Message{Text: "it stays"}}}}}
 	}
 	return plan, nil
 }
@@ -374,6 +401,20 @@ func (s *session) RunAction(ctx context.Context, run provider.ActionRun) (core.A
 		}
 		msg = "workload " + o.name + ": deletion requested"
 		w.changed(o, true)
+	case actEvacuate.ID:
+		names := c.evacuated(o)
+		var parts []core.ActionPart
+		for i, n := range names {
+			part := core.ActionPart{ID: n, Title: n, Outcome: core.OutcomeDone}
+			if i >= len(names)-c.Refuse {
+				part.Outcome, part.Why = core.OutcomeRefused, &core.Message{Text: "refused (synthetic)"}
+			}
+			parts = append(parts, part)
+		}
+		parts = append(parts, core.ActionPart{ID: o.name + "-helper", Title: o.name + "-helper", Outcome: core.OutcomeSkipped, Why: &core.Message{Text: "left alone"}})
+		o.restarts++
+		w.changed(o, false)
+		return core.ActionResult{Message: "workload " + o.name + ": evacuation requested", Outcome: core.PartsOutcome(parts), Parts: parts}, nil
 	}
 	if c.Fail == provider.ClassUnknown {
 		return core.ActionResult{}, &provider.Error{Class: provider.ClassUnknown, Message: "the request was sent but its outcome is not known (synthetic)"}

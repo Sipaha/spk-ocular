@@ -358,7 +358,7 @@ describe('ActionDialog', () => {
       const { f, dialog } = setup(restart)
       f.client.runAction = vi.fn(async () => parts('refused'))
       await userEvent.click(await within(dialog).findByRole('button', { name: 'Restart' }))
-      expect(await within(dialog).findByRole('alert')).toHaveTextContent('Stopped at a refusal')
+      expect(await within(dialog).findByRole('alert')).toHaveTextContent('Not everything was done: a part was refused')
       expect(useStore.getState().notice).toBe('Restart api: 1 of 3 done; 1 refused; 1 not run')
     })
 
@@ -396,6 +396,84 @@ describe('ActionDialog', () => {
       unmount()
       await act(async () => run.resolve(parts('refused')))
       expect(useStore.getState().notice).toBe('prod-ctx · Restart api: The answer came late: 1 of 3 done; 1 refused; 1 not run')
+    })
+  })
+
+  describe('lists of a plan and many parts', () => {
+    const items = (n: number, prefix = 'pod') => Array.from({ length: n }, (_, i) => ({ name: `${prefix}-${i + 1}` }))
+
+    it('a list is shown whole, in portions of 50; a collapsed one opens on request', async () => {
+      const { dialog } = setup(
+        restart,
+        (p) =>
+          planOf(restart, p, {
+            lists: [
+              { title: { key: 'test.evicted', text: 'Evicted' }, destructive: true, items: items(120) },
+              { title: { text: 'Left alone' }, collapsed: true, items: [{ name: 'ds-1', note: { text: 'a daemon' } }] },
+            ],
+          }),
+      )
+      const evicted = await within(dialog).findByRole('region', { name: 'Evicted (120)' })
+      expect(within(evicted).getAllByRole('listitem')).toHaveLength(50)
+      await userEvent.click(within(evicted).getByRole('button', { name: 'Show 50 more (70 left)' }))
+      expect(within(evicted).getAllByRole('listitem')).toHaveLength(100)
+      await userEvent.click(within(evicted).getByRole('button', { name: 'Show 20 more (20 left)' }))
+      expect(within(evicted).getAllByRole('listitem')).toHaveLength(120)
+      expect(within(evicted).queryByRole('button', { name: /more/ })).toBeNull()
+      expect(evicted).toHaveTextContent('pod-120')
+
+      const left = within(dialog).getByRole('region', { name: 'Left alone (1)' })
+      expect(within(left).queryByRole('listitem')).toBeNull()
+      await userEvent.click(within(left).getByRole('button', { name: 'Left alone (1)' }))
+      expect(within(left).getByRole('listitem')).toHaveTextContent('ds-1 · a daemon')
+    })
+
+    it('list titles and part reasons are said in the UI\'s language by key', async () => {
+      setLanguage('ru')
+      try {
+        const { f, dialog } = setup(restart, (p) => planOf(restart, p, { lists: [{ title: { key: 'compose.scope.singular', text: 'x' }, items: items(1) }] }))
+        expect(await within(dialog).findByRole('region', { name: 'Проект (1)' })).toBeInTheDocument()
+        f.client.runAction = vi.fn(async () => ({
+          message: 'm',
+          outcome: 'refused' as const,
+          parts: [{ id: 'p1', title: 'pod-1', outcome: 'refused' as const, message: 'raw', why: { key: 'compose.scope.singular', text: 'x' } }],
+        }))
+        await userEvent.click(within(dialog).getByRole('button', { name: 'Перезапустить' }))
+        expect(await within(dialog).findByRole('list', { name: 'Итог' })).toHaveTextContent('pod-1Отказано · Проект')
+      } finally {
+        setLanguage('en')
+      }
+    })
+
+    it('a run left unfinished (skipped parts): the dialog stays with them', async () => {
+      const { f, dialog, onClose } = setup(restart)
+      f.client.runAction = vi.fn(async () => ({
+        message: 'm',
+        outcome: 'skipped' as const,
+        parts: [
+          { id: 'p1', title: 'pod-1', outcome: 'done' as const },
+          { id: 'p2', title: 'bare-1', outcome: 'skipped' as const, why: { text: 'left: no controller' } },
+        ],
+      }))
+      await userEvent.click(await within(dialog).findByRole('button', { name: 'Restart' }))
+      expect(await within(dialog).findByRole('alert')).toHaveTextContent('Not everything was done')
+      expect(within(dialog).getByRole('list', { name: 'Result' })).toHaveTextContent('bare-1Not run · left: no controller')
+      expect(onClose).not.toHaveBeenCalled()
+    })
+
+    it('many parts: shown in portions, in their order, every one reachable', async () => {
+      const { f, dialog } = setup(restart)
+      const parts = Array.from({ length: 130 }, (_, i) => ({ id: `p${i}`, title: `pod-${i + 1}`, outcome: (i === 129 ? 'refused' : 'done') as 'done' | 'refused' }))
+      f.client.runAction = vi.fn(async () => ({ message: 'm', outcome: 'refused' as const, parts }))
+      await userEvent.click(await within(dialog).findByRole('button', { name: 'Restart' }))
+      const list = await within(dialog).findByRole('list', { name: 'Result' })
+      const shown = within(list).getAllByRole('listitem')
+      expect(shown).toHaveLength(50)
+      expect(shown[0]).toHaveTextContent('pod-1Done')
+      await userEvent.click(within(dialog).getByRole('button', { name: 'Show 50 more (80 left)' }))
+      expect(within(list).getAllByRole('listitem')).toHaveLength(100)
+      await userEvent.click(within(dialog).getByRole('button', { name: 'Show 30 more (30 left)' }))
+      expect(within(list).getAllByRole('listitem')[129]).toHaveTextContent('pod-130Refused')
     })
   })
 

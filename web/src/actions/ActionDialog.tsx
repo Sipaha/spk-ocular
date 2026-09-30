@@ -6,6 +6,7 @@ import { refTitle } from '../refs'
 import { useScopeWords } from '../scopeNames'
 import { showNotice } from '../store'
 import { focusMark, restoreFocus } from '../shortcuts'
+import { ActionLists, Portions } from './ActionLists'
 
 /** An action chosen on an object: the dialog reviews it, then runs it. */
 export interface ActionRequest {
@@ -30,7 +31,7 @@ type Outcome =
   | { type: 'failed'; text: string }
   /** An answer after the timeout said it was done. */
   | { type: 'lateDone'; text: string }
-  /** Some parts were done, then one was refused or its outcome is unknown. */
+  /** Not every part was done: one was refused, its outcome is unknown, or it was left. */
   | { type: 'partial'; text: string; parts: ActionPart[]; unknown: boolean }
 
 const RUN_TIMEOUT_MS = 60_000
@@ -75,7 +76,8 @@ export function partsSummary(parts: ActionPart[]): string {
 function partialOf(res: ActionResult): Extract<Outcome, { type: 'partial' }> | null {
   if (!res.outcome || res.outcome === 'done') return null
   const unknown = res.outcome === 'unknown'
-  return { type: 'partial', text: t(unknown ? 'action.partialUnknown' : 'action.partialRefused'), parts: res.parts ?? [], unknown }
+  const text = t(unknown ? 'action.partialUnknown' : res.outcome === 'refused' ? 'action.partialRefused' : 'action.partialSkipped')
+  return { type: 'partial', text, parts: res.parts ?? [], unknown }
 }
 
 const detailOf = (e: unknown) => (e instanceof ApiError ? e.detail || e.code : e instanceof Error ? e.message : String(e))
@@ -375,6 +377,7 @@ export function ActionDialog({ client, req, onClose, runTimeoutMs = RUN_TIMEOUT_
                 </ul>
               </section>
             )}
+            {!!plan.lists?.length && <ActionLists lists={plan.lists} />}
             <p aria-label={t('action.rights')} className={plan.rights.state === 'denied' ? 'text-danger' : plan.rights.state === 'unknown' ? 'text-warning' : 'text-fg-muted'}>
               {t('action.rights')}:{' '}
               {plan.rights.state === 'allowed'
@@ -397,17 +400,27 @@ export function ActionDialog({ client, req, onClose, runTimeoutMs = RUN_TIMEOUT_
           </p>
         )}
         {outcome?.type === 'partial' && outcome.parts.length > 0 && (
-          <ul aria-label={t('action.parts')} className="space-y-0.5 rounded-md border border-line px-3 py-2 text-xs">
-            {outcome.parts.map((p) => (
-              <li key={p.id} className="flex gap-2">
-                <span className="min-w-0 break-all font-mono">{p.title}</span>
-                <span className={partClass[p.outcome]}>
-                  {t(`action.part.${p.outcome}`)}
-                  {p.message && p.outcome !== 'done' ? ` · ${p.message}` : ''}
-                </span>
-              </li>
-            ))}
-          </ul>
+          <div>
+            <Portions
+              items={outcome.parts}
+              render={(shown) => (
+                <ul aria-label={t('action.parts')} className="space-y-0.5 rounded-md border border-line px-3 py-2 text-xs">
+                  {shown.map((p) => {
+                    const why = p.why ? messageText(p.why) : p.message
+                    return (
+                      <li key={p.id} className="flex gap-2">
+                        <span className="min-w-0 break-all font-mono">{p.title}</span>
+                        <span className={partClass[p.outcome]}>
+                          {t(`action.part.${p.outcome}`)}
+                          {why && p.outcome !== 'done' ? ` · ${why}` : ''}
+                        </span>
+                      </li>
+                    )
+                  })}
+                </ul>
+              )}
+            />
+          </div>
         )}
 
         <div className="flex justify-end gap-2">

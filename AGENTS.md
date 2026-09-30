@@ -128,7 +128,9 @@ P10 — значения Secret: показать, скопировать, из�
   `internal/providers/kubernetes/actions.go` (матрица kind × действие, `Expect`, запись с
   предусловиями, повторы, классификация) и `actions_effects.go` (последствия по стратегии,
   политика PVC, контроллер pod-а, HPA, SSAR). Клиент — `web/src/actions/` (`Menu`,
-  `ActionDialog`), меню строки и `Delete` — `ResourceTable` (`rowMenu`, `onDelete`), «Действия ▾»
+  `ActionDialog`, `ActionLists` — списки плана `ActionPlan.Lists` и части результата порциями по
+  50, без усечения; итог частей — `core.PartsOutcome`: unknown > refused > skipped > done),
+  меню строки и `Delete` — `ResourceTable` (`rowMenu`, `onDelete`), «Действия ▾»
   — `ResourceDrawer`, уведомление — `showNotice` в `store.ts`.
 - Правка YAML (P9): `provider.Editor` (`EditSource`, `PrepareEdit`, `RunEdit`),
   `KindDescriptor.Editable`; `internal/api/edit.go` (база и грант — HMAC-конверты с
@@ -182,8 +184,9 @@ P10 — значения Secret: показать, скопировать, из�
   чтения при любом состоянии контейнера).
 - `internal/providers/synthetic` — тестовый провайдер (`--test-api --test-synthetic`): логи,
   эхо-терминал и порты (`live.go`), переконфигурация (`POST /api/_test/synthetic/reconfigure`),
-  вид Workloads с действиями (`actions.go`; `POST /api/_test/synthetic/controls` — права, отказ,
-  `unknown`, задержка; `mutate` — чужое изменение/замена; `reset`).
+  вид Workloads с действиями (`actions.go`; `evacuate` — списки плана и части результата
+  для общего UI; `POST /api/_test/synthetic/controls` — права, отказ, `unknown`, задержка,
+  `items`/`refuse` у evacuate; `mutate` — чужое изменение/замена; `reset`).
 - `internal/execshim` — shim для exec-плагинов kubeconfig (таймаут, смерть вместе с приложением).
 - `internal/store` — SQLite, миграции `migrations/NNNN_*.sql`, `ui_prefs`, `target_state`,
   `recent_objects` (≤ 50 на target, ≤ 500 всего).

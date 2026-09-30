@@ -106,10 +106,30 @@ type ActionPlan struct {
 	Rights   Rights    `json:"rights"`
 	// Unavailable: why the action cannot run in the object's state.
 	Unavailable *Message `json:"unavailable,omitempty"`
+	// Lists: the objects the plan concerns, by group — whole: the UI shows
+	// them in portions, never a cut list.
+	Lists []ActionList `json:"lists,omitempty"`
 	// Expect is the provider's opaque fingerprint of the action, its
 	// parameters and the state the effects depend on; a run whose object
 	// no longer matches it is refused (conflict).
 	Expect string `json:"expect"`
+}
+
+// ActionList is a group of objects a plan concerns (to be evicted, left
+// alone, …); Title in the provider's words.
+type ActionList struct {
+	Title Message `json:"title"`
+	// Destructive: what happens to them may lose something.
+	Destructive bool `json:"destructive,omitempty"`
+	// Collapsed: shown on request (what the action leaves alone).
+	Collapsed bool         `json:"collapsed,omitempty"`
+	Items     []ActionItem `json:"items"`
+}
+
+// ActionItem is one object of a list, with a note about it.
+type ActionItem struct {
+	Name string   `json:"name"`
+	Note *Message `json:"note,omitempty"`
 }
 
 // ActionOutcome: what became of a run or of one of its parts.
@@ -121,14 +141,17 @@ const (
 	OutcomeRefused ActionOutcome = "refused"
 	// OutcomeUnknown: sent, the outcome is not known.
 	OutcomeUnknown ActionOutcome = "unknown"
-	// OutcomeSkipped: not run (an earlier part was refused or unknown).
+	// OutcomeSkipped: not run (an earlier part was refused or unknown, the
+	// action leaves it alone, the time ran out); of a run: not everything
+	// was done, nothing refused or unknown.
 	OutcomeSkipped ActionOutcome = "skipped"
 )
 
 // ActionResult: the change was requested (its progress shows in views).
 // A run of several writes (a service's containers) reports each in Parts
 // and returns its result, not an error, once any write was sent: Outcome
-// is done only when every part is.
+// is done only when every part is, else the worst part's (unknown, then
+// refused, then skipped — PartsOutcome).
 type ActionResult struct {
 	Message string        `json:"message"`
 	Outcome ActionOutcome `json:"outcome"`
@@ -142,6 +165,21 @@ type ActionPart struct {
 	Title   string        `json:"title"`
 	Outcome ActionOutcome `json:"outcome"`
 	Message string        `json:"message,omitempty"`
+	// Why in the provider's words (the UI prefers it to Message).
+	Why *Message `json:"why,omitempty"`
+}
+
+// PartsOutcome is a run's outcome from its parts: unknown outranks refused,
+// refused outranks skipped; done only when every part is (none: done).
+func PartsOutcome(parts []ActionPart) ActionOutcome {
+	rank := map[ActionOutcome]int{OutcomeDone: 0, OutcomeSkipped: 1, OutcomeRefused: 2, OutcomeUnknown: 3}
+	out := OutcomeDone
+	for _, p := range parts {
+		if rank[p.Outcome] > rank[out] {
+			out = p.Outcome
+		}
+	}
+	return out
 }
 
 // ErrNoAction: the kind has no such action.

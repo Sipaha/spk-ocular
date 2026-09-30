@@ -27,7 +27,7 @@ test("a row's menu is its object's kind's: a workload offers its actions", async
   const grid = await openProblems(page)
   await grid.getByRole('gridcell', { name: 'db', exact: true }).click({ button: 'right' })
   const menu = page.getByRole('menu', { name: 'Row actions' })
-  await expect(menu.getByRole('menuitem')).toHaveText(['Details', 'Restart', 'Scale…', 'Delete'])
+  await expect(menu.getByRole('menuitem')).toHaveText(['Details', 'Restart', 'Scale…', 'Delete', 'Evacuate'])
   await menu.getByRole('menuitem', { name: 'Restart' }).click()
   const dialog = page.getByRole('dialog', { name: 'Restart db' })
   await expect(dialog.getByText('Workload', { exact: true })).toBeVisible() // the kind's singular

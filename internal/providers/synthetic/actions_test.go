@@ -89,7 +89,7 @@ func TestWorkloadsOfferActionsAndServicesDoNot(t *testing.T) {
 	for _, a := range kinds[1].Actions {
 		ids = append(ids, a.ID)
 	}
-	assert.Equal(t, []string{"restart", "scale", "delete"}, ids)
+	assert.Equal(t, []string{"restart", "scale", "delete", "evacuate"}, ids)
 }
 
 func TestActionsChangeTheLiveView(t *testing.T) {
@@ -275,4 +275,40 @@ func TestControls(t *testing.T) {
 		p, _ := open(t)
 		assert.Error(t, p.Mutate(Mutation{Object: "nope"}))
 	})
+}
+
+// Evacuate: the generic UI's lists and parts (a plan names every instance,
+// a run reports each; what it leaves alone is a skipped part with a reason).
+func TestEvacuateListsAndParts(t *testing.T) {
+	p, s := open(t)
+	ctx := context.Background()
+	p.SetControls(Controls{Items: 120, Refuse: 2})
+	plan, err := s.PrepareAction(ctx, wref("web"), "evacuate", core.ActionParams{})
+	require.NoError(t, err)
+	assert.True(t, plan.Destructive)
+	require.Len(t, plan.Lists, 2)
+	assert.Equal(t, "Moved", plan.Lists[0].Title.Text)
+	assert.True(t, plan.Lists[0].Destructive)
+	require.Len(t, plan.Lists[0].Items, 120, "whole, never cut")
+	assert.Equal(t, "web-120", plan.Lists[0].Items[119].Name)
+	assert.True(t, plan.Lists[1].Collapsed)
+	assert.Equal(t, "web-helper", plan.Lists[1].Items[0].Name)
+
+	res, err := s.RunAction(ctx, provider.ActionRun{Ref: plan.Where.Ref, Action: "evacuate", Expect: plan.Expect})
+	require.NoError(t, err)
+	require.Len(t, res.Parts, 121)
+	assert.Equal(t, core.OutcomeDone, res.Parts[0].Outcome)
+	assert.Equal(t, core.OutcomeRefused, res.Parts[119].Outcome)
+	require.NotNil(t, res.Parts[119].Why)
+	assert.Equal(t, "refused (synthetic)", res.Parts[119].Why.Text)
+	assert.Equal(t, core.OutcomeSkipped, res.Parts[120].Outcome)
+	assert.Equal(t, "left alone", res.Parts[120].Why.Text)
+	assert.Equal(t, core.OutcomeRefused, res.Outcome, "a refusal outranks what was left")
+
+	p.SetControls(Controls{Items: 2})
+	plan, err = s.PrepareAction(ctx, wref("web"), "evacuate", core.ActionParams{})
+	require.NoError(t, err)
+	res, err = s.RunAction(ctx, provider.ActionRun{Ref: plan.Where.Ref, Action: "evacuate", Expect: plan.Expect})
+	require.NoError(t, err)
+	assert.Equal(t, core.OutcomeSkipped, res.Outcome, "done, but something left: not everything")
 }

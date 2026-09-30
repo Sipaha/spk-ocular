@@ -175,9 +175,13 @@ pod-ов через Eviction API, который соблюдает PodDisruptio
   нужна; `kind-down` теперь с `--kubeconfig` (иначе `kind delete` правит `~/.kube/config`).
 
 ### Task 2. Общий DTO списков
-- [ ] `core.ActionList`/`ActionItem`, API, TS-типы; синтетика: действие со списками (большой
+- [x] `core.ActionList`/`ActionItem`, API, TS-типы; синтетика: действие со списками (большой
   список, свёрнутый, опасный); ActionDialog: порции по 50, свёрнутые, части результата
   порциями, диалог остаётся при `skipped` — vitest и e2e synth.
+  Добавлено: `ActionPart.Why` (причина части ключом провайдера, по-русски в UI),
+  `core.PartsOutcome` (старшинство итога), итог `skipped` в TS; части — в своём порядке
+  (порядок выполнения важен Compose), каждая достижима порциями; текст отказа части общий
+  («Выполнено не всё: в части отказано») — drain не останавливается на отказе.
 
 ### Task 3. Cordon / Uncordon (Go)
 - [ ] Unit: эффект, `Unavailable` в нужном состоянии, SSAR с именем, `effectState`; запись —

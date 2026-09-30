@@ -203,7 +203,7 @@ test('a service run of several parts: each part in the dialog, the sum in a noti
   await expect(dialog).toContainText('Restarts ocular-fixture-logger-1')
   await expect(dialog).toContainText('Restarts ocular-fixture-logger-2')
   await dialog.getByRole('button', { name: 'Restart' }).click()
-  await expect(dialog.getByRole('alert')).toContainText('Stopped at a refusal')
+  await expect(dialog.getByRole('alert')).toContainText('Not everything was done: a part was refused')
   const parts = dialog.getByRole('list', { name: 'Result' }).getByRole('listitem')
   await expect(parts).toHaveText(['ocular-fixture-logger-1Done', 'ocular-fixture-logger-2Refused · the Docker Engine refused: cannot restart'])
   await expect(page.getByRole('status')).toHaveText('Restart logger: 1 of 2 done; 1 refused')
