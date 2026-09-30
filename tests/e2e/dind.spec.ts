@@ -1,6 +1,6 @@
 import { expect, test, type Page } from '@playwright/test'
 import { execFileSync } from 'node:child_process'
-import { stats } from './synth'
+import { expectScreen, stats } from './synth'
 
 // The Compose provider against the isolated test daemon (scripts/dind-seed.sh:
 // projects ocular-fixture and ocular-other). Every change of the daemon is
@@ -95,4 +95,62 @@ test('logs of a service: both replicas, stdout and stderr, live', async ({ page 
   }
   const seen = await newest()
   await expect.poll(newest, { timeout: 15_000 }).toBeGreaterThan(seen)
+})
+
+test('a terminal in a replica of a service: the shell answers', async ({ page }) => {
+  await openDind(page)
+  const grid = await kindPage(page, 'Services')
+  await row(grid, 'logger').click()
+  await page.keyboard.press('s')
+  await expect(page.getByRole('tab', { name: /logger/ })).toBeVisible()
+  await expectScreen(page, '# ', 30_000) // busybox sh's prompt (root)
+  await page.keyboard.type('echo ocular-$((6*7))')
+  await page.keyboard.press('Enter')
+  await expectScreen(page, 'ocular-42')
+})
+
+test('CPU and Memory of services and containers', async ({ page }) => {
+  await openDind(page)
+  const services = await kindPage(page, 'Services')
+  await expect(services.getByRole('columnheader', { name: /CPU/ })).toBeVisible()
+  await expect(services.getByRole('columnheader', { name: /Memory/ })).toBeVisible()
+  // the last two cells: cores (or millicores), then bytes
+  const usage = async (r: ReturnType<typeof row>) => {
+    await expect(r.getByRole('gridcell').nth(-2)).toHaveText(/^\d+(\.\d+)?m?$/, { timeout: 30_000 })
+    await expect(r.getByRole('gridcell').nth(-1)).toHaveText(/^\d+(\.\d+)?(Ki|Mi|Gi)$/)
+  }
+  await usage(row(services, 'logger'))
+  const containers = await kindPage(page, 'Containers')
+  await usage(row(containers, 'ocular-fixture-logger-1'))
+  await expect(page.getByRole('note', { name: 'CPU/Memory' })).toHaveCount(0) // nothing to explain
+})
+
+test('stop and start a service from its row menu: its container, the plan, the sum', async ({ page }) => {
+  await openDind(page, 'ocular-other')
+  const grid = await kindPage(page, 'Services')
+  const idle = row(grid, 'idle')
+  await expect(idle).toContainText('1/1')
+  try {
+    await idle.click({ button: 'right' })
+    await page.getByRole('menu').getByRole('menuitem', { name: /^Stop/ }).click()
+    const dialog = page.getByRole('dialog', { name: 'Stop idle' })
+    await expect(dialog).toContainText('Stops ocular-other-idle-1 with SIGTERM; if it has not exited after 10 s, it is killed (SIGKILL).')
+    await expect(dialog).toContainText('The Docker Engine takes no preconditions')
+    await expect(dialog).toContainText('Permission: could not be checked')
+    await dialog.getByRole('button', { name: 'Stop' }).click()
+    await expect(dialog).toBeHidden({ timeout: 30_000 }) // sleep as PID 1 ignores SIGTERM: killed after 10 s
+    await expect(page.getByRole('status')).toHaveText('Stop idle: 1 of 1 done')
+    await expect(idle).toContainText('0/1')
+
+    await idle.click({ button: 'right' })
+    await page.getByRole('menu').getByRole('menuitem', { name: /^Start/ }).click()
+    const start = page.getByRole('dialog', { name: 'Start idle' })
+    await expect(start).toContainText('Starts ocular-other-idle-1.')
+    await start.getByRole('button', { name: 'Start' }).click()
+    await expect(start).toBeHidden()
+    await expect(page.getByRole('status')).toHaveText('Start idle: 1 of 1 done')
+    await expect(idle).toContainText('1/1')
+  } finally {
+    docker('start', 'ocular-other-idle-1')
+  }
 })
