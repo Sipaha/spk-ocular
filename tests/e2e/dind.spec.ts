@@ -188,11 +188,11 @@ test('a service run of several parts: each part in the dialog, the sum in a noti
     ran++
     await route.fulfill({
       json: {
-        message: '1 of 2 containers restarted; 1 refused',
+        message: { text: '1 of 2 containers restarted; 1 refused' },
         outcome: 'refused',
         parts: [
-          { id: 'a', title: 'ocular-fixture-logger-1', outcome: 'done', message: 'container ocular-fixture-logger-1 restarted' },
-          { id: 'b', title: 'ocular-fixture-logger-2', outcome: 'refused', message: 'the Docker Engine refused: cannot restart' },
+          { id: 'a', title: 'ocular-fixture-logger-1', outcome: 'done' },
+          { id: 'b', title: 'ocular-fixture-logger-2', outcome: 'refused', why: { key: 'compose.act.engineRefused', params: { detail: 'cannot restart' }, text: 'the Docker Engine refused: cannot restart' } },
         ],
       },
     })
