@@ -488,7 +488,7 @@ export function ActionDialog({ client, req, onClose, runTimeoutMs = RUN_TIMEOUT_
           <button ref={cancelRef} type="button" disabled={busy === 'run'} className={`${btn} text-fg-muted hover:bg-hover`} onClick={close}>
             {sent || outcome?.type === 'prepareFailed' ? t('action.close') : t('action.cancel')}
           </button>
-          {(outcome?.type === 'conflict' || outcome?.type === 'prepareFailed') && (
+          {(outcome?.type === 'conflict' || outcome?.type === 'prepareFailed' || (choosing && chosen !== null && reviewed && !!plan?.unavailable && !sent)) && (
             <button type="button" className={`${btn} border border-line hover:bg-hover`} onClick={() => (choosing ? prepare(chosen === null ? {} : { choice: chosen }) : counted && count.trim() ? review() : prepare({}))}>
               {t('action.reviewAgain')}
             </button>

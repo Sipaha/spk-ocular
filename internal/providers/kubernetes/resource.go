@@ -412,7 +412,7 @@ func (s *session) list(ctx context.Context, kind *kindDef, ns, selector string, 
 				return out, nil
 			}
 			class, msg := classify(err)
-			return out, fmt.Errorf("%s: %s (%s)", kind.desc.Title, msg, class)
+			return out, &listError{class: class, msg: msg, text: fmt.Sprintf("%s: %s (%s)", kind.desc.Title, msg, class)}
 		}
 		for i := range l.Items {
 			if keep != nil && !keep(&l.Items[i]) {
@@ -429,4 +429,26 @@ func (s *session) list(ctx context.Context, kind *kindDef, ns, selector string, 
 		}
 		opts.Continue = l.GetContinue()
 	}
+}
+
+// listError: a list that failed, with the class of why (an action tells
+// forbidden from unavailable); its text names the kind.
+type listError struct {
+	class     provider.ErrorClass
+	msg, text string
+}
+
+func (e *listError) Error() string { return e.text }
+
+// asProviderError: err with its class kept (a list's), else unavailable.
+func asProviderError(err error) *provider.Error {
+	var le *listError
+	if errors.As(err, &le) {
+		return &provider.Error{Class: le.class, Message: le.text}
+	}
+	var pe *provider.Error
+	if errors.As(err, &pe) {
+		return pe
+	}
+	return &provider.Error{Class: provider.ClassUnavailable, Message: err.Error()}
 }

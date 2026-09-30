@@ -3,12 +3,15 @@ package kubernetes
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	kruntime "k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	dynamicfake "k8s.io/client-go/dynamic/fake"
 	k8stesting "k8s.io/client-go/testing"
@@ -412,4 +415,24 @@ func TestUndoRightsAskForTheReplicaSetsToo(t *testing.T) {
 	assert.Equal(t, core.RightsDenied, plan.Rights.State)
 	assert.Contains(t, plan.Rights.Reason, "list replicasets in ns")
 	assert.Len(t, asked, 2)
+}
+
+// Revisions that cannot be read at the run keep the class of why: a lost
+// right is forbidden, not unavailable; nothing is written.
+func TestUndoRevisionsUnreadableAtTheRunKeepTheirClass(t *testing.T) {
+	s, c := actionSession(t, history(nil)...)
+	plan := prepare(t, s, deployWebRef, "undo", choice("web-aaa1"))
+	c.PrependReactor("list", "replicasets", func(k8stesting.Action) (bool, kruntime.Object, error) {
+		return true, nil, apierrors.NewForbidden(schema.GroupResource{Group: "apps", Resource: "replicasets"}, "", errors.New("rbac"))
+	})
+	_, err := s.RunAction(context.Background(), provider.ActionRun{Ref: deployWebRef, Action: "undo", Params: choice("web-aaa1"), Expect: plan.Expect})
+	assertClass(t, err, provider.ClassForbidden)
+	assert.Empty(t, writes(c))
+}
+
+// Only a list named env is said as env values.
+func TestOnlyEnvListsAreSaidAsValues(t *testing.T) {
+	from := map[string]any{"spec": map[string]any{"xenv": []any{}}}
+	to := map[string]any{"spec": map[string]any{"xenv": []any{map[string]any{"name": "A", "value": "1"}}}}
+	assert.Equal(t, []string{"xenv[A]: added"}, core.Texts(templateChanges(from, to)))
 }

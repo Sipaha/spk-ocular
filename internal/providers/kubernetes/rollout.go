@@ -210,7 +210,7 @@ func (s *session) runUndo(ctx context.Context, def *kindDef, run provider.Action
 	expect := func(ctx context.Context, u *unstructured.Unstructured) (*revision, string, error) {
 		revs, _, err := s.revisions(ctx, u)
 		if err != nil {
-			return nil, "", &provider.Error{Class: provider.ClassUnavailable, Message: err.Error()}
+			return nil, "", asProviderError(err) // a lost right stays forbidden
 		}
 		r, e := undoState(def, choice, u, revs)
 		return r, e, nil
@@ -391,7 +391,7 @@ func diffValue(out *[]core.Message, a, b any, path string) {
 
 // diffNamed: items of b in their order, then those only in a.
 func diffNamed(out *[]core.Message, path string, al, bl []any, an, bn map[string]map[string]any) {
-	env := strings.HasSuffix(path, "env")
+	env := path == "env" || strings.HasSuffix(path, ".env")
 	item := func(name string) string { return path + "[" + name + "]" }
 	for _, x := range bl {
 		m := x.(map[string]any)

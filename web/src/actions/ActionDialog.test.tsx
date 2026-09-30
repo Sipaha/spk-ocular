@@ -664,6 +664,18 @@ describe('ActionDialog', () => {
       await waitFor(() => expect(within(dialog).getByRole('button', { name: 'Cancel' })).toHaveFocus()) // Esc reaches the dialog
     })
 
+    it('a choice whose plan is unavailable can be reviewed again', async () => {
+      let gone = true
+      const { f, dialog } = setup(undo, (p) => ({ ...undoPlan(p), unavailable: p.choice && gone ? { text: 'revision web-a is no longer there' } : undefined }))
+      await userEvent.click(within(await within(dialog).findByRole('radiogroup')).getByRole('radio', { name: /Revision 1/ }))
+      await within(dialog).findByText(/no longer there/)
+      gone = false
+      await userEvent.click(within(dialog).getByRole('button', { name: 'Review again' }))
+      await within(dialog).findByText('to web-a')
+      expect(f.client.prepareAction).toHaveBeenLastCalledWith(ref, 'undo', { choice: 'web-a' })
+      await waitFor(() => expect(within(dialog).getByRole('button', { name: 'Roll back' })).toBeEnabled())
+    })
+
     it('arrows move between the choices and review each; a late plan of an earlier one never runs', async () => {
       const late = deferred<ActionPlan>()
       const { f, dialog } = setup(undo, (p) => (p.choice === 'web-b' ? late.promise : undoPlan(p)))

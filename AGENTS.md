@@ -427,7 +427,8 @@ P15 — Deployment: откат к выбранной ревизии, пауза 
   `failedWrite` пересчитывает `Expect` тем же путём. Запись — один JSON Patch: `test /metadata/uid`,
   `replace /metadata/resourceVersion`, `replace /spec/template` (шаблон RS без хэша), change-cause —
   как у ревизии (прочие аннотации не трогаются); тело — из прочитанного в этой попытке. На паузе —
-  недоступен («сначала возобновите»). Права — patch deployments и list replicasets. Разница
+  недоступен («сначала возобновите»). Права — patch deployments и list replicasets; нечитаемые при
+  прогоне ревизии сохраняют класс причины (403 — `forbidden`, не `unavailable`). Разница
   шаблонов — пути, именованные списки (containers, env, volumes) по имени и поштучно, `env` с
   `valueFrom` — ссылкой (`secretKeyRef x/key`), не значением. Pause/resume — merge patch
   `spec.paused` с uid + rv, `Expect` — paused и generation; id `resume` общий с CronJob, ветвление
