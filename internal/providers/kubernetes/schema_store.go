@@ -142,6 +142,11 @@ func (s *session) schemaFor(ctx context.Context, def *kindDef, q provider.Query)
 				return nil, &provider.Error{Class: provider.ClassSchemaChanged, Message: def.desc.Title + ": the API resource changed; opening again"}
 			}
 			continue
+		case sch.table && s.schemas.plain[def.gvr]:
+			// No Tables was shown meanwhile (another probe, a stream): this
+			// answer is not published; the next round reads plain.
+			s.schemas.mu.Unlock()
+			continue
 		case e.cur == nil:
 			s.schemas.epochs++
 			sch.epoch = s.schemas.epochs
@@ -442,10 +447,14 @@ func (s *session) checkSchema(e *schemaEntry) {
 	ctx, cancel := context.WithTimeout(s.ctx, probeTimeout)
 	defer cancel()
 	next, err := s.probeRoute(ctx, sch.def, ns, metav1.ListOptions{Limit: 1, FieldSelector: sel})
-	if err != nil {
+	switch {
+	case err != nil:
 		return // not an answer about the columns: the views say what fails
-	}
-	if !next.same(sch) {
+	case !next.table:
+		// Evidence of no Tables: whatever Table epoch is current now (not
+		// only the one read) ends, and probes in flight are fenced.
+		s.markPlain(sch.gvr)
+	case !next.same(sch):
 		s.schemaChanged(sch)
 	}
 }

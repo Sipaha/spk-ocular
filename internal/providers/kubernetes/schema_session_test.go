@@ -50,6 +50,14 @@ type widgetsAPI struct {
 	inflight       atomic.Int32
 	maxInflight    atomic.Int32
 	probeCancelled atomic.Int32
+	// scripted: per limit=1 request in turn, a hold and a body (nil: the
+	// table) taken as the request comes.
+	scripted []scriptedProbe
+}
+
+type scriptedProbe struct {
+	hold chan struct{}
+	body any
 }
 
 func (a *widgetsAPI) setCols(c []metav1.TableColumnDefinition) {
@@ -80,6 +88,13 @@ func (a *widgetsAPI) serve(w http.ResponseWriter, r *http.Request) {
 	a.mu.Lock()
 	a.queries = append(a.queries, q)
 	status, plain, cols, objs, w406, probeBody, delay, hold := a.status, a.plain, a.cols, a.objs, a.watch406, a.probeBody, a.probeDelay, a.probeHold
+	if q.Get("limit") == "1" && len(a.scripted) > 0 {
+		hold, probeBody = a.scripted[0].hold, a.scripted[0].body
+		if probeBody == nil {
+			probeBody = tableJSON(cols, "10", "", nil, objs...)
+		}
+		a.scripted = a.scripted[1:]
+	}
 	a.mu.Unlock()
 	if q.Get("limit") == "1" {
 		a.probes.Add(1)
@@ -619,4 +634,85 @@ func TestNoTablesEvidenceSticksOnEveryPath(t *testing.T) {
 		assert.Equal(t, plainCols, d.Columns)
 		assert.Equal(t, probes, api.probes.Load())
 	})
+}
+
+// A revalidation finding no Tables while a replacement epoch's probe is in
+// flight: the replacement never publishes Tables (Codex re-review of
+// d3a9b9b).
+func TestPlainRevalidationFencesAReplacementProbe(t *testing.T) {
+	api := newWidgetsAPI()
+	s, _ := tableSession(t, api)
+	_, q, err := s.DescribeView(context.Background(), provider.Query{Kind: "ocular.dev/widgets", Scope: allNS})
+	require.NoError(t, err)
+	sink := &deltaSink{}
+	stop, err := s.Watch(q, sink)
+	require.NoError(t, err)
+	defer stop()
+	require.Eventually(t, func() bool { st := sink.status(); return st != nil && st.State == provider.StatusReady }, 5*time.Second, 5*time.Millisecond)
+	s.schemas.mu.Lock()
+	a := s.schemas.by[widgetsGVR].cur
+	s.schemas.mu.Unlock()
+
+	holdR, holdB := make(chan struct{}), make(chan struct{})
+	api.mu.Lock()
+	api.scripted = []scriptedProbe{
+		{hold: holdR, body: map[string]any{"kind": "WidgetList", "apiVersion": "ocular.dev/v1", "metadata": map[string]any{"resourceVersion": "10"}, "items": []any{}}},
+		{hold: holdB},
+	}
+	api.mu.Unlock()
+	revalidated := make(chan struct{})
+	go func() { s.revalidate(nil); close(revalidated) }()
+	require.Eventually(t, func() bool { return api.inflight.Load() == 1 }, 5*time.Second, time.Millisecond)
+	s.schemaChanged(a) // a header mismatch ends A meanwhile
+	type res struct {
+		d   core.KindDescriptor
+		err error
+	}
+	done := make(chan res, 1)
+	go func() {
+		d, _, err := s.DescribeView(context.Background(), provider.Query{Kind: "ocular.dev/widgets", Scope: allNS})
+		done <- res{d, err}
+	}()
+	require.Eventually(t, func() bool { return api.inflight.Load() == 2 }, 5*time.Second, time.Millisecond)
+	close(holdR)
+	<-revalidated
+	close(holdB)
+	r := <-done
+	require.NoError(t, r.err)
+	assert.Equal(t, []core.Column{colName, colNS, colAge}, r.d.Columns)
+}
+
+// The other order: the replacement publishes Tables first, then the
+// revalidation's evidence ends that epoch too (not only the one it read).
+func TestPlainRevalidationEndsTheCurrentEpoch(t *testing.T) {
+	api := newWidgetsAPI()
+	s, _ := tableSession(t, api)
+	_, q, err := s.DescribeView(context.Background(), provider.Query{Kind: "ocular.dev/widgets", Scope: allNS})
+	require.NoError(t, err)
+	stop, err := s.Watch(q, &deltaSink{})
+	require.NoError(t, err)
+	defer stop()
+	s.schemas.mu.Lock()
+	a := s.schemas.by[widgetsGVR].cur
+	s.schemas.mu.Unlock()
+	holdR := make(chan struct{})
+	api.mu.Lock()
+	api.scripted = []scriptedProbe{{hold: holdR, body: map[string]any{"kind": "WidgetList", "apiVersion": "ocular.dev/v1", "metadata": map[string]any{}, "items": []any{}}}}
+	api.mu.Unlock()
+	revalidated := make(chan struct{})
+	go func() { s.revalidate(nil); close(revalidated) }()
+	require.Eventually(t, func() bool { return api.inflight.Load() == 1 }, 5*time.Second, time.Millisecond)
+	s.schemaChanged(a)
+	_, qb, err := s.DescribeView(context.Background(), provider.Query{Kind: "ocular.dev/widgets", Scope: allNS})
+	require.NoError(t, err)
+	sinkB := &deltaSink{}
+	stopB, err := s.Watch(qb, sinkB)
+	require.NoError(t, err)
+	defer stopB()
+	close(holdR)
+	<-revalidated
+	require.Eventually(t, func() bool { st := sinkB.status(); return st != nil && st.Class == provider.ClassSchemaChanged }, 5*time.Second, 5*time.Millisecond)
+	d, _, err := s.DescribeView(context.Background(), provider.Query{Kind: "ocular.dev/widgets", Scope: allNS})
+	require.NoError(t, err)
+	assert.Equal(t, []core.Column{colName, colNS, colAge}, d.Columns)
 }
