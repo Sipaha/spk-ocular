@@ -319,3 +319,135 @@ test('a user without the right sees it in the review', async ({ page }) => {
   await dialog.getByRole('button', { name: 'Cancel' }).click()
   expect(kubectl('-n', 'ocular-demo', 'get', 'pod', name, '-o', 'jsonpath={.metadata.name}')).toBe(name)
 })
+
+// ---- P8: every listable resource (discovery + server-side Tables)
+
+/** The navigation's discovered kind (its API group subgroup expanded). */
+async function apiKind(page: Page, sub: string, kind: string, ns?: string) {
+  const nav = page.getByRole('navigation', { name: 'resources' })
+  const group = nav.getByRole('group', { name: sub })
+  const head = group.getByRole('button', { name: new RegExp(`^${sub.replace(/\./g, '\\.')}`) })
+  if ((await head.getAttribute('aria-expanded')) === 'false') await head.click()
+  await group.getByRole('button', { name: kind, exact: true }).click()
+  await expect(page.getByRole('heading', { name: kind })).toBeVisible()
+  if (ns) await page.getByRole('combobox', { name: 'Namespace' }).selectOption(ns)
+  return page.getByRole('grid', { name: 'resources' })
+}
+
+test('custom resources: API groups in the navigation, the CRD columns, live changes', async ({ page }) => {
+  await openTarget(page, 'kind-ocular-dev')
+  const section = page.getByRole('navigation', { name: 'resources' }).getByRole('region', { name: 'API groups' })
+  await expect(section.getByRole('button', { name: /^ocular\.dev/ })).toHaveAttribute('aria-expanded', 'false')
+  const grid = await apiKind(page, 'ocular.dev', 'Widgets', 'ocular-crd')
+  // kubectl get's columns (Detail is wide: a fact of the details)
+  await expect(grid.getByRole('columnheader')).toHaveText([/Name/, /Size/, /Phase/, /Ready/, /Since/])
+  await expect(row(grid, 'alpha')).toContainText('Running')
+  await expect(row(grid, 'beta')).toContainText('Failing')
+  // health from the conditions: a dot by the name, the reason on hover
+  await expect(row(grid, 'beta').locator('[data-health]')).toHaveAttribute('data-health', 'error')
+  await expect(row(grid, 'beta')).toHaveAttribute('title', 'Broken: the widget is broken')
+  await expect(row(grid, 'alpha').locator('[data-health]')).toHaveAttribute('data-health', 'ok')
+  await expect(row(grid, 'alpha').getByRole('gridcell').last()).toHaveText(/^\d+(s|m|h|d)/)
+  kubectl('-n', 'ocular-crd', 'patch', 'widget', 'gamma', '--type=merge', '-p', '{"spec":{"size":11}}')
+  try {
+    await expect(row(grid, 'gamma').getByRole('gridcell').nth(1)).toHaveText('11')
+  } finally {
+    kubectl('-n', 'ocular-crd', 'patch', 'widget', 'gamma', '--type=merge', '-p', '{"spec":{"size":1}}')
+  }
+})
+
+test('details of a custom resource: wide columns are facts, the YAML is the object', async ({ page }) => {
+  await openTarget(page, 'kind-ocular-dev')
+  const grid = await apiKind(page, 'ocular.dev', 'Widgets', 'ocular-crd')
+  await row(grid, 'alpha').click()
+  const drawer = page.getByRole('dialog', { name: 'ocular.dev/widgets alpha' })
+  await expect(drawer.getByText('Detail', { exact: true })).toBeVisible()
+  await expect(drawer.getByText('first', { exact: true })).toBeVisible()
+  await drawer.getByRole('tab', { name: 'YAML' }).click()
+  await expect(drawer.locator('.cm-editor')).toContainText('kind: Widget')
+  await expect(drawer.locator('.cm-editor')).not.toContainText('ocularCells')
+})
+
+test('the palette opens a custom resource by its short name', async ({ page }) => {
+  await openTarget(page, 'kind-ocular-dev')
+  await page.keyboard.press('Control+k')
+  await page.keyboard.type(':wd')
+  await page.keyboard.press('Enter')
+  await expect(page.getByRole('heading', { name: 'Widgets' })).toBeVisible()
+})
+
+test('built-ins without a described view: Jobs with the server columns', async ({ page }) => {
+  await openTarget(page, 'kind-ocular-dev')
+  const grid = await apiKind(page, 'batch', 'Jobs', 'ocular-crd')
+  await expect(grid.getByRole('columnheader')).toHaveText([/Name/, /Status/, /Completions/, /Duration/, /Age/])
+  await expect(row(grid, 'once')).toContainText('Complete')
+  await expect(row(grid, 'once')).toContainText('1/1')
+})
+
+test('deleting a custom resource with a finalizer: the review says so, deletion waits for it', async ({ page }) => {
+  const cleanup = () => {
+    try {
+      kubectl('-n', 'ocular-crd', 'patch', 'widget', 'delta', '--type=merge', '-p', '{"metadata":{"finalizers":null}}')
+    } catch {
+      // already gone
+    }
+    kubectl('-n', 'ocular-crd', 'delete', 'widget', 'delta', '--ignore-not-found', '--wait=true', '--timeout=30s')
+  }
+  cleanup() // a run that died before its cleanup
+  execFileSync('kubectl', ['--kubeconfig', kc, '--context', 'kind-ocular-dev', 'apply', '-f', '-'], {
+    input: 'apiVersion: ocular.dev/v1\nkind: Widget\nmetadata: {name: delta, namespace: ocular-crd, finalizers: [ocular.dev/hold]}\nspec: {size: 2}\n',
+  })
+  try {
+    await openTarget(page, 'kind-ocular-dev')
+    const grid = await apiKind(page, 'ocular.dev', 'Widgets', 'ocular-crd')
+    await row(grid, 'delta').click({ button: 'right' })
+    await page.getByRole('menu', { name: 'Row actions' }).getByRole('menuitem', { name: 'Delete' }).click()
+    const dialog = page.getByRole('dialog', { name: 'Delete delta' })
+    await expect(dialog).toContainText('Deletion waits for its finalizers: ocular.dev/hold.')
+    await expect(dialog.getByRole('button', { name: 'Cancel' })).toBeFocused()
+    await dialog.getByRole('button', { name: 'Delete' }).click()
+    await expect(page.getByRole('status')).toHaveText('widget delta: deletion requested')
+    await expect(row(grid, 'delta').locator('[data-health]')).toHaveAttribute('data-health', 'terminating')
+    await expect(row(grid, 'delta')).toHaveAttribute('title', 'Terminating')
+    kubectl('-n', 'ocular-crd', 'patch', 'widget', 'delta', '--type=merge', '-p', '{"metadata":{"finalizers":null}}')
+    await expect(row(grid, 'delta')).toHaveCount(0)
+  } finally {
+    cleanup()
+  }
+})
+
+test('a CRD created while the target is open appears; deleted, its open view says it is no longer served', async ({ page }) => {
+  const crd = 'things.e2e.ocular.dev'
+  const cleanup = () => kubectl('delete', 'crd', crd, '--ignore-not-found', '--wait=false')
+  cleanup()
+  try {
+    await openTarget(page, 'kind-ocular-dev')
+    execFileSync('kubectl', ['--kubeconfig', kc, '--context', 'kind-ocular-dev', 'apply', '-f', '-'], {
+      input: `apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata: {name: ${crd}}
+spec:
+  group: e2e.ocular.dev
+  scope: Cluster
+  names: {plural: things, singular: thing, kind: Thing}
+  versions:
+  - {name: v1, served: true, storage: true, schema: {openAPIV3Schema: {type: object, x-kubernetes-preserve-unknown-fields: true}}}
+`,
+    })
+    kubectl('wait', '--for=condition=Established', `crd/${crd}`, '--timeout=60s')
+    execFileSync('kubectl', ['--kubeconfig', kc, '--context', 'kind-ocular-dev', 'apply', '-f', '-'], { input: 'apiVersion: e2e.ocular.dev/v1\nkind: Thing\nmetadata: {name: t1}\n' })
+    // No reload: the CRD watch triggers discovery, the UI lists again.
+    const nav = page.getByRole('navigation', { name: 'resources' })
+    await expect(nav.getByRole('button', { name: 'Things', exact: true })).toBeVisible({ timeout: 30_000 })
+    await nav.getByRole('button', { name: 'Things', exact: true }).click()
+    const grid = page.getByRole('grid', { name: 'resources' })
+    await expect(row(grid, 't1')).toBeVisible()
+
+    kubectl('delete', 'crd', crd, '--wait=true', '--timeout=60s')
+    await expect(page.getByRole('alert')).toContainText('no longer served by the API', { timeout: 30_000 })
+    await expect(page.getByRole('heading', { name: 'Things' })).toBeVisible()
+    await expect(nav.getByRole('button', { name: 'Things', exact: true })).toHaveCount(0)
+  } finally {
+    cleanup()
+  }
+})

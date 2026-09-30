@@ -105,3 +105,35 @@ describe('ResourceTable metrics', () => {
     expect(seen).toHaveBeenLastCalledWith(['id-a', 'id-b', 'id-c'])
   })
 })
+
+describe('ResourceTable health without a status column', () => {
+  const plain: Column[] = [{ id: 'name', title: 'Name', type: 'text' }, { id: 'size', title: 'Size', type: 'number' }]
+  const hrow = (name: string, health: Row['health']): Row => ({ ...row(name), health })
+  it('a table of server columns (no status column) still shows each row’s health: a dot by the name, the reason on hover', () => {
+    render(
+      <ResourceTable
+        columns={plain}
+        rows={[hrow('alpha', { state: 'ok' }), hrow('beta', { state: 'error', reason: 'Broken', message: 'the widget is broken' }), hrow('delta', { state: 'terminating', reason: 'Terminating' })]}
+        hideScope={false}
+        filter=""
+        selected={null}
+        onSelect={() => {}}
+        metrics={null}
+      />,
+    )
+    const r = (name: string) => screen.getByText(name).closest('[role="row"]') as HTMLElement
+    const first = (name: string) => within(r(name)).getAllByRole('gridcell')[0]
+    expect(first('beta').querySelector('[data-health]')).toHaveAttribute('data-health', 'error')
+    expect(r('beta')).toHaveAttribute('title', 'Broken: the widget is broken')
+    expect(first('alpha').querySelector('[data-health]')).toHaveAttribute('data-health', 'ok')
+    expect(first('delta').querySelector('[data-health]')).toHaveAttribute('data-health', 'terminating')
+    expect(first('delta')).toHaveClass('text-fg-subtle')
+    expect(within(r('beta')).getAllByRole('gridcell')[1].querySelector('[data-health]')).toBeNull()
+  })
+  it('with a status column the dot stays there', () => {
+    render(<ResourceTable columns={[...plain, { id: 'status', title: 'Status', type: 'status' }]} rows={[{ ...hrow('a', { state: 'error' }), cells: [{ text: 'a' }, { num: 1 }, { text: 'Failed' }] }]} hideScope={false} filter="" selected={null} onSelect={() => {}} metrics={null} />)
+    const cells = within(screen.getByText('a').closest('[role="row"]') as HTMLElement).getAllByRole('gridcell')
+    expect(cells[0].querySelector('[data-health]')).toBeNull()
+    expect(cells[2].querySelector('[data-health]')).toHaveAttribute('data-health', 'error')
+  })
+})

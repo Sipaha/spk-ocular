@@ -262,7 +262,7 @@ ServiceAccounts, Roles, HPA…). Колонки — **те же, что у `kube
   создание — настоящее `kinds_changed`; потерянное событие и чужой target — vitest.
 
 ### Task 5. kind и e2e
-- [ ] `kind-seed`: CRD `widgets.ocular.dev` (namespaced, printer columns: число, строка,
+- [x] `kind-seed`: CRD `widgets.ocular.dev` (namespaced, printer columns: число, строка,
   дата, condition Ready, wide; shortName `wd`) и cluster-scoped `gadgets.ocular.dev` без
   колонок, CR-ы с Ready True/False и устаревшим `observedGeneration`, финализатор; Job,
   CronJob, PVC. `TestKind…`: колонки как у `kubectl get`, возраст тикает, живое изменение,
@@ -270,6 +270,13 @@ ServiceAccounts, Roles, HPA…). Колонки — **те же, что у `kube
   columns той же версии → новая эпоха, viewer без list ресурса → forbidden в виде, без
   чтения CRD → каталог всё равно есть (обновление по `F5`). e2e-kind: навигация, таблица CR,
   детали, delete CR с финализатором.
+  Сделано (e2e-kind, 22 теста): навигация «API groups» (свёрнутая `ocular.dev`), колонки
+  Widgets как у `kubectl get` (Detail — только в деталях), живое изменение, health по
+  conditions (точка у имени и причина в подсказке — у таблицы колонок сервера нет колонки
+  статуса; найдено этим тестом), детали с wide-фактом и YAML без служебного поля, `:wd`, Jobs
+  с колонками сервера, delete CR с финализатором (план говорит о нём, строка «terminating»,
+  снятие финализатора убирает строку), CRD, созданный при открытом target-е, появляется без
+  перезагрузки, а удалённый — открытый вид говорит «больше не обслуживается API».
 
 ### Task 6. Desktop, документы, ревью
 - [ ] Desktop под Xvfb (русская раскладка): навигация с подгруппами, таблица CR, детали,

@@ -122,6 +122,7 @@ export function ResourceTable({ columns, rows, hideScope, filter, selected, onSe
   })
   // Ties: the kind's second key (ascending), then the name.
   const thenCol = defaultSort?.then ? columns.findIndex((c) => c.id === defaultSort.then) : -1
+  const hasStatus = columns.some((c) => c.type === 'status')
   const visibleCols = useMemo(
     () => columns.map((c, i) => ({ c, i })).filter(({ c }) => !(hideScope && c.scopeColumn)),
     [columns, hideScope],
@@ -304,6 +305,9 @@ export function ResourceTable({ columns, rows, hideScope, filter, selected, onSe
               >
                 {visibleCols.map(({ c, i }) => {
                   const cell = cellOf(r, i)
+                  // No status column (a table of the server's columns): the
+                  // row's health is a dot by its first cell.
+                  const dotHere = c.type === 'status' || (!hasStatus && i === 0)
                   return (
                     <span
                       key={c.id}
@@ -312,10 +316,11 @@ export function ResourceTable({ columns, rows, hideScope, filter, selected, onSe
                         'truncate px-3',
                         isNumeric(c) ? 'text-right font-mono text-[12px]' : '',
                         c.type === 'status' ? (cell?.muted ? 'text-fg-subtle' : healthText[r.health.state]) : '',
+                        !hasStatus && i === 0 && r.health.state === 'terminating' ? healthText.terminating : '',
                         i === 0 ? 'font-medium' : '',
                       ].join(' ')}
                     >
-                      {c.type === 'status' && <HealthDot state={r.health.state} muted={cell?.muted} />}
+                      {dotHere && <HealthDot state={r.health.state} muted={c.type === 'status' && cell?.muted} />}
                       {cellText(c, cell, now)}
                     </span>
                   )
@@ -348,6 +353,7 @@ export function HealthDot({ state, muted }: { state: HealthState; muted?: boolea
   return (
     <span
       aria-hidden
+      data-health={state}
       className={['mr-1.5 inline-block h-2 w-2 rounded-full align-middle', muted ? 'border border-fg-subtle' : dotColor[state]].join(' ')}
     />
   )

@@ -179,7 +179,7 @@ export function Workspace({ client, hub, target }: { client: Client; hub: ViewHu
 
   return (
     <div className="flex min-h-0 flex-1">
-      <nav aria-label="resources" data-area="nav" onKeyDown={onNavKey} className="w-40 shrink-0 overflow-y-auto border-r border-line bg-sidebar/60 px-2 py-3">
+      <nav aria-label="resources" data-area="nav" onKeyDown={onNavKey} className="w-48 shrink-0 overflow-y-auto border-r border-line bg-sidebar/60 px-2 py-3">
         <NavItem active={kind === OVERVIEW} onClick={() => setKind(OVERVIEW)} label={t('nav.overview')} />
         {groups.map((g) => (
           <section key={g.group} className="mt-3" aria-label={g.group}>
