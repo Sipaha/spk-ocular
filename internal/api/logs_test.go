@@ -51,7 +51,7 @@ func (o *logOpenable) Open(ctx context.Context, target string) (provider.Session
 
 func newLogService(t *testing.T) (*Service, *logOpenable, *httptest.Server, *streams.Handler) {
 	t.Helper()
-	k := &logOpenable{openable: newOpenable("a", "b"), started: make(chan provider.LogQuery, 4)}
+	k := &logOpenable{openable: newOpenable("a", "b", "c", "d"), started: make(chan provider.LogQuery, 4)}
 	s, _ := newService(t, k)
 	h := streams.NewHandler(s.Streams(), streams.HandlerOptions{Classify: StreamErrorClass})
 	srv := httptest.NewServer(h)
@@ -114,9 +114,26 @@ func TestSessionClosingEndsItsLogStreamsGone(t *testing.T) {
 	q := <-k.started
 	assert.Equal(t, provider.LogQuery{TailLines: 100, Follow: true}, q)
 
-	require.NoError(t, s.SelectTarget(ctx, "k", "b")) // another context: session a closes
+	k.setHash("a", "h2") // the kubeconfig changed under it: the session goes
+	s.revalidateSessions(ctx, "k")
 	assert.Equal(t, map[string]any{"k": "end", "reason": "gone"}, lastFrame(t, sc))
 	require.Eventually(t, func() bool { return s.Streams().Len() == 0 }, 5*time.Second, 10*time.Millisecond)
+}
+
+// A log tab of another target keeps going: switching never closes a
+// session with a stream, however many targets were left since.
+func TestSwitchingKeepsALogTabOfAnotherTarget(t *testing.T) {
+	ctx := context.Background()
+	s, k, _, _ := newLogService(t)
+	info, err := s.OpenLogStream(ctx, LogStreamRequest{Ref: podRef, Query: provider.LogQuery{TailLines: 100, Follow: true}})
+	require.NoError(t, err)
+	connect(t, s, info.StreamID)
+	<-k.started
+	for _, next := range []string{"b", "c", "d", "b", "c"} {
+		require.NoError(t, s.SelectTarget(ctx, "k", next))
+	}
+	assert.False(t, k.opened[0].isClosed(), "a was left long ago, but its log tab is open")
+	assert.Equal(t, 1, s.Streams().Len())
 }
 
 func TestSessionWithOnlyALogTabIsNotReaped(t *testing.T) {

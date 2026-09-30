@@ -227,6 +227,14 @@ context старые кэши освобождаются сразу») и «Не
   `WAYLAND_DISPLAY`/`DBUS_SESSION_BUS_ADDRESS`/`BROWSER`/`GPG_TTY`/`SSH_ASKPASS`,
   `interactive: false`, 15 с); неудача без головы — `unauthorized`, `lost()` (решение 2).
 
+**rev3 (316c190), `ggyxmbt4`, 2026-10-01 — CLOSED.** Не блокирующее, записать в бэклог: без
+`DBUS_SESSION_BUS_ADDRESS` не работают и плагины, хранящие кэш токена в связке ключей рабочего
+стола через Secret Service (kubelogin `--token-cache-storage=keyring`, часть azure/gcloud,
+помощники на libsecret) — в фоне даже тихое обновление не пройдёт, сессия закроется на
+истечении токена (безопасно, но холоднее нужного). Вариант на потом — оставлять D-Bus и убирать
+только переменные запуска GUI (разблокированная связка не спрашивает) — против pinentry-gnome
+через D-Bus.
+
 ## Итоги
 
 (после реализации)

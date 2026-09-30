@@ -32,8 +32,16 @@ type sessionEntry struct {
 }
 
 // sessionIdle: a session without views is closed after this long (a page
-// that went away, a target left behind). A local timer, not cluster polling.
+// that went away). A local timer, not cluster polling.
 const sessionIdle = 60 * time.Second
+
+// Recent targets (P18): the recentTargets targets left last keep their
+// sessions (caches, watches) so switching back is instant; unused, one
+// closes recentIdle after it was left.
+const (
+	recentTargets = 2
+	recentIdle    = 10 * time.Minute
+)
 
 func ownerKey(providerID, target string) string { return providerID + "\x00" + target }
 
@@ -162,14 +170,35 @@ func keyProvider(key string) string {
 	return p
 }
 
-// closeOtherSessions keeps only the selected target's session — and those
-// agents are using (AgentCall).
-func (s *Service) closeOtherSessions(keep string) {
+// selectSession makes cur the selected target's session key, prev (if
+// another) a recent one, and closes the sessions that are neither current
+// nor recent — but not busy ones: with a stream (a log tab of that target
+// goes on) or agents' calls (AgentCall).
+func (s *Service) selectSession(prev, cur string) {
+	streams := s.streams.Owners()
 	s.sessMu.Lock()
 	defer s.sessMu.Unlock()
 	now := s.now()
+	if s.current != "" {
+		prev = s.current // this run's own record beats the stored preference
+	}
+	if prev != "" && prev != cur {
+		s.left[prev] = now
+	}
+	delete(s.left, cur)
+	s.current = cur
+	for len(s.left) > recentTargets {
+		oldest := ""
+		for k, at := range s.left {
+			if oldest == "" || at.Before(s.left[oldest]) {
+				oldest = k
+			}
+		}
+		delete(s.left, oldest)
+	}
 	for key, e := range s.sessions {
-		if key != keep && !e.spared(now) {
+		_, recent := s.left[key]
+		if key != cur && !recent && !e.spared(now) && streams[e.owner] == 0 {
 			s.closeSessionLocked(key)
 		}
 	}
@@ -526,7 +555,14 @@ func (s *Service) reapIdleSessions() {
 			e.lastUsed = now
 			continue
 		}
-		if now.Sub(e.lastUsed) >= sessionIdle {
+		idle, since := sessionIdle, e.lastUsed
+		if at, ok := s.left[key]; ok {
+			idle = recentIdle
+			if at.After(since) {
+				since = at
+			}
+		}
+		if now.Sub(since) >= idle {
 			s.closeSessionLocked(key)
 		}
 	}

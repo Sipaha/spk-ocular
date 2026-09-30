@@ -140,14 +140,88 @@ func TestConfigChangeClosesSessionAndTellsViews(t *testing.T) {
 	assert.Equal(t, "h2", k.opened[1].ConfigHash())
 }
 
-func TestSelectingAnotherTargetClosesOtherSessions(t *testing.T) {
+// visit selects target and opens its session (the page's first call).
+func visit(t *testing.T, s *Service, target string) {
+	t.Helper()
+	require.NoError(t, s.SelectTarget(context.Background(), "k", target))
+	_, err := s.ListKinds(context.Background(), "k", target)
+	require.NoError(t, err)
+}
+
+// The two targets left last stay open (switching back is instant); one
+// left before them closes when another is selected.
+func TestLeftTargetsStayOpenTwoOfThem(t *testing.T) {
+	k := newOpenable("a", "b", "c", "d")
+	s, _ := newService(t, k)
+	visit(t, s, "a")
+	visit(t, s, "b")
+	visit(t, s, "c")
+	for i := range 3 {
+		assert.False(t, k.opened[i].isClosed(), "c current; a, b left last")
+	}
+	visit(t, s, "d")
+	assert.True(t, k.opened[0].isClosed(), "a was left before b and c")
+	assert.False(t, k.opened[1].isClosed())
+	assert.False(t, k.opened[2].isClosed())
+
+	visit(t, s, "b") // back: the same session, not another Open
+	assert.Len(t, k.opened, 4)
+	assert.False(t, k.opened[1].isClosed())
+	visit(t, s, "a") // left: d, b's before it is c — c goes
+	assert.True(t, k.opened[2].isClosed(), "c was left before d and b")
+	assert.False(t, k.opened[3].isClosed())
+}
+
+// A left target's session idles for recentIdle; the others for sessionIdle.
+func TestALeftTargetIdlesLonger(t *testing.T) {
+	k := newOpenable("a", "b")
+	s, _ := newService(t, k)
+	now := time.Unix(1000, 0)
+	s.now = func() time.Time { return now }
+	visit(t, s, "a")
+	visit(t, s, "b")
+	now = now.Add(sessionIdle + time.Second)
+	s.reapIdleSessions()
+	assert.False(t, k.opened[0].isClosed(), "a, left: kept")
+	assert.True(t, k.opened[1].isClosed(), "b, current without views: as before")
+	now = now.Add(recentIdle)
+	s.reapIdleSessions()
+	assert.True(t, k.opened[0].isClosed(), "a, left over recentIdle ago")
+}
+
+// recentIdle counts from leaving, not from the session's last recorded use.
+func TestARecentTargetIdlesFromLeavingIt(t *testing.T) {
 	ctx := context.Background()
 	k := newOpenable("a", "b")
 	s, _ := newService(t, k)
-	_, err := s.ListKinds(ctx, "k", "a")
+	now := time.Unix(1000, 0)
+	s.now = func() time.Time { return now }
+	require.NoError(t, s.SelectTarget(ctx, "k", "a"))
+	info, err := s.OpenView(ctx, OpenViewRequest{Provider: "k", Target: "a", Query: provider.Query{Kind: "pods", Scope: allScopes}})
 	require.NoError(t, err)
-	require.NoError(t, s.SelectTarget(ctx, "k", "b"))
-	assert.True(t, k.opened[0].isClosed())
+	s.reapIdleSessions() // in use now
+	now = now.Add(50 * time.Second)
+	require.NoError(t, s.CloseView(ctx, info.ViewID)) // the page goes
+	visit(t, s, "b")
+	now = now.Add(recentIdle - 5*time.Second)
+	s.reapIdleSessions()
+	assert.False(t, k.opened[0].isClosed(), "left less than recentIdle ago")
+}
+
+// Back to a left target: it is current again, not recent — current idle
+// rules, and it takes no recent place.
+func TestATargetSelectedAgainIsNotRecent(t *testing.T) {
+	k := newOpenable("a", "b")
+	s, _ := newService(t, k)
+	now := time.Unix(1000, 0)
+	s.now = func() time.Time { return now }
+	visit(t, s, "a")
+	visit(t, s, "b")
+	visit(t, s, "a")
+	now = now.Add(sessionIdle + time.Second)
+	s.reapIdleSessions()
+	assert.True(t, k.opened[0].isClosed(), "a, current without views: as before")
+	assert.False(t, k.opened[1].isClosed(), "b, left")
 }
 
 func TestScopesForbiddenIsDataNotFailure(t *testing.T) {

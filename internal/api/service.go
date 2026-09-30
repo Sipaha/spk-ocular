@@ -50,6 +50,11 @@ type Service struct {
 	reaper   *time.Timer
 	sessSeq  uint64
 	now      func() time.Time
+	// current: the selected target's key ("" until the first selection
+	// in this run); left: when each recent target was left (at most
+	// recentTargets of them).
+	current string
+	left    map[string]time.Time
 
 	cancel context.CancelFunc
 	wg     sync.WaitGroup
@@ -79,7 +84,7 @@ func NewService(reg *provider.Registry, st *store.Store, em *events.Emitter, o O
 	if _, err := rand.Read(key); err != nil {
 		panic(err) // crypto/rand does not fail on supported platforms
 	}
-	return &Service{reg: reg, store: st, em: em, opts: o, views: views.NewManager(em), streams: streams.NewRegistry(), fwd: newForwards(em), sessions: map[string]*sessionEntry{}, now: time.Now, revKey: key, agentWatches: make(chan struct{}, maxAgentWatches)}
+	return &Service{reg: reg, store: st, em: em, opts: o, views: views.NewManager(em), streams: streams.NewRegistry(), fwd: newForwards(em), sessions: map[string]*sessionEntry{}, left: map[string]time.Time{}, now: time.Now, revKey: key, agentWatches: make(chan struct{}, maxAgentWatches)}
 }
 
 // configRev is the opaque revision of a configuration hash ("" for none).
@@ -201,11 +206,15 @@ func (s *Service) SelectTarget(ctx context.Context, providerID, id string) error
 	if !found {
 		return coded(CodeNotFound, fmt.Errorf("no target %q in %s", id, p.Title()))
 	}
+	prev := ""
+	if sel, err := s.selected(ctx); err == nil && sel != nil {
+		prev = ownerKey(sel.Provider, sel.ID)
+	}
 	b, _ := json.Marshal(TargetRef{Provider: providerID, ID: id})
 	if err := s.store.SetUIPref(ctx, prefSelectedTarget, string(b)); err != nil {
 		return coded(CodeInternal, err)
 	}
-	s.closeOtherSessions(ownerKey(providerID, id))
+	s.selectSession(prev, ownerKey(providerID, id))
 	return nil
 }
 
