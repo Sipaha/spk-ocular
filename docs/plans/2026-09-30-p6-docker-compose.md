@@ -310,22 +310,55 @@ inspect, старый API 1.41, обрыв кадра stdcopy).
   в Task 6 (сейчас нечего запускать).
 
 ### Task 1. Общий UI без Kubernetes-знания (решение 8)
-- [ ] Поля `Target.DefaultScope`, `KindDescriptor.Default`/`EventsKind`, `ScopeNames`,
+- [x] Поля `Target.DefaultScope`, `KindDescriptor.Default`/`EventsKind`, `ScopeNames`,
   `Ref.Title`; Kubernetes и синтетический провайдер их заполняют; UI читает их вместо `pods`,
   `events`, `defaultNamespace`; аудит строк; «Перечитать» (`F5`, `provider.Resyncer`,
   API `ResyncView`). Тесты: синтетическая регрессия из решения 8; Kubernetes-поведение не
   меняется (vitest + e2e + kind).
+  Сделано (8fc7917, 003e2bc, 88b7573): `core.ScopeNames` — через опциональный
+  `provider.ScopeNamer` в `TargetGroup.scopeNames` (слова — `core.Message`, русский по ключу;
+  без них — «Область/области/Все области»); `LogInfo.channelLabel/allChannelsLabel`,
+  `ExecInfo.noInstances`; `ViewInfo.resync` → кнопка «Перечитать F5» в шапке вида; F5 —
+  глобальная клавиша реестра только при наличии `[data-resync]` (иначе F5 страницы, работает и
+  из поля); `ResyncView` — через owner вида (`views.Info` → `entryByOwner`), старая
+  инкарнация — `gone`, без `Resyncer` — `unsupported`. Тексты по провайдеру —
+  `providerText(key, provider)` (`<key>.<provider>`, иначе общий): «нет target-ов» и подсказка
+  «current»; иконка группы — `ProviderIcon`. Регрессия — синтетический вид `crates` (вид и зона
+  по умолчанию, запрет списка зон → ручной ввод, `Ref.Title`, без событий, терминал без
+  экземпляров, `Resyncer`): `GenericProvider.test.tsx`, `generic.spec.ts`, `crates_test.go`.
+  Отступление: «действие, ждущее ответа при смене target-а» в e2e невозможно — модальный
+  диалог действия закрывает всё окно; поздний ответ уже покрыт `ActionDialog.test.tsx`, а
+  подпись scope от провайдера плана — новым тестом там же.
 
 ### Task 2. Discovery: Docker contexts (решение 3)
-- [ ] `internal/providers/compose`: источники, target-ы, текущий, `ConfigHash`, TLS-пары,
+- [x] `internal/providers/compose`: источники, target-ы, текущий, `ConfigHash`, TLS-пары,
   `ssh://`, битые meta.json; inotify по решению 3. Тесты на фикстурных каталогах
   (`DOCKER_CONFIG`, `DOCKER_HOST`+TLS, `DOCKER_CONTEXT`, новый context, замена cert-а);
   e2e: contexts видны рядом с kube contexts, секретов на странице нет.
+  Сделано (d0679ad): `compose/contexts.go` (CLI 29: `DOCKER_CONFIG`, `DOCKER_HOST`+`DOCKER_TLS_VERIFY`/
+  `DOCKER_TLS`/`DOCKER_CERT_PATH`, `DOCKER_CONTEXT`, `currentContext`; несуществующий текущий —
+  `Problem`, ничего не помечено; meta.json не в своём каталоге/без endpoint/битый — `Problem`;
+  каталог без meta.json — ещё пишется, молча), TLS читается в память (сессия и хеш — одни
+  байты), неполная пара — деталь `tlsProblem` и отказ сессии; `watch.go` — inotify с
+  ожиданием несуществующих каталогов через ближайшего предка, `buildx`/токены в `~/.docker` не
+  будят. Провайдер зарегистрирован (открытие target-а — Task 4). e2e: фикстурный `~/.docker`,
+  все конфиги Playwright очищают `DOCKER_*`.
 
 ### Task 3. Клиент Engine (решение 1)
-- [ ] Транспорт, TLS, версия (лениво; 1.41–1.54), лимиты тел, дедлайны, ошибки, декодеры,
+- [x] Транспорт, TLS, версия (лениво; 1.41–1.54), лимиты тел, дедлайны, ошибки, декодеры,
   stdcopy. Фейк `enginefake`. Тесты: редирект отклонён, запрос уходит один раз (на проводе),
   тело сверх лимита, зависшие заголовки/тело, API 1.40 → unsupported, 1.41 → работает.
+  Сделано (45ac962, cd52af9, 25322d9; субагент, ревью и правка 401 → `unauthorized`):
+  `engine` — `New(Config)` без сети, общий ленивый `_ping`, `get` с общим дедлайном и лимитом,
+  `openStream` с дедлайном только на заголовки, `Events`/`EventStream`, `ContainerLogs`/
+  `LogReader` (stdcopy: лимит кадра до выделения, gap на неполном EOF, поток 3 — ошибка,
+  обрезка длинной строки), `Raw` у каждого inspect. «Ровно один раз на проводе»: GET несёт
+  пустое тело без `GetBody` — net/http не переотправляет его на умершем keep-alive
+  соединении (обратная сторона: такой обрыв — `unavailable`, решает вызывающий). Прокси для
+  `tcp://` — `x/net/http/httpproxy` при создании клиента (stdlib кэширует окружение на
+  процесс). `enginefake` — unix-сокет в `TMPDIR`, модель объектов, события с историей 256 и
+  пропуском медленного подписчика как у moby, логи, хуки (зависания, обрывы, редирект),
+  счётчики запросов.
 
 ### Task 4. Наблюдение и виды (решения 2, 4–6)
 - [ ] Лента с эпохами, читатель событий, очередь грязных id, пул inspect, сверка, Ready/
