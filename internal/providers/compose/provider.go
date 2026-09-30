@@ -14,11 +14,17 @@ import (
 
 const ProviderID = "compose"
 
+// maxLogRequests bounds log requests open at once in the app.
+const maxLogRequests = 64
+
 // Provider discovers Docker contexts; the environment is re-read on every
 // Discover.
 type Provider struct {
 	getenv func(string) string
 	home   string
+
+	// logSlots bounds log requests open at once across all sessions.
+	logSlots chan struct{}
 
 	mu   sync.Mutex
 	last loaded // latest Discover result: sessions are built from it
@@ -32,7 +38,7 @@ func New() *Provider {
 
 // NewWith is New with an injected environment (tests).
 func NewWith(getenv func(string) string, home string) *Provider {
-	return &Provider{getenv: getenv, home: home}
+	return &Provider{getenv: getenv, home: home, logSlots: make(chan struct{}, maxLogRequests)}
 }
 
 func (p *Provider) ID() string    { return ProviderID }
