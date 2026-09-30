@@ -25,7 +25,9 @@ type Timers = { setTimeout: typeof setTimeout; clearTimeout: typeof clearTimeout
  * applied; pull again while the applied version is below the announced one;
  * bounded retries on failure; a "gone" view is reopened; responses of an
  * older open (generation) or after dispose are ignored, and a late OpenView
- * result after dispose is closed.
+ * result after dispose is closed. A view whose kind's columns changed
+ * ("schema_changed") opens again (bounded); a kind no longer served
+ * ("removed") ends the view for good: no rows, no reopening, no retries.
  */
 export class ViewSync {
   private viewId: string | null = null
@@ -37,6 +39,10 @@ export class ViewSync {
   private retries = 0
   private retryTimer: ReturnType<typeof setTimeout> | null = null
   private disposed = false
+  /** The kind is no longer served: the view is over. */
+  private ended = false
+  /** Reopens for changed columns since the last good page. */
+  private schemaReopens = 0
   private rows = new Map<string, Row>()
   private state: ViewState = { viewId: null, kind: null, resync: false, rows: [], status: { state: 'loading' }, openError: null }
   private listeners = new Set<() => void>()
@@ -77,6 +83,7 @@ export class ViewSync {
     this.cursor = 0
     this.desired = 0
     this.force = false
+    this.ended = false
     // No id while reopening: metrics must not poll the previous view.
     if (this.state.viewId !== null) this.emit({ viewId: null })
     try {
@@ -91,13 +98,48 @@ export class ViewSync {
       void this.pull()
     } catch (e) {
       if (this.disposed || gen !== this.generation) return
-      this.emit({ openError: errText(e), status: { state: 'error', class: codeOf(e), message: errText(e) } })
+      if (codeOf(e) === 'schema_changed') {
+        this.reopenForSchema(e)
+        return
+      }
+      if (codeOf(e) === 'removed') this.end(errText(e))
+      else this.emit({ openError: errText(e), status: { state: 'error', class: codeOf(e), message: errText(e) } })
     }
+  }
+
+  /** The kind's columns changed: open again (its rows stay until then);
+   * again and again — an error instead of a loop. */
+  private reopenForSchema(e: unknown) {
+    const n = ++this.schemaReopens
+    if (n > MAX_RETRIES) {
+      this.emit({ status: { state: 'error', class: 'schema_changed', message: errText(e) } })
+      return
+    }
+    if (n === 1) {
+      void this.open()
+      return
+    }
+    const gen = this.generation
+    this.retryTimer = this.timers.setTimeout(() => {
+      this.retryTimer = null
+      if (gen === this.generation && !this.disposed) void this.open()
+    }, 250 * 2 ** (n - 2))
+  }
+
+  /** The kind is no longer served: final (no rows, nothing more asked). */
+  private end(message: string) {
+    this.ended = true
+    this.generation++ // pulls in flight are over
+    this.pulling = false
+    if (this.retryTimer) this.timers.clearTimeout(this.retryTimer)
+    this.retryTimer = null
+    this.rows = new Map()
+    this.emit({ rows: [], status: { state: 'error', class: 'removed', message } })
   }
 
   /** view_changed for this view. */
   onChanged(p: { version?: number; gone?: boolean }) {
-    if (this.disposed) return
+    if (this.disposed || this.ended) return
     if (p.gone) {
       void this.open()
       return
@@ -108,7 +150,7 @@ export class ViewSync {
 
   /** Events may have been lost (resync / reconnect): pull regardless. */
   resync() {
-    if (this.disposed) return
+    if (this.disposed || this.ended) return
     this.force = true
     void this.pull()
   }
@@ -119,12 +161,23 @@ export class ViewSync {
     const gen = this.generation
     const id = this.viewId
     let reopen = false
+    let schema: string | null = null
     try {
       do {
         this.force = false
         const before = this.cursor
         const page = await this.client.getRows(id, this.cursor)
         if (this.disposed || gen !== this.generation) return
+        if (page.status.state === 'error' && page.status.class === 'removed') {
+          this.end(page.status.message ?? '')
+          return
+        }
+        if (page.status.state === 'error' && page.status.class === 'schema_changed') {
+          // Not applied: the rows of the old columns stay until the new view.
+          schema = page.status.message ?? ''
+          break
+        }
+        this.schemaReopens = 0
         this.apply(page)
         this.retries = 0
         // A page that did not move the cursor means the announced version is
@@ -135,6 +188,10 @@ export class ViewSync {
       if (this.disposed || gen !== this.generation) return
       if (codeOf(e) === 'gone') {
         reopen = true
+      } else if (codeOf(e) === 'removed') {
+        this.end(errText(e))
+      } else if (codeOf(e) === 'schema_changed') {
+        schema = errText(e)
       } else if (this.retries < MAX_RETRIES) {
         const delay = 250 * 2 ** this.retries++
         this.retryTimer = this.timers.setTimeout(() => {
@@ -148,6 +205,7 @@ export class ViewSync {
       if (gen === this.generation) this.pulling = false
     }
     if (reopen) void this.open()
+    else if (schema !== null) this.reopenForSchema(new Error(schema))
   }
 
   private apply(p: Page) {
@@ -184,6 +242,7 @@ export class ViewSync {
 export class ViewHub {
   private syncs = new Set<ViewSync>()
   private touchTimer: ReturnType<typeof setInterval> | null = null
+  private kindsListeners = new Set<(payload?: Record<string, unknown>) => void>()
 
   constructor(private client: Client) {}
 
@@ -222,6 +281,19 @@ export class ViewHub {
 
   resyncAll() {
     for (const s of this.syncs) s.resync()
+    // Catalog events may have been lost too: listeners list the kinds again.
+    for (const fn of this.kindsListeners) fn(undefined)
+  }
+
+  /** kinds_changed ({provider, target, session, rev}): a hint to list the kinds again. */
+  onKindsChanged(payload: Record<string, unknown> | undefined) {
+    for (const fn of this.kindsListeners) fn(payload ?? {})
+  }
+
+  /** fn(payload) on kinds_changed, fn(undefined) on resync. */
+  subscribeKinds(fn: (payload?: Record<string, unknown>) => void): () => void {
+    this.kindsListeners.add(fn)
+    return () => this.kindsListeners.delete(fn)
   }
 
   async touch() {

@@ -185,6 +185,105 @@ describe('ViewSync', () => {
   })
 })
 
+const widgetsKind = (cols: string[]) => ({ id: 'ocular.dev/widgets', title: 'Widgets', group: 'API groups', scoped: true, columns: cols.map((id) => ({ id, title: id, type: 'text' as const })) })
+
+describe('ViewSync: the kind ends', () => {
+  it('a view ending "schema changed" opens again with the new columns; its old rows stay until then', async () => {
+    const openView = vi.fn()
+      .mockResolvedValueOnce({ viewId: 'v1', kind: widgetsKind(['name', 'size']) })
+      .mockResolvedValueOnce({ viewId: 'v2', kind: widgetsKind(['name', 'phase']) })
+    const getRows = vi.fn(async (id: string, since: number) => {
+      if (id === 'v1' && since === 0) return page({ viewId: 'v1', reset: true, version: 1, upserts: [row('a')] })
+      if (id === 'v1') return page({ viewId: 'v1', version: 2, upserts: [row('a', 'late')], status: { state: 'error', class: 'schema_changed', message: 'Widgets: the columns changed; opening again' } })
+      return page({ viewId: 'v2', reset: true, version: 1, upserts: [row('a', 'new')] })
+    })
+    const s = new ViewSync(client({ openView, getRows }), 'kubernetes', 't', q)
+    await s.open()
+    await flush()
+    s.onChanged({ version: 2 })
+    await flush()
+    await flush()
+    expect(openView).toHaveBeenCalledTimes(2)
+    await flush()
+    expect(s.snapshot().kind?.columns.map((c) => c.id)).toEqual(['name', 'phase'])
+    expect(s.snapshot().rows[0].cells[0].text).toBe('new')
+    expect(s.snapshot().status.state).toBe('ready')
+  })
+
+  it('"schema changed" again and again is bounded: then an error, no loop', async () => {
+    vi.useFakeTimers()
+    let n = 0
+    const openView = vi.fn(async () => ({ viewId: `v${++n}`, kind: widgetsKind(['name']) }))
+    const getRows = vi.fn(async (id: string) => page({ viewId: id, reset: true, version: 1, status: { state: 'error', class: 'schema_changed', message: 'changed' } }))
+    const s = new ViewSync(client({ openView, getRows }), 'kubernetes', 't', q)
+    void s.open()
+    await vi.advanceTimersByTimeAsync(60_000)
+    expect(openView.mock.calls.length).toBeLessThanOrEqual(7)
+    expect(s.snapshot().status).toMatchObject({ state: 'error', class: 'schema_changed' })
+    const calls = openView.mock.calls.length
+    await vi.advanceTimersByTimeAsync(60_000)
+    expect(openView).toHaveBeenCalledTimes(calls)
+  })
+
+  it('a view ending "removed" is final: rows go, nothing reopens or retries', async () => {
+    vi.useFakeTimers()
+    const openView = vi.fn(async () => ({ viewId: 'v1', kind: widgetsKind(['name']) }))
+    const getRows = vi.fn()
+      .mockResolvedValueOnce(page({ reset: true, version: 1, upserts: [row('a')] }))
+      .mockResolvedValue(page({ version: 2, status: { state: 'error', class: 'removed', message: 'Widgets are no longer served by the API' } }))
+    const s = new ViewSync(client({ openView, getRows }), 'kubernetes', 't', q)
+    await s.open()
+    await vi.advanceTimersByTimeAsync(0)
+    s.onChanged({ version: 2 })
+    await vi.advanceTimersByTimeAsync(0)
+    expect(s.snapshot().rows).toEqual([])
+    expect(s.snapshot().status).toMatchObject({ state: 'error', class: 'removed' })
+    s.onChanged({ gone: true })
+    s.onChanged({ version: 3 })
+    s.resync()
+    await vi.advanceTimersByTimeAsync(60_000)
+    expect(openView).toHaveBeenCalledTimes(1)
+    expect(getRows).toHaveBeenCalledTimes(2)
+  })
+
+  it('OpenView "removed" is final; OpenView "schema changed" opens again', async () => {
+    vi.useFakeTimers()
+    const removed = vi.fn(async () => {
+      throw new ApiError('removed', 'ocular.dev/widgets is no longer served')
+    })
+    const r = new ViewSync(client({ openView: removed }), 'kubernetes', 't', q)
+    await r.open()
+    await vi.advanceTimersByTimeAsync(60_000)
+    expect(removed).toHaveBeenCalledTimes(1)
+    expect(r.snapshot().status).toMatchObject({ state: 'error', class: 'removed' })
+
+    const changed = vi.fn()
+      .mockRejectedValueOnce(new ApiError('schema_changed', 'Widgets: the API resource changed; opening again'))
+      .mockResolvedValue({ viewId: 'v2', kind: widgetsKind(['name']) })
+    const s = new ViewSync(client({ openView: changed }), 'kubernetes', 't', q)
+    await s.open()
+    await vi.advanceTimersByTimeAsync(1_000)
+    expect(changed).toHaveBeenCalledTimes(2)
+    expect(s.id).toBe('v2')
+    expect(s.snapshot().openError).toBeNull()
+  })
+
+  it('a pull answered "removed" is final too (no retries)', async () => {
+    vi.useFakeTimers()
+    const getRows = vi.fn()
+      .mockResolvedValueOnce(page({ reset: true, version: 1, upserts: [row('a')] }))
+      .mockRejectedValue(new ApiError('removed', 'no longer served'))
+    const s = new ViewSync(client({ getRows }), 'kubernetes', 't', q)
+    await s.open()
+    await vi.advanceTimersByTimeAsync(0)
+    s.onChanged({ version: 2 })
+    await vi.advanceTimersByTimeAsync(60_000)
+    expect(getRows).toHaveBeenCalledTimes(2)
+    expect(s.snapshot().rows).toEqual([])
+    expect(s.snapshot().status).toMatchObject({ state: 'error', class: 'removed' })
+  })
+})
+
 describe('ViewHub', () => {
   beforeEach(() => vi.useFakeTimers())
 
@@ -210,5 +309,18 @@ describe('ViewHub', () => {
     expect(c.closeView).toHaveBeenCalledWith('v2')
     await vi.advanceTimersByTimeAsync(40_000)
     expect(touchViews).toHaveBeenCalledTimes(1) // timer stopped with no views
+  })
+})
+
+describe('ViewHub catalog events', () => {
+  it('tells its catalog listeners of kinds_changed and of resync', () => {
+    const hub = new ViewHub(client())
+    const seen: unknown[] = []
+    const off = hub.subscribeKinds((p) => seen.push(p ?? 'resync'))
+    hub.onKindsChanged({ provider: 'kubernetes', target: 't', session: 1, rev: 3 })
+    hub.resyncAll()
+    off()
+    hub.onKindsChanged({ provider: 'kubernetes', target: 't', session: 1, rev: 4 })
+    expect(seen).toEqual([{ provider: 'kubernetes', target: 't', session: 1, rev: 3 }, 'resync'])
   })
 })

@@ -48,6 +48,7 @@ export function App({ client }: { client: Client }) {
   useEffect(() => {
     const off = client.subscribeEvents((e) => {
       if (e.type === 'view_changed') hub.onViewChanged(e.payload)
+      if (e.type === 'kinds_changed') hub.onKindsChanged(e.payload)
       if (e.type === 'resync') hub.resyncAll()
       if (e.type === 'targets_changed' || e.type === 'resync') void act.reload()
       if (e.type === 'forwards_changed' || e.type === 'resync') void loadTunnels()
@@ -68,6 +69,7 @@ export function App({ client }: { client: Client }) {
       else if (id === 'help') setHelp(true)
       else if (id === 'nextArea' || id === 'prevArea') cycleArea(id === 'nextArea' ? 1 : -1)
       else if (id === 'resync') document.querySelector<HTMLButtonElement>('[data-resync]')?.click()
+      else if (id === 'refreshKinds') document.querySelector<HTMLButtonElement>('[data-refresh-kinds]')?.click()
       else {
         // The open table's filter wins over the contexts filter.
         const el = document.querySelector<HTMLInputElement>('[data-primary-filter]') ?? document.querySelector<HTMLInputElement>('[data-target-filter]')

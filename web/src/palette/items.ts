@@ -63,7 +63,7 @@ const kindItem = (k: KindDescriptor, filter?: string): PaletteItem => ({
   key: `kind:${k.id}${filter ? `:${filter}` : ''}`,
   section: 'kind',
   label: k.title,
-  hint: filter ? t('palette.filtered', { text: filter }) : k.group,
+  hint: filter ? t('palette.filtered', { text: filter }) : k.subgroup ? `${k.group} · ${k.subgroup}` : k.group,
   action: filter ? { type: 'kind', kind: k.id, filter } : { type: 'kind', kind: k.id },
 })
 
@@ -148,8 +148,13 @@ function fuzzy(query: string, src: Sources): Built {
 
 const lower = (s: string) => s.toLocaleLowerCase()
 
-/** Every name a kind answers to in a command. */
-const kindNames = (k: KindDescriptor) => [...(k.aliases ?? []), k.id, k.id.split('/').pop() ?? k.id, k.title].map(lower)
+/** A kind's own names in a command: its aliases and full id (the provider
+ * gives each alias to one kind). */
+const ownNames = (k: KindDescriptor) => [...(k.aliases ?? []), k.id].map(lower)
+
+/** Every name a kind answers to in a command: its own, the id's last
+ * segment and the title (these may be another kind's too: "other.example/pods"). */
+const kindNames = (k: KindDescriptor) => [...ownNames(k), k.id.split('/').pop() ?? k.id, k.title].map(lower)
 
 /** One exact candidate is chosen; several (or none) leave the list to pick from. */
 const choose = (items: PaletteItem[], exact: PaletteItem[]): Built => ({ items: items.slice(0, MAX_ITEMS), cursor: exact.length === 1 ? exact[0].key : null })
@@ -179,11 +184,13 @@ function command(input: string, src: Sources): Built {
     return choose([...exact, ...others], exact)
   }
 
-  // 2. Kinds: ":po" opens the view, ":deploy web" opens it filtered.
+  // 2. Kinds: ":po" opens the view, ":deploy web" opens it filtered. A kind's
+  // own name wins over another's id segment or title; several such — a list.
+  const own = src.kinds.filter((k) => ownNames(k).includes(head))
   const exactKinds = src.kinds.filter((k) => kindNames(k).includes(head))
   if (head && exactKinds.length) {
-    const items = exactKinds.map((k) => kindItem(k, rest || undefined))
-    return choose(items, items)
+    const items = [...own, ...exactKinds.filter((k) => !own.includes(k))].map((k) => kindItem(k, rest || undefined))
+    return choose(items, own.length ? items.slice(0, own.length) : items)
   }
   if (!rest) {
     // Incomplete: what it could become (never chosen by itself).

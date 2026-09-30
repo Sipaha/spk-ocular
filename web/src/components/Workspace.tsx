@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { Client } from '../api/client'
-import type { ActionDescriptor, KindDescriptor, MetricsView, Ref, Row, ScopeSel, ScopesView, SourceCoverage, Target } from '../api/types'
+import type { ActionDescriptor, KindDescriptor, KindsView, MetricsView, Ref, Row, ScopeSel, ScopesView, SourceCoverage, Target } from '../api/types'
 import { ApiError } from '../api/client'
 import { actionLabel, classLabel, t } from '../i18n'
 import { showNotice } from '../store'
@@ -9,6 +9,7 @@ import { ActionDialog, type ActionRequest } from '../actions/ActionDialog'
 import type { MenuItem } from '../actions/Menu'
 import { metricsState, useMetrics } from '../views/useMetrics'
 import { useView } from '../views/useView'
+import { useKinds } from '../views/useKinds'
 import type { ViewHub } from '../views/viewSync'
 import { ResourceDrawer } from './ResourceDrawer'
 import { ResourceTable } from './ResourceTable'
@@ -31,6 +32,18 @@ interface UIState {
   scope: ScopeSel
 }
 
+/** A navigation subgroup's key in target_state "navOpen". */
+const subKey = (group: string, sub: string) => `${group}/${sub}`
+
+function parseOpen(st: Record<string, string>): string[] {
+  try {
+    const v = JSON.parse(st.navOpen ?? '[]')
+    return Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : []
+  } catch {
+    return []
+  }
+}
+
 function parseState(st: Record<string, string>, fallback: UIState): UIState {
   const parse = (v: string | undefined) => {
     try {
@@ -49,9 +62,17 @@ function parseState(st: Record<string, string>, fallback: UIState): UIState {
 
 /** The selected target: kind navigation + the current table. */
 export function Workspace({ client, hub, target }: { client: Client; hub: ViewHub; target: Target }) {
-  const [kinds, setKinds] = useState<KindDescriptor[] | null>(null)
-  const [kindsError, setKindsError] = useState<string | null>(null)
+  const catalog = useKinds(client, hub, target.provider, target.id)
+  const kinds = catalog.view?.kinds ?? null
+  const kindsError = catalog.error
   const [scopes, setScopes] = useState<ScopesView | null>(null)
+  // Expanded navigation subgroups (collapsed by default; target_state).
+  const [navOpen, setNavOpen] = useState<string[]>([])
+  const toggleSub = (key: string, open: boolean) => {
+    const next = open ? [...new Set([...navOpen, key])] : navOpen.filter((k) => k !== key)
+    setNavOpen(next)
+    void client.setTargetState(target.provider, target.id, 'navOpen', JSON.stringify(next)).catch(() => {})
+  }
   const defaultScope = target.defaultScope
   // Last kind and scope per target (SQLite target_state); null until loaded,
   // so the default view is not opened only to be replaced.
@@ -106,12 +127,9 @@ export function Workspace({ client, hub, target }: { client: Client; hub: ViewHu
       (st) => {
         if (!live) return
         setUI(parseState(st, fallback))
+        setNavOpen(parseOpen(st))
       },
       () => live && setUI(fallback),
-    )
-    client.listKinds(target.provider, target.id).then(
-      (k) => live && setKinds(k.kinds),
-      (e) => live && setKindsError(e instanceof Error ? e.message : String(e)),
     )
     client.listScopes(target.provider, target.id).then(
       (s) => live && setScopes(s),
@@ -122,12 +140,11 @@ export function Workspace({ client, hub, target }: { client: Client; hub: ViewHu
     }
   }, [client, target.provider, target.id, defaultScope])
 
-  const groups = useMemo(() => {
-    const m = new Map<string, KindDescriptor[]>()
-    for (const k of kinds ?? []) if (!k.hidden) m.set(k.group, [...(m.get(k.group) ?? []), k])
-    return [...m.entries()]
-  }, [kinds])
-  const current = kinds?.find((k) => k.id === kind)
+  const groups = useMemo(() => navGroups(kinds ?? []), [kinds])
+  // A kind a later listing no longer has keeps its page: it says why.
+  const current = kinds?.find((k) => k.id === kind) ?? catalog.removed.get(kind)
+  // The remembered kind may be a discovered one not listed yet.
+  const waiting = !current && kind !== OVERVIEW && !!kind && catalog.view?.state === 'discovering'
 
   // The palette acts through the latest state of this workspace.
   const paletteActs = useRef<Pick<PaletteHost, 'openKind' | 'setScope' | 'openObject'> | null>(null)
@@ -164,19 +181,50 @@ export function Workspace({ client, hub, target }: { client: Client; hub: ViewHu
     <div className="flex min-h-0 flex-1">
       <nav aria-label="resources" data-area="nav" onKeyDown={onNavKey} className="w-40 shrink-0 overflow-y-auto border-r border-line bg-sidebar/60 px-2 py-3">
         <NavItem active={kind === OVERVIEW} onClick={() => setKind(OVERVIEW)} label={t('nav.overview')} />
-        {groups.map(([group, list]) => (
-          <section key={group} className="mt-3">
-            <h3 className="px-2 pb-1 text-[11px] font-semibold uppercase tracking-wider text-fg-subtle">{group}</h3>
-            {list.map((k) => (
-              <NavItem key={k.id} active={kind === k.id} onClick={() => setKind(k.id)} label={k.title} />
-            ))}
+        {groups.map((g) => (
+          <section key={g.group} className="mt-3" aria-label={g.group}>
+            <h3 className="flex px-2 pb-1 text-[11px] font-semibold uppercase tracking-wider text-fg-subtle">
+              <span className="min-w-0 flex-1 truncate">{g.group}</span>
+              {g.subgrouped && (
+                <span className="font-normal" title={t('nav.kinds', { count: g.count })}>
+                  {g.count}
+                </span>
+              )}
+            </h3>
+            {g.items.map((it) =>
+              'kind' in it ? (
+                <NavItem key={it.kind.id} active={kind === it.kind.id} onClick={() => setKind(it.kind.id)} label={it.kind.title} hint={it.kind.subgroup} />
+              ) : (
+                <NavSubgroup
+                  key={it.sub}
+                  label={it.sub}
+                  kinds={it.kinds}
+                  open={navOpen.includes(subKey(g.group, it.sub))}
+                  onToggle={(open) => toggleSub(subKey(g.group, it.sub), open)}
+                  active={kind}
+                  onPick={setKind}
+                />
+              ),
+            )}
           </section>
         ))}
+        <CatalogNote view={catalog.view} />
         {kindsError && <p className="mt-3 px-2 text-xs text-danger">{kindsError}</p>}
+        <button
+          data-refresh-kinds
+          tabIndex={-1}
+          onClick={catalog.refresh}
+          title={t('nav.refreshHint')}
+          className="mt-3 w-full truncate rounded-md px-2 py-1 text-left text-xs text-fg-subtle hover:bg-hover hover:text-fg"
+        >
+          {t('nav.refresh')} <span className="opacity-70">F5</span>
+        </button>
       </nav>
       <main className="flex min-w-0 flex-1 flex-col">
         <div className="flex min-h-0 flex-1 flex-col">
-        {!ui ? null : kind === OVERVIEW || !current ? (
+        {!ui || waiting ? (
+          waiting ? <p className="px-4 py-6 text-center text-fg-subtle">{t('app.loading')}</p> : null
+        ) : kind === OVERVIEW || !current ? (
           <div className="min-h-0 flex-1 overflow-y-auto">
             <TargetDetails />
           </div>
@@ -240,7 +288,50 @@ function onNavKey(e: React.KeyboardEvent<HTMLElement>) {
   items[Math.max(0, Math.min(items.length - 1, to))].focus()
 }
 
-function NavItem({ active, onClick, label }: { active: boolean; onClick: () => void; label: string }) {
+type NavEntry = { kind: KindDescriptor } | { sub: string; kinds: KindDescriptor[] }
+
+interface NavGroup {
+  group: string
+  items: NavEntry[]
+  /** The group has subgroups (its header counts its kinds). */
+  subgrouped: boolean
+  count: number
+}
+
+/** The navigation in the provider's order: groups, and inside a group its
+ * subgroups (a subgroup of one kind is that kind, without a level). */
+export function navGroups(kinds: KindDescriptor[]): NavGroup[] {
+  const out: NavGroup[] = []
+  const byGroup = new Map<string, NavGroup>()
+  const bySub = new Map<string, { sub: string; kinds: KindDescriptor[] }>()
+  for (const k of kinds) {
+    if (k.hidden) continue
+    let g = byGroup.get(k.group)
+    if (!g) {
+      g = { group: k.group, items: [], subgrouped: false, count: 0 }
+      byGroup.set(k.group, g)
+      out.push(g)
+    }
+    g.count++
+    if (!k.subgroup) {
+      g.items.push({ kind: k })
+      continue
+    }
+    g.subgrouped = true
+    const key = subKey(k.group, k.subgroup)
+    let s = bySub.get(key)
+    if (!s) {
+      s = { sub: k.subgroup, kinds: [] }
+      bySub.set(key, s)
+      g.items.push(s)
+    }
+    s.kinds.push(k)
+  }
+  for (const g of out) g.items = g.items.map((it) => ('sub' in it && it.kinds.length === 1 ? { kind: it.kinds[0] } : it))
+  return out
+}
+
+function NavItem({ active, onClick, label, hint, nested }: { active: boolean; onClick: () => void; label: string; hint?: string; nested?: boolean }) {
   return (
     <button
       onClick={onClick}
@@ -248,10 +339,69 @@ function NavItem({ active, onClick, label }: { active: boolean; onClick: () => v
       tabIndex={active ? 0 : -1}
       data-area-focus={active ? '' : undefined}
       aria-current={active ? 'page' : undefined}
-      className={['block w-full truncate rounded-md px-2 py-1 text-left', active ? 'bg-active text-fg' : 'text-fg-muted hover:bg-hover hover:text-fg'].join(' ')}
+      title={hint ? `${label} · ${hint}` : label}
+      className={['block w-full truncate rounded-md py-1 text-left', nested ? 'pr-2 pl-5' : 'px-2', active ? 'bg-active text-fg' : 'text-fg-muted hover:bg-hover hover:text-fg'].join(' ')}
     >
       {label}
     </button>
+  )
+}
+
+/** A collapsible level of the navigation; collapsed, it still shows the
+ * open kind (so the page's place is never hidden). → opens, ← closes. */
+function NavSubgroup(props: {
+  label: string
+  kinds: KindDescriptor[]
+  open: boolean
+  onToggle: (open: boolean) => void
+  active: string
+  onPick: (kind: string) => void
+}) {
+  const { label, kinds, open, onToggle, active, onPick } = props
+  const shown = open ? kinds : kinds.filter((k) => k.id === active)
+  return (
+    <div role="group" aria-label={label}>
+      <button
+        data-nav-item
+        tabIndex={-1}
+        aria-expanded={open}
+        title={label}
+        onClick={() => onToggle(!open)}
+        onKeyDown={(e) => {
+          if ((e.key === 'ArrowRight' && !open) || (e.key === 'ArrowLeft' && open)) {
+            e.preventDefault()
+            onToggle(!open)
+          }
+        }}
+        className="flex w-full items-center gap-1 rounded-md px-2 py-1 text-left text-fg-muted hover:bg-hover hover:text-fg"
+      >
+        <span aria-hidden className={['inline-block w-2.5 shrink-0 text-[9px] transition-transform', open ? 'rotate-90' : ''].join(' ')}>
+          ▶
+        </span>
+        <span className="min-w-0 flex-1 truncate">{label}</span>
+        <span className="shrink-0 text-[11px] text-fg-subtle">{kinds.length}</span>
+      </button>
+      {shown.map((k) => (
+        <NavItem key={k.id} nested active={active === k.id} onClick={() => onPick(k.id)} label={k.title} hint={label} />
+      ))}
+    </div>
+  )
+}
+
+/** What the catalog cannot vouch for now: still discovering, groups that
+ * did not answer (their last known kinds kept), or no discovery at all. */
+function CatalogNote({ view }: { view: KindsView | null }) {
+  if (!view || view.state === 'ready') return null
+  const text =
+    view.state === 'discovering'
+      ? t('nav.discovering')
+      : view.state === 'failed'
+        ? t('nav.discoveryFailed')
+        : t('nav.unconfirmed', { groups: (view.unconfirmed ?? []).map((g) => (g === '*' ? t('nav.allGroups') : g)).join(', ') })
+  return (
+    <p role="note" aria-label="catalog" title={view.state === 'partial' ? t('nav.unconfirmedHint') : undefined} className={['mt-3 px-2 text-xs', view.state === 'discovering' ? 'text-fg-subtle' : 'text-warning'].join(' ')}>
+      {text}
+    </p>
   )
 }
 

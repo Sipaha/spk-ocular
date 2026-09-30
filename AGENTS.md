@@ -10,7 +10,8 @@ Go + Wails v3 + React. Спецификация: `docs/specs/2026-09-29-spk-ocul
 клавиатура, полировка) готов (`docs/plans/2026-09-30-p5-problems-palette.md`; soak памяти принят на
 сборке P7 по критерию пользователя 2026-09-30). Docker Compose provider
 готов: P6 — просмотр и логи (`docs/plans/2026-09-30-p6-docker-compose.md`), P7 — терминал,
-статистика и действия (`docs/plans/2026-09-30-p7-compose-exec-stats-actions.md`). Дальше — бэклог.
+статистика и действия (`docs/plans/2026-09-30-p7-compose-exec-stats-actions.md`). P8 — все
+ресурсы API (discovery + server-side Table: CRD, Jobs, PVC…) — `docs/plans/2026-09-30-p8-generic-resources.md`.
 
 ## Сборка и тесты
 
@@ -83,6 +84,15 @@ Go + Wails v3 + React. Спецификация: `docs/specs/2026-09-29-spk-ocul
   (`watch.go`), сессия (`session.go`), кэши informers (`cache.go`, `slim.go`, `listwatch.go`),
   вид поверх кэша (`view_watch.go`), kinds (`kinds.go`, `kind_*.go`), детали и связи
   (`resource.go`), метрики (`metrics.go`).
+- Все ресурсы API (P8): каталог видов сессии (`catalog.go`: описанные `allKinds` + обнаруженные,
+  ревизия, состояние, неподтверждённые группы; `provider.Cataloger`, API `ListKinds` →
+  `KindsView`, `RefreshKinds`, событие `kinds_changed`), discovery v2/v1 (`discovery.go`),
+  триггер — watch CRD (`crdwatch.go`), Table list/watch под Reflector-ом (`tablelw.go`), схема —
+  эпоха на GVR (`schema.go`, `schema_store.go`: проба `limit=1` через `provider.ViewDescriber`,
+  `Query.Schema`, поколение против устаревших проб, закреплённый обычный формат, перепроверка
+  по отпечатку CRD и `F5`). Клиент — `web/src/views/useKinds.ts` (перечитывание каталога),
+  `navGroups`/`NavSubgroup`/`CatalogNote` в `Workspace.tsx`, `schema_changed`/`removed` в
+  `viewSync.ts`.
 - `internal/streams` — потоки для UI (логи): реестр одноразовых id с owner-ом сессии, NDJSON-
   писатель (коалесцирование, «толчок», heartbeat, дедлайн записи), обработчик с guard-ами
   (токен в пути, Host, Origin), loopback-сервер desktop, сохранение файлов (`save`).
@@ -203,9 +213,26 @@ Go + Wails v3 + React. Спецификация: `docs/specs/2026-09-29-spk-ocul
 - Связи: владение — по UID контроллера (не только labels); Service без selector не «выбирает»
   все pods; ошибка поиска связей не роняет ресурс. — `TestDeploymentRelationsFollowControllerUID`,
   `TestSelectorlessServiceSelectsNothing`, `TestRelationErrorsDoNotFailTheResource`.
-- Новый kind: `kindDef` (колонки, `keep`-whitelist, `project` c health), регистрация в
+- Новый описанный kind: `kindDef` (колонки, `keep`-whitelist, `project` c health), регистрация в
   `allKinds`, строка таблицы-теста в `kinds_test.go`, строка в `kindOf` (resource.go);
-  kind-тест `TestKindEveryKindBecomesReady` проверит его на кластере.
+  kind-тест `TestKindEveryKindBecomesReady` проверит его на кластере. Остальные ресурсы API
+  показываются сами (P8) — описанный вид нужен только ради своей проекции и действий.
+- Discovery — не доказательство исчезновения: ресурс удаляется из каталога только успешным
+  ответом без него; неответившие группы сохраняют виды («не подтверждено»); вытесненный ответ
+  только добавляет. Вид исчезнувшего ресурса кончается `removed` (окончательно, UI не
+  переоткрывает); `gone` — по-прежнему «переоткрыть». — `catalog_test.go`, `viewSync.test.ts`.
+- Никакого I/O в `Open`/`Kinds()`: discovery — фоновая single-flight задача сессии; обновление —
+  по watch CRD (дебаунс 1 с, не позже 5 с), `F5` в навигации, resync. Периодических опросов нет.
+- Колонки обнаруженного вида — только из ответа сервера (Table) и держатся эпохой: любой ответ
+  с другими колонками кончает эпоху (`schema_changed`, UI переоткрывает, ограниченно); ответ
+  пробы, начатой до инвалидации, не публикуется; признак «Table не обслуживается» (406,
+  обычный список, ERROR 406 в потоке) закрепляет обычный формат до конца сессии. —
+  `schema_session_test.go`, `tablelw_test.go`.
+- Живой возраст у колонки Table — только при известном происхождении (точный встроенный
+  GroupResource с «Age»; колонка CRD по позиции с путём `.metadata.creationTimestamp`);
+  `description` — не доказательство. — `TestAgeProvenance*`.
+- Действие над обнаруженным видом держит маршрут (GVR + scope) в `Expect` и на весь прогон
+  (чтения, повторы после 409); финализаторы — в последствиях и в `Expect`. — `route_test.go`.
 - Browser-режим отвечает только на loopback-`Host` (защита от DNS rebinding: `/` отдаёт токен). —
   `TestNonLoopbackHostIsRejected`.
 - `/api/_test/*` — только с `--test-api` и токеном. — `TestTestAPIOnlyWithFlagAndToken`.
@@ -479,6 +506,11 @@ Go + Wails v3 + React. Спецификация: `docs/specs/2026-09-29-spk-ocul
 - **dind после `docker stop/start` не поднимается**, если pid-файлы dockerd/containerd пережили
   перезапуск (pid переиспользован: «process with PID 40 is still running») — у `ocular-dind`
   `/run` на tmpfs (`dind-up.sh` пересоздаёт старый контейнер без него).
+- **Table-ответ сервера**: заголовки колонок — только в первом событии watch-потока (любого
+  типа, BOOKMARK тоже); `date`-ячейка CRD — уже текст длительности («40s»), метку не
+  восстановить; объект строки — полный объект ресурса (служебные ячейки — отдельно, не в нём).
+- **Имена printer columns CRD не уникальны** — сопоставлять по позиции (сервер: Name, затем
+  колонки по порядку; без колонок — Age).
 - **`t.Context()` уже отменён в `t.Cleanup`** — ожидания в cleanup-ах — с `context.Background()`.
 - Кандидат из соседей, ещё не встреченный здесь: fetch с `Blob`/`FormData`-телом через `wails://`
   роняет WebKitGTK (сохранение логов в desktop — строковым телом на loopback).

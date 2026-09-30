@@ -134,6 +134,31 @@ describe('buildItems — commands', () => {
     expect(cursorItem(buildItems(':rs', sources()))?.action).toEqual({ type: 'kind', kind: 'apps/replicasets' })
   })
 
+  it('own names (alias, id) win over another kind id segment or title; a tie is a list', () => {
+    // The provider gives an alias to one kind (described first): a CRD whose
+    // plural is "pods" or short name "po" answers to them only by segment.
+    const crds = [
+      ...kinds,
+      kind('other.example/pods', 'Pods', ['pod.other'], { group: 'API groups', subgroup: 'other.example' }),
+      kind('x.example/po', 'Pos', [], { group: 'API groups', subgroup: 'x.example' }),
+      kind('a.example/things', 'Things', ['things'], { group: 'API groups', subgroup: 'a.example' }),
+      kind('b.example/things', 'Things', [], { group: 'API groups', subgroup: 'b.example' }),
+      kind('c.example/gizmos', 'Gizmos', [], { group: 'API groups', subgroup: 'c.example' }),
+      kind('d.example/gizmos', 'Gizmos', [], { group: 'API groups', subgroup: 'd.example' }),
+    ]
+    const src = sources({ kinds: crds })
+    const pods = buildItems(':pods', src)
+    expect(cursorItem(pods)?.action).toEqual({ type: 'kind', kind: 'pods' })
+    expect(labels(pods)).toEqual(['kind:Pods', 'kind:Pods']) // the other one is still offered
+    expect(pods.items[1]).toMatchObject({ hint: 'API groups · other.example' })
+    expect(cursorItem(buildItems(':po', src))?.action).toEqual({ type: 'kind', kind: 'pods' })
+    expect(cursorItem(buildItems(':things', src))?.action).toEqual({ type: 'kind', kind: 'a.example/things' })
+    expect(cursorItem(buildItems(':other.example/pods', src))?.action).toEqual({ type: 'kind', kind: 'other.example/pods' })
+    const tie = buildItems(':gizmos', src)
+    expect(tie.cursor).toBeNull()
+    expect(tie.items.map((i) => i.action)).toEqual([{ type: 'kind', kind: 'c.example/gizmos' }, { type: 'kind', kind: 'd.example/gizmos' }])
+  })
+
   it('an incomplete command lists the views it could be, choosing none', () => {
     const r = buildItems(':de', sources())
     expect(r.cursor).toBeNull()

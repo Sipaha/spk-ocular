@@ -8,7 +8,7 @@ import { inTerminal, isShortcut } from './keyboard'
 
 export type Scope = 'global' | 'lists' | 'table' | 'details' | 'logs' | 'terminal'
 
-export type GlobalId = 'palette' | 'help' | 'filter' | 'nextArea' | 'prevArea' | 'resync'
+export type GlobalId = 'palette' | 'help' | 'filter' | 'nextArea' | 'prevArea' | 'refreshKinds' | 'resync'
 
 export interface KeyDef {
   id: string
@@ -24,6 +24,8 @@ export interface KeyDef {
 
 const plain = (e: KeyboardEvent) => !e.ctrlKey && !e.metaKey && !e.altKey
 
+const inNav = (t: EventTarget | null) => t instanceof HTMLElement && !!t.closest('[data-area="nav"]')
+
 export const KEYS: KeyDef[] = [
   { id: 'palette', scope: 'global', keys: 'Ctrl+K', help: 'keys.palette', inFields: true, match: (e) => !e.altKey && isShortcut(e, 'KeyK', { ctrl: true, shift: false }) },
   // "?" by the physical key (a Russian layout types ","), or by the character.
@@ -34,6 +36,8 @@ export const KEYS: KeyDef[] = [
   // F-keys type nothing: they work from a field too.
   { id: 'nextArea', scope: 'global', keys: 'F6', help: 'keys.nextArea', inFields: true, match: (e) => plain(e) && e.key === 'F6' && !e.shiftKey },
   { id: 'prevArea', scope: 'global', keys: 'Shift+F6', help: 'keys.prevArea', inFields: true, match: (e) => plain(e) && e.key === 'F6' && e.shiftKey },
+  // In the navigation (it offers [data-refresh-kinds]): the list of kinds, before the view's F5.
+  { id: 'refreshKinds', scope: 'global', keys: 'F5', help: 'keys.refreshKinds', match: (e) => plain(e) && e.key === 'F5' && !e.shiftKey && inNav(e.target) && !!document.querySelector('[data-refresh-kinds]') },
   // Only where the open view offers it (a [data-resync] button): elsewhere F5 stays the page's.
   { id: 'resync', scope: 'global', keys: 'F5', help: 'keys.resync', inFields: true, match: (e) => plain(e) && e.key === 'F5' && !e.shiftKey && !!document.querySelector('[data-resync]') },
   { id: 'move', scope: 'lists', keys: '↑ ↓', help: 'keys.move' },
