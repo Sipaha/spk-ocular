@@ -48,7 +48,7 @@ var (
 // kindActions: namespaces and nodes are not deleted here (the blast radius
 // of a namespace, a node is drained rather than deleted); events expire.
 var kindActions = map[*kindDef][]core.ActionDescriptor{
-	deploymentsKind:  {actRestart, actScale, actDelete},
+	deploymentsKind:  {actRestart, actScale, actUndo, actPause, actResume, actDelete},
 	statefulSetsKind: {actRestart, actScale, actDelete},
 	daemonSetsKind:   {actRestart, actDelete},
 	replicaSetsKind:  {actDelete},
@@ -137,8 +137,16 @@ func effectState(def *kindDef, action string, u *unstructured.Unstructured) map[
 		}
 	case actCordon.ID, actUncordon.ID:
 		st["unschedulable"] = boolAt(o, "spec", "unschedulable")
-	case actSuspend.ID, actResume.ID:
-		cronJobEffectState(action, o, st)
+	case actPause.ID, actResume.ID, actSuspend.ID:
+		if def == deploymentsKind {
+			// generation: the whole spec (the strategy resume's text reads).
+			st["paused"], st["generation"] = boolAt(o, "spec", "paused"), u.GetGeneration()
+			if action == actResume.ID {
+				st["strategy"], st["replicas"] = fieldAt(o, "spec", "strategy"), replicas(o)
+			}
+		} else {
+			cronJobEffectState(action, o, st)
+		}
 	case actDelete.ID:
 		if sts {
 			st["claims"], st["whenDeleted"] = len(slice(o, "spec", "volumeClaimTemplates")), str(o, "spec", "persistentVolumeClaimRetentionPolicy", "whenDeleted")
@@ -184,6 +192,11 @@ func actionUnavailable(def *kindDef, action string, u *unstructured.Unstructured
 	if action == actRestart.ID && def == deploymentsKind && boolAt(u.Object, "spec", "paused") {
 		m := msg("unavailable.paused", "name", u.GetName())
 		return &m
+	}
+	if def == deploymentsKind {
+		if why := pauseUnavailable(action, u); why != nil {
+			return why
+		}
 	}
 	cordoned := boolAt(u.Object, "spec", "unschedulable")
 	if action == actCordon.ID && cordoned {
@@ -233,6 +246,8 @@ func (s *session) RunAction(ctx context.Context, run provider.ActionRun) (core.A
 		return s.runDrain(ctx, def, run)
 	case actRunNow.ID:
 		return s.runNow(ctx, def, run)
+	case actUndo.ID:
+		return s.runUndo(ctx, def, run)
 	}
 	if !sameRoute(def, run.Expect) {
 		// Reviewed through another version or scope of the resource: never
@@ -259,7 +274,9 @@ func (s *session) RunAction(ctx context.Context, run provider.ActionRun) (core.A
 		if err == nil {
 			return core.ActionResult{Message: said}, nil
 		}
-		retry, err := s.failedWrite(ctx, def, run, u, err)
+		retry, err := s.failedWrite(ctx, def, run, u, err, func(_ context.Context, now *unstructured.Unstructured) (string, error) {
+			return actionExpect(def, run.Action, run.Params, now), nil
+		})
 		if !retry || attempt == maxVersionRetries {
 			return core.ActionResult{}, err
 		}
@@ -305,10 +322,15 @@ func (s *session) write(ctx context.Context, def *kindDef, run provider.ActionRu
 		})
 		err := wr.patch(ctx, def.gvr, ns, u.GetName(), types.MergePatchType, patch, "")
 		return msg("done."+run.Action, "kind", kind, "name", name), err
-	case actSuspend.ID, actResume.ID:
+	case actPause.ID, actResume.ID, actSuspend.ID:
+		field := "suspend"
+		on := run.Action == actSuspend.ID
+		if def == deploymentsKind {
+			field, on = "paused", run.Action == actPause.ID
+		}
 		patch, _ := json.Marshal(map[string]any{
 			"metadata": map[string]any{"uid": u.GetUID(), "resourceVersion": u.GetResourceVersion()},
-			"spec":     map[string]any{"suspend": run.Action == actSuspend.ID},
+			"spec":     map[string]any{field: on},
 		})
 		err := wr.patch(ctx, def.gvr, ns, u.GetName(), types.MergePatchType, patch, "")
 		return msg("done."+run.Action, "kind", kind, "name", name), err
@@ -322,7 +344,10 @@ func (s *session) write(ctx context.Context, def *kindDef, run provider.ActionRu
 
 // failedWrite classifies a failed write; retry: nothing was written and
 // only the object's version changed (re-read, same UID and Expect).
-func (s *session) failedWrite(ctx context.Context, def *kindDef, run provider.ActionRun, was *unstructured.Unstructured, err error) (bool, error) {
+// expect is the run's Expect for an object read now (an undo's reads the
+// revisions too).
+func (s *session) failedWrite(ctx context.Context, def *kindDef, run provider.ActionRun, was *unstructured.Unstructured, err error,
+	expect func(context.Context, *unstructured.Unstructured) (string, error)) (bool, error) {
 	var se apierrors.APIStatus
 	switch {
 	case !errors.As(err, &se) && strings.Contains(err.Error(), "getting credentials"): // before sending
@@ -345,6 +370,10 @@ func (s *session) failedWrite(ctx context.Context, def *kindDef, run provider.Ac
 	// 409 (a failed precondition) or 422 (an immutable UID, validation,
 	// admission): look again to tell which.
 	now, gerr := s.getConfirmed(ctx, def, run.Ref)
+	var nowExpect string
+	if gerr == nil {
+		nowExpect, gerr = expect(ctx, now)
+	}
 	switch {
 	case gerr != nil:
 		var pe *provider.Error
@@ -352,7 +381,7 @@ func (s *session) failedWrite(ctx context.Context, def *kindDef, run provider.Ac
 			return false, provider.Said(provider.ClassGone, msg("error.replacedMeanwhile", "kind", singular(def), "name", was.GetName()))
 		}
 		return false, gerr
-	case actionExpect(def, run.Action, run.Params, now) != run.Expect:
+	case nowExpect != run.Expect:
 		return false, provider.Said(provider.ClassConflict, msg("error.changed", "kind", singular(def), "name", was.GetName()))
 	case now.GetResourceVersion() != was.GetResourceVersion() && apierrors.IsConflict(err):
 		// A failed precondition at a moved version: retry. Other refusals
@@ -398,6 +427,9 @@ func (s *session) PrepareAction(ctx context.Context, ref core.Ref, action string
 	plan.Destructive = plan.Destructive || fx.destructive
 	if action == actRunNow.ID {
 		plan = s.prepareRunNow(def, plan, u)
+	}
+	if action == actUndo.ID {
+		plan = s.prepareUndo(ctx, def, plan, u)
 	}
 
 	// The optional parts, in parallel within one deadline; an answer that

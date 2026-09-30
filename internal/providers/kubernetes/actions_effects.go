@@ -87,7 +87,13 @@ func effects(def *kindDef, action string, p core.ActionParams, u *unstructured.U
 		fx.effects = append(fx.effects, msg("node.cordon", "name", u.GetName()), msg("node.cordonBypass"))
 	case actUncordon.ID:
 		fx.effects = append(fx.effects, msg("node.uncordon", "name", u.GetName()))
-	case actSuspend.ID, actResume.ID:
+	case actPause.ID:
+		fx.effects = append(fx.effects, msg("pause.effect", "name", u.GetName()), msg("pause.midRollout"))
+	case actResume.ID, actSuspend.ID:
+		if def == deploymentsKind {
+			fx.effects = append(fx.effects, msg("resume.effect", "name", u.GetName()), restartEffect(def, o))
+			break
+		}
 		fx.effects = append(fx.effects, cronJobEffects(action, u)...)
 	}
 	return fx
@@ -288,6 +294,19 @@ func shortErr(err error) string {
 // rights asks the API server whether the action is allowed (RBAC); it
 // cannot vouch for admission or quotas, and rights may change meanwhile.
 func (s *session) rights(ctx context.Context, def *kindDef, action string, u *unstructured.Unstructured) core.Rights {
+	r := s.writeRights(ctx, def, action, u)
+	if action == actUndo.ID && r.State != core.RightsDenied {
+		// The revisions are read at the run as well.
+		l := s.rightsTo(ctx, "list", map[string]any{"verb": "list", "group": replicaSetsKind.gvr.Group, "resource": replicaSetsKind.gvr.Resource, "namespace": u.GetNamespace()}, "", u)
+		if l.State != core.RightsAllowed {
+			return l
+		}
+	}
+	return r
+}
+
+// writeRights: may the action's write be sent.
+func (s *session) writeRights(ctx context.Context, def *kindDef, action string, u *unstructured.Unstructured) core.Rights {
 	verb, sub := "patch", ""
 	switch action {
 	case actScale.ID:
@@ -303,6 +322,11 @@ func (s *session) rights(ctx context.Context, def *kindDef, action string, u *un
 	if sub != "" {
 		attrs["subresource"] = sub
 	}
+	return s.rightsTo(ctx, verb, attrs, sub, u)
+}
+
+// rightsTo asks one question and says a refusal in words.
+func (s *session) rightsTo(ctx context.Context, verb string, attrs map[string]any, sub string, u *unstructured.Unstructured) core.Rights {
 	st, why := s.access(ctx, attrs)
 	switch st {
 	case core.RightsAllowed:
