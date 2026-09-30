@@ -1,6 +1,7 @@
 package core
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -36,6 +37,33 @@ func TestCheckParams(t *testing.T) {
 		{"choice, empty value", choice, ActionParams{Choice: &empty}, false, false},
 		{"choice, count", choice, ActionParams{Choice: &v, Count: &n}, false, false},
 		{"choice, count only", choice, ActionParams{Count: &n}, false, false},
+	} {
+		err := c.d.CheckParams(c.p, c.final)
+		assert.Equal(t, c.ok, err == nil, "%s: %v", c.name, err)
+	}
+}
+
+// A text value only for an action that takes one: required at the run,
+// never empty or longer than its Max; it goes with the action's Param.
+func TestCheckParamsText(t *testing.T) {
+	img, empty, long := "busybox:1.36", "", strings.Repeat("x", 13)
+	target := "app"
+	debug := ActionDescriptor{ID: "debug", Text: &ActionText{Title: Message{Text: "Image"}, Default: "busybox:1.36", Max: 12}, Param: &ActionParam{Kind: ParamChoice}}
+	plain := ActionDescriptor{ID: "restart"}
+	for _, c := range []struct {
+		name  string
+		d     ActionDescriptor
+		p     ActionParams
+		final bool
+		ok    bool
+	}{
+		{"no text taken", plain, ActionParams{Text: &img}, false, false},
+		{"prepare without", debug, ActionParams{}, false, true},
+		{"run without text", debug, ActionParams{Choice: &target}, true, false},
+		{"run with both", debug, ActionParams{Text: &img, Choice: &target}, true, true},
+		{"run without choice", debug, ActionParams{Text: &img}, true, false},
+		{"empty", debug, ActionParams{Text: &empty}, false, false},
+		{"too long", debug, ActionParams{Text: &long}, false, false},
 	} {
 		err := c.d.CheckParams(c.p, c.final)
 		assert.Equal(t, c.ok, err == nil, "%s: %v", c.name, err)

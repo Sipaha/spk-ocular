@@ -217,11 +217,21 @@ export interface ActionDescriptor {
   title: string
   destructive?: boolean
   param?: ActionParam
+  /** a text value next to the param (a debug container's image) */
+  text?: ActionText
+}
+
+export interface ActionText {
+  title: Message
+  default?: string
+  /** the longest value, in bytes */
+  max: number
 }
 
 export interface ActionParams {
   count?: number
   choice?: string
+  text?: string
 }
 
 /** One value a choice parameter may take, as the provider offers it now. */
@@ -451,6 +461,16 @@ export interface ActionResult {
   /** skipped: not everything was done (parts left or not started) */
   outcome?: ActionOutcome
   parts?: ActionPart[]
+  /** open a terminal there once done (a debug container's) */
+  terminal?: TerminalOpen
+}
+
+export interface TerminalOpen {
+  ref: Ref
+  instance?: string
+  channel?: string
+  /** to the container's own process, not a new one */
+  attach?: boolean
 }
 
 export type ScopeMode = 'all' | 'one' | 'none'
@@ -640,6 +660,8 @@ export interface TerminalRequest {
   channel?: string
   /** argv; empty = the interactive shell */
   command?: string[]
+  /** to the container's own process (a debug container); a reopen attaches again */
+  attach?: boolean
   cols: number
   rows: number
 }

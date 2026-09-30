@@ -284,10 +284,11 @@ func TestOpenTerminalValidatesBeforePreparing(t *testing.T) {
 	ctx := context.Background()
 	s, k, _ := newExecService(t)
 	for name, req := range map[string]TerminalRequest{
-		"no size":      {Ref: podRef},
-		"too wide":     {Ref: podRef, Cols: 1001, Rows: 24},
-		"empty argv0":  {Ref: podRef, Cols: 80, Rows: 24, Command: []string{"", "x"}},
-		"huge command": {Ref: podRef, Cols: 80, Rows: 24, Command: []string{strings.Repeat("x", 17<<10)}},
+		"no size":               {Ref: podRef},
+		"too wide":              {Ref: podRef, Cols: 1001, Rows: 24},
+		"empty argv0":           {Ref: podRef, Cols: 80, Rows: 24, Command: []string{"", "x"}},
+		"huge command":          {Ref: podRef, Cols: 80, Rows: 24, Command: []string{strings.Repeat("x", 17<<10)}},
+		"attach with a command": {Ref: podRef, Cols: 80, Rows: 24, Attach: true, Command: []string{"sh"}},
 	} {
 		_, err := s.OpenTerminal(ctx, req)
 		assert.True(t, IsCoded(err, CodeBadRequest), "%s: %v", name, err)
@@ -300,6 +301,11 @@ func TestOpenTerminalValidatesBeforePreparing(t *testing.T) {
 	_, err := s.OpenTerminal(ctx, req)
 	require.NoError(t, err, "empty later arguments are fine")
 	assert.Equal(t, []string{"ls", "-la", ""}, k.sessions[0].prepared[0].Command)
+	req = termReq
+	req.Attach = true
+	_, err = s.OpenTerminal(ctx, req)
+	require.NoError(t, err)
+	assert.True(t, k.sessions[0].prepared[1].Attach, "the provider is asked to attach")
 }
 
 func TestTerminalLimitReleasesTheRefusedHandle(t *testing.T) {

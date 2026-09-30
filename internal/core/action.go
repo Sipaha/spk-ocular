@@ -3,6 +3,7 @@ package core
 import (
 	"errors"
 	"fmt"
+	"strings"
 )
 
 // ActionDescriptor is an action objects of a kind offer (k8s: restart,
@@ -15,6 +16,17 @@ type ActionDescriptor struct {
 	// parameters even when the action is not (scale to zero).
 	Destructive bool         `json:"destructive,omitempty"`
 	Param       *ActionParam `json:"param,omitempty"`
+	// Text: a text value the action takes next to its Param (a debug
+	// container's image).
+	Text *ActionText `json:"text,omitempty"`
+}
+
+// ActionText describes an action's text value.
+type ActionText struct {
+	Title   Message `json:"title"`
+	Default string  `json:"default,omitempty"`
+	// Max: the longest value, in bytes.
+	Max int `json:"max"`
 }
 
 // ActionParam is the one parameter an action takes.
@@ -35,12 +47,21 @@ const (
 type ActionParams struct {
 	Count  *int    `json:"count,omitempty"`
 	Choice *string `json:"choice,omitempty"`
+	Text   *string `json:"text,omitempty"`
 }
 
 // CheckParams: p carries exactly what d takes. A plan may be prepared
 // before the value is chosen (final false: a missing value is fine); a run
 // needs it (final true).
 func (d ActionDescriptor) CheckParams(p ActionParams, final bool) error {
+	switch {
+	case d.Text == nil && p.Text != nil:
+		return fmt.Errorf("%s takes no text", d.ID)
+	case d.Text != nil && p.Text == nil && final:
+		return fmt.Errorf("%s needs %s", d.ID, strings.ToLower(d.Text.Title.Text))
+	case p.Text != nil && (*p.Text == "" || len(*p.Text) > d.Text.Max):
+		return fmt.Errorf("%s must be 1..%d characters", d.Text.Title.Text, d.Text.Max)
+	}
 	if d.Param == nil {
 		if p.Count != nil || p.Choice != nil {
 			return fmt.Errorf("%s takes no parameters", d.ID)
@@ -199,6 +220,8 @@ type ActionResult struct {
 	Message Message       `json:"message"`
 	Outcome ActionOutcome `json:"outcome"`
 	Parts   []ActionPart  `json:"parts,omitempty"`
+	// Terminal: open a terminal there once done (a debug container's).
+	Terminal *TerminalOpen `json:"terminal,omitempty"`
 }
 
 // ActionPart is one write of a run: its object (ID: the full id, Title:
@@ -241,4 +264,13 @@ func FindAction(kinds []KindDescriptor, kind, id string) (ActionDescriptor, erro
 		return ActionDescriptor{}, fmt.Errorf("%w: %s has no action %q", ErrNoAction, k.Title, id)
 	}
 	return ActionDescriptor{}, fmt.Errorf("%w: unknown kind %q", ErrNoAction, kind)
+}
+
+// TerminalOpen is a terminal an action's result asks the UI to open.
+type TerminalOpen struct {
+	Ref      Ref    `json:"ref"`
+	Instance string `json:"instance,omitempty"`
+	Channel  string `json:"channel,omitempty"`
+	// Attach: to the container's own process (its stdin), not a new one.
+	Attach bool `json:"attach,omitempty"`
 }

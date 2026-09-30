@@ -27,6 +27,9 @@ type ExecRequest struct {
 	// Command is argv (no shell interpretation); empty = the provider's
 	// interactive shell.
 	Command []string `json:"command,omitempty"`
+	// Attach to the channel's own process instead of running Command (a
+	// debug container: its shell ends with the attach).
+	Attach bool `json:"attach,omitempty"`
 }
 
 // ExecHandle is a prepared, pinned command. It owns its connection and is

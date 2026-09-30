@@ -139,7 +139,7 @@ debug-контейнеры (`kubectl debug`) и attach без exec»). Прин�
 ## Задачи
 
 ### Task 1. Текстовое значение действия (core, TS)
-- [ ] `ActionText`, `ActionDescriptor.Text`, `ActionParams.Text`, `CheckParams` (таблица),
+- [x] `ActionText`, `ActionDescriptor.Text`, `ActionParams.Text`, `CheckParams` (таблица),
   `ActionResult.Terminal`, `ExecRequest.Attach`; `web/src/api/types.ts`.
 
 ### Task 2. План и запись отладчика (Go)
@@ -189,3 +189,8 @@ debug-контейнеры (`kubectl debug`) и attach без exec»). Прин�
   предупреждения, план не падает.
 - P3-4 режим терминала (attach) хранится для «Подключиться заново».
 - P3-5 недоступность — только по фазе pod-а/удалению/mirror; падающая цель — доступна.
+
+**rev2 (5d11eff), `ggyxmbt4`, 2026-10-01 — CLOSED.** Не блокирующее к реализации: со
+`stdinOnce` «Подключиться заново» работает, только пока никто не подключался; одна попытка attach
+на вкладку — ожидающая отменяется до повторного открытия (двойной щелчок, дедлайн во время
+подключения), второй одновременный attach не допускается (тест).

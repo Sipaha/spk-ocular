@@ -17,6 +17,9 @@ type TerminalRequest struct {
 	Channel  string   `json:"channel,omitempty"`
 	// Command is argv; empty = the provider's interactive shell.
 	Command []string `json:"command,omitempty"`
+	// Attach to the container's own process (a debug container), not a
+	// new command; a reopen attaches again.
+	Attach bool `json:"attach,omitempty"`
 	// Cols, Rows: the terminal's size when it opens (1..1000).
 	Cols int `json:"cols"`
 	Rows int `json:"rows"`
@@ -188,6 +191,9 @@ func validTerminal(req TerminalRequest) error {
 	if err := validSize(req.Cols, req.Rows); err != nil {
 		return err
 	}
+	if req.Attach && len(req.Command) > 0 {
+		return errors.New("an attach runs no command")
+	}
 	if len(req.Command) > maxArgs {
 		return fmt.Errorf("at most %d arguments", maxArgs)
 	}
@@ -216,7 +222,7 @@ func (s *Service) OpenTerminal(ctx context.Context, req TerminalRequest) (Termin
 	if err != nil {
 		return TerminalInfo{}, err
 	}
-	proto, err := ex.PrepareExec(ctx, req.Ref, provider.ExecRequest{Instance: req.Instance, Channel: req.Channel, Command: req.Command})
+	proto, err := ex.PrepareExec(ctx, req.Ref, provider.ExecRequest{Instance: req.Instance, Channel: req.Channel, Command: req.Command, Attach: req.Attach})
 	if err != nil {
 		return TerminalInfo{}, fromProvider(err)
 	}
