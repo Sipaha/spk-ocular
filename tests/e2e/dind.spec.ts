@@ -1,0 +1,85 @@
+import { expect, test, type Page } from '@playwright/test'
+import { execFileSync } from 'node:child_process'
+
+// The Compose provider against the isolated test daemon (scripts/dind-seed.sh:
+// projects ocular-fixture and ocular-other). Every change of the daemon is
+// preceded by scripts/dind-verify.sh.
+const host = process.env.OCULAR_DIND_HOST!
+const docker = (...args: string[]) => {
+  const verified = execFileSync('bash', [process.env.OCULAR_DIND_VERIFY!], { encoding: 'utf8' }).trim()
+  if (verified !== host) throw new Error(`the test daemon check says ${verified}, not ${host}`)
+  return execFileSync('docker', ['-H', host, ...args], { encoding: 'utf8', env: { ...process.env, DOCKER_HOST: '', DOCKER_CONTEXT: '' } })
+}
+
+async function openDind(page: Page, project = 'ocular-fixture') {
+  await page.goto('/')
+  await page.getByRole('option', { name: /^ocular-dind\b/ }).click()
+  await expect(page.getByRole('navigation', { name: 'resources' })).toBeVisible()
+  const picker = page.getByRole('combobox', { name: 'Project' })
+  await expect(picker.locator('option', { hasText: project })).toBeAttached()
+  await picker.selectOption(project)
+}
+
+async function kindPage(page: Page, kind: string) {
+  await page.getByRole('navigation', { name: 'resources' }).getByRole('button', { name: kind, exact: true }).click()
+  return page.getByRole('grid', { name: 'resources' })
+}
+
+const row = (grid: ReturnType<Page['getByRole']>, name: string | RegExp) => grid.getByRole('row').filter({ has: grid.page().getByRole('gridcell', { name, exact: typeof name === 'string' }) })
+
+test('services of a project with their health', async ({ page }) => {
+  await openDind(page)
+  const grid = page.getByRole('grid', { name: 'resources' }) // services is the first view
+  await expect(page.getByRole('navigation', { name: 'resources' }).getByRole('button', { name: 'Services', exact: true })).toHaveAttribute('aria-current', /.+/)
+  await expect(row(grid, 'web')).toContainText('1/1')
+  await expect(row(grid, 'sick')).toContainText('Unhealthy', { timeout: 30_000 })
+  await expect(row(grid, 'logger')).toContainText('2/2')
+  await expect(row(grid, 'done')).toContainText('Completed')
+  await expect(row(grid, 'fail')).toContainText('Exited')
+})
+
+test('containers, details with relations and the inspect YAML', async ({ page }) => {
+  await openDind(page)
+  const grid = await kindPage(page, 'Containers')
+  await expect(row(grid, 'ocular-fixture-oneoff')).toBeVisible()
+  await row(grid, 'ocular-fixture-web-1').click()
+  const drawer = page.getByRole('dialog', { name: /ocular-fixture-web-1/ })
+  await expect(drawer.getByRole('button', { name: /ocular-ext-net/ })).toBeVisible()
+  await expect(drawer.getByRole('button', { name: /ocular-ext-vol/ })).toBeVisible()
+  await drawer.getByRole('tab', { name: 'YAML' }).click()
+  await expect(drawer.locator('.cm-editor')).toContainText('com.docker.compose.service: web')
+})
+
+test('a stop and a start on the daemon show live; Read again keeps the rows', async ({ page }) => {
+  await openDind(page, 'ocular-other')
+  const grid = await kindPage(page, 'Containers')
+  const idle = row(grid, 'ocular-other-idle-1')
+  await expect(idle).toContainText('running')
+  docker('stop', '-t', '0', 'ocular-other-idle-1')
+  try {
+    await expect(idle).toContainText('exited')
+  } finally {
+    docker('start', 'ocular-other-idle-1')
+  }
+  await expect(idle).toContainText('running')
+  await page.getByRole('button', { name: /Read again/ }).click()
+  await expect(idle).toContainText('running')
+  await expect(page.getByRole('alert')).toHaveCount(0)
+})
+
+const logPanel = (page: Page) => page.locator('[role=tabpanel]:not([hidden])')
+const logRows = (page: Page) => logPanel(page).locator('[data-log-viewport] [data-index]')
+
+test('logs of a service: both replicas, stdout and stderr, live', async ({ page }) => {
+  await openDind(page)
+  const grid = await kindPage(page, 'Services')
+  await row(grid, 'logger').click()
+  await page.keyboard.press('l')
+  const panel = logPanel(page)
+  await expect(panel.getByLabel('stream state')).toHaveText('Live', { timeout: 30_000 })
+  // Source labels lose their common prefix: "ocular-fixture-logger-2 (stderr)" shows as "2 (stderr)".
+  await expect(logRows(page).filter({ hasText: /^\s*1\s+line \d+/ }).first()).toBeAttached({ timeout: 30_000 })
+  await expect(logRows(page).filter({ hasText: /^\s*2\s+line \d+/ }).first()).toBeAttached()
+  await expect(logRows(page).filter({ hasText: /2 \(stderr\)\s*err \d+/ }).first()).toBeAttached()
+  await expect(panel.getByRole('combobox').first()).toHaveValue('*') // stdout and stderr by default
+})

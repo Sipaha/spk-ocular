@@ -1,4 +1,4 @@
-.PHONY: kind-up kind-down test-kind e2e-kind dind-up dind-down test-dind build build-web build-go build-desktop release run run-browser test test-go test-web test-e2e lint lint-go lint-web check fmt tidy clean pss
+.PHONY: kind-up kind-down test-kind e2e-kind dind-up dind-down test-dind e2e-dind build build-web build-go build-desktop release run run-browser test test-go test-web test-e2e lint lint-go lint-web check fmt tidy clean pss
 
 BIN_DIR := build/bin
 BIN     := $(BIN_DIR)/spk-ocular
@@ -129,3 +129,8 @@ test-dind:
 	@bash scripts/dind-verify.sh >/dev/null || { echo "the test daemon is not up: run make dind-up"; exit 1; }
 	bash scripts/dind-seed.sh >/dev/null
 	OCULAR_DIND_HOST=$$(bash scripts/dind-verify.sh) OCULAR_DIND_VERIFY=$(CURDIR)/scripts/dind-verify.sh go test -race -count=1 -run Dind ./internal/...
+
+e2e-dind: build
+	@bash scripts/dind-verify.sh >/dev/null || { echo "the test daemon is not up: run make dind-up"; exit 1; }
+	bash scripts/dind-seed.sh >/dev/null
+	cd tests/e2e && OCULAR_DIND_HOST=$$(bash ../../scripts/dind-verify.sh) OCULAR_DIND_VERIFY=$(CURDIR)/scripts/dind-verify.sh pnpm exec playwright test -c playwright.dind.config.ts && rm -rf .run
