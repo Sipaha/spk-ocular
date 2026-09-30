@@ -1,14 +1,16 @@
 # spk-ocular — гид для агентов
 
 Лёгкий локальный просмотрщик инфраструктуры: «Lens-like visibility + kubectl-like простота,
-без тяжеловесности Lens». Первый provider — Kubernetes, следующий — Docker Compose.
+без тяжеловесности Lens». Provider-ы — Kubernetes и Docker Compose.
 Go + Wails v3 + React. Спецификация: `docs/specs/2026-09-29-spk-ocular-design.md`.
 Планы: `docs/plans/`. Бэклог: `docs/backlog.md`.
 
 Статус: P0 (каркас), P1 (ресурсы, детали, метрики), P2 (логи), P3 (терминалы, туннели) и P4
 (действия restart/scale/delete) готовы — `docs/plans/`. P5 (Problems, палитра `Ctrl+K`,
-клавиатура, полировка) реализован; остаются часовой soak памяти и ревью реализации
-(`docs/plans/2026-09-30-p5-problems-palette.md`, Task 8). Следующий — Docker Compose provider.
+клавиатура, полировка) реализован и прошёл ревью; остаются зачётный часовой soak памяти и
+desktop-проверка (`docs/plans/2026-09-30-p5-problems-palette.md`, Task 8). P6 — Docker Compose provider:
+просмотр и логи (`docs/plans/2026-09-30-p6-docker-compose.md`) готов. Следующий — P7: терминал,
+статистика и действия Compose.
 
 ## Сборка и тесты
 
@@ -137,7 +139,8 @@ Go + Wails v3 + React. Спецификация: `docs/specs/2026-09-29-spk-ocul
   над `World` (`world.go`): `kinds.go`, `rows.go` (идентичность, scope, Rev без лога проверок),
   `health.go` (таблица решения 6, сервис по приоритету), `resource.go` (факты, YAML inspect,
   связи uses/used-by/owns). Логи — `logs.go` (каналы stdout/stderr, члены сервиса из ленты,
-  backlog-merge, курсор «время + счёт повторов», ожидание старта остановленного).
+  backlog-merge, курсор «последняя метка + число строк, доставленных после строки, которая
+  её достигла» — `since` Docker позиционный, ожидание старта остановленного).
 - `internal/providers/synthetic` — тестовый провайдер (`--test-api --test-synthetic`): логи,
   эхо-терминал и порты (`live.go`), переконфигурация (`POST /api/_test/synthetic/reconfigure`),
   вид Workloads с действиями (`actions.go`; `POST /api/_test/synthetic/controls` — права, отказ,

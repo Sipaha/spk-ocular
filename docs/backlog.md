@@ -1,11 +1,11 @@
 # Бэклог (после MVP)
 
-- **Docker Compose provider** — следующий provider; проверка абстракции (см. спецификацию).
-  Долг общего UI, найденный ревью P5 (Codex, 2026-09-30), — снять в этом этапе: `Workspace`
-  знает `defaultNamespace` и открывает `pods` по умолчанию, `ResourceDrawer` всегда открывает
-  связанный вид `events`, `ActionDialog` подписывает scope как `action.namespace`. Нужны
-  метаданные провайдера: вид по умолчанию, scope по умолчанию, связанный вид событий объекта.
-- Docker provider, SSH provider (`~/.ssh/config`), кастомные provider-ы.
+- **Docker Compose — после P6/P7** (`docs/plans/2026-09-30-p6-docker-compose.md`): чтение
+  compose-файлов (желаемое число реплик, сервисы без контейнеров, scale/create/up/down);
+  endpoint-ы `ssh://` (нужен `docker system dial-stdio`; сейчас target виден, сессия отвечает
+  `unsupported`); Problems для Compose; контейнеры вне compose (Docker provider), Swarm, podman,
+  build, push/pull образов, события Docker как вид.
+- SSH provider (`~/.ssh/config`), кастомные provider-ы.
 - Интеграция с агентами Claude/Codex (поэтому состояние сразу в SQLite — решение пользователя
   2026-09-29).
 - Несколько активных кластеров одновременно / несколько окон.

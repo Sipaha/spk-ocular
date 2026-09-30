@@ -428,9 +428,21 @@ inspect, старый API 1.41, обрыв кадра stdcopy).
   backlog-а; закрытие под backpressure. dind: логи сервиса с двумя репликами, restart.
 
 ### Task 6. UI, desktop, документы, ревью
-- [ ] Регистрация провайдера, e2e на dind (`playwright.dind.config.ts`), desktop под Xvfb
+- [x] Регистрация провайдера, e2e на dind (`playwright.dind.config.ts`), desktop под Xvfb
   (русская раскладка): contexts, проекты, сервисы, контейнеры, детали со связями, логи
   сервиса, «Перечитать» — скриншоты; замер Private_Dirty с открытым Compose target-ом.
+  Сделано (3ba869d — `make e2e-dind`, 4 теста; desktop 2026-09-30, фикстурный `~/.docker` с
+  context-ом `ocular-dind`, `LANG=ru_RU`): kube context и два Docker context-а в одном
+  списке; обзор context-а; проекты, сервисы (RestartedByPolicy/Completed/Exited/Unhealthy/
+  Running), контейнеры (статусы, health, restarts, порты, one-off без номера); детали
+  контейнера — факты, labels, связи «Владелец» (сервис) и «Использует» (сети, тома, образ);
+  логи сервиса `logger` в реальном времени — источники «1», «2 (stderr)»; `F5` в русской
+  раскладке перечитывает (restarts 13 → 14), `/` открывает фильтр. Найдено и исправлено
+  (72dfadf): имена контейнеров обрезались до одинакового `ocular-fixture-…` (колонка Name
+  делила место поровну) → гибкая колонка `name` получает двойную долю (`minmax(180px, 2fr)`,
+  и у pod-ов тоже); длинная метка «Last health check (as of reading)» раздувала колонку меток
+  деталей → `fit-content(35%)`, метка переносится. Private_Dirty с открытыми kind, ocular-dind
+  и живыми логами сервиса — **132.9 МБ** (Go 38.8, WebProcess 85.0, NetworkProcess 8.6).
 - [ ] AGENTS.md, спецификация (P6 ✅), бэклог, «Итоги»; гейты `make check`, kind, dind.
 - [ ] Ревью реализации Codex, исправления, раздел «Ревью реализации».
 
