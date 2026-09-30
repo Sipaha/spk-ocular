@@ -18,7 +18,7 @@ const bin = process.env.E2E_BIN ?? '../../build/bin/spk-ocular'
 
 export default defineConfig({
   testDir: '.',
-  testMatch: ['logs.spec.ts', 'terminal.spec.ts', 'tunnels.spec.ts', 'actions.spec.ts', 'problems.spec.ts', 'palette.spec.ts', 'keyboard.spec.ts', 'generic.spec.ts'],
+  testMatch: ['logs.spec.ts', 'agents.spec.ts', 'terminal.spec.ts', 'tunnels.spec.ts', 'actions.spec.ts', 'problems.spec.ts', 'palette.spec.ts', 'keyboard.spec.ts', 'generic.spec.ts'],
   workers: 1,
   use: { baseURL: `http://127.0.0.1:${port}`, locale: 'en-US', screenshot: 'only-on-failure', permissions: ['clipboard-read', 'clipboard-write'] },
   webServer: {

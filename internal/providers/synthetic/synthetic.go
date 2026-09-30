@@ -31,9 +31,10 @@ var objects = map[string][]string{
 
 // Provider holds the live log feeds tests push into.
 type Provider struct {
-	live   live
-	wl     workloads
-	crates crates
+	live    live
+	wl      workloads
+	crates  crates
+	parcels parcels
 	// rev is the configuration revision (Reconfigure bumps it); changed
 	// wakes Watch.
 	rev     atomic.Int64
@@ -94,7 +95,7 @@ func (p *Provider) ID() string    { return ID }
 func (p *Provider) Title() string { return "Synthetic (test)" }
 
 func (p *Provider) Discover(context.Context) (provider.Discovery, error) {
-	return provider.Discovery{Targets: []core.Target{{Provider: ID, ID: Target, Title: Target, Subtitle: "test provider", ConfigHash: p.hash(), DefaultScope: DefaultScope}}}, nil
+	return provider.Discovery{Targets: []core.Target{{Provider: ID, ID: Target, Title: Target, Subtitle: "test provider", ConfigHash: p.hash(), DefaultScope: DefaultScope, Identity: "synthetic.local"}}}, nil
 }
 
 var _ provider.ScopeNamer = (*Provider)(nil)
@@ -150,7 +151,7 @@ var kind = core.KindDescriptor{
 
 func (s *session) ConfigHash() string { return s.hash }
 func (s *session) Kinds() []core.KindDescriptor {
-	return []core.KindDescriptor{kind, workloadKind, problemsKind, crateKind}
+	return []core.KindDescriptor{kind, workloadKind, problemsKind, crateKind, parcelKind}
 }
 
 // Scopes cannot be listed: the UI takes a typed one.
@@ -165,6 +166,8 @@ func (s *session) Get(_ context.Context, ref core.Ref) (*core.Resource, error) {
 		return s.getWorkload(ref.Name)
 	case CrateKind:
 		return s.getCrate(ref)
+	case ParcelKind:
+		return s.getParcel(ref)
 	}
 	if _, ok := objects[ref.Name]; !ok {
 		return nil, &provider.Error{Class: provider.ClassNotFound, Message: ref.Name}
@@ -184,6 +187,8 @@ func (s *session) Watch(q provider.Query, sink provider.Sink) (func(), error) {
 		return s.watchProblems(sink)
 	case CrateKind:
 		return s.watchCrates(q, sink)
+	case ParcelKind:
+		return s.watchParcels(q, sink)
 	}
 	var rows []core.Row
 	for _, name := range []string{"api", "workers"} {

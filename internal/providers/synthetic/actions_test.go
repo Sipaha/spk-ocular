@@ -81,7 +81,7 @@ func class(t *testing.T, err error) provider.ErrorClass {
 func TestWorkloadsOfferActionsAndServicesDoNot(t *testing.T) {
 	_, s := open(t)
 	kinds := s.Kinds()
-	require.Len(t, kinds, 4)
+	require.Len(t, kinds, 5)
 	assert.Empty(t, kinds[0].Actions, "services are for logs, terminals and tunnels")
 	assert.Empty(t, kinds[2].Actions, "problems: a row offers its object's kind's")
 	assert.Empty(t, kinds[3].Actions, "crates: a regression of the generic UI, no actions")

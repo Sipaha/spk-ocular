@@ -200,6 +200,7 @@ func (p *Provider) ResetActions() {
 	defer w.mu.Unlock()
 	w.objs, w.controls = workloadsAtStart(), Controls{}
 	w.resetViews()
+	p.parcels.reset()
 }
 
 func (s *session) watchWorkloads(q provider.Query, sink provider.Sink) (func(), error) {
@@ -277,6 +278,9 @@ func actionOf(id string) (core.ActionDescriptor, error) {
 }
 
 func (s *session) PrepareAction(_ context.Context, ref core.Ref, action string, p core.ActionParams) (core.ActionPlan, error) {
+	if ref.Kind == ParcelKind {
+		return s.prepareParcel(ref, action, p)
+	}
 	if ref.Kind != WorkloadKind {
 		return core.ActionPlan{}, &provider.Error{Class: provider.ClassInvalid, Message: ref.Kind + " have no actions"}
 	}
@@ -345,6 +349,9 @@ func (s *session) PrepareAction(_ context.Context, ref core.Ref, action string, 
 }
 
 func (s *session) RunAction(ctx context.Context, run provider.ActionRun) (core.ActionResult, error) {
+	if run.Ref.Kind == ParcelKind {
+		return s.runParcel(run)
+	}
 	d, err := actionOf(run.Action)
 	if err != nil {
 		return core.ActionResult{}, err
