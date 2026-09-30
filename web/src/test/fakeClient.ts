@@ -93,6 +93,16 @@ export function fakeClient(targets: Target[]) {
       throw new Error('prepareEdit not stubbed')
     }),
     runEdit: vi.fn(async () => ({ message: 'written' })),
+    getValues: vi.fn(async () => {
+      throw new Error('getValues not stubbed')
+    }),
+    revealValue: vi.fn(async () => {
+      throw new Error('revealValue not stubbed')
+    }),
+    prepareValueEdit: vi.fn(async () => {
+      throw new Error('prepareValueEdit not stubbed')
+    }),
+    runValueEdit: vi.fn(async () => ({ message: 'written' })),
     forwardInfo: vi.fn(async () => ({ ports: [] })),
     startForward: vi.fn(async () => { throw new Error('startForward: not set up') }),
     stopForward: vi.fn(async () => {}),

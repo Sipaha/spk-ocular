@@ -108,6 +108,18 @@ func (w *API) PrepareEdit(req api.EditPrepareRequest) (core.EditPlan, error) {
 func (w *API) RunEdit(req api.EditRunRequest) (core.EditResult, error) {
 	return w.a.RunEdit(context.Background(), req)
 }
+func (w *API) GetValues(ref core.Ref) (core.ValueList, error) {
+	return w.a.GetValues(context.Background(), ref)
+}
+func (w *API) RevealValue(req api.ValueRevealRequest) (core.Value, error) {
+	return w.a.RevealValue(context.Background(), req)
+}
+func (w *API) PrepareValueEdit(req api.ValueEditRequest) (core.ValuePlan, error) {
+	return w.a.PrepareValueEdit(context.Background(), req)
+}
+func (w *API) RunValueEdit(req api.ValueRunRequest) (core.ValueResult, error) {
+	return w.a.RunValueEdit(context.Background(), req)
+}
 func (w *API) ForwardInfo(ref core.Ref) (core.ForwardInfo, error) {
 	return w.a.ForwardInfo(context.Background(), ref)
 }

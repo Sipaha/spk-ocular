@@ -3,6 +3,7 @@ package transport
 import (
 	"bufio"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -14,6 +15,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/spk/spk-ocular/internal/api"
+	"github.com/spk/spk-ocular/internal/core"
 	"github.com/spk/spk-ocular/internal/events"
 )
 
@@ -199,4 +201,67 @@ func TestSSEDeliversEvents(t *testing.T) {
 			return
 		}
 	}
+}
+
+type valueAPI struct {
+	fakeAPI
+	prepared api.ValueEditRequest
+}
+
+func (f *valueAPI) RevealValue(_ context.Context, req api.ValueRevealRequest) (core.Value, error) {
+	if req.Key == "gone" {
+		return core.Value{}, &api.CodedError{Code: api.CodeGone, Detail: "no key"}
+	}
+	return core.Value{Key: req.Key, Value: "v", UID: req.Ref.UID}, nil
+}
+
+func (f *valueAPI) PrepareValueEdit(_ context.Context, req api.ValueEditRequest) (core.ValuePlan, error) {
+	f.prepared = req
+	return core.ValuePlan{Key: req.Key}, nil
+}
+
+func TestRevealedValuesAreNotStored(t *testing.T) {
+	h := NewHTTP(&valueAPI{}, events.NewEmitter())
+	ts := httptest.NewServer(h)
+	defer ts.Close()
+	for _, key := range []string{"password", "gone"} {
+		resp := call(t, h, ts.URL, "RevealValue", `{"ref":{"provider":"k","target":"a","kind":"secrets","name":"db","uid":"u"},"key":"`+key+`"}`)
+		assert.Equal(t, "no-store", resp.Header.Get("Cache-Control"), key)
+	}
+}
+
+// A value of 1 MiB typed as base64 (~1.4 MB, in lines) passes the transport.
+func TestTheTransportTakesAWholeValue(t *testing.T) {
+	f := &valueAPI{}
+	h := NewHTTP(f, events.NewEmitter())
+	ts := httptest.NewServer(h)
+	defer ts.Close()
+	b64 := base64.StdEncoding.EncodeToString(make([]byte, 1<<20))
+	var lines strings.Builder
+	for i := 0; i < len(b64); i += 76 {
+		lines.WriteString(b64[i:min(i+76, len(b64))])
+		lines.WriteString("\r\n")
+	}
+	body, _ := json.Marshal(api.ValueEditRequest{Ref: core.Ref{Provider: "k", Target: "a"}, Base: "b", Key: "k", Op: core.ValueSet, Value: lines.String(), Encoding: api.ValueBase64})
+	resp := call(t, h, ts.URL, "PrepareValueEdit", string(body))
+	assert.Equal(t, 200, resp.StatusCode)
+	assert.Equal(t, lines.String(), f.prepared.Value)
+}
+
+func (f *valueAPI) RunValueEdit(_ context.Context, req api.ValueRunRequest) (core.ValueResult, error) {
+	f.prepared = req.ValueEditRequest
+	return core.ValueResult{Message: req.Token}, nil
+}
+
+// The UI sends a run flat: the change's fields and its token side by side.
+func TestAValueRunIsFlat(t *testing.T) {
+	f := &valueAPI{}
+	h := NewHTTP(f, events.NewEmitter())
+	ts := httptest.NewServer(h)
+	defer ts.Close()
+	resp := call(t, h, ts.URL, "RunValueEdit", `{"ref":{"provider":"k","target":"a"},"base":"b","key":"password","op":"set","value":"x","encoding":"text","token":"t"}`)
+	var res core.ValueResult
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&res))
+	assert.Equal(t, "t", res.Message)
+	assert.Equal(t, api.ValueEditRequest{Ref: core.Ref{Provider: "k", Target: "a"}, Base: "b", Key: "password", Op: "set", Value: "x", Encoding: "text"}, f.prepared)
 }

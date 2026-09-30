@@ -68,12 +68,15 @@ func (s *Service) editMAC(enc string) string {
 	return hex.EncodeToString(m.Sum(nil))
 }
 
+// signedNoun says what a signed value is in a refusal.
+var signedNoun = map[string]string{"base": "editor's text", "grant": "reviewed plan", "vbase": "list of keys", "vgrant": "reviewed plan"}
+
 // openEdit checks a signed value of kind for ref's target and decodes its
 // payload into out; it returns the revision it was made in.
 func (s *Service) openEdit(v, kind string, ref core.Ref, out any) (string, error) {
 	enc, mac, ok := strings.Cut(v, ".")
 	if !ok || !hmac.Equal([]byte(mac), []byte(s.editMAC(enc))) {
-		return "", coded(CodeBadRequest, fmt.Errorf("the %s is not one this application made: open the editor again", kind))
+		return "", coded(CodeBadRequest, fmt.Errorf("the %s is not one this application made: start again", signedNoun[kind]))
 	}
 	body, err := base64.RawURLEncoding.DecodeString(enc)
 	if err != nil {
@@ -84,7 +87,7 @@ func (s *Service) openEdit(v, kind string, ref core.Ref, out any) (string, error
 		return "", coded(CodeBadRequest, err)
 	}
 	if e.Kind != kind || e.Provider != ref.Provider || e.Target != ref.Target || e.Rev == "" {
-		return "", coded(CodeBadRequest, fmt.Errorf("the %s is of another edit", kind))
+		return "", coded(CodeBadRequest, fmt.Errorf("the %s is of another edit", signedNoun[kind]))
 	}
 	if err := json.Unmarshal(e.Payload, out); err != nil {
 		return "", coded(CodeBadRequest, err)

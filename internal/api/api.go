@@ -100,6 +100,15 @@ type API interface {
 	GetEditSource(ctx context.Context, ref core.Ref) (core.EditDoc, error)
 	PrepareEdit(ctx context.Context, req EditPrepareRequest) (core.EditPlan, error)
 	RunEdit(ctx context.Context, req EditRunRequest) (core.EditResult, error)
+	// GetValues lists an object's protected values by key (sizes, no
+	// values) with a signed base; RevealValue reads one key's value (the
+	// only answer a value leaves in); PrepareValueEdit reviews a key's
+	// change (nothing changes) and signs a plan that can be written;
+	// RunValueEdit writes that plan once.
+	GetValues(ctx context.Context, ref core.Ref) (core.ValueList, error)
+	RevealValue(ctx context.Context, req ValueRevealRequest) (core.Value, error)
+	PrepareValueEdit(ctx context.Context, req ValueEditRequest) (core.ValuePlan, error)
+	RunValueEdit(ctx context.Context, req ValueRunRequest) (core.ValueResult, error)
 	// ForwardInfo: the ports of an object that can be forwarded.
 	ForwardInfo(ctx context.Context, ref core.Ref) (core.ForwardInfo, error)
 	// StartForward starts a tunnel (owned by the app, not the session):

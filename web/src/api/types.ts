@@ -165,6 +165,8 @@ export interface KindDescriptor {
   forward?: boolean
   /** Objects of this kind can be edited as text (GetEditSource). */
   editable?: boolean
+  /** Objects of this kind keep protected values by key (GetValues). */
+  values?: boolean
   /** Actions objects of this kind offer (restart, scale, delete, …). */
   actions?: ActionDescriptor[]
   /** How a table of this kind is first sorted (else by the first column). */
@@ -287,6 +289,100 @@ export interface EditResult {
   message: string
   version?: string
   actual?: string
+}
+
+// ---- protected values (internal/core/values.go)
+
+/** One key of an object's protected values, never its value. */
+export interface ValueKey {
+  key: string
+  /** bytes (decoded) */
+  size: number
+  /** UTF-8 without control characters but \n and \t: shown and edited as text; else as base64 */
+  text?: boolean
+}
+
+/** An object's keys, as read now (GetValues). */
+export interface ValueList {
+  /** the object, with the UID read */
+  ref: Ref
+  version?: string
+  keys: ValueKey[]
+  /** signed by the backend: sent back with a key's change */
+  base: string
+}
+
+/** One key's value, read on request (RevealValue): never kept beyond the view that asked. */
+export interface Value {
+  key: string
+  size: number
+  text?: boolean
+  /** the text itself when text, else base64 of the bytes */
+  value: string
+  /** the object and revision it was read from */
+  uid: string
+  version?: string
+}
+
+export type ValueOp = 'set' | 'delete'
+export type ValueEncoding = 'text' | 'base64'
+
+/** What reads the object's values, as far as could be seen; unknown is never "nothing". */
+export interface ValueConsumers {
+  known: boolean
+  why?: string
+  items?: string[]
+}
+
+/** What a key's change would do, read without changing anything and without any value. */
+export interface ValuePlan {
+  where: LiveTarget
+  key: string
+  op: ValueOp
+  /** sizes in bytes; -1 is absent */
+  before: number
+  after: number
+  /** after is the server's dry run; else computed locally */
+  checked: boolean
+  changed: boolean
+  /** the object changed since its keys were listed */
+  rebased?: boolean
+  /** this key changed since its keys were listed */
+  collision?: boolean
+  destructive?: boolean
+  /** keys the server's review leaves otherwise than the change asks */
+  serverChanges?: string[]
+  consumers?: ValueConsumers
+  warnings?: Message[]
+  rights: { state: RightsState; reason?: string }
+  /** why it cannot be written */
+  unavailable?: Message
+  /** present only when the plan can be written */
+  token?: string
+}
+
+/** A key's change: set (value in encoding; empty is a value) or delete (no value). */
+export interface ValueEditRequest {
+  ref: Ref
+  base: string
+  key: string
+  op: ValueOp
+  value?: string
+  encoding?: ValueEncoding
+}
+
+export interface ValueRunRequest extends ValueEditRequest {
+  token: string
+}
+
+/** A key's change was written. */
+export interface ValueResult {
+  message: string
+  version?: string
+  /** keys written otherwise than the review expected */
+  differs?: string[]
+  /** as reviewed: the server changes what was typed */
+  serverChanges?: string[]
 }
 
 export type ActionOutcome = 'done' | 'refused' | 'unknown' | 'skipped'

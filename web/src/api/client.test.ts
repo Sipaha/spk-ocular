@@ -108,3 +108,37 @@ describe('getMetrics', () => {
     expect(vi.mocked(Call.ByName)).toHaveBeenCalledWith(expect.stringMatching(/\.CancelMetrics$/), 'v1', req.seq)
   })
 })
+
+describe('values', () => {
+  const ref = { provider: 'kubernetes', target: 'ctx', scope: 'ns', kind: 'secrets', name: 'db', uid: 'u1' }
+  const run = { ref, base: 'b', key: 'password', op: 'set' as const, value: 'x', encoding: 'text' as const, token: 't' }
+
+  it('the HTTP client sends one key of one object and the run flat with its token', async () => {
+    document.head.innerHTML = '<meta name="spk-ocular-api-token" content="tok">'
+    const fetchMock = vi.fn(async () => new Response('{}', { status: 200, headers: { 'content-type': 'application/json' } }))
+    vi.stubGlobal('fetch', fetchMock)
+    await httpClient.revealValue(ref, 'password')
+    await httpClient.runValueEdit(run)
+    const sent = (fetchMock.mock.calls as unknown as [string, RequestInit][]).map(([url, init]) => [url, JSON.parse(init.body as string)])
+    expect(sent).toEqual([
+      ['/api/RevealValue', { ref, key: 'password' }],
+      ['/api/RunValueEdit', run],
+    ])
+  })
+
+  it('the Wails client calls the same methods with the same shapes', async () => {
+    const byName = vi.mocked(Call.ByName)
+    byName.mockReset()
+    byName.mockResolvedValue({})
+    await wailsClient.getValues(ref)
+    await wailsClient.revealValue(ref, 'password')
+    await wailsClient.prepareValueEdit(run)
+    await wailsClient.runValueEdit(run)
+    expect(byName.mock.calls.map((c) => [String(c[0]).split('.').pop(), c[1]])).toEqual([
+      ['GetValues', ref],
+      ['RevealValue', { ref, key: 'password' }],
+      ['PrepareValueEdit', run],
+      ['RunValueEdit', run],
+    ])
+  })
+})

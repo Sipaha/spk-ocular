@@ -74,6 +74,14 @@ func handle[Req any](fn func(ctx context.Context, req *Req) (any, error)) http.H
 	}
 }
 
+// noStore marks every answer of h (errors too) as not to be cached.
+func noStore(h http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Cache-Control", "no-store")
+		h.ServeHTTP(w, r)
+	})
+}
+
 func writeErr(w http.ResponseWriter, err error) {
 	var ce *api.CodedError
 	if !errors.As(err, &ce) {
@@ -194,6 +202,19 @@ func (h *HTTP) routes() {
 	}))
 	h.mux.HandleFunc("POST /api/RunEdit", handle(func(ctx context.Context, r *api.EditRunRequest) (any, error) {
 		return h.api.RunEdit(ctx, *r)
+	}))
+	h.mux.HandleFunc("POST /api/GetValues", handle(func(ctx context.Context, r *core.Ref) (any, error) {
+		return h.api.GetValues(ctx, *r)
+	}))
+	// A value: nothing between here and the page keeps it.
+	h.mux.Handle("POST /api/RevealValue", noStore(handle(func(ctx context.Context, r *api.ValueRevealRequest) (any, error) {
+		return h.api.RevealValue(ctx, *r)
+	})))
+	h.mux.HandleFunc("POST /api/PrepareValueEdit", handle(func(ctx context.Context, r *api.ValueEditRequest) (any, error) {
+		return h.api.PrepareValueEdit(ctx, *r)
+	}))
+	h.mux.HandleFunc("POST /api/RunValueEdit", handle(func(ctx context.Context, r *api.ValueRunRequest) (any, error) {
+		return h.api.RunValueEdit(ctx, *r)
 	}))
 	h.mux.HandleFunc("POST /api/ForwardInfo", handle(func(ctx context.Context, r *core.Ref) (any, error) {
 		return h.api.ForwardInfo(ctx, *r)
