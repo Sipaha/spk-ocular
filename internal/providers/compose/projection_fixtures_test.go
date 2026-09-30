@@ -103,7 +103,7 @@ func raw(s string) ctrOpt {
 	return func(c *engine.ContainerInspect) { c.Raw = []byte(s) }
 }
 
-func net(id, name, project string) *engine.Network {
+func network(id, name, project string) *engine.Network {
 	n := &engine.Network{ID: id, Name: name, Driver: "bridge", Scope: "local", Created: engine.TimeOf(t0.Add(-2 * time.Hour))}
 	if project != "" {
 		n.Labels = map[string]string{LabelProject: project, LabelNetwork: "default"}
