@@ -22,6 +22,11 @@ var messageTexts = map[string]string{
 	"container.restartedByPolicyOnce": "restarted by its restart policy ({count} restart in total)",
 	"service.members":                 "{count} of {total} containers",
 	"service.membersExample":          "{count} of {total} containers; {example}",
+	"volume.identity":                 "A volume is identified by its name and creation time (to the second): one re-created within the same second is taken for the same volume.",
+	"error.unknownKind":               "unknown kind {kind}",
+	"error.notObserved":               "the {feed} are not observed",
+	"error.notFound":                  "{kind} {name} is not found",
+	"error.gone":                      "{kind} {name} no longer exists: another object has its name now",
 }
 
 // msg builds the message key with params given as name, value pairs.
