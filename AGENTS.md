@@ -364,7 +364,9 @@ P9 — правка YAML объекта Kubernetes с просмотром и о
   `TestSecretRefusalsNeverPrintServerStrings`, `TestASecretsReadRefusalsAreHidden`.
 - Несохранённые правки не теряются молча: всё, что уводит от редактора (закрытие деталей, Esc,
   связи, вкладка, другой объект, вид, scope, target, палитра), идёт через `mayLeave`
-  (`web/src/edit/guard.ts`) — «Отбросить правки?» с фокусом на «Продолжить правку». —
+  (`web/src/edit/guard.ts`) — «Отбросить правки?» с фокусом на «Продолжить правку» (вопрос держит
+  фокус, пока задан). Автоматические обновления страницы (вид сдался, вид вернулся в каталог)
+  ждут, пока правки держатся (`useEditHolder`). Просмотр — снимок текста в момент `Ctrl+Enter`. —
   `WorkspaceEdit.test.tsx`, `guard.test.ts`, e2e-kind «edit a ConfigMap».
 - Версии `github.com/wailsapp/wails/v3` и `@wailsio/runtime` совпадают (сейчас `3.0.0-beta.26`).
 - `go build ./...` без тега `wails` обязан проходить: desktop-код за тегом.

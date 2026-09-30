@@ -22,7 +22,7 @@ export const k8sScopeNames = {
 }
 
 /** A session's catalog of fixed kinds (ListKinds). */
-export const kindsView = (kinds: KindDescriptor[]): KindsView => ({ kinds, rev: 1, state: 'ready', session: 1 })
+export const kindsView = (kinds: KindDescriptor[], over: Partial<KindsView> = {}): KindsView => ({ kinds, rev: 1, state: 'ready', session: 1, ...over })
 
 /** An in-memory Client: tests mutate `view` and call `emit`. */
 export function fakeClient(targets: Target[]) {

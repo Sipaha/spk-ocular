@@ -101,6 +101,50 @@ describe('editing an object in the details', () => {
     expect(drawer).not.toBeInTheDocument()
   })
 
+  it('the review is of the text as it was asked for: focus leaves the editor at once, later typing is not sent', async () => {
+    const { f, drawer, v } = await openEditor()
+    type(v, 'x: 1', 'x: 2')
+    let answer: (() => void) | null = null
+    const prepare = f.client.prepareEdit as ReturnType<typeof vi.fn>
+    const real = prepare.getMockImplementation() as (req: EditPrepareRequest) => unknown
+    prepare.mockImplementationOnce((req: EditPrepareRequest) => new Promise((ok) => (answer = () => ok(real(req)))))
+    v.focus()
+    fireEvent.keyDown(v.contentDOM, { key: 'Enter', code: 'Enter', ctrlKey: true })
+    const review = await screen.findByRole('dialog', { name: 'Edit api-1' })
+    // Still preparing: the keyboard is the dialog's, not the editor's behind it.
+    expect(review).toHaveAttribute('aria-busy', 'true')
+    expect(review.contains(document.activeElement)).toBe(true)
+    // A change that still reaches the text is not part of this review.
+    type(v, 'x: 2', 'x: 7')
+    await act(async () => answer!())
+    f.client.runEdit = vi.fn(async () => ({ message: 'written' }))
+    await userEvent.click(await within(review).findByRole('button', { name: 'Apply' }))
+    const edited = docText('api-1').replace('x: 1', 'x: 2')
+    expect(f.client.runEdit).toHaveBeenCalledWith(expect.objectContaining({ edited, token: 'grant' }))
+    expect(prepare).toHaveBeenLastCalledWith(expect.objectContaining({ edited }))
+    expect(drawer).toBeInTheDocument()
+  })
+
+  it('a palette choice that would drop edits asks, and the question keeps the focus', async () => {
+    const { f, drawer, v } = await openEditor()
+    type(v, 'x: 1', 'x: 9')
+    v.focus()
+    await userEvent.keyboard('{Control>}k{/Control}')
+    const palette = await screen.findByRole('dialog', { name: 'Go to' })
+    await userEvent.keyboard(':nodes')
+    await waitFor(() => expect(within(palette).getByRole('option', { selected: true })).toHaveTextContent('Nodes'))
+    await userEvent.keyboard('{Enter}')
+    const prompt = await screen.findByRole('alertdialog', { name: 'Discard edits?' })
+    // The palette closing gives focus back behind the question: not while it is asked.
+    await act(async () => new Promise((r) => setTimeout(r, 20)))
+    expect(within(prompt).getByRole('button', { name: 'Keep editing' })).toHaveFocus()
+    await userEvent.keyboard('{Escape}')
+    expect(prompt).not.toBeInTheDocument()
+    expect((await editorView(drawer)).state.doc.toString()).toContain('x: 9')
+    await waitFor(() => expect(drawer.querySelector('.cm-content')).toHaveFocus())
+    expect(f.client.openView).not.toHaveBeenCalledWith('kubernetes', 'prod', expect.objectContaining({ kind: 'nodes' }))
+  })
+
   it('Back to the text keeps the edits', async () => {
     const { drawer, v } = await openEditor()
     type(v, 'x: 1', 'x: 3')
@@ -145,6 +189,50 @@ describe('editing an object in the details', () => {
     await userEvent.click(screen.getByText('stage'))
     await userEvent.click(await screen.findByRole('button', { name: 'Discard' }))
     await waitFor(() => expect(f.client.selectTarget).toHaveBeenCalledWith('kubernetes', 'stage'))
+  })
+
+  it('a page renewed on its own (its view gave up) waits while edits are held', async () => {
+    const { f, drawer, v } = await openEditor()
+    type(v, 'x: 1', 'x: 9')
+    const podOpens = () => (f.client.openView as ReturnType<typeof vi.fn>).mock.calls.filter((c) => c[2].kind === 'pods' && !c[2].name).length
+    const before = podOpens()
+    // The table's view ends "removed" while the catalog still serves pods:
+    // the page would be renewed at once (a new page drops the drawer).
+    f.state.statusByKind.pods = { state: 'error', class: 'removed', message: 'pods are no longer served' }
+    await act(async () => f.emit({ type: 'view_changed', payload: { viewId: 'v-pods', version: 99 } }))
+    await act(async () => new Promise((r) => setTimeout(r, 50)))
+    expect(podOpens()).toBe(before)
+    expect(screen.getByRole('dialog', { name: 'pods api-1' })).toBe(drawer)
+    expect((await editorView(drawer)).state.doc.toString()).toContain('x: 9')
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
+    // Edits dropped by the user: the page is renewed now.
+    delete f.state.statusByKind.pods
+    await userEvent.keyboard('{Escape}')
+    await userEvent.click(await screen.findByRole('button', { name: 'Discard' }))
+    await waitFor(() => expect(podOpens()).toBe(before + 1))
+  })
+
+  it('a kind served again (a new page on its own) waits while edits are held', async () => {
+    const { f, grid, drawer, v } = await openEditor()
+    // Pods chosen (remembered), not the default kind a listing without it replaces.
+    await userEvent.click(screen.getByRole('button', { name: /^Pods/ }))
+    expect(within(grid).getByText('api-1')).toBeInTheDocument()
+    type(v, 'x: 1', 'x: 9')
+    const listKinds = f.client.listKinds as ReturnType<typeof vi.fn>
+    const podOpens = () => (f.client.openView as ReturnType<typeof vi.fn>).mock.calls.filter((c) => c[2].kind === 'pods' && !c[2].name).length
+    const before = podOpens()
+    listKinds.mockResolvedValue(kindsView([nodes], { rev: 2 }))
+    await act(async () => f.emit({ type: 'kinds_changed', payload: { provider: 'kubernetes', target: 'prod', session: 1, rev: 2 } }))
+    listKinds.mockResolvedValue(kindsView([pods, nodes], { rev: 3 }))
+    await act(async () => f.emit({ type: 'kinds_changed', payload: { provider: 'kubernetes', target: 'prod', session: 1, rev: 3 } }))
+    await waitFor(() => expect(listKinds).toHaveBeenCalledTimes(3))
+    await act(async () => new Promise((r) => setTimeout(r, 50)))
+    expect(podOpens()).toBe(before)
+    expect(screen.getByRole('dialog', { name: 'pods api-1' })).toBe(drawer)
+    expect((await editorView(drawer)).state.doc.toString()).toContain('x: 9')
+    await userEvent.keyboard('{Escape}')
+    await userEvent.click(await screen.findByRole('button', { name: 'Discard' }))
+    await waitFor(() => expect(podOpens()).toBe(before + 1))
   })
 
   it('says when the object changed on the server while its text is edited', async () => {

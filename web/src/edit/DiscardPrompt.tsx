@@ -1,6 +1,6 @@
 import { useLayoutEffect, useRef } from 'react'
 import { t } from '../i18n'
-import { discardEdits, keepEditing, useLeaveAsked } from './guard'
+import { discardEdits, keepEditing, leaveAsked, useLeaveAsked } from './guard'
 
 const btn = 'rounded-md px-3 py-1 outline-none focus:ring-2 focus:ring-accent focus:ring-offset-2 focus:ring-offset-panel'
 
@@ -15,6 +15,17 @@ function Prompt() {
   const keep = useRef<HTMLButtonElement>(null)
   const box = useRef<HTMLDivElement>(null)
   useLayoutEffect(() => keep.current?.focus(), [])
+  // While asked, focus stays here: whatever closes along with the request
+  // (the palette giving focus back) must not take it behind the question.
+  // Answered, the answer places it (the editor, the next page). A layout
+  // effect: in place before the closing palette's passive cleanup runs.
+  useLayoutEffect(() => {
+    const onFocus = (e: FocusEvent) => {
+      if (leaveAsked() && box.current && !box.current.contains(e.target as Node)) keep.current?.focus()
+    }
+    document.addEventListener('focusin', onFocus, true)
+    return () => document.removeEventListener('focusin', onFocus, true)
+  }, [])
   const onKey = (e: React.KeyboardEvent) => {
     if (e.key === 'Escape') {
       e.preventDefault()

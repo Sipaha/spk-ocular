@@ -25,9 +25,11 @@ const emit = () => listeners.forEach((l) => l())
 /** The editor holds its edits until the returned release is called. */
 export function holdEdits(h: EditHolder): () => void {
   holder = h
+  emit()
   return () => {
     if (holder !== h) return
     holder = null
+    emit()
     if (pending) {
       // The editor went on its own (its object was deleted, say): nothing to ask.
       const p = pending
@@ -37,6 +39,9 @@ export function holdEdits(h: EditHolder): () => void {
     }
   }
 }
+
+/** The question is asked now (not a hook: for listeners). */
+export const leaveAsked = () => pending !== null
 
 /** Unsaved edits are held now. */
 export const editsHeld = () => !!holder?.dirty()
@@ -80,6 +85,10 @@ const subscribe = (l: () => void) => {
   listeners.add(l)
   return () => listeners.delete(l)
 }
+
+/** The editor holding edits now (changes when one starts or ends; its
+ * edits may be clean): what waits for edits re-checks editsHeld on change. */
+export const useEditHolder = () => useSyncExternalStore(subscribe, () => holder)
 
 /** The prompt is asked now. */
 export const useLeaveAsked = () => useSyncExternalStore(subscribe, () => pending !== null)

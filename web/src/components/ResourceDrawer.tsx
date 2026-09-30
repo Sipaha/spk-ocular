@@ -2,7 +2,7 @@ import { lazy, Suspense, useEffect, useMemo, useRef, useState, type ReactNode } 
 import { ApiError, type Client } from '../api/client'
 import type { ActionDescriptor, EditDoc, Relation, Ref, Resource } from '../api/types'
 import { Menu } from '../actions/Menu'
-import { EditDialog } from '../edit/EditDialog'
+import { EditDialog, type EditReview } from '../edit/EditDialog'
 import { holdEdits, mayLeave } from '../edit/guard'
 import { actionLabel, classLabel, detailLabel, relationLabel, t } from '../i18n'
 import { showNotice } from '../store'
@@ -89,7 +89,9 @@ export function ResourceDrawer({ client, hub, target, subject, onClose, hasLogs,
   // object never shows it. The editor opens on the YAML tab.
   const [edit, setEdit] = useState<Editing | null>(null)
   const [editLoad, setEditLoad] = useState<{ key: string; error?: string } | null>(null)
-  const [reviewing, setReviewing] = useState(false)
+  // The review asked for: the text as it was then (typing after it is not
+  // part of what the review shows and writes).
+  const [reviewing, setReviewing] = useState<EditReview | null>(null)
   const editing = edit?.key === key ? edit : null
   const editRef = useRef(editing)
   const keyRef = useRef(key)
@@ -101,7 +103,7 @@ export function ResourceDrawer({ client, hub, target, subject, onClose, hasLogs,
   const focusEditor = () => host.current?.querySelector<HTMLElement>('.cm-content')?.focus()
   const endEdit = () => {
     setEdit(null)
-    setReviewing(false)
+    setReviewing(null)
   }
   // Edits not written are held: leaving asks first (edit/guard).
   const editingKey = editing ? key : null
@@ -134,7 +136,8 @@ export function ResourceDrawer({ client, hub, target, subject, onClose, hasLogs,
     )
   }
   const review = () => {
-    if (editRef.current && !reviewing) setReviewing(true)
+    const ed = editRef.current
+    if (ed && !reviewing) setReviewing({ ref: ed.doc.ref, base: ed.doc.base, original: ed.doc.text, edited: ed.text, kindTitle: kindTitleOf?.(current.kind) ?? current.kind })
   }
   const cancelEdit = () => mayLeave(endEdit)
   const keys = useRef({ close, depth: stack.length, startEdit, review, cancelEdit, editing: !!editing })
@@ -377,9 +380,9 @@ export function ResourceDrawer({ client, hub, target, subject, onClose, hasLogs,
       {reviewing && editing && (
         <EditDialog
           client={client}
-          req={{ ref: editing.doc.ref, base: editing.doc.base, original: editing.doc.text, edited: editing.text, kindTitle: kindTitleOf?.(current.kind) ?? current.kind }}
+          req={reviewing}
           onBack={() => {
-            setReviewing(false)
+            setReviewing(null)
             requestAnimationFrame(focusEditor)
           }}
           onDone={(res) => {

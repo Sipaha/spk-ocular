@@ -103,9 +103,13 @@ export function EditDialog({ client, req, onBack, onDone }: Props) {
   const destructive = !!plan?.destructive
 
   // Focus: Apply on a plan that can be written; Back on a destructive one
-  // and otherwise.
+  // and otherwise. While busy the dialog itself holds it: keys (typing,
+  // a held Ctrl+Enter) must not reach the editor behind it.
   useLayoutEffect(() => {
-    if (busy) return
+    if (busy) {
+      if (!box.current?.contains(document.activeElement)) box.current?.focus()
+      return
+    }
     if (canRun && !destructive) applyRef.current?.focus()
     else if (!box.current?.contains(document.activeElement) || document.activeElement === box.current || destructive) backRef.current?.focus()
     // eslint-disable-next-line react-hooks/exhaustive-deps

@@ -17,7 +17,7 @@ import { ResourceTable } from './ResourceTable'
 import { TargetDetails } from './TargetDetails'
 import { SearchIcon, WarningIcon } from './icons'
 import { dock } from '../dock/store'
-import { mayLeave } from '../edit/guard'
+import { editsHeld, mayLeave, useEditHolder } from '../edit/guard'
 import { TerminalDialog } from '../term/TerminalDialog'
 import { lend, type PaletteHost } from '../palette/store'
 
@@ -94,10 +94,10 @@ export function Workspace({ client, hub, target }: { client: Client; hub: ViewHu
   // The remembered kind may be a discovered one not listed yet.
   const waiting = !current && kind !== OVERVIEW && !!kind && catalog.view?.state === 'discovering'
   // A new kind or scope is a new page: selection, filter and an open drawer
-  // belong to the table they were made in. A kind served again (after
-  // removed) is a new page too, and so is a renewed one (below).
+  // belong to the table they were made in. A renewed one (a kind served
+  // again after removed, a view that gave up; below) is a new page too.
   const pageScope = current?.scoped ? scope : { mode: 'none' as const }
-  const pageKey = current ? `${current.id}#${catalog.appeared.get(current.id) ?? 0}.${renewed.get(current.id) ?? 0}/${JSON.stringify(pageScope)}` : ''
+  const pageKey = current ? `${current.id}#${renewed.get(current.id) ?? 0}/${JSON.stringify(pageScope)}` : ''
   // The page (by key) whose view gave up (ViewState.halted).
   const [halted, setHalted] = useState<string | null>(null)
   const onHalted = useCallback((key: string, h: boolean) => setHalted((old) => (h ? key : old === key ? null : old)), [])
@@ -177,14 +177,26 @@ export function Workspace({ client, hub, target }: { client: Client; hub: ViewHu
   // that discovered it again, one it opened too early in, a kind deleted and
   // created again between two listings) gets one new page per listing: no
   // polling, no loop. Explicit navigation to it renews it too (setKind).
+  // A kind served again (after removed) is of a new appearance: its page is
+  // renewed too; other kinds' appearances are only noted (going to one is a
+  // new page anyway). Renewals on their own wait while the open editor holds
+  // edits (a new page drops it, and nobody asked to leave); they run once it
+  // lets go.
+  const holder = useEditHolder()
   const renewedAt = useRef(new Map<string, string>())
+  const seenAppeared = useRef(new Map<string, number>())
   const stamp = catalog.view ? `${catalog.view.session}/${catalog.view.rev}` : ''
   useEffect(() => {
-    if (!current || halted !== pageKey || !kinds?.some((k) => k.id === current.id)) return
-    if (renewedAt.current.get(current.id) === stamp) return
-    renewedAt.current.set(current.id, stamp)
+    for (const [id, n] of catalog.appeared) if (id !== current?.id) seenAppeared.current.set(id, n)
+    if (!current || !kinds?.some((k) => k.id === current.id) || editsHeld()) return
+    const appeared = catalog.appeared.get(current.id) ?? 0
+    const cameBack = (seenAppeared.current.get(current.id) ?? 0) !== appeared
+    const gaveUp = halted === pageKey && renewedAt.current.get(current.id) !== stamp
+    if (!cameBack && !gaveUp) return
+    seenAppeared.current.set(current.id, appeared)
+    if (gaveUp) renewedAt.current.set(current.id, stamp)
     renew(current.id)
-  }, [current, halted, pageKey, kinds, stamp, renew])
+  }, [current, halted, pageKey, kinds, stamp, renew, holder, catalog.appeared])
 
   // The palette acts through the latest state of this workspace.
   const paletteActs = useRef<Pick<PaletteHost, 'openKind' | 'setScope' | 'openObject'> | null>(null)
