@@ -370,19 +370,17 @@ type TailLine struct {
 	Cut bool `json:"cut,omitempty"`
 }
 
-// Tail: Truncated — more lines or bytes than a tail keeps, or no end
-// within tailWait.
+// Tail: Truncated — older lines left out (more lines or bytes than a
+// tail keeps), or no end within tailWait.
 type Tail struct {
 	Sources   []TailSource `json:"sources"`
 	Lines     []TailLine   `json:"lines"`
-	Truncated bool         `json:"truncated,omitempty"`
+	Truncated bool         `json:"truncated,omitempty" jsonschema_description:"Older lines were left out (a tail keeps the newest 5000 lines and 1 MiB), or not every source answered in time."`
 }
 
-// errTailEnd stops a provider's stream: the tail is full.
-var errTailEnd = errors.New("tail full")
-
-// TailLogs reads the backlog of an object's logs (maxTailLines lines and
-// maxTailBytes of text at most): never followed, the stream ends after it.
+// TailLogs reads the backlog of an object's logs, never followed (the
+// stream ends after it), and keeps its newest maxTailLines lines and
+// maxTailBytes of text: Truncated says older ones were left out.
 func (c *AgentCall) TailLogs(req TailRequest) (Tail, error) {
 	if req.TailLines < 1 || req.TailLines > maxTailLines {
 		return Tail{}, coded(CodeBadRequest, fmt.Errorf("tailLines must be 1..%d", maxTailLines))
@@ -399,29 +397,25 @@ func (c *AgentCall) TailLogs(req TailRequest) (Tail, error) {
 	sink := &tailSink{}
 	q := provider.LogQuery{Channel: req.Channel, Previous: req.Previous, TailLines: req.TailLines, SinceTime: req.SinceTime}
 	err := src.StreamLogs(ctx, req.Ref, q, sink)
-	switch {
-	case errors.Is(err, errTailEnd), err == nil:
-	case ctx.Err() != nil && c.ctx.Err() == nil: // out of time: what came
-		sink.out.Truncated = true
-	default:
+	if ctx.Err() != nil && c.ctx.Err() == nil { // out of time: what came
+		sink.out.Truncated, err = true, nil
+	}
+	if err != nil {
 		return Tail{}, c.fail(err)
 	}
 	if sink.out.Sources == nil {
 		sink.out.Sources = []TailSource{}
 	}
-	if sink.out.Lines == nil {
-		sink.out.Lines = []TailLine{}
-	}
+	sink.out.Lines = append([]TailLine{}, sink.out.Lines...) // not the dropped front
 	return sink.out, nil
 }
 
-// tailSink collects a tail; it ends the stream when full (maxTailLines
-// over all sources: each has its own TailLines). Ready is no end: a pod's
-// own stream sends it before its lines, and a stream without Follow ends
-// by itself after the backlog.
+// tailSink collects a tail: the newest lines within maxTailLines (over
+// all sources: each has its own TailLines) and maxTailBytes, the older
+// dropped from the front. Ready is no end: a pod's own stream sends it
+// before its lines, and a stream without Follow ends by itself.
 type tailSink struct {
 	bytes int
-	full  bool
 	out   Tail
 }
 
@@ -432,12 +426,13 @@ func (t *tailSink) Source(id int, _, label, channel string) error {
 
 func (t *tailSink) Lines(id int, lines []provider.LogLine) error {
 	for _, l := range lines {
-		if t.full || len(t.out.Lines) >= maxTailLines || t.bytes+len(l.Text) > maxTailBytes {
-			t.full, t.out.Truncated = true, true
-			return errTailEnd
-		}
 		t.bytes += len(l.Text)
 		t.out.Lines = append(t.out.Lines, TailLine{Source: id, TS: l.TS, Text: l.Text, Cut: l.Flags&provider.LineCut != 0})
+		for len(t.out.Lines) > maxTailLines || t.bytes > maxTailBytes {
+			t.bytes -= len(t.out.Lines[0].Text)
+			t.out.Lines = t.out.Lines[1:]
+			t.out.Truncated = true
+		}
 	}
 	return nil
 }

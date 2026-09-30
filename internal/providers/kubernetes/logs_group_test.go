@@ -251,6 +251,33 @@ func TestGroupSlowBacklogDoesNotHoldOthers(t *testing.T) {
 	g.sink.await(t, "the slow one live", func() bool { return len(g.linesOf("pb/app")) == 1 })
 }
 
+// Without follow (an agent's tail), the caller's deadline ends the backlog:
+// what the others read is delivered, the slow one says it did not load.
+func TestGroupTailKeepsWhatCameByTheDeadline(t *testing.T) {
+	k := newFakeKubelet(t)
+	k.start("web-a", "app", "cid-web-a-app")
+	k.start("web-b", "app", "cid-web-b-app")
+	k.log("web-a", "app", fakeRec{ts: at(1), text: "fast"})
+	k.log("web-b", "app", fakeRec{ts: at(2), text: "slow"})
+	k.slow["web-b"] = 5 * time.Second
+	client := groupClient(deployment("web", "d1", "app"), replicaSet("web-rs", "rs1", "d1"),
+		memberOf("web-a", "pa", "rs1", 10, "app"), memberOf("web-b", "pb", "rs1", 20, "app"))
+	s := newSession("ctx", "h", client, false)
+	s.logs = k.fetcher(t)
+	t.Cleanup(s.Close)
+	sink := newLogRecorder()
+	ctx, cancel := context.WithTimeout(context.Background(), 700*time.Millisecond)
+	defer cancel()
+	start := time.Now()
+	_ = s.StreamLogs(ctx, webRef(), provider.LogQuery{TailLines: 10}, sink)
+	assert.Less(t, time.Since(start), 3*time.Second)
+	assert.Equal(t, []string{"fast"}, sink.texts())
+	st := sink.state("pb/app")
+	assert.Equal(t, provider.LogError, st.State)
+	assert.Contains(t, st.Message, "did not load in time")
+	assert.NotContains(t, st.Message, "following live", "nothing follows a tail")
+}
+
 // All containers of one pod: the same group machinery; a same-named
 // replacement is not followed.
 func TestAllContainersOfAPod(t *testing.T) {

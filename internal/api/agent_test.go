@@ -448,13 +448,37 @@ func TestTailLogs(t *testing.T) {
 	t.Cleanup(func() { maxTailBytes = old })
 	tl, err = c.TailLogs(TailRequest{Ref: row("a", "web-1").Ref, TailLines: 50})
 	require.NoError(t, err)
-	assert.True(t, tl.Truncated)
-	assert.Len(t, tl.Lines, 1)
+	assert.True(t, tl.Truncated, "older lines left out")
+	require.Len(t, tl.Lines, 1)
+	assert.Equal(t, "two", tl.Lines[0].Text, "the newest lines are kept")
 
 	for _, n := range []int{0, -1, maxTailLines + 1} {
 		_, err = c.TailLogs(TailRequest{Ref: row("a", "web-1").Ref, TailLines: n})
 		assert.True(t, IsCoded(err, CodeBadRequest), "%d", n)
 	}
+}
+
+// A provider ends a tail at the deadline with what came (the others of a
+// group) and no error: still truncated.
+func TestATailEndedByItsDeadlineIsTruncated(t *testing.T) {
+	old := tailWait
+	tailWait = 50 * time.Millisecond
+	t.Cleanup(func() { tailWait = old })
+	k := newAgentProvider("a")
+	p := agentWrapped{k, func(a *agentSession) provider.Session {
+		a.logs = func(_ provider.LogQuery, sink provider.LogSink) error {
+			_ = sink.Source(1, "k1", "web-1", "main")
+			time.Sleep(200 * time.Millisecond) // past the deadline
+			_ = sink.Lines(1, []provider.LogLine{{TS: "t1", Text: "came"}})
+			return nil
+		}
+		return loggingSession{a}
+	}}
+	s, _ := newService(t, p)
+	tl, err := call(t, s, "a").TailLogs(TailRequest{Ref: row("a", "web-1").Ref, TailLines: 10})
+	require.NoError(t, err)
+	require.Len(t, tl.Lines, 1)
+	assert.True(t, tl.Truncated)
 }
 
 func TestTailLogsWithoutLogs(t *testing.T) {

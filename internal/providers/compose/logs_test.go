@@ -906,6 +906,34 @@ func TestLogsFailedReadOfAStoppedContainerIsRetried(t *testing.T) {
 
 // Re-review P2: a finite read's error stays the member's last state (not
 // replaced by "ended").
+// Without follow (an agent's tail), the caller's deadline ends the
+// backlog: the members that answered are delivered, the stalled one says it
+// did not load.
+func TestLogsTailKeepsWhatCameByTheDeadline(t *testing.T) {
+	e := newLogEnv(t)
+	c2 := composeContainer(id(2), "p", "web", "running")
+	c2.Name, c2.Config.Labels[LabelNumber] = "/p-web-2", "2"
+	c2.HostConfig.LogConfig.Type = "json-file"
+	e.fe.PutContainer(c2)
+	e.fe.Journal(e.c.ID, 1, e.at(1), "one 1")
+	e.fe.AddHook(logsHook(c2.ID, false, 1, nil, true))
+	ref := core.Ref{Provider: ProviderID, Kind: KindServices, Scope: "p", Name: "p/web", UID: "p/web"}
+	sk := newLogSink()
+	ctx, cancel := context.WithTimeout(t.Context(), 700*time.Millisecond)
+	defer cancel()
+	start := time.Now()
+	_ = e.s.StreamLogs(ctx, ref, provider.LogQuery{TailLines: 10, Channel: channelStdout}, sk)
+	if d := time.Since(start); d > 3*time.Second {
+		t.Fatalf("took %v", d)
+	}
+	if !eq(sk.texts("p-web-1"), "one 1") {
+		t.Fatalf("the member that answered: %v", sk.texts("p-web-1"))
+	}
+	if st := sk.lastState("p-web-2"); st.State != provider.LogError || !strings.Contains(st.Message, "did not load in time") || strings.Contains(st.Message, "following") {
+		t.Fatalf("the stalled member: %+v", st)
+	}
+}
+
 func TestLogsOnceKeepsItsError(t *testing.T) {
 	e := newLogEnv(t)
 	e.fe.AddHook(logsHook(e.c.ID, false, 1, enginefake.Frame(3, []byte("the log file is corrupt")), false))

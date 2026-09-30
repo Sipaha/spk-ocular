@@ -478,9 +478,11 @@ func (g *logGroup) backlog(ctx context.Context, ms []*member) error {
 	}
 	close(work)
 	wg.Wait()
-	if ctx.Err() != nil {
+	if ctx.Err() != nil && g.q.Follow {
 		return ctx.Err()
 	}
+	// Without follow (a tail) the caller's deadline ends the backlog: what
+	// the others read is delivered, the late ones say they did not load.
 	var lists [][]provider.LogLine
 	var ids []int
 	for _, m := range ms {
@@ -519,7 +521,11 @@ func (g *logGroup) backlog(ctx context.Context, ms []*member) error {
 		m.backlogLines = nil
 		switch err := m.backlogErr; {
 		case err != nil && errors.Is(err, context.DeadlineExceeded):
-			if err := m.state(provider.LogError, provider.ClassUnavailable, "its recent lines did not load in time; following live"); err != nil {
+			late := "its recent lines did not load in time"
+			if g.q.Follow {
+				late += "; following live"
+			}
+			if err := m.state(provider.LogError, provider.ClassUnavailable, late); err != nil {
 				return err
 			}
 		case err != nil && engine.IsNotFound(err):

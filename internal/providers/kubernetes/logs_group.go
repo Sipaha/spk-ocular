@@ -278,9 +278,11 @@ func (g *logGroup) backlog(ctx context.Context, srcs []*groupSrc) error {
 	}
 	close(work)
 	wg.Wait()
-	if ctx.Err() != nil {
+	if ctx.Err() != nil && g.q.Follow {
 		return ctx.Err()
 	}
+	// Without follow (a tail) the caller's deadline ends the backlog: what
+	// the others read is delivered, the late ones say they did not load.
 
 	lists := make([][]provider.LogLine, len(srcs))
 	for i, x := range srcs {
@@ -325,7 +327,7 @@ func (g *logGroup) backlog(ctx context.Context, srcs []*groupSrc) error {
 	for _, x := range srcs {
 		switch {
 		case x.err != nil && errors.Is(x.err, context.DeadlineExceeded):
-			if err := g.sink.State(x.src.id, provider.LogState{State: provider.LogError, Class: provider.ClassUnavailable, Message: "its recent lines did not load in time; following live"}); err != nil {
+			if err := g.sink.State(x.src.id, provider.LogState{State: provider.LogError, Class: provider.ClassUnavailable, Message: lateBacklog(g.q)}); err != nil {
 				return err
 			}
 		case x.err != nil:
@@ -372,6 +374,14 @@ func (g *logGroup) readBacklog(ctx context.Context, x *groupSrc, per int64) ([]p
 			return out, false, rerr
 		}
 	}
+}
+
+// lateBacklog: a source whose recent lines did not come in time.
+func lateBacklog(q provider.LogQuery) string {
+	if q.Follow {
+		return "its recent lines did not load in time; following live"
+	}
+	return "its recent lines did not load in time"
 }
 
 var errMemberGone = &provider.Error{Class: provider.ClassNotFound, Message: "the pod was deleted"}
