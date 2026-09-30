@@ -5,6 +5,7 @@ import { t, type MessageKey } from '../i18n'
 import { type Actions, useStore } from '../store'
 import { SearchIcon } from '../components/icons'
 import { buildItems, type PaletteItem, type Sources } from './items'
+import { scopeWords } from '../scopeNames'
 import { closePalette, usePalette } from './store'
 import { focusMark, restoreFocus } from '../shortcuts'
 
@@ -60,12 +61,20 @@ function PaletteDialog({ client, act }: { client: Client; act: Actions }) {
       targets: (view?.groups ?? []).flatMap((g) => g.targets.map((target) => ({ target, groupTitle: g.title }))),
       scopes: host ? (liveScopes ?? host.scopes) : [],
       scopeAliases: host ? (group?.aliases?.scope ?? []) : [],
+      scopeWords: scopeWords(group?.scopeNames),
       targetAliases: [...new Set((view?.groups ?? []).flatMap((g) => g.aliases?.target ?? []))],
       rows: host ? rows : [],
       recents: host ? recents : [],
     }
   }, [view, host, hostProvider, liveScopes, rows, recents])
   const built = useMemo(() => buildItems(query, sources), [query, sources])
+  // Examples from the provider's own aliases (":po", ":ns"): the UI knows no kind.
+  const placeholder = useMemo(() => {
+    if (!host) return t('palette.placeholderTargets')
+    const base = t('palette.placeholder', { scopes: sources.scopeWords?.plural ?? '' })
+    const examples = [...sources.kinds.filter((k) => !k.hidden && k.aliases?.length).slice(0, 2).map((k) => `:${k.aliases![0]}`), ...sources.scopeAliases.slice(0, 1).map((a) => `:${a} …`)]
+    return examples.length ? t('palette.examples', { placeholder: base, list: examples.join(', ') }) : base
+  }, [sources, host])
   const cursor = moved && built.items.some((i) => i.key === moved) ? moved : built.cursor
   const index = built.items.findIndex((i) => i.key === cursor)
 
@@ -133,7 +142,7 @@ function PaletteDialog({ client, act }: { client: Client; act: Actions }) {
               setQuery(e.target.value)
               setMoved(null)
             }}
-            placeholder={t('palette.placeholder')}
+            placeholder={placeholder}
             spellCheck={false}
             autoComplete="off"
             className="w-full bg-transparent text-[15px] outline-none placeholder:text-fg-subtle"
@@ -151,7 +160,7 @@ function PaletteDialog({ client, act }: { client: Client; act: Actions }) {
               onMouseMove={() => item.key !== cursor && setMoved(item.key)}
               className={['flex cursor-pointer items-baseline gap-3 px-3 py-1.5', i === index ? 'bg-active text-fg' : 'text-fg-muted'].join(' ')}
             >
-              <span className="w-20 shrink-0 text-[11px] uppercase tracking-wide text-fg-subtle">{t(`palette.section.${item.section}` as MessageKey)}</span>
+              <span className="w-20 shrink-0 truncate text-[11px] uppercase tracking-wide text-fg-subtle">{item.section === 'scope' ? sources.scopeWords?.singular : t(`palette.section.${item.section}` as MessageKey)}</span>
               <span className="min-w-0 flex-1 truncate text-fg">{item.label}</span>
               {item.hint && <span className="max-w-[45%] shrink-0 truncate text-xs text-fg-subtle">{item.hint}</span>}
             </div>

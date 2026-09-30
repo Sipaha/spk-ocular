@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import type { Ref, TargetRef } from '../api/types'
+import { refTitle } from '../refs'
 
 // The bottom panel's tabs live above the per-target Workspace: log tabs
 // belong to their target (its session) and close when another target is
@@ -59,12 +60,12 @@ function activate(tab: DockTab) {
 export const dock = {
   /** One log tab per object and target; opening it again activates it. */
   openLogs(target: TargetRef, targetTitle: string, ref: Ref) {
-    activate({ kind: 'logs', id: `logs:${targetKey(target)}:${refKey(ref)}`, target, targetTitle, ref, title: `${ref.kind.split('/').pop()}/${ref.name}` })
+    activate({ kind: 'logs', id: `logs:${targetKey(target)}:${refKey(ref)}`, target, targetTitle, ref, title: `${ref.kind.split('/').pop()}/${refTitle(ref)}` })
   },
   /** Every open is a new terminal (two shells in one pod are normal). */
   openTerminal(target: TargetRef, targetTitle: string, open: TermOpen) {
     termSeq++
-    activate({ kind: 'term', id: `term:${targetKey(target)}:${refKey(open.ref)}:${termSeq}`, target, targetTitle, open, title: open.ref.name })
+    activate({ kind: 'term', id: `term:${targetKey(target)}:${refKey(open.ref)}:${termSeq}`, target, targetTitle, open, title: refTitle(open.ref) })
   },
   update(id: string, patch: Partial<Pick<TermTab, 'title' | 'hint' | 'rev'>>) {
     useDock.setState((s) => ({ tabs: s.tabs.map((t) => (t.id === id ? { ...t, ...patch } : t)) }))

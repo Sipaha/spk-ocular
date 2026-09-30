@@ -1,7 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { Client } from '../api/client'
 import type { ActionDescriptor, KindDescriptor, Ref, Row, ScopeSel, ScopesView, SourceCoverage, Target } from '../api/types'
+import { ApiError } from '../api/client'
 import { actionLabel, classLabel, t } from '../i18n'
+import { showNotice } from '../store'
+import { useScopeWords } from '../scopeNames'
 import { ActionDialog, type ActionRequest } from '../actions/ActionDialog'
 import type { MenuItem } from '../actions/Menu'
 import { useMetrics } from '../views/useMetrics'
@@ -49,11 +52,13 @@ export function Workspace({ client, hub, target }: { client: Client; hub: ViewHu
   const [kinds, setKinds] = useState<KindDescriptor[] | null>(null)
   const [kindsError, setKindsError] = useState<string | null>(null)
   const [scopes, setScopes] = useState<ScopesView | null>(null)
-  const defaultNs = target.details?.find((d) => d.key === 'defaultNamespace')?.value
+  const defaultScope = target.defaultScope
   // Last kind and scope per target (SQLite target_state); null until loaded,
   // so the default view is not opened only to be replaced.
   const [ui, setUI] = useState<UIState | null>(null)
-  const kind = ui?.kind ?? 'pods'
+  // No remembered kind: the provider's default one (else the first in the navigation).
+  const defaultKind = kinds?.find((k) => k.default && !k.hidden)?.id ?? kinds?.find((k) => !k.hidden)?.id ?? ''
+  const kind = ui?.kind || defaultKind
   const scope: ScopeSel = ui?.scope ?? { mode: 'all' }
   const remember = (next: UIState) => {
     // Navigation drops the palette's requests: they were for the page it opened.
@@ -84,6 +89,7 @@ export function Workspace({ client, hub, target }: { client: Client; hub: ViewHu
   const hasExec = useCallback((kindId: string) => !!kinds?.find((k) => k.id === kindId)?.exec, [kinds])
   const hasForward = useCallback((kindId: string) => !!kinds?.find((k) => k.id === kindId)?.forward, [kinds])
   const actionsOf = useCallback((kindId: string) => kinds?.find((k) => k.id === kindId)?.actions ?? [], [kinds])
+  const eventsKindOf = useCallback((kindId: string) => kinds?.find((k) => k.id === kindId)?.eventsKind, [kinds])
   const [actionReq, setActionReq] = useState<(ActionRequest & { seq: number }) | null>(null)
   const actionSeq = useRef(0)
   const openAction = useCallback(
@@ -95,7 +101,7 @@ export function Workspace({ client, hub, target }: { client: Client; hub: ViewHu
   useEffect(() => {
     // Workspace is keyed by target: state starts fresh for each one.
     let live = true
-    const fallback: UIState = { kind: 'pods', scope: defaultNs ? { mode: 'one', name: defaultNs } : { mode: 'all' } }
+    const fallback: UIState = { kind: '', scope: defaultScope ? { mode: 'one', name: defaultScope } : { mode: 'all' } }
     client.getTargetState(target.provider, target.id).then(
       (st) => {
         if (!live) return
@@ -114,7 +120,7 @@ export function Workspace({ client, hub, target }: { client: Client; hub: ViewHu
     return () => {
       live = false
     }
-  }, [client, target.provider, target.id, defaultNs])
+  }, [client, target.provider, target.id, defaultScope])
 
   const groups = useMemo(() => {
     const m = new Map<string, KindDescriptor[]>()
@@ -193,6 +199,7 @@ export function Workspace({ client, hub, target }: { client: Client; hub: ViewHu
             hasForward={hasForward}
             actionsOf={actionsOf}
             onAction={openAction}
+            eventsKindOf={eventsKindOf}
             filterReq={filterReq}
             openReq={openReq}
           />
@@ -263,10 +270,11 @@ function ResourcePage(props: {
   hasForward: (kindId: string) => boolean
   actionsOf: (kindId: string) => ActionDescriptor[]
   onAction: (ref: Ref, action: ActionDescriptor) => void
+  eventsKindOf: (kindId: string) => string | undefined
   filterReq?: PageReq<string> | null
   openReq?: PageReq<Ref> | null
 }) {
-  const { client, hub, target, kind, scope, scopes, onScope, hasLogs, onLogs, hasExec, onTerminal, hasForward, actionsOf, onAction, filterReq, openReq } = props
+  const { client, hub, target, kind, scope, scopes, onScope, hasLogs, onLogs, hasExec, onTerminal, hasForward, actionsOf, onAction, eventsKindOf, filterReq, openReq } = props
   const scopeKey = JSON.stringify(scope)
   const query = useMemo(() => ({ kind: kind.id, scope: JSON.parse(scopeKey) as ScopeSel }), [kind.id, scopeKey])
   const view = useView(hub, target.provider, target.id, query)
@@ -310,6 +318,7 @@ function ResourcePage(props: {
         ) : (
           <ScopePicker scope={scope} scopes={scopes} onScope={onScope} />
         ))}
+        {view.resync && <ResyncButton client={client} viewId={view.viewId} />}
         <label className="ml-auto flex w-64 items-center gap-2 rounded-md border border-line bg-app px-2 py-1 focus-within:border-accent">
           <SearchIcon className="h-3.5 w-3.5 text-fg-subtle" />
           <input
@@ -372,10 +381,39 @@ function ResourcePage(props: {
             hasForward={hasForward}
             actionsOf={actionsOf}
             onAction={onAction}
+            eventsKindOf={eventsKindOf}
           />
         )}
       </div>
     </>
+  )
+}
+
+/** Reads the view again (ViewInfo.resync: the target's live updates are best
+ * effort); F5 clicks it. One request at a time; the backend coalesces. */
+function ResyncButton({ client, viewId }: { client: Client; viewId: string | null }) {
+  const [busy, setBusy] = useState(false)
+  return (
+    <button
+      data-resync
+      disabled={!viewId || busy}
+      title={t('view.resyncHint')}
+      onClick={() => {
+        if (!viewId || busy) return
+        setBusy(true)
+        client.resyncView(viewId).then(
+          () => setBusy(false),
+          (e) => {
+            setBusy(false)
+            // A view that went away is reopened by its page: nothing to say.
+            if (!(e instanceof ApiError && e.code === 'gone')) showNotice(t('view.resyncFailed', { error: e instanceof ApiError ? classLabel(e.code) : String(e) }))
+          },
+        )
+      }}
+      className="rounded-md border border-line px-2 py-0.5 text-xs text-fg-muted hover:bg-hover hover:text-fg disabled:opacity-50"
+    >
+      {t('view.resync')} <span className="text-fg-subtle">F5</span>
+    </button>
   )
 }
 
@@ -402,8 +440,9 @@ function LiveScopePicker(props: {
 
 function ScopePicker({ scope, scopes, onScope }: { scope: ScopeSel; scopes: ScopesView | null; onScope: (s: ScopeSel) => void }) {
   const [typed, setTyped] = useState(scope.mode === 'one' ? (scope.name ?? '') : '')
+  const words = useScopeWords()
   if (scopes?.error) {
-    // Listing namespaces is forbidden (or failed): the user can still type one.
+    // Listing scopes is forbidden (or failed): the user can still type one.
     return (
       <form
         className="flex items-center gap-1"
@@ -415,9 +454,9 @@ function ScopePicker({ scope, scopes, onScope }: { scope: ScopeSel; scopes: Scop
         <input
           value={typed}
           onChange={(e) => setTyped(e.target.value)}
-          placeholder={t('scope.type')}
-          aria-label={t('scope.label')}
-          title={t('scope.cannotList', { error: scopes.error.detail || scopes.error.code })}
+          placeholder={t('scope.type', { scope: words.singular.toLowerCase() })}
+          aria-label={words.singular}
+          title={t('scope.cannotList', { scopes: words.plural, error: scopes.error.detail || scopes.error.code })}
           className="w-44 rounded-md border border-line bg-app px-2 py-1 outline-none focus:border-accent"
         />
       </form>
@@ -428,12 +467,12 @@ function ScopePicker({ scope, scopes, onScope }: { scope: ScopeSel; scopes: Scop
   if (value && !names.includes(value)) names.unshift(value)
   return (
     <select
-      aria-label={t('scope.label')}
+      aria-label={words.singular}
       value={value}
       onChange={(e) => onScope(e.target.value ? { mode: 'one', name: e.target.value } : { mode: 'all' })}
       className="rounded-md border border-line bg-app px-2 py-1 outline-none focus:border-accent"
     >
-      <option value="">{t('scope.all')}</option>
+      <option value="">{words.all}</option>
       {names.map((n) => (
         <option key={n} value={n}>
           {n}

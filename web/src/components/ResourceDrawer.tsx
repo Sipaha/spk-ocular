@@ -5,6 +5,7 @@ import { Menu } from '../actions/Menu'
 import { actionLabel, classLabel, detailLabel, relationLabel, t } from '../i18n'
 import { inTerminal } from '../keyboard'
 import { consumed, focusMark, isTyping, overlayOpen, restoreFocus } from '../shortcuts'
+import { refTitle } from '../refs'
 import { PortsSection } from '../tunnels/Ports'
 import { useView } from '../views/useView'
 import type { ViewHub } from '../views/viewSync'
@@ -28,11 +29,13 @@ interface Props {
   /** The actions of a kind: an Actions menu acts on the object shown now. */
   actionsOf?: (kindId: string) => ActionDescriptor[]
   onAction?: (ref: Ref, action: ActionDescriptor) => void
+  /** The kind listing events about objects of a kind (KindDescriptor.eventsKind); none: no events section. */
+  eventsKindOf?: (kindId: string) => string | undefined
 }
 
 type Tab = 'details' | 'yaml'
 
-export function ResourceDrawer({ client, hub, target, subject, onClose, hasLogs, onLogs, hasExec, onTerminal, hasForward, actionsOf, onAction }: Props) {
+export function ResourceDrawer({ client, hub, target, subject, onClose, hasLogs, onLogs, hasExec, onTerminal, hasForward, actionsOf, onAction, eventsKindOf }: Props) {
   const [stack, setStack] = useState<Ref[]>([subject])
   const [tab, setTab] = useState<Tab>('details')
   const [res, setRes] = useState<{ key: string; r?: Resource; error?: string; gone?: boolean } | null>(null)
@@ -52,7 +55,7 @@ export function ResourceDrawer({ client, hub, target, subject, onClose, hasLogs,
         setRes({ key, r })
         if (touched.current !== key) {
           touched.current = key
-          void client.touchRecent({ ...r.ref, provider: target.provider, target: target.id }, r.ref.name).catch(() => {})
+          void client.touchRecent({ ...r.ref, provider: target.provider, target: target.id }, refTitle(r.ref)).catch(() => {})
         }
       },
       (e) =>
@@ -99,6 +102,8 @@ export function ResourceDrawer({ client, hub, target, subject, onClose, hasLogs,
   // The object shown now (after relation navigation: that one), with the UID read.
   // A deleted object has nothing to open or act on.
   const hasTools = !shown?.gone && ((!!onLogs && !!hasLogs?.(current.kind)) || (!!onTerminal && !!hasExec?.(current.kind)) || (!!onAction && actions.length > 0))
+  // Shown by its title (a container's name) once read; the key stays the name.
+  const title = refTitle(r?.ref ?? current)
   const shownRef = (): Ref => ({ ...(r?.ref ?? current), provider: target.provider, target: target.id })
   const go = (ref: Ref) => {
     setStack((s) => [...s, ref])
@@ -106,7 +111,7 @@ export function ResourceDrawer({ client, hub, target, subject, onClose, hasLogs,
   }
 
   return (
-    <aside role="dialog" aria-label={`${current.kind} ${current.name}`} data-area="details" tabIndex={-1} className="absolute inset-y-0 right-0 z-10 flex w-[min(720px,55%)] flex-col border-l border-line bg-app shadow-2xl outline-none">
+    <aside role="dialog" aria-label={`${current.kind} ${title}`} data-area="details" tabIndex={-1} className="absolute inset-y-0 right-0 z-10 flex w-[min(720px,55%)] flex-col border-l border-line bg-app shadow-2xl outline-none">
       {/* Name first, whole; the object's tools on a line of their own. */}
       <header className="border-b border-line px-4 py-2">
         {stack.length > 1 && (
@@ -116,19 +121,19 @@ export function ResourceDrawer({ client, hub, target, subject, onClose, hasLogs,
               <span key={i} className="flex min-w-0 items-center gap-1">
                 <button
                   className="max-w-48 truncate rounded px-1 hover:bg-hover hover:text-fg"
-                  title={`${ref.kind} ${ref.name}`}
+                  title={`${ref.kind} ${refTitle(ref)}`}
                   onClick={() => {
                     setStack((s) => s.slice(0, i + 1))
                     setTab('details')
                   }}
                 >
-                  {ref.name}
+                  {refTitle(ref)}
                 </button>
                 <span aria-hidden>›</span>
               </span>
             ))}
             <span aria-current="page" className="max-w-48 truncate px-1 text-fg-muted">
-              {current.name}
+              {title}
             </span>
           </nav>
         )}
@@ -139,8 +144,8 @@ export function ResourceDrawer({ client, hub, target, subject, onClose, hasLogs,
             </button>
           )}
           <span className="shrink-0 text-xs uppercase tracking-wide text-fg-subtle">{current.kind}</span>
-          <h2 className="min-w-0 flex-1 truncate font-semibold" title={current.name}>
-            {current.name}
+          <h2 className="min-w-0 flex-1 truncate font-semibold" title={title}>
+            {title}
           </h2>
           <button className="rounded px-2 text-lg leading-none text-fg-muted hover:bg-hover hover:text-fg" onClick={close} aria-label={t('drawer.close')}>
             ×
@@ -241,6 +246,7 @@ export function ResourceDrawer({ client, hub, target, subject, onClose, hasLogs,
             target={target}
             r={r}
             onGo={go}
+            eventsKind={eventsKindOf?.(current.kind)}
             // Right under the facts: the events list below is a fixed-height box.
             ports={hasForward?.(current.kind) && <PortsSection key={key} client={client} subject={{ ...r.ref, provider: target.provider, target: target.id }} />}
           />
@@ -250,7 +256,8 @@ export function ResourceDrawer({ client, hub, target, subject, onClose, hasLogs,
   )
 }
 
-function Details({ hub, target, r, onGo, ports }: { client: Client; hub: ViewHub; target: { provider: string; id: string }; r: Resource; onGo: (ref: Ref) => void; ports?: ReactNode }) {
+function Details(props: { client: Client; hub: ViewHub; target: { provider: string; id: string }; r: Resource; onGo: (ref: Ref) => void; eventsKind?: string; ports?: ReactNode }) {
+  const { hub, target, r, onGo, eventsKind, ports } = props
   const groups = useMemo(() => {
     const m = new Map<string, Relation[]>()
     for (const rel of r.relations ?? []) m.set(rel.type, [...(m.get(rel.type) ?? []), rel])
@@ -289,11 +296,11 @@ function Details({ hub, target, r, onGo, ports }: { client: Client; hub: ViewHub
                   <li key={`${rel.ref.kind}/${rel.ref.name}/${rel.ref.uid ?? ''}`}>
                     {rel.inert ? (
                       <span className="text-fg-muted" title={t('drawer.relationInert')}>
-                        {rel.ref.kind}/{rel.ref.name}
+                        {rel.ref.kind}/{refTitle(rel.ref)}
                       </span>
                     ) : (
                       <button className="text-accent hover:underline" onClick={() => onGo({ ...rel.ref, provider: target.provider, target: target.id })}>
-                        {rel.ref.kind}/{rel.ref.name}
+                        {rel.ref.kind}/{refTitle(rel.ref)}
                       </button>
                     )}
                   </li>
@@ -305,7 +312,7 @@ function Details({ hub, target, r, onGo, ports }: { client: Client; hub: ViewHub
           {r.relationsTruncated && <p className="text-xs text-fg-subtle">{t('drawer.relationsTruncated')}</p>}
         </section>
       )}
-      {r.ref.uid && r.ref.kind !== 'events' && <ObjectEvents hub={hub} subject={r.ref} />}
+      {r.ref.uid && eventsKind && <ObjectEvents hub={hub} kind={eventsKind} subject={r.ref} />}
     </div>
   )
 }
@@ -333,10 +340,10 @@ function useObjectRevision(hub: ViewHub, target: { provider: string; id: string 
 }
 
 /** Events about one object: a normal live view narrowed by Subject. */
-function ObjectEvents({ hub, subject }: { hub: ViewHub; subject: Ref }) {
+function ObjectEvents({ hub, kind, subject }: { hub: ViewHub; kind: string; subject: Ref }) {
   const query = useMemo(
-    () => ({ kind: 'events', scope: subject.scope ? { mode: 'one' as const, name: subject.scope } : { mode: 'all' as const }, subject }),
-    [subject],
+    () => ({ kind, scope: subject.scope ? { mode: 'one' as const, name: subject.scope } : { mode: 'all' as const }, subject }),
+    [kind, subject],
   )
   const view = useView(hub, subject.provider, subject.target, query)
   const cols = view.kind?.columns ?? []

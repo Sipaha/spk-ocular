@@ -15,7 +15,7 @@ async function openProd(f: ReturnType<typeof fakeClient>) {
 
 describe('Workspace', () => {
   it('shows live rows of the default namespace with health', async () => {
-    const f = fakeClient([k8s('prod', { details: [{ key: 'defaultNamespace', value: 'web' }] })])
+    const f = fakeClient([k8s('prod', { defaultScope: 'web' })])
     f.state.rows = [podRow('api-1', 'web'), podRow('api-2', 'web', 'CrashLoopBackOff', { state: 'error', reason: 'CrashLoopBackOff' })]
     const grid = await openProd(f)
     expect(await within(grid).findByText('api-1')).toBeInTheDocument()
@@ -26,7 +26,7 @@ describe('Workspace', () => {
   })
 
   it('switching to all namespaces reopens the view and shows the namespace column', async () => {
-    const f = fakeClient([k8s('prod', { details: [{ key: 'defaultNamespace', value: 'web' }] })])
+    const f = fakeClient([k8s('prod', { defaultScope: 'web' })])
     await openProd(f)
     await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Namespace' }), '')
     expect(f.client.openView).toHaveBeenLastCalledWith('kubernetes', 'prod', { kind: 'pods', scope: { mode: 'all' } })

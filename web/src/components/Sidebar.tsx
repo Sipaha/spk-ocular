@@ -1,8 +1,8 @@
 import { useEffect, useRef } from 'react'
 import type { Target, TargetGroup } from '../api/types'
-import { t } from '../i18n'
+import { providerText, t } from '../i18n'
 import { type Actions, matchesFilter, targetKey, useStore } from '../store'
-import { EyeIcon, HelmWheelIcon, SearchIcon, WarningIcon } from './icons'
+import { EyeIcon, ProviderIcon, SearchIcon, WarningIcon } from './icons'
 import { openPalette } from '../palette/store'
 
 export function Sidebar({ act }: { act: Actions }) {
@@ -88,7 +88,7 @@ function Group({ group, act }: { group: TargetGroup; act: Actions }) {
   return (
     <section className="mt-2" aria-label={group.title}>
       <h2 className="flex items-center gap-1.5 px-2 pb-1 text-[11px] font-semibold uppercase tracking-wider text-fg-subtle">
-        <HelmWheelIcon className="h-3.5 w-3.5" />
+        <ProviderIcon provider={group.provider} className="h-3.5 w-3.5" />
         <span className="flex-1">{group.title}</span>
         <span className="font-normal">{group.targets.length}</span>
       </h2>
@@ -103,7 +103,7 @@ function Group({ group, act }: { group: TargetGroup; act: Actions }) {
         </Notice>
       )}
       {group.targets.length === 0 && !group.error && (
-        <p className="px-2 py-1 text-xs leading-relaxed text-fg-subtle">{t(`sidebar.noTargets.kubernetes`)}</p>
+        <p className="px-2 py-1 text-xs leading-relaxed text-fg-subtle">{providerText('sidebar.noTargets', group.provider)}</p>
       )}
       {group.targets.length > 0 && visible.length === 0 && <p className="px-2 py-1 text-xs text-fg-subtle">{t('sidebar.empty')}</p>}
       {visible.map((x) => (
@@ -139,7 +139,7 @@ function TargetRow({ target, act }: { target: Target; act: Actions }) {
         <span className="flex items-center gap-1.5">
           <span className="truncate">{target.title}</span>
           {target.current && (
-            <span title={t('target.currentHint')} className="shrink-0 rounded bg-panel px-1 text-[10px] text-fg-muted">
+            <span title={providerText('target.currentHint', target.provider)} className="shrink-0 rounded bg-panel px-1 text-[10px] text-fg-muted">
               {t('target.current')}
             </span>
           )}

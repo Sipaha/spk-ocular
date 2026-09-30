@@ -9,6 +9,8 @@ export interface ViewState {
   /** The backend view id (for metrics); null while (re)opening. */
   viewId: string | null
   kind: KindDescriptor | null
+  /** The session reads the view's sources again on request (ViewInfo.resync). */
+  resync: boolean
   rows: Row[]
   status: ViewStatus
   /** OpenView failed (unknown kind, target gone, ...). */
@@ -36,7 +38,7 @@ export class ViewSync {
   private retryTimer: ReturnType<typeof setTimeout> | null = null
   private disposed = false
   private rows = new Map<string, Row>()
-  private state: ViewState = { viewId: null, kind: null, rows: [], status: { state: 'loading' }, openError: null }
+  private state: ViewState = { viewId: null, kind: null, resync: false, rows: [], status: { state: 'loading' }, openError: null }
   private listeners = new Set<() => void>()
 
   constructor(
@@ -85,7 +87,7 @@ export class ViewSync {
       }
       this.viewId = info.viewId
       this.retries = 0
-      this.emit({ viewId: info.viewId, kind: info.kind, openError: null })
+      this.emit({ viewId: info.viewId, kind: info.kind, resync: !!info.resync, openError: null })
       void this.pull()
     } catch (e) {
       if (this.disposed || gen !== this.generation) return

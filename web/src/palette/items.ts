@@ -5,6 +5,8 @@
 // .aliases): nothing here knows Kubernetes.
 import type { KindDescriptor, RecentObject, Ref, Row, ScopeSel, Target, TargetRef } from '../api/types'
 import { t } from '../i18n'
+import { refTitle } from '../refs'
+import { scopeWords, type ScopeWords } from '../scopeNames'
 import { fuzzyScore } from './score'
 
 export type PaletteAction =
@@ -31,6 +33,8 @@ export interface Sources {
   /** Scope names; null: they cannot be listed (a typed one is taken as is). */
   scopes: string[] | null
   scopeAliases: string[]
+  /** What the current target's provider calls its scopes (absent: generic words). */
+  scopeWords?: ScopeWords
   targetAliases: string[]
   /** The current table's rows. */
   rows: Row[]
@@ -71,15 +75,17 @@ const targetItem = ({ target, groupTitle }: Sources['targets'][number]): Palette
   action: { type: 'target', ref: { provider: target.provider, id: target.id } },
 })
 
-const scopeItem = (name: string, typed = false): PaletteItem => ({
+const wordsOf = (src: Sources) => src.scopeWords ?? scopeWords(undefined)
+
+const scopeItem = (src: Sources, name: string, typed = false): PaletteItem => ({
   key: `scope:${typed ? 'typed:' : ''}${name}`,
   section: 'scope',
   label: name,
-  hint: typed ? t('palette.typedScope') : t('palette.scope'),
+  hint: typed ? t('palette.typedScope', { scope: wordsOf(src).singular }) : wordsOf(src).singular,
   action: { type: 'scope', scope: { mode: 'one', name } },
 })
 
-const allScopesItem: PaletteItem = { key: 'scope:*', section: 'scope', label: t('scope.all'), hint: '*', action: { type: 'scope', scope: { mode: 'all' } } }
+const allScopesItem = (src: Sources): PaletteItem => ({ key: 'scope:*', section: 'scope', label: wordsOf(src).all, hint: '*', action: { type: 'scope', scope: { mode: 'all' } } })
 
 const objectItem = (kinds: KindDescriptor[], ref: Ref, label: string, section: 'object' | 'recent'): PaletteItem => ({
   key: `${section}:${refKey(ref)}`,
@@ -97,14 +103,14 @@ function objects(src: Sources): { rows: PaletteItem[]; recents: PaletteItem[] } 
     const k = refKey(r.ref)
     if (seen.has(k)) continue
     seen.add(k)
-    rows.push(objectItem(src.kinds, r.ref, r.ref.name, 'object'))
+    rows.push(objectItem(src.kinds, r.ref, refTitle(r.ref), 'object'))
   }
   const recents: PaletteItem[] = []
   for (const r of src.recents) {
     const k = refKey(r.ref)
     if (seen.has(k)) continue
     seen.add(k)
-    recents.push(objectItem(src.kinds, r.ref, r.title || r.ref.name, 'recent'))
+    recents.push(objectItem(src.kinds, r.ref, r.title || refTitle(r.ref), 'recent'))
   }
   return { rows, recents }
 }
@@ -131,7 +137,7 @@ function fuzzy(query: string, src: Sources): Built {
   const { rows, recents } = objects(src)
   const kinds = visibleKinds(src).map((k) => ({ item: kindItem(k), texts: [[k.title, 0], ...(k.aliases ?? []).map((a): [string, number] => [a, 0])] as [string, number][] }))
   const targets = src.targets.map((x) => ({ item: targetItem(x), texts: [[x.target.title, 0], [x.target.subtitle ?? '', -2000]] as [string, number][] }))
-  const scopes = (src.scopes ?? []).map((n) => ({ item: scopeItem(n), texts: [[n, 0]] as [string, number][] }))
+  const scopes = (src.scopes ?? []).map((n) => ({ item: scopeItem(src, n), texts: [[n, 0]] as [string, number][] }))
   const objs = rows.map((item) => ({ item, texts: [[item.label, 0]] as [string, number][] }))
   const recs = recents.map((item) => ({ item, texts: [[item.label, 0]] as [string, number][] }))
   // Nothing typed: what was opened last first; typed: ties go to live things.
@@ -156,14 +162,14 @@ function command(input: string, src: Sources): Built {
 
   // 1. Scope and target commands (they need an argument).
   if (rest && src.scopeAliases.map(lower).includes(head)) {
-    if (rest === '*') return choose([allScopesItem], [allScopesItem])
+    if (rest === '*') return choose([allScopesItem(src)], [allScopesItem(src)])
     if (src.scopes === null) {
-      const typed = scopeItem(rest)
+      const typed = scopeItem(src, rest)
       return choose([typed], [typed])
     }
-    const exact = src.scopes.filter((n) => n === rest).map((n) => scopeItem(n))
-    const others = ranked(rest, src.scopes.filter((n) => n !== rest).map((n) => ({ item: scopeItem(n), texts: [[n, 0]] })))
-    const typed = exact.length ? [] : [scopeItem(rest, true)]
+    const exact = src.scopes.filter((n) => n === rest).map((n) => scopeItem(src, n))
+    const others = ranked(rest, src.scopes.filter((n) => n !== rest).map((n) => ({ item: scopeItem(src, n), texts: [[n, 0]] })))
+    const typed = exact.length ? [] : [scopeItem(src, rest, true)]
     return choose([...exact, ...others, ...typed], exact)
   }
   if (rest && src.targetAliases.map(lower).includes(head)) {
@@ -184,7 +190,7 @@ function command(input: string, src: Sources): Built {
     const kinds = visibleKinds(src).filter((k) => kindNames(k).some((n) => n.startsWith(head))).map((k) => kindItem(k))
     const extra: PaletteItem[] = []
     if (head && src.targetAliases.map(lower).includes(head)) extra.push(...src.targets.map(targetItem))
-    if (head && src.scopeAliases.map(lower).includes(head)) extra.push(allScopesItem, ...(src.scopes ?? []).map((n) => scopeItem(n)))
+    if (head && src.scopeAliases.map(lower).includes(head)) extra.push(allScopesItem(src), ...(src.scopes ?? []).map((n) => scopeItem(src, n)))
     const items = [...kinds, ...extra]
     if (items.length) return choose(items, [])
   }

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { t, type MessageKey } from '../i18n'
+import { useScopeWords } from '../scopeNames'
 import { KEYS, type Scope, focusMark, restoreFocus } from '../shortcuts'
 
 const SCOPES: Scope[] = ['global', 'lists', 'table', 'details', 'logs', 'terminal']
@@ -7,6 +8,7 @@ const SCOPES: Scope[] = ['global', 'lists', 'table', 'details', 'logs', 'termina
 /** ?: the keys, from the registry (shortcuts.ts). */
 export function HelpDialog({ onClose }: { onClose: () => void }) {
   const [mark] = useState(focusMark)
+  const words = useScopeWords()
   const box = useRef<HTMLDivElement>(null)
   useEffect(() => {
     box.current?.focus()
@@ -50,7 +52,7 @@ export function HelpDialog({ onClose }: { onClose: () => void }) {
                         </kbd>
                       ))}
                     </dt>
-                    <dd className="text-fg-muted">{t(k.help)}</dd>
+                    <dd className="text-fg-muted">{t(k.help, { scopes: words.plural })}</dd>
                   </div>
                 ))}
               </dl>

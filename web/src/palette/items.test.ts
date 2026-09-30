@@ -147,3 +147,21 @@ describe('buildItems — commands', () => {
     expect(r.unknown).toBe(true)
   })
 })
+
+describe('buildItems — the provider names its scopes', () => {
+  const zones = { singular: 'Zone', plural: 'zones', all: 'All zones' }
+  it('scope items say the provider’s words', () => {
+    const r = buildItems(':ns *', sources({ scopeWords: zones }))
+    expect(cursorItem(r)).toMatchObject({ label: 'All zones', hint: '*' })
+    expect(buildItems(':ns demo', sources({ scopeWords: zones })).items[0]).toMatchObject({ label: 'demo', hint: 'Zone' })
+    expect(buildItems(':ns nowhere', sources({ scopeWords: zones })).items.at(-1)).toMatchObject({ label: 'nowhere', hint: 'Zone as typed' })
+  })
+  it('without names: generic words, never Kubernetes ones', () => {
+    expect(cursorItem(buildItems(':ns *', sources()))).toMatchObject({ label: 'All scopes' })
+    expect(buildItems(':ns demo', sources()).items[0]).toMatchObject({ hint: 'Scope' })
+  })
+  it('an object is listed by its title', () => {
+    const r = buildItems('', sources({ rows: [{ ...row('3f2a9c'), ref: { ...row('3f2a9c').ref, title: 'web-1' } }], recents: [] }))
+    expect(labels(r)).toContain('object:web-1')
+  })
+})

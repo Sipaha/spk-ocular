@@ -8,7 +8,7 @@ import { inTerminal, isShortcut } from './keyboard'
 
 export type Scope = 'global' | 'lists' | 'table' | 'details' | 'logs' | 'terminal'
 
-export type GlobalId = 'palette' | 'help' | 'filter' | 'nextArea' | 'prevArea'
+export type GlobalId = 'palette' | 'help' | 'filter' | 'nextArea' | 'prevArea' | 'resync'
 
 export interface KeyDef {
   id: string
@@ -34,6 +34,8 @@ export const KEYS: KeyDef[] = [
   // F-keys type nothing: they work from a field too.
   { id: 'nextArea', scope: 'global', keys: 'F6', help: 'keys.nextArea', inFields: true, match: (e) => plain(e) && e.key === 'F6' && !e.shiftKey },
   { id: 'prevArea', scope: 'global', keys: 'Shift+F6', help: 'keys.prevArea', inFields: true, match: (e) => plain(e) && e.key === 'F6' && e.shiftKey },
+  // Only where the open view offers it (a [data-resync] button): elsewhere F5 stays the page's.
+  { id: 'resync', scope: 'global', keys: 'F5', help: 'keys.resync', inFields: true, match: (e) => plain(e) && e.key === 'F5' && !e.shiftKey && !!document.querySelector('[data-resync]') },
   { id: 'move', scope: 'lists', keys: '↑ ↓', help: 'keys.move' },
   { id: 'page', scope: 'lists', keys: 'PageUp PageDown', help: 'keys.page' },
   { id: 'ends', scope: 'lists', keys: 'Home End', help: 'keys.ends' },

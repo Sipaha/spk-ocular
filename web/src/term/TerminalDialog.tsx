@@ -4,6 +4,7 @@ import type { ExecInfo, Ref } from '../api/types'
 import { messageText, t } from '../i18n'
 import { ArgvError, parseArgv } from './argv'
 import type { TermOpen } from '../dock/store'
+import { refTitle } from '../refs'
 
 interface Props {
   client: Client
@@ -64,7 +65,7 @@ export function TerminalDialog({ client, subject, onOpen, onClose }: Props) {
         className="flex w-[min(560px,90%)] flex-col gap-3 rounded-lg border border-line bg-panel p-4 shadow-2xl"
       >
         <h2 className="font-semibold">
-          {t('term.dialogTitle')} · <span className="text-fg-muted">{subject.name}</span>
+          {t('term.dialogTitle')} · <span className="text-fg-muted">{refTitle(subject)}</span>
         </h2>
         {error && (
           <p role="alert" className="rounded-md bg-danger/10 px-3 py-2 text-xs text-danger">
@@ -72,7 +73,7 @@ export function TerminalDialog({ client, subject, onOpen, onClose }: Props) {
           </p>
         )}
         {!info && !error && <p className="text-fg-subtle">{t('app.loading')}</p>}
-        {info && info.instances.length === 0 && <p className="text-fg-subtle">{t('term.noInstances')}</p>}
+        {info && info.instances.length === 0 && <p className="text-fg-subtle">{info.noInstances ? messageText(info.noInstances) : t('term.noInstances')}</p>}
         {info && info.instances.length > 0 && (
           <>
             {info.instances.length > 1 && (

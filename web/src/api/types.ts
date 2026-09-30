@@ -12,6 +12,8 @@ export interface Target {
   subtitle?: string
   current?: boolean
   details?: Detail[]
+  /** The scope a first visit shows (k8s: the context's namespace); absent: all. */
+  defaultScope?: string
   /** opaque revision of the configuration: equal = the same */
   configRev?: string
 }
@@ -29,6 +31,14 @@ export interface TargetGroup {
   error?: string
   /** Names of the provider's scopes and targets in palette commands (":ns demo", ":ctx prod"). */
   aliases?: { scope?: string[]; target?: string[] }
+  /** What the provider's scopes are called; absent: the UI's generic words. */
+  scopeNames?: ScopeNames
+}
+
+export interface ScopeNames {
+  singular: Message
+  plural: Message
+  all: Message
 }
 
 /** An object whose details were opened (its UID as of then). */
@@ -75,8 +85,11 @@ export interface Ref {
   target: string
   scope?: string
   kind: string
+  /** The object's key: never changes for the object (Docker: a container's full id). */
   name: string
   uid?: string
+  /** How the object is shown when it differs from name; display only, never identity. */
+  title?: string
 }
 
 export type HealthState = 'ok' | 'progressing' | 'warning' | 'error' | 'terminating' | 'unknown'
@@ -134,6 +147,10 @@ export interface KindDescriptor {
   scoped: boolean
   /** Not in the navigation (reached through relations). */
   hidden?: boolean
+  /** The kind a first visit of the target opens (none marked: the first in the navigation). */
+  default?: boolean
+  /** The kind whose view with query.subject = an object of this kind lists events about it; absent: none. */
+  eventsKind?: string
   /** One object of the kind ("Deployment"; title is the navigation's plural). */
   singular?: string
   /** Short names in palette commands (":po"), besides the id and title. */
@@ -240,6 +257,8 @@ export interface ScopesView {
 export interface ViewInfo {
   viewId: string
   kind: KindDescriptor
+  /** The session reads the view's sources again on request (resyncView, F5). */
+  resync?: boolean
 }
 
 export type StatusState = 'loading' | 'ready' | 'stale' | 'error'
@@ -319,6 +338,9 @@ export interface LogInfo {
   aggregate: boolean
   /** Previous-instance logs make sense (one pod). */
   previous: boolean
+  /** The provider's names of a channel (Container) and of all of them; absent: generic words. */
+  channelLabel?: Message
+  allChannelsLabel?: Message
 }
 
 export interface LogQuery {
@@ -359,6 +381,8 @@ export interface ExecInfo {
   /** The provider's names of the levels (Pod, Container); absent: generic words. */
   instanceLabel?: Message
   channelLabel?: Message
+  /** Nowhere to run now ("No running pods"); absent: generic words. */
+  noInstances?: Message
 }
 
 /** What a live resource (terminal, tunnel) is connected to, as captured when opened. */

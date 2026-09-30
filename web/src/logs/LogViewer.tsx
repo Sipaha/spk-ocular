@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import type { Client } from '../api/client'
 import type { LogInfo, LogQuery, Ref } from '../api/types'
-import { classLabel, t, type MessageKey } from '../i18n'
+import { classLabel, messageText, t, type MessageKey } from '../i18n'
 import { isShortcut } from '../keyboard'
 import { LEVEL_CLASS, LOG_LEVELS } from './levels'
 import { LogViewport } from './LogViewport'
@@ -9,6 +9,7 @@ import { rowText, shortLabels, sourceColor, type RowOpts } from './row'
 import { logFileName, saveLogs } from './save'
 import { useLogFilter } from './useLogFilter'
 import { useLogStream, type LogSource } from './useLogStream'
+import { refTitle } from '../refs'
 
 const TAILS = [100, 500, 1000, 5000, -1]
 const SINCE: [string, number][] = [
@@ -79,14 +80,14 @@ export default function LogViewer({ client, subject, active }: Props) {
       query={query}
       toolbar={
         <>
-          <Select label={t('logs.container')} value={channel ?? ''} onChange={(v) => { setChannel(v); if (v === '*') setPrevious(false) }}>
+          <Select label={info.channelLabel ? messageText(info.channelLabel) : t('logs.channel')} value={channel ?? ''} onChange={(v) => { setChannel(v); if (v === '*') setPrevious(false) }}>
             {info.channels.map((c) => (
               <option key={c.id} value={c.id}>
                 {c.title}
                 {c.note ? ` (${c.note})` : ''}
               </option>
             ))}
-            {info.channels.length > 1 || info.aggregate ? <option value="*">{t('logs.allContainers')}</option> : null}
+            {info.channels.length > 1 || info.aggregate ? <option value="*">{info.allChannelsLabel ? messageText(info.allChannelsLabel) : t('logs.allChannels')}</option> : null}
           </Select>
           <Select label={t('logs.tail')} value={String(tail)} onChange={(v) => setTail(Number(v))}>
             {TAILS.map((n) => (
@@ -170,7 +171,7 @@ function Stream({ client, subject, active, query, toolbar, view }: { client: Cli
   const copyShown = () => void navigator.clipboard?.writeText(shownText()).catch(() => {})
   const save = async () => {
     try {
-      const path = await saveLogs(client, logFileName(subject.name), shownText())
+      const path = await saveLogs(client, logFileName(refTitle(subject)), shownText())
       setNote(path ? t('logs.saved', { path }) : null)
     } catch (e) {
       setNote(t('logs.saveFailed', { error: e instanceof Error ? e.message : String(e) }))

@@ -67,6 +67,7 @@ export function App({ client }: { client: Client }) {
       if (id === 'palette') openPalette()
       else if (id === 'help') setHelp(true)
       else if (id === 'nextArea' || id === 'prevArea') cycleArea(id === 'nextArea' ? 1 : -1)
+      else if (id === 'resync') document.querySelector<HTMLButtonElement>('[data-resync]')?.click()
       else {
         // The open table's filter wins over the contexts filter.
         const el = document.querySelector<HTMLInputElement>('[data-primary-filter]') ?? document.querySelector<HTMLInputElement>('[data-target-filter]')

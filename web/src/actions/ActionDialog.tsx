@@ -2,6 +2,8 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { ApiError, type Client } from '../api/client'
 import type { ActionDescriptor, ActionParams, ActionPlan, Ref } from '../api/types'
 import { actionLabel, classLabel, messageText, t } from '../i18n'
+import { refTitle } from '../refs'
+import { useScopeWords } from '../scopeNames'
 import { showNotice } from '../store'
 import { focusMark, restoreFocus } from '../shortcuts'
 
@@ -61,6 +63,8 @@ const codeOf = (e: unknown) => (e instanceof ApiError ? e.code : 'internal')
  */
 export function ActionDialog({ client, req, onClose, runTimeoutMs = RUN_TIMEOUT_MS }: Props) {
   const { ref, action, kindTitle } = req
+  // The object's own provider names its scopes (not the target selected now).
+  const scopeWords = useScopeWords(ref.provider)
   const param = action.param
   const [plan, setPlan] = useState<ActionPlan | null>(null)
   const [count, setCount] = useState('')
@@ -173,7 +177,7 @@ export function ActionDialog({ client, req, onClose, runTimeoutMs = RUN_TIMEOUT_
         lateFor.current = 0
         setOutcome(out)
         if (message) showNotice(message)
-      } else showNotice(`${where}${out.type === 'lateDone' ? out.text : `${actionLabel(action)} ${plan.where.ref.name}: ${out.text}`}`, 10_000)
+      } else showNotice(`${where}${out.type === 'lateDone' ? out.text : `${actionLabel(action)} ${refTitle(plan.where.ref)}: ${out.text}`}`, 10_000)
     }
     answer.then(
       (res) => lateAnswer({ type: 'lateDone', text: t('action.lateDone', { message: res.message }) }, res.message),
@@ -197,7 +201,7 @@ export function ActionDialog({ client, req, onClose, runTimeoutMs = RUN_TIMEOUT_
     } catch (e) {
       const out: Outcome = e instanceof RunTimeout ? { type: 'unknown', text: t('action.timeout', { sec: Math.round(runTimeoutMs / 1000) }) } : outcomeOf(e)
       if (!live.current) {
-        showNotice(`${where}${actionLabel(action)} ${plan.where.ref.name}: ${out.text}`, 10_000)
+        showNotice(`${where}${actionLabel(action)} ${refTitle(plan.where.ref)}: ${out.text}`, 10_000)
         return
       }
       if (e instanceof RunTimeout) lateFor.current = op
@@ -232,7 +236,7 @@ export function ActionDialog({ client, req, onClose, runTimeoutMs = RUN_TIMEOUT_
   }
 
   const where = plan?.where
-  const name = where?.ref.name ?? ref.name
+  const name = refTitle(where?.ref ?? ref)
   const scope = where?.ref.scope ?? ref.scope
   const label = actionLabel(action)
   const unknownOrDone = outcome?.type === 'unknown' || outcome?.type === 'lateDone'
@@ -268,7 +272,7 @@ export function ActionDialog({ client, req, onClose, runTimeoutMs = RUN_TIMEOUT_
           )}
           {scope && (
             <>
-              <dt className="text-fg-muted">{t('action.namespace')}</dt>
+              <dt className="text-fg-muted">{scopeWords.singular}</dt>
               <dd className="min-w-0 break-all font-mono">{scope}</dd>
             </>
           )}

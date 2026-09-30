@@ -14,6 +14,13 @@ export const k8s = (id: string, extra: Partial<Target> = {}): Target => ({
   ...extra,
 })
 
+/** What the Kubernetes provider calls its scopes (core.ScopeNames). */
+export const k8sScopeNames = {
+  singular: { key: 'kubernetes.scope.singular', text: 'Namespace' },
+  plural: { key: 'kubernetes.scope.plural', text: 'namespaces' },
+  all: { key: 'kubernetes.scope.all', text: 'All namespaces' },
+}
+
 /** An in-memory Client: tests mutate `view` and call `emit`. */
 export function fakeClient(targets: Target[]) {
   let listener: ((e: ApiEvent) => void) | null = null
@@ -25,7 +32,7 @@ export function fakeClient(targets: Target[]) {
     statusByKind: {} as Record<string, ViewStatus>,
     version: 0,
     recents: [] as RecentObject[],
-    view: { groups: [{ provider: 'kubernetes', title: 'Kubernetes', targets, problems: [] }], selected: null } as TargetsView,
+    view: { groups: [{ provider: 'kubernetes', title: 'Kubernetes', targets, problems: [], scopeNames: k8sScopeNames }], selected: null } as TargetsView,
   }
   const client: Client = {
     appInfo: vi.fn(async () => ({ name: 'SPK Ocular', version: 'test', mode: 'browser' as const, language: 'en' as const })),
@@ -48,6 +55,7 @@ export function fakeClient(targets: Target[]) {
       return { viewId, version: ++state.version, reset: true, upserts: rows, deleted: [], status: state.statusByKind[kind] ?? { state: 'ready' as const } }
     }),
     closeView: vi.fn(async () => {}),
+    resyncView: vi.fn(async () => {}),
     touchViews: vi.fn(async () => []),
     getResource: vi.fn(async (ref: Ref) => ({
       ref, health: { state: 'ok' as const }, yaml: `kind: Pod\nmetadata:\n  name: ${ref.name}\n`,
@@ -103,6 +111,8 @@ export const podsKind: KindDescriptor = {
   title: 'Pods',
   group: 'Workloads',
   scoped: true,
+  default: true,
+  eventsKind: 'events',
   columns: [
     { id: 'name', title: 'Name', type: 'text' },
     { id: 'namespace', title: 'Namespace', type: 'text', scopeColumn: true },

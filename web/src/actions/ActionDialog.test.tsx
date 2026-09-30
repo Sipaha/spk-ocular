@@ -5,7 +5,7 @@ import { ApiError } from '../api/client'
 import type { ActionDescriptor, ActionParams, ActionPlan, Ref } from '../api/types'
 import { initialState, useStore } from '../store'
 import { setLanguage } from '../i18n'
-import { fakeClient, k8s } from '../test/fakeClient'
+import { fakeClient, k8s, k8sScopeNames } from '../test/fakeClient'
 import { ActionDialog } from './ActionDialog'
 
 beforeEach(() => useStore.setState({ ...initialState }))
@@ -47,6 +47,28 @@ function setup(action: ActionDescriptor, plan: (p: ActionParams) => ActionPlan |
 }
 
 describe('ActionDialog', () => {
+  it('names the scope in the words of the object’s own provider, not the selected one', async () => {
+    const zone = { singular: { key: 'other.scope.singular', text: 'Zone' }, plural: { key: 'other.scope.plural', text: 'zones' }, all: { key: 'other.scope.all', text: 'All zones' } }
+    useStore.setState({
+      view: {
+        groups: [
+          { provider: 'kubernetes', title: 'Kubernetes', targets: [k8s('prod')], problems: [], scopeNames: k8sScopeNames },
+          { provider: 'other', title: 'Other', targets: [{ provider: 'other', id: 'site', title: 'site' }], problems: [], scopeNames: zone },
+        ],
+        selected: { provider: 'kubernetes', id: 'prod' },
+      },
+    })
+    const other: Ref = { provider: 'other', target: 'site', scope: 'blue', kind: 'crates', name: 'c-1', uid: 'c-1', title: 'alpha' }
+    const f = fakeClient([k8s('prod')])
+    f.client.prepareAction = vi.fn(async () => planOf(restart, {}, { where: { provider: 'other', target: 'site', targetTitle: 'site', ref: other } }))
+    render(<ActionDialog client={f.client} req={{ ref: other, action: restart, kindTitle: 'Crate' }} onClose={() => {}} />)
+    const where = await screen.findByLabelText('where')
+    await within(screen.getByRole('dialog')).findByRole('button', { name: 'Restart' })
+    expect(where).toHaveTextContent('Zoneblue')
+    expect(where).toHaveTextContent('Namealpha')
+    expect(where).not.toHaveTextContent('Namespace')
+  })
+
   it('shows where, what and the rights; the run carries the plan back', async () => {
     const { f, onClose, dialog } = setup(restart)
     const confirm = await within(dialog).findByRole('button', { name: 'Restart' })
@@ -327,7 +349,7 @@ describe('ActionDialog', () => {
       if (fail) throw new ApiError('unavailable', 'dial tcp: connection refused')
       return planOf(restart, p)
     })
-    expect(await within(dialog).findByRole('alert')).toHaveTextContent('Could not read the current state · cluster unavailable: dial tcp: connection refused')
+    expect(await within(dialog).findByRole('alert')).toHaveTextContent('Could not read the current state · unavailable: dial tcp: connection refused')
     fail = false
     await userEvent.click(within(dialog).getByRole('button', { name: 'Review again' }))
     expect(await within(dialog).findByRole('button', { name: 'Restart' })).toBeEnabled()

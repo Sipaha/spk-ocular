@@ -25,6 +25,8 @@ export interface Client {
   /** Changes after cursor `since` (0: full snapshot); rejects with code "gone" for a closed view. */
   getRows(viewId: string, since: number): Promise<Page>
   closeView(viewId: string): Promise<void>
+  /** Asks the view's own session to read its sources again (ViewInfo.resync); "gone" for a closed view. */
+  resyncView(viewId: string): Promise<void>
   /** Renews leases; returns the ids that are gone. */
   touchViews(viewIds: string[]): Promise<string[]>
   getResource(ref: Ref): Promise<Resource>
@@ -106,6 +108,7 @@ export const httpClient: Client = {
   openView: (provider, target, query) => post('OpenView', { provider, target, query }),
   getRows: (viewId, since) => post('GetRows', { viewId, since }),
   closeView: (viewId) => done(post('CloseView', { viewId })),
+  resyncView: (viewId) => done(post('ResyncView', { viewId })),
   touchViews: (viewIds) => post('TouchViews', { viewIds }),
   getResource: (ref) => post('GetResource', ref),
   getMetrics: (viewId) => post('GetMetrics', { viewId }),
@@ -170,6 +173,7 @@ export const wailsClient: Client = {
   openView: (provider, target, query) => wcall('OpenView', { provider, target, query }),
   getRows: (viewId, since) => wcall('GetRows', viewId, since),
   closeView: (viewId) => wcall('CloseView', viewId),
+  resyncView: (viewId) => wcall('ResyncView', viewId),
   touchViews: (viewIds) => wcall('TouchViews', viewIds),
   getResource: (ref) => wcall('GetResource', ref),
   getMetrics: (viewId) => wcall('GetMetrics', viewId),

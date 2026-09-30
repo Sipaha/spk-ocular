@@ -1,4 +1,4 @@
-import { detailLabel, t } from '../i18n'
+import { detailLabel, providerText, t } from '../i18n'
 import { selectedTarget, useStore } from '../store'
 import { EyeIcon } from './icons'
 
@@ -18,7 +18,7 @@ export function TargetDetails() {
       <header className="mb-5 flex items-baseline gap-3">
         <h1 className="truncate text-xl font-semibold">{target.title}</h1>
         {target.current && (
-          <span title={t('target.currentHint')} className="rounded bg-panel px-1.5 py-0.5 text-xs text-fg-muted">
+          <span title={providerText('target.currentHint', target.provider)} className="rounded bg-panel px-1.5 py-0.5 text-xs text-fg-muted">
             {t('target.current')}
           </span>
         )}

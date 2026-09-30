@@ -17,6 +17,18 @@ export const HelmWheelIcon = ({ className }: P) => (
   </svg>
 )
 
+/** A provider without an icon of its own: stacked layers. */
+export const LayersIcon = ({ className }: P) => (
+  <svg viewBox="0 0 24 24" className={className} aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round">
+    <path d="M12 3 2.5 8 12 13l9.5-5L12 3Z" />
+    <path d="m2.5 12.5 9.5 5 9.5-5M2.5 16.5l9.5 5 9.5-5" />
+  </svg>
+)
+
+/** The icon of a provider's group (by provider id; presentation only). */
+export const ProviderIcon = ({ provider, className }: P & { provider: string }) =>
+  provider === 'kubernetes' ? <HelmWheelIcon className={className} /> : <LayersIcon className={className} />
+
 export const WarningIcon = ({ className }: P) => (
   <svg viewBox="0 0 24 24" className={className} aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="2">
     <path d="M12 3 2 20h20L12 3Z" strokeLinejoin="round" />

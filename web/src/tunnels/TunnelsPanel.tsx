@@ -8,6 +8,7 @@ import { Reconfigured } from '../dock/Dock'
 import { reconfigured, useStore } from '../store'
 import { openURL } from './open'
 import { tunnels, tunnelURL, useTunnels } from './store'
+import { refTitle } from '../refs'
 
 interface Props {
   client: Client
@@ -74,7 +75,7 @@ function TunnelRow({ tn, client, mode }: { tn: Tunnel; client: Client; mode: 'de
   const [stopError, setStopError] = useState<string | null>(null)
   const ref = tn.target.ref
   const stale = useStore((s) => reconfigured(s.view, tn.target.provider, tn.target.target, tn.target.configRev))
-  const what = `${ref.kind.split('/').pop()}/${ref.name}:${tn.target.port}`
+  const what = `${ref.kind.split('/').pop()}/${refTitle(ref)}:${tn.target.port}`
   const addr = tn.addresses[0]
   return (
     <li className="flex flex-col gap-0.5 border-b border-line px-3 py-2 text-xs last:border-b-0" aria-label={what}>
