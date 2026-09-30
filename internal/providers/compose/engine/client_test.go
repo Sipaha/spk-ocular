@@ -281,7 +281,7 @@ func TestErrorClasses(t *testing.T) {
 		msg    string
 	}{
 		{400, `{"message":"bad parameter"}`, provider.ClassInvalid, "bad parameter"},
-		{401, `{"message":"who are you"}`, provider.ClassForbidden, "who are you"},
+		{401, `{"message":"who are you"}`, provider.ClassUnauthorized, "who are you"},
 		{403, `{"message":"authorization denied by plugin"}`, provider.ClassForbidden, "authorization denied by plugin"},
 		{404, `{"message":"No such container: x"}`, provider.ClassNotFound, "No such container: x"},
 		{409, `{"message":"is already in progress"}`, provider.ClassConflict, "is already in progress"},

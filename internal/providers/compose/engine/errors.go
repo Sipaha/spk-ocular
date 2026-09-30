@@ -61,7 +61,9 @@ func statusClass(code int) provider.ErrorClass {
 		return provider.ClassNotFound
 	case code == http.StatusConflict:
 		return provider.ClassConflict
-	case code == http.StatusUnauthorized, code == http.StatusForbidden:
+	case code == http.StatusUnauthorized:
+		return provider.ClassUnauthorized // as for Kubernetes: not authenticated
+	case code == http.StatusForbidden:
 		return provider.ClassForbidden
 	case code == http.StatusBadRequest:
 		return provider.ClassInvalid
