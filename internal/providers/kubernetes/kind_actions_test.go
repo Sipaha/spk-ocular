@@ -561,3 +561,37 @@ func TestKindActionDrain(t *testing.T) {
 	}
 	assert.Contains(t, c.kubectlNS("get", "pod", "bare", "-o", "jsonpath={.status.phase}"), "Running", "no controller: left")
 }
+
+// A CronJob (a discovered kind) suspended and resumed: the field on the
+// server follows, a second suspend is unavailable.
+func TestKindActionCronJobSuspendAndResume(t *testing.T) {
+	c := kindActionCluster(t)
+	require.Eventually(t, func() bool { return c.sess.Catalog().State == core.CatalogReady }, 30*time.Second, 20*time.Millisecond)
+	c.apply(`apiVersion: batch/v1
+kind: CronJob
+metadata: {name: yearly}
+spec:
+  schedule: "0 0 1 1 *"
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          restartPolicy: Never
+          containers: [{name: app, image: "busybox:1.36", command: ["true"]}]
+`)
+	uid := c.kubectlNS("get", "cronjob", "yearly", "-o", "jsonpath={.metadata.uid}")
+	ref := core.Ref{Provider: ProviderID, Target: c.sess.target, Scope: c.ns, Kind: "batch/cronjobs", Name: "yearly", UID: uid}
+	suspend := func() string { return c.jsonpath("cronjob", "yearly", "{.spec.suspend}") }
+
+	res, err := c.act(ref, "suspend", core.ActionParams{})
+	require.NoError(t, err)
+	assert.Contains(t, res.Message, "suspend requested")
+	assert.Equal(t, "true", suspend())
+	plan := c.prepare(ref, "suspend", core.ActionParams{})
+	require.NotNil(t, plan.Unavailable, "already suspended")
+	assert.Equal(t, core.RightsAllowed, plan.Rights.State)
+
+	_, err = c.act(ref, "resume", core.ActionParams{})
+	require.NoError(t, err)
+	assert.Equal(t, "false", suspend())
+}

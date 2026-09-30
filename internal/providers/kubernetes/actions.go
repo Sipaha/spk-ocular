@@ -135,6 +135,8 @@ func effectState(def *kindDef, action string, u *unstructured.Unstructured) map[
 		}
 	case actCordon.ID, actUncordon.ID:
 		st["unschedulable"] = boolAt(o, "spec", "unschedulable")
+	case actSuspend.ID, actResume.ID:
+		cronJobEffectState(action, o, st)
 	case actDelete.ID:
 		if sts {
 			st["claims"], st["whenDeleted"] = len(slice(o, "spec", "volumeClaimTemplates")), str(o, "spec", "persistentVolumeClaimRetentionPolicy", "whenDeleted")
@@ -189,6 +191,9 @@ func actionUnavailable(def *kindDef, action string, u *unstructured.Unstructured
 	if action == actUncordon.ID && !cordoned {
 		m := msg("unavailable.schedulable", "name", u.GetName())
 		return &m
+	}
+	if isCronJobs(def) {
+		return cronJobUnavailable(action, u)
 	}
 	return nil
 }
@@ -292,6 +297,13 @@ func (s *session) write(ctx context.Context, def *kindDef, run provider.ActionRu
 		patch, _ := json.Marshal(map[string]any{
 			"metadata": map[string]any{"uid": u.GetUID(), "resourceVersion": u.GetResourceVersion()},
 			"spec":     map[string]any{"unschedulable": run.Action == actCordon.ID},
+		})
+		err := wr.patch(ctx, def.gvr, ns, u.GetName(), types.MergePatchType, patch, "")
+		return fmt.Sprintf("%s: %s requested", name, run.Action), err
+	case actSuspend.ID, actResume.ID:
+		patch, _ := json.Marshal(map[string]any{
+			"metadata": map[string]any{"uid": u.GetUID(), "resourceVersion": u.GetResourceVersion()},
+			"spec":     map[string]any{"suspend": run.Action == actSuspend.ID},
 		})
 		err := wr.patch(ctx, def.gvr, ns, u.GetName(), types.MergePatchType, patch, "")
 		return fmt.Sprintf("%s: %s requested", name, run.Action), err

@@ -393,9 +393,7 @@ func discoveredDef(r apiResource) *kindDef {
 		discovered: true,
 		project:    projectGeneric(r.Namespaced),
 	}
-	if r.has("delete") {
-		d.actions = []core.ActionDescriptor{actDelete}
-	}
+	d.actions = discoveredActions(r)
 	return d
 }
 

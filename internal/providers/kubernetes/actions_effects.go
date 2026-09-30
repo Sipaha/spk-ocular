@@ -87,6 +87,8 @@ func effects(def *kindDef, action string, p core.ActionParams, u *unstructured.U
 		fx.effects = append(fx.effects, msg("node.cordon", "name", u.GetName()), msg("node.cordonBypass"))
 	case actUncordon.ID:
 		fx.effects = append(fx.effects, msg("node.uncordon", "name", u.GetName()))
+	case actSuspend.ID, actResume.ID:
+		fx.effects = append(fx.effects, cronJobEffects(action, u)...)
 	}
 	return fx
 }
