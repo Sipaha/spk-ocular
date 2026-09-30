@@ -282,12 +282,21 @@ func canceledMetrics() MetricsView {
 	return MetricsView{Status: string(provider.ClassUnavailable), Message: "the request was canceled", Values: map[string]provider.Usage{}}
 }
 
+// errViewClosed: the view closed before its metrics request took its place.
+var errViewClosed = coded(CodeGone, errors.New("the view was closed"))
+
 // enterMetrics makes the request the view's one in flight (ending an
-// older one), or refuses it (false) when its seq was already passed. The
-// returned release ends it and forgets it.
-func (s *Service) enterMetrics(ctx context.Context, viewID string, seq uint64) (context.Context, func(), bool) {
+// older one), or refuses it: canceled (false) when its seq was already
+// passed, errViewClosed when the view is gone — checked under metricsMu,
+// which CloseView takes after closing the view, so a request either sees
+// the view closed or is ended by the close. The returned release ends it
+// and forgets it.
+func (s *Service) enterMetrics(ctx context.Context, viewID string, seq uint64) (context.Context, func(), bool, error) {
 	s.metricsMu.Lock()
 	defer s.metricsMu.Unlock()
+	if !s.views.Exists(viewID) {
+		return nil, nil, false, errViewClosed
+	}
 	if s.metricGates == nil {
 		s.metricGates = map[string]*metricGate{}
 	}
@@ -298,7 +307,7 @@ func (s *Service) enterMetrics(ctx context.Context, viewID string, seq uint64) (
 		s.metricGates[viewID] = g
 	}
 	if seq != 0 && seq < g.next {
-		return nil, nil, false
+		return nil, nil, false, nil
 	}
 	if g.cancel != nil {
 		g.cancel() // superseded
@@ -316,17 +325,15 @@ func (s *Service) enterMetrics(ctx context.Context, viewID string, seq uint64) (
 			g.cancel, g.call = nil, nil
 		}
 		s.metricsMu.Unlock()
-	}, true
+	}, true, nil
 }
 
 // sweepMetricGatesLocked forgets the gates of views that are gone
 // (expired rather than closed) with nothing in flight.
 func (s *Service) sweepMetricGatesLocked() {
 	for id, g := range s.metricGates {
-		if g.cancel == nil {
-			if _, _, _, err := s.views.Info(id); errors.Is(err, views.ErrGone) {
-				delete(s.metricGates, id)
-			}
+		if g.cancel == nil && !s.views.Exists(id) {
+			delete(s.metricGates, id)
 		}
 	}
 }
@@ -345,7 +352,7 @@ func (s *Service) dropMetricGate(viewID string) {
 func (s *Service) CancelMetrics(_ context.Context, viewID string, seq uint64) error {
 	s.metricsMu.Lock()
 	defer s.metricsMu.Unlock()
-	if _, _, _, err := s.views.Info(viewID); errors.Is(err, views.ErrGone) {
+	if !s.views.Exists(viewID) {
 		return nil // nothing runs for a gone view: its gate went with it
 	}
 	if s.metricGates == nil {
@@ -400,7 +407,13 @@ func (s *Service) GetMetrics(ctx context.Context, req MetricsRequest) (MetricsVi
 	if len(asked) == 0 {
 		return MetricsView{Status: "ok", Values: map[string]provider.Usage{}}, nil
 	}
-	ctx, release, ok := s.enterMetrics(ctx, viewID, req.Seq)
+	if s.beforeMetricsGate != nil {
+		s.beforeMetricsGate()
+	}
+	ctx, release, ok, err := s.enterMetrics(ctx, viewID, req.Seq)
+	if err != nil {
+		return MetricsView{}, err
+	}
 	if !ok {
 		return canceledMetrics(), nil
 	}

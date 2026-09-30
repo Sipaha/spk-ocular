@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -123,9 +124,124 @@ func TestMetricsOfAServiceWithFailingMembers(t *testing.T) {
 	assert.True(t, u.CPUPartial && u.MemoryPartial)
 
 	failing["/containers/"+one.ID+"/stats"] = true
-	m, err = e.s.Metrics(t.Context(), metricsQuery(KindServices), []string{"p/web"})
+	_, err = e.s.Metrics(t.Context(), metricsQuery(KindServices), []string{"p/web"})
+	assert.Equal(t, provider.ClassUnavailable, errClass(err), "every read failed: an error, not an empty success")
+}
+
+// Every read refused: the refusal is the answer (not "ok" with nothing).
+func TestMetricsAllRefused(t *testing.T) {
+	e := newTestEnv(t)
+	one := replica("aaaa1111", "p", "web", "1", "running")
+	e.fe.PutContainer(one)
+	e.fe.AddHook(func(w http.ResponseWriter, _ *http.Request, p string) bool {
+		if !strings.HasSuffix(p, "/stats") {
+			return false
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusForbidden)
+		_, _ = io.WriteString(w, `{"message":"authorization denied by plugin"}`)
+		return true
+	})
+	_, err := e.s.Metrics(t.Context(), metricsQuery(KindContainers), []string{one.ID})
+	assert.Equal(t, provider.ClassForbidden, errClass(err))
+	assert.Contains(t, err.Error(), "authorization denied")
+}
+
+// A restart between the daemon's two points leaves the CPU unknown even
+// when the new incarnation's counter is the larger (the fresh inspect
+// proves the incarnation began before the first point); memory, a value
+// at the second point, stays.
+func TestMetricsCPUOnlyWithinOneIncarnation(t *testing.T) {
+	e := newTestEnv(t)
+	c := replica("aaaa1111", "p", "web", "1", "running")
+	e.fe.PutContainer(c)
+	e.fe.SetStats(func(string, bool) []byte {
+		b := statsJSON(9e8, 1e8, 4e9, 2e9, 2, 64<<20, map[string]int64{"inactive_file": 16 << 20})
+		restarted := c
+		restarted.State.StartedAt = engine.TimeOf(time.Now().UTC().Add(-500 * time.Millisecond)) // after preread
+		e.fe.PutContainer(restarted)
+		return b
+	})
+	m, err := e.s.Metrics(t.Context(), metricsQuery(KindContainers), []string{c.ID})
 	require.NoError(t, err)
-	assert.Empty(t, m.Values)
+	u := m.Values[c.ID]
+	assert.Nil(t, u.CPU, "the counters are of two incarnations")
+	require.NotNil(t, u.Memory)
+	assert.InDelta(t, 48<<20, *u.Memory, 0)
+}
+
+// Many services, slow stats, a budget for one batch of statsPool reads:
+// the first member of every row is read before any row's second, so every
+// shown row gets a value (in the rows' order, the batch would be the first
+// rows' members only).
+func TestMetricsCoverEveryRowFirst(t *testing.T) {
+	e := newTestEnv(t)
+	var rows []string
+	for r := range 12 {
+		svc := fmt.Sprintf("s%02d", r)
+		rows = append(rows, "p/"+svc)
+		for n := 1; n <= 5; n++ {
+			e.fe.PutContainer(replica(fmt.Sprintf("%s%06d", svc, n), "p", svc, fmt.Sprint(n), "running"))
+		}
+	}
+	e.fe.AddHook(func(_ http.ResponseWriter, r *http.Request, p string) bool {
+		if strings.HasSuffix(p, "/stats") {
+			select {
+			case <-time.After(300 * time.Millisecond):
+			case <-r.Context().Done():
+			}
+		}
+		return false
+	})
+	ctx, cancel := context.WithTimeout(t.Context(), 500*time.Millisecond)
+	defer cancel()
+	m, err := e.s.Metrics(ctx, metricsQuery(KindServices), rows)
+	require.NoError(t, err, "some were read: values, not an error")
+	for _, r := range rows {
+		_, ok := m.Values[r]
+		assert.True(t, ok, r)
+	}
+}
+
+// The stats slots are the session's: two views at once still read at
+// most statsPool at a time.
+func TestMetricsShareTheSessionsSlots(t *testing.T) {
+	e := newTestEnv(t)
+	e.s.statsSlots = make(chan struct{}, 3)
+	var ids []string
+	for n := range 8 {
+		c := replica(fmt.Sprintf("c%07d", n), "p", "web", fmt.Sprint(n+1), "running")
+		e.fe.PutContainer(c)
+		ids = append(ids, c.ID)
+	}
+	var mu sync.Mutex
+	active, most := 0, 0
+	e.fe.AddHook(func(_ http.ResponseWriter, _ *http.Request, p string) bool {
+		if !strings.HasSuffix(p, "/stats") {
+			return false
+		}
+		mu.Lock()
+		active++
+		most = max(most, active)
+		mu.Unlock()
+		time.Sleep(30 * time.Millisecond)
+		mu.Lock()
+		active--
+		mu.Unlock()
+		return false
+	})
+	var wg sync.WaitGroup
+	for range 2 {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			_, err := e.s.Metrics(t.Context(), metricsQuery(KindContainers), ids)
+			assert.NoError(t, err)
+		}()
+	}
+	wg.Wait()
+	assert.LessOrEqual(t, most, 3)
+	assert.Equal(t, 3, most, "the slots are used")
 }
 
 // Past maxServiceSum running members the sum is partial and the rest are
@@ -158,13 +274,25 @@ func TestUsageOfSamples(t *testing.T) {
 		require.NoError(t, json.Unmarshal(b, &s))
 		return s
 	}
-	sm, ok := usageOf(st(statsJSON(3e8, 1e8, 3e9, 1e9, 4, 100, map[string]int64{"total_inactive_file": 30})))
+	sm, ok := usageOf(st(statsJSON(3e8, 1e8, 3e9, 1e9, 4, 100, map[string]int64{"total_inactive_file": 30, "inactive_file": 10, "cache": 40})))
 	require.True(t, ok)
 	assert.InDelta(t, 0.4, *sm.cpu, 1e-9)
-	assert.InDelta(t, 70, *sm.mem, 0)
-	sm, ok = usageOf(st(statsJSON(3e8, 1e8, 3e9, 1e9, 4, 100, nil)))
-	require.True(t, ok)
-	assert.InDelta(t, 100, *sm.mem, 0, "no cache counter: the raw usage")
+	assert.InDelta(t, 70, *sm.mem, 0, "cgroup v1 (both counters): the hierarchy's total_inactive_file, as docker stats")
+	for _, x := range []struct {
+		stats map[string]int64
+		want  float64
+		why   string
+	}{
+		{map[string]int64{"inactive_file": 10}, 90, "cgroup v2: inactive_file"},
+		{map[string]int64{"total_inactive_file": 0, "inactive_file": 0, "cache": 30}, 100, "a zero counter is a value, not a missing one"},
+		{map[string]int64{"inactive_file": 0, "cache": 30}, 100, "v2 zero: the cache is not a fallback"},
+		{map[string]int64{"inactive_file": 150}, 100, "a counter above the usage: the raw usage, as docker stats"},
+		{nil, 100, "no counter: the raw usage"},
+	} {
+		sm, ok = usageOf(st(statsJSON(3e8, 1e8, 3e9, 1e9, 4, 100, x.stats)))
+		require.True(t, ok)
+		assert.InDelta(t, x.want, *sm.mem, 0, x.why)
+	}
 	sm, ok = usageOf(st(statsJSON(1e8, 3e8, 3e9, 1e9, 4, 100, nil)))
 	require.True(t, ok)
 	assert.Nil(t, sm.cpu, "the CPU counter went back: unknown")
@@ -203,8 +331,7 @@ func TestMetricsEndWithTheCaller(t *testing.T) {
 	ctx, cancel := context.WithCancel(t.Context())
 	time.AfterFunc(100*time.Millisecond, cancel)
 	t0 := time.Now()
-	m, err := e.s.Metrics(ctx, metricsQuery(KindContainers), []string{web.ID})
-	require.NoError(t, err)
-	assert.Empty(t, m.Values)
+	_, err := e.s.Metrics(ctx, metricsQuery(KindContainers), []string{web.ID})
+	assert.ErrorIs(t, err, context.Canceled, "nothing read: the caller's end, not an empty success")
 	assert.Less(t, time.Since(t0), 2*time.Second)
 }

@@ -58,6 +58,9 @@ type Service struct {
 	// seq still accepted (see GetMetrics).
 	metricsMu   sync.Mutex
 	metricGates map[string]*metricGate
+	// beforeMetricsGate (tests): runs between reading a view and taking
+	// its metrics gate.
+	beforeMetricsGate func()
 
 	// revKey keys ConfigRev: configuration hashes cover credentials, so the
 	// page gets only a keyed digest it cannot test guesses against.

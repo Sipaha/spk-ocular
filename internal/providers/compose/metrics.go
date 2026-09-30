@@ -16,11 +16,13 @@ var _ provider.MetricsSource = (*session)(nil)
 // Usage of containers and services from the Engine's stats.
 //
 // Every sample is the daemon's own two-point one (stats without one-shot:
-// it reads the cgroup twice ~1 s apart), so CPU is the rate over that
-// second of that container incarnation — never a delta against an older
-// sample of ours that a restart unseen by the feed, or a long pause of the
-// page, would make wrong (Codex plan review #9). The daemon's wait is
-// spent in parallel: statsPool requests at once per session.
+// it reads the cgroup twice ~1 s apart), never a delta against an older
+// sample of ours that a long pause of the page would make wrong (Codex
+// plan review #9). The daemon's two points may still span a restart, so
+// the CPU counts only when a fresh inspect after the sample shows the
+// running incarnation began before the first point. The daemon's wait is
+// spent in parallel: statsPool requests at once per session (all views
+// together), each row's first container before any row's second.
 const (
 	statsPool = 32
 	// maxServiceSum: a service's sum is over at most this many running
@@ -55,14 +57,12 @@ func (s *session) Metrics(ctx context.Context, q provider.Query, rowIDs []string
 	// the containers of each row
 	parts := map[string][]string{}
 	cut := map[string]bool{}
-	var ids []string
-	seen := map[string]bool{}
+	var order []string // rows with containers, in the page's order
 	add := func(row string, c *engine.ContainerInspect) {
-		parts[row] = append(parts[row], c.ID)
-		if !seen[c.ID] {
-			seen[c.ID] = true
-			ids = append(ids, c.ID)
+		if parts[row] == nil {
+			order = append(order, row)
 		}
+		parts[row] = append(parts[row], c.ID)
 	}
 	for _, row := range rowIDs {
 		switch q.Kind {
@@ -95,7 +95,28 @@ func (s *session) Metrics(ctx context.Context, q provider.Query, rowIDs []string
 		}
 	}
 
-	samples := s.sampleAll(ctx, ids)
+	// Rounds: every row's first container, then every row's second, …
+	var ids []string
+	seen := map[string]bool{}
+	for round := 0; ; round++ {
+		more := false
+		for _, row := range order {
+			if cs := parts[row]; round < len(cs) {
+				more = true
+				if id := cs[round]; !seen[id] {
+					seen[id] = true
+					ids = append(ids, id)
+				}
+			}
+		}
+		if !more {
+			break
+		}
+	}
+	samples, err := s.sampleAll(ctx, ids)
+	if len(samples) == 0 && err != nil {
+		return provider.Metrics{}, err // nothing read: why, not an empty success
+	}
 	out := provider.Metrics{Values: map[string]provider.Usage{}}
 	var window time.Duration
 	for row, cs := range parts {
@@ -172,30 +193,44 @@ type sample struct {
 	window   time.Duration
 }
 
-// sampleAll reads the containers' stats, statsPool at a time; a failed or
-// empty read has no entry. It returns once all are read or ctx ends.
-func (s *session) sampleAll(ctx context.Context, ids []string) map[string]sample {
+// sampleAll reads the containers' stats in the session's slots, in order;
+// a failed or empty read has no entry. It returns once all are read or
+// ctx ends, with the first failure (ctx's end when that came first; a
+// container removed meanwhile is none).
+func (s *session) sampleAll(ctx context.Context, ids []string) (map[string]sample, error) {
 	out := make(map[string]sample, len(ids))
-	var mu sync.Mutex
-	var wg sync.WaitGroup
-	pool := make(chan struct{}, statsPool)
+	var (
+		mu    sync.Mutex
+		wg    sync.WaitGroup
+		first error
+	)
+	fail := func(err error) {
+		mu.Lock()
+		if first == nil {
+			first = err
+		}
+		mu.Unlock()
+	}
 	for _, id := range ids {
 		select {
-		case pool <- struct{}{}:
+		case s.statsSlots <- struct{}{}:
 		case <-ctx.Done():
 		}
 		if ctx.Err() != nil {
+			fail(ctx.Err())
 			break
 		}
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			defer func() { <-pool }()
-			st, err := s.cl.ContainerStats(ctx, id, false)
-			if err != nil {
-				return
-			}
-			if sm, ok := usageOf(st); ok {
+			defer func() { <-s.statsSlots }()
+			sm, ok, err := s.sampleOne(ctx, id)
+			switch {
+			case err != nil && ctx.Err() != nil:
+				fail(ctx.Err())
+			case err != nil:
+				fail(providerError(err))
+			case ok:
 				mu.Lock()
 				out[id] = sm
 				mu.Unlock()
@@ -203,14 +238,37 @@ func (s *session) sampleAll(ctx context.Context, ids []string) map[string]sample
 		}()
 	}
 	wg.Wait()
-	return out
+	return out, first
+}
+
+// sampleOne reads a container's two-point sample; its CPU only when a
+// fresh inspect after it shows the running incarnation began before the
+// first point (else the two counters may be of two processes).
+func (s *session) sampleOne(ctx context.Context, id string) (sample, bool, error) {
+	st, err := s.cl.ContainerStats(ctx, id, false)
+	switch {
+	case engine.IsNotFound(err):
+		return sample{}, false, nil // removed meanwhile
+	case err != nil:
+		return sample{}, false, err
+	}
+	sm, ok := usageOf(st)
+	if ok && sm.cpu != nil {
+		c, err := s.cl.InspectContainer(ctx, id)
+		if err != nil || !c.State.Running || !c.State.StartedAt.Before(st.PreRead) {
+			sm.cpu = nil
+			ok = sm.mem != nil
+		}
+	}
+	return sm, ok, nil
 }
 
 // usageOf reads a two-point sample: CPU in cores from the deltas (a
 // negative CPU delta or no system delta — unknown), memory without the
-// inactive file cache like `docker stats` (the user's SPK-launcher
-// effectiveMemoryUsage: inactive_file on cgroup v2, total_inactive_file on
-// v1, cache as a coarse fallback; none — the raw usage). A zero read time:
+// inactive file cache exactly as `docker stats` (the Docker CLI's
+// calculateMemUsageUnixNoCache): cgroup v1 (total_inactive_file present,
+// the hierarchy's) or else v2 inactive_file, a zero counter included; a
+// counter not below the usage, or none — the raw usage. A zero read time:
 // the container is not running.
 func usageOf(st engine.Stats) (sample, bool) {
 	if st.Read.IsZero() {
@@ -231,11 +289,12 @@ func usageOf(st engine.Stats) (sample, bool) {
 	}
 	if m := st.MemoryStats; m.Usage > 0 {
 		used := m.Usage
-		for _, key := range []string{"inactive_file", "total_inactive_file", "cache"} {
-			if v, ok := m.Stats[key]; ok && v > 0 {
-				used = max(m.Usage-v, 0)
-				break
+		if v, v1 := m.Stats["total_inactive_file"]; v1 {
+			if v < m.Usage {
+				used = m.Usage - v
 			}
+		} else if v := m.Stats["inactive_file"]; v < m.Usage {
+			used = m.Usage - v
 		}
 		sm.mem = provider.Num(float64(used))
 	}

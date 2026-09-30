@@ -89,6 +89,8 @@ type session struct {
 	ctx    context.Context
 	cancel context.CancelFunc
 	pool   chan struct{} // the inspect pool, all feeds together
+	// statsSlots: the stats requests at once, all metrics requests together.
+	statsSlots chan struct{}
 	// logSlots: the provider's log request slots (nil: unlimited).
 	logSlots chan struct{}
 
@@ -110,7 +112,7 @@ func newSession(target, hash string, cl *engine.Client) *session {
 	ctx, cancel := context.WithCancel(context.Background())
 	return &session{
 		target: target, hash: hash, cl: cl, now: time.Now, proj: defaultProjections,
-		ctx: ctx, cancel: cancel, pool: make(chan struct{}, inspectPool),
+		ctx: ctx, cancel: cancel, pool: make(chan struct{}, inspectPool), statsSlots: make(chan struct{}, statsPool),
 		grace: feedGrace, staleAfter: staleAfter, maxDirty: maxDirty, maxUnresolved: maxUnresolved, backoff: backoffSteps,
 	}
 }

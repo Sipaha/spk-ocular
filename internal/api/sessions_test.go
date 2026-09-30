@@ -420,6 +420,26 @@ func TestGetMetricsOneRequestPerView(t *testing.T) {
 	s.metricsMu.Unlock()
 }
 
+// A view closed after a request read it but before the request took its
+// place never reaches the provider, and leaves nothing behind.
+func TestGetMetricsOfAViewClosedMeanwhile(t *testing.T) {
+	ms := &metricSession{m: provider.Metrics{Values: map[string]provider.Usage{"1": {CPU: provider.Num(1)}}}}
+	k := &metricOpenable{openable: newOpenable("a"), ms: ms}
+	s, _ := newService(t, k)
+	ctx := context.Background()
+	info, err := s.OpenView(ctx, OpenViewRequest{Provider: "k", Target: "a", Query: provider.Query{Kind: "pods", Scope: allScopes}})
+	require.NoError(t, err)
+	_, err = s.OpenView(ctx, OpenViewRequest{Provider: "k", Target: "a", Query: provider.Query{Kind: "pods", Scope: allScopes}}) // the session lives on
+	require.NoError(t, err)
+	s.beforeMetricsGate = func() { require.NoError(t, s.CloseView(ctx, info.ViewID)) }
+	_, err = s.GetMetrics(ctx, MetricsRequest{ViewID: info.ViewID, RowIDs: []string{"1"}, Seq: 1})
+	assert.True(t, IsCoded(err, CodeGone), "%v", err)
+	assert.Empty(t, ms.asked, "the provider was not asked")
+	s.metricsMu.Lock()
+	assert.Empty(t, s.metricGates, "no gate brought back")
+	s.metricsMu.Unlock()
+}
+
 func TestIdleSessionsAreReaped(t *testing.T) {
 	ctx := context.Background()
 	k := newOpenable("a", "b")

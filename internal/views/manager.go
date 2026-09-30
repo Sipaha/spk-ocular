@@ -190,6 +190,13 @@ func (m *Manager) Info(id string) (owner string, q provider.Query, rows []core.R
 	return e.owner, e.query, e.view.Since(0).Upserts, nil
 }
 
+// Exists: the view is open (a lookup, no rows copied).
+func (m *Manager) Exists(id string) bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.views[id] != nil
+}
+
 // Close stops one view; closing an unknown view is a no-op.
 func (m *Manager) Close(id string) {
 	m.mu.Lock()
