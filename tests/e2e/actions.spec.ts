@@ -186,7 +186,7 @@ test('the context configuration changes after the review: review again', async (
   await expect(dialog.getByRole('button', { name: 'Restart' })).toBeEnabled()
   await reconfigure(page)
   await dialog.getByRole('button', { name: 'Restart' }).click()
-  await expect(dialog.getByRole('alert')).toContainText('changed since this was reviewed')
+  await expect(dialog.getByRole('alert')).toHaveText('the configuration of demo changed since the action was reviewed; review it again')
   expect(await cells(grid, 'web')).toEqual(['web', '2', '0'])
   await dialog.getByRole('button', { name: 'Review again' }).click()
   await dialog.getByRole('button', { name: 'Restart' }).click()

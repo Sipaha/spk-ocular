@@ -313,8 +313,9 @@ describe('ActionDialog', () => {
       })
       await userEvent.click(await within(dialog).findByRole('button', { name: 'Перезапустить' }))
       const alert = await within(dialog).findByRole('alert')
-      expect(alert).toHaveTextContent('deployment api изменился после просмотра — посмотрите снова')
-      expect(alert).not.toHaveTextContent('review it again')
+      // The reason is the whole sentence: no generic "the object changed" frame around it.
+      expect(alert).toHaveTextContent(/^deployment api изменился после просмотра — посмотрите снова$/)
+      expect(within(dialog).getByRole('button', { name: 'Проверить заново' })).toBeEnabled()
     })
 
     it('a lost connection stays "unknown" whatever reason it carries', async () => {

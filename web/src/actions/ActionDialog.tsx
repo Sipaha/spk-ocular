@@ -59,7 +59,9 @@ function outcomeOf(e: unknown): Outcome {
   return code === 'unknown' || transport
     ? { type: 'unknown', text: `${t('action.unknown')} ${errorDetail(e)}` }
     : code === 'conflict'
-      ? { type: 'conflict', text: t('action.conflict', { detail: errorDetail(e) }) }
+      ? // The provider's own reason says what changed (or why the review no
+        // longer holds) in full; a server's text gets the generic frame.
+        { type: 'conflict', text: e instanceof ApiError && e.why ? errorDetail(e) : t('action.conflict', { detail: errorDetail(e) }) }
       : { type: 'failed', text: t('action.failed', { class: classLabel(code), detail: errorDetail(e) }) }
 }
 
