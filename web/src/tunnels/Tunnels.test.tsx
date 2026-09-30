@@ -84,7 +84,7 @@ describe('tunnels', () => {
     expect(within(ports).getByText('cannot be forwarded')).toHaveAttribute('title', 'UDP cannot be forwarded')
     await user.click(within(ports).getByRole('button', { name: 'Forward' }))
     const dialog = screen.getByRole('dialog', { name: 'Forward a port' })
-    expect(within(dialog).getByRole('combobox')).toHaveValue('http')
+    expect(within(dialog).getByRole('button', { name: 'Open in a browser as' })).toHaveTextContent('http')
     await user.type(within(dialog).getByRole('textbox', { name: 'Local port' }), '8080')
     await user.click(within(dialog).getByRole('button', { name: 'Forward' }))
     expect(await within(dialog).findByRole('alert')).toHaveTextContent('local port 8080 is in use')

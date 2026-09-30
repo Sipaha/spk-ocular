@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { Client } from '../api/client'
 import type { ExecInfo, Ref } from '../api/types'
+import { Select } from '../components/Select'
 import { messageText, t } from '../i18n'
 import { ArgvError, parseArgv } from './argv'
 import type { TermOpen } from '../dock/store'
@@ -79,38 +80,35 @@ export function TerminalDialog({ client, subject, onOpen, onClose }: Props) {
         {info && info.instances.length > 0 && (
           <>
             {info.instances.length > 1 && (
-              <label className="flex flex-col gap-1 text-xs text-fg-muted">
-                {info.instanceLabel ? messageText(info.instanceLabel) : t('term.instance')}
-                <select
+              <div className="flex flex-col gap-1 text-xs text-fg-muted">
+                <span aria-hidden="true">{info.instanceLabel ? messageText(info.instanceLabel) : t('term.instance')}</span>
+                <Select
+                  label={info.instanceLabel ? messageText(info.instanceLabel) : t('term.instance')}
                   value={instance}
-                  onChange={(e) => {
-                    setInstance(e.target.value)
-                    setChannel(info.instances.find((x) => x.id === e.target.value)?.defaultChannel ?? '')
+                  onChange={(v) => {
+                    setInstance(v)
+                    setChannel(info.instances.find((x) => x.id === v)?.defaultChannel ?? '')
                   }}
-                  className="rounded-md border border-line bg-app px-2 py-1 text-sm text-fg outline-none focus:border-accent"
-                >
-                  {info.instances.map((x) => (
-                    <option key={x.id} value={x.id}>
-                      {x.title}
-                      {x.ready ? '' : ` (${t('term.notReady')})`}
-                    </option>
-                  ))}
-                </select>
-              </label>
+                  options={info.instances.map((x) => ({ value: x.id, label: x.ready ? x.title : `${x.title} (${t('term.notReady')})` }))}
+                  className="text-sm"
+                />
+              </div>
             )}
             {inst && inst.channels.length > 0 && (
-              <label className="flex flex-col gap-1 text-xs text-fg-muted">
-                {info.channelLabel ? messageText(info.channelLabel) : t('term.channel')}
-                <select value={channel} onChange={(e) => setChannel(e.target.value)} className="rounded-md border border-line bg-app px-2 py-1 text-sm text-fg outline-none focus:border-accent">
-                  {inst.channels.map((c) => (
-                    <option key={c.id} value={c.id} disabled={!c.running}>
-                      {c.title}
-                      {c.note ? ` (${c.note})` : ''}
-                      {c.running ? '' : ` — ${t('term.notRunning', { state: c.state ?? '' })}`}
-                    </option>
-                  ))}
-                </select>
-              </label>
+              <div className="flex flex-col gap-1 text-xs text-fg-muted">
+                <span aria-hidden="true">{info.channelLabel ? messageText(info.channelLabel) : t('term.channel')}</span>
+                <Select
+                  label={info.channelLabel ? messageText(info.channelLabel) : t('term.channel')}
+                  value={channel}
+                  onChange={setChannel}
+                  options={inst.channels.map((c) => ({
+                    value: c.id,
+                    label: `${c.title}${c.note ? ` (${c.note})` : ''}${c.running ? '' : ` — ${t('term.notRunning', { state: c.state ?? '' })}`}`,
+                    disabled: !c.running,
+                  }))}
+                  className="text-sm"
+                />
+              </div>
             )}
           </>
         )}

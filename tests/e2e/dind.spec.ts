@@ -1,6 +1,6 @@
 import { expect, test, type Page } from '@playwright/test'
 import { execFileSync } from 'node:child_process'
-import { pickScope } from './fixtures'
+import { pickOption, pickScope, selects } from './fixtures'
 import { expectScreen, stats } from './synth'
 
 // The Compose provider against the isolated test daemon (scripts/dind-seed.sh:
@@ -94,7 +94,7 @@ test('logs of a service: both replicas, stdout and stderr, live', async ({ page 
   await expect(logRows(page).filter({ hasText: /^\s*1\s+line \d+/ }).first()).toBeAttached({ timeout: 30_000 })
   await expect(logRows(page).filter({ hasText: /^\s*2\s+line \d+/ }).first()).toBeAttached()
   await expect(logRows(page).filter({ hasText: /2 \(stderr\)\s*err \d+/ }).first()).toBeAttached()
-  await expect(panel.getByRole('combobox').first()).toHaveValue('*') // stdout and stderr by default
+  await expect(selects(panel).first()).toHaveText('stdout and stderr') // stdout and stderr by default
   // live: a line newer than any shown now arrives (the logger prints one a second)
   const newest = async () => {
     const texts = await logRows(page).allInnerTexts()
@@ -168,7 +168,7 @@ test('a terminal in a chosen replica runs in that container', async ({ page }) =
   await row(grid, 'logger').click()
   await page.keyboard.press('Shift+S')
   const dlg = page.getByRole('dialog', { name: 'Open a terminal' })
-  await dlg.getByRole('combobox').first().selectOption({ label: 'ocular-fixture-logger-2' })
+  await pickOption(selects(dlg).first(), 'ocular-fixture-logger-2')
   await dlg.getByRole('button', { name: 'Open' }).click()
   await expectScreen(page, '# ', 30_000)
   const hostname = docker('inspect', '-f', '{{.Config.Hostname}}', 'ocular-fixture-logger-2').trim()

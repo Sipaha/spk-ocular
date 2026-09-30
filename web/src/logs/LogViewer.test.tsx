@@ -1,4 +1,4 @@
-import { act, render, screen, waitFor } from '@testing-library/react'
+import { act, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { Ref } from '../api/types'
@@ -111,7 +111,8 @@ describe('LogViewer', () => {
     expect(await screen.findByRole('status')).toHaveTextContent('possible gap — lines around the reconnect may be missing')
 
     // a new stream (another tail): the old one's late lines must not appear
-    await user.selectOptions(screen.getByRole('combobox', { name: 'Lines' }), '100')
+    await user.click(screen.getByRole('button', { name: 'Lines' }))
+    await user.click(within(screen.getByRole('listbox', { name: 'Lines' })).getByRole('option', { name: '100' }))
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2))
     expect(signals[0].aborted).toBe(true)
     act(() => s1.send({ k: 'lines', s: 1, l: [['2026-09-29T10:00:02Z', 'late from the old stream']] }))

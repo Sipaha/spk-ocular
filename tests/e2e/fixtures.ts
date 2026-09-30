@@ -1,4 +1,4 @@
-import { expect, type Page } from '@playwright/test'
+import { expect, type Locator, type Page } from '@playwright/test'
 import { createHash } from 'node:crypto'
 import { mkdirSync, renameSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
@@ -81,4 +81,15 @@ export async function pickScope(page: Page, label: string, name: string) {
   await page.getByRole('combobox', { name: new RegExp(label, 'i') }).fill(name)
   await page.keyboard.press('Enter')
   await expect(page.getByRole('button', { name: label, exact: true })).toHaveText(name)
+}
+
+/** The app's select buttons (not native selects) in a part of the page. */
+export const selects = (within: Locator | Page) => within.locator('button[aria-haspopup="listbox"]')
+
+/** Chooses an option of an app select: opens it, clicks the option. */
+export async function pickOption(button: Locator, name: string | RegExp) {
+  await button.click()
+  const id = await button.page().locator('[role="listbox"]').last().getAttribute('id')
+  await button.page().locator(`[id="${id}"]`).getByRole('option', { name, exact: typeof name === 'string' }).click()
+  await expect(button).toHaveText(name)
 }

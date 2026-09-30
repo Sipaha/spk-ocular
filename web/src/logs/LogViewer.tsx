@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import type { Client } from '../api/client'
 import type { LogInfo, LogQuery, Ref } from '../api/types'
+import { Select as AppSelect, type SelectOption } from '../components/Select'
 import { classLabel, messageText, t, type MessageKey } from '../i18n'
 import { isShortcut } from '../keyboard'
 import { LEVEL_CLASS, LOG_LEVELS } from './levels'
@@ -80,22 +81,19 @@ export default function LogViewer({ client, subject, active }: Props) {
       query={query}
       toolbar={
         <>
-          <Select label={info.channelLabel ? messageText(info.channelLabel) : t('logs.channel')} value={channel ?? ''} onChange={(v) => { setChannel(v); if (v === '*') setPrevious(false) }}>
-            {info.channels.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.title}
-                {c.note ? ` (${c.note})` : ''}
-              </option>
-            ))}
-            {info.channels.length > 1 || info.aggregate ? <option value="*">{info.allChannelsLabel ? messageText(info.allChannelsLabel) : t('logs.allChannels')}</option> : null}
-          </Select>
-          <Select label={t('logs.tail')} value={String(tail)} onChange={(v) => setTail(Number(v))}>
-            {TAILS.map((n) => (
-              <option key={n} value={n}>
-                {n < 0 ? t('logs.tailAll') : n}
-              </option>
-            ))}
-          </Select>
+          <Select
+            label={info.channelLabel ? messageText(info.channelLabel) : t('logs.channel')}
+            value={channel ?? ''}
+            onChange={(v) => {
+              setChannel(v)
+              if (v === '*') setPrevious(false)
+            }}
+            options={[
+              ...info.channels.map((c) => ({ value: c.id, label: c.note ? `${c.title} (${c.note})` : c.title })),
+              ...(info.channels.length > 1 || info.aggregate ? [{ value: '*', label: info.allChannelsLabel ? messageText(info.allChannelsLabel) : t('logs.allChannels') }] : []),
+            ]}
+          />
+          <Select label={t('logs.tail')} value={String(tail)} onChange={(v) => setTail(Number(v))} options={TAILS.map((n) => ({ value: String(n), label: n < 0 ? t('logs.tailAll') : String(n) }))} />
           <Select
             label={t('logs.since')}
             value={since?.key ?? ''}
@@ -103,14 +101,8 @@ export default function LogViewer({ client, subject, active }: Props) {
               const s = SINCE.find(([k]) => k === v)
               setSince(s ? { key: v, at: new Date(Date.now() - s[1] * 1000).toISOString() } : null)
             }}
-          >
-            <option value="">{t('logs.sinceAll')}</option>
-            {SINCE.map(([k]) => (
-              <option key={k} value={k}>
-                {k}
-              </option>
-            ))}
-          </Select>
+            options={[{ value: '', label: t('logs.sinceAll') }, ...SINCE.map(([k]) => ({ value: k, label: k }))]}
+          />
           {info.previous && channel !== '*' && (
             <Toggle on={previous} onClick={() => setPrevious((p) => !p)} title={t('logs.previous.tooltip')}>
               {t('logs.previous')}
@@ -381,10 +373,6 @@ function Toggle({ on, children, ...p }: { on: boolean; children: ReactNode; onCl
   )
 }
 
-function Select({ label, value, onChange, children }: { label: string; value: string; onChange: (v: string) => void; children: ReactNode }) {
-  return (
-    <select aria-label={label} title={label} value={value} onChange={(e) => onChange(e.target.value)} className="rounded border border-line bg-app px-1 py-0.5 outline-none focus:border-accent">
-      {children}
-    </select>
-  )
+function Select(props: { label: string; value: string; onChange: (v: string) => void; options: SelectOption[] }) {
+  return <AppSelect {...props} className="rounded py-0.5 pl-1.5" />
 }

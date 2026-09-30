@@ -1,6 +1,6 @@
 import { expect, test, type Page } from '@playwright/test'
 import { execFileSync } from 'node:child_process'
-import { pickScope } from './fixtures'
+import { pickOption, pickScope, selects } from './fixtures'
 
 const kc = process.env.OCULAR_KIND_KUBECONFIG!
 const kubectl = (...args: string[]) => execFileSync('kubectl', ['--kubeconfig', kc, '--context', 'kind-ocular-dev', ...args], { encoding: 'utf8' })
@@ -187,7 +187,7 @@ test('a tunnel to a service: the runner reaches nginx through it', async ({ page
   const ports = page.getByRole('dialog', { name: 'services web' }).getByRole('region', { name: 'Ports' })
   await ports.getByRole('listitem').filter({ hasText: '80' }).getByRole('button', { name: 'Forward' }).click()
   const dlg = page.getByRole('dialog', { name: 'Forward a port' })
-  await dlg.getByRole('combobox').selectOption('http')
+  await pickOption(selects(dlg).first(), 'http')
   await dlg.getByRole('button', { name: 'Forward' }).click()
   const tunnel = page.getByRole('region', { name: 'Port forwards' }).getByRole('listitem', { name: 'services/web:80' })
   await expect(tunnel).toContainText('connected')

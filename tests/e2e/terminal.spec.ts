@@ -1,5 +1,6 @@
 import { expect, test, type Page } from '@playwright/test'
 import { activePanel, expectScreen, focusTerminal, screen, selectObject, since, stats } from './synth'
+import { pickOption, selects } from './fixtures'
 
 // The echo terminal of the synthetic provider (internal/providers/synthetic/live.go):
 // typed lines are answered "you said: …", "flood N", "exit N", "size CxR" on resize.
@@ -72,7 +73,7 @@ test('a custom command is not run again without asking', async ({ page }) => {
   await selectObject(page, 'workers')
   await page.keyboard.press('Shift+S')
   const dlg = page.getByRole('dialog', { name: 'Open a terminal' })
-  await dlg.getByRole('combobox').first().selectOption('worker-2')
+  await pickOption(selects(dlg).first(), /^worker-2/)
   await dlg.getByPlaceholder(/interactive shell/).fill('exit 5')
   await dlg.getByRole('button', { name: 'Open' }).click()
   const alert = activePanel(page).getByRole('alert')

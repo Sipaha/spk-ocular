@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import type { Client } from '../api/client'
 import { ApiError } from '../api/client'
 import type { ForwardInfo, ForwardPort, Ref } from '../api/types'
+import { Select } from '../components/Select'
 import { classLabel, t } from '../i18n'
 import { tunnels } from './store'
 
@@ -123,14 +124,20 @@ export function ForwardDialog({ client, subject, port, onClose }: { client: Clie
             className="rounded-md border border-line bg-app px-2 py-1 font-mono text-sm text-fg outline-none focus:border-accent"
           />
         </label>
-        <label className="flex flex-col gap-1 text-xs text-fg-muted">
-          {t('fwd.scheme')}
-          <select value={scheme} onChange={(e) => setScheme(e.target.value)} className="rounded-md border border-line bg-app px-2 py-1 text-sm text-fg outline-none focus:border-accent">
-            <option value="">{t('fwd.schemeNone')}</option>
-            <option value="http">http</option>
-            <option value="https">https</option>
-          </select>
-        </label>
+        <div className="flex flex-col gap-1 text-xs text-fg-muted">
+          <span aria-hidden="true">{t('fwd.scheme')}</span>
+          <Select
+            label={t('fwd.scheme')}
+            value={scheme}
+            onChange={setScheme}
+            options={[
+              { value: '', label: t('fwd.schemeNone') },
+              { value: 'http', label: 'http' },
+              { value: 'https', label: 'https' },
+            ]}
+            className="text-sm"
+          />
+        </div>
         {error && (
           <p role="alert" className="rounded-md bg-danger/10 px-3 py-2 text-xs text-danger">
             {error}

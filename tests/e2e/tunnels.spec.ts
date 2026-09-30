@@ -1,6 +1,7 @@
 import { expect, test, type Page } from '@playwright/test'
 import { createServer, type Server } from 'node:net'
 import { expectScreen, reconfigure, selectObject, since, stats } from './synth'
+import { selects } from './fixtures'
 
 // Tunnels to the synthetic provider's ports (in-process HTTP servers). The
 // request goes through the runner's own HTTP client, not the page.
@@ -33,7 +34,7 @@ test('forward, request through the tunnel, stop', async ({ page }) => {
   await page.keyboard.press('Escape')
 
   const dlg = await forwardDialog(page, 'api', 80)
-  await expect(dlg.getByRole('combobox')).toHaveValue('http') // the port says it speaks http
+  await expect(selects(dlg).first()).toHaveText('http') // the port says it speaks http
   await dlg.getByRole('button', { name: 'Forward' }).click()
   await expect(dlg).toHaveCount(0)
 
