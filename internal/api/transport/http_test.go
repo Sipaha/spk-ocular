@@ -22,6 +22,12 @@ import (
 type fakeAPI struct {
 	api.API  // unimplemented methods panic: tests call only what they set up
 	selected api.TargetRef
+	closed   api.TargetRef
+}
+
+func (f *fakeAPI) CloseTarget(_ context.Context, provider, id string) error {
+	f.closed = api.TargetRef{Provider: provider, ID: id}
+	return nil
 }
 
 func (f *fakeAPI) ListTargets(context.Context) (api.TargetsView, error) {
@@ -102,6 +108,10 @@ func TestPostRoutesToAPI(t *testing.T) {
 	resp := call(t, h, ts.URL, "SelectTarget", `{"provider":"kubernetes","id":"prod"}`)
 	assert.Equal(t, 200, resp.StatusCode)
 	assert.Equal(t, api.TargetRef{Provider: "kubernetes", ID: "prod"}, f.selected)
+
+	resp = call(t, h, ts.URL, "CloseTarget", `{"provider":"kubernetes","id":"stage"}`)
+	assert.Equal(t, 200, resp.StatusCode)
+	assert.Equal(t, api.TargetRef{Provider: "kubernetes", ID: "stage"}, f.closed)
 
 	resp = call(t, h, ts.URL, "ListTargets", `{}`)
 	var v api.TargetsView

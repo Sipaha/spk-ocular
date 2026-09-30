@@ -15,6 +15,17 @@ var messageTexts = map[string]string{
 	"unknownKind":   "no such action: unknown kind {kind}",
 	"sessionClosed": "the session closed meanwhile; try again",
 	"configChanged": "the configuration of {target} changed since the action was reviewed; review it again",
+	"loginNeeded":   "a login to the cluster is needed to go on: select the target",
+	"closedByUser":  "the connection to the target was closed",
+}
+
+// apiMessage is the API's sentence key as a message (no params).
+func apiMessage(key string) core.Message {
+	tmpl, ok := messageTexts[key]
+	if !ok {
+		panic("api: no text for " + key)
+	}
+	return core.Message{Key: "api." + key, Text: tmpl}
 }
 
 // said is a coded error whose detail is the API's sentence key (params as

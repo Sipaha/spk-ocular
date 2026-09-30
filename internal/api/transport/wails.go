@@ -30,6 +30,10 @@ func (w *API) SelectTarget(provider, id string) error {
 	return w.a.SelectTarget(context.Background(), provider, id)
 }
 
+func (w *API) CloseTarget(provider, id string) error {
+	return w.a.CloseTarget(context.Background(), provider, id)
+}
+
 func (w *API) ListKinds(provider, target string) (api.KindsView, error) {
 	return w.a.ListKinds(context.Background(), provider, target)
 }

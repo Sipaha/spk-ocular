@@ -97,6 +97,11 @@ func (c *AgentCall) Done() {
 		delete(c.e.agentCalls, c)
 		now := c.s.now()
 		c.e.lastUsed, c.e.agentUntil = now, now.Add(sessionIdle)
+		key := ownerKey(c.e.provider, c.e.target)
+		if c.e.closing && len(c.e.agentCalls) == 0 && c.s.sessions[key] == c.e {
+			m := apiMessage("closedByUser") // the user closed it meanwhile
+			c.s.closeSessionWhyLocked(key, &m)
+		}
 		c.s.sessMu.Unlock()
 		c.cancel()
 	})

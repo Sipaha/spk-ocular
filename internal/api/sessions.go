@@ -29,6 +29,12 @@ type sessionEntry struct {
 	// stays spared until then after the last one (AgentCall).
 	agentCalls map[*AgentCall]struct{}
 	agentUntil time.Time
+	// background: told so (provider.Backgrounder), its target not the
+	// selected one.
+	background bool
+	// closing: the user closed it while agents' calls held it; it goes
+	// with the last one (AgentCall.Done).
+	closing bool
 }
 
 // sessionIdle: a session without views is closed after this long (a page
@@ -79,6 +85,7 @@ func (s *Service) session(ctx context.Context, providerID, target string) (provi
 		return nil, coded(CodeNotFound, fmt.Errorf("no target %q in %s", target, p.Title()))
 	}
 	key := ownerKey(providerID, target)
+	current := s.currentKey(ctx)
 	s.sessMu.Lock()
 	defer s.sessMu.Unlock()
 	if e := s.sessions[key]; e != nil {
@@ -94,7 +101,12 @@ func (s *Service) session(ctx context.Context, providerID, target string) (provi
 	}
 	s.sessSeq++
 	seq := s.sessSeq
-	s.sessions[key] = &sessionEntry{sess: sess, provider: providerID, target: target, hash: sess.ConfigHash(), lastUsed: s.now(), owner: fmt.Sprintf("%s#%d", key, seq), seq: seq}
+	e := &sessionEntry{sess: sess, provider: providerID, target: target, hash: sess.ConfigHash(), lastUsed: s.now(), owner: fmt.Sprintf("%s#%d", key, seq), seq: seq}
+	s.sessions[key] = e
+	if key != current {
+		s.setBackgroundLocked(key, e, true)
+	}
+	s.emitTargetsChanged(providerID)
 	if c, ok := sess.(provider.Cataloger); ok {
 		// Set before anyone reads the catalog: a revision published
 		// earlier is in the first ListKinds, a later one is an event.
@@ -122,7 +134,11 @@ func (s *Service) targetHash(ctx context.Context, p provider.Provider, target st
 
 // closeSessionLocked closes a session and its views; each view's UI learns
 // it is gone (views.Manager.CloseOwner) and reopens against a new session.
-func (s *Service) closeSessionLocked(key string) {
+func (s *Service) closeSessionLocked(key string) { s.closeSessionWhyLocked(key, nil) }
+
+// closeSessionWhyLocked is closeSessionLocked whose streams end saying why
+// (nil: just gone).
+func (s *Service) closeSessionWhyLocked(key string, why *core.Message) {
 	e := s.sessions[key]
 	if e == nil {
 		return
@@ -132,8 +148,75 @@ func (s *Service) closeSessionLocked(key string) {
 		c.cancel() // their work ends: gone
 	}
 	s.views.CloseOwner(e.owner)
-	s.streams.CloseOwner(e.owner)
+	s.streams.CloseOwnerWhy(e.owner, why)
 	e.sess.Close()
+	s.emitTargetsChanged(e.provider)
+}
+
+// CloseTarget closes a target's session on the user's word (P18): its
+// views, its log streams (they say so), its caches. Not the selected
+// target's. An agent's call in flight is not cut: the session goes when
+// the last one ends. It is no longer a recent target.
+func (s *Service) CloseTarget(ctx context.Context, providerID, id string) error {
+	if _, err := s.targetOf(ctx, providerID, id); err != nil {
+		return err
+	}
+	key := ownerKey(providerID, id)
+	if key == s.currentKey(ctx) {
+		return coded(CodeBadRequest, errors.New("the selected target's connection stays open"))
+	}
+	s.sessMu.Lock()
+	defer s.sessMu.Unlock()
+	delete(s.left, key)
+	e := s.sessions[key]
+	switch {
+	case e == nil:
+	case len(e.agentCalls) > 0:
+		e.closing = true
+	default:
+		m := apiMessage("closedByUser")
+		s.closeSessionWhyLocked(key, &m)
+	}
+	return nil
+}
+
+// emitTargetsChanged: a target's session opened or closed (its "open" dot).
+func (s *Service) emitTargetsChanged(providerID string) {
+	s.em.Emit(events.Event{Type: EventTargetsChanged, Key: providerID, Payload: map[string]any{"provider": providerID}})
+}
+
+// currentKey: the selected target's key — this run's selection, else the
+// one remembered from the last run ("" when none).
+func (s *Service) currentKey(ctx context.Context) string {
+	s.sessMu.Lock()
+	cur := s.current
+	s.sessMu.Unlock()
+	if cur != "" {
+		return cur
+	}
+	if sel, err := s.selected(ctx); err == nil && sel != nil {
+		return ownerKey(sel.Provider, sel.ID)
+	}
+	return ""
+}
+
+// setBackgroundLocked tells e (of key) it is in the background or not; its
+// lost closes it — that incarnation only, and only while still in the
+// background (a person selected it meanwhile: they will log in).
+func (s *Service) setBackgroundLocked(key string, e *sessionEntry, on bool) {
+	b, ok := e.sess.(provider.Backgrounder)
+	if !ok || e.background == on {
+		return
+	}
+	e.background = on
+	b.SetBackground(on, func() {
+		s.sessMu.Lock()
+		defer s.sessMu.Unlock()
+		if s.sessions[key] == e && e.background {
+			m := apiMessage("loginNeeded")
+			s.closeSessionWhyLocked(key, &m)
+		}
+	})
 }
 
 // revalidateSessions closes sessions whose target vanished or now resolves
@@ -184,6 +267,12 @@ func (s *Service) selectSession(prev, cur string) {
 	}
 	if prev != "" && prev != cur {
 		s.left[prev] = now
+		if e := s.sessions[prev]; e != nil {
+			s.setBackgroundLocked(prev, e, true)
+		}
+	}
+	if e := s.sessions[cur]; e != nil {
+		s.setBackgroundLocked(cur, e, false)
 	}
 	delete(s.left, cur)
 	s.current = cur

@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/spk/spk-ocular/internal/core"
+	"github.com/spk/spk-ocular/internal/events"
 	"github.com/spk/spk-ocular/internal/provider"
 )
 
@@ -625,4 +626,191 @@ func TestResyncIsUnsupportedWithoutAResyncer(t *testing.T) {
 	require.NoError(t, err)
 	assert.False(t, info.Resync)
 	assert.True(t, IsCoded(s.ResyncView(ctx, info.ViewID), CodeUnsupported))
+}
+
+// bgSession records what it was told about the background.
+type bgSession struct {
+	*fakeSession
+	mu    sync.Mutex
+	calls []bool
+	lost  func()
+}
+
+func (b *bgSession) SetBackground(on bool, lost func()) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.calls = append(b.calls, on)
+	b.lost = lost
+}
+
+func (b *bgSession) told() []bool {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return append([]bool(nil), b.calls...)
+}
+
+type bgOpenable struct {
+	*openable
+	mu       sync.Mutex
+	sessions map[string][]*bgSession
+}
+
+func (o *bgOpenable) Open(ctx context.Context, target string) (provider.Session, error) {
+	s, _ := o.openable.Open(ctx, target)
+	b := &bgSession{fakeSession: s.(*fakeSession)}
+	o.mu.Lock()
+	o.sessions[target] = append(o.sessions[target], b)
+	o.mu.Unlock()
+	return b, nil
+}
+
+func (o *bgOpenable) of(target string, n int) *bgSession {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	return o.sessions[target][n]
+}
+
+func newBgOpenable(targets ...string) *bgOpenable {
+	return &bgOpenable{openable: newOpenable(targets...), sessions: map[string][]*bgSession{}}
+}
+
+// A session of a target that is not the selected one is in the
+// background — left by the user, or opened for an agent; selecting its
+// target brings it back.
+func TestSessionsOfTargetsNotSelectedAreInTheBackground(t *testing.T) {
+	ctx := context.Background()
+	k := newBgOpenable("a", "b", "c")
+	s, _ := newService(t, k)
+	visit(t, s, "a")
+	assert.Empty(t, k.of("a", 0).told(), "the selected one: as it opened")
+	visit(t, s, "b")
+	assert.Equal(t, []bool{true}, k.of("a", 0).told())
+	assert.Empty(t, k.of("b", 0).told())
+	visit(t, s, "a")
+	assert.Equal(t, []bool{true, false}, k.of("a", 0).told())
+	assert.Equal(t, []bool{true}, k.of("b", 0).told())
+	visit(t, s, "a") // again: nothing changes
+	assert.Equal(t, []bool{true, false}, k.of("a", 0).told())
+
+	_, err := s.ListKinds(ctx, "k", "c") // an agent's, say
+	require.NoError(t, err)
+	assert.Equal(t, []bool{true}, k.of("c", 0).told(), "opened for a target not selected")
+}
+
+// The selection remembered from the last run is the selected target before
+// anything is selected in this one.
+func TestTheRememberedSelectionIsNotInTheBackground(t *testing.T) {
+	ctx := context.Background()
+	k := newBgOpenable("a", "b")
+	s, _ := newService(t, k)
+	require.NoError(t, s.SelectTarget(ctx, "k", "b"))
+	s2 := newServiceOn(t, s, k) // the next run, same store
+	_, err := s2.ListKinds(ctx, "k", "b")
+	require.NoError(t, err)
+	assert.Empty(t, k.of("b", 0).told())
+}
+
+// lost: a background session that cannot go on without a person is closed;
+// its log streams end saying a login is needed. Once; never another
+// incarnation; never the selected target's.
+func TestALostBackgroundSessionIsClosed(t *testing.T) {
+	k := newBgOpenable("a", "b")
+	s, em := newService(t, k)
+	sub, unsub := em.Subscribe()
+	defer unsub()
+	visit(t, s, "a")
+	visit(t, s, "b")
+	a := k.of("a", 0)
+	sub.Drain() // the openings' events (Emit delivers at once)
+	a.lost()
+	assert.True(t, a.isClosed())
+	a.lost() // again: nothing
+	require.Eventually(t, func() bool {
+		select {
+		case <-sub.Wake():
+			for _, ev := range sub.Drain() {
+				if ev.Type == EventTargetsChanged {
+					return true
+				}
+			}
+		default:
+		}
+		return false
+	}, 2*time.Second, 10*time.Millisecond, "the target list learns it is closed")
+
+	visit(t, s, "a") // a new incarnation, selected
+	a.lost()         // the old one's late word
+	assert.False(t, k.of("a", 1).isClosed())
+	visit(t, s, "b")
+	visit(t, s, "a")
+	k.of("a", 1).lost() // selected meanwhile: the person is here
+	assert.False(t, k.of("a", 1).isClosed())
+}
+
+// newServiceOn is another run of s's app: the same store, new sessions.
+func newServiceOn(t *testing.T, s *Service, ps ...provider.Provider) *Service {
+	t.Helper()
+	reg, err := provider.NewRegistry(ps...)
+	require.NoError(t, err)
+	s2 := NewService(reg, s.store, events.NewEmitter(), s.opts)
+	t.Cleanup(s2.Close)
+	return s2
+}
+
+func openOf(t *testing.T, s *Service) map[string]bool {
+	t.Helper()
+	v, err := s.ListTargets(context.Background())
+	require.NoError(t, err)
+	out := map[string]bool{}
+	for _, g := range v.Groups {
+		for _, tg := range g.Targets {
+			out[tg.ID] = tg.Open
+		}
+	}
+	return out
+}
+
+// Targets say whether their session is open; the user closes one left
+// behind (its watches, its log tabs), never the selected one.
+func TestCloseTargetEndsALeftTargetsSession(t *testing.T) {
+	ctx := context.Background()
+	k := newOpenable("a", "b", "c")
+	s, _ := newService(t, k)
+	visit(t, s, "a")
+	visit(t, s, "b")
+	assert.Equal(t, map[string]bool{"a": true, "b": true, "c": false}, openOf(t, s))
+	require.NoError(t, s.CloseTarget(ctx, "k", "a"))
+	assert.True(t, k.opened[0].isClosed())
+	assert.Equal(t, map[string]bool{"a": false, "b": true, "c": false}, openOf(t, s))
+	assert.True(t, IsCoded(s.CloseTarget(ctx, "k", "b"), CodeBadRequest), "the selected target")
+	assert.False(t, k.opened[1].isClosed())
+	require.NoError(t, s.CloseTarget(ctx, "k", "c"), "nothing open: nothing to do")
+	assert.True(t, IsCoded(s.CloseTarget(ctx, "k", "zz"), CodeNotFound))
+
+	// Closed, it is not recent any more: opened for an agent, it idles as
+	// any other.
+	now := time.Unix(1000, 0)
+	s.now = func() time.Time { return now }
+	_, err := s.ListKinds(ctx, "k", "a")
+	require.NoError(t, err)
+	now = now.Add(sessionIdle + time.Second)
+	s.reapIdleSessions()
+	assert.True(t, k.opened[2].isClosed())
+}
+
+// An agent's call in flight is not cut: the session closes as soon as the
+// last call ends (not sessionIdle later).
+func TestCloseTargetWaitsForAgentsCalls(t *testing.T) {
+	ctx := context.Background()
+	k := newOpenable("a", "b")
+	s, _ := newService(t, k)
+	visit(t, s, "a")
+	visit(t, s, "b")
+	c, err := s.AgentCall(ctx, "k", "a")
+	require.NoError(t, err)
+	require.NoError(t, s.CloseTarget(ctx, "k", "a"))
+	assert.False(t, k.opened[0].isClosed())
+	assert.NoError(t, c.Context().Err())
+	c.Done()
+	assert.True(t, k.opened[0].isClosed())
 }

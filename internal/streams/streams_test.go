@@ -177,6 +177,24 @@ func TestCloseOwnerEndsConnectedStreamsGoneAndDropsRegistered(t *testing.T) {
 	assert.Equal(t, http.StatusOK, f.get(t, "/"+f.h.Token()+"/logs/"+other, nil).StatusCode, "other owners untouched")
 }
 
+// A session closed for a reason (a login is needed) says it in the end
+// frame, besides "gone".
+func TestCloseOwnerWhySaysWhy(t *testing.T) {
+	f := newFixture(t, HandlerOptions{})
+	started := make(chan struct{})
+	live, err := f.reg.Add("o", func(ctx context.Context, _ *Writer) error {
+		close(started)
+		<-ctx.Done()
+		return ctx.Err()
+	})
+	require.NoError(t, err)
+	resp := f.get(t, "/"+f.h.Token()+"/logs/"+live, nil)
+	<-started
+	f.reg.CloseOwnerWhy("o", &core.Message{Key: "api.loginNeeded", Text: "a login is needed"})
+	fr := frames(t, resp.Body)
+	assert.Equal(t, map[string]any{"k": "end", "reason": "gone", "why": map[string]any{"key": "api.loginNeeded", "text": "a login is needed"}}, fr[len(fr)-1])
+}
+
 func TestConnectRacingCloseOwnerNeverRunsAfterIt(t *testing.T) {
 	for range 200 {
 		reg := NewRegistry()
@@ -189,7 +207,8 @@ func TestConnectRacingCloseOwnerNeverRunsAfterIt(t *testing.T) {
 		ran.Wait()
 		if err == nil {
 			assert.Error(t, ctx.Err(), "connected before the close: canceled by it")
-			assert.True(t, reg.wasRevoked(s))
+			revoked, _ := reg.wasRevoked(s)
+			assert.True(t, revoked)
 			done()
 		} else {
 			assert.ErrorIs(t, err, ErrGone)

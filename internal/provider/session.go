@@ -48,6 +48,17 @@ type Resyncer interface {
 	Resync(q Query) error
 }
 
+// Backgrounder is implemented by sessions that behave differently while
+// their target is not the selected one (P18): left by the user, or opened
+// for an agent. A session starts in the foreground.
+type Backgrounder interface {
+	// SetBackground: on — nothing may involve a person (Kubernetes: a
+	// credential plugin runs headless); lost is called once when the
+	// session cannot go on without one (a login). off — selected again.
+	// Must not block, and never calls lost from within.
+	SetBackground(on bool, lost func())
+}
+
 // Cataloger is implemented by sessions whose kinds change while they live
 // (Kubernetes: discovery of served resources).
 type Cataloger interface {

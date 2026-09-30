@@ -1506,6 +1506,8 @@ const providerTexts: Partial<Record<Language, Record<string, string>>> = {
     'api.unknownKind': 'вида {kind} больше нет: обновите меню',
     'api.sessionClosed': 'сессия закрылась тем временем — попробуйте снова',
     'api.configChanged': 'конфигурация {target} изменилась после просмотра — посмотрите снова',
+    'api.loginNeeded': 'для продолжения нужен вход в кластер — выберите цель',
+    'api.closedByUser': 'подключение к цели закрыто',
   },
 }
 

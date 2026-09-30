@@ -177,9 +177,12 @@ func (s *Service) ListTargets(ctx context.Context) (TargetsView, error) {
 			g.Targets = append(g.Targets, d.Targets...)
 			g.Problems = append(g.Problems, d.Problems...)
 		}
+		s.sessMu.Lock()
 		for i := range g.Targets {
 			g.Targets[i].ConfigRev = s.configRev(g.Targets[i].ConfigHash)
+			g.Targets[i].Open = s.sessions[ownerKey(p.ID(), g.Targets[i].ID)] != nil
 		}
+		s.sessMu.Unlock()
 		for _, t := range g.Targets {
 			if sel != nil && sel.Provider == t.Provider && sel.ID == t.ID {
 				view.Selected = sel

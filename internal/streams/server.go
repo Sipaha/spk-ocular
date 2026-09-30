@@ -152,9 +152,10 @@ func (h *Handler) serveStream(w http.ResponseWriter, r *http.Request, id string)
 	out.timeout, out.nudge, out.beat = h.writeTimeout, h.nudge, h.beat
 	runErr := s.run(ctx, out)
 	end := End{K: "end", Reason: "done"}
+	revoked, why := h.reg.wasRevoked(s)
 	switch {
-	case h.reg.wasRevoked(s):
-		end.Reason = "gone"
+	case revoked:
+		end.Reason, end.Why = "gone", why
 	case r.Context().Err() != nil:
 		out.close() // the page went away: nobody to tell
 		return
@@ -211,5 +212,5 @@ func (h *Handler) serveTerm(w http.ResponseWriter, r *http.Request, id string) {
 		return
 	}
 	b := newTermBridge(conn, h.term, h.classify, s.size)
-	b.run(ctx, s.term, func() bool { return h.reg.wasRevoked(s) })
+	b.run(ctx, s.term, func() bool { revoked, _ := h.reg.wasRevoked(s); return revoked })
 }

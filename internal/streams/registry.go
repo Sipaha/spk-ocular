@@ -18,6 +18,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/spk/spk-ocular/internal/core"
 	"github.com/spk/spk-ocular/internal/provider"
 )
 
@@ -72,6 +73,7 @@ type stream struct {
 	connected bool
 	cancel    context.CancelFunc // set on connect
 	gone      bool               // owner closed: the end frame says so
+	goneWhy   *core.Message      // and why, when there is more to say
 }
 
 // release frees what a stream holds when it is dropped without running.
@@ -216,16 +218,20 @@ func (r *Registry) connect(parent context.Context, id string, kind Kind) (s *str
 }
 
 // wasRevoked reports whether s ended because its owner was closed.
-func (r *Registry) wasRevoked(s *stream) bool {
+func (r *Registry) wasRevoked(s *stream) (bool, *core.Message) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	return s.gone
+	return s.gone, s.goneWhy
 }
 
 // CloseOwner ends every stream of owner (its session went away): connected
 // ones finish with an end frame "gone", registered ones can no longer
 // connect.
-func (r *Registry) CloseOwner(owner string) {
+func (r *Registry) CloseOwner(owner string) { r.CloseOwnerWhy(owner, nil) }
+
+// CloseOwnerWhy is CloseOwner whose end frames say why (the provider's or
+// the API's sentence) besides "gone".
+func (r *Registry) CloseOwnerWhy(owner string, why *core.Message) {
 	var dropped []*stream
 	defer func() { releaseAll(dropped) }()
 	r.mu.Lock()
@@ -234,7 +240,7 @@ func (r *Registry) CloseOwner(owner string) {
 		if s.owner != owner {
 			continue
 		}
-		s.gone = true
+		s.gone, s.goneWhy = true, why
 		if s.connected {
 			s.cancel()
 		} else {

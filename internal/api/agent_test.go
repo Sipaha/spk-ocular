@@ -313,7 +313,12 @@ func TestSnapshotAppliesDeltasByContract(t *testing.T) {
 	assert.Equal(t, provider.StatusReady, snap.Status.State)
 	assert.Equal(t, "Pods", snap.Kind.Title)
 	assert.Equal(t, int32(1), k.last().stops.Load())
-	assert.Empty(t, sub.Drain(), "the UI hears nothing of an agent's snapshot")
+	var heard []string
+	for _, ev := range sub.Drain() {
+		heard = append(heard, ev.Type)
+	}
+	// Only that the target's session opened (its "open" dot, P18).
+	assert.Equal(t, []string{EventTargetsChanged}, heard, "the UI hears nothing of an agent's snapshot")
 }
 
 func TestSnapshotStates(t *testing.T) {

@@ -100,6 +100,9 @@ func (h *HTTP) routes() {
 	h.mux.HandleFunc("POST /api/ListTargets", handle(func(ctx context.Context, _ *struct{}) (any, error) {
 		return h.api.ListTargets(ctx)
 	}))
+	h.mux.HandleFunc("POST /api/CloseTarget", handle(func(ctx context.Context, r *api.TargetRef) (any, error) {
+		return nil, h.api.CloseTarget(ctx, r.Provider, r.ID)
+	}))
 	h.mux.HandleFunc("POST /api/SelectTarget", handle(func(ctx context.Context, r *api.TargetRef) (any, error) {
 		return nil, h.api.SelectTarget(ctx, r.Provider, r.ID)
 	}))

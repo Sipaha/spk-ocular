@@ -21,9 +21,12 @@ type API interface {
 	AppInfo(ctx context.Context) (AppInfo, error)
 	// ListTargets re-reads local configuration (kubeconfig, ...): no network.
 	ListTargets(ctx context.Context) (TargetsView, error)
-	// SelectTarget remembers the user's choice across restarts and closes
-	// the sessions of other targets (one active context).
+	// SelectTarget remembers the user's choice across restarts; the two
+	// targets left last stay open, other idle sessions close (P18).
 	SelectTarget(ctx context.Context, provider, id string) error
+	// CloseTarget closes a target's connection (not the selected one's):
+	// its caches, watches and log streams (P18).
+	CloseTarget(ctx context.Context, provider, id string) error
 
 	// ListKinds: what the target's session can show now, with the
 	// catalog's revision (EventKindsChanged tells of a new one).
