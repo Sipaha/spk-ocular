@@ -150,7 +150,8 @@ function List({ value, options, label, search, anchor, onClose, onChange }: List
     const onScroll = (e: Event) => {
       const el = e.target as Node
       if (box.current?.contains(el)) return
-      if (anchor.current && el.contains?.(anchor.current)) close.current(false)
+      // The focus it had goes back to the button (not to nowhere).
+      if (anchor.current && el.contains?.(anchor.current)) close.current(!!box.current?.contains(document.activeElement))
     }
     document.addEventListener('mousedown', onDown, true)
     document.addEventListener('scroll', onScroll, true)
@@ -193,7 +194,9 @@ function List({ value, options, label, search, anchor, onClose, onChange }: List
       if (active >= 0) choose(items[active])
     } else if (e.key === 'Escape') onClose(true)
     else if (e.key === 'Tab') {
-      onClose(false)
+      // The Tab goes on from the button: focus it now, the key's default
+      // (or a dialog's focus trap) moves on from there.
+      onClose(true)
       return
     } else if (!search && e.key.length === 1 && !e.altKey && !e.ctrlKey && !e.metaKey) {
       // A letter: the next option starting with it.

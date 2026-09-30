@@ -100,4 +100,35 @@ describe('Select', () => {
     fireEvent.scroll(screen.getByTestId('box'))
     expect(screen.queryByRole('listbox', { name: 'Pick' })).not.toBeInTheDocument()
   })
+
+  it.each([false, true])('Tab and Shift+Tab from the open list go on from the button (search: %s)', async (search) => {
+    render(
+      <>
+        <button>before</button>
+        <Select label="Pick" value="a" options={opts} onChange={() => {}} search={search} />
+        <button>after</button>
+      </>,
+    )
+    await userEvent.click(screen.getByRole('button', { name: 'Pick' }))
+    await userEvent.tab()
+    expect(screen.queryByRole('listbox')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'after' })).toHaveFocus()
+    await userEvent.click(screen.getByRole('button', { name: 'Pick' }))
+    await userEvent.tab({ shift: true })
+    expect(screen.queryByRole('listbox')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'before' })).toHaveFocus()
+  })
+
+  it('closed by a scroll of its box, the focus it had goes back to the button', async () => {
+    render(
+      <div data-testid="box" style={{ overflow: 'auto' }}>
+        <Select label="Pick" value="a" options={opts} onChange={() => {}} />
+      </div>,
+    )
+    await userEvent.click(screen.getByRole('button', { name: 'Pick' }))
+    expect(screen.getByRole('listbox')).toHaveFocus()
+    fireEvent.scroll(screen.getByTestId('box'))
+    expect(screen.queryByRole('listbox')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Pick' })).toHaveFocus()
+  })
 })

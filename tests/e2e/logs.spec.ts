@@ -119,4 +119,12 @@ test('the app select of the toolbar: focused list, live lines do not close it, E
   await page.keyboard.press('Home')
   await page.keyboard.press('Enter')
   await expect(lines).toHaveText('100')
+  // Tab from the open list goes on from its button, Shift+Tab back.
+  await lines.click()
+  await page.keyboard.press('Tab')
+  await expect(list).toHaveCount(0)
+  await expect(panel.getByRole('button', { name: 'Since', exact: true })).toBeFocused()
+  await lines.click()
+  await page.keyboard.press('Shift+Tab')
+  await expect(panel.getByRole('button', { name: 'Channel', exact: true })).toBeFocused()
 })
