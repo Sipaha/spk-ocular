@@ -368,7 +368,7 @@ test('marked rows: checkboxes, Ctrl/Shift+click, Ctrl+A, Esc; one bulk review of
   await dialog.getByRole('button', { name: 'web', exact: true }).click() // its own plan, on request
   await expect(dialog).toContainText('Its instances are replaced one by one.')
   await dialog.getByRole('button', { name: 'Restart 2' }).click()
-  await expect(dialog.getByRole('status')).toHaveText('1 of 2 done; conflicts: 1')
+  await expect(dialog.getByRole('status')).toHaveText('1 of 2 done; conflicts: 1; skipped: 1')
   await dialog.getByRole('button', { name: 'Close' }).click()
   await expect.poll(() => cells(grid, 'web')).toEqual(['web', '2', '1'])
   // What was done is unmarked; the rest stays marked for another try.

@@ -645,7 +645,7 @@ function ResourcePage(props: {
           {view.rows.length}
         </span>
         {marked.size > 0 && (
-          <div role="toolbar" aria-label={t('bulk.bar')} className="flex items-center gap-2 rounded-md bg-marked px-2 py-0.5 text-xs">
+          <div role="toolbar" aria-label={t('bulk.bar')} className="flex shrink-0 items-center gap-2 whitespace-nowrap rounded-md bg-marked px-2 py-0.5 text-xs">
             <span>{t('bulk.marked', { n: marked.size, total: shownRows.length })}</span>
             <button
               type="button"

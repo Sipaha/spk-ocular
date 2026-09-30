@@ -89,14 +89,22 @@ describe('BulkActionDialog', () => {
     expect(confirm).toHaveClass('bg-danger')
     await waitFor(() => expect(within(dialog).getByRole('button', { name: 'Cancel' })).toHaveFocus()) // destructive: Cancel first
     await userEvent.click(confirm)
-    await within(dialog).findByText('6 of 6 done')
+    await within(dialog).findByText('6 of 6 done; skipped: 3')
     const sent = vi.mocked(f.client.runAction).mock.calls.map((c) => c[0].expect).sort()
     expect(sent).toEqual(['exp-p0-', 'exp-p4-', 'exp-p5-', 'exp-p6-', 'exp-p7-', 'exp-p8-'])
     expect(rowOf(dialog, 'p0')).toHaveTextContent('pod p0 deleted')
     expect(rowOf(dialog, 'p1')).toHaveTextContent('unavailable') // never run
     expect(onDone).toHaveBeenCalledWith(['id-p0', 'id-p4', 'id-p5', 'id-p6', 'id-p7', 'id-p8'])
-    expect(useStore.getState().notice).toContain('Delete: 6 of 6 done')
+    expect(useStore.getState().notice).toContain('Delete: 6 of 6 done; skipped: 3')
     expect(within(dialog).queryByRole('button', { name: /^Delete/ })).toBeNull() // one run per review
+  })
+
+  it('the objects are listed by scope and name, numbers in order', async () => {
+    const items = [{ id: '1', ref: refOf('b10', 'y') }, { id: '2', ref: refOf('b2', 'y') }, { id: '3', ref: refOf('z', 'x') }]
+    const { dialog } = setup(restart, items)
+    await within(dialog).findByRole('button', { name: 'Restart 3' })
+    const names = within(within(dialog).getByRole('list', { name: 'Objects' })).getAllByRole('listitem').map((li) => within(li).getAllByRole('button')[0].textContent?.replace(/^[▸▾]/, ''))
+    expect(names).toEqual(['x/z', 'y/b2', 'y/b10'])
   })
 
   it('an object’s details open on request: its effects, warnings, rights', async () => {
@@ -112,7 +120,7 @@ describe('BulkActionDialog', () => {
   })
 
   it('a warning several objects share is said once with how many and whose', async () => {
-    const same = (r: Ref) => planOf(del, r, {}, { warnings: [{ key: 'kubernetes.forceDelete.nodeNotReady', params: { node: r.name }, text: `node of ${r.name} is not ready` }] })
+    const same = (r: Ref) => planOf(del, r, {}, { warnings: [{ key: 'kubernetes.forceDelete.nodeNotReady', params: { node: r.name }, text: `node of ${r.name} is not ready.` }] })
     const { dialog } = setup(del, itemsOf('a', 'b', 'c', 'd'), same)
     const summary = await within(dialog).findByRole('region', { name: 'Warnings' })
     expect(within(summary).getAllByRole('listitem')).toHaveLength(1)

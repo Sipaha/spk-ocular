@@ -60,6 +60,11 @@ const runClass: Record<Run['state'], string> = {
   notRun: 'text-fg-subtle',
 }
 
+const byName = new Intl.Collator(undefined, { numeric: true })
+
+/** A sentence to be continued (its last period dropped). */
+const unended = (s: string) => s.replace(/\.\s*$/, '')
+
 const reviewOf = (plan: ActionPlan): Review => ({ state: plan.unavailable ? 'unavailable' : plan.rights.state === 'denied' ? 'denied' : 'ready', plan })
 
 /**
@@ -68,8 +73,9 @@ const reviewOf = (plan: ActionPlan): Review => ({ state: plan.unavailable ? 'una
  * shown together, and each ready one runs on its own. One run per review.
  */
 export function BulkActionDialog({ client, req, onClose, onDone, runTimeoutMs = RUN_TIMEOUT_MS, prepareLimit = PREPARE_LIMIT, runLimit = RUN_LIMIT }: Props) {
-  // The marked objects as the dialog opened: later marks do not change it.
-  const [items] = useState(req.items)
+  // The marked objects as the dialog opened (later marks do not change it),
+  // by scope and name — numbers in order (web-2 before web-10).
+  const [items] = useState(() => [...req.items].sort((a, b) => byName.compare(`${a.ref.scope ?? ''}/${a.ref.name}`, `${b.ref.scope ?? ''}/${b.ref.name}`)))
   const { action } = req
   const param = action.param
   const counted = !!param && param.kind === 'count'
@@ -252,13 +258,15 @@ export function BulkActionDialog({ client, req, onClose, onDone, runTimeoutMs = 
     if (n('partial')) parts.push(t('bulk.partial', { n: n('partial') }))
     if (n('failed')) parts.push(t('bulk.failed', { n: n('failed') }))
     if (n('notRun')) parts.push(t('bulk.notRun', { n: n('notRun') }))
+    const skippedNow = items.length - todo.length
+    if (skippedNow) parts.push(t('bulk.skipped', { n: skippedNow }))
     const text = parts.join('; ')
     const doneIds = todo.filter((x) => outcomes[x.it.id]?.state === 'done').map((x) => x.it.id)
     onDone(doneIds)
     const all = doneIds.length === todo.length
     showNotice(`${todo[0]?.plan.where.targetTitle ?? ''} · ${label}: ${text}`, all ? undefined : 10_000)
     if (!live.current) return
-    setSummary(text)
+    setSummary(text.charAt(0).toUpperCase() + text.slice(1))
     setPhase('done')
   }
 
@@ -379,7 +387,7 @@ export function BulkActionDialog({ client, req, onClose, onDone, runTimeoutMs = 
                     <li key={i}>
                       {w.names.length === 1
                         ? `${messageText(w.first)} (${w.names[0]})`
-                        : t('bulk.warnedMany', { text: messageText(w.first), n: w.names.length, names: w.names.slice(0, 3).join(', ') + (w.names.length > 3 ? '…' : '') })}
+                        : t('bulk.warnedMany', { text: unended(messageText(w.first)), n: w.names.length, names: w.names.slice(0, 3).join(', ') + (w.names.length > 3 ? '…' : '') })}
                     </li>
                   ))}
                 </ul>
