@@ -151,6 +151,7 @@ func (r *kindRegistry) descriptors() []core.KindDescriptor {
 			desc.Actions = d.actions
 		}
 		desc.Editable = editable(d)
+		desc.Values = d == secretsKind
 		desc.Default = d == podsKind
 		if d != eventsKind {
 			desc.EventsKind = eventsKind.desc.ID

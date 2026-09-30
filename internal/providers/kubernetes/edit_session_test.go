@@ -41,6 +41,8 @@ type editRec struct {
 	fail  func(dry bool) error
 	// dryAnswer, if set, edits the dry run's answer (server-side changes).
 	dryAnswer func(o map[string]any)
+	// wetAnswer, if set, edits the written object (admission at the write).
+	wetAnswer func(o map[string]any)
 	// hold, if set, runs first with the request's context (a slow server).
 	hold func(ctx context.Context) error
 }
@@ -62,7 +64,7 @@ func (w *editRec) editPatch(ctx context.Context, gvr schema.GroupVersionResource
 	}
 	w.mu.Lock()
 	w.calls = append(w.calls, editCall{dry: dry, name: name, body: body})
-	fail, dryAnswer, hold := w.fail, w.dryAnswer, w.hold
+	fail, dryAnswer, wetAnswer, hold := w.fail, w.dryAnswer, w.wetAnswer, w.hold
 	w.mu.Unlock()
 	if hold != nil {
 		if err := hold(ctx); err != nil {
@@ -86,6 +88,12 @@ func (w *editRec) editPatch(ctx context.Context, gvr schema.GroupVersionResource
 		u, err := w.dyn.Resource(gvr).Namespace(ns).Patch(ctx, name, types.MergePatchType, data, metav1.PatchOptions{})
 		if err != nil {
 			return nil, err
+		}
+		if wetAnswer != nil {
+			wetAnswer(u.Object)
+			if u, err = w.dyn.Resource(gvr).Namespace(ns).Update(ctx, u, metav1.UpdateOptions{}); err != nil {
+				return nil, err
+			}
 		}
 		return u.MarshalJSON()
 	}

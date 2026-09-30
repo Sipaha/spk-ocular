@@ -79,6 +79,10 @@ type KindDescriptor struct {
 	// Editable: objects of this kind can be edited as text (the session is
 	// an Editor).
 	Editable bool `json:"editable,omitempty"`
+	// Values: objects of this kind keep protected values by key (a
+	// Secret's): listed with sizes, shown one at a time on request (the
+	// session is a ValueHolder).
+	Values bool `json:"values,omitempty"`
 	// Aliases are short names of the kind in palette commands (":po"),
 	// besides its id and title.
 	Aliases []string `json:"aliases,omitempty"`
