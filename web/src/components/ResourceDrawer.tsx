@@ -80,7 +80,14 @@ export function ResourceDrawer({ client, hub, target, subject, onClose, hasLogs,
       },
       (e) =>
         live &&
-        setRes({ key, error: e instanceof Error ? e.message : String(e), gone: e instanceof ApiError && (e.code === 'not_found' || e.code === 'gone') }),
+        // The object's last details stay under the message: whatever is open
+        // on them (a value's draft) is left by the user, never dropped.
+        setRes((old) => ({
+          key,
+          r: old?.key === key ? old.r : undefined,
+          error: e instanceof Error ? e.message : String(e),
+          gone: e instanceof ApiError && (e.code === 'not_found' || e.code === 'gone'),
+        })),
     )
     return () => {
       live = false

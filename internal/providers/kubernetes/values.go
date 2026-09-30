@@ -127,22 +127,52 @@ func printOf(ps []provider.ValuePrint, key string) provider.ValuePrint {
 	return provider.ValuePrint{Key: key}
 }
 
-// differing names the keys where a and b disagree (presence or print).
+// differing names the keys where a and b disagree (presence or print);
+// linear in the keys (a Secret may hold many small ones).
 func differing(a, b []provider.ValuePrint) []string {
-	seen := map[string]bool{}
-	var out []string
-	for _, p := range append(append([]provider.ValuePrint{}, a...), b...) {
-		if seen[p.Key] {
-			continue
+	index := func(ps []provider.ValuePrint) map[string]provider.ValuePrint {
+		m := make(map[string]provider.ValuePrint, len(ps))
+		for _, p := range ps {
+			m[p.Key] = p
 		}
-		seen[p.Key] = true
-		if printOf(a, p.Key) != printOf(b, p.Key) {
-			out = append(out, p.Key)
+		return m
+	}
+	am, bm := index(a), index(b)
+	// An absent key is the zero print of its name (as printOf says).
+	at := func(m map[string]provider.ValuePrint, k string) provider.ValuePrint {
+		if p, ok := m[k]; ok {
+			return p
+		}
+		return provider.ValuePrint{Key: k}
+	}
+	var out []string
+	for k := range am {
+		if at(am, k) != at(bm, k) {
+			out = append(out, k)
+		}
+	}
+	for k := range bm {
+		if _, ok := am[k]; !ok && at(bm, k) != (provider.ValuePrint{Key: k}) {
+			out = append(out, k)
 		}
 	}
 	sort.Strings(out)
 	return out
 }
+
+// withSession is ctx that also ends with the session: a read over a
+// closed connection stops (and its answer is not given).
+func (s *session) withSession(ctx context.Context) (context.Context, func()) {
+	ctx, cancel := context.WithCancel(ctx)
+	stop := context.AfterFunc(s.ctx, cancel)
+	return ctx, func() {
+		stop()
+		cancel()
+	}
+}
+
+// errValuesClosed: the session ended while reading values.
+var errValuesClosed = &provider.Error{Class: provider.ClassUnavailable, Message: "the connection was closed: open the object again"}
 
 func (s *session) valueTarget(ref core.Ref) (*kindDef, error) {
 	def := s.kind(ref.Kind)
@@ -158,7 +188,12 @@ func (s *session) Values(ctx context.Context, ref core.Ref) (core.ValueList, pro
 	if err != nil {
 		return core.ValueList{}, provider.ValueBase{}, err
 	}
+	ctx, done := s.withSession(ctx)
+	defer done()
 	u, err := s.editGet(ctx, def, ref)
+	if s.ctx.Err() != nil {
+		return core.ValueList{}, provider.ValueBase{}, errValuesClosed
+	}
 	if err != nil {
 		return core.ValueList{}, provider.ValueBase{}, err
 	}
@@ -187,7 +222,12 @@ func (s *session) RevealValue(ctx context.Context, ref core.Ref, key string) (co
 	if ref.UID == "" {
 		return core.Value{}, badEdit("which object: its UID is missing")
 	}
+	ctx, done := s.withSession(ctx)
+	defer done()
 	u, err := s.editGet(ctx, def, ref)
+	if s.ctx.Err() != nil {
+		return core.Value{}, errValuesClosed
+	}
 	if err != nil {
 		return core.Value{}, err
 	}
@@ -349,6 +389,11 @@ func (s *session) prepareValueEdit(ctx context.Context, c *valueCheck, req provi
 	} else {
 		plan.Warnings = append(plan.Warnings, msg("edit.local"))
 	}
+	// After is what the review leaves (the server's, when checked).
+	plan.After = -1
+	if b, ok := result[req.Key]; ok {
+		plan.After = len(b)
+	}
 	expected := prints(c.route, uid, result)
 	plan.ServerChanges = differing(prints(c.route, uid, local), expected)
 
@@ -375,7 +420,7 @@ func (s *session) prepareValueEdit(ctx context.Context, c *valueCheck, req provi
 	defer cancel()
 	rights := make(chan core.Rights, 1)
 	consumers := make(chan consumerScan, 1)
-	go func() { rights <- s.rights(ectx, def, "edit", cur) }()
+	go func() { rights <- valueRights(s.rights(ectx, def, "edit", cur), cur.GetNamespace()) }()
 	go func() { consumers <- s.secretConsumers(ectx, cur, req.Key) }()
 	for got := 0; got < 2; {
 		select {
@@ -460,6 +505,19 @@ func (s *session) RunValueEdit(ctx context.Context, run provider.ValueEditRun) (
 	return out, nil
 }
 
+// valueRights is a rights check said in our words only: a failed check or
+// an authorizer's evaluation error is "not known", a denial is ours without
+// the authorizer's reason (none of the server's text reaches a value plan).
+func valueRights(r core.Rights, ns string) core.Rights {
+	switch r.State {
+	case core.RightsUnknown:
+		r.Reason = "the permission check did not answer"
+	case core.RightsDenied:
+		r.Reason = fmt.Sprintf("you may not patch secrets in %s", ns)
+	}
+	return r
+}
+
 // consumerScan is what reads a Secret among the namespace's pods.
 type consumerScan struct {
 	core.ValueConsumers
@@ -541,7 +599,12 @@ func (s *session) secretConsumers(ctx context.Context, sec *unstructured.Unstruc
 	out := consumerScan{ValueConsumers: core.ValueConsumers{Known: err == nil && !trunc}}
 	switch {
 	case err != nil:
-		out.Why = err.Error()
+		// Our words by class: the server's text is never passed on here.
+		if class, _ := classify(err); class == provider.ClassForbidden || class == provider.ClassUnauthorized {
+			out.Why = "not allowed to list the pods of the namespace"
+		} else {
+			out.Why = "the pods of the namespace could not be listed"
+		}
 	case trunc:
 		out.Why = "more pods than were looked at"
 	}

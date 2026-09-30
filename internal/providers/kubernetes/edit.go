@@ -66,14 +66,15 @@ func (s *session) editGet(ctx context.Context, def *kindDef, ref core.Ref) (*uns
 	if err == nil {
 		return u, nil
 	}
-	var se apierrors.APIStatus
-	if def == secretsKind && errors.As(err, &se) {
-		class, _ := classify(err)
-		return nil, &provider.Error{Class: class, Message: secretReadSafe(err).Text}
-	}
 	var pe *provider.Error
 	if errors.As(err, &pe) {
 		return nil, err
+	}
+	// A Secret's read error is never the server's or transport's text,
+	// status or not: its class and our words.
+	if def == secretsKind {
+		class, _ := classify(err)
+		return nil, &provider.Error{Class: class, Message: secretReadSafe(err).Text}
 	}
 	class, text := classify(err)
 	return nil, &provider.Error{Class: class, Message: text}

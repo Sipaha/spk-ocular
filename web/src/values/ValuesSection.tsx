@@ -43,8 +43,13 @@ export function ValuesSection({ client, subject, revision, kindTitle }: Props) {
   // Bumped by Hide all and by a new list: every answer asked before is stale.
   const gen = useRef(0)
   const keyGen = useRef(new Map<string, number>())
-  // The listed version now (callbacks check an answer against it).
+  // Hide of a key: bumped per key, a pending copy of it is given up.
+  const hidden = useRef(new Map<string, number>())
+  // The listed version and the object's live revision now: callbacks check
+  // an answer against both (a revision seen hides at once, before the keys
+  // are read again).
   const listed = useRef<string | undefined>(undefined)
+  const seen = useRef(revision)
   const uid = subject.uid ?? ''
 
   useLayoutEffect(() => {
@@ -53,18 +58,23 @@ export function ValuesSection({ client, subject, revision, kindTitle }: Props) {
       live.current = false
     }
   }, [])
+  useLayoutEffect(() => {
+    seen.current = revision
+  }, [revision])
 
   // Keys are read on opening, again when the object's revision moves away
   // from the listed one (each new revision once), and after a write.
   const behind = list?.data && revision && revision !== list.data.version ? revision : null
+  // The reload last answered (a request counts once its answer applied:
+  // an effect replayed, as StrictMode does, asks again).
   const fetched = useRef(-1)
   useEffect(() => {
     if (behind === null && fetched.current === reload) return
-    fetched.current = reload
     let current = true
     client.getValues(subject).then(
       (data) => {
         if (!current || !live.current) return
+        fetched.current = reload
         gen.current++
         listed.current = data.version
         setList({ data })
@@ -78,7 +88,13 @@ export function ValuesSection({ client, subject, revision, kindTitle }: Props) {
           return out
         })
       },
-      (e) => current && live.current && setList({ error: t('values.loadFailed', { class: classLabel(codeOf(e)), detail: detailOf(e) }) }),
+      (e) => {
+        if (!current || !live.current) return
+        fetched.current = reload
+        // The keys known last stay (an open dialog keeps its draft on them);
+        // what is shown is hidden by the revision, never kept.
+        setList((l) => ({ data: l?.data, error: t('values.loadFailed', { class: classLabel(codeOf(e)), detail: detailOf(e) }) }))
+      },
     )
     return () => {
       current = false
@@ -103,8 +119,10 @@ export function ValuesSection({ client, subject, revision, kindTitle }: Props) {
       return out
     })
 
+  /** Nothing moved since asking at version asked: still listed, and no other revision seen. */
+  const still = (asked: string | undefined) => listed.current === asked && (!seen.current || seen.current === asked)
   /** The answer is for the object and version shown now. */
-  const fits = (v: Value, asked: string | undefined) => v.uid === uid && v.version === asked && listed.current === asked
+  const fits = (v: Value, asked: string | undefined) => v.uid === uid && v.version === asked && still(asked)
 
   const reveal = (key: string) => {
     const g = gen.current
@@ -130,6 +148,7 @@ export function ValuesSection({ client, subject, revision, kindTitle }: Props) {
 
   const hide = (key: string) => {
     nextKeyGen(key)
+    hidden.current.set(key, (hidden.current.get(key) ?? 0) + 1)
     setLine(key, null)
   }
   const hideAll = () => {
@@ -140,8 +159,9 @@ export function ValuesSection({ client, subject, revision, kindTitle }: Props) {
   const copy = (k: ValueKey) => {
     const asked = version
     const g = gen.current
-    // Valid: the section lives, nothing was hidden since, same object and version.
-    const valid = () => live.current && g === gen.current && listed.current === asked
+    const h = hidden.current.get(k.key) ?? 0
+    // Valid: the section lives, nothing hidden since (all or this key), same object and version.
+    const valid = () => live.current && g === gen.current && h === (hidden.current.get(k.key) ?? 0) && still(asked)
     copyValue({
       read: () =>
         client.revealValue(subject, k.key).then((v) => {

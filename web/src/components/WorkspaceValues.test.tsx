@@ -76,4 +76,22 @@ describe('values in the details', () => {
     await userEvent.click(within(drawer).getByRole('button', { name: 'Close' }))
     expect(await screen.findByRole('alertdialog')).toHaveTextContent('Discard edits?')
   })
+
+  it('an object that fails to read again keeps the open value dialog and its draft', async () => {
+    const { f, values } = await openDrawer()
+    await userEvent.click(within(values).getByRole('button', { name: 'Change' }))
+    const dialog = screen.getByRole('dialog', { name: /Change value/ })
+    await userEvent.type(within(dialog).getByLabelText('Value'), 'draft')
+    // The details have followed the object's revision (debounced) once.
+    await vi.waitFor(() => expect(vi.mocked(f.client.getResource).mock.calls.length).toBe(2), { timeout: 2000 })
+    const { ApiError } = await import('../api/client')
+    f.client.getResource = vi.fn(async () => {
+      throw new ApiError('not_found', 'gone')
+    })
+    f.state.rowsByKind['pods-api-1'] = []
+    await act(async () => f.emit({ type: 'view_changed', payload: { viewId: 'v-pods-api-1', version: 99 } }))
+    expect(await screen.findByText('This object no longer exists.', undefined, { timeout: 3000 })).toBeInTheDocument()
+    expect(within(screen.getByRole('dialog', { name: /Change value/ })).getByLabelText('Value')).toHaveValue('draft')
+    expect(editsHeld()).toBe(true)
+  })
 })

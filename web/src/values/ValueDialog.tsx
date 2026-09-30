@@ -62,6 +62,9 @@ export function ValueDialog({ client, subject, list: listed, mode, shown, revisi
   const field = useRef<HTMLTextAreaElement>(null)
   const keyField = useRef<HTMLInputElement>(null)
   const live = useRef(true)
+  // The draft's epoch: typing, switching the encoding or starting a review
+  // makes a pending "Load current" stale (its answer never replaces them).
+  const epoch = useRef(0)
 
   const dirty = mode.op === 'set' && (touched || (isNew && keyName !== ''))
   const dirtyRef = useRef(dirty)
@@ -91,11 +94,13 @@ export function ValueDialog({ client, subject, list: listed, mode, shown, revisi
   const cancel = () => mayLeave(onClose)
   const startReview = () => {
     if (!canReview) return
+    epoch.current++
     setReview({ ref: subject, base: list.base, key: keyName, op: 'set', value, encoding })
   }
 
   const switchTo = (enc: ValueEncoding) => {
     if (enc === encoding) return
+    epoch.current++
     setNote(null)
     if (enc === 'base64') {
       setValue(toBase64(utf8(value)))
@@ -116,6 +121,7 @@ export function ValueDialog({ client, subject, list: listed, mode, shown, revisi
     setLoading(true)
     setNote(null)
     const key = mode.key
+    const at = ++epoch.current
     client
       .getValues(subject)
       .then(async (fresh) => ({ fresh, v: await client.revealValue({ ...subject, uid: fresh.ref.uid ?? subject.uid }, key) }))
@@ -123,6 +129,7 @@ export function ValueDialog({ client, subject, list: listed, mode, shown, revisi
         ({ fresh, v }) => {
           if (!live.current) return
           setLoading(false)
+          if (at !== epoch.current) return setNote(t('values.loadDropped'))
           if (v.uid !== subject.uid || v.version !== fresh.version) return setNote(t('values.changed'))
           const k = fresh.keys.find((x) => x.key === key)
           setList(fresh)
@@ -235,6 +242,7 @@ export function ValueDialog({ client, subject, list: listed, mode, shown, revisi
           spellCheck={false}
           autoComplete="off"
           onChange={(e) => {
+            epoch.current++
             setValue(e.target.value)
             setTouched(true)
           }}
@@ -397,7 +405,18 @@ function ValueReview({ client, req, kindTitle, title, onBack, onDone }: { client
   const where = plan?.where
   const name = refTitle(where?.ref ?? req.ref)
   const scope = where?.ref.scope ?? req.ref.scope
-  const sizes = !plan ? '' : plan.op === 'delete' ? t('values.opDelete', { before: plan.before }) : plan.before < 0 ? t('values.opAdd', { after: plan.after }) : t('values.opSet', { before: plan.before, after: plan.after })
+  // From what the review leaves (the server's, when checked), not from the
+  // operation asked: a server may keep, lengthen or drop the key.
+  const sizes = !plan
+    ? ''
+    : plan.after < 0
+      ? plan.before < 0
+        ? ''
+        : t('values.opDelete', { before: plan.before })
+      : plan.before < 0
+        ? t('values.opAdd', { after: plan.after })
+        : t('values.opSet', { before: plan.before, after: plan.after })
+  const removes = !!plan && plan.before >= 0 && plan.after < 0
 
   return (
     <Overlay onOutside={back}>
@@ -448,9 +467,11 @@ function ValueReview({ client, req, kindTitle, title, onBack, onDone }: { client
               </p>
             ) : (
               <>
-                <p aria-label={t('values.value')} className={['font-mono', plan.op === 'delete' ? 'text-danger' : ''].join(' ')}>
-                  {sizes}
-                </p>
+                {sizes && (
+                  <p aria-label={t('values.value')} className={['font-mono', removes ? 'text-danger' : ''].join(' ')}>
+                    {sizes}
+                  </p>
+                )}
                 <p aria-label={t('edit.mode')} className={plan.checked ? 'text-fg-muted' : 'text-warning'}>
                   {plan.checked ? t('edit.checked') : t('edit.local')}
                 </p>
