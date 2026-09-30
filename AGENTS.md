@@ -14,6 +14,7 @@ Go + Wails v3 + React. Спецификация: `docs/specs/2026-09-29-spk-ocul
 ресурсы API (discovery + server-side Table: CRD, Jobs, PVC…) — `docs/plans/2026-09-30-p8-generic-resources.md`.
 P9 — правка YAML объекта Kubernetes с просмотром и одной записью — `docs/plans/2026-09-30-p9-edit-yaml.md`.
 P10 — значения Secret: показать, скопировать, изменить/добавить/удалить ключ — `docs/plans/2026-09-30-p10-secret-values.md`.
+P11 — узлы: cordon, uncordon, drain — `docs/plans/2026-09-30-p11-node-operations.md`.
 
 ## Сборка и тесты
 
@@ -127,7 +128,9 @@ P10 — значения Secret: показать, скопировать, из�
   строгая проверка запроса, сверка `ConfigRev`, выполнение на захваченной сессии),
   `internal/providers/kubernetes/actions.go` (матрица kind × действие, `Expect`, запись с
   предусловиями, повторы, классификация) и `actions_effects.go` (последствия по стратегии,
-  политика PVC, контроллер pod-а, HPA, SSAR). Клиент — `web/src/actions/` (`Menu`,
+  политика PVC, контроллер pod-а, HPA, SSAR); узлы (P11): cordon/uncordon — в `actions.go`,
+  drain — `drain.go` (классы pod-ов, отпечатки в `Expect`, прогноз PDB, права записей, прогон
+  с частями; выселение — `actionWriter.evict`). Клиент — `web/src/actions/` (`Menu`,
   `ActionDialog`, `ActionLists` — списки плана `ActionPlan.Lists` и части результата порциями по
   50, без усечения; итог частей — `core.PartsOutcome`: unknown > refused > skipped > done),
   меню строки и `Delete` — `ResourceTable` (`rowMenu`, `onDelete`), «Действия ▾»
@@ -368,6 +371,24 @@ P10 — значения Secret: показать, скопировать, из�
   Esc не закрывает во время выполнения; цель меню — строка под курсором / текущий объект деталей;
   `Delete` — только в теле таблицы. — `ActionDialog.test.tsx`, `WorkspaceActions.test.tsx`,
   `tests/e2e/actions.spec.ts`.
+- В диалоге действия прокручивается только середина (план, итог): заголовок, «где» и кнопки
+  видны всегда, появившийся итог прокручивается в вид — иначе длинный план drain уводил цель
+  действия из вида (фокус на «Отмена»), а итог оставался под планом. — e2e synth «a plan with
+  long lists…» (`toBeInViewport`).
+- Drain (P11) — как `kubectl drain` без `--force` и без ожидания: pod-ы узла — list по
+  `spec.nodeName` с пределом 500; не узнать всех (ошибка, > 500, `continue`) — `Unavailable` и в
+  плане, и в прогоне (ноль записей). Без контроллера — остаются и названы (части `skipped`),
+  `emptyDir` — опасный план, DaemonSet/mirror/завершённые/удаляемые — не затрагиваются.
+  `Expect` — маршрут, uid и `unschedulable` узла и отпечатки выселяемых и оставляемых pod-ов
+  (класс, контроллер, `emptyDir`), без статуса и состояния PDB. Прогон: cordon первым (его
+  отказ или «неизвестно» — остальные `skipped`), выселения независимы, по одному POST
+  `pods/eviction` с uid + версией свежего списка; 429 — по cause (`DisruptionBudget` — PDB,
+  иначе «перегружен»), без повтора; 404/409 — одно чтение: ушёл/заменён — `skipped`, тот же
+  отпечаток с новой версией — повтор (≤ 3 попыток всего), иначе `refused`; 5xx/транспорт —
+  `unknown`; DELETE — никогда. Сроки: прогон 45 с, запись 10 с, после первой записи — всегда
+  результат с частями. Права — только записей плана (patch узла — только с частью cordon;
+  выселение — SSAR по имени pod-а, ≤ 8 одновременно). — `drain_test.go`, `drain_run_test.go`,
+  `actions_wire_test.go`, `TestKindActionDrain`, e2e-kind «drain a node…».
 - Правка YAML пишет только просмотренное: `RunEdit` заново выводит патч из original+edited,
   сверяет хэш с грантом и пишет один раз с uid+resourceVersion просмотра (без перечитывания и
   повторов); `PATCH` с `dryRun` — только по доказанному маршруту (точный GVR описанного вида,

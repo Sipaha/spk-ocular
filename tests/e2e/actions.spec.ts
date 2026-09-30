@@ -200,12 +200,22 @@ test('a plan with long lists and a run of many parts: every name reachable, the 
   await row(grid, 'web').click({ button: 'right' })
   await page.getByRole('menu').getByRole('menuitem', { name: 'Evacuate' }).click()
   const dialog = page.getByRole('dialog', { name: 'Evacuate web' })
+  // Only the plan scrolls: what and where stay above it, the buttons below.
+  const framed = async () => {
+    await expect(dialog.getByRole('heading', { name: /Evacuate · web/ })).toBeInViewport({ ratio: 1 })
+    await expect(dialog.getByRole('definition').filter({ hasText: /^web$/ })).toBeInViewport({ ratio: 1 })
+    await expect(dialog.getByRole('button', { name: /^(Cancel|Close)$/ })).toBeInViewport({ ratio: 1 })
+  }
   const moved = dialog.getByRole('region', { name: 'Moved (120)' })
   await expect(moved.getByRole('listitem')).toHaveCount(50)
+  await framed()
   await moved.getByRole('button', { name: 'Show 50 more (70 left)' }).click()
   await moved.getByRole('button', { name: 'Show 20 more (20 left)' }).click()
   await expect(moved.getByRole('listitem')).toHaveCount(120)
   await expect(moved.getByRole('listitem').last()).toHaveText('web-120')
+  await moved.getByRole('listitem').last().scrollIntoViewIfNeeded()
+  await framed()
+  await expect(dialog.getByRole('button', { name: 'Evacuate' })).toBeInViewport({ ratio: 1 })
   const left = dialog.getByRole('region', { name: 'Left alone (1)' })
   await expect(left.getByRole('listitem')).toHaveCount(0)
   await left.getByRole('button', { name: 'Left alone (1)' }).click()
@@ -213,11 +223,15 @@ test('a plan with long lists and a run of many parts: every name reachable, the 
 
   await dialog.getByRole('button', { name: 'Evacuate' }).click()
   await expect(dialog.getByRole('alert')).toContainText('Not everything was done: a part was refused')
+  await expect(dialog.getByRole('alert')).toBeInViewport({ ratio: 1 }) // the outcome is brought into view below the long plan
+  await framed()
   const result = dialog.getByRole('list', { name: 'Result' })
   await expect(result.getByRole('listitem')).toHaveCount(50)
   await dialog.getByRole('button', { name: 'Show 50 more (71 left)' }).click()
   await dialog.getByRole('button', { name: 'Show 21 more (21 left)' }).click()
   await expect(result.getByRole('listitem').nth(119)).toHaveText('web-120Refused · refused (synthetic)')
   await expect(result.getByRole('listitem').nth(120)).toHaveText('web-helperNot run · left alone')
+  await result.getByRole('listitem').nth(120).scrollIntoViewIfNeeded()
+  await framed()
   await expect.poll(() => cells(grid, 'web')).toEqual(['web', '2', '1'])
 })

@@ -112,6 +112,7 @@ export function ActionDialog({ client, req, onClose, runTimeoutMs = RUN_TIMEOUT_
   const confirmRef = useRef<HTMLButtonElement>(null)
   const cancelRef = useRef<HTMLButtonElement>(null)
   const countRef = useRef<HTMLInputElement>(null)
+  const outcomeRef = useRef<HTMLParagraphElement>(null)
   const [mark] = useState(focusMark)
 
   useEffect(() => {
@@ -172,6 +173,11 @@ export function ActionDialog({ client, req, onClose, runTimeoutMs = RUN_TIMEOUT_
     else if (!box.current?.contains(document.activeElement) || document.activeElement === box.current) cancelRef.current?.focus()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [plan, busy])
+
+  // An outcome comes below the plan: bring it into view (only the middle scrolls).
+  useEffect(() => {
+    if (outcome) outcomeRef.current?.scrollIntoView({ block: 'start' })
+  }, [outcome])
 
   const review = () => {
     if (!param || busy === 'run') return
@@ -301,7 +307,7 @@ export function ActionDialog({ client, req, onClose, runTimeoutMs = RUN_TIMEOUT_
           e.preventDefault()
           review() // Enter in the count reviews; it never runs
         }}
-        className="flex max-h-[80%] w-[min(600px,92%)] flex-col gap-3 overflow-y-auto rounded-lg border border-line bg-panel p-4 shadow-2xl outline-none"
+        className="flex max-h-[80%] w-[min(600px,92%)] flex-col gap-3 rounded-lg border border-line bg-panel p-4 shadow-2xl outline-none"
       >
         <h2 className="font-semibold">
           <span className={destructive ? 'text-danger' : ''}>{label}</span> · <span className="font-mono text-fg-muted">{name}</span>
@@ -328,100 +334,104 @@ export function ActionDialog({ client, req, onClose, runTimeoutMs = RUN_TIMEOUT_
           <dd className="min-w-0 break-all font-mono">{name}</dd>
         </dl>
 
-        {param && (
-          <label className="flex items-center gap-2 text-xs text-fg-muted">
-            {t('action.count')}
-            <input
-              ref={countRef}
-              inputMode="numeric"
-              value={count}
-              disabled={busy === 'run' || sent}
-              onChange={(e) => {
-                setCount(e.target.value)
-                setCountError(null)
-              }}
-              aria-invalid={!!countError}
-              className="w-24 rounded-md border border-line bg-app px-2 py-1 font-mono text-sm text-fg outline-none focus:border-accent"
-            />
-            {plan?.current !== undefined && <span>{t('action.countNow', { count: plan.current })}</span>}
-            {countError && <span className="text-danger">{countError}</span>}
-          </label>
-        )}
+        {/* Only the middle scrolls: a long plan or result never hides what and where, nor the buttons. */}
+        <div className="-mx-1 flex min-h-0 flex-col gap-3 overflow-y-auto px-1">
 
-        {busy === 'prepare' && <p className="text-fg-subtle">{t('action.preparing')}</p>}
+          {param && (
+            <label className="flex items-center gap-2 text-xs text-fg-muted">
+              {t('action.count')}
+              <input
+                ref={countRef}
+                inputMode="numeric"
+                value={count}
+                disabled={busy === 'run' || sent}
+                onChange={(e) => {
+                  setCount(e.target.value)
+                  setCountError(null)
+                }}
+                aria-invalid={!!countError}
+                className="w-24 rounded-md border border-line bg-app px-2 py-1 font-mono text-sm text-fg outline-none focus:border-accent"
+              />
+              {plan?.current !== undefined && <span>{t('action.countNow', { count: plan.current })}</span>}
+              {countError && <span className="text-danger">{countError}</span>}
+            </label>
+          )}
 
-        {plan && busy !== 'prepare' && reviewed && (
-          <>
-            {plan.unavailable && (
-              <p role="alert" className="rounded-md bg-warning/10 px-3 py-2 text-warning">
-                {t('action.unavailable', { reason: messageText(plan.unavailable) })}
-              </p>
-            )}
-            {!!plan.effects?.length && (
-              <section aria-label={t('action.effects')}>
-                <h3 className="mb-1 text-[12px] font-semibold uppercase tracking-wider text-fg-subtle">{t('action.effects')}</h3>
-                <ul className="list-disc space-y-0.5 pl-5">
-                  {plan.effects.map((x, i) => (
-                    <li key={i}>{messageText(x)}</li>
-                  ))}
-                </ul>
-              </section>
-            )}
-            {!!plan.warnings?.length && (
-              <section aria-label={t('action.warnings')} className="text-warning">
-                <h3 className="mb-1 text-[12px] font-semibold uppercase tracking-wider">{t('action.warnings')}</h3>
-                <ul className="list-disc space-y-0.5 pl-5">
-                  {plan.warnings.map((x, i) => (
-                    <li key={i}>{messageText(x)}</li>
-                  ))}
-                </ul>
-              </section>
-            )}
-            {!!plan.lists?.length && <ActionLists lists={plan.lists} />}
-            <p aria-label={t('action.rights')} className={plan.rights.state === 'denied' ? 'text-danger' : plan.rights.state === 'unknown' ? 'text-warning' : 'text-fg-muted'}>
-              {t('action.rights')}:{' '}
-              {plan.rights.state === 'allowed'
-                ? t('action.rightsAllowed')
-                : plan.rights.state === 'denied'
-                  ? t('action.rightsDenied', { reason: plan.rights.reason ?? '' })
-                  : t('action.rightsUnknown') + (plan.rights.reason ? ` (${plan.rights.reason})` : '')}
-            </p>
-          </>
-        )}
+          {busy === 'prepare' && <p className="text-fg-subtle">{t('action.preparing')}</p>}
 
-        {busy === 'run' && <p className="text-fg-subtle">{t('action.running')}</p>}
-        {outcome?.type === 'lateDone' ? (
-          <p role="status" className="rounded-md bg-success/10 px-3 py-2 text-success">
-            {outcome.text}
-          </p>
-        ) : outcome && (
-          <p role="alert" className={['rounded-md px-3 py-2', outcome.type === 'unknown' || outcome.type === 'conflict' || (outcome.type === 'partial' && outcome.unknown) ? 'bg-warning/10 text-warning' : 'bg-danger/10 text-danger'].join(' ')}>
-            {outcome.text}
-          </p>
-        )}
-        {outcome?.type === 'partial' && outcome.parts.length > 0 && (
-          <div>
-            <Portions
-              items={outcome.parts}
-              render={(shown) => (
-                <ul aria-label={t('action.parts')} className="space-y-0.5 rounded-md border border-line px-3 py-2 text-xs">
-                  {shown.map((p) => {
-                    const why = p.why ? messageText(p.why) : p.message
-                    return (
-                      <li key={p.id} className="flex gap-2">
-                        <span className="min-w-0 break-all font-mono">{p.title}</span>
-                        <span className={partClass[p.outcome]}>
-                          {t(`action.part.${p.outcome}`)}
-                          {why && p.outcome !== 'done' ? ` · ${why}` : ''}
-                        </span>
-                      </li>
-                    )
-                  })}
-                </ul>
+          {plan && busy !== 'prepare' && reviewed && (
+            <>
+              {plan.unavailable && (
+                <p role="alert" className="rounded-md bg-warning/10 px-3 py-2 text-warning">
+                  {t('action.unavailable', { reason: messageText(plan.unavailable) })}
+                </p>
               )}
-            />
-          </div>
-        )}
+              {!!plan.effects?.length && (
+                <section aria-label={t('action.effects')}>
+                  <h3 className="mb-1 text-[12px] font-semibold uppercase tracking-wider text-fg-subtle">{t('action.effects')}</h3>
+                  <ul className="list-disc space-y-0.5 pl-5">
+                    {plan.effects.map((x, i) => (
+                      <li key={i}>{messageText(x)}</li>
+                    ))}
+                  </ul>
+                </section>
+              )}
+              {!!plan.warnings?.length && (
+                <section aria-label={t('action.warnings')} className="text-warning">
+                  <h3 className="mb-1 text-[12px] font-semibold uppercase tracking-wider">{t('action.warnings')}</h3>
+                  <ul className="list-disc space-y-0.5 pl-5">
+                    {plan.warnings.map((x, i) => (
+                      <li key={i}>{messageText(x)}</li>
+                    ))}
+                  </ul>
+                </section>
+              )}
+              {!!plan.lists?.length && <ActionLists lists={plan.lists} />}
+              <p aria-label={t('action.rights')} className={plan.rights.state === 'denied' ? 'text-danger' : plan.rights.state === 'unknown' ? 'text-warning' : 'text-fg-muted'}>
+                {t('action.rights')}:{' '}
+                {plan.rights.state === 'allowed'
+                  ? t('action.rightsAllowed')
+                  : plan.rights.state === 'denied'
+                    ? t('action.rightsDenied', { reason: plan.rights.reason ?? '' })
+                    : t('action.rightsUnknown') + (plan.rights.reason ? ` (${plan.rights.reason})` : '')}
+              </p>
+            </>
+          )}
+
+          {busy === 'run' && <p className="text-fg-subtle">{t('action.running')}</p>}
+          {outcome?.type === 'lateDone' ? (
+            <p ref={outcomeRef} role="status" className="rounded-md bg-success/10 px-3 py-2 text-success">
+              {outcome.text}
+            </p>
+          ) : outcome && (
+            <p ref={outcomeRef} role="alert" className={['rounded-md px-3 py-2', outcome.type === 'unknown' || outcome.type === 'conflict' || (outcome.type === 'partial' && outcome.unknown) ? 'bg-warning/10 text-warning' : 'bg-danger/10 text-danger'].join(' ')}>
+              {outcome.text}
+            </p>
+          )}
+          {outcome?.type === 'partial' && outcome.parts.length > 0 && (
+            <div>
+              <Portions
+                items={outcome.parts}
+                render={(shown) => (
+                  <ul aria-label={t('action.parts')} className="space-y-0.5 rounded-md border border-line px-3 py-2 text-xs">
+                    {shown.map((p) => {
+                      const why = p.why ? messageText(p.why) : p.message
+                      return (
+                        <li key={p.id} className="flex gap-2">
+                          <span className="min-w-0 break-all font-mono">{p.title}</span>
+                          <span className={partClass[p.outcome]}>
+                            {t(`action.part.${p.outcome}`)}
+                            {why && p.outcome !== 'done' ? ` · ${why}` : ''}
+                          </span>
+                        </li>
+                      )
+                    })}
+                  </ul>
+                )}
+              />
+            </div>
+          )}
+        </div>
 
         <div className="flex justify-end gap-2">
           <button ref={cancelRef} type="button" disabled={busy === 'run'} className={`${btn} text-fg-muted hover:bg-hover`} onClick={close}>
