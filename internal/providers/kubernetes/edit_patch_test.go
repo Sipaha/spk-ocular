@@ -1,8 +1,11 @@
 package kubernetes
 
 import (
+	"encoding/json"
+	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
@@ -170,5 +173,36 @@ func TestEditViewHidesWhatTheEditorDoesNotChange(t *testing.T) {
 	}
 	if strings.Contains(text, "eHl6") || !strings.Contains(text, "<3 bytes>") || strings.Contains(text, "annotations") {
 		t.Fatalf("secret view:\n%s", text)
+	}
+}
+
+// Many decimals come back in one pass: each marker used to be a separate
+// ReplaceAll over the whole text (16k decimals took ~6 s).
+func TestEditViewManyDecimalsIsLinear(t *testing.T) {
+	const n = 40000
+	l := make([]any, n)
+	for i := range l {
+		l[i] = json.Number(strconv.Itoa(i) + ".5")
+	}
+	u := &unstructured.Unstructured{Object: map[string]any{
+		"apiVersion": "v1", "kind": "ConfigMap",
+		"metadata": map[string]any{"name": "c", "namespace": "web"},
+		"spec":     map[string]any{"l": l, "one": json.Number("1.0"), "ten": json.Number("10.25")},
+	}}
+	start := time.Now()
+	text, err := editView(u, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if d := time.Since(start); d > 2*time.Second {
+		t.Fatalf("editView of %d decimals took %v", n, d)
+	}
+	for _, want := range []string{"- 0.5\n", "- 1.5\n", "- 10.5\n", "- 39999.5\n", "one: 1.0\n", "ten: 10.25\n"} {
+		if !strings.Contains(text, want) {
+			t.Fatalf("%q missing", want)
+		}
+	}
+	if strings.Contains(text, "ocularnum") {
+		t.Fatal("a marker is left in the text")
 	}
 }

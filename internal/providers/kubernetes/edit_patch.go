@@ -246,10 +246,29 @@ func exactDecimals(o map[string]any) (map[string]any, func(string) string) {
 		if len(lits) == 0 {
 			return text
 		}
-		// Longest index first: marker 1 is a prefix of marker 10.
-		for i := len(lits) - 1; i >= 0; i-- {
-			text = strings.ReplaceAll(text, prefix+strconv.Itoa(i), lits[i])
+		// One pass: a marker is a whole scalar, so the digits after the
+		// prefix are all its index (marker 1 never cuts marker 10 short).
+		var b strings.Builder
+		b.Grow(len(text))
+		for {
+			i := strings.Index(text, prefix)
+			if i < 0 {
+				break
+			}
+			j := i + len(prefix)
+			for j < len(text) && text[j] >= '0' && text[j] <= '9' {
+				j++
+			}
+			n, err := strconv.Atoi(text[i+len(prefix) : j])
+			b.WriteString(text[:i])
+			if err == nil && n < len(lits) {
+				b.WriteString(lits[n])
+			} else {
+				b.WriteString(text[i:j])
+			}
+			text = text[j:]
 		}
-		return text
+		b.WriteString(text)
+		return b.String()
 	}
 }
