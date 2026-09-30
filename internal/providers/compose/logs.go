@@ -551,15 +551,22 @@ func errText(err error) string {
 // a gap (a repeat or an old line beats a loss). Records equal in time (to
 // the nanosecond), stream and text are one record to this: a rotation
 // that dropped one of two such and a new third one would go unnoticed.
+// And the ring is bounded: more than maxSeen records written just before
+// the anchor yet stamped after it (within the stamps' skew) may repeat on
+// a resume, after a gap.
 type seenLog struct {
-	ring []recordID // the last maxSeen records read, circular
-	next int
+	ring  []recordID // the last maxSeen records read, circular
+	next  int
+	count map[recordID]int // of ring
 	// anchor: the last record delivered outside a replay that had a time
 	// (a replay does not move it: the delivered history ends there until
 	// the replay meets it, even when the attempt breaks).
 	anchor    recordID
 	anchorAt  time.Time
 	hasAnchor bool
+	// anchorN: records equal to the anchor read up to it (kept apart from
+	// the ring, which may drop them).
+	anchorN int
 	// partial: the anchor was delivered without its newline (the
 	// container stopped mid-line); the journal may continue it.
 	partial bool
@@ -572,6 +579,12 @@ type seenLog struct {
 // maxSeen bounds the records a member remembers: a replay's known part is
 // what was written within the stamps' skew before the anchor.
 const maxSeen = 512
+
+// replaySkew bounds how much later than the anchor a record written before
+// it can be stamped (stdout and stderr are stamped apart, by microseconds):
+// an unknown record later than this is past the anchor — which is gone
+// (rotated) when the replay has not met it.
+const replaySkew = time.Second
 
 // recordID tells records apart: time, stream, and the text's length and
 // hash.
@@ -605,18 +618,37 @@ func textSum(text string) uint64 {
 // the replay meets it, even when this attempt breaks).
 func (s *seenLog) read(l logLine, partial, move bool) {
 	id := idOf(l.stream, l.at, l.line.Text)
+	if s.count == nil {
+		s.count = make(map[recordID]int)
+	}
 	if len(s.ring) < maxSeen {
 		s.ring = append(s.ring, id)
 	} else {
+		old := s.ring[s.next]
+		if s.count[old]--; s.count[old] <= 0 {
+			delete(s.count, old)
+		}
 		s.ring[s.next] = id
 		s.next = (s.next + 1) % maxSeen
 	}
-	if move && !l.at.IsZero() {
-		s.anchor, s.anchorAt, s.hasAnchor, s.partial = id, l.at, true, partial
+	s.count[id]++
+	if move {
+		s.moveAnchor(id, l.at, partial)
 	}
 	if !s.torn.IsZero() && l.stream == s.tornStream && l.at.Equal(s.torn) {
 		s.torn = time.Time{} // the cut line came whole
 	}
+}
+
+func (s *seenLog) moveAnchor(id recordID, at time.Time, partial bool) {
+	if at.IsZero() {
+		return
+	}
+	n := 1
+	if s.hasAnchor && id == s.anchor {
+		n = s.anchorN + 1
+	}
+	s.anchor, s.anchorAt, s.hasAnchor, s.partial, s.anchorN = id, at, true, partial, n
 }
 
 // tear notes a line whose read was cut before its end.
@@ -638,36 +670,62 @@ func (s *seenLog) since() time.Time {
 
 // replay starts matching an answer since since().
 func (s *seenLog) replay() *replay {
-	r := &replay{s: s, done: !s.hasAnchor, anchor: s.anchor, partial: s.partial, known: make(map[recordID]int, len(s.ring))}
-	for _, id := range s.ring {
-		r.known[id]++
+	r := &replay{s: s, done: !s.hasAnchor, anchor: s.anchor, anchorAt: s.anchorAt, anchorLeft: s.anchorN, partial: s.partial, known: make(map[recordID]int, len(s.count))}
+	for id, n := range s.count {
+		if id != s.anchor {
+			r.known[id] = n
+		}
 	}
 	return r
 }
 
 // replay matches the start of a resumed answer against what was read.
 type replay struct {
-	s       *seenLog
-	known   map[recordID]int
-	anchor  recordID
-	partial bool
-	done    bool // the anchor was met: the rest is new
-	gapped  bool
+	s          *seenLog
+	known      map[recordID]int // besides the anchor
+	anchor     recordID
+	anchorAt   time.Time
+	anchorLeft int
+	partial    bool
+	done       bool // the anchor was met (or is gone): the rest is new
+	gapped     bool
+	// last: the last record of the answer (dropped or delivered), the
+	// position when the anchor turns out gone at the answer's end.
+	last        recordID
+	lastAt      time.Time
+	lastPartial bool
+}
+
+// abandon ends a replay that read the whole answer without meeting the
+// anchor (rotated away): the answer's last record is the new position.
+func (r *replay) abandon() {
+	if r == nil || r.done {
+		return
+	}
+	r.done = true
+	r.s.anchorN = 0
+	r.s.moveAnchor(r.last, r.lastAt, r.lastPartial)
 }
 
 // check decides a record of the answer: drop (read before), or deliver
 // its text from skip on (a continued partial anchor: its new part);
 // unknown: delivered before the anchor was met.
-func (r *replay) check(l logLine) (drop bool, skip int, unknown bool) {
+func (r *replay) check(l logLine, partial bool) (drop bool, skip int, unknown bool) {
 	if r == nil || r.done {
 		return false, 0, false
 	}
 	id := idOf(l.stream, l.at, l.line.Text)
-	if r.known[id] > 0 {
-		r.known[id]--
-		if id == r.anchor && r.known[id] == 0 {
+	if !l.at.IsZero() {
+		r.last, r.lastAt, r.lastPartial = id, l.at, partial
+	}
+	if id == r.anchor && r.anchorLeft > 0 {
+		if r.anchorLeft--; r.anchorLeft == 0 {
 			r.done = true
 		}
+		return true, 0, false
+	}
+	if r.known[id] > 0 {
+		r.known[id]--
 		return true, 0, false
 	}
 	a := r.anchor
@@ -677,6 +735,9 @@ func (r *replay) check(l logLine) (drop bool, skip int, unknown bool) {
 	}
 	if !r.s.torn.IsZero() && l.stream == r.s.tornStream && l.at.Equal(r.s.torn) {
 		return false, 0, false // the cut line, expected
+	}
+	if l.at.Sub(r.anchorAt) > replaySkew {
+		r.done = true // past where the anchor was: it is gone
 	}
 	return false, 0, true
 }
@@ -1035,6 +1096,7 @@ func (m *member) pump(ctx context.Context, lr *engine.LogReader, rp *replay) (in
 					return n, false, gerr
 				}
 			}
+			rp.abandon()
 			return n, false, nil
 		}
 		if rec.Gap != "" {
@@ -1054,7 +1116,7 @@ func (m *member) pump(ctx context.Context, lr *engine.LogReader, rp *replay) (in
 			continue // the next request replays it whole
 		}
 		l := toLine(rec)
-		drop, skip, unknown := rp.check(l)
+		drop, skip, unknown := rp.check(l, rec.Partial)
 		if drop {
 			continue
 		}

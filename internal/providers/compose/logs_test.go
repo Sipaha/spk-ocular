@@ -994,3 +994,73 @@ func TestLogsCutReadOfAStoppedContainerIsRetried(t *testing.T) {
 	sk, _ := e.stream(e.containerRef(), q)
 	sk.waitFor(t, "b after a retry", func() bool { return eq(sk.texts("p-web-1"), "a", "b") })
 }
+
+// Re-review 3, P2: the anchor was rotated away; the replay ends at the
+// first record clearly after it (a gap), and the next resume starts from
+// what was delivered since — nothing is shown twice.
+func TestLogsRotatedAnchorIsLeftBehind(t *testing.T) {
+	e := newLogEnv(t)
+	e.fe.Journal(e.c.ID, 1, e.at(1), "a")
+	e.fe.Journal(e.c.ID, 1, e.at(2), "b")
+	q := follow()
+	q.Channel = channelStdout
+	sk, _ := e.stream(e.containerRef(), q)
+	sk.waitFor(t, "the backlog", func() bool { return sk.isReady() && eq(sk.texts("p-web-1"), "a", "b") })
+	e.stopContainer(sk, "p-web-1")
+	e.fe.RotateJournal(e.c.ID, e.at(3))
+	e.fe.Journal(e.c.ID, 1, e.at(5), "c1")
+	e.fe.Journal(e.c.ID, 1, e.at(6), "c2")
+	e.startContainer()
+	sk.waitFor(t, "c1 c2", func() bool { return eq(sk.texts("p-web-1"), "a", "b", "c1", "c2") })
+	e.stopContainer(sk, "p-web-1")
+	e.fe.Journal(e.c.ID, 1, e.at(7), "d")
+	e.startContainer()
+	sk.waitFor(t, "d", func() bool { return len(sk.texts("p-web-1")) >= 5 })
+	if got := sk.texts("p-web-1"); !eq(got, "a", "b", "c1", "c2", "d") {
+		t.Fatalf("stdout %v", got)
+	}
+	// the last resume asked from c2, not from the rotated b again
+	var last enginefake.Request
+	for _, r := range e.fe.Requests() {
+		if strings.HasSuffix(r.Path, "/logs") {
+			last = r
+		}
+	}
+	if want := fmt.Sprintf("%d.%09d", e.at(6).Unix(), 0); last.Query.Get("since") != want {
+		t.Fatalf("the last resume since %q, want %q", last.Query.Get("since"), want)
+	}
+}
+
+// Re-review 3, P2: records delivered during a replay push the anchor out
+// of the ring; it is still known by the next replay (not shown twice).
+// (Records past the ring's size written just before the anchor may repeat,
+// after a gap: a documented limit.)
+func TestLogsAnchorOutlivesTheRing(t *testing.T) {
+	e := newLogEnv(t)
+	for i := range maxSeen + 50 {
+		e.fe.Journal(e.c.ID, 1, e.at(1).Add(time.Duration(i+1)), fmt.Sprintf("x%d", i))
+	}
+	e.fe.Journal(e.c.ID, 2, e.at(1), "Z") // written after the x-s, stamped before them
+	q := follow()
+	q.TailLines = 1
+	sk, _ := e.stream(e.containerRef(), q)
+	sk.waitFor(t, "the x-s", func() bool { return sk.isReady() && len(sk.texts("p-web-1")) == maxSeen+50 })
+	e.stopContainer(sk, "p-web-1 (stderr)")
+	e.startContainer()
+	for e.fe.LogFollowers(e.c.ID) == 0 {
+		time.Sleep(2 * time.Millisecond)
+	}
+	e.fe.Journal(e.c.ID, 2, e.at(3), "D")
+	sk.waitFor(t, "D", func() bool {
+		ts := sk.texts("p-web-1 (stderr)")
+		return len(ts) > 0 && ts[len(ts)-1] == "D"
+	})
+	if got := sk.texts("p-web-1 (stderr)"); !eq(got, "Z", "D") {
+		t.Fatalf("stderr %v", got)
+	}
+	// more x-s than the ring holds were written within the stamps' skew
+	// before Z: the ones it lost may come again, only after a gap
+	if n := len(sk.texts("p-web-1")); n < maxSeen+50 || n > maxSeen+50 && !sk.hadState("p-web-1", provider.LogGap) {
+		t.Fatalf("%d x-s, gap %v", n, sk.hadState("p-web-1", provider.LogGap))
+	}
+}
