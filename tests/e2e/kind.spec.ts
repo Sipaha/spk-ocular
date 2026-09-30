@@ -295,7 +295,7 @@ test('roll a deployment back to its first revision from the table', async ({ pag
     await expect(radios).toHaveCount(2)
     await expect(radios.nth(0)).toBeDisabled() // revision 2, the current template
     await dialog.getByRole('radiogroup').getByText('Revision 1').click()
-    await expect(dialog.getByRole('region', { name: 'Changes' })).toContainText('containers[nginx].env: removed')
+    await expect(dialog.getByRole('region', { name: 'Changes' })).toContainText('containers[nginx].env[V]: removed')
     await expect(dialog).toContainText('The pod template becomes that of revision 1; it becomes revision 3.')
     await expect(dialog).toContainText('Permission: checked: allowed')
     await dialog.getByRole('button', { name: 'Roll back' }).click()

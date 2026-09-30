@@ -175,6 +175,8 @@ export function ActionDialog({ client, req, onClose, runTimeoutMs = RUN_TIMEOUT_
   // or Cancel when it is destructive.
   useLayoutEffect(() => {
     if (busy) return
+    // Choosing with the arrows: each choice is reviewed as it is made, the focus stays.
+    if (choosing && choicesRef.current?.contains(document.activeElement)) return
     if (choosing && chosen === null) {
       // The first choice that can be made (the current one cannot).
       const first = choicesRef.current?.querySelector<HTMLInputElement>('input:not(:disabled)')
@@ -537,7 +539,8 @@ function Choices({ choices, chosen, disabled, onChoose, boxRef }: { choices: Act
               checked={chosen === c.value}
               disabled={disabled || !!c.unavailable}
               onChange={() => onChoose(c.value)}
-              className="mt-1 accent-accent"
+              // A visible focus: WebKitGTK shows no :focus-visible for focus set by script.
+              className="mt-1 accent-accent outline-none focus:ring-2 focus:ring-accent focus:ring-offset-2 focus:ring-offset-panel"
             />
             <span className="flex min-w-0 flex-col">
               <span>

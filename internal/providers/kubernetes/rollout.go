@@ -189,7 +189,9 @@ func revisionChoice(r revision, current bool) core.ActionChoice {
 	if len(images) > 0 {
 		c.Details = append(c.Details, msg("undo.images", "images", strings.Join(images, ", ")))
 	}
-	c.Details = append(c.Details, msg("undo.pods", "ready", i64(o, "status", "readyReplicas"), "total", i64(o, "status", "replicas")))
+	if n := i64(o, "status", "replicas"); n > 0 { // an old revision runs none: not said
+		c.Details = append(c.Details, msg("undo.pods", "ready", i64(o, "status", "readyReplicas"), "total", n))
+	}
 	if current {
 		m := msg("undo.isCurrent", "revision", r.n)
 		c.Unavailable = &m
@@ -328,6 +330,12 @@ func diffValue(out *[]core.Message, a, b any, path string) {
 	case reflect.DeepEqual(a, b):
 		return
 	case a == nil:
+		if l, ok := b.([]any); ok {
+			if bn, ok := byName(l); ok && len(l) > 0 {
+				diffNamed(out, path, nil, l, nil, bn) // item by item
+				return
+			}
+		}
 		if m, ok := b.(map[string]any); ok && len(m) > 0 {
 			diffValue(out, map[string]any{}, m, path) // what was added, key by key
 			return
@@ -335,6 +343,12 @@ func diffValue(out *[]core.Message, a, b any, path string) {
 		*out = append(*out, addedMsg(path, b))
 		return
 	case b == nil:
+		if l, ok := a.([]any); ok {
+			if an, ok := byName(l); ok && len(l) > 0 {
+				diffNamed(out, path, l, nil, an, map[string]map[string]any{})
+				return
+			}
+		}
 		*out = append(*out, msg("change.removed", "path", path))
 		return
 	}

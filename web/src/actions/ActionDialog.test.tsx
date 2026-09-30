@@ -673,6 +673,7 @@ describe('ActionDialog', () => {
       await userEvent.keyboard('{ArrowDown}')
       await waitFor(() => expect(a).toBeChecked())
       await within(dialog).findByText('to web-a')
+      expect(a).toHaveFocus() // the arrows go on choosing
       act(() => late.resolve(undoPlan({ choice: 'web-b' })))
       await userEvent.click(within(dialog).getByRole('button', { name: 'Roll back' }))
       expect(vi.mocked(f.client.runAction).mock.calls[0][0].params).toEqual({ choice: 'web-a' })

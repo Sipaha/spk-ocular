@@ -99,6 +99,7 @@ func TestUndoOffersTheRevisionsNewestFirst(t *testing.T) {
 	assert.Contains(t, core.Texts(old.Details), "deploy v1")
 	assert.Contains(t, core.Texts(old.Details), "Images: busybox:1.36")
 	assert.Contains(t, core.Texts(cur.Details), "Pods: 1 of 2 ready")
+	assert.Len(t, old.Details, 2, "no pods: not said")
 	assert.Empty(t, plan.Changes, "nothing chosen: nothing changes yet")
 
 	_, err := s.RunAction(context.Background(), provider.ActionRun{Ref: deployWebRef, Action: "undo", Expect: plan.Expect})
@@ -334,9 +335,15 @@ func TestTemplateChangesArePathsAndReferences(t *testing.T) {
 		"containers[app].image: busybox:1.36 → busybox:1.37",
 		"containers[side]: added",
 		"serviceAccountName: added (robot)",
-		"volumes: removed",
+		"volumes[data]: removed",
 	}, core.Texts(templateChanges(from, to)))
 	assert.Empty(t, templateChanges(from, from))
+
+	// A named list gone or come whole is said item by item.
+	bare := podTemplate("a")
+	delete(bare["spec"].(map[string]any)["containers"].([]any)[0].(map[string]any), "env")
+	assert.Equal(t, []string{"containers[app].env[V]: removed"}, core.Texts(templateChanges(podTemplate("a"), bare)))
+	assert.Equal(t, []string{"containers[app].env[V]: added (a)"}, core.Texts(templateChanges(bare, podTemplate("a"))))
 }
 
 func TestPauseAndResumeAreMergePatchesOfPaused(t *testing.T) {
