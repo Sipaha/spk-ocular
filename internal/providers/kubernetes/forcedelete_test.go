@@ -2,10 +2,12 @@ package kubernetes
 
 import (
 	"context"
+	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	kruntime "k8s.io/apimachinery/pkg/runtime"
@@ -50,7 +52,7 @@ func readyNode(status string) *unstructured.Unstructured {
 func forceSession(t *testing.T, objs ...kruntime.Object) (*session, *dynamicfake.FakeDynamicClient) {
 	t.Helper()
 	c := dynamicfake.NewSimpleDynamicClientWithCustomListKinds(kruntime.NewScheme(), map[schema.GroupVersionResource]string{
-		podGVR: "PodList", nodeGVR: "NodeList", stsGVR: "StatefulSetList",
+		podGVR: "PodList", nodeGVR: "NodeList", stsGVR: "StatefulSetList", rsGVR: "ReplicaSetList",
 	}, objs...)
 	s := newSession("ctx", "h", c, false)
 	t.Cleanup(s.Close)
@@ -170,4 +172,73 @@ func TestForceDeleteRightsAreThoseOfADelete(t *testing.T) {
 	assert.Equal(t, core.RightsAllowed, plan.Rights.State)
 	require.Len(t, asked, 1)
 	assert.Equal(t, map[string]any{"verb": "delete", "group": "", "resource": "pods", "namespace": "ns", "name": "db-0"}, asked[0])
+}
+
+// A ReplicaSet counts a deleting pod as gone: its replacement is already
+// made or on its way. A StatefulSet waits for the name: it replaces after.
+func TestForceDeleteOfADeletingPodSaysItsReplacementIsUnderway(t *testing.T) {
+	for _, c := range []struct {
+		owner    string
+		gvr      schema.GroupVersionResource
+		deleting bool
+		key      string
+	}{
+		{"ReplicaSet", rsGVR, true, "pod.ownerReplacing"},
+		{"ReplicaSet", rsGVR, false, "pod.ownerRecreates"},
+		{"StatefulSet", stsGVR, true, "pod.ownerRecreates"},
+	} {
+		t.Run(fmt.Sprint(c.owner, " deleting=", c.deleting), func(t *testing.T) {
+			ctl := workload(c.owner, "db", "uid-sts", "1", map[string]any{"replicas": int64(1)})
+			s, _ := forceSession(t, stuckPod("uid-db-0", "7", c.deleting, nil, c.owner), readyNode("True"), ctl)
+			plan := prepare(t, s, stuckRef, "forceDelete", core.ActionParams{})
+			assert.Contains(t, msgKeys(plan.Effects), ProviderID+"."+c.key)
+		})
+	}
+}
+
+// What a deletion wanted already happened: the object with the reviewed UID
+// is gone (nothing has its name) — done, not a failure. Another object
+// under its name is still not it.
+func TestADeletionOfAnObjectAlreadyGoneIsDone(t *testing.T) {
+	notFound := apierrors.NewNotFound(schema.GroupResource{Resource: "pods"}, "db-0")
+	for _, action := range []string{"delete", "forceDelete"} {
+		for name, c := range map[string]struct {
+			verb   string
+			fail   error
+			mutate func(t *testing.T, cl *dynamicfake.FakeDynamicClient) func()
+			gone   bool // else: error.replaced / replacedMeanwhile
+		}{
+			"gone before the run":   {gone: true},
+			"the write answers 404": {verb: "delete", fail: notFound, gone: true},
+			"deleted between read and write": {verb: "delete", fail: conflict409, mutate: func(t *testing.T, cl *dynamicfake.FakeDynamicClient) func() {
+				return func() { require.NoError(t, cl.Tracker().Delete(podGVR, "ns", "db-0")) }
+			}, gone: true},
+			"replaced before the run": {},
+		} {
+			t.Run(action+": "+name, func(t *testing.T) {
+				// A plain delete is for a pod not yet deleting.
+				s, cl := forceSession(t, stuckPod("uid-db-0", "7", action == "forceDelete", nil, ""), readyNode("True"))
+				plan := prepare(t, s, stuckRef, action, core.ActionParams{})
+				switch {
+				case c.verb != "":
+					var mutate func()
+					if c.mutate != nil {
+						mutate = c.mutate(t, cl)
+					}
+					failWrite(cl, c.verb, 1, mutate, c.fail)
+				case c.gone:
+					require.NoError(t, cl.Tracker().Delete(podGVR, "ns", "db-0"))
+				default:
+					require.NoError(t, cl.Tracker().Update(podGVR, stuckPod("uid-db-0b", "9", false, nil, ""), "ns"))
+				}
+				res, err := s.RunAction(context.Background(), provider.ActionRun{Ref: plan.Where.Ref, Action: action, Expect: plan.Expect})
+				if !c.gone {
+					assertSaid(t, err, provider.ClassGone, "error.replaced")
+					return
+				}
+				require.NoError(t, err)
+				assertDone(t, res, "done.goneAlready", map[string]string{"kind": "pod", "name": "db-0"})
+			})
+		}
+	}
 }

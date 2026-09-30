@@ -717,6 +717,7 @@ function ResourcePage(props: {
             if (markedRows.length) {
               const del = bulkActions(markedRows.map((m) => actionsOf(m.ref.kind))).find((a) => a.id === 'delete')
               if (del) actOnMarked(markedRows, del)
+              else showNotice(t('bulk.noDelete'))
               return
             }
             const del = r && deleteOf(r)

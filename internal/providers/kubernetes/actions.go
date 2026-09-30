@@ -273,6 +273,25 @@ func (s *session) RunAction(ctx context.Context, run provider.ActionRun) (core.A
 		// catalog moves meanwhile.
 		return core.ActionResult{}, provider.Said(provider.ClassConflict, msg("error.routeChanged", "kind", def.desc.Title))
 	}
+	res, err := s.runWrite(ctx, def, run)
+	if err != nil && (run.Action == actDelete.ID || run.Action == actForceDelete.ID) && goneByName(err) {
+		// What the deletion wanted has happened (a pod stuck on a gone
+		// node is often removed by PodGC meanwhile): not a failure.
+		return core.ActionResult{Message: msg("done.goneAlready", "kind", singular(def), "name", run.Ref.Name)}, nil
+	}
+	return res, err
+}
+
+// goneByName: err says nothing has the object's name any more (not that
+// another object took it).
+func goneByName(err error) bool {
+	var pe *provider.Error
+	return errors.As(err, &pe) && pe.Why != nil && pe.Why.Key == ProviderID+".error.gone"
+}
+
+// runWrite reads the confirmed object, checks it against Expect and writes
+// once; a write refused only for a moved version is retried.
+func (s *session) runWrite(ctx context.Context, def *kindDef, run provider.ActionRun) (core.ActionResult, error) {
 	for attempt := 0; ; attempt++ {
 		u, err := s.getConfirmed(ctx, def, run.Ref)
 		if err != nil {
@@ -399,6 +418,9 @@ func (s *session) failedWrite(ctx context.Context, def *kindDef, run provider.Ac
 	switch {
 	case gerr != nil:
 		var pe *provider.Error
+		if goneByName(gerr) {
+			return false, gerr // deleted meanwhile
+		}
 		if errors.As(gerr, &pe) && pe.Class == provider.ClassGone {
 			return false, provider.Said(provider.ClassGone, msg("error.replacedMeanwhile", "kind", singular(def), "name", was.GetName()))
 		}

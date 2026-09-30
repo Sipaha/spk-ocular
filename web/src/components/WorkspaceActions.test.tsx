@@ -268,5 +268,23 @@ describe('actions on marked rows', () => {
     await userEvent.click(within(menu).getByRole('menuitem', { name: 'No action common to the marked' }))
     expect(screen.getByRole('menu', { name: 'Actions on the marked' })).toBeInTheDocument() // it does nothing
   })
+
+  it('Delete on marks not all of which can be deleted: said, nothing opens', async () => {
+    const drain: ActionDescriptor = { id: 'drain', title: 'Drain', destructive: true, single: true }
+    const f = fakeClient([k8s('prod')])
+    f.state.view.selected = { provider: 'kubernetes', id: 'prod' }
+    const node = (name: string) => ({ id: `n-${name}`, ref: { provider: 'kubernetes', target: 'prod', kind: 'nodes', name, uid: `n-${name}` }, cells: [{ text: name }], health: { state: 'ok' as const }, rev: '1' })
+    f.state.rowsByKind.nodes = [node('n1'), node('n2')]
+    f.client.listKinds = vi.fn(async () => kindsView([pods, { ...nodes, actions: [drain] }]))
+    render(<App client={f.client} />)
+    await userEvent.click(await screen.findByRole('button', { name: /^Nodes/ }))
+    const grid = await screen.findByRole('grid', { name: 'resources' })
+    await within(grid).findByText('n2')
+    await userEvent.click(within(grid).getByRole('checkbox', { name: 'Mark all' }))
+    within(grid).getByText('n1').closest<HTMLElement>('[role="row"]')!.focus()
+    await userEvent.keyboard('{Delete}')
+    expect(await screen.findByText('Not every marked object can be deleted')).toBeInTheDocument()
+    expect(screen.queryByRole('dialog')).toBeNull()
+  })
 })
 

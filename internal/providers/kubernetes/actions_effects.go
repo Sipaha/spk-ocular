@@ -180,6 +180,10 @@ func (s *session) podController(ctx context.Context, p *unstructured.Unstructure
 		return msg("pod.ownerDeleting", "ownerKind", c.Kind, "owner", c.Name)
 	case def != daemonSetsKind && replicas(owner.Object) == 0:
 		return msg("pod.ownerWantsNone", "ownerKind", c.Kind, "owner", c.Name)
+	case def == replicaSetsKind && p.GetDeletionTimestamp() != nil:
+		// A ReplicaSet counts a deleting pod as gone (a StatefulSet waits
+		// for the name to be free).
+		return msg("pod.ownerReplacing", "ownerKind", c.Kind, "owner", c.Name)
 	}
 	return msg("pod.ownerRecreates", "ownerKind", c.Kind, "owner", c.Name)
 }
