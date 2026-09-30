@@ -7,6 +7,7 @@ import (
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/dynamic"
@@ -23,6 +24,18 @@ type actionWriter interface {
 	// editPatch sends an edit (a JSON merge patch) with strict field
 	// validation, as a dry run or for real; the answer is the object.
 	editPatch(ctx context.Context, gvr schema.GroupVersionResource, ns, name string, data []byte, dryRun bool) ([]byte, error)
+	// evict asks for a pod's eviction (policy/v1 Eviction) with its UID and
+	// version as preconditions.
+	evict(ctx context.Context, ns, name, uid, rv string) error
+}
+
+// eviction is the body of a pod's eviction request.
+func eviction(ns, name, uid, rv string) map[string]any {
+	return map[string]any{
+		"apiVersion": "policy/v1", "kind": "Eviction",
+		"metadata":      map[string]any{"name": name, "namespace": ns},
+		"deleteOptions": map[string]any{"preconditions": map[string]any{"uid": uid, "resourceVersion": rv}},
+	}
 }
 
 // restWriter: the dynamic client's REST setup, requests with MaxRetries(0).
@@ -85,6 +98,14 @@ func (w *restWriter) delete(ctx context.Context, gvr schema.GroupVersionResource
 	return w.c.Delete().AbsPath(objectPath(gvr, ns, name, "")...).SetHeader("Content-Type", "application/json").Body(body).MaxRetries(0).Do(ctx).Error()
 }
 
+func (w *restWriter) evict(ctx context.Context, ns, name, uid, rv string) error {
+	body, err := json.Marshal(eviction(ns, name, uid, rv))
+	if err != nil {
+		return err
+	}
+	return w.c.Post().AbsPath(objectPath(podsKind.gvr, ns, name, "eviction")...).SetHeader("Content-Type", "application/json").Body(body).MaxRetries(0).Do(ctx).Error()
+}
+
 // dynWriter writes through a dynamic client (fake clients in tests: no
 // transport, no retries).
 type dynWriter struct{ dyn dynamic.Interface }
@@ -108,6 +129,11 @@ func (w dynWriter) editPatch(ctx context.Context, gvr schema.GroupVersionResourc
 		return nil, err
 	}
 	return u.MarshalJSON()
+}
+
+func (w dynWriter) evict(ctx context.Context, ns, name, uid, rv string) error {
+	_, err := w.dyn.Resource(podsKind.gvr).Namespace(ns).Create(ctx, &unstructured.Unstructured{Object: eviction(ns, name, uid, rv)}, metav1.CreateOptions{}, "eviction")
+	return err
 }
 
 func (w dynWriter) delete(ctx context.Context, gvr schema.GroupVersionResource, ns, name string, opts metav1.DeleteOptions) error {

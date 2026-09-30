@@ -222,7 +222,7 @@ func (s *session) RunAction(ctx context.Context, run provider.ActionRun) (core.A
 		return core.ActionResult{}, err
 	}
 	if run.Action == actDrain.ID {
-		return core.ActionResult{}, &provider.Error{Class: provider.ClassUnsupported, Message: "drain is not ready yet"}
+		return s.runDrain(ctx, def, run)
 	}
 	if !sameRoute(def, run.Expect) {
 		// Reviewed through another version or scope of the resource: never

@@ -187,3 +187,46 @@ func TestAnEditRefusalOverTheWireKeepsTheServersStatus(t *testing.T) {
 	m := secretSafe(err)
 	assert.Equal(t, "kubernetes.edit.hiddenInvalidFields", m.Key, "the causes are read")
 }
+
+// An eviction is one POST to the pod's eviction subresource with its UID
+// and version as preconditions — also when answered 429 or 503 with
+// Retry-After (client-go would otherwise send it again).
+func TestAnEvictionIsOneRequestOnTheWire(t *testing.T) {
+	for _, tc := range []struct {
+		code   int
+		reason string
+	}{{429, "TooManyRequests"}, {503, "ServiceUnavailable"}, {201, ""}} {
+		t.Run(fmt.Sprint(tc.code), func(t *testing.T) {
+			var mu sync.Mutex
+			var posts []string
+			var body map[string]any
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				mu.Lock()
+				posts = append(posts, r.Method+" "+r.URL.Path)
+				_ = json.NewDecoder(r.Body).Decode(&body)
+				mu.Unlock()
+				if tc.code == 201 {
+					w.Header().Set("Content-Type", "application/json")
+					w.WriteHeader(201)
+					_, _ = io.WriteString(w, `{"apiVersion":"v1","kind":"Status","status":"Success","code":201}`)
+					return
+				}
+				statusReply(w, tc.code, tc.reason, true)
+			}))
+			t.Cleanup(srv.Close)
+			wr, err := newRESTWriter(&rest.Config{Host: srv.URL})
+			require.NoError(t, err)
+			err = wr.evict(context.Background(), "a", "p", "uid-p", "7")
+			if tc.code == 201 {
+				require.NoError(t, err)
+			} else {
+				require.Error(t, err)
+			}
+			mu.Lock()
+			defer mu.Unlock()
+			assert.Equal(t, []string{"POST /api/v1/namespaces/a/pods/p/eviction"}, posts)
+			assert.Equal(t, "Eviction", body["kind"])
+			assert.Equal(t, map[string]any{"uid": "uid-p", "resourceVersion": "7"}, body["deleteOptions"].(map[string]any)["preconditions"])
+		})
+	}
+}

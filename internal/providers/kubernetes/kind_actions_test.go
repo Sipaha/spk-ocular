@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"os"
 	"os/exec"
 	"strings"
 	"sync"
@@ -396,4 +397,167 @@ func TestKindActionCordonAndUncordon(t *testing.T) {
 	_, err = c.act(ref, "uncordon", core.ActionParams{})
 	require.NoError(t, err)
 	assert.Empty(t, unschedulable())
+}
+
+// drainFixtures: on the drain worker only (nodeSelector + toleration) —
+// movers (2 replicas), cache (emptyDir), guarded (a PodDisruptionBudget
+// allowing no disruption) and a pod without a controller.
+func drainFixtures(ns string) string {
+	pod := func(app, extra string) string {
+		return fmt.Sprintf(`metadata: {labels: {app: %s, ocular.test/drain: fixture}}
+    spec:
+      nodeSelector: {ocular.dev/drain: only}
+      tolerations: [{key: ocular.dev/drain, operator: Equal, value: only, effect: NoSchedule}]
+      terminationGracePeriodSeconds: 1
+      containers: [{name: app, image: "registry.k8s.io/pause:3.10", imagePullPolicy: IfNotPresent%s}]`, app, extra)
+	}
+	deploy := func(name string, n int, extra, volumes string) string {
+		return fmt.Sprintf(`apiVersion: apps/v1
+kind: Deployment
+metadata: {name: %s, namespace: %s}
+spec:
+  replicas: %d
+  selector: {matchLabels: {app: %s}}
+  template:
+    %s%s
+---
+`, name, ns, n, name, pod(name, extra), volumes)
+	}
+	cache := `
+      volumes: [{name: scratch, emptyDir: {}}]`
+	return deploy("movers", 2, "", "") + deploy("cache", 1, ", volumeMounts: [{name: scratch, mountPath: /scratch}]", cache) + deploy("guarded", 1, "", "") +
+		fmt.Sprintf(`apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata: {name: guarded, namespace: %s}
+spec: {minAvailable: 1, selector: {matchLabels: {app: guarded}}}
+---
+apiVersion: v1
+kind: Pod
+metadata: {name: bare, namespace: %s, labels: {app: bare, ocular.test/drain: fixture}}
+spec:
+  nodeSelector: {ocular.dev/drain: only}
+  tolerations: [{key: ocular.dev/drain, operator: Equal, value: only, effect: NoSchedule}]
+  terminationGracePeriodSeconds: 1
+  containers: [{name: app, image: "registry.k8s.io/pause:3.10", imagePullPolicy: IfNotPresent}]
+`, ns, ns)
+}
+
+// workerPods: the worker's pods as [namespace/name, uid, owner kind, drain label].
+func (c *actionCluster) workerPods() [][]string {
+	c.t.Helper()
+	out := c.kubectl("get", "pods", "-A", "--field-selector", "spec.nodeName="+drainWorker, "-o",
+		`jsonpath={range .items[*]}{.metadata.namespace}/{.metadata.name}|{.metadata.uid}|{.metadata.ownerReferences[0].kind}|{.metadata.labels.ocular\.test/drain}{"\n"}{end}`)
+	var pods [][]string
+	for _, l := range strings.Split(out, "\n") {
+		if f := strings.Split(l, "|"); len(f) == 4 {
+			pods = append(pods, f)
+		}
+	}
+	return pods
+}
+
+func TestKindActionDrain(t *testing.T) {
+	c := kindActionCluster(t)
+	ref := c.worker()
+	file := t.TempDir() + "/drain.yaml"
+	require.NoError(t, os.WriteFile(file, []byte(drainFixtures(c.ns)), 0o600))
+	c.kubectl("apply", "-f", file)
+	for _, d := range []string{"movers", "cache", "guarded"} {
+		c.kubectlNS("rollout", "status", "deployment/"+d, "--timeout=120s")
+	}
+	c.kubectlNS("wait", "--for=condition=Ready", "pod/bare", "--timeout=120s")
+	c.kubectlNS("wait", "--for=jsonpath={.status.expectedPods}=1", "pdb/guarded", "--timeout=60s")
+
+	// Before any write: every pod a drain would touch on the worker is a
+	// fixture of this test; the rest are DaemonSets' (left alone).
+	daemons := map[string]bool{}
+	movers := map[string]bool{}
+	for _, f := range c.workerPods() {
+		switch {
+		case f[2] == "DaemonSet":
+			daemons[f[1]] = true
+		case f[3] == "fixture" && strings.HasPrefix(f[0], c.ns+"/"):
+			if strings.HasPrefix(f[0], c.ns+"/movers-") {
+				movers[f[1]] = true
+			}
+		default:
+			require.Failf(t, "a pod on the drain worker that is not this test's", "%v", f)
+		}
+	}
+	require.Len(t, movers, 2)
+	require.NotEmpty(t, daemons, "kindnet and kube-proxy run there")
+
+	plan, err := c.sess.PrepareAction(context.Background(), ref, "drain", core.ActionParams{})
+	require.NoError(t, err)
+	require.Nil(t, plan.Unavailable)
+	assert.Equal(t, core.RightsAllowed, plan.Rights.State)
+	names := func(key string) []string {
+		for _, l := range plan.Lists {
+			if l.Title.Key == "kubernetes."+key {
+				var out []string
+				for _, it := range l.Items {
+					out = append(out, strings.TrimPrefix(it.Name, c.ns+"/"))
+				}
+				return out
+			}
+		}
+		return nil
+	}
+	assert.Len(t, names("drain.list.evict"), 4, "movers ×2, cache, guarded")
+	assert.Equal(t, []string{"bare"}, names("drain.list.bare"))
+	require.Len(t, names("drain.list.emptyDir"), 1)
+	assert.True(t, strings.HasPrefix(names("drain.list.emptyDir")[0], "cache-"))
+	var blocking []string
+	for _, w := range plan.Warnings {
+		if w.Key == "kubernetes.drain.pdbBlocksOne" {
+			blocking = append(blocking, w.Params["pdb"])
+		}
+	}
+	assert.Equal(t, []string{c.ns + "/guarded"}, blocking)
+
+	res, err := c.sess.RunAction(context.Background(), provider.ActionRun{Ref: plan.Where.Ref, Action: "drain", Expect: plan.Expect})
+	require.NoError(t, err)
+	byTitle := map[string]core.ActionPart{}
+	for _, p := range res.Parts {
+		byTitle[strings.TrimPrefix(p.Title, c.ns+"/")] = p
+	}
+	assert.Equal(t, core.OutcomeDone, byTitle[drainWorker].Outcome, "the cordon")
+	for title, p := range byTitle {
+		switch {
+		case strings.HasPrefix(title, "movers-"), strings.HasPrefix(title, "cache-"):
+			assert.Equal(t, core.OutcomeDone, p.Outcome, title)
+		case strings.HasPrefix(title, "guarded-"):
+			assert.Equal(t, core.OutcomeRefused, p.Outcome)
+			require.NotNil(t, p.Why)
+			assert.Equal(t, "kubernetes.drain.why.pdb", p.Why.Key, "the budget, told by its cause")
+		case title == "bare":
+			assert.Equal(t, core.OutcomeSkipped, p.Outcome)
+		}
+	}
+	assert.Len(t, byTitle, 6)
+	assert.Equal(t, core.OutcomeRefused, res.Outcome)
+	assert.Equal(t, "true", c.kubectl("get", "node", drainWorker, "-o", "jsonpath={.spec.unschedulable}"))
+
+	// The movers' pods leave; their replacements wait (the worker is the
+	// only node they may run on, and it is cordoned). DaemonSets stay.
+	require.Eventually(t, func() bool {
+		for _, f := range c.workerPods() {
+			if movers[f[1]] {
+				return false
+			}
+		}
+		return true
+	}, 90*time.Second, time.Second, "the evicted pods are gone")
+	require.Eventually(t, func() bool {
+		out, _ := c.run("-n", c.ns, "get", "pods", "-l", "app=movers", "--field-selector", "status.phase=Pending", "-o", "name")
+		return len(strings.Fields(out)) == 2
+	}, 60*time.Second, time.Second, "replacements wait for a node")
+	still := map[string]bool{}
+	for _, f := range c.workerPods() {
+		still[f[1]] = true
+	}
+	for uid := range daemons {
+		assert.True(t, still[uid], "a DaemonSet's pod is left alone")
+	}
+	assert.Contains(t, c.kubectlNS("get", "pod", "bare", "-o", "jsonpath={.status.phase}"), "Running", "no controller: left")
 }

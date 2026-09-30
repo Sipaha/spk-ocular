@@ -199,21 +199,25 @@ pod-ов через Eviction API, который соблюдает PodDisruptio
 - [x] Прогноз PDB: `disruptionsAllowed` 0, два PDB на pod, запрет/предел — «не проверены».
 
 ### Task 5. Drain: прогон (Go)
-- [ ] Ответы выселения (httptest, счётчик POST на каждую попытку): 201; 429 с
+- [x] Ответы выселения (httptest, счётчик POST на каждую попытку): 201; 429 с
   `DisruptionBudget`; 429 без него с `Retry-After` (без повтора); 409 тот же UID и та же
   версия; 409 новая версия + тот же отпечаток (повтор с новой версией); 409 + владелец снят
   между list-ом и вторым выселением (`refused`, pod остаётся); 404 субресурса при живом pod-е
   (`refused`, без DELETE); 404/409 + pod удалён/заменён (`skipped`, новый UID не выселяется);
   5xx/таймаут (`unknown`, без повтора).
-- [ ] Части и итог: cordon `refused`/`unknown` — остальные `skipped`; смешанные unknown →
+- [x] Части и итог: cordon `refused`/`unknown` — остальные `skipped`; смешанные unknown →
   refused → done — итог `unknown`; срок до первой отправки (ошибка, ноль записей), после
   cordon, во время позднего выселения (текущая `unknown`, остальные `skipped`, результат с
   частями); отмена; только названные на закрытом узле — `Unavailable`; изменённый `Expect`
   (владелец A→B до прогона) — `conflict`, ноль записей; обрезанный list в прогоне — ноль записей.
-- [ ] kind: на worker-е Deployment (2 реплики, метка фикстуры), pod без контроллера, pod с
+- [x] kind: на worker-е Deployment (2 реплики, метка фикстуры), pod без контроллера, pod с
   `emptyDir`, Deployment с PDB `minAvailable` = всем репликам; проверка «все выселяемые —
   фикстуры»; drain: cordon, выселения (старые UID ушли, новые `Pending`), PDB-отказ, без
   контроллера остался, DaemonSet-ы не тронуты; очистка — uncordon, удаление фикстур.
+  Сделано: `drain_run_test.go` (фейковый writer считает каждый POST), `actions_wire_test.go`
+  (один POST и при 429/503 с `Retry-After`; без `MaxRetries(0)` тест падает),
+  `TestKindActionDrain` — на kind настоящий apiserver ответил 429 с cause `DisruptionBudget`.
+  Фикстуры — образ `registry.k8s.io/pause:3.10` (есть на узлах, без загрузки).
 
 ### Task 6. UI и e2e
 - [ ] Подписи `act.*`, ключи сообщений; меню узла и «Действия ▾»; просмотр drain и итог по

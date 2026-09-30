@@ -55,6 +55,10 @@ func (w *editRec) delete(context.Context, schema.GroupVersionResource, string, s
 	return errors.New("unexpected delete")
 }
 
+func (w *editRec) evict(context.Context, string, string, string, string) error {
+	return errors.New("unexpected eviction")
+}
+
 func (w *editRec) editPatch(ctx context.Context, gvr schema.GroupVersionResource, ns, name string, data []byte, dry bool) ([]byte, error) {
 	var body map[string]any
 	dec := json.NewDecoder(strings.NewReader(string(data)))

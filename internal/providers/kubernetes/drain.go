@@ -5,17 +5,21 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"sort"
 	"strings"
 	"sync"
+	"time"
 
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 
 	"github.com/spk/spk-ocular/internal/core"
+	"github.com/spk/spk-ocular/internal/provider"
 )
 
 // Drain (P11): cordon the node, then ask the API server to evict its pods
@@ -498,3 +502,215 @@ func runtimeFromMap(m map[string]any, v any) error {
 	}
 	return json.Unmarshal(b, v)
 }
+
+// drainRunTimeout bounds a whole drain run (reads, cordon, evictions) —
+// under the dialog's 60 s; drainWriteTimeout bounds one write. Variables
+// for tests.
+var (
+	drainRunTimeout   = 45 * time.Second
+	drainWriteTimeout = 10 * time.Second
+)
+
+// disruptionBudgetCause: a 429 of an eviction for a PodDisruptionBudget
+// (policy/v1 DisruptionBudgetCause), not throttling.
+const disruptionBudgetCause = "DisruptionBudget"
+
+// runDrain: the node and its pods are read again and must match the plan;
+// then the cordon (if the node is open) and one eviction per pod, each one
+// request. After the first write the answer is a result with parts, never
+// an error — even when the time runs out or the caller goes.
+func (s *session) runDrain(ctx context.Context, def *kindDef, run provider.ActionRun) (core.ActionResult, error) {
+	if !sameRoute(def, run.Expect) {
+		return core.ActionResult{}, &provider.Error{Class: provider.ClassConflict, Message: fmt.Sprintf("the API resource of %s changed since the action was reviewed; review it again", def.desc.Title)}
+	}
+	ctx, cancel := context.WithTimeout(ctx, drainRunTimeout)
+	defer cancel()
+	var parts []core.ActionPart
+	var inv *drainInventory
+	var node *unstructured.Unstructured
+	for attempt := 1; ; attempt++ {
+		var err error
+		node, inv, err = s.drainCheck(ctx, def, run)
+		if err != nil {
+			return core.ActionResult{}, err
+		}
+		if boolAt(node.Object, "spec", "unschedulable") {
+			break
+		}
+		if err := ctx.Err(); err != nil {
+			return core.ActionResult{}, &provider.Error{Class: provider.ClassUnavailable, Message: "nothing was written: " + err.Error()}
+		}
+		part, retry, err := s.drainCordon(ctx, def, run, node, attempt)
+		if err != nil {
+			return core.ActionResult{}, err
+		}
+		if retry {
+			continue
+		}
+		parts = append(parts, part)
+		break
+	}
+	if len(parts) > 0 && parts[0].Outcome != core.OutcomeDone {
+		for _, p := range inv.evict {
+			parts = append(parts, skippedPart(p, msg("drain.why.notCordoned")))
+		}
+	} else {
+		for _, p := range inv.evict {
+			parts = append(parts, s.evictOne(ctx, p)) // not started once the run is over
+		}
+	}
+	for _, p := range inv.bare {
+		parts = append(parts, skippedPart(p, msg("drain.why.bare")))
+	}
+	out := core.PartsOutcome(parts)
+	done := 0
+	for _, p := range parts {
+		if p.Outcome == core.OutcomeDone {
+			done++
+		}
+	}
+	return core.ActionResult{Message: fmt.Sprintf("node %s: drain requested (%d of %d parts done)", node.GetName(), done, len(parts)), Outcome: out, Parts: parts}, nil
+}
+
+// drainCheck reads the node (by UID) and its pods again: they must be the
+// plan's.
+func (s *session) drainCheck(ctx context.Context, def *kindDef, run provider.ActionRun) (*unstructured.Unstructured, *drainInventory, error) {
+	node, err := s.getConfirmed(ctx, def, run.Ref)
+	if err != nil {
+		return nil, nil, err
+	}
+	if why := actionUnavailable(def, actDrain.ID, node); why != nil {
+		return nil, nil, &provider.Error{Class: provider.ClassConflict, Message: why.Text}
+	}
+	inv, why := s.drainPods(ctx, node.GetName())
+	if why != nil {
+		return nil, nil, &provider.Error{Class: provider.ClassConflict, Message: why.Text + "; nothing was written"}
+	}
+	if drainExpect(def, node, inv) != run.Expect {
+		return nil, nil, &provider.Error{Class: provider.ClassConflict, Message: fmt.Sprintf("node %s or its pods changed since the drain was reviewed; review it again", node.GetName())}
+	}
+	return node, inv, nil
+}
+
+// drainCordon writes the cordon; retry: a version-only change refused it
+// (the whole plan checked again before). An error: nothing was written.
+func (s *session) drainCordon(ctx context.Context, def *kindDef, run provider.ActionRun, node *unstructured.Unstructured, attempt int) (core.ActionPart, bool, error) {
+	part := core.ActionPart{ID: "cordon", Title: node.GetName()}
+	wctx, cancel := context.WithTimeout(ctx, drainWriteTimeout)
+	defer cancel()
+	cordon := provider.ActionRun{Ref: run.Ref, Action: actCordon.ID}
+	_, err := s.write(wctx, def, cordon, node)
+	if err == nil {
+		part.Outcome, part.Message = core.OutcomeDone, "cordon requested"
+		return part, false, nil
+	}
+	var se apierrors.APIStatus
+	switch {
+	case !errors.As(err, &se) || ambiguous(err):
+		part.Outcome, part.Why = core.OutcomeUnknown, ptr(msg("drain.why.unknown", "detail", shortErr(err)))
+		return part, false, nil
+	case apierrors.IsNotFound(err):
+		return part, false, &provider.Error{Class: provider.ClassGone, Message: fmt.Sprintf("node %s no longer exists", node.GetName())}
+	case apierrors.IsConflict(err) && attempt < maxVersionRetries:
+		// Checked again from the start (node and pods); a moved version
+		// with the same plan is tried again.
+		now, gerr := s.getConfirmed(ctx, def, run.Ref)
+		if gerr == nil && now.GetResourceVersion() != node.GetResourceVersion() {
+			return part, true, nil
+		}
+	}
+	part.Outcome, part.Why = core.OutcomeRefused, ptr(msg("drain.why.refused", "detail", statusMessage(err)))
+	return part, false, nil
+}
+
+// evictOne asks for p's eviction with the UID and version of this run's
+// list. A 404 or 409 proves nothing alone: one read of the pod tells gone
+// or replaced (skipped) from refused; only a 409 at a moved version with
+// the same fingerprint is tried again (at most maxVersionRetries in all).
+func (s *session) evictOne(ctx context.Context, p drainPod) core.ActionPart {
+	part := core.ActionPart{ID: string(p.u.GetUID()), Title: p.name()}
+	ns, name, uid, rv := p.u.GetNamespace(), p.u.GetName(), string(p.u.GetUID()), p.u.GetResourceVersion()
+	wr := s.writer
+	if wr == nil {
+		wr = dynWriter{s.dyn}
+	}
+	for attempt := 1; ; attempt++ {
+		if ctx.Err() != nil {
+			return skippedPart(p, stopWhy(ctx))
+		}
+		wctx, cancel := context.WithTimeout(ctx, drainWriteTimeout)
+		err := wr.evict(wctx, ns, name, uid, rv)
+		cancel()
+		var se apierrors.APIStatus
+		switch {
+		case err == nil:
+			part.Outcome, part.Message = core.OutcomeDone, "eviction requested"
+			return part
+		case !errors.As(err, &se) || ambiguous(err):
+			part.Outcome, part.Why = core.OutcomeUnknown, ptr(msg("drain.why.unknown", "detail", shortErr(err)))
+			return part
+		case apierrors.IsTooManyRequests(err):
+			part.Outcome = core.OutcomeRefused
+			part.Why = ptr(msg("drain.why.throttled"))
+			if d := se.Status().Details; d != nil {
+				for _, c := range d.Causes {
+					if string(c.Type) == disruptionBudgetCause {
+						part.Why = ptr(msg("drain.why.pdb"))
+					}
+				}
+			}
+			return part
+		case !apierrors.IsNotFound(err) && !apierrors.IsConflict(err):
+			part.Outcome, part.Why = core.OutcomeRefused, ptr(msg("drain.why.refused", "detail", statusMessage(err)))
+			return part
+		}
+		// 404 or 409: look at the pod once.
+		gctx, gcancel := context.WithTimeout(ctx, drainWriteTimeout)
+		now, gerr := s.dyn.Resource(podsKind.gvr).Namespace(ns).Get(gctx, name, metav1.GetOptions{})
+		gcancel()
+		switch {
+		case gerr != nil && apierrors.IsNotFound(gerr):
+			return skippedPart(p, msg("drain.why.gone"))
+		case gerr != nil:
+			part.Outcome, part.Why = core.OutcomeRefused, ptr(msg("drain.why.refused", "detail", statusMessage(err)))
+			return part
+		case string(now.GetUID()) != uid:
+			return skippedPart(p, msg("drain.why.replaced"))
+		case apierrors.IsNotFound(err), now.GetResourceVersion() == rv:
+			// A live pod and a 404 (no eviction route?), or a 409 at the
+			// version asked about: refused, not proof of anything else.
+			part.Outcome, part.Why = core.OutcomeRefused, ptr(msg("drain.why.refused", "detail", statusMessage(err)))
+			return part
+		}
+		q := classifyPod(now)
+		if b1, _ := json.Marshal(q.print()); string(b1) != string(printJSON(p.print())) {
+			part.Outcome, part.Why = core.OutcomeRefused, ptr(msg("drain.why.changed"))
+			return part
+		}
+		if attempt >= maxVersionRetries {
+			part.Outcome, part.Why = core.OutcomeRefused, ptr(msg("drain.why.keepsChanging"))
+			return part
+		}
+		rv = now.GetResourceVersion()
+	}
+}
+
+func printJSON(v any) []byte {
+	b, _ := json.Marshal(v)
+	return b
+}
+
+func skippedPart(p drainPod, why core.Message) core.ActionPart {
+	return core.ActionPart{ID: string(p.u.GetUID()), Title: p.name(), Outcome: core.OutcomeSkipped, Why: &why}
+}
+
+// stopWhy: why parts were not started — the run's time ran out or its
+// caller went away.
+func stopWhy(ctx context.Context) core.Message {
+	if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+		return msg("drain.why.timeUp")
+	}
+	return msg("drain.why.cancelled")
+}
+
+func ptr[T any](v T) *T { return &v }
