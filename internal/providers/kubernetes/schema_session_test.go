@@ -145,7 +145,7 @@ func (a *widgetsAPI) serve(w http.ResponseWriter, r *http.Request) {
 }
 
 // serveOne answers a GET of one widget: a one-row Table (406 when plain).
-func (a *widgetsAPI) serveOne(w http.ResponseWriter, r *http.Request, name string) {
+func (a *widgetsAPI) serveOne(w http.ResponseWriter, _ *http.Request, name string) {
 	a.mu.Lock()
 	plain, cols, objs := a.plain, a.cols, a.objs
 	a.mu.Unlock()
