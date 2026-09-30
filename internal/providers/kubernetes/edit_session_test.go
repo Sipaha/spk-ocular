@@ -223,6 +223,20 @@ func TestPrepareEditOfAnUnprovenRouteSendsNothing(t *testing.T) {
 	assert.Contains(t, keys(plan.Warnings), "kubernetes.edit.local")
 	require.NotNil(t, grant)
 	assert.Equal(t, "local", grant.Mode)
+
+	// A local overlay shows the decimal it sends, not float64's reading of
+	// it: an unknown backend may keep it exactly (the server-checked mode
+	// shows the server's own answer instead).
+	plan, grant, err = s.PrepareEdit(context.Background(), request(doc, base, doc.Text+"spec: {value: 9007199254740993.0, half: .5}\n"))
+	require.NoError(t, err)
+	assert.Contains(t, plan.After, "value: 9007199254740993.0\n")
+	assert.Contains(t, plan.After, "half: 0.5\n")
+	after, err := parseEditDoc(plan.After)
+	require.NoError(t, err)
+	assert.Equal(t, json.Number("9007199254740993.0"), after["spec"].(map[string]any)["value"])
+	_, err = s.RunEdit(context.Background(), run(request(doc, base, doc.Text+"spec: {value: 9007199254740993.0, half: .5}\n"), grant))
+	require.NoError(t, err)
+	assert.Equal(t, json.Number("9007199254740993.0"), w.writes(false)[0].body["spec"].(map[string]any)["value"])
 }
 
 func keys(ms []core.Message) []string {

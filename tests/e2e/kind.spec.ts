@@ -451,3 +451,65 @@ spec:
     cleanup()
   }
 })
+
+/** The editor's text (a short document: every line is rendered). */
+async function editorText(drawer: ReturnType<Page['getByRole']>) {
+  const lines = await drawer.getByLabel('YAML editor').locator('.cm-line').allTextContents()
+  return lines.join('\n') + '\n'
+}
+
+/** Replaces the editor's whole text, as typing would. */
+async function setEditorText(page: Page, drawer: ReturnType<Page['getByRole']>, text: string) {
+  await drawer.getByLabel('YAML editor').locator('.cm-content').click()
+  await page.keyboard.press('ControlOrMeta+a')
+  await page.keyboard.insertText(text)
+}
+
+test('edit a ConfigMap as YAML: reviewed by the server, written once; a refusal is said', async ({ page }) => {
+  kubectl('-n', 'ocular-demo', 'create', 'configmap', 'e2e-edit', '--from-literal=a=1', '--from-literal=b=2')
+  try {
+    await openTarget(page, 'kind-ocular-dev')
+    const grid = await kindPage(page, 'ConfigMaps')
+    await row(grid, 'e2e-edit').click()
+    const drawer = page.getByRole('dialog', { name: 'configmaps e2e-edit' })
+    await drawer.getByRole('button', { name: 'Edit' }).click()
+    await expect(drawer.getByLabel('YAML editor')).toContainText('a: "1"')
+    const text = await editorText(drawer)
+    expect(text).not.toContain('manager:') // managedFields are not shown
+    await setEditorText(page, drawer, text.replace('a: "1"', 'a: "2"'))
+    await page.keyboard.press('ControlOrMeta+Enter')
+
+    const review = page.getByRole('dialog', { name: 'Edit e2e-edit' })
+    await expect(review).toContainText('checked by the server without writing')
+    await expect(review.getByLabel('where')).toContainText('Contextkind-ocular-dev')
+    await expect(review.getByLabel('where')).toContainText('Namespaceocular-demo')
+    await expect(review.getByRole('region', { name: 'Changes' })).toContainText('lines removed: 1, added: 1')
+    expect(kubectl('-n', 'ocular-demo', 'get', 'configmap', 'e2e-edit', '-o', 'jsonpath={.data.a}')).toBe('1') // reviewed only
+    await review.getByRole('button', { name: 'Apply' }).click()
+    await expect(page.getByRole('status')).toContainText('e2e-edit: changes written')
+    await expect(review).toBeHidden()
+    expect(kubectl('-n', 'ocular-demo', 'get', 'configmap', 'e2e-edit', '-o', 'jsonpath={.data.a}')).toBe('2')
+    // The details follow the object: the viewer shows what was written.
+    await expect(drawer.getByLabel('YAML editor')).toBeHidden()
+    await expect(drawer.locator('.cm-editor')).toContainText('a: "2"')
+
+    // An unknown field: the server's strict validation refuses the dry run.
+    await drawer.getByRole('button', { name: 'Edit' }).click()
+    await expect(drawer.getByLabel('YAML editor')).toContainText('a: "2"')
+    await setEditorText(page, drawer, (await editorText(drawer)) + 'datta:\n  x: "1"\n')
+    await drawer.getByRole('button', { name: /Review changes/ }).click()
+    await expect(review.getByRole('alert')).toContainText('The server refuses this edit')
+    await expect(review.getByRole('alert')).toContainText('unknown field')
+    await expect(review.getByRole('button', { name: 'Apply' })).toBeDisabled()
+    await review.getByRole('button', { name: 'Back to the text' }).click()
+    // Leaving with the edits asks first; the safe answer has the focus.
+    await drawer.getByRole('button', { name: 'Close' }).click()
+    const prompt = page.getByRole('alertdialog', { name: 'Discard edits?' })
+    await expect(prompt.getByRole('button', { name: 'Keep editing' })).toBeFocused()
+    await prompt.getByRole('button', { name: 'Discard' }).click()
+    await expect(drawer).toBeHidden()
+    expect(kubectl('-n', 'ocular-demo', 'get', 'configmap', 'e2e-edit', '-o', 'jsonpath={.data}')).not.toContain('datta')
+  } finally {
+    kubectl('-n', 'ocular-demo', 'delete', 'configmap', 'e2e-edit', '--ignore-not-found', '--wait=false')
+  }
+})

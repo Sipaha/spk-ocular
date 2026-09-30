@@ -58,12 +58,22 @@ func (w *restWriter) patch(ctx context.Context, gvr schema.GroupVersionResource,
 	return w.c.Patch(pt).AbsPath(objectPath(gvr, ns, name, sub)...).Body(data).MaxRetries(0).Do(ctx).Error()
 }
 
+// editManager names the editor's writes in managedFields (kubectl edit's
+// are "kubectl-edit").
+const editManager = "spk-ocular"
+
 func (w *restWriter) editPatch(ctx context.Context, gvr schema.GroupVersionResource, ns, name string, data []byte, dryRun bool) ([]byte, error) {
-	r := w.c.Patch(types.MergePatchType).AbsPath(objectPath(gvr, ns, name, "")...).Param("fieldValidation", "Strict")
+	r := w.c.Patch(types.MergePatchType).AbsPath(objectPath(gvr, ns, name, "")...).Param("fieldValidation", "Strict").Param("fieldManager", editManager)
 	if dryRun {
 		r = r.Param("dryRun", "All")
 	}
-	return r.Body(data).MaxRetries(0).Do(ctx).Raw()
+	res := r.Body(data).MaxRetries(0).Do(ctx)
+	// Error, not Raw: only Error reads a refusal's Status (message, causes)
+	// from the body; Raw gives the bare "the server rejected our request".
+	if err := res.Error(); err != nil {
+		return nil, err
+	}
+	return res.Raw()
 }
 
 func (w *restWriter) delete(ctx context.Context, gvr schema.GroupVersionResource, ns, name string, opts metav1.DeleteOptions) error {
@@ -89,7 +99,7 @@ func (w dynWriter) patch(ctx context.Context, gvr schema.GroupVersionResource, n
 }
 
 func (w dynWriter) editPatch(ctx context.Context, gvr schema.GroupVersionResource, ns, name string, data []byte, dryRun bool) ([]byte, error) {
-	opts := metav1.PatchOptions{FieldValidation: "Strict"}
+	opts := metav1.PatchOptions{FieldValidation: "Strict", FieldManager: editManager}
 	if dryRun {
 		opts.DryRun = []string{metav1.DryRunAll}
 	}

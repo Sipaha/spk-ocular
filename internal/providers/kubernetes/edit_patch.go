@@ -1,11 +1,15 @@
 package kubernetes
 
 import (
+	"crypto/rand"
+	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"reflect"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -193,9 +197,59 @@ func editView(u *unstructured.Unstructured, secret bool) (string, error) {
 	if secret {
 		maskSecret(o)
 	}
+	o, back := exactDecimals(o)
 	y, err := yaml.Marshal(o)
 	if err != nil {
 		return "", err
 	}
-	return editHeader + string(y), nil
+	return editHeader + back(string(y)), nil
+}
+
+// exactDecimals: sigs.k8s.io/yaml reads numbers back through float64 on
+// the way to YAML, so a decimal literal of an edit (json.Number, as sent)
+// would show rounded — 9007199254740993.0 as 9.007199254740992e+15. Each
+// one is swapped (in a copy) for a marker the emitter keeps as a plain
+// word; back puts the literals in its place. A local overlay then shows
+// the value it sends (an unknown backend may keep it exactly); integers
+// are exact without this.
+func exactDecimals(o map[string]any) (map[string]any, func(string) string) {
+	var nonce [8]byte
+	_, _ = rand.Read(nonce[:])
+	prefix := "ocularnum" + hex.EncodeToString(nonce[:]) + "x"
+	var lits []string
+	var walk func(v any) any
+	walk = func(v any) any {
+		switch t := v.(type) {
+		case map[string]any:
+			out := make(map[string]any, len(t))
+			for k, x := range t {
+				out[k] = walk(x)
+			}
+			return out
+		case []any:
+			out := make([]any, len(t))
+			for i, x := range t {
+				out[i] = walk(x)
+			}
+			return out
+		case json.Number:
+			if !strings.ContainsAny(string(t), ".eE") {
+				return t
+			}
+			lits = append(lits, string(t))
+			return prefix + strconv.Itoa(len(lits)-1)
+		}
+		return v
+	}
+	out := walk(o).(map[string]any)
+	return out, func(text string) string {
+		if len(lits) == 0 {
+			return text
+		}
+		// Longest index first: marker 1 is a prefix of marker 10.
+		for i := len(lits) - 1; i >= 0; i-- {
+			text = strings.ReplaceAll(text, prefix+strconv.Itoa(i), lits[i])
+		}
+		return text
+	}
 }

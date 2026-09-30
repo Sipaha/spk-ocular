@@ -168,3 +168,22 @@ func TestARefusalIsNotRetriedOnTheWireEvenWhenTheVersionMoved(t *testing.T) {
 		})
 	}
 }
+
+// An edit's refusal keeps the server's Status (message, causes): the UI
+// says why, not "the server rejected our request".
+func TestAnEditRefusalOverTheWireKeepsTheServersStatus(t *testing.T) {
+	ws := &wireServer{obj: configMap("cfg", "7", map[string]any{"a": "1"}, nil), reply: func(_ int, w http.ResponseWriter) (bool, bool) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusUnprocessableEntity)
+		_, _ = io.WriteString(w, `{"apiVersion":"v1","kind":"Status","status":"Failure","reason":"Invalid","code":422,`+
+			`"message":"Deployment.apps \"web\" is invalid: spec.selector: Invalid value: field is immutable",`+
+			`"details":{"causes":[{"reason":"FieldValueInvalid","field":"spec.selector"}]}}`)
+		return false, true
+	}}
+	s := wireSession(t, ws)
+	_, err := s.editWriter().editPatch(context.Background(), cmGVR, "ns", "cfg", []byte(`{}`), true)
+	require.Error(t, err)
+	assert.Contains(t, statusMessage(err), "field is immutable")
+	m := secretSafe(err)
+	assert.Equal(t, "kubernetes.edit.hiddenInvalidFields", m.Key, "the causes are read")
+}
