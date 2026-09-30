@@ -524,7 +524,7 @@ target, kind, scope, name, uid, title, opened_at; ≤ 50 на target, ≤ 500 в
   чужое изменение replicas, политика PVC StatefulSet при scale down и delete, paused, HPA,
   RBAC viewer) и в desktop под Xvfb (контекстное меню, диалоги, `Delete`/`Shift+F10` в русской
   раскладке, фокус и Esc).
-- **P5** — Problems, палитра, клавиатурная навигация, полировка, soak-замер памяти
+- **P5** ✅ — Problems, палитра, клавиатурная навигация, полировка, soak-замер памяти
   (реализовано 2026-09-30; soak принят 2026-09-30 на сборке P7: по фазам ≤ +75 МБ, после
   нагрузки 156 МБ ровно — план P5 Task 8). Problems: один вид из обычных наблюдений pods,
   workloads, services, ingresses, nodes и Warning events текущей области, ошибки → предупреждения
@@ -539,7 +539,7 @@ target, kind, scope, name, uid, title, opened_at; ≤ 50 на target, ≤ 500 в
   последствия и причины — ключи с параметрами (русский в UI), уровни exec от провайдера,
   поздний ответ действия после таймаута. Проверено: vitest, synth e2e, kind (Problems) и
   desktop под Xvfb в русской раскладке.
-- **P6** — Docker Compose provider: просмотр и логи (реализовано 2026-09-30,
+- **P6** ✅ — Docker Compose provider: просмотр и логи (реализовано 2026-09-30,
   `docs/plans/2026-09-30-p6-docker-compose.md`). Target-ы — Docker contexts, как docker CLI 29
   (`DOCKER_CONFIG`/`DOCKER_HOST`/`DOCKER_CONTEXT`, TLS-пары, inotify), рядом с kube contexts; свой
   тонкий клиент Engine (unix/tcp/TLS, без повторов). Scope — compose-проект; виды services
