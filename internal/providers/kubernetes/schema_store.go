@@ -382,8 +382,23 @@ func (s *session) setPlainLocked(gvr schema.GroupVersionResource) {
 // answer shows other columns or another provenance ends; a first probe in
 // flight is fenced (its answer may be the old one's). only nil: all.
 func (s *session) revalidate(only *schema.GroupVersionResource) {
+	s.check(s.fence(only))
+}
+
+// revalidateLater is revalidate with the checks in the background; the
+// fence is set before it returns, so a probe answering right after the
+// event (before any check runs) publishes nothing.
+func (s *session) revalidateLater(only *schema.GroupVersionResource) {
+	if gvrs := s.fence(only); len(gvrs) > 0 {
+		go s.check(gvrs)
+	}
+}
+
+// fence ends the probes in flight (only nil: all) and returns the resources
+// with a schema to check again.
+func (s *session) fence(only *schema.GroupVersionResource) []schema.GroupVersionResource {
 	if s.tables == nil {
-		return
+		return nil
 	}
 	s.schemas.mu.Lock()
 	var gvrs []schema.GroupVersionResource
@@ -399,6 +414,10 @@ func (s *session) revalidate(only *schema.GroupVersionResource) {
 		}
 	}
 	s.schemas.mu.Unlock()
+	return gvrs
+}
+
+func (s *session) check(gvrs []schema.GroupVersionResource) {
 	for _, gvr := range gvrs {
 		s.revalidateOne(gvr)
 	}

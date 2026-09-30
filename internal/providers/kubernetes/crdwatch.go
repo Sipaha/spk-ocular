@@ -207,7 +207,7 @@ func (s *session) crdChanged(u *unstructured.Unstructured) {
 	}
 	s.schemas.mu.Unlock()
 	for _, gvr := range gvrs {
-		go s.revalidate(&gvr)
+		s.revalidateLater(&gvr)
 	}
 }
 

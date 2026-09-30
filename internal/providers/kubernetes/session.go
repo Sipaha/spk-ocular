@@ -242,7 +242,7 @@ func (s *session) OnKindsChanged(f func(rev uint64)) { s.kindsListener.Store(&f)
 // printer columns may change without an event we can see).
 func (s *session) RefreshKinds() {
 	s.cat.refresh()
-	go s.revalidate(nil)
+	s.revalidateLater(nil)
 }
 func (s *session) KindRemoved(id string) bool { return s.cat.snap().removed[id] }
 

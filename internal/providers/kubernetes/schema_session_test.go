@@ -475,7 +475,16 @@ func TestARevalidationFencesAProbeInFlight(t *testing.T) {
 	cols[1].(map[string]any)["jsonPath"] = ".status.since"
 	// Through the tracker: the client's lock is held by the reactor.
 	require.NoError(t, s.dyn.(*dynamicfake.FakeDynamicClient).Tracker().Update(crdGVR, changed, "", metav1.UpdateOptions{}))
+	gen := func() uint64 {
+		s.schemas.mu.Lock()
+		defer s.schemas.mu.Unlock()
+		return s.schemas.by[widgetsGVR].gen
+	}
+	was := gen()
 	s.crdChanged(changed)
+	// Fenced by the time the event is handled, not later: a probe answering
+	// right after it (before any background check runs) publishes nothing.
+	assert.Greater(t, gen(), was, "the probe in flight is fenced at once")
 	close(release)
 	r := <-done
 	require.NoError(t, r.err)
