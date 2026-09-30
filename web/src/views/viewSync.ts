@@ -41,8 +41,10 @@ export class ViewSync {
   private disposed = false
   /** The kind is no longer served: the view is over. */
   private ended = false
-  /** Reopens for changed columns since the last good page. */
+  /** Reopens for changed columns since the last ready page. */
   private schemaReopens = 0
+  /** A reopened view's kind, shown with its first snapshot. */
+  private pendingKind: KindDescriptor | null = null
   private rows = new Map<string, Row>()
   private state: ViewState = { viewId: null, kind: null, resync: false, rows: [], status: { state: 'loading' }, openError: null }
   private listeners = new Set<() => void>()
@@ -94,7 +96,15 @@ export class ViewSync {
       }
       this.viewId = info.viewId
       this.retries = 0
-      this.emit({ viewId: info.viewId, kind: info.kind, resync: !!info.resync, openError: null })
+      // Rows shown now are the previous view's: its columns stay with them
+      // until the new view's snapshot (one epoch's metadata and rows).
+      if (this.rows.size === 0) {
+        this.pendingKind = null
+        this.emit({ viewId: info.viewId, kind: info.kind, resync: !!info.resync, openError: null })
+      } else {
+        this.pendingKind = info.kind
+        this.emit({ viewId: info.viewId, resync: !!info.resync, openError: null })
+      }
       void this.pull()
     } catch (e) {
       if (this.disposed || gen !== this.generation) return
@@ -134,6 +144,7 @@ export class ViewSync {
     if (this.retryTimer) this.timers.clearTimeout(this.retryTimer)
     this.retryTimer = null
     this.rows = new Map()
+    this.pendingKind = null
     this.emit({ rows: [], status: { state: 'error', class: 'removed', message } })
   }
 
@@ -177,7 +188,8 @@ export class ViewSync {
           schema = page.status.message ?? ''
           break
         }
-        this.schemaReopens = 0
+        // Recovered only when the new view shows its rows (not a loading page).
+        if (page.status.state === 'ready') this.schemaReopens = 0
         this.apply(page)
         this.retries = 0
         // A page that did not move the cursor means the announced version is
@@ -213,7 +225,9 @@ export class ViewSync {
     for (const r of p.upserts) this.rows.set(r.id, r)
     for (const id of p.deleted) this.rows.delete(id)
     this.cursor = p.version
-    this.emit({ rows: Array.from(this.rows.values()), status: p.status })
+    const kind = p.reset && this.pendingKind ? { kind: this.pendingKind } : {}
+    if (p.reset) this.pendingKind = null
+    this.emit({ rows: Array.from(this.rows.values()), status: p.status, ...kind })
   }
 
   /** Starts (or restarts after dispose — React StrictMode remounts). */

@@ -284,6 +284,53 @@ describe('ViewSync: the kind ends', () => {
   })
 })
 
+describe('ViewSync: the kind ends (review)', () => {
+  it('loading pages do not reset the reopen budget: schema_changed before ready stays bounded', async () => {
+    vi.useFakeTimers()
+    let n = 0
+    const openView = vi.fn(async () => ({ viewId: `v${++n}`, kind: widgetsKind(['name']) }))
+    const getRows = vi.fn(async (id: string, since: number) =>
+      since === 0
+        ? page({ viewId: id, reset: true, version: 1, status: { state: 'loading' } })
+        : page({ viewId: id, version: 2, status: { state: 'error', class: 'schema_changed', message: 'changed' } }))
+    const s = new ViewSync(client({ openView, getRows }), 'kubernetes', 't', q)
+    await s.open()
+    for (let i = 0; i < 12; i++) {
+      await vi.advanceTimersByTimeAsync(0)
+      s.onChanged({ version: 2 })
+      await vi.advanceTimersByTimeAsync(10_000)
+    }
+    expect(openView.mock.calls.length).toBeLessThanOrEqual(6)
+    expect(s.snapshot().status).toMatchObject({ state: 'error', class: 'schema_changed' })
+  })
+
+  it('the new columns come with the new rows, never over the old ones', async () => {
+    const second = deferred<Page>()
+    const openView = vi.fn()
+      .mockResolvedValueOnce({ viewId: 'v1', kind: widgetsKind(['name', 'size']) })
+      .mockResolvedValueOnce({ viewId: 'v2', kind: widgetsKind(['name', 'phase']) })
+    const getRows = vi.fn(async (id: string, since: number) => {
+      if (id === 'v1' && since === 0) return page({ viewId: 'v1', reset: true, version: 1, upserts: [row('a', '42')] })
+      if (id === 'v1') return page({ viewId: 'v1', version: 2, status: { state: 'error', class: 'schema_changed' } })
+      return second.p
+    })
+    const s = new ViewSync(client({ openView, getRows }), 'kubernetes', 't', q)
+    await s.open()
+    await flush()
+    s.onChanged({ version: 2 })
+    await flush()
+    await flush()
+    await flush()
+    expect(openView).toHaveBeenCalledTimes(2)
+    expect(s.snapshot().kind?.columns.map((c) => c.id)).toEqual(['name', 'size']) // still the old rows' columns
+    second.resolve(page({ viewId: 'v2', reset: true, version: 1, upserts: [row('a', 'Running')] }))
+    await flush()
+    await flush()
+    expect(s.snapshot().kind?.columns.map((c) => c.id)).toEqual(['name', 'phase'])
+    expect(s.snapshot().rows[0].cells[0].text).toBe('Running')
+  })
+})
+
 describe('ViewHub', () => {
   beforeEach(() => vi.useFakeTimers())
 

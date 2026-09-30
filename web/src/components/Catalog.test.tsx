@@ -189,3 +189,44 @@ describe('the navigation follows the open view', () => {
   })
 })
 
+describe('a kind that comes back', () => {
+  it('a new session still discovering does not strand the open discovered kind', async () => {
+    const f = fakeClient([k8s('prod')])
+    const listKinds = vi.fn(async () => catalog([podsKind, jobs]))
+    f.client.listKinds = listKinds
+    f.client.getTargetState = vi.fn(async () => ({ kind: JSON.stringify('batch/jobs') }))
+    const nav = await open(f)
+    await screen.findByRole('heading', { name: 'Jobs' })
+    const opens = () => (f.client.openView as ReturnType<typeof vi.fn>).mock.calls.filter((c) => c[2].kind === 'batch/jobs').length
+    const before = opens()
+    // the target was reconfigured: session 2 knows only the described kinds yet
+    listKinds.mockResolvedValue(catalog([podsKind], { session: 2, state: 'discovering' }))
+    await act(async () => f.emit({ type: 'kinds_changed', payload: { provider: 'kubernetes', target: 'prod', session: 2, rev: 1 } }))
+    expect(await screen.findByText('Loading…')).toBeInTheDocument()
+    listKinds.mockResolvedValue(catalog([podsKind, jobs], { session: 2, rev: 2 }))
+    await act(async () => f.emit({ type: 'kinds_changed', payload: { provider: 'kubernetes', target: 'prod', session: 2, rev: 2 } }))
+    expect(await within(nav).findByRole('button', { name: 'Jobs' })).toBeInTheDocument()
+    await waitFor(() => expect(opens()).toBeGreaterThan(before))
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  })
+
+  it('a removed kind served again opens a fresh view', async () => {
+    const f = fakeClient([k8s('prod')])
+    const listKinds = vi.fn(async () => catalog([podsKind, jobs]))
+    f.client.listKinds = listKinds
+    f.client.getTargetState = vi.fn(async () => ({ kind: JSON.stringify('batch/jobs') }))
+    const nav = await open(f)
+    await screen.findByRole('heading', { name: 'Jobs' })
+    listKinds.mockResolvedValue(catalog([podsKind], { rev: 2 }))
+    f.state.statusByKind['batch/jobs'] = { state: 'error', class: 'removed', message: 'Jobs are no longer served by the API' }
+    await act(async () => f.emit({ type: 'kinds_changed', payload: { provider: 'kubernetes', target: 'prod', session: 1, rev: 2 } }))
+    await act(async () => f.emit({ type: 'view_changed', payload: { viewId: 'v-batch/jobs', version: 50 } }))
+    expect(await screen.findByRole('alert')).toHaveTextContent('no longer served by the API')
+    delete f.state.statusByKind['batch/jobs']
+    listKinds.mockResolvedValue(catalog([podsKind, jobs], { rev: 3 }))
+    await act(async () => f.emit({ type: 'kinds_changed', payload: { provider: 'kubernetes', target: 'prod', session: 1, rev: 3 } }))
+    expect(await within(nav).findByRole('button', { name: 'Jobs' })).toBeInTheDocument()
+    await waitFor(() => expect(screen.queryByRole('alert')).not.toBeInTheDocument())
+  })
+})
+

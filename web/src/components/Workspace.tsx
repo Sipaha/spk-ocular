@@ -232,7 +232,8 @@ export function Workspace({ client, hub, target }: { client: Client; hub: ViewHu
           <ResourcePage
             // A new kind or scope is a new page: selection, filter and an open
             // drawer belong to the table they were made in.
-            key={`${current.id}/${JSON.stringify(current.scoped ? scope : { mode: 'none' })}`}
+            // A kind served again (after removed / a new session) is a new page too.
+            key={`${current.id}#${catalog.appeared.get(current.id) ?? 0}/${JSON.stringify(current.scoped ? scope : { mode: 'none' })}`}
             client={client}
             hub={hub}
             target={target}

@@ -10,6 +10,9 @@ export interface Kinds {
   error: string | null
   /** Kinds a later listing no longer had (their pages say "no longer served"). */
   removed: ReadonlyMap<string, KindDescriptor>
+  /** Per kind, how many times it came back after being absent: a page is
+   * of one appearance (a kind served again gets a fresh view). */
+  appeared: ReadonlyMap<string, number>
   /** F5 in the navigation: the target reads its kinds again. */
   refresh: () => void
 }
@@ -18,6 +21,7 @@ interface State {
   view: KindsView | null
   error: string | null
   removed: Map<string, KindDescriptor>
+  appeared: Map<string, number>
 }
 
 /**
@@ -27,7 +31,7 @@ interface State {
  * request wins; an answer to an older one is dropped.
  */
 export function useKinds(client: Client, hub: ViewHub, provider: string, target: string): Kinds {
-  const [st, setSt] = useState<State>({ view: null, error: null, removed: new Map() })
+  const [st, setSt] = useState<State>({ view: null, error: null, removed: new Map(), appeared: new Map() })
   const seq = useRef(0)
   const known = useRef<{ session: number; rev: number } | null>(null)
 
@@ -39,10 +43,17 @@ export function useKinds(client: Client, hub: ViewHub, provider: string, target:
         known.current = { session: v.session, rev: v.rev }
         setSt((old) => {
           const removed = new Map(old.removed)
+          const appeared = new Map(old.appeared)
           const now = new Set(v.kinds.map((k) => k.id))
-          for (const k of old.view?.kinds ?? []) if (!now.has(k.id)) removed.set(k.id, k)
-          for (const id of now) removed.delete(id)
-          return { view: v, error: null, removed }
+          const before = new Set((old.view?.kinds ?? []).map((k) => k.id))
+          // Still discovering (a new session knows only the described kinds
+          // yet): a kind not listed is pending, not removed.
+          if (v.state !== 'discovering') for (const k of old.view?.kinds ?? []) if (!now.has(k.id)) removed.set(k.id, k)
+          for (const id of now) {
+            if (old.view && !before.has(id)) appeared.set(id, (appeared.get(id) ?? 0) + 1)
+            removed.delete(id)
+          }
+          return { view: v, error: null, removed, appeared }
         })
       },
       (e) => {
@@ -75,5 +86,5 @@ export function useKinds(client: Client, hub: ViewHub, provider: string, target:
     load()
   }, [client, load, provider, target])
 
-  return { view: st.view, error: st.error, removed: st.removed, refresh }
+  return { view: st.view, error: st.error, removed: st.removed, appeared: st.appeared, refresh }
 }
