@@ -304,8 +304,11 @@ func (s *session) watchDef(def *kindDef, q provider.Query, selector string, sink
 	c.watchers[w] = struct{}{}
 	c.mu.Unlock()
 	if s.cat.snap().removed[def.desc.ID] {
-		// removed while opening: the catalog's walk may not have seen it
-		w.setRemoved()
+		// Removed while opening (the catalog's walk may not have seen this
+		// watcher): the view ends at once, without observing anything.
+		w.markRemoved()
+		s.detach(c, w)
+		return func() {}, nil
 	}
 	w.pushStatus() // loading, or an error the cache already knows
 	reg, err := c.inf.AddEventHandler(w.handlers())
@@ -314,11 +317,18 @@ func (s *session) watchDef(def *kindDef, q provider.Query, selector string, sink
 		return nil, &provider.Error{Class: provider.ClassGone, Message: err.Error()}
 	}
 	w.reg = reg
+	var once sync.Once
+	release := func() {
+		once.Do(func() {
+			_ = c.inf.RemoveEventHandler(reg)
+			s.detach(c, w)
+		})
+	}
+	w.setRelease(release) // a removal ends the observation, not only the rows
 	go w.waitSynced()
 	return func() {
 		w.stop()
-		_ = c.inf.RemoveEventHandler(reg)
-		s.detach(c, w)
+		release()
 	}, nil
 }
 

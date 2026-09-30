@@ -42,6 +42,8 @@ type viewWatch struct {
 	synced    bool
 	stopped   bool
 	removed   bool                // the kind is no longer served: final
+	release   func()              // ends the observation (handler, cache lease); once
+	ended     bool                // removed and ended: a release set later runs at once
 	deadlines map[string]deadline // object key -> when to re-project which incarnation
 	timer     *time.Timer
 	timerGen  uint64
@@ -172,16 +174,43 @@ func (w *viewWatch) pushStatus() {
 	w.sink.Apply(provider.Delta{Status: &st}) // the view drops an unchanged status
 }
 
-func (w *viewWatch) setRemoved() {
+// markRemoved ends the view: its kind is not served any more. The final
+// status is the last delivery (under the order gate: no row or deadline
+// after it), then the observation is released — the cache may go and its
+// reflector stops asking for a resource that is not served. Reopening is a
+// new view.
+func (w *viewWatch) markRemoved() {
+	w.order.Lock()
+	if w.isStopped() {
+		w.order.Unlock()
+		return
+	}
 	w.mu.Lock()
 	w.removed = true
 	w.mu.Unlock()
+	st := w.status()
+	w.sink.Apply(provider.Delta{Status: &st})
+	w.stop()
+	w.order.Unlock()
+	w.mu.Lock()
+	w.ended = true
+	release := w.release
+	w.mu.Unlock()
+	if release != nil {
+		release()
+	}
 }
 
-// markRemoved ends the view: its kind is not served any more.
-func (w *viewWatch) markRemoved() {
-	w.setRemoved()
-	w.pushStatus()
+// setRelease sets how the observation ends; if the view already ended
+// removed, it ends now.
+func (w *viewWatch) setRelease(f func()) {
+	w.mu.Lock()
+	ended := w.ended
+	w.release = f
+	w.mu.Unlock()
+	if ended {
+		f()
+	}
 }
 
 // waitSynced pushes Ready once every initial object reached the handler.

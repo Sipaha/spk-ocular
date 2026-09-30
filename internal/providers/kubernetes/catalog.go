@@ -77,15 +77,13 @@ func (c *catalog) setOnChange(f func(rev uint64)) {
 	c.mu.Unlock()
 }
 
-// maxSuperseded: after this many answers in a row overtaken by a newer
-// refresh, the next one is published anyway (a stream of refreshes must
-// not hold the catalog back forever).
-const maxSuperseded = 4
-
 // refresh runs a discovery in the background; one at a time. A refresh
-// asked meanwhile supersedes the running discovery: its answer (possibly
-// read before the change the refresh is about) is not published, the
-// discovery runs again and the latest answer wins.
+// asked meanwhile supersedes the running discovery: its answer may have
+// been read before the change the refresh is about, so it only adds kinds
+// (never removes one or moves one to another version — that waits for an
+// answer not superseded); the discovery runs again and the latest answer
+// wins. A stream of refreshes thus still shows new kinds without ever
+// certifying an absence it did not confirm.
 func (c *catalog) refresh() {
 	if c.get == nil {
 		return
@@ -109,7 +107,6 @@ func (c *catalog) refresh() {
 // order (a listener asking for a refresh only marks another round).
 func (c *catalog) run() {
 	defer c.wg.Done()
-	superseded := 0
 	for {
 		c.mu.Lock()
 		c.again = false
@@ -123,10 +120,12 @@ func (c *catalog) run() {
 		}
 		c.mu.Lock()
 		var rev uint64
-		if c.again && superseded < maxSuperseded {
-			superseded++
+		if c.again && c.have {
+			if added := additions(c.last, d); len(added) > 0 {
+				c.last.resources = sortedResources(append(append([]apiResource{}, c.last.resources...), added...))
+				rev = c.publish(discovered{unconfirmed: c.last.unconfirmed}, true)
+			}
 		} else {
-			superseded = 0
 			if c.have {
 				d = merge(c.last, d)
 			}
@@ -150,6 +149,21 @@ func (c *catalog) run() {
 		}
 		c.mu.Unlock()
 	}
+}
+
+// additions: resources of cur whose group+resource last does not have.
+func additions(last, cur discovered) []apiResource {
+	have := map[schema.GroupResource]bool{}
+	for _, r := range last.resources {
+		have[schema.GroupResource{Group: r.Group, Resource: r.Resource}] = true
+	}
+	var out []apiResource
+	for _, r := range cur.resources {
+		if !have[schema.GroupResource{Group: r.Group, Resource: r.Resource}] {
+			out = append(out, r)
+		}
+	}
+	return out
 }
 
 // publish stores a new snapshot when the kinds or the state changed and

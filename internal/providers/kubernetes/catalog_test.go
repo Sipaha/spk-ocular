@@ -14,6 +14,7 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/watch"
 	dynamicfake "k8s.io/client-go/dynamic/fake"
 	k8stesting "k8s.io/client-go/testing"
 
@@ -509,4 +510,178 @@ func TestNoCRDTriggerWithoutTheRight(t *testing.T) {
 	require.Eventually(t, func() bool { return lists.Load() == 1 }, 5*time.Second, 5*time.Millisecond)
 	time.Sleep(1500 * time.Millisecond) // past the first backoff
 	assert.Equal(t, int32(1), lists.Load())
+}
+
+// Review 2026-09-30 (Codex, be73e99 P2-1): however many answers in a row are
+// superseded, none of them removes a kind.
+func TestCatalogSupersededAnswersNeverRemoveAKind(t *testing.T) {
+	api := &scriptedAPI{}
+	api.set("/api", coreDoc)
+	good := apisDoc(map[string][]v2ver{"ocular.dev": {widgets}}, "ocular.dev")
+	api.set("/apis", good)
+	c := newCatalog(context.Background(), allKinds, api.get)
+	c.refresh()
+	c.wait()
+	require.NotNil(t, c.snap().reg.byID["ocular.dev/widgets"])
+
+	api.set("/apis", apisDoc(map[string][]v2ver{"batch": {jobsV1}}, "batch")) // widgets gone, jobs new
+	gate := make(chan struct{})
+	api.setGate(gate)
+	calls := api.calls.Load()
+	c.refresh()
+	for range 7 {
+		require.Eventually(t, func() bool { return api.calls.Load() >= calls+2 }, 5*time.Second, time.Millisecond)
+		calls += 2
+		next := make(chan struct{})
+		api.setGate(next)
+		c.refresh() // supersedes the held round
+		close(gate)
+		gate = next
+		require.Eventually(t, func() bool { return api.calls.Load() >= calls+2 }, 5*time.Second, time.Millisecond)
+		s := c.snap()
+		assert.NotNil(t, s.reg.byID["ocular.dev/widgets"], "a superseded answer removed a kind")
+		assert.Empty(t, s.removed)
+		assert.NotNil(t, s.reg.byID["batch/jobs"], "a superseded answer still adds")
+	}
+	api.setGate(nil)
+	close(gate) // the last round is not superseded: its absence is confirmed
+	c.wait()
+	assert.Nil(t, c.snap().reg.byID["ocular.dev/widgets"])
+	assert.True(t, c.snap().removed["ocular.dev/widgets"])
+}
+
+// Review 2026-09-30 (Codex, be73e99 P2-3): a view ended removed gets
+// nothing more, and its observation ends.
+func TestARemovedViewGetsNoMoreRowsAndReleasesItsCache(t *testing.T) {
+	api := &scriptedAPI{}
+	api.set("/api", coreDoc)
+	api.set("/apis", apisDoc(map[string][]v2ver{"ocular.dev": {widgets}}, "ocular.dev"))
+	w := &unstructured.Unstructured{Object: map[string]any{"apiVersion": "ocular.dev/v1", "kind": "Widget",
+		"metadata": map[string]any{"name": "alpha", "namespace": "ns", "uid": "w1", "creationTimestamp": "2026-09-30T10:00:00Z"}}}
+	client := catalogClient(w)
+	s := newSession("ctx", "h", client, false)
+	defer s.Close()
+	s.startCatalog(api.get)
+	waitRev(t, s.cat, 2)
+	sink := &deltaSink{}
+	stop, err := s.Watch(provider.Query{Kind: "ocular.dev/widgets", Scope: core.ScopeSel{Mode: core.ScopeAll}}, sink)
+	require.NoError(t, err)
+	defer stop()
+	require.Eventually(t, func() bool { st := sink.status(); return st != nil && st.State == provider.StatusReady }, 5*time.Second, 5*time.Millisecond)
+
+	api.set("/apis", apisDoc(nil))
+	s.RefreshKinds()
+	require.Eventually(t, func() bool { st := sink.status(); return st != nil && st.Class == provider.ClassRemoved }, 5*time.Second, 5*time.Millisecond)
+	n := sink.count()
+	w2 := w.DeepCopy()
+	w2.SetLabels(map[string]string{"late": "1"})
+	_, err = client.Resource(widgetsGVR).Namespace("ns").Update(context.Background(), w2, metav1.UpdateOptions{})
+	require.NoError(t, err)
+	time.Sleep(200 * time.Millisecond) // a live handler would deliver the update now
+	assert.Equal(t, n, sink.count(), "nothing after the final removed status")
+	active, _ := s.caches.stats()
+	assert.Zero(t, active, "the removed view leases no cache")
+}
+
+// deltaSink records deliveries.
+type deltaSink struct {
+	mu sync.Mutex
+	d  []provider.Delta
+}
+
+func (r *deltaSink) Apply(d provider.Delta) { r.mu.Lock(); r.d = append(r.d, d); r.mu.Unlock() }
+func (r *deltaSink) count() int             { r.mu.Lock(); defer r.mu.Unlock(); return len(r.d) }
+func (r *deltaSink) status() *provider.ViewStatus {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for i := len(r.d) - 1; i >= 0; i-- {
+		if r.d[i].Status != nil {
+			return r.d[i].Status
+		}
+	}
+	return nil
+}
+
+func fastCRDTrigger(t *testing.T, debounce, maxDelay time.Duration) {
+	d, m := crdDebounce, crdMaxDelay
+	crdDebounce, crdMaxDelay = debounce, maxDelay
+	t.Cleanup(func() { crdDebounce, crdMaxDelay = d, m })
+}
+
+// Review 2026-09-30 (Codex, be73e99 P2-2): a CRD created between the
+// discovery and the watch's baseline has no event; the baseline is
+// followed by a discovery.
+func TestACRDCreatedBeforeTheWatchBaselineIsFound(t *testing.T) {
+	fastCRDTrigger(t, 10*time.Millisecond, 50*time.Millisecond)
+	api := &scriptedAPI{}
+	api.set("/api", coreDoc)
+	api.set("/apis", apisDoc(map[string][]v2ver{"apiextensions.k8s.io": {crdsV1}}, "apiextensions.k8s.io"))
+	client := catalogClient()
+	client.PrependReactor("list", "customresourcedefinitions", func(k8stesting.Action) (bool, runtime.Object, error) {
+		// created just now: after the discovery, before the baseline
+		api.set("/apis", apisDoc(map[string][]v2ver{"apiextensions.k8s.io": {crdsV1}, "ocular.dev": {widgets}}, "apiextensions.k8s.io", "ocular.dev"))
+		l := &unstructured.UnstructuredList{Object: map[string]any{"apiVersion": "apiextensions.k8s.io/v1", "kind": "CustomResourceDefinitionList"}}
+		l.SetResourceVersion("100")
+		return true, l, nil
+	})
+	s := newSession("ctx", "h", client, false)
+	defer s.Close()
+	s.startCatalog(api.get)
+	require.Eventually(t, func() bool { return s.cat.snap().reg.byID["ocular.dev/widgets"] != nil }, 5*time.Second, 5*time.Millisecond)
+}
+
+// Review 2026-09-30 (Codex, be73e99 P2-4): CRD changes that never pause
+// still refresh the catalog, within the bound.
+func TestContinuousCRDChangesStillRefreshWithinTheBound(t *testing.T) {
+	fastCRDTrigger(t, 200*time.Millisecond, 400*time.Millisecond)
+	api := &scriptedAPI{}
+	api.set("/api", coreDoc)
+	api.set("/apis", apisDoc(map[string][]v2ver{"apiextensions.k8s.io": {crdsV1}}, "apiextensions.k8s.io"))
+	client := catalogClient()
+	fw := watch.NewFake()
+	client.PrependWatchReactor("customresourcedefinitions", func(k8stesting.Action) (bool, watch.Interface, error) { return true, fw, nil })
+	s := newSession("ctx", "h", client, false)
+	defer s.Close()
+	s.startCatalog(api.get)
+	waitRev(t, s.cat, 2)
+	require.Eventually(t, func() bool {
+		for _, a := range client.Actions() {
+			if a.GetVerb() == "watch" {
+				return true
+			}
+		}
+		return false
+	}, 5*time.Second, 5*time.Millisecond)
+	time.Sleep(300 * time.Millisecond) // the baseline's own discovery is done
+	api.set("/apis", apisDoc(map[string][]v2ver{"apiextensions.k8s.io": {crdsV1}, "ocular.dev": {widgets}}, "apiextensions.k8s.io", "ocular.dev"))
+	start := time.Now()
+	found := false
+	for time.Since(start) < 1500*time.Millisecond && !found {
+		fw.Modify(crd("other.example.com")) // a status change every 40 ms
+		time.Sleep(40 * time.Millisecond)
+		found = s.cat.snap().reg.byID["ocular.dev/widgets"] != nil
+	}
+	assert.True(t, found, "continuous changes postponed every refresh")
+}
+
+// Review 2026-09-30 (Codex, be73e99 P3): a denial inside the stream stops
+// the trigger like a denied request does.
+func TestADeniedCRDStreamStopsTheTrigger(t *testing.T) {
+	api := &scriptedAPI{}
+	api.set("/api", coreDoc)
+	api.set("/apis", apisDoc(map[string][]v2ver{"apiextensions.k8s.io": {crdsV1}}, "apiextensions.k8s.io"))
+	client := catalogClient()
+	var watches atomic.Int32
+	client.PrependWatchReactor("customresourcedefinitions", func(k8stesting.Action) (bool, watch.Interface, error) {
+		watches.Add(1)
+		fw := watch.NewFakeWithChanSize(1, false)
+		fw.Error(&metav1.Status{Status: metav1.StatusFailure, Code: 403, Reason: metav1.StatusReasonForbidden, Message: "rbac"})
+		return true, fw, nil
+	})
+	s := newSession("ctx", "h", client, false)
+	defer s.Close()
+	s.startCatalog(api.get)
+	require.Eventually(t, func() bool { return watches.Load() == 1 }, 5*time.Second, 5*time.Millisecond)
+	time.Sleep(1500 * time.Millisecond) // past the first backoff
+	assert.Equal(t, int32(1), watches.Load())
 }

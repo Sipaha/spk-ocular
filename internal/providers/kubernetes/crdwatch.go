@@ -2,6 +2,7 @@ package kubernetes
 
 import (
 	"context"
+	"sync"
 	"time"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -12,31 +13,65 @@ import (
 
 // CRDs as the trigger of the next discovery (not a timer): a CRD added,
 // changed or deleted asks the catalog to discover again, a second after
-// the last change. Without the right to list and watch CRDs there is no
-// trigger — F5 and reopening the target remain.
+// the last change but no later than crdMaxDelay after the first one (a
+// busy cluster's stream of CRD status changes must not postpone it
+// forever). Each baseline (the collection's version the watch starts
+// from, first or after an expiry) is followed by a discovery too: a change
+// between the last discovery and the baseline has no event. Without the
+// right to list and watch CRDs there is no trigger — F5 and reopening the
+// target remain.
 
 const crdKindID = "apiextensions.k8s.io/customresourcedefinitions"
 
 // Package vars for tests.
 var (
 	crdDebounce   = time.Second
+	crdMaxDelay   = 5 * time.Second
 	crdBackoffMax = 5 * time.Minute
 )
 
+// crdTrigger coalesces CRD changes into catalog refreshes.
+type crdTrigger struct {
+	mu      sync.Mutex
+	timer   *time.Timer
+	first   time.Time // the first change not yet refreshed for
+	refresh func()
+}
+
+func (t *crdTrigger) changed() {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	now := time.Now()
+	if t.timer == nil {
+		t.first = now
+	} else {
+		t.timer.Stop()
+	}
+	delay := min(crdDebounce, t.first.Add(crdMaxDelay).Sub(now))
+	t.timer = time.AfterFunc(max(delay, 0), t.fire)
+}
+
+func (t *crdTrigger) fire() {
+	t.mu.Lock()
+	t.timer = nil
+	t.mu.Unlock()
+	t.refresh()
+}
+
+func (t *crdTrigger) stop() {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	if t.timer != nil {
+		t.timer.Stop()
+		t.timer = nil
+	}
+}
+
 func (s *session) watchCRDs(gvr schema.GroupVersionResource) {
 	res := s.dyn.Resource(gvr)
-	var pending *time.Timer
-	changed := func() {
-		if pending != nil {
-			pending.Stop()
-		}
-		pending = time.AfterFunc(crdDebounce, s.cat.refresh)
-	}
-	defer func() {
-		if pending != nil {
-			pending.Stop()
-		}
-	}()
+	trig := &crdTrigger{refresh: s.cat.refresh}
+	defer trig.stop()
+	changed := trig.changed
 	backoff := time.Second
 	rv := ""
 	for s.ctx.Err() == nil {
@@ -56,6 +91,7 @@ func (s *session) watchCRDs(gvr schema.GroupVersionResource) {
 				continue
 			}
 			rv = l.GetResourceVersion()
+			changed() // what changed before the baseline had no event
 		}
 		// A deadline on getting the stream only; it then lives until it ends.
 		ctx, cancel := context.WithCancel(s.ctx)
@@ -72,8 +108,7 @@ func (s *session) watchCRDs(gvr schema.GroupVersionResource) {
 		case apierrors.IsForbidden(err) || apierrors.IsUnauthorized(err):
 			return
 		case apierrors.IsGone(err) || apierrors.IsResourceExpired(err):
-			rv = ""
-			changed() // changes since rv may be lost
+			rv = "" // a new baseline, then a discovery (changes since rv may be lost)
 			continue
 		case err != nil:
 			if !s.sleep(backoff) {
@@ -83,8 +118,12 @@ func (s *session) watchCRDs(gvr schema.GroupVersionResource) {
 			continue
 		}
 		started := time.Now()
-		rv = s.followCRDs(w, rv, changed)
+		var denied bool
+		rv, denied = s.followCRDs(w, rv, changed)
 		cancel()
+		if denied {
+			return
+		}
 		if time.Since(started) > time.Minute {
 			backoff = time.Second
 		} else if !s.sleep(backoff) {
@@ -96,23 +135,26 @@ func (s *session) watchCRDs(gvr schema.GroupVersionResource) {
 }
 
 // followCRDs reads one watch stream until it ends; returns the version to
-// watch from next ("" — list again).
-func (s *session) followCRDs(w watch.Interface, rv string, changed func()) string {
+// watch from next ("" — a new baseline) and whether the right was denied.
+func (s *session) followCRDs(w watch.Interface, rv string, changed func()) (string, bool) {
 	defer w.Stop()
 	for {
 		select {
 		case <-s.ctx.Done():
-			return rv
+			return rv, false
 		case ev, ok := <-w.ResultChan():
 			if !ok {
-				return rv
+				return rv, false
 			}
 			if ev.Type == watch.Error {
-				if st, ok := ev.Object.(*metav1.Status); ok && st.Code == 410 {
-					changed()
-					return ""
+				err := apierrors.FromObject(ev.Object)
+				switch {
+				case apierrors.IsForbidden(err) || apierrors.IsUnauthorized(err):
+					return rv, true
+				case apierrors.IsGone(err) || apierrors.IsResourceExpired(err):
+					return "", false
 				}
-				return rv
+				return rv, false
 			}
 			if o, ok := ev.Object.(metav1.Object); ok && o.GetResourceVersion() != "" {
 				rv = o.GetResourceVersion()

@@ -140,13 +140,7 @@ func discoverAPI(ctx context.Context, get getter) discovered {
 	for _, p := range parts {
 		out.add(p)
 	}
-	sort.Slice(out.resources, func(i, j int) bool {
-		a, b := out.resources[i], out.resources[j]
-		if a.Group != b.Group {
-			return a.Group < b.Group
-		}
-		return a.Resource < b.Resource
-	})
+	out.resources = sortedResources(out.resources)
 	return out
 }
 
@@ -411,12 +405,18 @@ func merge(prev, cur discovered) discovered {
 			out.resources = append(out.resources, r)
 		}
 	}
-	sort.Slice(out.resources, func(i, j int) bool {
-		a, b := out.resources[i], out.resources[j]
+	out.resources = sortedResources(out.resources)
+	return out
+}
+
+// sortedResources orders resources by group, then resource (in place).
+func sortedResources(rs []apiResource) []apiResource {
+	sort.Slice(rs, func(i, j int) bool {
+		a, b := rs[i], rs[j]
 		if a.Group != b.Group {
 			return a.Group < b.Group
 		}
 		return a.Resource < b.Resource
 	})
-	return out
+	return rs
 }
