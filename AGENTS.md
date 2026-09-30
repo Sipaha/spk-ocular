@@ -16,6 +16,9 @@ P9 — правка YAML объекта Kubernetes с просмотром и о
 P10 — значения Secret: показать, скопировать, изменить/добавить/удалить ключ — `docs/plans/2026-09-30-p10-secret-values.md`.
 P11 — узлы: cordon, uncordon, drain — `docs/plans/2026-09-30-p11-node-operations.md`.
 P12 — CronJob: приостановить, возобновить, запустить сейчас — `docs/plans/2026-09-30-p12-cronjob-actions.md`.
+P13 — итоги и отказы действий на языке интерфейса — `docs/plans/2026-09-30-p13-action-outcomes-i18n.md`.
+Следующий этап — доступ агентов через unix-сокет: дизайн закрыт ревью
+(`docs/specs/2026-09-30-agent-access-design.md`), план — следующим.
 
 ## Сборка и тесты
 
@@ -467,6 +470,18 @@ P12 — CronJob: приостановить, возобновить, запус�
 - Фразы провайдера (последствия, предупреждения, причины) — ключ + параметры, не готовый текст;
   новый ключ = английский в `messages.go` + русский в `providerTexts`. —
   `TestTheUIsTranslationsCoverEveryMessage` (разбирает `i18n.ts`).
+- Итог действия — `core.Message` (`ActionResult.Message`), у частей — только `Why` (у
+  `refused`/`unknown` всегда). Наша фраза отказа — `provider.Said(class, msg(...))`: `Message`
+  = английский текст (детали, логи), `Why` — фраза по ключу; `CodedError.Why` несёт её к UI (HTTP
+  — поле `why`, Wails — `error.cause.why`, форма проверяется `asMessage`). Текст сервера (apiserver,
+  Docker Engine, сеть) — без `Why` или параметром `{detail}`. Свои фразы слоя API — `api.*`
+  (`internal/api/messages.go`). Подстановка параметров — один проход по плейсхолдерам шаблона
+  (`core.Format`, `messageText`, `t()`): значение — данные, не пересканируется. UI показывает
+  ошибку через один `errorDetail` (причина, иначе `detail`, иначе код; класс добавляет
+  вызывающий); конфликт с нашей причиной — одна эта фраза, без общей рамки. — страж
+  `TestActionErrorsAreSaidByKey` (kubernetes, compose), `TestTheAPIsOwnRefusalsAreSaid`,
+  `TestAProvidersWhyTravelsWithTheCodedError`, `TestFormatFillsTheTemplatesPlaceholdersOnce`,
+  `errors.test.ts`, `ActionDialog.test.tsx` «in the UI's language».
 - Поздний ответ `RunAction` (после клиентского таймаута) меняет только «неизвестно» своего
   прогона (номер прогона отдельно от поколения диалога) или становится уведомлением с target-ом;
   ничего не отправляет заново и не трогает более новый диалог. — `ActionDialog.test.tsx`.
