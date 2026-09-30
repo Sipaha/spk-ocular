@@ -46,7 +46,6 @@ func (s *session) Get(ctx context.Context, ref core.Ref) (*core.Resource, error)
 		u, fs, err = s.getTable(ctx, def, ref)
 		if u != nil {
 			health = genericHealth(u)
-			delete(u.Object, cellsField)
 		}
 	}
 	if u == nil && err == nil { // a described kind, or no Tables for the resource
@@ -57,7 +56,11 @@ func (s *session) Get(ctx context.Context, ref core.Ref) (*core.Resource, error)
 			u, err = res.Get(ctx, ref.Name, metav1.GetOptions{})
 		}
 		if err == nil {
-			// Health and table facts come from the same projection the list uses.
+			// Health and table facts come from the same projection the list
+			// uses (a discovered kind's: its plain format's).
+			if def.discovered {
+				def = newTableSchema(def, 0, false, nil, nil).def
+			}
 			proj := u.DeepCopy()
 			if def.pre != nil {
 				def.pre(proj)
@@ -183,7 +186,7 @@ func (s *session) getTable(ctx context.Context, def *kindDef, ref core.Ref) (*un
 	if def.namespaced {
 		ns = ref.Scope
 	}
-	cols, row, err := s.tables.get(ctx, def.gvr, ns, ref.Name)
+	cols, cells, row, err := s.tables.get(ctx, def.gvr, ns, ref.Name)
 	s.schemas.mu.Lock()
 	cur := s.schemas.entry(def.gvr).cur
 	s.schemas.mu.Unlock()
@@ -207,7 +210,6 @@ func (s *session) getTable(ctx context.Context, def *kindDef, ref core.Ref) (*un
 	}
 	fs := factsHead(row)
 	named := false
-	cells, _ := row.Object[cellsField].([]any)
 	for i, c := range cols {
 		if c.Format == "name" && !named {
 			named = true

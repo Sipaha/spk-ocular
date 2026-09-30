@@ -186,13 +186,14 @@ func singular(def *kindDef) string {
 	return strings.ToLower(kindSingular[def])
 }
 
-// getConfirmed reads the confirmed object: its UID is required and must
-// match; a missing object is gone as well (the confirmation was of it).
-func (s *session) getConfirmed(ctx context.Context, ref core.Ref) (*unstructured.Unstructured, error) {
+// getConfirmed reads the confirmed object through the run's route: its
+// UID is required and must match; a missing object is gone as well (the
+// confirmation was of it).
+func (s *session) getConfirmed(ctx context.Context, def *kindDef, ref core.Ref) (*unstructured.Unstructured, error) {
 	if ref.UID == "" {
 		return nil, invalid("the object's UID is missing: act only on a confirmed object")
 	}
-	u, err := s.getObject(ctx, ref)
+	u, err := s.getObjectOf(ctx, def, ref)
 	var pe *provider.Error
 	if errors.As(err, &pe) && pe.Class == provider.ClassNotFound {
 		return nil, &provider.Error{Class: provider.ClassGone, Message: fmt.Sprintf("%s %s no longer exists", ref.Kind, ref.Name)}
@@ -207,11 +208,13 @@ func (s *session) RunAction(ctx context.Context, run provider.ActionRun) (core.A
 	}
 	if !sameRoute(def, run.Expect) {
 		// Reviewed through another version or scope of the resource: never
-		// read or written through the current one instead.
+		// read or written through the current one instead. Checked, the
+		// route holds for the whole run (reads, write, retries) even if the
+		// catalog moves meanwhile.
 		return core.ActionResult{}, &provider.Error{Class: provider.ClassConflict, Message: fmt.Sprintf("the API resource of %s changed since the action was reviewed; review it again", def.desc.Title)}
 	}
 	for attempt := 0; ; attempt++ {
-		u, err := s.getConfirmed(ctx, run.Ref)
+		u, err := s.getConfirmed(ctx, def, run.Ref)
 		if err != nil {
 			return core.ActionResult{}, err
 		}
@@ -299,7 +302,7 @@ func (s *session) failedWrite(ctx context.Context, def *kindDef, run provider.Ac
 	}
 	// 409 (a failed precondition) or 422 (an immutable UID, validation,
 	// admission): look again to tell which.
-	now, gerr := s.getConfirmed(ctx, run.Ref)
+	now, gerr := s.getConfirmed(ctx, def, run.Ref)
 	switch {
 	case gerr != nil:
 		var pe *provider.Error
@@ -329,7 +332,7 @@ func (s *session) PrepareAction(ctx context.Context, ref core.Ref, action string
 	if err != nil {
 		return core.ActionPlan{}, err
 	}
-	u, err := s.getObject(ctx, ref) // an unpinned ref (from a relation) is pinned here
+	u, err := s.getObjectOf(ctx, def, ref) // an unpinned ref (from a relation) is pinned here
 	if err != nil {
 		return core.ActionPlan{}, err
 	}

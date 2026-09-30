@@ -68,6 +68,10 @@ func (a *widgetsAPI) push(ev map[string]any) {
 }
 
 func (a *widgetsAPI) serve(w http.ResponseWriter, r *http.Request) {
+	if i := strings.Index(r.URL.Path, "/widgets/"); i >= 0 {
+		a.serveOne(w, r, r.URL.Path[i+len("/widgets/"):])
+		return
+	}
 	if !strings.HasSuffix(r.URL.Path, "/widgets") {
 		http.NotFound(w, r)
 		return
@@ -138,6 +142,28 @@ func (a *widgetsAPI) serve(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+}
+
+// serveOne answers a GET of one widget: a one-row Table (406 when plain).
+func (a *widgetsAPI) serveOne(w http.ResponseWriter, r *http.Request, name string) {
+	a.mu.Lock()
+	plain, cols, objs := a.plain, a.cols, a.objs
+	a.mu.Unlock()
+	for _, o := range objs {
+		if o["metadata"].(map[string]any)["name"] != name {
+			continue
+		}
+		if plain {
+			w.WriteHeader(http.StatusNotAcceptable)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{"kind": "Table", "apiVersion": "meta.k8s.io/v1", "metadata": map[string]any{}, "columnDefinitions": cols,
+			"rows": []any{map[string]any{"cells": []any{name, 5, "2m", "wide text"}, "object": o}}})
+		return
+	}
+	w.WriteHeader(http.StatusNotFound)
+	_ = json.NewEncoder(w).Encode(map[string]any{"kind": "Status", "apiVersion": "v1", "status": "Failure", "reason": "NotFound", "code": 404})
 }
 
 // tableSession: a session whose discovered widgets are read from api as
@@ -517,4 +543,17 @@ func TestSessionCloseCancelsASchemaProbe(t *testing.T) {
 		t.Fatal("the probe outlived its session")
 	}
 	require.Eventually(t, func() bool { return api.probeCancelled.Load() == 1 }, 3*time.Second, 5*time.Millisecond)
+}
+
+// Details of a Table kind: the object exactly as the server has it (a field
+// of its own named like our cells is its own), facts with the wide columns
+// (Codex P2-3 of 77b7b11).
+func TestTableGetKeepsTheObjectAsIs(t *testing.T) {
+	api := newWidgetsAPI()
+	api.objs[0]["ocularCells"] = map[string]any{"real": "payload"}
+	s, _ := tableSession(t, api)
+	r, err := s.Get(context.Background(), core.Ref{Kind: "ocular.dev/widgets", Scope: "ns", Name: "alpha"})
+	require.NoError(t, err)
+	assert.Contains(t, r.YAML, "ocularCells:\n  real: payload")
+	assert.Contains(t, r.Facts, core.Detail{Key: "Detail", Value: "wide text"})
 }

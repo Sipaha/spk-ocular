@@ -71,6 +71,12 @@ func (s *session) getObject(ctx context.Context, ref core.Ref) (*unstructured.Un
 	if def == nil || def.virtual {
 		return nil, &provider.Error{Class: provider.ClassUnsupported, Message: fmt.Sprintf("unknown kind %q", ref.Kind)}
 	}
+	return s.getObjectOf(ctx, def, ref)
+}
+
+// getObjectOf reads ref through def's route (an operation that pinned its
+// route never reads through a newer one).
+func (s *session) getObjectOf(ctx context.Context, def *kindDef, ref core.Ref) (*unstructured.Unstructured, error) {
 	ctx, cancel := context.WithTimeout(ctx, getTimeout)
 	defer cancel()
 	u, err := s.dyn.Resource(def.gvr).Namespace(ref.Scope).Get(ctx, ref.Name, metav1.GetOptions{})

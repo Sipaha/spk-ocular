@@ -8,9 +8,11 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
+	dynamicfake "k8s.io/client-go/dynamic/fake"
 	k8stesting "k8s.io/client-go/testing"
 
 	"github.com/spk/spk-ocular/internal/core"
@@ -117,4 +119,65 @@ func TestOwnersOfDiscoveredKindsOpen(t *testing.T) {
 	require.NotEmpty(t, r.Relations)
 	assert.Equal(t, "ocular.dev/widgets", r.Relations[0].Ref.Kind)
 	assert.False(t, r.Relations[0].Inert)
+}
+
+// A run keeps the route it checked: the resource moving to another
+// version between a refused write and its retry never mixes versions
+// (reads and writes all through the reviewed one) (Codex P2-1 of 77b7b11).
+func TestARunKeepsItsRouteThroughRetries(t *testing.T) {
+	s, api := widgetSession(t, widget("alpha"))
+	ref := core.Ref{Kind: "ocular.dev/widgets", Scope: "ns", Name: "alpha", UID: "uid-alpha"}
+	plan, err := s.PrepareAction(context.Background(), ref, "delete", core.ActionParams{})
+	require.NoError(t, err)
+	fake := s.dyn.(*dynamicfake.FakeDynamicClient)
+	var moved bool
+	s.beforeWrite = func(string, *unstructured.Unstructured) {
+		if moved {
+			return
+		}
+		moved = true
+		v2 := widgets
+		v2.version = "v2"
+		api.set("/apis", apisDoc(map[string][]v2ver{"ocular.dev": {v2, widgets}}, "ocular.dev"))
+		s.RefreshKinds()
+		s.cat.wait()
+		require.Equal(t, "v2", s.kind("ocular.dev/widgets").gvr.Version)
+	}
+	var refused bool
+	fake.PrependReactor("delete", "widgets", func(k8stesting.Action) (bool, runtime.Object, error) {
+		if refused {
+			return false, nil, nil
+		}
+		refused = true
+		// Someone else touched it: a failed precondition at a moved version.
+		u := widget("alpha")
+		u.SetResourceVersion("6")
+		require.NoError(t, fake.Tracker().Update(widgetsGVR, u, "ns", metav1.UpdateOptions{}))
+		return true, nil, apierrors.NewConflict(widgetsGVR.GroupResource(), "alpha", errors.New("precondition failed"))
+	})
+	_, err = s.RunAction(context.Background(), provider.ActionRun{Ref: ref, Action: "delete", Expect: plan.Expect})
+	var versions []string
+	for _, a := range fake.Actions() {
+		if a.GetResource().Resource == "widgets" {
+			versions = append(versions, a.GetVerb()+" "+a.GetResource().Version)
+		}
+	}
+	assert.NotContains(t, strings.Join(versions, ","), "v2", "one route for the run: %v", versions)
+	if err == nil {
+		assert.Equal(t, 2, deletes(s), "retried through the reviewed route")
+	}
+}
+
+// Details of a kind read in the plain format say the health its list says
+// (conditions), not the catalog placeholder's unknown (Codex P2-2 of
+// 77b7b11).
+func TestPlainDetailsReadTheConditions(t *testing.T) {
+	w := widget("alpha")
+	w.SetGeneration(2)
+	w.Object["status"] = map[string]any{"conditions": []any{map[string]any{"type": "Ready", "status": "False", "reason": "Broken", "observedGeneration": int64(2)}}}
+	s, _ := widgetSession(t, w)
+	r, err := s.Get(context.Background(), core.Ref{Kind: "ocular.dev/widgets", Scope: "ns", Name: "alpha"})
+	require.NoError(t, err)
+	assert.Equal(t, core.HealthError, r.Health.State)
+	assert.Equal(t, "Broken", r.Health.Reason)
 }

@@ -211,25 +211,26 @@ func (c *tableClient) list(ctx context.Context, gvr schema.GroupVersionResource,
 	return p, nil
 }
 
-// get reads one object as a Table: the columns and the row's object.
-func (c *tableClient) get(ctx context.Context, gvr schema.GroupVersionResource, ns, name string) ([]metav1.TableColumnDefinition, *unstructured.Unstructured, error) {
+// get reads one object as a Table: the columns, the row's cells and its
+// object as the server has it (the cells apart: the object is shown).
+func (c *tableClient) get(ctx context.Context, gvr schema.GroupVersionResource, ns, name string) ([]metav1.TableColumnDefinition, []any, *unstructured.Unstructured, error) {
 	resp, err := c.do(ctx, gvr, c.url(gvr, ns, name, url.Values{"includeObject": {"Object"}}), acceptTable)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 	defer func() { _ = resp.Body.Close() }()
 	var d tableDoc
 	if err := json.NewDecoder(resp.Body).Decode(&d); err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
 	if d.Kind != "Table" || len(d.Rows) != 1 {
-		return nil, nil, errNotTable
+		return nil, nil, nil, errNotTable // one object in the plain format: no list to tell by
 	}
 	u, err := rowObject(d.Rows[0].Object, false)
 	if err != nil {
-		return nil, nil, err
+		return nil, nil, nil, err
 	}
-	return d.ColumnDefinitions, withCells(u, d.Rows[0].Cells), nil
+	return d.ColumnDefinitions, d.Rows[0].Cells, u, nil
 }
 
 // rowObject: a row's object, decoded like the API machinery does (whole
