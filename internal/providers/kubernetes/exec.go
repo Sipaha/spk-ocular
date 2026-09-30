@@ -53,6 +53,9 @@ type conn struct {
 	endpoint    string // the API server's host (never credentials)
 	// newExecutor builds the exec transport (tests replace it).
 	newExecutor func(u *url.URL) (remotecommand.Executor, error)
+	// startWait bounds waiting for a debugger to start, exitWait for its
+	// status after the attach ended (tests shorten them).
+	startWait, exitWait time.Duration
 }
 
 func newConn(cfg *rest.Config, dyn dynamic.Interface, target, title, hash string) *conn {
@@ -61,6 +64,7 @@ func newConn(cfg *rest.Config, dyn dynamic.Interface, target, title, hash string
 		c.endpoint = u.Host
 	}
 	c.newExecutor = c.fallbackExecutor
+	c.startWait, c.exitWait = debugStartWait, debugExitWait
 	return c
 }
 
@@ -399,6 +403,9 @@ func (s *session) PrepareExec(ctx context.Context, ref core.Ref, req provider.Ex
 	if ch == "" {
 		ch = inst.DefaultChannel
 	}
+	if req.Attach {
+		return s.prepareAttach(p, ref, ch, req)
+	}
 	if err := channelRunnable(inst, ch); err != nil {
 		return nil, err
 	}
@@ -507,6 +514,7 @@ type execHandle struct {
 	container string
 	argv      []string
 	shell     bool // argv is defaultShell
+	attach    bool // to the debugger's own process, not argv
 }
 
 func (h *execHandle) Describe() core.LiveTarget {
@@ -529,18 +537,12 @@ func (h *execHandle) Again() (provider.ExecHandle, error) {
 func (h *execHandle) Close() {}
 
 func (h *execHandle) Run(ctx context.Context, t provider.Terminal) (provider.ExitStatus, error) {
-	// The pod is addressed by name: check it is still the pinned one (a
-	// same-named replacement between this check and the exec request is
-	// a race the API cannot close).
-	p, err := h.conn.getPod(ctx, h.ns, h.pod)
-	var pe *provider.Error
-	switch {
-	case errors.As(err, &pe) && pe.Class == provider.ClassNotFound:
-		return provider.ExitStatus{}, &provider.Error{Class: provider.ClassGone, Message: fmt.Sprintf("pod %s no longer exists", h.pod)}
-	case err != nil:
+	if h.attach {
+		return h.runAttach(ctx, t)
+	}
+	p, err := h.pinnedPod(ctx)
+	if err != nil {
 		return provider.ExitStatus{}, err
-	case p.GetUID() != h.uid:
-		return provider.ExitStatus{}, &provider.Error{Class: provider.ClassGone, Message: fmt.Sprintf("pod %s was replaced by a new one with the same name", h.pod)}
 	}
 	if err := channelRunnable(execInstance(p), h.container); err != nil {
 		return provider.ExitStatus{}, err
@@ -569,6 +571,32 @@ func (h *execHandle) Run(ctx context.Context, t provider.Terminal) (provider.Exi
 		return provider.ExitStatus{}, ctx.Err()
 	}
 	return provider.ExitStatus{}, h.execError(err)
+}
+
+// pinnedPod reads the pinned pod. It is addressed by name: check it is
+// still the pinned one (a same-named replacement between this check and
+// the exec request is a race the API cannot close).
+func (h *execHandle) pinnedPod(ctx context.Context) (*unstructured.Unstructured, error) {
+	p, err := h.conn.getPod(ctx, h.ns, h.pod)
+	var pe *provider.Error
+	switch {
+	case errors.As(err, &pe) && pe.Class == provider.ClassNotFound:
+		return nil, h.podGone()
+	case err != nil:
+		return nil, err
+	}
+	return p, h.samePod(p)
+}
+
+func (h *execHandle) podGone() error {
+	return &provider.Error{Class: provider.ClassGone, Message: fmt.Sprintf("pod %s no longer exists", h.pod)}
+}
+
+func (h *execHandle) samePod(p *unstructured.Unstructured) error {
+	if p.GetUID() != h.uid {
+		return &provider.Error{Class: provider.ClassGone, Message: fmt.Sprintf("pod %s was replaced by a new one with the same name", h.pod)}
+	}
+	return nil
 }
 
 // execError explains the usual failures.

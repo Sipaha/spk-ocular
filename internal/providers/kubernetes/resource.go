@@ -177,6 +177,16 @@ func facts(def *kindDef, u *unstructured.Unstructured, cells []core.Cell) []core
 		for _, c := range slice(u.Object, "spec", "containers") {
 			out = append(out, core.Detail{Key: "container " + str(c, "name"), Value: str(c, "image")})
 		}
+		for _, c := range slice(u.Object, "spec", "initContainers") {
+			key := "init container "
+			if str(c, "restartPolicy") == "Always" {
+				key = "sidecar container "
+			}
+			out = append(out, core.Detail{Key: key + str(c, "name"), Value: str(c, "image")})
+		}
+		for _, c := range slice(u.Object, "spec", "ephemeralContainers") {
+			out = append(out, core.Detail{Key: "debug container " + str(c, "name"), Value: str(c, "image")})
+		}
 	}
 	return append(out, labelFacts(u)...)
 }

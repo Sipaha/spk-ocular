@@ -3,6 +3,7 @@ package kubernetes
 import (
 	"context"
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -48,6 +49,35 @@ func mk(apiVersion, kind, ns, name, uid string, body map[string]any) *unstructur
 
 func ownerRef(kind, name, uid string) map[string]any {
 	return map[string]any{"apiVersion": "apps/v1", "kind": kind, "name": name, "uid": uid, "controller": true}
+}
+
+// A pod's facts name every container with its image: init ones, sidecars
+// and debuggers marked (a debugger added is seen in the details).
+func TestPodFactsNameEveryContainer(t *testing.T) {
+	p := pod("web", "a", "uid-a", func(o map[string]any) {
+		spec := o["spec"].(map[string]any)
+		spec["initContainers"] = []any{
+			map[string]any{"name": "migrate", "image": "tool:1"},
+			map[string]any{"name": "mesh", "image": "proxy:2", "restartPolicy": "Always"},
+		}
+		spec["ephemeralContainers"] = []any{map[string]any{"name": "debugger-x1y2z", "image": "busybox:1.36"}}
+	})
+	s := newSession("t", "h", fullFake(p), false)
+	defer s.Close()
+	r, err := s.Get(context.Background(), core.Ref{Kind: "pods", Scope: "web", Name: "a", UID: "uid-a"})
+	require.NoError(t, err)
+	var got []core.Detail
+	for _, f := range r.Facts {
+		if strings.Contains(f.Key, "container") {
+			got = append(got, f)
+		}
+	}
+	assert.Equal(t, []core.Detail{
+		{Key: "container app", Value: "nginx"},
+		{Key: "init container migrate", Value: "tool:1"},
+		{Key: "sidecar container mesh", Value: "proxy:2"},
+		{Key: "debug container debugger-x1y2z", Value: "busybox:1.36"},
+	}, got)
 }
 
 func TestGetCleansYAMLAndChecksUID(t *testing.T) {

@@ -148,7 +148,7 @@ debug-контейнеры (`kubectl debug`) и attach без exec»). Прин�
   kind dry-run; сообщения и переводы.
 
 ### Task 3. Attach и ожидание запуска (Go)
-- [ ] `ExecRequest.Attach` → `pods/attach`; ожидание запуска watch-ем с `Notice`; код выхода из
+- [x] `ExecRequest.Attach` → `pods/attach`; ожидание запуска watch-ем с `Notice`; код выхода из
   статуса; ошибки (образ, завершился); факты деталей pod-а (решение 9).
 
 ### Task 4. kind

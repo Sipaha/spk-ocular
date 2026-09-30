@@ -260,9 +260,12 @@ func termOwner(terminalID string) string { return "term:" + terminalID }
 
 // startTerminal registers a fresh run of terminal id with the stream
 // registry (which closes that run's handle on any failure, including the
-// app closing meanwhile).
+// app closing meanwhile). A terminal has one run: the previous one —
+// connected or pending — ends first, under the lock runs take (two
+// attaches to a debugger would share its stdin).
 func (s *Service) startTerminal(id string, cols, rows int) (TerminalInfo, error) {
 	return s.terms.run(id, func(proto provider.ExecHandle) (TerminalInfo, func(), error) {
+		s.streams.CloseOwner(termOwner(id))
 		h, err := proto.Again()
 		if err != nil {
 			return TerminalInfo{}, nil, fromProvider(err)

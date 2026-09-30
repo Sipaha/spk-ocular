@@ -214,9 +214,69 @@ func TestTerminalsOutliveTheirSession(t *testing.T) {
 	assert.True(t, IsCoded(err, CodeGone), "%v", err)
 }
 
-// Forgetting a terminal (its tab closed) ends its runs: the connected one
-// and one registered but not connected yet; other terminals go on.
+// waitGone waits until c is closed as revoked ("gone").
+func waitGone(t *testing.T, c *websocket.Conn) {
+	t.Helper()
+	rctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	for {
+		if _, _, err := c.Read(rctx); err != nil {
+			assert.Equal(t, websocket.StatusGoingAway, websocket.CloseStatus(err), "%v", err)
+			return
+		}
+	}
+}
+
+// dialGone: stream id can no longer connect.
+func dialGone(t *testing.T, base, id string) {
+	t.Helper()
+	dctx, dcancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer dcancel()
+	_, resp, err := websocket.Dial(dctx, base+"/term/"+id, &websocket.DialOptions{HTTPHeader: http.Header{"Origin": {"wails://localhost"}}})
+	require.Error(t, err, "the run can no longer connect")
+	require.NotNil(t, resp)
+	assert.Equal(t, http.StatusGone, resp.StatusCode)
+	if resp.Body != nil {
+		_ = resp.Body.Close()
+	}
+}
+
+// Forgetting a terminal (its tab closed) ends its run — connected, or
+// registered but not connected yet; other terminals go on.
 func TestForgettingATerminalEndsItsRuns(t *testing.T) {
+	ctx := context.Background()
+	s, k, base := newExecService(t)
+	a, err := s.OpenTerminal(ctx, termReq)
+	require.NoError(t, err)
+	b, err := s.OpenTerminal(ctx, termReq)
+	require.NoError(t, err)
+	c, err := s.OpenTerminal(ctx, termReq)
+	require.NoError(t, err)
+	ca, cb := dialTerm(t, base, a.StreamID), dialTerm(t, base, b.StreamID)
+	echo(t, ca, "a")
+	echo(t, cb, "b")
+	require.Equal(t, 1, s.Streams().Owners()[termOwner(c.TerminalID)])
+
+	require.NoError(t, s.ForgetTerminal(ctx, a.TerminalID))
+	require.NoError(t, s.ForgetTerminal(ctx, c.TerminalID))
+	waitGone(t, ca)
+	require.Eventually(t, func() bool {
+		o := s.Streams().Owners()
+		return o[termOwner(a.TerminalID)] == 0 && o[termOwner(c.TerminalID)] == 0
+	}, 5*time.Second, 10*time.Millisecond)
+	es := k.sessions[0]
+	require.Eventually(t, func() bool {
+		es.mu.Lock()
+		defer es.mu.Unlock()
+		return es.runs[0].closed.Load() == 1 && es.runs[2].closed.Load() == 1
+	}, 5*time.Second, 10*time.Millisecond, "the run and the pending one are released")
+	dialGone(t, base, c.StreamID)
+	echo(t, cb, "b goes on")
+}
+
+// A terminal has one run: reconnecting ends the previous one — connected
+// (an attach would otherwise share the debugger's stdin) or still pending.
+func TestReopeningATerminalReplacesItsRun(t *testing.T) {
 	ctx := context.Background()
 	s, k, base := newExecService(t)
 	a, err := s.OpenTerminal(ctx, termReq)
@@ -226,35 +286,21 @@ func TestForgettingATerminalEndsItsRuns(t *testing.T) {
 	ca, cb := dialTerm(t, base, a.StreamID), dialTerm(t, base, b.StreamID)
 	echo(t, ca, "a")
 	echo(t, cb, "b")
+
 	pending, err := s.ReopenTerminal(ctx, ReopenTerminalRequest{TerminalID: a.TerminalID, Cols: 80, Rows: 24})
 	require.NoError(t, err)
-	require.Equal(t, 2, s.Streams().Owners()[termOwner(a.TerminalID)])
-
-	require.NoError(t, s.ForgetTerminal(ctx, a.TerminalID))
-	rctx, cancel := context.WithTimeout(ctx, 5*time.Second)
-	defer cancel()
-	for {
-		if _, _, err := ca.Read(rctx); err != nil {
-			assert.Equal(t, websocket.StatusGoingAway, websocket.CloseStatus(err), "%v", err) // revoked: "gone"
-			break
-		}
-	}
-	require.Eventually(t, func() bool { return s.Streams().Owners()[termOwner(a.TerminalID)] == 0 }, 5*time.Second, 10*time.Millisecond)
+	waitGone(t, ca)
+	again, err := s.ReopenTerminal(ctx, ReopenTerminalRequest{TerminalID: a.TerminalID, Cols: 80, Rows: 24})
+	require.NoError(t, err)
+	dialGone(t, base, pending.StreamID)
+	require.Eventually(t, func() bool { return s.Streams().Owners()[termOwner(a.TerminalID)] == 1 }, 5*time.Second, 10*time.Millisecond)
 	es := k.sessions[0]
 	require.Eventually(t, func() bool {
 		es.mu.Lock()
 		defer es.mu.Unlock()
 		return es.runs[0].closed.Load() == 1 && es.runs[2].closed.Load() == 1
-	}, 5*time.Second, 10*time.Millisecond, "the run and the pending one are released")
-	dctx, dcancel := context.WithTimeout(ctx, 5*time.Second)
-	defer dcancel()
-	_, resp, err := websocket.Dial(dctx, base+"/term/"+pending.StreamID, &websocket.DialOptions{HTTPHeader: http.Header{"Origin": {"wails://localhost"}}})
-	require.Error(t, err, "the pending run can no longer connect")
-	require.NotNil(t, resp)
-	assert.Equal(t, http.StatusGone, resp.StatusCode)
-	if resp.Body != nil {
-		_ = resp.Body.Close()
-	}
+	}, 5*time.Second, 10*time.Millisecond, "the replaced runs are released")
+	echo(t, dialTerm(t, base, again.StreamID), "reconnected")
 	echo(t, cb, "b goes on")
 }
 
