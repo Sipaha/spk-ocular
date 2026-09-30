@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto'
 import { mkdirSync, renameSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 
@@ -45,3 +46,27 @@ export function env(root: string): Env {
 export const ONE = kubeconfig('prod', 'prod', 'staging')
 export const TWO = kubeconfig('dev', 'dev')
 export const EXTRA = kubeconfig('', 'lab')
+
+/** The Docker CLI variables cleared for the app under test: it reads only the fixture ~/.docker. */
+export const noDockerEnv = { DOCKER_HOST: '', DOCKER_CONTEXT: '', DOCKER_CONFIG: '', DOCKER_TLS_VERIFY: '', DOCKER_TLS: '', DOCKER_CERT_PATH: '' }
+
+/**
+ * Docker contexts in <home>/.docker as `docker context create` stores them:
+ * "docker-edge" (tcp + TLS, its key holds SECRET), "sock" (a unix socket that
+ * does not exist), current "sock". Nothing here is ever connected to.
+ */
+export function dockerContexts(home: string) {
+  const cfg = join(home, '.docker')
+  const add = (name: string, host: string, tls?: Record<string, string>) => {
+    const dir = createHash('sha256').update(name).digest('hex')
+    writeAtomic(join(cfg, 'contexts', 'meta', dir, 'meta.json'), JSON.stringify({ Name: name, Metadata: { Description: `fixture ${name}` }, Endpoints: { docker: { Host: host, SkipTLSVerify: false } } }))
+    for (const [f, body] of Object.entries(tls ?? {})) writeAtomic(join(cfg, 'contexts', 'tls', dir, 'docker', f), body)
+  }
+  add('docker-edge', 'tcp://edge.example:2376', {
+    'ca.pem': '-----BEGIN CERTIFICATE-----\nSECRET-CA\n-----END CERTIFICATE-----\n',
+    'cert.pem': '-----BEGIN CERTIFICATE-----\nSECRET-CERT\n-----END CERTIFICATE-----\n',
+    'key.pem': '-----BEGIN PRIVATE KEY-----\nSECRET-KEY\n-----END PRIVATE KEY-----\n',
+  })
+  add('sock', `unix://${join(home, 'no-such', 'docker.sock')}`)
+  writeAtomic(join(cfg, 'config.json'), JSON.stringify({ auths: { 'registry.example': { auth: 'U0VDUkVULWF1dGg=' } }, currentContext: 'sock' }))
+}

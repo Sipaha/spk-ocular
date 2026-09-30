@@ -1,7 +1,7 @@
 import { defineConfig } from '@playwright/test'
 import { mkdirSync, mkdtempSync } from 'node:fs'
 import { join } from 'node:path'
-import { EXTRA, ONE, TWO, env, writeAtomic } from './fixtures'
+import { EXTRA, ONE, TWO, env, writeAtomic, noDockerEnv, dockerContexts } from './fixtures'
 
 const port = Number(process.env.E2E_PORT ?? 5191)
 // The config is evaluated by the runner AND again in every worker: create the
@@ -16,6 +16,7 @@ if (!root) {
   writeAtomic(e.one, ONE)
   writeAtomic(e.two, TWO)
   writeAtomic(e.extra, EXTRA)
+  dockerContexts(e.home)
   process.env.E2E_ROOT = root
 }
 const e = env(root)
@@ -34,6 +35,7 @@ export default defineConfig({
     env: {
       SPK_OCULAR_HOME: e.dataDir,
       HOME: e.home,
+      ...noDockerEnv,
       KUBECONFIG: `${e.one}:${e.two}`,
       LANG: 'en_US.UTF-8',
       LANGUAGE: '',

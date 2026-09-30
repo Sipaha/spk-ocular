@@ -12,6 +12,7 @@ import (
 	"github.com/spk/spk-ocular/internal/events"
 	"github.com/spk/spk-ocular/internal/paths"
 	"github.com/spk/spk-ocular/internal/provider"
+	"github.com/spk/spk-ocular/internal/providers/compose"
 	"github.com/spk/spk-ocular/internal/providers/kubernetes"
 	"github.com/spk/spk-ocular/internal/providers/synthetic"
 	"github.com/spk/spk-ocular/internal/store"
@@ -43,7 +44,7 @@ func newCore(ctx context.Context, mode string, withSynthetic bool) (*appCore, er
 		return nil, fmt.Errorf("open db: %w", err)
 	}
 	self, _ := os.Executable() // runs kubeconfig exec plugins with a timeout (internal/execshim)
-	providers := []provider.Provider{kubernetes.New().WithExecShim(self)}
+	providers := []provider.Provider{kubernetes.New().WithExecShim(self), compose.New()}
 	var syn *synthetic.Provider
 	if withSynthetic {
 		syn = synthetic.New()

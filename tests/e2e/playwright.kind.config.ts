@@ -1,4 +1,5 @@
 import { defineConfig } from '@playwright/test'
+import { noDockerEnv } from './fixtures'
 import { existsSync, mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 
@@ -33,6 +34,7 @@ export default defineConfig({
     env: {
       SPK_OCULAR_HOME: join(root, 'data'),
       HOME: join(root, 'home'),
+      ...noDockerEnv,
       KUBECONFIG: `${kc}:${join(rbac, 'viewer.kubeconfig')}`,
       LANG: 'en_US.UTF-8', LANGUAGE: '', LC_ALL: '', LC_MESSAGES: '',
     },
