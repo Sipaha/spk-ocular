@@ -376,7 +376,8 @@ Actions: restart/stop/start/rm), «Ключевые технические ре�
 - [x] AGENTS.md, спецификация (P7 ✅), бэклог, «Итоги»; гейты `make check`, kind, dind.
   (На `fedb76b`: `make check` — golangci-lint 0, go test, vitest 291, synth e2e; `e2e-dind` 9,
   `e2e-kind` 16. Go-тесты `test-kind`/`test-dind` — на `5fc5742`, Go-код после не менялся.)
-- [ ] Ревью реализации Codex, исправления, раздел «Ревью реализации».
+- [x] Ревью реализации Codex, исправления, раздел «Ревью реализации». (Перепроверка `f8cde9a`:
+  обе находки закрыты, новых нет; гейты на `f8cde9a`: `make check`, `e2e-dind` 9, `e2e-kind` 16.)
 
 ## Итоги (2026-09-30)
 
