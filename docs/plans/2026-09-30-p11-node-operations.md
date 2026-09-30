@@ -220,9 +220,10 @@ pod-ов через Eviction API, который соблюдает PodDisruptio
   Фикстуры — образ `registry.k8s.io/pause:3.10` (есть на узлах, без загрузки).
 
 ### Task 6. UI и e2e
-- [ ] Подписи `act.*`, ключи сообщений; меню узла и «Действия ▾»; просмотр drain и итог по
+- [x] Подписи `act.*`, ключи сообщений; меню узла и «Действия ▾»; просмотр drain и итог по
   частям (vitest).
-- [ ] e2e-kind: cordon/uncordon узла, drain worker-а с PDB-отказом и оставленным pod-ом в итоге.
+- [x] e2e-kind: cordon/uncordon узла, drain worker-а с PDB-отказом и оставленным pod-ом в итоге.
+  Меню и диалог общие: отдельного UI для узлов нет (списки и части — Task 2, vitest там).
 
 ### Task 7. Desktop, документы, ревью
 - [ ] Desktop под Xvfb в русской раскладке (просмотр drain, итог), Private_Dirty.

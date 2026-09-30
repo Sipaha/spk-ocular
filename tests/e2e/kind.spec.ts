@@ -591,3 +591,122 @@ test('Secret values: show, copy and change a key; the value leaves only in Revea
     expect(s).not.toContain(b64)
   }
 })
+
+// Node actions (P11) on the drain worker only: its taint keeps everything
+// but drain fixtures (and DaemonSets) off it; every test opens it again.
+const worker = 'ocular-dev-worker'
+
+function drainFixtures(ns: string) {
+  const pod = (app: string) => `metadata: {labels: {app: ${app}, ocular.test/drain: fixture}}
+    spec:
+      nodeSelector: {ocular.dev/drain: only}
+      tolerations: [{key: ocular.dev/drain, operator: Equal, value: only, effect: NoSchedule}]
+      terminationGracePeriodSeconds: 1
+      containers: [{name: app, image: "registry.k8s.io/pause:3.10", imagePullPolicy: IfNotPresent}]`
+  const deploy = (name: string) => `apiVersion: apps/v1
+kind: Deployment
+metadata: {name: ${name}, namespace: ${ns}}
+spec:
+  replicas: 1
+  selector: {matchLabels: {app: ${name}}}
+  template:
+    ${pod(name)}
+---
+`
+  kubectl('create', 'namespace', ns)
+  execFileSync('kubectl', ['--kubeconfig', kc, '--context', 'kind-ocular-dev', 'apply', '-f', '-'], {
+    encoding: 'utf8',
+    input:
+      deploy('movers') +
+      deploy('guarded') +
+      `apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata: {name: guarded, namespace: ${ns}}
+spec: {minAvailable: 1, selector: {matchLabels: {app: guarded}}}
+---
+apiVersion: v1
+kind: Pod
+metadata: {name: bare, namespace: ${ns}, labels: {app: bare, ocular.test/drain: fixture}}
+spec:
+  nodeSelector: {ocular.dev/drain: only}
+  tolerations: [{key: ocular.dev/drain, operator: Equal, value: only, effect: NoSchedule}]
+  terminationGracePeriodSeconds: 1
+  containers: [{name: app, image: "registry.k8s.io/pause:3.10", imagePullPolicy: IfNotPresent}]
+`,
+  })
+  for (const d of ['movers', 'guarded']) kubectl('-n', ns, 'rollout', 'status', `deployment/${d}`, '--timeout=120s')
+  kubectl('-n', ns, 'wait', '--for=condition=Ready', 'pod/bare', '--timeout=120s')
+  kubectl('-n', ns, 'wait', '--for=jsonpath={.status.expectedPods}=1', 'pdb/guarded', '--timeout=60s')
+  // Nothing but this test's fixtures and DaemonSets on the worker.
+  const pods = kubectl('get', 'pods', '-A', '--field-selector', `spec.nodeName=${worker}`, '-o', 'jsonpath={range .items[*]}{.metadata.namespace}|{.metadata.ownerReferences[0].kind}{"\\n"}{end}')
+  for (const l of pods.trim().split('\n')) {
+    const [podNS, owner] = l.split('|')
+    if (owner !== 'DaemonSet' && podNS !== ns) throw new Error(`a pod on ${worker} that is not this test's: ${l}`)
+  }
+  return () => {
+    kubectl('uncordon', worker)
+    kubectl('delete', 'namespace', ns, '--wait=false')
+  }
+}
+
+test('cordon and uncordon a node from its row', async ({ page }) => {
+  try {
+    await openTarget(page, 'kind-ocular-dev')
+    const grid = await kindPage(page, 'Nodes', '')
+    await row(grid, worker).click({ button: 'right' })
+    const menu = page.getByRole('menu', { name: 'Row actions' })
+    await expect(menu.getByRole('menuitem')).toHaveText(['Details', 'Cordon', 'Uncordon', 'Drain'])
+    await menu.getByRole('menuitem', { name: 'Cordon', exact: true }).click()
+    const dialog = page.getByRole('dialog', { name: `Cordon ${worker}` })
+    await expect(dialog).toContainText(`No new pods are scheduled on node ${worker}; the pods running there stay.`)
+    await expect(dialog).toContainText('Permission: checked: allowed')
+    await dialog.getByRole('button', { name: 'Cordon' }).click()
+    await expect(page.getByRole('status')).toHaveText(`node ${worker}: cordon requested`)
+    await expect(row(grid, worker)).toContainText('SchedulingDisabled')
+
+    await row(grid, worker).click({ button: 'right' })
+    await page.getByRole('menu', { name: 'Row actions' }).getByRole('menuitem', { name: 'Cordon', exact: true }).click()
+    const again = page.getByRole('dialog', { name: `Cordon ${worker}` })
+    await expect(again.getByRole('alert')).toContainText('is already cordoned')
+    await again.getByRole('button', { name: 'Cancel' }).click()
+
+    await row(grid, worker).click({ button: 'right' })
+    await page.getByRole('menu', { name: 'Row actions' }).getByRole('menuitem', { name: 'Uncordon' }).click()
+    await page.getByRole('dialog', { name: `Uncordon ${worker}` }).getByRole('button', { name: 'Uncordon' }).click()
+    await expect(row(grid, worker)).not.toContainText('SchedulingDisabled')
+  } finally {
+    kubectl('uncordon', worker)
+  }
+})
+
+test('drain a node: its pods listed, evictions requested, a PodDisruptionBudget refusal and a pod left are said', async ({ page }) => {
+  const ns = `ocular-drain-${Date.now() % 1_000_000}`
+  const cleanup = drainFixtures(ns)
+  try {
+    await openTarget(page, 'kind-ocular-dev')
+    const grid = await kindPage(page, 'Nodes', '')
+    await row(grid, worker).click()
+    const drawer = page.getByRole('dialog', { name: `nodes ${worker}` })
+    await drawer.getByRole('button', { name: /Actions/ }).click()
+    await page.getByRole('menu', { name: 'Actions' }).getByRole('menuitem', { name: 'Drain' }).click()
+    const dialog = page.getByRole('dialog', { name: `Drain ${worker}` })
+    const evicted = dialog.getByRole('region', { name: 'Evicted (2)' })
+    await expect(evicted.getByRole('listitem')).toHaveText([new RegExp(`^${ns}/guarded-\\S+ · ReplicaSet guarded-`), new RegExp(`^${ns}/movers-\\S+ · ReplicaSet movers-`)])
+    await expect(dialog.getByRole('region', { name: 'Stay: no controller (1)' })).toContainText(`${ns}/bare`)
+    await expect(dialog.getByRole('region', { name: /^Left alone \(\d+\)$/ })).toBeVisible()
+    await expect(dialog).toContainText(`PodDisruptionBudget ${ns}/guarded allows no disruption now`)
+    await expect(dialog.getByRole('button', { name: 'Cancel' })).toBeFocused() // destructive
+    await dialog.getByRole('button', { name: 'Drain' }).click()
+
+    await expect(dialog.getByRole('alert')).toContainText('Not everything was done: a part was refused')
+    const result = dialog.getByRole('list', { name: 'Result' })
+    await expect(result.getByRole('listitem').filter({ hasText: worker })).toHaveText(`${worker}Done`)
+    await expect(result.getByRole('listitem').filter({ hasText: `${ns}/movers-` })).toHaveText(/Done$/)
+    await expect(result.getByRole('listitem').filter({ hasText: `${ns}/guarded-` })).toContainText('Refused · a PodDisruptionBudget does not allow it now')
+    await expect(result.getByRole('listitem').filter({ hasText: `${ns}/bare` })).toHaveText(`${ns}/bareNot run · left: no controller would recreate it`)
+    expect(kubectl('get', 'node', worker, '-o', 'jsonpath={.spec.unschedulable}')).toBe('true')
+    await expect(row(grid, worker)).toContainText('SchedulingDisabled')
+  } finally {
+    cleanup()
+  }
+})
