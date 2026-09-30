@@ -27,7 +27,7 @@ async function openProd(rows = 3) {
   return { f, grid, scroll: grid.querySelector<HTMLElement>('[data-table-scroll]')! }
 }
 
-const selectedName = (grid: HTMLElement) => within(grid).getAllByRole('row').find((r) => r.getAttribute('aria-selected') === 'true')?.querySelector('[role=gridcell]')?.textContent
+const selectedName = (grid: HTMLElement) => within(grid).getAllByRole('row').find((r) => r.getAttribute('aria-selected') === 'true')?.querySelectorAll('[role=gridcell]')[1]?.textContent // past the mark's cell
 
 describe('keyboard', () => {
   it('F6 goes round contexts, views, the table and details; Shift+F6 goes back', async () => {

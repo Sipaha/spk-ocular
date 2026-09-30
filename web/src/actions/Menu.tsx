@@ -7,6 +7,8 @@ export interface MenuItem {
   danger?: boolean
   /** A line above the item (a new group). */
   separator?: boolean
+  /** Said, not chosen (nothing to do). */
+  disabled?: boolean
   onSelect: () => void
 }
 
@@ -96,11 +98,13 @@ export function Menu({ items, at, label, onClose }: Props) {
             title={it.hint}
             // Enter held from what opened the menu: the repeats must not choose.
             onKeyDown={(e) => e.key === 'Enter' && e.repeat && e.preventDefault()}
+            aria-disabled={it.disabled || undefined}
             onClick={() => {
+              if (it.disabled) return
               close()
               it.onSelect()
             }}
-            className={['block w-full px-3 py-1 text-left outline-none hover:bg-hover focus:bg-active', it.danger ? 'text-danger' : 'text-fg'].join(' ')}
+            className={['block w-full px-3 py-1 text-left outline-none hover:bg-hover focus:bg-active', it.disabled ? 'text-fg-subtle' : it.danger ? 'text-danger' : 'text-fg'].join(' ')}
           >
             {it.label}
           </button>

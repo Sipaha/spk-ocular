@@ -124,6 +124,20 @@ func TestEveryChoiceHasItsTitle(t *testing.T) {
 	assert.Equal(t, 2, n, "debug and undo")
 }
 
+// A drain goes one node at a time (as kubectl drain of several nodes): the
+// UI never runs it on several at once.
+func TestOnlyTheDrainIsSingle(t *testing.T) {
+	var single []string
+	for _, as := range kindActions {
+		for _, a := range as {
+			if a.Single {
+				single = append(single, a.ID)
+			}
+		}
+	}
+	assert.Equal(t, []string{"drain"}, single)
+}
+
 // A reason without its "nothing was written" form is said as text rather
 // than panicking in the run.
 func TestNotWrittenOfAnUnknownReasonIsText(t *testing.T) {

@@ -23,7 +23,8 @@ async function openWorkloads(page: Page) {
 }
 
 const row = (grid: Locator, name: string) => grid.getByRole('row').filter({ has: grid.page().getByRole('gridcell', { name, exact: true }) })
-const cells = async (grid: Locator, name: string) => (await row(grid, name).getByRole('gridcell').allTextContents()).map((s) => s.trim())
+// Past the mark's cell (its checkbox).
+const cells = async (grid: Locator, name: string) => (await row(grid, name).getByRole('gridcell').allTextContents()).slice(1).map((s) => s.trim())
 
 test.afterEach(async ({ page }) => {
   await post(page, '/api/_test/synthetic/reset')

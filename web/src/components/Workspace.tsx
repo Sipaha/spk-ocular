@@ -7,14 +7,16 @@ import { showNotice } from '../store'
 import { useScopeWords } from '../scopeNames'
 import { refTitle } from '../refs'
 import { ActionDialog, type ActionRequest } from '../actions/ActionDialog'
-import type { MenuItem } from '../actions/Menu'
+import { Menu, type MenuItem } from '../actions/Menu'
+import { BulkActionDialog, type BulkItem, type BulkRequest } from '../actions/BulkActionDialog'
+import { bulkActions } from '../actions/bulk'
 import { ScopeSelect } from './ScopeSelect'
 import { metricsState, useMetrics } from '../views/useMetrics'
 import { useView } from '../views/useView'
 import { useKinds } from '../views/useKinds'
 import type { ViewHub } from '../views/viewSync'
 import { ResourceDrawer } from './ResourceDrawer'
-import { ResourceTable } from './ResourceTable'
+import { matchesRow, ResourceTable } from './ResourceTable'
 import { TargetDetails } from './TargetDetails'
 import { SearchIcon, WarningIcon } from './icons'
 import { dock } from '../dock/store'
@@ -161,6 +163,13 @@ export function Workspace({ client, hub, target }: { client: Client; hub: ViewHu
   const openAction = useCallback(
     (ref: Ref, action: ActionDescriptor) =>
       setActionReq({ ref, action, kindTitle: kindTitleOf(ref.kind), seq: ++actionSeq.current }),
+    [kindTitleOf],
+  )
+  // One action on several marked objects; onDone unmarks the rows done.
+  const [bulkReq, setBulkReq] = useState<(BulkRequest & { seq: number; onDone: (ids: string[]) => void }) | null>(null)
+  const openBulk = useCallback(
+    (items: BulkItem[], action: ActionDescriptor, onDone: (ids: string[]) => void) =>
+      setBulkReq({ items, action, kindTitleOf, onDone, seq: ++actionSeq.current }),
     [kindTitleOf],
   )
 
@@ -346,6 +355,7 @@ export function Workspace({ client, hub, target }: { client: Client; hub: ViewHu
             hasForward={hasForward}
             actionsOf={actionsOf}
             onAction={openAction}
+            onBulk={openBulk}
             eventsKindOf={eventsKindOf}
             editableOf={editableOf}
             valuesOf={valuesOf}
@@ -364,6 +374,15 @@ export function Workspace({ client, hub, target }: { client: Client; hub: ViewHu
               setTermDialog(null)
               dock.openTerminal(targetRef, target.title, open)
             }}
+          />
+        )}
+        {bulkReq && (
+          <BulkActionDialog
+            key={bulkReq.seq}
+            client={client}
+            req={bulkReq}
+            onClose={() => setBulkReq(null)}
+            onDone={bulkReq.onDone}
           />
         )}
         {actionReq && (
@@ -534,6 +553,7 @@ function ResourcePage(props: {
   hasForward: (kindId: string) => boolean
   actionsOf: (kindId: string) => ActionDescriptor[]
   onAction: (ref: Ref, action: ActionDescriptor) => void
+  onBulk: (items: BulkItem[], action: ActionDescriptor, onDone: (ids: string[]) => void) => void
   eventsKindOf: (kindId: string) => string | undefined
   editableOf: (kindId: string) => boolean
   valuesOf: (kindId: string) => boolean
@@ -541,7 +561,7 @@ function ResourcePage(props: {
   filterReq?: PageReq<string> | null
   openReq?: PageReq<Ref> | null
 }) {
-  const { pageKey, onHalted, client, hub, target, kind, scope, scopes, onScope, hasLogs, onLogs, hasExec, onTerminal, hasForward, actionsOf, onAction, eventsKindOf, editableOf, valuesOf, kindTitleOf, filterReq, openReq } = props
+  const { pageKey, onHalted, client, hub, target, kind, scope, scopes, onScope, hasLogs, onLogs, hasExec, onTerminal, hasForward, actionsOf, onAction, onBulk, eventsKindOf, editableOf, valuesOf, kindTitleOf, filterReq, openReq } = props
   const scopeKey = JSON.stringify(scope)
   const query = useMemo(() => ({ kind: kind.id, scope: JSON.parse(scopeKey) as ScopeSel }), [kind.id, scopeKey])
   const view = useView(hub, target.provider, target.id, query)
@@ -574,8 +594,40 @@ function ResourcePage(props: {
   // What a row offers is its object's kind's (a Problems row is a pod, a
   // deployment, an event…), not the table's.
   const deleteOf = (r: Row) => actionsOf(r.ref.kind).find((a) => a.id === 'delete')
-  // The row's menu, for the row it opens on (its ref as of now).
-  const rowMenu = (r: Row): MenuItem[] => {
+  // Marks (for one action on several rows): only rows shown now — a row that
+  // goes, or that the filter hides, drops its mark (an action never touches
+  // what is not seen).
+  const [markedAll, setMarked] = useState<ReadonlySet<string>>(() => new Set())
+  const shownRows = useMemo(() => {
+    const f = filter.trim()
+    return f ? view.rows.filter((r) => matchesRow(r, f)) : view.rows
+  }, [view.rows, filter])
+  const marked = useMemo(() => {
+    const shown = new Set(shownRows.map((r) => r.id))
+    const kept = [...markedAll].filter((id) => shown.has(id))
+    return kept.length === markedAll.size ? markedAll : new Set(kept)
+  }, [markedAll, shownRows])
+  if (marked !== markedAll) setMarked(marked) // dropped for good: they do not come back with the filter
+  const markedRows = shownRows.filter((r) => marked.has(r.id))
+  const unmark = (ids: string[]) => setMarked((m) => new Set([...m].filter((id) => !ids.includes(id))))
+  // An action on the marked rows: one row — its own dialog; several — the bulk one.
+  const actOnMarked = (rows: Row[], a: ActionDescriptor) => {
+    if (rows.length === 1) onAction(rows[0].ref, actionsOf(rows[0].ref.kind).find((x) => x.id === a.id) ?? a)
+    else onBulk(rows.map((r) => ({ id: r.id, ref: r.ref })), a, unmark)
+  }
+  const markedMenu = (): MenuItem[] => {
+    const rows = markedRows
+    const acts = bulkActions(rows.map((r) => actionsOf(r.ref.kind)))
+    const items: MenuItem[] = acts.map((a) => ({ id: `bulk-${a.id}`, label: actionLabel(a) + (a.param ? '…' : ''), danger: a.destructive, onSelect: () => actOnMarked(rows, a) }))
+    if (!items.length) items.push({ id: 'bulk-none', label: t('bulk.noCommon'), disabled: true, onSelect: () => {} })
+    items.push({ id: 'unmark', label: t('bulk.unmark'), separator: true, onSelect: () => setMarked(new Set()) })
+    return items
+  }
+  const [barMenu, setBarMenu] = useState<{ x: number; y: number } | null>(null)
+  // The row's menu, for the row it opens on (its ref as of now); a marked
+  // row among several: the marks' menu.
+  const rowMenu = (r: Row): MenuItem[] | { label: string; items: MenuItem[] } => {
+    if (marked.size >= 2 && marked.has(r.id)) return { label: t('bulk.menu'), items: markedMenu() }
     const items: MenuItem[] = [{ id: 'details', label: t('row.details'), onSelect: () => setOpen(r.ref) }]
     if (hasLogs(r.ref.kind)) items.push({ id: 'logs', label: t('row.logs'), hint: 'L', onSelect: () => onLogs(r.ref) })
     if (hasExec(r.ref.kind)) items.push({ id: 'terminal', label: t('row.terminal'), hint: 'S', onSelect: () => onTerminal(r.ref, false) })
@@ -592,6 +644,26 @@ function ResourcePage(props: {
         <span className="text-xs text-fg-subtle" aria-label="count">
           {view.rows.length}
         </span>
+        {marked.size > 0 && (
+          <div role="toolbar" aria-label={t('bulk.bar')} className="flex items-center gap-2 rounded-md bg-marked px-2 py-0.5 text-xs">
+            <span>{t('bulk.marked', { n: marked.size, total: shownRows.length })}</span>
+            <button
+              type="button"
+              aria-haspopup="menu"
+              onClick={(e) => {
+                const b = e.currentTarget.getBoundingClientRect()
+                setBarMenu({ x: b.left, y: b.bottom + 2 })
+              }}
+              className="rounded px-1.5 py-0.5 text-accent hover:bg-hover"
+            >
+              {t('bulk.actions')} <span aria-hidden>▾</span>
+            </button>
+            <button type="button" onClick={() => setMarked(new Set())} className="rounded px-1.5 py-0.5 text-fg-muted hover:bg-hover">
+              {t('bulk.unmark')}
+            </button>
+          </div>
+        )}
+        {barMenu && marked.size > 0 && <Menu items={markedMenu()} at={barMenu} label={t('bulk.menu')} onClose={() => setBarMenu(null)} />}
         {kind.scoped && (scopes?.kind && !scopes.error ? (
           <LiveScopePicker hub={hub} target={target} scopeKind={scopes.kind} scope={scope} scopes={scopes} onScope={onScope} />
         ) : (
@@ -640,10 +712,18 @@ function ResourcePage(props: {
           metrics={metrics}
           onVisibleRows={setVisibleRows}
           rowMenu={rowMenu}
-          onDelete={(r: Row) => {
-            const del = deleteOf(r)
-            if (del) onAction(r.ref, del)
+          onDelete={(r: Row | undefined) => {
+            // Marks first: Delete deletes what is marked.
+            if (markedRows.length) {
+              const del = bulkActions(markedRows.map((m) => actionsOf(m.ref.kind))).find((a) => a.id === 'delete')
+              if (del) actOnMarked(markedRows, del)
+              return
+            }
+            const del = r && deleteOf(r)
+            if (r && del) onAction(r.ref, del)
           }}
+          marked={marked}
+          onMarked={setMarked}
           defaultSort={view.kind?.sort ?? kind.sort}
         />
         </div>

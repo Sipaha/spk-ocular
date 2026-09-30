@@ -16,7 +16,7 @@ async function openProblems(page: import('@playwright/test').Page) {
 
 test('the worst first; evidence quieter; what could not be observed is said', async ({ page }) => {
   const grid = await openProblems(page)
-  const names = await grid.getByRole('row').locator('[role=gridcell]:nth-child(3)').allTextContents()
+  const names = await grid.getByRole('row').locator('[role=gridcell]:nth-child(4)').allTextContents()
   expect(names).toEqual(['api', 'db', 'workers'])
   await expect(grid.getByRole('gridcell', { name: /recent/ })).toHaveClass(/text-fg-subtle/)
   await expect(page.getByRole('note', { name: 'Not observed' })).toHaveText('Not observed: Nodes (access denied)')

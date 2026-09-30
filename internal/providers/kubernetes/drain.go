@@ -33,7 +33,7 @@ import (
 // writes or names: identity, class, controller, emptyDir volumes. A run
 // lists the pods again and writes nothing unless they match.
 
-var actDrain = core.ActionDescriptor{ID: "drain", Title: "Drain", Destructive: true}
+var actDrain = core.ActionDescriptor{ID: "drain", Title: "Drain", Destructive: true, Single: true}
 
 const (
 	// maxDrainPods: a node's pods one drain may know (kubelet's default

@@ -23,7 +23,7 @@ test('pods show health from the real cluster', async ({ page }) => {
   await openTarget(page, 'kind-ocular-dev')
   const grid = await kindPage(page, 'Pods')
   await expect(row(grid, 'bad-image')).toContainText(/ImagePullBackOff|ErrImagePull/)
-  await expect(row(grid, 'bad-image').getByRole('gridcell').nth(2)).toHaveClass(/text-danger/)
+  await expect(row(grid, 'bad-image').getByRole('gridcell').nth(3)).toHaveClass(/text-danger/) // past the mark's cell
   await expect(row(grid, 'unschedulable')).toContainText('Pending')
   await expect(row(grid, /^web-/).first()).toContainText('Running')
   // metrics-server is installed in the fixture: memory shows up
@@ -375,7 +375,7 @@ test('a user without the right sees it in the review', async ({ page }) => {
   await openTarget(page, 'ocular-viewer')
   const grid = page.getByRole('grid', { name: 'resources' })
   const pod = row(grid, /^web-/).first()
-  const name = (await pod.getByRole('gridcell').first().textContent())!.trim()
+  const name = (await pod.getByRole('gridcell').nth(1).textContent())!.trim() // past the mark's cell
   await pod.click({ button: 'right' })
   await page.getByRole('menu', { name: 'Row actions' }).getByRole('menuitem', { name: 'Delete' }).click()
   const dialog = page.getByRole('dialog', { name: `Delete ${name}` })
@@ -419,7 +419,7 @@ test('custom resources: API groups in the navigation, the CRD columns, live chan
   await expect(row(grid, 'alpha').getByRole('gridcell').last()).toHaveText(/^\d+(s|m|h|d)/)
   kubectl('-n', 'ocular-crd', 'patch', 'widget', 'gamma', '--type=merge', '-p', '{"spec":{"size":11}}')
   try {
-    await expect(row(grid, 'gamma').getByRole('gridcell').nth(1)).toHaveText('11')
+    await expect(row(grid, 'gamma').getByRole('gridcell').nth(2)).toHaveText('11') // past the mark's cell
   } finally {
     kubectl('-n', 'ocular-crd', 'patch', 'widget', 'gamma', '--type=merge', '-p', '{"spec":{"size":1}}')
   }

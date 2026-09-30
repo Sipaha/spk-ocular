@@ -61,7 +61,8 @@ async function openProblems(rows: Row[], status: object = { state: 'ready' }) {
   return { f, grid }
 }
 
-const names = (grid: HTMLElement) => within(grid).queryAllByRole('row').slice(1).map((r) => within(r).getAllByRole('gridcell')[3]?.textContent)
+// Past the mark's cell (its checkbox).
+const names = (grid: HTMLElement) => within(grid).queryAllByRole('row').slice(1).map((r) => within(r).getAllByRole('gridcell')[4]?.textContent)
 
 describe('Problems', () => {
   it('is in the navigation; the worst first, then the most recent', async () => {

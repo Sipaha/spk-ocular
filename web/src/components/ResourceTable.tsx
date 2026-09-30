@@ -35,14 +35,22 @@ interface Props {
    * The context menu of a row (right click, the Menu key, Shift+F10): built
    * for that row when it opens.
    */
-  rowMenu?: (row: Row) => MenuItem[]
-  /** Delete on the focused table: the selected row. */
-  onDelete?: (row: Row) => void
+  rowMenu?: (row: Row) => MenuItem[] | { label: string; items: MenuItem[] }
+  /** Delete on the focused table: the selected row (none: only marks). */
+  onDelete?: (row: Row | undefined) => void
   /** The kind's first sort (else by the first column). */
   defaultSort?: SortSpec
   /** The table of its area (F6 focuses it); not a table inside details. */
   areaFocus?: boolean
+  /**
+   * The marked rows (for an action on several), apart from the cursor
+   * (selected): with onMarked the table has a column of checkboxes.
+   */
+  marked?: ReadonlySet<string>
+  onMarked?: (next: ReadonlySet<string>) => void
 }
+
+const MARK_W = 32
 
 export const healthText: Record<HealthState, string> = {
   ok: 'text-fg',
@@ -109,12 +117,13 @@ export function matchesRow(r: Row, f: string): boolean {
   return r.cells.some((c) => (c.text ?? '').toLowerCase().includes(needle)) || (r.health.reason ?? '').toLowerCase().includes(needle)
 }
 
-export function ResourceTable({ columns, rows, hideScope, filter, selected, onSelect, onOpen, onLogs, onTerminal, metrics, onVisibleRows, rowMenu, onDelete, defaultSort, areaFocus }: Props) {
+export function ResourceTable({ columns, rows, hideScope, filter, selected, onSelect, onOpen, onLogs, onTerminal, metrics, onVisibleRows, rowMenu, onDelete, defaultSort, areaFocus, marked, onMarked }: Props) {
   const now = useNow(10_000)
-  const [menu, setMenu] = useState<{ items: MenuItem[]; at: { x: number; y: number } } | null>(null)
+  const [menu, setMenu] = useState<{ items: MenuItem[]; label: string; at: { x: number; y: number } } | null>(null)
   const openMenu = (r: Row, at: { x: number; y: number }) => {
-    const items = rowMenu?.(r) ?? []
-    if (items.length) setMenu({ items, at })
+    const m = rowMenu?.(r) ?? []
+    const { items, label } = Array.isArray(m) ? { items: m, label: t('row.menu') } : m
+    if (items.length) setMenu({ items, label, at })
   }
   const [sort, setSort] = useState<Sort & { clicks: number }>(() => {
     const col = defaultSort ? columns.findIndex((c) => c.id === defaultSort.column) : -1
@@ -207,13 +216,38 @@ export function ResourceTable({ columns, rows, hideScope, filter, selected, onSe
   // A flexible name — the row's identity (a container's or pod's name, long
   // and alike in its prefix) — gets a double share, the others one.
   const least = (c: Column) => c.width || (c.id === 'name' ? 180 : 120)
-  const template = visibleCols
+  const marking = !!onMarked
+  const template = (marking ? `${MARK_W}px ` : '') + visibleCols
     .map(({ c }) => (c.width ? `${c.width}px` : c.id === 'name' ? 'minmax(180px, 2fr)' : 'minmax(120px, 1fr)'))
     .join(' ')
   // The columns' least width, set on the header and the rows: Chromium does
   // not count the overflowing tracks of the (absolute) rows fully, so the
   // last columns could not be scrolled to.
-  const minWidth = visibleCols.reduce((sum, { c }) => sum + least(c), 0)
+  const minWidth = visibleCols.reduce((sum, { c }) => sum + least(c), marking ? MARK_W : 0)
+
+  // Marks: a click with Ctrl toggles one, with Shift marks the range from
+  // the last toggled row (the anchor) in the shown order.
+  const anchor = useRef<string | null>(null)
+  const marks = marked ?? noMarks
+  const setMarks = (next: Set<string>) => onMarked?.(next)
+  const toggle = (id: string) => {
+    const next = new Set(marks)
+    if (!next.delete(id)) next.add(id)
+    anchor.current = id
+    setMarks(next)
+  }
+  const markRange = (from: string | null, to: string) => {
+    const a = sorted.findIndex((r) => r.id === from)
+    const b = sorted.findIndex((r) => r.id === to)
+    if (a < 0 || b < 0) return toggle(to)
+    const next = new Set(marks)
+    for (let k = Math.min(a, b); k <= Math.max(a, b); k++) next.add(sorted[k].id)
+    setMarks(next)
+  }
+  const shownMarked = marking ? sorted.reduce((n, r) => n + (marks.has(r.id) ? 1 : 0), 0) : 0
+  const allState = shownMarked === 0 ? 'false' : shownMarked === sorted.length ? 'true' : 'mixed'
+  const focusTable = () => scrollRef.current?.focus({ preventScroll: true })
+  const markAll = () => setMarks(allState === 'true' ? new Set() : new Set(sorted.map((r) => r.id)))
 
   const onKey = (e: React.KeyboardEvent) => {
     if (!sorted.length) return
@@ -226,8 +260,23 @@ export function ResourceTable({ columns, rows, hideScope, filter, selected, onSe
     if (to !== null && !e.altKey && !e.ctrlKey && !e.metaKey) {
       e.preventDefault()
       const next = Math.max(0, Math.min(last, to))
+      // Shift+arrows mark the row left and the row reached.
+      if (marking && e.shiftKey && i >= 0 && (e.key === 'ArrowDown' || e.key === 'ArrowUp')) {
+        setMarks(new Set([...marks, sorted[i].id, sorted[next].id]))
+        anchor.current = sorted[next].id
+      }
       onSelect(sorted[next])
       virt.scrollToIndex(next, { align: 'auto' })
+    } else if (marking && e.key === ' ' && !e.repeat && i >= 0 && !e.ctrlKey && !e.altKey && !e.metaKey) {
+      e.preventDefault()
+      toggle(sorted[i].id)
+    } else if (marking && isShortcut(e, 'KeyA', { ctrl: true, shift: false }) && !e.altKey) {
+      e.preventDefault()
+      setMarks(new Set(sorted.map((r) => r.id)))
+    } else if (marking && e.key === 'Escape' && marks.size > 0) {
+      // One Esc, one effect: the marks go, details stay.
+      e.preventDefault()
+      setMarks(new Set())
     } else if (onLogs && i >= 0 && isShortcut(e, 'KeyL', { ctrl: false, shift: false }) && !e.altKey) {
       e.preventDefault()
       onLogs(sorted[i])
@@ -237,7 +286,7 @@ export function ResourceTable({ columns, rows, hideScope, filter, selected, onSe
     } else if (e.key === 'Enter' && !e.repeat && i >= 0 && onOpen) {
       e.preventDefault()
       onOpen(sorted[i])
-    } else if (e.key === 'Delete' && !e.repeat && i >= 0 && onDelete) {
+    } else if (e.key === 'Delete' && !e.repeat && (i >= 0 || (marking && marks.size > 0)) && onDelete) {
       e.preventDefault()
       onDelete(sorted[i])
     } else if (rowMenu && i >= 0 && (e.key === 'ContextMenu' || (e.key === 'F10' && e.shiftKey))) {
@@ -253,6 +302,11 @@ export function ResourceTable({ columns, rows, hideScope, filter, selected, onSe
       {/* The header scrolls sideways with the rows (a narrow window), never the page. */}
       <div ref={headRef} className="shrink-0 overflow-hidden border-b border-line bg-sidebar [scrollbar-gutter:stable]">
         <div className="grid text-[12px] font-semibold uppercase tracking-wide text-fg-subtle" style={{ gridTemplateColumns: template, minWidth }} role="row">
+          {marking && (
+            <span role="columnheader" className="flex items-center justify-center">
+              <MarkBox state={allState} label={t('table.markAll')} onToggle={() => (markAll(), focusTable())} />
+            </span>
+          )}
           {visibleCols.map(({ c, i }) => (
             <button
               key={c.id}
@@ -280,13 +334,21 @@ export function ResourceTable({ columns, rows, hideScope, filter, selected, onSe
           {items.map((vi) => {
             const r = sorted[vi.index]
             const isSel = r.id === selected
+            const isMarked = marking && marks.has(r.id)
             return (
               <div
                 key={vi.key}
                 role="row"
                 aria-selected={isSel}
                 data-row-id={r.id}
-                onClick={() => {
+                data-marked={isMarked ? '' : undefined}
+                onClick={(e) => {
+                  if (marking && (e.ctrlKey || e.metaKey)) return toggle(r.id)
+                  if (marking && e.shiftKey) {
+                    markRange(anchor.current ?? selected, r.id)
+                    anchor.current = r.id
+                    return
+                  }
                   onSelect(r)
                   onOpen?.(r)
                 }}
@@ -300,9 +362,14 @@ export function ResourceTable({ columns, rows, hideScope, filter, selected, onSe
                   })
                 }
                 title={r.health.message ? `${r.health.reason}: ${r.health.message}` : r.health.reason}
-                className={['absolute left-0 grid w-full cursor-default items-center border-b border-line/40', isSel ? 'bg-active' : 'hover:bg-hover'].join(' ')}
+                className={['absolute left-0 grid w-full cursor-default items-center border-b border-line/40', isSel ? 'bg-active' : isMarked ? 'bg-marked' : 'hover:bg-hover'].join(' ')}
                 style={{ top: vi.start, height: ROW_H, gridTemplateColumns: template, minWidth }}
               >
+                {marking && (
+                  <span role="gridcell" className="flex items-center justify-center">
+                    <MarkBox state={isMarked ? 'true' : 'false'} label={t('table.mark', { name: r.ref.name })} onToggle={() => (toggle(r.id), focusTable())} />
+                  </span>
+                )}
                 {visibleCols.map(({ c, i }) => {
                   const cell = cellOf(r, i)
                   // No status column (a table of the server's columns): the
@@ -330,8 +397,36 @@ export function ResourceTable({ columns, rows, hideScope, filter, selected, onSe
           })}
         </div>
       </div>
-      {menu && <Menu items={menu.items} at={menu.at} label={t('row.menu')} onClose={() => setMenu(null)} />}
+      {menu && <Menu items={menu.items} at={menu.at} label={menu.label} onClose={() => setMenu(null)} />}
     </div>
+  )
+}
+
+const noMarks: ReadonlySet<string> = new Set()
+
+/** A mark's checkbox: not a tab stop (the table's keys mark), a click is its own (the row does not open). */
+function MarkBox({ state, label, onToggle }: { state: 'true' | 'false' | 'mixed'; label: string; onToggle: () => void }) {
+  return (
+    <span
+      role="checkbox"
+      aria-checked={state}
+      aria-label={label}
+      onClick={(e) => {
+        e.stopPropagation()
+        onToggle()
+      }}
+      onMouseDown={(e) => e.preventDefault()} // the table keeps the focus
+      className={[
+        'flex h-3.5 w-3.5 cursor-pointer items-center justify-center rounded-sm border',
+        state === 'false' ? 'border-fg-subtle hover:border-fg-muted' : 'border-accent bg-accent text-accent-fg',
+      ].join(' ')}
+    >
+      {state !== 'false' && (
+        <svg aria-hidden viewBox="0 0 10 10" className="h-2.5 w-2.5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+          <path d={state === 'true' ? 'M2 5.2 4.2 7.4 8 2.8' : 'M2.5 5h5'} />
+        </svg>
+      )}
+    </span>
   )
 }
 

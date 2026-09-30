@@ -162,3 +162,111 @@ describe('actions in the workspace', () => {
   })
 
 })
+
+describe('actions on marked rows', () => {
+  const mark = async (grid: HTMLElement, name: string) =>
+    userEvent.click(within(within(grid).getByText(name).closest('[role="row"]') as HTMLElement).getByRole('checkbox'))
+  const bar = () => screen.getByRole('toolbar', { name: 'Marked' })
+
+  async function openThree() {
+    const r = await openProd()
+    r.f.state.rows = [...r.f.state.rows, { ...podRow('api-3', 'web'), rev: '1' }]
+    await act(async () => r.f.emit({ type: 'view_changed', payload: { viewId: 'v-pods', version: 50 } }))
+    await within(r.grid).findByText('api-3')
+    return r
+  }
+
+  it('marked rows get a bar: how many, their common actions, unmark', async () => {
+    const { f, grid } = await openProd()
+    expect(screen.queryByRole('toolbar', { name: 'Marked' })).toBeNull()
+    await mark(grid, 'api-1')
+    await mark(grid, 'api-2')
+    expect(bar()).toHaveTextContent('Marked: 2 of 2')
+    await userEvent.click(within(bar()).getByRole('button', { name: 'Actions' }))
+    const menu = screen.getByRole('menu', { name: 'Actions on the marked' })
+    expect(within(menu).getAllByRole('menuitem').map((m) => m.textContent)).toEqual(['Delete', 'Unmark'])
+    await userEvent.click(within(menu).getByRole('menuitem', { name: 'Delete' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Delete 2 objects' })
+    await within(dialog).findByRole('button', { name: 'Delete 2' })
+    expect(f.client.prepareAction).toHaveBeenCalledWith(expect.objectContaining({ name: 'api-1' }), 'delete', {})
+    expect(f.client.prepareAction).toHaveBeenCalledWith(expect.objectContaining({ name: 'api-2' }), 'delete', {})
+  })
+
+  it('a done bulk run unmarks what was done; the rest stays marked', async () => {
+    const { f, grid } = await openThree()
+    const { ApiError } = await import('../api/client')
+    f.client.runAction = vi.fn(async (p) => {
+      if (p.where.ref.name === 'api-2') throw new ApiError('conflict', 'changed', false, { text: 'pod api-2 changed' })
+      return { message: { text: `deleted ${p.where.ref.name}` }, outcome: 'done' as const }
+    })
+    await userEvent.click(within(grid).getByRole('checkbox', { name: 'Mark all' }))
+    await userEvent.keyboard('{Delete}')
+    const dialog = await screen.findByRole('dialog', { name: 'Delete 3 objects' })
+    await userEvent.click(await within(dialog).findByRole('button', { name: 'Delete 3' }))
+    await within(dialog).findByText(/2 of 3 done/)
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Close' }))
+    expect(bar()).toHaveTextContent('Marked: 1 of 3')
+    expect(within(grid).getByText('api-2').closest('[role="row"]')).toHaveAttribute('data-marked')
+  })
+
+  it('the menu of a marked row acts on the marks; of another row, on that row', async () => {
+    const { f, grid } = await openThree()
+    await mark(grid, 'api-1')
+    await mark(grid, 'api-2')
+    fireEvent.contextMenu(within(grid).getByText('api-3'))
+    expect(screen.getByRole('menu', { name: 'Row actions' })).toBeInTheDocument()
+    await userEvent.keyboard('{Escape}')
+    fireEvent.contextMenu(within(grid).getByText('api-2'))
+    const menu = screen.getByRole('menu', { name: 'Actions on the marked' })
+    await userEvent.click(within(menu).getByRole('menuitem', { name: 'Unmark' }))
+    expect(screen.queryByRole('toolbar', { name: 'Marked' })).toBeNull()
+    expect(f.client.prepareAction).not.toHaveBeenCalled()
+  })
+
+  it('one mark: the action is the one-object dialog; Delete acts on the marks, not the cursor', async () => {
+    const { grid } = await openThree()
+    await userEvent.click(within(grid).getByText('api-3')) // the cursor (and details)
+    await userEvent.click(screen.getByRole('button', { name: 'Close' }))
+    await mark(grid, 'api-1')
+    body(grid).focus()
+    await userEvent.keyboard('{Delete}')
+    expect(await screen.findByRole('dialog', { name: 'Delete api-1' })).toBeInTheDocument()
+  })
+
+  it('marks are what is shown: a filter that hides a marked row drops its mark; so does a row that goes', async () => {
+    const { f, grid } = await openThree()
+    await mark(grid, 'api-1')
+    await mark(grid, 'api-2')
+    await mark(grid, 'api-3')
+    const filter = screen.getByRole('textbox', { name: 'Filter rows' })
+    await userEvent.type(filter, 'api-') // keeps all
+    expect(bar()).toHaveTextContent('Marked: 3 of 3')
+    await userEvent.type(filter, '1')
+    expect(bar()).toHaveTextContent('Marked: 1 of 1')
+    await userEvent.clear(filter)
+    expect(bar()).toHaveTextContent('Marked: 1 of 3') // api-2, api-3 do not come back marked
+    f.state.rows = f.state.rows.filter((r) => r.ref.name !== 'api-1')
+    await act(async () => f.emit({ type: 'view_changed', payload: { viewId: 'v-pods', version: 60 } }))
+    await waitFor(() => expect(screen.queryByRole('toolbar', { name: 'Marked' })).toBeNull())
+  })
+
+  it('no common action: said so; an action that goes one object at a time is never offered for several', async () => {
+    const drain: ActionDescriptor = { id: 'drain', title: 'Drain', destructive: true, single: true }
+    const f = fakeClient([k8s('prod')])
+    f.state.view.selected = { provider: 'kubernetes', id: 'prod' }
+    const node = (name: string) => ({ id: `n-${name}`, ref: { provider: 'kubernetes', target: 'prod', kind: 'nodes', name, uid: `n-${name}` }, cells: [{ text: name }], health: { state: 'ok' as const }, rev: '1' })
+    f.state.rowsByKind.nodes = [node('n1'), node('n2')]
+    f.client.listKinds = vi.fn(async () => kindsView([pods, { ...nodes, actions: [drain] }]))
+    render(<App client={f.client} />)
+    await userEvent.click(await screen.findByRole('button', { name: /^Nodes/ }))
+    const grid = await screen.findByRole('grid', { name: 'resources' })
+    await within(grid).findByText('n2')
+    await userEvent.click(within(grid).getByRole('checkbox', { name: 'Mark all' }))
+    await userEvent.click(within(bar()).getByRole('button', { name: 'Actions' }))
+    const menu = screen.getByRole('menu', { name: 'Actions on the marked' })
+    expect(within(menu).getAllByRole('menuitem').map((m) => m.textContent)).toEqual(['No action common to the marked', 'Unmark'])
+    await userEvent.click(within(menu).getByRole('menuitem', { name: 'No action common to the marked' }))
+    expect(screen.getByRole('menu', { name: 'Actions on the marked' })).toBeInTheDocument() // it does nothing
+  })
+})
+

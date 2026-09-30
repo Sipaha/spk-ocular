@@ -1,4 +1,5 @@
 import { act, render, screen, within } from '@testing-library/react'
+import { useState } from 'react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 import type { Column, MetricsView, Row } from '../api/types'
@@ -135,5 +136,127 @@ describe('ResourceTable health without a status column', () => {
     const cells = within(screen.getByText('a').closest('[role="row"]') as HTMLElement).getAllByRole('gridcell')
     expect(cells[0].querySelector('[data-health]')).toBeNull()
     expect(cells[2].querySelector('[data-health]')).toHaveAttribute('data-health', 'error')
+  })
+})
+
+describe('ResourceTable marks', () => {
+  const text: Column[] = [{ id: 'name', title: 'Name', type: 'text' }]
+  const rows = ['a', 'b', 'c', 'd', 'e'].map(row)
+
+  /** A table with its cursor and marks held as Workspace holds them. */
+  function Marked({ filter = '', onOpen, initial = [] }: { filter?: string; onOpen?: (r: Row) => void; initial?: string[] }) {
+    const [selected, setSelected] = useState<string | null>(null)
+    const [marked, setMarked] = useState<ReadonlySet<string>>(new Set(initial))
+    return (
+      <>
+        <input aria-label="filter" defaultValue="" />
+        <ResourceTable columns={text} rows={rows} hideScope={false} filter={filter} selected={selected} onSelect={(r) => setSelected(r.id)} onOpen={onOpen} marked={marked} onMarked={setMarked} />
+      </>
+    )
+  }
+  const grid = () => screen.getByRole('grid')
+  const rowOf = (name: string) => within(grid()).getByText(name).closest('[role="row"]') as HTMLElement
+  const markedNames = () =>
+    within(grid())
+      .getAllByRole('row')
+      .filter((r) => r.hasAttribute('data-marked'))
+      .map((r) => r.textContent)
+  const names2 = () => within(grid()).getAllByRole('row').slice(1).map((r) => r.textContent)
+  const box = (name: string) => within(rowOf(name)).getByRole('checkbox')
+  const all = () => within(grid()).getByRole('checkbox', { name: 'Mark all' })
+  const focusTable = () => act(() => (grid().querySelector('[data-table-scroll]') as HTMLElement).focus())
+
+  it('a row’s checkbox marks it without opening it; the header marks all, some or none', async () => {
+    const onOpen = vi.fn()
+    render(<Marked onOpen={onOpen} />)
+    const user = userEvent.setup()
+    await user.click(box('b'))
+    expect(markedNames()).toEqual(['b'])
+    expect(box('b')).toHaveAttribute('aria-checked', 'true')
+    expect(all()).toHaveAttribute('aria-checked', 'mixed')
+    expect(onOpen).not.toHaveBeenCalled()
+    await user.click(all())
+    expect(markedNames()).toEqual(['a', 'b', 'c', 'd', 'e'])
+    expect(all()).toHaveAttribute('aria-checked', 'true')
+    await user.click(all())
+    expect(markedNames()).toEqual([])
+    expect(all()).toHaveAttribute('aria-checked', 'false')
+  })
+
+  it('Ctrl+click toggles a mark without opening; Shift+click marks the range from the last toggled row in the shown order', async () => {
+    const onOpen = vi.fn()
+    render(<Marked onOpen={onOpen} />)
+    const user = userEvent.setup()
+    await user.keyboard('{Control>}')
+    await user.click(rowOf('b'))
+    await user.keyboard('{/Control}')
+    expect(markedNames()).toEqual(['b'])
+    expect(onOpen).not.toHaveBeenCalled()
+    await user.keyboard('{Shift>}')
+    await user.click(rowOf('d'))
+    await user.keyboard('{/Shift}')
+    expect(markedNames()).toEqual(['b', 'c', 'd'])
+    expect(onOpen).not.toHaveBeenCalled()
+    // descending: the range follows what is shown
+    await user.click(screen.getByRole('columnheader', { name: /Name/ }))
+    expect(names2()).toEqual(['e', 'd', 'c', 'b', 'a'])
+    await user.keyboard('{Control>}')
+    await user.click(rowOf('d')) // unmarks d, the anchor
+    await user.keyboard('{/Control}{Shift>}')
+    await user.click(rowOf('a'))
+    await user.keyboard('{/Shift}')
+    expect(markedNames()).toEqual(['d', 'c', 'b', 'a'])
+  })
+
+  it('a plain click and the arrows move the cursor, never the marks', async () => {
+    render(<Marked initial={['id-c']} />)
+    const user = userEvent.setup()
+    await user.click(rowOf('a'))
+    await user.keyboard('{ArrowDown}{ArrowDown}{End}')
+    expect(markedNames()).toEqual(['c'])
+  })
+
+  it('Space marks the cursor’s row, Shift+arrows mark as they go, Ctrl+A marks what the filter shows', async () => {
+    const { rerender } = render(<Marked />)
+    const user = userEvent.setup()
+    await user.click(rowOf('a'))
+    await user.keyboard(' ')
+    expect(markedNames()).toEqual(['a'])
+    await user.keyboard(' ')
+    expect(markedNames()).toEqual([])
+    await user.keyboard('{ArrowDown}{Shift>}{ArrowDown}{ArrowDown}{/Shift}')
+    expect(markedNames()).toEqual(['b', 'c', 'd'])
+    expect(rowOf('d')).toHaveAttribute('aria-selected', 'true')
+    await user.keyboard('{Control>}a{/Control}')
+    expect(markedNames()).toEqual(['a', 'b', 'c', 'd', 'e'])
+    await user.keyboard('{Escape}')
+    rerender(<Marked filter="c" />)
+    focusTable()
+    await user.keyboard('{Control>}a{/Control}')
+    expect(markedNames()).toEqual(['c'])
+  })
+
+  it('Ctrl+A in another field selects its text, not rows', async () => {
+    render(<Marked />)
+    const user = userEvent.setup()
+    await user.click(screen.getByRole('textbox', { name: 'filter' }))
+    await user.keyboard('{Control>}a{/Control} ')
+    expect(markedNames()).toEqual([])
+  })
+
+  it('Esc clears the marks and goes no further; without marks it goes on (details close)', async () => {
+    const outer = vi.fn()
+    render(
+      <div onKeyDown={(e) => e.key === 'Escape' && !e.defaultPrevented && outer()}>
+        <Marked initial={['id-a', 'id-b']} />
+      </div>,
+    )
+    const user = userEvent.setup()
+    focusTable()
+    await user.keyboard('{Escape}')
+    expect(markedNames()).toEqual([])
+    expect(outer).not.toHaveBeenCalled()
+    await user.keyboard('{Escape}')
+    expect(outer).toHaveBeenCalledTimes(1)
   })
 })

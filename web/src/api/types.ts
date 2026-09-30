@@ -223,6 +223,8 @@ export interface ActionDescriptor {
   text?: ActionText
   /** exec-level access: never granted to agents */
   noAgents?: boolean
+  /** only one object at a time (a node's drain): never in a bulk action */
+  single?: boolean
 }
 
 export interface ActionText {
