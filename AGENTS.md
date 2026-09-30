@@ -53,6 +53,8 @@ desktop-проверка (`docs/plans/2026-09-30-p5-problems-palette.md`, Task 8
   `<data>/test-api.json`, 0600, удаляется при выходе) и `scripts/soak-sample.sh <pid> <data> <csv>`
   (раз в `INTERVAL` с: MemAvailable, Private_Dirty/PSS/swap дерева, PID-ы, счётчики stats, фаза из
   `PHASE_FILE`; при MemAvailable < 8 ГБ отказывается — вытесненные страницы уходят из Private_Dirty).
+  Вердикт — `scripts/soak-verdict.py <csv>` по критерию пользователя 2026-09-30 (спецификация,
+  «Память»): по фазам ≤ +100 МБ от уровня после прогрева, после нагрузки ≥ 10 мин ровно.
 - `SPK_OCULAR_KLOG=1` — вернуть логи client-go (klog) в stderr для отладки.
 - `E2E_BIN=<путь> E2E_PORT=<порт>` — e2e против другой browser-сборки.
 - Проверка desktop без экрана пользователя: `xvfb-run -a -s "-screen 0 1400x900x24" <скрипт>`
