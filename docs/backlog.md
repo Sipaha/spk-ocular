@@ -4,7 +4,10 @@
   compose-файлов (желаемое число реплик, сервисы без контейнеров, scale/create/up/down);
   endpoint-ы `ssh://` (нужен `docker system dial-stdio`; сейчас target виден, сессия отвечает
   `unsupported`); Problems для Compose; контейнеры вне compose (Docker provider), Swarm, podman,
-  build, push/pull образов, события Docker как вид.
+  build, push/pull образов, события Docker как вид. После P7: pause/unpause (сейчас start
+  приостановленного — «снимите паузу», не предлагается), kill с выбором сигнала, удаление
+  контейнера с томами/`force`; CPU/память у Windows-демонов (другие поля stats — сейчас
+  `unsupported`); замеры сервисов > 20 реплик целиком (сейчас сумма первых 20 — «≥»).
 - SSH provider (`~/.ssh/config`), кастомные provider-ы.
 - Интеграция с агентами Claude/Codex (поэтому состояние сразу в SQLite — решение пользователя
   2026-09-29).

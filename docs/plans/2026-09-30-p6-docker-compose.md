@@ -447,8 +447,28 @@ inspect, старый API 1.41, обрыв кадра stdcopy).
   и у pod-ов тоже); длинная метка «Last health check (as of reading)» раздувала колонку меток
   деталей → `fit-content(35%)`, метка переносится. Private_Dirty с открытыми kind, ocular-dind
   и живыми логами сервиса — **132.9 МБ** (Go 38.8, WebProcess 85.0, NetworkProcess 8.6).
-- [ ] AGENTS.md, спецификация (P6 ✅), бэклог, «Итоги»; гейты `make check`, kind, dind.
-- [ ] Ревью реализации Codex, исправления, раздел «Ревью реализации».
+- [x] AGENTS.md, спецификация (P6 ✅), бэклог, «Итоги»; гейты `make check`, kind, dind.
+  Гейты 2026-09-30 на сборке с P7 (b282fcb): `make check`, `e2e-kind`, `test-dind`,
+  `e2e-dind` — зелёные; `test-kind` — зелёный на повторе (первый прогон упал на `kind-seed`: хостовый
+  earlyoom при нехватке памяти рассылал SIGTERM процессам kind, поды ушли в CrashLoopBackOff).
+- [x] Ревью реализации Codex, исправления, раздел «Ревью реализации» — пять раундов ниже.
+
+## Итоги (2026-09-30)
+
+- Docker Compose provider: target-ы — Docker contexts (как docker CLI 29) рядом с kube
+  contexts; свой клиент Engine (unix/tcp/TLS, без повторов); scope — проект; виды services
+  (синтетические по label-ам), containers, networks, volumes, images; health, связи, детали с
+  YAML inspect; наблюдение лентами с эпохами, «Перечитать» (`F5`); логи контейнера и сервиса
+  с продолжением по позиции без повторов и пропусков.
+- Общий UI очищен от Kubernetes-знания (метаданные провайдера: вид и область по умолчанию,
+  подписи scope, вид событий).
+- Проверено: фейковый Engine (Go), изолированный демон `ocular-dind` (Go и e2e), desktop под
+  Xvfb в русской раскладке; Private_Dirty с kind, Compose и живыми логами — 132.9 МБ.
+- Ревью Codex: план и пять раундов реализации — все находки приняты с регрессионными
+  тестами; остаток — граница TTY-журнала (метка продолжения в строке длиннее 16 КиБ, как у
+  `docker logs`).
+- Решения для P7 (терминал, статистика, действия) вынесены в свой план
+  `docs/plans/2026-09-30-p7-compose-exec-stats-actions.md`.
 
 ## Ревью реализации Task 4–5 (Codex, 2026-09-30)
 
