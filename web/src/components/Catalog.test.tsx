@@ -11,7 +11,7 @@ beforeEach(() => useStore.setState({ ...initialState }))
 const discovered = (id: string, title: string, subgroup: string, extra: Partial<KindDescriptor> = {}): KindDescriptor => ({
   id, title, group: 'API groups', subgroup, scoped: true, columns: [{ id: 'name', title: 'Name', type: 'text' }], ...extra,
 })
-const widgets = discovered('ocular.dev/widgets', 'Widgets', 'ocular.dev')
+const widgets = discovered('ocular.dev/widgets', 'Widgets', 'ocular.dev', { aliases: ['wd', 'widget', 'widgets'] })
 const gadgets = discovered('ocular.dev/gadgets', 'Gadgets', 'ocular.dev', { scoped: false })
 const jobs = discovered('batch/jobs', 'Jobs', 'batch')
 
@@ -174,3 +174,18 @@ describe('the catalog in an open target', () => {
     expect(f.client.openView).toHaveBeenLastCalledWith('kubernetes', 'prod', expect.objectContaining({ kind: 'ocular.dev/widgets' }))
   })
 })
+
+describe('the navigation follows the open view', () => {
+  it('a view opened elsewhere (the palette) is scrolled into the navigation', async () => {
+    const f = fakeClient([k8s('prod')])
+    f.client.listKinds = vi.fn(async () => catalog([podsKind, widgets, gadgets]))
+    const nav = await open(f)
+    const spy = vi.spyOn(Element.prototype, 'scrollIntoView')
+    await userEvent.keyboard('{Control>}k{/Control}')
+    await userEvent.keyboard(':wd{Enter}')
+    const item = await within(nav).findByRole('button', { name: 'Widgets' })
+    await waitFor(() => expect(spy.mock.contexts).toContain(item))
+    spy.mockRestore()
+  })
+})
+

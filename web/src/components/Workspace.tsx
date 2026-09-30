@@ -332,8 +332,14 @@ export function navGroups(kinds: KindDescriptor[]): NavGroup[] {
 }
 
 function NavItem({ active, onClick, label, hint, nested }: { active: boolean; onClick: () => void; label: string; hint?: string; nested?: boolean }) {
+  // A view opened elsewhere (the palette, a remembered one) is shown in the navigation.
+  const ref = useRef<HTMLButtonElement>(null)
+  useEffect(() => {
+    if (active) ref.current?.scrollIntoView({ block: 'nearest' })
+  }, [active])
   return (
     <button
+      ref={ref}
       onClick={onClick}
       data-nav-item
       tabIndex={active ? 0 : -1}
