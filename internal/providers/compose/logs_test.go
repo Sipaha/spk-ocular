@@ -478,6 +478,17 @@ func TestLogsRefusals(t *testing.T) {
 	if err := e.s.StreamLogs(t.Context(), e.containerRef(), provider.LogQuery{Channel: "stdin", TailLines: 10}, sk); !isClass(err, provider.ClassInvalid) {
 		t.Fatalf("a bad channel: %v", err)
 	}
+	for _, ref := range []core.Ref{
+		{Provider: ProviderID, Kind: KindContainers, Scope: "q", Name: e.c.ID},
+		{Provider: ProviderID, Kind: KindServices, Scope: "q", Name: "p/web"},
+	} {
+		if err := e.s.StreamLogs(t.Context(), ref, provider.LogQuery{TailLines: 10}, sk); !isClass(err, provider.ClassNotFound) {
+			t.Fatalf("another project's %s: %v", ref.Kind, err)
+		}
+		if _, err := e.s.LogInfo(t.Context(), ref); !isClass(err, provider.ClassNotFound) {
+			t.Fatalf("info of another project's %s: %v", ref.Kind, err)
+		}
+	}
 	gone := e.containerRef()
 	gone.Name = id(9)
 	if err := e.s.StreamLogs(t.Context(), gone, follow(), sk); !isClass(err, provider.ClassNotFound) {

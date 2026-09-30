@@ -286,6 +286,26 @@ func TestNotFoundAndGone(t *testing.T) {
 	assert.Equal(t, provider.ClassInternal, errClass(err))
 }
 
+// A ref with a scope names an object of that project only: another
+// project's container, service, network or volume of the same key is not
+// found (agents are judged by the scope they name).
+func TestAnotherProjectsObjectIsNotFound(t *testing.T) {
+	w := fixtureWorld()
+	for _, ref := range []core.Ref{
+		{Kind: KindContainers, Name: "c1"},
+		{Kind: KindServices, Name: "p/web"},
+		{Kind: KindNetworks, Name: "n-p"},
+		{Kind: KindVolumes, Name: "p_data"},
+	} {
+		ref.Scope = "p"
+		_, err := resourceOf(w, ref, t0)
+		assert.NoError(t, err, "%v", ref)
+		ref.Scope = "q"
+		_, err = resourceOf(w, ref, t0)
+		assert.Equal(t, provider.ClassNotFound, errClass(err), "%v", ref)
+	}
+}
+
 // Each relation list is capped and says so.
 func TestRelationsAreCapped(t *testing.T) {
 	w := world(network("n", "big", "p"))

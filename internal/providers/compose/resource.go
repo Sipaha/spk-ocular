@@ -74,6 +74,9 @@ func resourceOf(w *World, ref core.Ref, now time.Time) (*core.Resource, error) {
 	if res == nil {
 		return nil, provider.Said(provider.ClassNotFound, msg("error.notFound", "kind", ref.Kind, "name", shown(ref)))
 	}
+	if ref.Scope != "" && res.Ref.Scope != ref.Scope {
+		return nil, notInScope(ref)
+	}
 	if ref.UID != "" && ref.UID != res.Ref.UID {
 		// The same key, another object: never shown as the one asked for.
 		return nil, provider.Said(provider.ClassGone, msg("error.gone", "kind", ref.Kind, "name", shown(ref)))

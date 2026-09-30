@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"io"
 	"strconv"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -159,9 +158,9 @@ func (s *session) execInstance(ctx context.Context, ref core.Ref, instance strin
 			return nil, err
 		}
 	case KindServices:
-		project, service, ok := strings.Cut(ref.Name, "/")
-		if !ok {
-			return nil, &provider.Error{Class: provider.ClassInvalid, Message: fmt.Sprintf("%q is not a service key (project/service)", ref.Name)}
+		project, service, err := serviceOf(ref)
+		if err != nil {
+			return nil, err
 		}
 		got, err := s.cl.InspectContainer(ctx, instance)
 		switch {

@@ -193,9 +193,9 @@ func (s *session) actionObjects(ctx context.Context, ref core.Ref) ([]*engine.Co
 		}
 		return []*engine.ContainerInspect{c}, nil
 	}
-	project, service, ok := strings.Cut(ref.Name, "/")
-	if !ok {
-		return nil, provider.Said(provider.ClassInvalid, msg("act.notServiceKey", "key", strconv.Quote(ref.Name)))
+	project, service, err := serviceOf(ref)
+	if err != nil {
+		return nil, err
 	}
 	listed, err := s.cl.ListContainers(ctx, engine.Filters{"label": {LabelProject + "=" + project, LabelService + "=" + service}})
 	if err != nil {

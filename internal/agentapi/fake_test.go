@@ -127,6 +127,11 @@ func (s *fakeSess) Watch(q provider.Query, sink provider.Sink) (func(), error) {
 }
 
 func (s *fakeSess) Get(_ context.Context, r core.Ref) (*core.Resource, error) {
+	if r.Name == "stray" {
+		// As a provider finding objects by name alone would: stray lives
+		// in b whatever scope was asked.
+		r.Scope = "b"
+	}
 	return &core.Resource{Ref: r, Health: core.Health{State: core.HealthOK}, YAML: "name: " + r.Name + "\n", Facts: []core.Detail{{Key: "Name", Value: r.Name}},
 		Relations: []core.Relation{
 			{Type: "owns", Ref: ref("a", "pods", "web-1")},

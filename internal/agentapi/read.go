@@ -450,6 +450,13 @@ func (s *Server) getObject(ctx context.Context, c caller, req *GetObjectRequest)
 	if err != nil {
 		return nil, err
 	}
+	// The object found must be the one judged: a provider must not answer
+	// a ref with an object of another scope, and if one did, it is not shown.
+	if res.Ref.Scope != ref.Scope || !x.readable(res.Ref) {
+		err := forbidden("%s is not an object of %q", objectOf(ref), ref.Scope)
+		s.refused(c, "GetObject", ref.Provider, ref.Target, ref.Scope, objectOf(ref), err)
+		return nil, err
+	}
 	out := &ObjectView{Ref: res.Ref, Health: res.Health, Facts: res.Facts, YAML: res.YAML, Relations: []core.Relation{}, RelationsError: res.RelationsError, RelationsTruncated: res.RelationsTruncated}
 	if out.Facts == nil {
 		out.Facts = []core.Detail{}

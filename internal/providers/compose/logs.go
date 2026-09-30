@@ -94,7 +94,8 @@ func streamsInfo(cs []*engine.ContainerInspect, aggregate bool) core.LogInfo {
 	return info
 }
 
-// container reads ref's container (a Compose one, the same incarnation).
+// container reads ref's container (a Compose one, of ref's project when
+// ref has a scope, the same incarnation).
 func (s *session) container(ctx context.Context, ref core.Ref) (*engine.ContainerInspect, error) {
 	c, err := s.cl.InspectContainer(ctx, ref.Name)
 	switch {
@@ -104,17 +105,38 @@ func (s *session) container(ctx context.Context, ref core.Ref) (*engine.Containe
 		return nil, providerError(err)
 	case c.Config.Labels[LabelProject] == "":
 		return nil, provider.Said(provider.ClassNotFound, msg("error.notCompose"))
+	case ref.Scope != "" && c.Config.Labels[LabelProject] != ref.Scope:
+		return nil, notInScope(ref)
 	case ref.UID != "" && c.ID != ref.UID:
 		return nil, provider.Said(provider.ClassGone, msg("error.containerReplaced"))
 	}
 	return &c, nil
 }
 
+// serviceOf splits a service's key (project/service); a ref with a scope
+// names a service of that project only.
+func serviceOf(ref core.Ref) (project, service string, err error) {
+	project, service, ok := strings.Cut(ref.Name, "/")
+	switch {
+	case !ok:
+		return "", "", provider.Said(provider.ClassInvalid, msg("act.notServiceKey", "key", strconv.Quote(ref.Name)))
+	case ref.Scope != "" && project != ref.Scope:
+		return "", "", notInScope(ref)
+	}
+	return project, service, nil
+}
+
+// notInScope: a ref's scope is judged (agents' grants), so an object of
+// another project under the same key is not the one asked for.
+func notInScope(ref core.Ref) error {
+	return provider.Said(provider.ClassNotFound, msg("error.notFound", "kind", ref.Kind, "name", shown(ref)))
+}
+
 // serviceMembers reads the service's containers from the containers feed.
 func (s *session) serviceMembers(ctx context.Context, ref core.Ref) ([]*engine.ContainerInspect, error) {
-	project, service, ok := strings.Cut(ref.Name, "/")
-	if !ok {
-		return nil, provider.Said(provider.ClassInvalid, msg("act.notServiceKey", "key", strconv.Quote(ref.Name)))
+	project, service, err := serviceOf(ref)
+	if err != nil {
+		return nil, err
 	}
 	fs, err := s.acquire([]Feed{FeedContainers})
 	if err != nil {
@@ -174,9 +196,9 @@ func (s *session) StreamLogs(ctx context.Context, ref core.Ref, q provider.LogQu
 		}
 		g.one = c.ID
 	case KindServices:
-		project, service, ok := strings.Cut(ref.Name, "/")
-		if !ok {
-			return &provider.Error{Class: provider.ClassInvalid, Message: fmt.Sprintf("%q is not a service key (project/service)", ref.Name)}
+		project, service, err := serviceOf(ref)
+		if err != nil {
+			return err
 		}
 		g.project, g.service = project, service
 	default:

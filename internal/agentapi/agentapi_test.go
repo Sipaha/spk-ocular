@@ -252,6 +252,17 @@ func TestRelationsAndProblemsAreFiltered(t *testing.T) {
 	e.refused("Problems", with(tgt, "scope", "c"))
 }
 
+func TestAnObjectOutsideTheScopeAskedIsRefused(t *testing.T) {
+	e := newEnv(t)
+	e.grant(one("a", agentgrant.VerbRead))
+	detail := e.refused("GetObject", map[string]any{"ref": ref("a", "apps/deployments", "stray")})
+	assert.NotContains(t, detail, `"b"`, "where it really is is not said")
+	entries, err := e.st.ListAudit(context.Background(), store.AuditFilter{})
+	require.NoError(t, err)
+	require.NotEmpty(t, entries)
+	assert.Equal(t, store.AuditRefused, entries[0].Phase, "%+v", entries[0])
+}
+
 func TestMetricsByRef(t *testing.T) {
 	e := newEnv(t)
 	e.grant(one("a", agentgrant.VerbRead))

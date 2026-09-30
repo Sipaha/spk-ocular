@@ -16,6 +16,7 @@ import (
 
 	"github.com/spk/spk-ocular/internal/agentgrant"
 	"github.com/spk/spk-ocular/internal/api"
+	"github.com/spk/spk-ocular/internal/core"
 	"github.com/spk/spk-ocular/internal/providers/compose"
 )
 
@@ -126,6 +127,18 @@ services:
 	_, code = a.objects(ListObjectsRequest{TargetRef: target, Kind: compose.KindContainers, Scope: "ocular-other"})
 	assert.Equal(t, http.StatusForbidden, code)
 	ctr := v.Rows[0].Ref
+
+	// Another project's container and service named under the granted
+	// project's scope: not found there, neither details nor logs.
+	otherID := a.docker("ps", "-q", "--no-trunc", "--filter", "label=com.docker.compose.project=ocular-other", "--filter", "label=com.docker.compose.service=idle")
+	require.NotEmpty(t, otherID)
+	for _, ref := range []core.Ref{
+		{Provider: "compose", Target: target.Target, Scope: name, Kind: compose.KindContainers, Name: otherID},
+		{Provider: "compose", Target: target.Target, Scope: name, Kind: compose.KindServices, Name: "ocular-other/idle"},
+	} {
+		assert.NotEqual(t, http.StatusOK, a.call("GetObject", GetObjectRequest{Ref: ref}, nil), "%s", ref.Kind)
+		assert.NotEqual(t, http.StatusOK, a.call("GetLogs", GetLogsRequest{Ref: ref, TailLines: 5}, nil), "%s", ref.Kind)
+	}
 
 	// The container's logs.
 	var tail api.Tail
