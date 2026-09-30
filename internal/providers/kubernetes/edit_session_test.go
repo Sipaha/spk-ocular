@@ -467,3 +467,23 @@ func TestEditEffectsThatCannotBeUndone(t *testing.T) {
 	assert.False(t, plan.Destructive)
 	assert.Contains(t, keys(plan.Warnings), "kubernetes.edit.rollout")
 }
+
+func TestEditKeepsNumbersExactToTheRequestAndStatusChurnIsNoCollision(t *testing.T) {
+	d := workload("Deployment", "web", "uid-web", "4", map[string]any{"replicas": int64(3), "big": int64(9007199254740993)})
+	s, w := editSession(t, d)
+	doc, base := source(t, s, deployWebRef)
+	require.Contains(t, doc.Text, "big: 9007199254740993")
+	// Only the status changed since the editor opened (a controller).
+	moved := d.DeepCopy()
+	moved.SetResourceVersion("5")
+	moved.Object["status"] = map[string]any{"readyReplicas": int64(3)}
+	_, err := w.dyn.Resource(deployGVR).Namespace("ns").Update(context.Background(), moved, metav1.UpdateOptions{})
+	require.NoError(t, err)
+
+	plan, _, err := s.PrepareEdit(context.Background(), request(doc, base, strings.Replace(doc.Text, "big: 9007199254740993", "big: 9007199254740995", 1)))
+	require.NoError(t, err)
+	assert.True(t, plan.Rebased)
+	assert.Empty(t, plan.Collisions, "status is not the editor's")
+	sent := w.writes(true)[0].body["spec"].(map[string]any)
+	assert.Equal(t, json.Number("9007199254740995"), sent["big"])
+}
