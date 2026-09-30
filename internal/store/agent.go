@@ -124,13 +124,18 @@ func (s *Store) ObserveAgentIdentity(ctx context.Context, provider, target, iden
 	return n > 0, err
 }
 
-// ReconfirmAgentTarget grants the target's grants for the identity last
-// observed (the user confirmed the target is the one meant).
-func (s *Store) ReconfirmAgentTarget(ctx context.Context, provider, target string) error {
-	_, err := s.db.ExecContext(ctx,
-		`UPDATE agent_targets SET identity = observed, observed = '', updated_at = ? WHERE provider = ? AND target = ? AND observed <> ''`,
-		time.Now().UnixMilli(), provider, target)
-	return err
+// ReconfirmAgentTarget grants the target's grants for the identity
+// observed, if it is still the one the user was shown (false: it changed
+// again, or the target is not suspended).
+func (s *Store) ReconfirmAgentTarget(ctx context.Context, provider, target, observed string) (bool, error) {
+	res, err := s.db.ExecContext(ctx,
+		`UPDATE agent_targets SET identity = observed, observed = '', updated_at = ? WHERE provider = ? AND target = ? AND observed <> '' AND observed = ?`,
+		time.Now().UnixMilli(), provider, target, observed)
+	if err != nil {
+		return false, err
+	}
+	n, err := res.RowsAffected()
+	return n > 0, err
 }
 
 // Audit phases.

@@ -246,8 +246,8 @@ func (h *HTTP) routes() {
 	h.mux.HandleFunc("POST /api/RevokeAllAgentGrants", handle(func(ctx context.Context, _ *struct{}) (any, error) {
 		return nil, h.api.RevokeAllAgentGrants(ctx)
 	}))
-	h.mux.HandleFunc("POST /api/ReconfirmAgentTarget", handle(func(ctx context.Context, r *targetReq) (any, error) {
-		return nil, h.api.ReconfirmAgentTarget(ctx, r.Provider, r.Target)
+	h.mux.HandleFunc("POST /api/ReconfirmAgentTarget", handle(func(ctx context.Context, r *api.ReconfirmAgentTargetRequest) (any, error) {
+		return nil, h.api.ReconfirmAgentTarget(ctx, *r)
 	}))
 	h.mux.HandleFunc("POST /api/ListAgentPending", handle(func(ctx context.Context, _ *struct{}) (any, error) {
 		return h.api.ListAgentPending(ctx)

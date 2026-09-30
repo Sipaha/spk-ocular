@@ -60,9 +60,14 @@ func (s *Server) RevokeAll(ctx context.Context) error {
 	return nil
 }
 
-func (s *Server) Reconfirm(ctx context.Context, provider, target string) error {
-	if err := s.o.Store.ReconfirmAgentTarget(ctx, provider, target); err != nil {
+func (s *Server) Reconfirm(ctx context.Context, req api.ReconfirmAgentTargetRequest) error {
+	ok, err := s.o.Store.ReconfirmAgentTarget(ctx, req.Provider, req.Target, req.Observed)
+	if err != nil {
 		return &api.CodedError{Code: api.CodeInternal, Detail: err.Error()}
+	}
+	if !ok {
+		s.o.Service.Emit(api.EventAgentGrantsChanged, "", nil) // show what it is now
+		return &api.CodedError{Code: api.CodeConflict, Detail: "the target changed again since it was shown: look at what it points at now"}
 	}
 	s.o.Service.Emit(api.EventAgentGrantsChanged, "", nil)
 	return nil

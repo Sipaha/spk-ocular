@@ -274,7 +274,11 @@ func identity(cl *clientcmdapi.Cluster, user string) string {
 		ca = caDigest(cl.CertificateAuthorityData)
 	case cl.CertificateAuthority != "":
 		ca = "unreadable " + cl.CertificateAuthority
-		if f, err := os.Open(cl.CertificateAuthority); err == nil {
+		path := cl.CertificateAuthority
+		if !filepath.IsAbs(path) && cl.LocationOfOrigin != "" {
+			path = filepath.Join(filepath.Dir(cl.LocationOfOrigin), path) // as kubectl: relative to its kubeconfig
+		}
+		if f, err := os.Open(path); err == nil {
 			b, err := io.ReadAll(io.LimitReader(f, maxCAFile))
 			_ = f.Close()
 			if err == nil {

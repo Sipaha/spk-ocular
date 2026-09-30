@@ -126,14 +126,15 @@ type API interface {
 
 	// Agent access (P14, agentaccess.go): the socket's state and the line
 	// for an agent's instructions; the grants per target (saved whole;
-	// Reconfirm grants them for the identity the target has now); the
+	// Reconfirm grants them for the identity the user was shown, if the
+	// target still has it — else conflict); the
 	// agents' destructive plans waiting for the user and the decision; the
 	// journal, newest first. EventAgent*Changed say when to reload.
 	AgentAccessStatus(ctx context.Context) (AgentAccessStatus, error)
 	ListAgentGrants(ctx context.Context) ([]agentgrant.Target, error)
 	SaveAgentGrants(ctx context.Context, req SaveAgentGrantsRequest) error
 	RevokeAllAgentGrants(ctx context.Context) error
-	ReconfirmAgentTarget(ctx context.Context, provider, target string) error
+	ReconfirmAgentTarget(ctx context.Context, req ReconfirmAgentTargetRequest) error
 	ListAgentPending(ctx context.Context) ([]AgentPending, error)
 	DecideAgentPending(ctx context.Context, req DecideAgentPendingRequest) error
 	ListAgentAudit(ctx context.Context, f store.AuditFilter) ([]store.AuditEntry, error)

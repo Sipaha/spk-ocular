@@ -284,7 +284,9 @@ func (s *Server) runPlan(ctx context.Context, c caller, method, id string) (*Run
 // the outcome after. The grants and the identity are checked again at the
 // moment of the write.
 func (s *Server) execute(p *plan) RunView {
-	s.runs.Add(1)
+	if !s.track() {
+		return failed(&api.CodedError{Code: api.CodeGone, Detail: "Ocular is closing"})
+	}
 	defer s.runs.Done()
 	ctx, cancel := context.WithTimeout(s.runCtx, runTimeout)
 	defer cancel()

@@ -19,8 +19,10 @@ type fakeProv struct {
 	identity  string
 	hash      string
 	allDenied bool
-	runs      []provider.ActionRun
-	edits     []provider.EditRun
+	// quiet: views never load (a snapshot waits for them).
+	quiet bool
+	runs  []provider.ActionRun
+	edits []provider.EditRun
 	// runGate, when set, holds RunAction until it is closed or ctx ends.
 	runGate chan struct{}
 	opened  int
@@ -93,8 +95,11 @@ func rowOf(r core.Ref) core.Row {
 
 func (s *fakeSess) Watch(q provider.Query, sink provider.Sink) (func(), error) {
 	s.f.mu.Lock()
-	denied := s.f.allDenied
+	denied, quiet := s.f.allDenied, s.f.quiet
 	s.f.mu.Unlock()
+	if quiet {
+		return func() {}, nil
+	}
 	if q.Scope.Mode == core.ScopeAll && denied {
 		sink.Apply(provider.Delta{Status: &provider.ViewStatus{State: provider.StatusError, Class: provider.ClassForbidden, Message: "pods is forbidden at the cluster scope"}})
 		return func() {}, nil

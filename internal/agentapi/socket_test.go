@@ -1,16 +1,20 @@
 package agentapi
 
 import (
+	"context"
 	"errors"
 	"net"
+	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/spk/spk-ocular/internal/agentgrant"
 	"github.com/spk/spk-ocular/internal/api"
 )
 
@@ -137,6 +141,37 @@ func TestPeerUIDReadsTheCredentials(t *testing.T) {
 	uid, err := peerUID(c)
 	require.NoError(t, err)
 	assert.Equal(t, os.Getuid(), uid)
+}
+
+// Closing while an agent's read waits (a view that does not load): the
+// request's context ends, so the shutdown is not held by it.
+func TestClosingEndsAReadInProgress(t *testing.T) {
+	e := newEnv(t)
+	e.grant(one("a", agentgrant.VerbRead))
+	e.f.mu.Lock()
+	e.f.quiet = true
+	e.f.mu.Unlock()
+	d := sockDir(t)
+	srv := New(Options{Service: e.svc, Store: e.st, Socket: filepath.Join(d, "agent.sock"), Lock: filepath.Join(d, "agent.sock.lock"), Version: "test"})
+	require.NoError(t, srv.Start())
+	e.svc.SetAgentControl(srv)
+	client := &http.Client{Transport: &http.Transport{DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
+		var dl net.Dialer
+		return dl.DialContext(ctx, "unix", filepath.Join(d, "agent.sock"))
+	}}}
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		resp, err := client.Post("http://ocular/v1/ListObjects", "application/json", strings.NewReader(`{"provider":"k","target":"t","kind":"pods","scope":"a"}`))
+		if err == nil {
+			_ = resp.Body.Close()
+		}
+	}()
+	time.Sleep(200 * time.Millisecond) // the snapshot waits
+	start := time.Now()
+	srv.Close()
+	assert.Less(t, time.Since(start), 2*time.Second, "not held by the read")
+	<-done
 }
 
 // A server closed right after it started (the app quitting at once) stops

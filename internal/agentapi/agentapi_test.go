@@ -490,7 +490,10 @@ func TestATargetPointedElsewhereSuspendsItsGrants(t *testing.T) {
 
 	e.f.setIdentity("https://b | ca:2 | user:u")
 	e.refused("ListObjects", with(tgt, "kind", "pods", "scope", "a"))
-	require.NoError(t, e.svc.ReconfirmAgentTarget(context.Background(), "k", "t"))
+	err := e.svc.ReconfirmAgentTarget(context.Background(), api.ReconfirmAgentTargetRequest{Provider: "k", Target: "t", Observed: "https://c | ca:3 | user:u"})
+	assert.True(t, api.IsCoded(err, api.CodeConflict), "confirmed what was not shown: %v", err)
+	e.refused("ListObjects", with(tgt, "kind", "pods", "scope", "a"))
+	require.NoError(t, e.svc.ReconfirmAgentTarget(context.Background(), api.ReconfirmAgentTargetRequest{Provider: "k", Target: "t", Observed: "https://b | ca:2 | user:u"}))
 	e.ok("ListObjects", with(tgt, "kind", "pods", "scope", "a"))
 }
 
@@ -549,6 +552,35 @@ func TestClosingDuringAWriteLeavesATrace(t *testing.T) {
 	j, _ := e.st.ListAudit(context.Background(), store.AuditFilter{Limit: 10})
 	assert.Equal(t, store.AuditOutcome, j[0].Phase)
 	assert.Equal(t, string(core.OutcomeUnknown), j[0].Outcome)
+}
+
+// Closing Ocular with a plan waiting: the agent's GetRun is answered at
+// once (gone), the journal says so, and a late decision is refused.
+func TestClosingEndsTheWaitingPlans(t *testing.T) {
+	e := newEnv(t)
+	e.grant(one("a", "action:delete", "apps/deployments"))
+	p := prepare(e, "web", "delete", nil)
+	id := e.ok("RunAction", map[string]any{"planId": p["planId"]})["runId"].(string)
+	got := make(chan map[string]any, 1)
+	go func() {
+		_, out := e.call("GetRun", map[string]any{"runId": id})
+		got <- out
+	}()
+	time.Sleep(50 * time.Millisecond) // GetRun waits
+	start := time.Now()
+	e.srv.Close()
+	assert.Less(t, time.Since(start), 2*time.Second)
+	select {
+	case out := <-got:
+		assert.Equal(t, stateGone, out["state"])
+	case <-time.After(2 * time.Second):
+		t.Fatal("GetRun still waits after Close")
+	}
+	j, _ := e.st.ListAudit(context.Background(), store.AuditFilter{Limit: 10})
+	require.NotEmpty(t, j)
+	assert.Equal(t, store.AuditOutcome, j[0].Phase)
+	assert.Equal(t, stateGone, j[0].Outcome)
+	assert.True(t, IsGone(e.svc.DecideAgentPending(context.Background(), api.DecideAgentPendingRequest{ID: id, Approve: true})))
 }
 
 func TestPendingPlansExpireAndAreBounded(t *testing.T) {

@@ -186,7 +186,7 @@ describe('agent access: grants', () => {
     const editor = editorOf(panel, 'prod')
     expect(within(editor).getByRole('alert')).toHaveTextContent('The target changed: it was https://old:6443, now it is https://new:6443.')
     await user.click(within(editor).getByRole('button', { name: 'Confirm for what it is now' }))
-    expect(f.client.reconfirmAgentTarget).toHaveBeenCalledWith('kubernetes', 'prod')
+    expect(f.client.reconfirmAgentTarget).toHaveBeenCalledWith('kubernetes', 'prod', 'https://new:6443')
     await waitFor(() => expect(within(panel).queryByText('suspended')).not.toBeInTheDocument())
   })
 

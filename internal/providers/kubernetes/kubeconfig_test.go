@@ -251,6 +251,13 @@ func TestTargetIdentity(t *testing.T) {
 		assert.NotEqual(t, base.Identity, other.Identity, name)
 	}
 
+	// A CA file named relative to its kubeconfig (as kubectl reads it), not
+	// to the process's directory: its content is the identity.
+	relative := one(t, "    server: https://a.example:6443\n    certificate-authority: ca.crt\n", "    token: T1\n", map[string]string{".kube/ca.crt": "CA-1"})
+	absolute := one(t, "    server: https://a.example:6443\n    certificate-authority: HOME/.kube/ca.crt\n", "    token: T1\n", map[string]string{".kube/ca.crt": "CA-1"})
+	assert.NotContains(t, relative.Identity, "unreadable")
+	assert.Equal(t, absolute.Identity, relative.Identity)
+
 	// Credentials in a URL never enter the identity; changing them keeps it.
 	withPass := one(t, "    server: https://adm:SRVPASS@a.example:6443\n    certificate-authority-data: Q0EtMQ==\n    proxy-url: http://pu:PXPASS@proxy.example:3128\n", "    token: T1\n", nil)
 	otherPass := one(t, "    server: https://adm:OTHER@a.example:6443\n    certificate-authority-data: Q0EtMQ==\n    proxy-url: http://pu:OTHER2@proxy.example:3128\n", "    token: T1\n", nil)

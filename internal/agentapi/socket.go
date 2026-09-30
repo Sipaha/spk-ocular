@@ -66,10 +66,11 @@ func listen(path, lockPath string) (*socket, error) {
 		_ = lf.Close()
 		return nil, err
 	}
-	// Owner-only from the start: the file is created under this umask.
-	old := unix.Umask(0o177)
+	// No process-wide umask (other goroutines create files meanwhile): the
+	// file is made owner-only right after; until then it has the default
+	// mode (others cannot write, i.e. connect) in the 0700 data directory,
+	// and connections of other users are dropped anyway (ownUIDListener).
 	ln, err := net.Listen("unix", path)
-	unix.Umask(old)
 	if err != nil {
 		_ = lf.Close()
 		return nil, err

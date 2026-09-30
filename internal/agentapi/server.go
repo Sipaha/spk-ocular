@@ -58,6 +58,13 @@ type Server struct {
 	runCtx    context.Context
 	runCancel context.CancelFunc
 	runs      sync.WaitGroup
+	// reqCtx is the agents' requests' base: Close cancels it first, so a
+	// waiting GetRun or a read does not hold the shutdown.
+	reqCtx    context.Context
+	reqCancel context.CancelFunc
+	// closing: Close waits for runs; no more are counted (track).
+	runMu   sync.Mutex
+	closing bool
 }
 
 var _ api.AgentControl = (*Server)(nil)
@@ -66,6 +73,7 @@ var _ api.AgentControl = (*Server)(nil)
 func New(o Options) *Server {
 	s := &Server{o: o, mux: http.NewServeMux(), now: time.Now, state: api.AgentFailed, errMsg: "not started"}
 	s.runCtx, s.runCancel = context.WithCancel(context.Background())
+	s.reqCtx, s.reqCancel = context.WithCancel(context.Background())
 	s.plans = newRegistry[*plan](planTTL, maxPlans)
 	s.sources = newRegistry[*editSource](planTTL, maxPlans)
 	s.pend = newPendingSet(s)
@@ -92,6 +100,7 @@ func (s *Server) Start() error {
 		Handler:           s.mux,
 		ReadHeaderTimeout: 5 * time.Second,
 		IdleTimeout:       120 * time.Second,
+		BaseContext:       func(net.Listener) context.Context { return s.reqCtx },
 	}
 	s.sock, s.srv = sock, srv
 	s.state, s.errMsg = api.AgentServing, ""
@@ -112,22 +121,38 @@ func (s *Server) Close() {
 	srv, sock := s.srv, s.sock
 	s.srv, s.sock = nil, nil
 	s.mu.Unlock()
+	s.pend.close() // the undecided are gone: their waiters are answered
+	s.reqCancel()
 	if srv != nil {
 		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 		_ = srv.Shutdown(ctx)
 		cancel()
 	}
 	s.runCancel()
+	s.runMu.Lock()
+	s.closing = true
+	s.runMu.Unlock()
 	done := make(chan struct{})
 	go func() { s.runs.Wait(); close(done) }()
 	select {
 	case <-done:
 	case <-time.After(3 * time.Second):
 	}
-	s.pend.close()
 	if sock != nil {
 		sock.close()
 	}
+}
+
+// track counts a write or a journal entry in flight for Close to wait
+// for; false once Close waits (nothing more starts).
+func (s *Server) track() bool {
+	s.runMu.Lock()
+	defer s.runMu.Unlock()
+	if s.closing {
+		return false
+	}
+	s.runs.Add(1)
+	return true
 }
 
 // Handler serves the methods (tests: without a socket).

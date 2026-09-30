@@ -128,9 +128,9 @@ export function fakeClient(targets: Target[]) {
       state.agentTargets = []
       listener?.({ type: 'agent_grants_changed' })
     }),
-    reconfirmAgentTarget: vi.fn(async (provider: string, target: string) => {
+    reconfirmAgentTarget: vi.fn(async (provider: string, target: string, observed: string) => {
       for (const x of state.agentTargets) {
-        if (x.provider === provider && x.target === target && x.observed) {
+        if (x.provider === provider && x.target === target && x.observed === observed) {
           x.identity = x.observed
           delete x.observed
         }

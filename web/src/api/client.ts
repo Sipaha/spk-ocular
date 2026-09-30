@@ -89,7 +89,8 @@ export interface Client {
   saveAgentGrants(provider: string, target: string, grants: AgentGrant[]): Promise<void>
   revokeAllAgentGrants(): Promise<void>
   /** A suspended target's grants hold for what it points at now. */
-  reconfirmAgentTarget(provider: string, target: string): Promise<void>
+  /** Grants a suspended target for the identity the user was shown (conflict if it changed again). */
+  reconfirmAgentTarget(provider: string, target: string, observed: string): Promise<void>
   /** Agents' destructive plans waiting for the user; reload on 'agent_pending_changed'. */
   listAgentPending(): Promise<AgentPending[]>
   /** gone: decided elsewhere or expired. */
@@ -186,7 +187,7 @@ export const httpClient: Client = {
   listAgentGrants: () => post('ListAgentGrants', {}),
   saveAgentGrants: (provider, target, grants) => done(post('SaveAgentGrants', { provider, target, grants })),
   revokeAllAgentGrants: () => done(post('RevokeAllAgentGrants', {})),
-  reconfirmAgentTarget: (provider, target) => done(post('ReconfirmAgentTarget', { provider, target })),
+  reconfirmAgentTarget: (provider, target, observed) => done(post('ReconfirmAgentTarget', { provider, target, observed })),
   listAgentPending: () => post('ListAgentPending', {}),
   decideAgentPending: (id, approve) => done(post('DecideAgentPending', { id, approve })),
   listAgentAudit: (filter) => post('ListAgentAudit', filter),
@@ -309,7 +310,7 @@ export const wailsClient: Client = {
   listAgentGrants: () => wcall('ListAgentGrants'),
   saveAgentGrants: (provider, target, grants) => wcall('SaveAgentGrants', { provider, target, grants }),
   revokeAllAgentGrants: () => wcall('RevokeAllAgentGrants'),
-  reconfirmAgentTarget: (provider, target) => wcall('ReconfirmAgentTarget', provider, target),
+  reconfirmAgentTarget: (provider, target, observed) => wcall('ReconfirmAgentTarget', { provider, target, observed }),
   listAgentPending: () => wcall('ListAgentPending'),
   decideAgentPending: (id, approve) => wcall('DecideAgentPending', { id, approve }),
   listAgentAudit: (filter) => wcall('ListAgentAudit', filter),

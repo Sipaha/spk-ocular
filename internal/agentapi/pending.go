@@ -2,6 +2,7 @@ package agentapi
 
 import (
 	"context"
+	"log/slog"
 	"sort"
 	"sync"
 	"time"
@@ -142,12 +143,27 @@ func (ps *pendingSet) armLocked() {
 	})
 }
 
+// close: no more plans wait or are decided; the undecided are gone (their
+// GetRun answered at once) and journaled so.
 func (ps *pendingSet) close() {
 	ps.mu.Lock()
-	defer ps.mu.Unlock()
 	ps.closed = true
 	if ps.timer != nil {
 		ps.timer.Stop()
+	}
+	var gone []*pendingRun
+	for _, r := range ps.runs {
+		if r.view.State == stateAwaiting {
+			ps.setLocked(r, RunView{State: stateGone})
+			gone = append(gone, r)
+		}
+	}
+	ps.mu.Unlock()
+	for _, r := range gone {
+		ps.s.audit(store.AuditEntry{Agent: r.p.agent, Method: r.p.method, Provider: r.p.provider, Target: r.p.target, Scope: r.p.ref.Scope, Object: objectOf(r.p.ref), Verb: r.p.verb, Destructive: true, ExpectHash: expectHash(r.p), Phase: store.AuditOutcome, Outcome: stateGone, Detail: "Ocular closed before the user decided"})
+	}
+	if len(gone) > 0 {
+		ps.s.o.Service.Emit(api.EventAgentPendingChanged, "", nil)
 	}
 }
 
@@ -157,7 +173,7 @@ func (ps *pendingSet) decide(id string, approve bool) error {
 	ps.mu.Lock()
 	ps.sweepLocked()
 	r := ps.runs[id]
-	if r == nil || r.view.State != stateAwaiting {
+	if r == nil || r.view.State != stateAwaiting || ps.closed {
 		ps.mu.Unlock()
 		return &api.CodedError{Code: api.CodeGone, Detail: "the plan no longer waits (decided, expired or withdrawn)"}
 	}
@@ -168,8 +184,11 @@ func (ps *pendingSet) decide(id string, approve bool) error {
 		ps.s.audit(store.AuditEntry{Agent: r.p.agent, Method: r.p.method, Provider: r.p.provider, Target: r.p.target, Scope: r.p.ref.Scope, Object: objectOf(r.p.ref), Verb: r.p.verb, Destructive: true, ExpectHash: expectHash(r.p), Phase: store.AuditOutcome, Outcome: stateRejected})
 		return nil
 	}
+	if !ps.s.track() {
+		ps.mu.Unlock()
+		return &api.CodedError{Code: api.CodeGone, Detail: "Ocular is closing"}
+	}
 	ps.setLocked(r, RunView{State: stateRunning})
-	ps.s.runs.Add(1)
 	ps.mu.Unlock()
 	ps.s.o.Service.Emit(api.EventAgentPendingChanged, "", nil)
 	go func() {
@@ -236,7 +255,10 @@ func (s *Server) getRun(ctx context.Context, _ caller, req *GetRunRequest) (*Run
 
 // auditAsync journals off the caller's lock.
 func (s *Server) auditAsync(e store.AuditEntry) {
-	s.runs.Add(1)
+	if !s.track() {
+		slog.Warn("agent access: journal not written, Ocular is closing", "method", e.Method, "outcome", e.Outcome)
+		return
+	}
 	go func() {
 		defer s.runs.Done()
 		s.audit(e)

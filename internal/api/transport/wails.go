@@ -143,8 +143,8 @@ func (w *API) SaveAgentGrants(req api.SaveAgentGrantsRequest) error {
 	return w.a.SaveAgentGrants(context.Background(), req)
 }
 func (w *API) RevokeAllAgentGrants() error { return w.a.RevokeAllAgentGrants(context.Background()) }
-func (w *API) ReconfirmAgentTarget(provider, target string) error {
-	return w.a.ReconfirmAgentTarget(context.Background(), provider, target)
+func (w *API) ReconfirmAgentTarget(req api.ReconfirmAgentTargetRequest) error {
+	return w.a.ReconfirmAgentTarget(context.Background(), req)
 }
 func (w *API) ListAgentPending() ([]api.AgentPending, error) {
 	return w.a.ListAgentPending(context.Background())

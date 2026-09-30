@@ -20,7 +20,7 @@ type AgentControl interface {
 	Grants(ctx context.Context) ([]agentgrant.Target, error)
 	SaveGrants(ctx context.Context, req SaveAgentGrantsRequest) error
 	RevokeAll(ctx context.Context) error
-	Reconfirm(ctx context.Context, provider, target string) error
+	Reconfirm(ctx context.Context, req ReconfirmAgentTargetRequest) error
 	Pending(ctx context.Context) ([]AgentPending, error)
 	Decide(ctx context.Context, req DecideAgentPendingRequest) error
 	Audit(ctx context.Context, f store.AuditFilter) ([]store.AuditEntry, error)
@@ -49,6 +49,14 @@ type SaveAgentGrantsRequest struct {
 	Provider string             `json:"provider"`
 	Target   string             `json:"target"`
 	Grants   []agentgrant.Grant `json:"grants"`
+}
+
+// ReconfirmAgentTargetRequest grants a suspended target's grants for the
+// identity the user was shown (Observed), not whatever it is by the click.
+type ReconfirmAgentTargetRequest struct {
+	Provider string `json:"provider"`
+	Target   string `json:"target"`
+	Observed string `json:"observed"`
 }
 
 // AgentPending is an agent's destructive plan waiting for the user.
@@ -133,12 +141,12 @@ func (s *Service) RevokeAllAgentGrants(ctx context.Context) error {
 	return c.RevokeAll(ctx)
 }
 
-func (s *Service) ReconfirmAgentTarget(ctx context.Context, providerID, target string) error {
+func (s *Service) ReconfirmAgentTarget(ctx context.Context, req ReconfirmAgentTargetRequest) error {
 	c, err := s.agentControl()
 	if err != nil {
 		return err
 	}
-	return c.Reconfirm(ctx, providerID, target)
+	return c.Reconfirm(ctx, req)
 }
 
 func (s *Service) ListAgentPending(ctx context.Context) ([]AgentPending, error) {

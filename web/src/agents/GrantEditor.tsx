@@ -128,11 +128,11 @@ export function GrantEditor({ client, provider, target, title, saved, exists }: 
     }
   }
 
-  const reconfirm = async () => {
+  const reconfirm = async (observed: string) => {
     setBusy(true)
     setError(null)
     try {
-      await client.reconfirmAgentTarget(provider, target)
+      await client.reconfirmAgentTarget(provider, target, observed)
     } catch (e) {
       setError(errorDetail(e))
     } finally {
@@ -173,7 +173,7 @@ export function GrantEditor({ client, provider, target, title, saved, exists }: 
       {saved?.observed && (
         <div role="alert" className="flex flex-col gap-2 rounded-md bg-warning/10 px-3 py-2 text-warning">
           <p className="break-all">{t('agents.suspended', { was: saved.identity, now: saved.observed })}</p>
-          <button type="button" disabled={busy} className="self-start rounded-md border border-warning px-2 py-0.5 hover:bg-warning/10 disabled:opacity-50" onClick={() => void reconfirm()}>
+          <button type="button" disabled={busy} className="self-start rounded-md border border-warning px-2 py-0.5 hover:bg-warning/10 disabled:opacity-50" onClick={() => void reconfirm(saved.observed ?? '')}>
             {t('agents.reconfirm')}
           </button>
         </div>
