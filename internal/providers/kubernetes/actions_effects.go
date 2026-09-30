@@ -83,6 +83,10 @@ func effects(def *kindDef, action string, p core.ActionParams, u *unstructured.U
 			fx.effects = append(fx.effects, msg("delete.finalizers", "finalizers", strings.Join(sorted, ", ")))
 		}
 		fx.effects = append(fx.effects, msg("delete.requested"))
+	case actCordon.ID:
+		fx.effects = append(fx.effects, msg("node.cordon", "name", u.GetName()), msg("node.cordonBypass"))
+	case actUncordon.ID:
+		fx.effects = append(fx.effects, msg("node.uncordon", "name", u.GetName()))
 	}
 	return fx
 }
@@ -317,7 +321,10 @@ func (s *session) rights(ctx context.Context, def *kindDef, action string, u *un
 	if sub != "" {
 		what += "/" + sub
 	}
-	reason := fmt.Sprintf("you may not %s %s in %s", verb, what, u.GetNamespace())
+	reason := fmt.Sprintf("you may not %s %s", verb, what)
+	if ns := u.GetNamespace(); ns != "" {
+		reason += " in " + ns
+	}
 	if r := str(out.Object, "status", "reason"); r != "" {
 		reason += " (" + r + ")"
 	}

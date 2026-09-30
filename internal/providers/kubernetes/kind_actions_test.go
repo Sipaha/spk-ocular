@@ -364,3 +364,36 @@ func TestKindActionDeleteOfADeploymentCountsThePodsItOwns(t *testing.T) {
 	plan := c.prepare(ref, "delete", core.ActionParams{})
 	assert.Contains(t, strings.Join(core.Texts(plan.Effects), "\n"), "Its pods are deleted too (2 now).", "the stray pod has its labels, not its owner")
 }
+
+// drainWorker is the kind worker kept for node actions (tainted: only
+// drain fixtures run there); every test leaves it open for pods again.
+const drainWorker = "ocular-dev-worker"
+
+func (c *actionCluster) worker() core.Ref {
+	c.t.Helper()
+	require.Equal(c.t, "only", c.kubectl("get", "node", drainWorker, "-o", `jsonpath={.metadata.labels.ocular\.dev/drain}`), "the drain worker, by its label")
+	c.t.Cleanup(func() { _, _ = c.run("uncordon", drainWorker) })
+	uid := c.kubectl("get", "node", drainWorker, "-o", "jsonpath={.metadata.uid}")
+	return core.Ref{Provider: ProviderID, Target: c.sess.target, Kind: "nodes", Name: drainWorker, UID: uid}
+}
+
+func TestKindActionCordonAndUncordon(t *testing.T) {
+	c := kindActionCluster(t)
+	ref := c.worker()
+	unschedulable := func() string {
+		return c.kubectl("get", "node", drainWorker, "-o", "jsonpath={.spec.unschedulable}")
+	}
+	res, err := c.act(ref, "cordon", core.ActionParams{})
+	require.NoError(t, err)
+	assert.Contains(t, res.Message, "cordon requested")
+	assert.Equal(t, "true", unschedulable())
+
+	plan, err := c.sess.PrepareAction(context.Background(), ref, "cordon", core.ActionParams{})
+	require.NoError(t, err)
+	require.NotNil(t, plan.Unavailable, "already cordoned")
+	assert.Equal(t, core.RightsAllowed, plan.Rights.State)
+
+	_, err = c.act(ref, "uncordon", core.ActionParams{})
+	require.NoError(t, err)
+	assert.Empty(t, unschedulable())
+}

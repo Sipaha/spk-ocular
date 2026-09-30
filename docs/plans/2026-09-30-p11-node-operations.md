@@ -184,9 +184,9 @@ pod-ов через Eviction API, который соблюдает PodDisruptio
   («Выполнено не всё: в части отказано») — drain не останавливается на отказе.
 
 ### Task 3. Cordon / Uncordon (Go)
-- [ ] Unit: эффект, `Unavailable` в нужном состоянии, SSAR с именем, `effectState`; запись —
+- [x] Unit: эффект, `Unavailable` в нужном состоянии, SSAR с именем, `effectState`; запись —
   merge patch с uid+rv, 409 с тем же `Expect` — повтор, другое состояние — `conflict`.
-- [ ] kind: cordon → `spec.unschedulable` true, uncordon → false; повтор — `Unavailable`.
+- [x] kind: cordon → `spec.unschedulable` true, uncordon → false; повтор — `Unavailable`.
 
 ### Task 4. Drain: план (Go)
 - [ ] Разбор (таблица: DaemonSet, mirror, завершённый, удаляемый, без контроллера, `emptyDir`,

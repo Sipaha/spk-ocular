@@ -39,6 +39,9 @@ var (
 	actRestart = core.ActionDescriptor{ID: "restart", Title: "Restart"}
 	actScale   = core.ActionDescriptor{ID: "scale", Title: "Scale", Param: &core.ActionParam{Kind: core.ParamCount, Min: 0, Max: maxReplicas}}
 	actDelete  = core.ActionDescriptor{ID: "delete", Title: "Delete", Destructive: true}
+	// A node is taken out of scheduling (cordon), back in (uncordon).
+	actCordon   = core.ActionDescriptor{ID: "cordon", Title: "Cordon"}
+	actUncordon = core.ActionDescriptor{ID: "uncordon", Title: "Uncordon"}
 )
 
 // kindActions: namespaces and nodes are not deleted here (the blast radius
@@ -53,6 +56,7 @@ var kindActions = map[*kindDef][]core.ActionDescriptor{
 	ingressesKind:    {actDelete},
 	configMapsKind:   {actDelete},
 	secretsKind:      {actDelete},
+	nodesKind:        {actCordon, actUncordon},
 }
 
 func (d *kindDef) action(id string) (core.ActionDescriptor, bool) {
@@ -129,6 +133,8 @@ func effectState(def *kindDef, action string, u *unstructured.Unstructured) map[
 			st["claims"], st["whenScaled"] = len(slice(o, "spec", "volumeClaimTemplates")), str(o, "spec", "persistentVolumeClaimRetentionPolicy", "whenScaled")
 			st["whenDeleted"], st["start"] = str(o, "spec", "persistentVolumeClaimRetentionPolicy", "whenDeleted"), i64(o, "spec", "ordinals", "start")
 		}
+	case actCordon.ID, actUncordon.ID:
+		st["unschedulable"] = boolAt(o, "spec", "unschedulable")
 	case actDelete.ID:
 		if sts {
 			st["claims"], st["whenDeleted"] = len(slice(o, "spec", "volumeClaimTemplates")), str(o, "spec", "persistentVolumeClaimRetentionPolicy", "whenDeleted")
@@ -173,6 +179,15 @@ func actionUnavailable(def *kindDef, action string, u *unstructured.Unstructured
 	}
 	if action == actRestart.ID && def == deploymentsKind && boolAt(u.Object, "spec", "paused") {
 		m := msg("unavailable.paused", "name", u.GetName())
+		return &m
+	}
+	cordoned := boolAt(u.Object, "spec", "unschedulable")
+	if action == actCordon.ID && cordoned {
+		m := msg("unavailable.cordoned", "name", u.GetName())
+		return &m
+	}
+	if action == actUncordon.ID && !cordoned {
+		m := msg("unavailable.schedulable", "name", u.GetName())
 		return &m
 	}
 	return nil
@@ -270,6 +285,13 @@ func (s *session) write(ctx context.Context, def *kindDef, run provider.ActionRu
 		})
 		err := wr.patch(ctx, def.gvr, ns, u.GetName(), types.MergePatchType, patch, "scale")
 		return fmt.Sprintf("%s: scale %d → %d requested", name, replicas(u.Object), m), err
+	case actCordon.ID, actUncordon.ID:
+		patch, _ := json.Marshal(map[string]any{
+			"metadata": map[string]any{"uid": u.GetUID(), "resourceVersion": u.GetResourceVersion()},
+			"spec":     map[string]any{"unschedulable": run.Action == actCordon.ID},
+		})
+		err := wr.patch(ctx, def.gvr, ns, u.GetName(), types.MergePatchType, patch, "")
+		return fmt.Sprintf("%s: %s requested", name, run.Action), err
 	case actDelete.ID:
 		uid, rv, bg := u.GetUID(), u.GetResourceVersion(), metav1.DeletePropagationBackground
 		err := wr.delete(ctx, def.gvr, ns, u.GetName(), metav1.DeleteOptions{Preconditions: &metav1.Preconditions{UID: &uid, ResourceVersion: &rv}, PropagationPolicy: &bg})
