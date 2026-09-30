@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { ApiError, type Client } from '../api/client'
-import type { ActionDescriptor, ActionParams, ActionPart, ActionPlan, ActionResult, Ref } from '../api/types'
+import type { ActionChoice, ActionDescriptor, ActionParams, ActionPart, ActionPlan, ActionResult, Ref } from '../api/types'
 import { actionLabel, classLabel, messageText, t } from '../i18n'
 import { refTitle } from '../refs'
 import { useScopeWords } from '../scopeNames'
@@ -8,6 +8,8 @@ import { showNotice } from '../store'
 import { focusMark, restoreFocus } from '../shortcuts'
 import { ActionLists, Portions } from './ActionLists'
 import { errorDetail } from '../errors'
+import { formatAge } from '../format'
+import { useNow } from '../views/useView'
 
 /** An action chosen on an object: the dialog reviews it, then runs it. */
 export interface ActionRequest {
@@ -87,8 +89,8 @@ const codeOf = (e: unknown) => (e instanceof ApiError ? e.code : 'internal')
 
 /**
  * The confirmation of an action: where (context, server, namespace, kind,
- * name), what happens, the permission check; a count is chosen first and
- * reviewed before it can run. One run per confirmation; while it runs the
+ * name), what happens, the permission check; a count or a choice is made
+ * first and reviewed before it can run (a choice is reviewed as it is made). One run per confirmation; while it runs the
  * dialog stays.
  */
 export function ActionDialog({ client, req, onClose, runTimeoutMs = RUN_TIMEOUT_MS }: Props) {
@@ -96,8 +98,12 @@ export function ActionDialog({ client, req, onClose, runTimeoutMs = RUN_TIMEOUT_
   // The object's own provider names its scopes (not the target selected now).
   const scopeWords = useScopeWords(ref.provider)
   const param = action.param
+  const counted = !!param && param.kind !== 'choice'
+  const choosing = param?.kind === 'choice'
   const [plan, setPlan] = useState<ActionPlan | null>(null)
   const [count, setCount] = useState('')
+  // The value chosen (a choice parameter).
+  const [chosen, setChosen] = useState<string | null>(null)
   const [countError, setCountError] = useState<string | null>(null)
   const [busy, setBusy] = useState<'prepare' | 'run' | null>('prepare')
   const [outcome, setOutcome] = useState<Outcome | null>(null)
@@ -114,6 +120,7 @@ export function ActionDialog({ client, req, onClose, runTimeoutMs = RUN_TIMEOUT_
   const confirmRef = useRef<HTMLButtonElement>(null)
   const cancelRef = useRef<HTMLButtonElement>(null)
   const countRef = useRef<HTMLInputElement>(null)
+  const choicesRef = useRef<HTMLDivElement>(null)
   const outcomeRef = useRef<HTMLParagraphElement>(null)
   const [mark] = useState(focusMark)
 
@@ -135,7 +142,7 @@ export function ActionDialog({ client, req, onClose, runTimeoutMs = RUN_TIMEOUT_
         if (!live.current || g !== gen.current) return // a later review (or none) owns the dialog
         setPlan(pl)
         setBusy(null)
-        if (param && p.count === undefined && pl.current !== undefined) setCount(String(pl.current))
+        if (counted && p.count === undefined && pl.current !== undefined) setCount(String(pl.current))
       },
       (e) => {
         if (!live.current || g !== gen.current) return
@@ -158,8 +165,9 @@ export function ActionDialog({ client, req, onClose, runTimeoutMs = RUN_TIMEOUT_
   useEffect(() => fetchPlan({}), [])
 
   const planned = plan?.params.count
-  // A count other than the reviewed one must be reviewed first.
-  const reviewed = !param || (planned !== undefined && count.trim() === String(planned))
+  // A count other than the reviewed one must be reviewed first; a choice
+  // runs only with its own plan.
+  const reviewed = !param || (choosing ? chosen !== null && plan?.params.choice === chosen : planned !== undefined && count.trim() === String(planned))
   const canRun = !!plan && reviewed && !busy && !sent && !plan.unavailable && plan.rights.state !== 'denied'
   const destructive = !!plan?.destructive
 
@@ -167,7 +175,14 @@ export function ActionDialog({ client, req, onClose, runTimeoutMs = RUN_TIMEOUT_
   // or Cancel when it is destructive.
   useLayoutEffect(() => {
     if (busy) return
-    if (param && !reviewed) {
+    if (choosing && chosen === null) {
+      // The first choice that can be made (the current one cannot).
+      const first = choicesRef.current?.querySelector<HTMLInputElement>('input:not(:disabled)')
+      if (first) first.focus()
+      else cancelRef.current?.focus() // nothing to choose: Esc and Enter still reach the dialog
+    } else if (choosing && !reviewed) {
+      return // a choice's review is on its way
+    } else if (counted && !reviewed) {
       countRef.current?.focus()
       countRef.current?.select()
     } else if (plan && canRun && !destructive) confirmRef.current?.focus()
@@ -181,8 +196,14 @@ export function ActionDialog({ client, req, onClose, runTimeoutMs = RUN_TIMEOUT_
     if (outcome) outcomeRef.current?.scrollIntoView({ block: 'start' })
   }, [outcome])
 
+  const choose = (v: string) => {
+    if (busy === 'run' || sent) return
+    setChosen(v)
+    prepare({ choice: v })
+  }
+
   const review = () => {
-    if (!param || busy === 'run') return
+    if (!param || !counted || busy === 'run') return
     const s = count.trim()
     const n = Number(s)
     if (!/^\d+$/.test(s) || n < param.min || n > param.max) {
@@ -280,7 +301,12 @@ export function ActionDialog({ client, req, onClose, runTimeoutMs = RUN_TIMEOUT_
       e.preventDefault()
       e.stopPropagation()
     } else if (e.key === 'Tab') {
-      const list = [...(box.current?.querySelectorAll<HTMLElement>('button:not(:disabled), input:not(:disabled)') ?? [])]
+      // A group of choices is one stop (its checked one, else its first): arrows move within it.
+      const radios = [...(box.current?.querySelectorAll<HTMLInputElement>('input[type=radio]:not(:disabled)') ?? [])]
+      const stop = radios.find((r) => r.checked) ?? radios[0]
+      const list = [...(box.current?.querySelectorAll<HTMLElement>('button:not(:disabled), input:not(:disabled)') ?? [])].filter(
+        (el) => !(el instanceof HTMLInputElement && el.type === 'radio') || el === stop,
+      )
       if (!list.length) return
       const i = list.indexOf(document.activeElement as HTMLElement)
       const next = e.shiftKey ? (i <= 0 ? list.length - 1 : i - 1) : i < 0 || i === list.length - 1 ? 0 : i + 1
@@ -339,7 +365,11 @@ export function ActionDialog({ client, req, onClose, runTimeoutMs = RUN_TIMEOUT_
         {/* Only the middle scrolls: a long plan or result never hides what and where, nor the buttons. */}
         <div className="-mx-1 flex min-h-0 flex-col gap-3 overflow-y-auto px-1">
 
-          {param && (
+          {choosing && !!plan?.choices?.length && (
+            <Choices choices={plan.choices} chosen={chosen} disabled={busy === 'run' || sent || (chosen === null && !!plan.unavailable)} onChoose={choose} boxRef={choicesRef} />
+          )}
+
+          {counted && (
             <label className="flex items-center gap-2 text-xs text-fg-muted">
               {t('action.count')}
               <input
@@ -361,7 +391,7 @@ export function ActionDialog({ client, req, onClose, runTimeoutMs = RUN_TIMEOUT_
 
           {busy === 'prepare' && <p className="text-fg-subtle">{t('action.preparing')}</p>}
 
-          {plan && busy !== 'prepare' && reviewed && (
+          {plan && busy !== 'prepare' && (reviewed || (choosing && chosen === null)) && (
             <>
               {plan.unavailable && (
                 <p role="alert" className="rounded-md bg-warning/10 px-3 py-2 text-warning">
@@ -386,6 +416,23 @@ export function ActionDialog({ client, req, onClose, runTimeoutMs = RUN_TIMEOUT_
                       <li key={i}>{messageText(x)}</li>
                     ))}
                   </ul>
+                </section>
+              )}
+              {!!plan.changes?.length && (
+                <section aria-label={t('action.changes')}>
+                  <h3 className="mb-1 text-[12px] font-semibold uppercase tracking-wider text-fg-subtle">{t('action.changes')}</h3>
+                  <Portions
+                    items={plan.changes}
+                    render={(shown) => (
+                      <ul className="space-y-0.5 pl-5 font-mono text-xs">
+                        {shown.map((x, i) => (
+                          <li key={i} className="break-all">
+                            {messageText(x)}
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  />
                 </section>
               )}
               {!!plan.lists?.length && <ActionLists lists={plan.lists} />}
@@ -440,17 +487,17 @@ export function ActionDialog({ client, req, onClose, runTimeoutMs = RUN_TIMEOUT_
             {sent || outcome?.type === 'prepareFailed' ? t('action.close') : t('action.cancel')}
           </button>
           {(outcome?.type === 'conflict' || outcome?.type === 'prepareFailed') && (
-            <button type="button" className={`${btn} border border-line hover:bg-hover`} onClick={() => (param && count.trim() ? review() : prepare({}))}>
+            <button type="button" className={`${btn} border border-line hover:bg-hover`} onClick={() => (choosing ? prepare(chosen === null ? {} : { choice: chosen }) : counted && count.trim() ? review() : prepare({}))}>
               {t('action.reviewAgain')}
             </button>
           )}
-          {param && !reviewed && !sent && (
+          {counted && !reviewed && !sent && (
             // Enabled while a review is read: a disabled default button would swallow Enter in the count.
             <button type="submit" disabled={busy === 'run'} className={`${btn} bg-accent text-accent-fg`}>
               {t('action.review')}
             </button>
           )}
-          {reviewed && !sent && !unknownOrDone && outcome?.type !== 'prepareFailed' && (
+          {(reviewed || choosing) && !sent && !unknownOrDone && outcome?.type !== 'prepareFailed' && (
             <button
               ref={confirmRef}
               type="button"
@@ -463,6 +510,51 @@ export function ActionDialog({ client, req, onClose, runTimeoutMs = RUN_TIMEOUT_
           )}
         </div>
       </form>
+    </div>
+  )
+}
+
+const dateTime = () => new Intl.DateTimeFormat(document.documentElement.lang || undefined, { dateStyle: 'short', timeStyle: 'medium' })
+
+/** The values a choice parameter may take, newest first as the provider gives them; one that cannot be chosen says why. */
+function Choices({ choices, chosen, disabled, onChoose, boxRef }: { choices: ActionChoice[]; chosen: string | null; disabled: boolean; onChoose: (v: string) => void; boxRef: React.RefObject<HTMLDivElement | null> }) {
+  const now = useNow(10_000)
+  return (
+    <div ref={boxRef} role="radiogroup" aria-label={t('action.choices')} className="flex flex-col gap-1">
+      <h3 className="mb-0.5 text-[12px] font-semibold uppercase tracking-wider text-fg-subtle">{t('action.choices')}</h3>
+      {choices.map((c) => {
+        const why = c.unavailable && messageText(c.unavailable)
+        return (
+          <label
+            key={c.value}
+            title={why || undefined}
+            className={['flex items-start gap-2 rounded-md border px-2 py-1', chosen === c.value ? 'border-accent bg-accent/10' : 'border-line', c.unavailable ? 'opacity-60' : 'cursor-pointer hover:bg-hover'].join(' ')}
+          >
+            <input
+              type="radio"
+              name="action-choice"
+              value={c.value}
+              checked={chosen === c.value}
+              disabled={disabled || !!c.unavailable}
+              onChange={() => onChoose(c.value)}
+              className="mt-1 accent-accent"
+            />
+            <span className="flex min-w-0 flex-col">
+              <span>
+                <span className="font-medium">{messageText(c.title)}</span>
+                {c.current && <span className="ml-2 rounded bg-fg/10 px-1 text-xs text-fg-muted">{t('action.choiceCurrent')}</span>}
+                {!!c.at && (
+                  <span className="ml-2 text-xs text-fg-subtle" title={dateTime().format(c.at)}>
+                    {t('action.choiceAge', { age: formatAge(now - c.at) })}
+                  </span>
+                )}
+                <span className="ml-2 font-mono text-xs text-fg-subtle">{c.value}</span>
+              </span>
+              {!!c.details?.length && <span className="break-all text-xs text-fg-muted">{c.details.map((d) => messageText(d)).join(' · ')}</span>}
+            </span>
+          </label>
+        )
+      })}
     </div>
   )
 }

@@ -89,7 +89,7 @@ func TestWorkloadsOfferActionsAndServicesDoNot(t *testing.T) {
 	for _, a := range kinds[1].Actions {
 		ids = append(ids, a.ID)
 	}
-	assert.Equal(t, []string{"restart", "scale", "delete", "evacuate"}, ids)
+	assert.Equal(t, []string{"restart", "scale", "undo", "pause", "resume", "delete", "evacuate"}, ids)
 }
 
 func TestActionsChangeTheLiveView(t *testing.T) {
@@ -311,4 +311,45 @@ func TestEvacuateListsAndParts(t *testing.T) {
 	res, err = s.RunAction(ctx, provider.ActionRun{Ref: plan.Where.Ref, Action: "evacuate", Expect: plan.Expect})
 	require.NoError(t, err)
 	assert.Equal(t, core.OutcomeSkipped, res.Outcome, "done, but something left: not everything")
+}
+
+// Undo offers three revisions of web (the newest current); a revision
+// rolled back to becomes the newest; paused ones wait for resume.
+func TestWorkloadUndoPauseResume(t *testing.T) {
+	_, s := open(t)
+	ctx := context.Background()
+	plan, err := s.PrepareAction(ctx, wref("web"), "undo", core.ActionParams{})
+	require.NoError(t, err)
+	require.Len(t, plan.Choices, 3)
+	assert.Equal(t, "web-3", plan.Choices[0].Value)
+	assert.True(t, plan.Choices[0].Current)
+	assert.NotNil(t, plan.Choices[0].Unavailable)
+	assert.Equal(t, "Revision 1", plan.Choices[2].Title.Text)
+
+	one := "web-1"
+	plan, err = s.PrepareAction(ctx, wref("web"), "undo", core.ActionParams{Choice: &one})
+	require.NoError(t, err)
+	require.Nil(t, plan.Unavailable)
+	assert.Equal(t, []string{"image: app:3 → app:1"}, core.Texts(plan.Changes))
+	res, err := act(t, s, "web", "undo", core.ActionParams{Choice: &one})
+	require.NoError(t, err)
+	assert.Equal(t, "workload web: rollback to revision 1 requested", res.Message.Text)
+	plan, err = s.PrepareAction(ctx, wref("web"), "undo", core.ActionParams{})
+	require.NoError(t, err)
+	assert.Equal(t, "web-1", plan.Choices[0].Value, "the revision rolled back to is the newest")
+	assert.Equal(t, "Revision 4", plan.Choices[0].Title.Text)
+	assert.True(t, plan.Choices[0].Current)
+
+	_, err = act(t, s, "web", "pause", core.ActionParams{})
+	require.NoError(t, err)
+	two := "web-2"
+	plan, err = s.PrepareAction(ctx, wref("web"), "undo", core.ActionParams{Choice: &two})
+	require.NoError(t, err)
+	assert.NotNil(t, plan.Unavailable, "paused: resume first")
+	_, err = act(t, s, "web", "pause", core.ActionParams{})
+	assert.Equal(t, provider.ClassConflict, class(t, err), "already paused")
+	_, err = act(t, s, "web", "resume", core.ActionParams{})
+	require.NoError(t, err)
+	_, err = act(t, s, "web", "undo", core.ActionParams{Choice: &two})
+	require.NoError(t, err)
 }

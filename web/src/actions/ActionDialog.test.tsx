@@ -608,6 +608,77 @@ describe('ActionDialog', () => {
     expect(alert).toHaveTextContent('HTTP 502')
   })
 
+  describe('a choice (undo to a revision)', () => {
+    const undo: ActionDescriptor = { id: 'undo', title: 'Roll back', param: { kind: 'choice', min: 0, max: 0 } }
+    const choices = [
+      { value: 'web-c', title: { text: 'Revision 3' }, current: true, unavailable: { text: 'revision 3 is the current template' }, details: [{ text: 'Images: nginx:2' }] },
+      { value: 'web-b', title: { text: 'Revision 2' }, at: Date.now() - 3 * 3600_000, details: [{ text: 'deploy b' }] },
+      { value: 'web-a', title: { text: 'Revision 1' }, details: [{ text: 'deploy a' }] },
+    ]
+    const undoPlan = (p: ActionParams) =>
+      planOf(undo, p, {
+        choices,
+        effects: [{ text: p.choice ? `to ${p.choice}` : 'Choose a revision' }],
+        changes: p.choice ? Array.from({ length: 60 }, (_, i) => ({ text: `line ${i + 1} of ${p.choice}` })) : undefined,
+        expect: `exp-undo-${p.choice ?? ''}`,
+      })
+
+    it('the choices are offered; the current one cannot be chosen; nothing runs before a choice is reviewed', async () => {
+      const { f, dialog } = setup(undo, undoPlan)
+      const group = await within(dialog).findByRole('radiogroup')
+      const radios = within(group).getAllByRole('radio')
+      expect(radios).toHaveLength(3)
+      expect(radios[0]).toBeDisabled()
+      expect(group).toHaveTextContent('current')
+      expect(group).toHaveTextContent('Images: nginx:2')
+      expect(group).toHaveTextContent('3h')
+      expect(within(dialog).getByRole('button', { name: 'Roll back' })).toBeDisabled()
+      await waitFor(() => expect(radios[1]).toHaveFocus())
+      expect(f.client.runAction).not.toHaveBeenCalled()
+    })
+
+    it('a choice is reviewed at once; its changes come in portions; the reviewed choice runs', async () => {
+      const { f, dialog } = setup(undo, undoPlan)
+      const group = await within(dialog).findByRole('radiogroup')
+      await userEvent.click(within(group).getByRole('radio', { name: /Revision 1/ }))
+      await within(dialog).findByText('to web-a')
+      expect(f.client.prepareAction).toHaveBeenLastCalledWith(ref, 'undo', { choice: 'web-a' })
+      const changes = within(dialog).getByRole('region', { name: 'Changes' })
+      expect(within(changes).getAllByRole('listitem')).toHaveLength(50)
+      await userEvent.click(within(changes).getByRole('button', { name: 'Show 10 more (10 left)' }))
+      expect(within(changes).getAllByRole('listitem')).toHaveLength(60)
+      const confirm = within(dialog).getByRole('button', { name: 'Roll back' })
+      await waitFor(() => expect(confirm).toBeEnabled())
+      await userEvent.click(confirm)
+      const sent = vi.mocked(f.client.runAction).mock.calls[0][0]
+      expect(sent.params).toEqual({ choice: 'web-a' })
+      expect(sent.expect).toBe('exp-undo-web-a')
+    })
+
+    it('before a choice: what the plan says (unavailable: nothing to choose)', async () => {
+      const { f, dialog } = setup(undo, (p) => ({ ...undoPlan(p), unavailable: { text: 'deployment web is paused: resume its rollout first' } }))
+      await within(dialog).findByText(/deployment web is paused/)
+      expect(dialog).toHaveTextContent('Choose a revision')
+      for (const r of within(dialog).getAllByRole('radio')) expect(r).toBeDisabled()
+      expect(f.client.prepareAction).toHaveBeenCalledTimes(1)
+      await waitFor(() => expect(within(dialog).getByRole('button', { name: 'Cancel' })).toHaveFocus()) // Esc reaches the dialog
+    })
+
+    it('arrows move between the choices and review each; a late plan of an earlier one never runs', async () => {
+      const late = deferred<ActionPlan>()
+      const { f, dialog } = setup(undo, (p) => (p.choice === 'web-b' ? late.promise : undoPlan(p)))
+      const group = await within(dialog).findByRole('radiogroup')
+      const [, b, a] = within(group).getAllByRole('radio')
+      await userEvent.click(b) // its plan comes late
+      await userEvent.keyboard('{ArrowDown}')
+      await waitFor(() => expect(a).toBeChecked())
+      await within(dialog).findByText('to web-a')
+      act(() => late.resolve(undoPlan({ choice: 'web-b' })))
+      await userEvent.click(within(dialog).getByRole('button', { name: 'Roll back' }))
+      expect(vi.mocked(f.client.runAction).mock.calls[0][0].params).toEqual({ choice: 'web-a' })
+    })
+  })
+
   it('Tab stays in the dialog', async () => {
     const { dialog } = setup(restart)
     await within(dialog).findByRole('button', { name: 'Restart' })

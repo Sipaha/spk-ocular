@@ -60,7 +60,7 @@ test('scale from the row menu in two steps: the count, then its review', async (
   const grid = await openWorkloads(page)
   await row(grid, 'db').click({ button: 'right' })
   const menu = page.getByRole('menu', { name: 'Row actions' })
-  await expect(menu.getByRole('menuitem')).toHaveText(['Details', 'Restart', 'Scale…', 'Delete', 'Evacuate'])
+  await expect(menu.getByRole('menuitem')).toHaveText(['Details', 'Restart', 'Scale…', 'Roll back…', 'Pause rollout', 'Resume', 'Delete', 'Evacuate'])
   await menu.getByRole('menuitem', { name: 'Scale…' }).click()
   const dialog = page.getByRole('dialog', { name: 'Scale db' })
   const count = dialog.getByRole('textbox')
@@ -74,6 +74,60 @@ test('scale from the row menu in two steps: the count, then its review', async (
   await dialog.getByRole('button', { name: 'Scale' }).click()
   await expect(dialog).toBeHidden()
   await expect.poll(() => cells(grid, 'db')).toEqual(['db', '3', '0'])
+})
+
+test('roll back to a chosen revision: the choices, the review of each, the changes', async ({ page }) => {
+  const grid = await openWorkloads(page)
+  await row(grid, 'web').click({ button: 'right' })
+  await page.getByRole('menu', { name: 'Row actions' }).getByRole('menuitem', { name: 'Roll back…' }).click()
+  const dialog = page.getByRole('dialog', { name: 'Roll back web' })
+  const choices = dialog.getByRole('radiogroup', { name: 'Choose' })
+  const radios = choices.getByRole('radio')
+  await expect(radios).toHaveCount(3)
+  await expect(radios.nth(0)).toBeDisabled() // the current template
+  await expect(choices.getByText('current')).toBeVisible()
+  await expect(dialog).toContainText('Choose a revision to see what changes.')
+  await expect(dialog.getByRole('button', { name: 'Roll back' })).toBeDisabled()
+  await expect(radios.nth(1)).toBeFocused()
+  await page.keyboard.press('ArrowDown') // revision 1, reviewed at once
+  await expect(radios.nth(2)).toBeChecked()
+  await expect(dialog.getByRole('region', { name: 'Changes' })).toContainText('image: app:3 → app:1')
+  await expect(dialog).toContainText('it becomes revision 4')
+  await dialog.getByRole('button', { name: 'Roll back' }).click()
+  await expect(dialog).toBeHidden()
+  await expect(page.getByRole('status')).toHaveText('workload web: rollback to revision 1 requested')
+
+  await row(grid, 'web').click({ button: 'right' })
+  await page.getByRole('menu', { name: 'Row actions' }).getByRole('menuitem', { name: 'Roll back…' }).click()
+  await expect(radios.nth(0)).toBeDisabled()
+  await expect(dialog.getByRole('radiogroup').locator('label').nth(0)).toContainText('Revision 4')
+  await page.keyboard.press('Escape')
+  await expect(dialog).toBeHidden()
+})
+
+test('pause and resume a rollout; a paused one is not rolled back', async ({ page }) => {
+  const grid = await openWorkloads(page)
+  const menuItem = async (name: string, item: string) => {
+    await row(grid, name).click({ button: 'right' })
+    await page.getByRole('menu', { name: 'Row actions' }).getByRole('menuitem', { name: item }).click()
+  }
+  await menuItem('web', 'Pause rollout')
+  let dialog = page.getByRole('dialog', { name: 'Pause rollout web' })
+  await expect(dialog).toContainText('Template changes are not rolled out until it is resumed.')
+  await dialog.getByRole('button', { name: 'Pause rollout' }).click()
+  await expect(page.getByRole('status')).toHaveText('workload web: rollout pause requested')
+
+  await menuItem('web', 'Roll back…')
+  dialog = page.getByRole('dialog', { name: 'Roll back web' })
+  await expect(dialog.getByRole('alert')).toContainText('web is paused: resume it first')
+  for (const r of await dialog.getByRole('radio').all()) await expect(r).toBeDisabled()
+  await page.keyboard.press('Escape')
+
+  await menuItem('web', 'Resume')
+  dialog = page.getByRole('dialog', { name: 'Resume web' })
+  await expect(dialog).toContainText('changes made while paused (if any) are rolled out')
+  await dialog.getByRole('button', { name: 'Resume' }).click()
+  await expect(page.getByRole('status')).toHaveText('workload web: resume requested')
 })
 
 test('Delete on the table: a destructive review with Cancel focused; the row goes', async ({ page }) => {

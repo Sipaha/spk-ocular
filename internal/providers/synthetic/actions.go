@@ -24,6 +24,10 @@ var (
 	// actEvacuate moves a workload's instances off (Controls.Items of them)
 	// and leaves its helper: the generic UI's lists and parts.
 	actEvacuate = core.ActionDescriptor{ID: "evacuate", Title: "Evacuate", Destructive: true}
+	// Rollouts: undo to a revision (a choice), pause and resume.
+	actUndo   = core.ActionDescriptor{ID: "undo", Title: "Roll back", Param: &core.ActionParam{Kind: core.ParamChoice}}
+	actPause  = core.ActionDescriptor{ID: "pause", Title: "Pause rollout"}
+	actResume = core.ActionDescriptor{ID: "resume", Title: "Resume"}
 )
 
 var workloadKind = core.KindDescriptor{
@@ -33,7 +37,7 @@ var workloadKind = core.KindDescriptor{
 		{ID: "replicas", Title: "Replicas", Type: core.ColNumber},
 		{ID: "restarts", Title: "Restarts", Type: core.ColNumber},
 	},
-	Actions: []core.ActionDescriptor{actRestart, actScale, actDelete, actEvacuate},
+	Actions: []core.ActionDescriptor{actRestart, actScale, actUndo, actPause, actResume, actDelete, actEvacuate},
 }
 
 type workload struct {
@@ -41,15 +45,45 @@ type workload struct {
 	uid                string
 	replicas, restarts int
 	paused, autoscaled bool
+	// revs: the revisions, newest (the current one) first.
+	revs []revision
+}
+
+// revision: a workload's template at a revision (its image alone).
+type revision struct {
+	name  string
+	n     int
+	image string
+	at    time.Time
+}
+
+// history: revisions 1–3 of name (app:1 … app:3), an hour apart.
+func history(name string) []revision {
+	now := time.Now()
+	out := make([]revision, 3)
+	for i := range out {
+		n := 3 - i
+		out[i] = revision{name: fmt.Sprintf("%s-%d", name, n), n: n, image: fmt.Sprintf("app:%d", n), at: now.Add(-time.Duration(i+1) * time.Hour)}
+	}
+	return out
+}
+
+func (o *workload) revision(name string) *revision {
+	for i := range o.revs {
+		if o.revs[i].name == name {
+			return &o.revs[i]
+		}
+	}
+	return nil
 }
 
 // workloadsAtStart: web (2 replicas), db (1, an autoscaler), paused
 // (restart unavailable).
 func workloadsAtStart() []*workload {
 	return []*workload{
-		{name: "web", uid: "uid-web", replicas: 2},
-		{name: "db", uid: "uid-db", replicas: 1, autoscaled: true},
-		{name: "paused", uid: "uid-paused", replicas: 1, paused: true},
+		{name: "web", uid: "uid-web", replicas: 2, revs: history("web")},
+		{name: "db", uid: "uid-db", replicas: 1, autoscaled: true, revs: history("db")},
+		{name: "paused", uid: "uid-paused", replicas: 1, paused: true, revs: history("paused")},
 	}
 }
 
@@ -122,11 +156,18 @@ func (w *workloads) find(name string) *workload {
 func (o *workload) row() core.Row {
 	r, n := float64(o.replicas), float64(o.restarts)
 	return core.Row{
-		ID: o.uid, Rev: fmt.Sprintf("%d.%d", o.replicas, o.restarts),
+		ID: o.uid, Rev: fmt.Sprintf("%d.%d.%d.%t", o.replicas, o.restarts, o.revs[0].n, o.paused),
 		Ref:    core.Ref{Provider: ID, Target: Target, Kind: WorkloadKind, Name: o.name, UID: o.uid},
 		Cells:  []core.Cell{core.TextCell(o.name), core.NumCell(r, fmt.Sprint(o.replicas)), core.NumCell(n, fmt.Sprint(o.restarts))},
-		Health: core.Health{State: core.HealthOK},
+		Health: health(o),
 	}
+}
+
+func health(o *workload) core.Health {
+	if o.paused {
+		return core.Health{State: core.HealthOK, Reason: "Paused"}
+	}
+	return core.Health{State: core.HealthOK}
 }
 
 // changed delivers o's row (or its removal when gone) to the views that
@@ -232,25 +273,65 @@ func (s *session) getWorkload(name string) (*core.Resource, error) {
 	return &core.Resource{
 		Ref: r.Ref, Health: r.Health,
 		Facts: []core.Detail{{Key: "kind", Value: "Workload"}, {Key: "replicas", Value: fmt.Sprint(o.replicas)}, {Key: "restarts", Value: fmt.Sprint(o.restarts)}},
-		YAML:  fmt.Sprintf("name: %s\nuid: %s\nreplicas: %d\nrestarts: %d\npaused: %t\n", o.name, o.uid, o.replicas, o.restarts, o.paused),
+		YAML:  fmt.Sprintf("name: %s\nuid: %s\nreplicas: %d\nrestarts: %d\npaused: %t\nimage: %s\nrevision: %d\n", o.name, o.uid, o.replicas, o.restarts, o.paused, o.revs[0].image, o.revs[0].n),
 	}, nil
 }
 
 var _ provider.Actioner = (*session)(nil)
 
 func expect(action string, p core.ActionParams, o *workload) string {
-	count := -1
+	count, choice := -1, ""
 	if p.Count != nil {
 		count = *p.Count
 	}
-	return fmt.Sprintf("%s|%d|%s|%d|%t", action, count, o.uid, o.replicas, o.paused)
+	if p.Choice != nil {
+		choice = *p.Choice
+	}
+	revs := ""
+	for _, r := range o.revs {
+		revs += fmt.Sprintf("%s:%d,", r.name, r.n)
+	}
+	return fmt.Sprintf("%s|%d|%s|%s|%d|%t|%s", action, count, choice, o.uid, o.replicas, o.paused, revs)
 }
 
 func unavailable(action string, o *workload) *core.Message {
-	if action == actRestart.ID && o.paused {
+	switch {
+	case (action == actRestart.ID || action == actUndo.ID) && o.paused:
 		return &core.Message{Text: o.name + " is paused: resume it first"}
+	case action == actPause.ID && o.paused:
+		return &core.Message{Text: o.name + " is already paused"}
+	case action == actResume.ID && !o.paused:
+		return &core.Message{Text: o.name + " is not paused"}
 	}
 	return nil
+}
+
+// prepareUndo: the revisions; with one chosen, what changes.
+func prepareUndo(plan core.ActionPlan, o *workload) core.ActionPlan {
+	for i, r := range o.revs {
+		c := core.ActionChoice{Value: r.name, Title: core.Message{Text: fmt.Sprintf("Revision %d", r.n)}, At: r.at.UnixMilli(),
+			Details: texts("Image: " + r.image), Current: i == 0}
+		if c.Current {
+			c.Unavailable = &core.Message{Text: fmt.Sprintf("revision %d is the current template", r.n)}
+		}
+		plan.Choices = append(plan.Choices, c)
+	}
+	if plan.Params.Choice == nil {
+		plan.Effects = texts("Choose a revision to see what changes.")
+		return plan
+	}
+	r := o.revision(*plan.Params.Choice)
+	switch {
+	case plan.Unavailable != nil:
+	case r == nil:
+		plan.Unavailable = &core.Message{Text: "revision " + *plan.Params.Choice + " is no longer there"}
+	case r == &o.revs[0]:
+		plan.Unavailable = plan.Choices[0].Unavailable
+	default:
+		plan.Effects = texts(fmt.Sprintf("The template becomes that of revision %d; it becomes revision %d.", r.n, o.revs[0].n+1))
+		plan.Changes = texts(fmt.Sprintf("image: %s → %s", o.revs[0].image, r.image))
+	}
+	return plan
 }
 
 // texts: messages without keys (the synthetic provider speaks English only).
@@ -335,6 +416,12 @@ func (s *session) PrepareAction(_ context.Context, ref core.Ref, action string, 
 		default:
 			plan.Effects = texts(fmt.Sprintf("%d → %d: %s added.", n, m, instanceCount(m-n)))
 		}
+	case actUndo.ID:
+		plan = prepareUndo(plan, o)
+	case actPause.ID:
+		plan.Effects = texts("Template changes are not rolled out until it is resumed.")
+	case actResume.ID:
+		plan.Effects = texts("Its rollout goes on: changes made while paused (if any) are rolled out.")
 	case actDelete.ID:
 		plan.Effects = texts(fmt.Sprintf("Its %s removed too.", instanceCount(o.replicas)))
 	case actEvacuate.ID:
@@ -398,6 +485,27 @@ func (s *session) RunAction(ctx context.Context, run provider.ActionRun) (core.A
 	case actScale.ID:
 		msg = fmt.Sprintf("workload %s: scale %d → %d requested", o.name, o.replicas, *run.Params.Count)
 		o.replicas = *run.Params.Count
+		w.changed(o, false)
+	case actUndo.ID:
+		r := o.revision(*run.Params.Choice)
+		if r == nil || r == &o.revs[0] {
+			return core.ActionResult{}, &provider.Error{Class: provider.ClassConflict, Message: "revision " + *run.Params.Choice + " is not a choice now"}
+		}
+		msg = fmt.Sprintf("workload %s: rollback to revision %d requested", o.name, r.n)
+		// It becomes the newest revision.
+		back := *r
+		back.n, back.at = o.revs[0].n+1, time.Now()
+		revs := []revision{back}
+		for _, x := range o.revs {
+			if x.name != back.name {
+				revs = append(revs, x)
+			}
+		}
+		o.revs = revs
+		w.changed(o, false)
+	case actPause.ID, actResume.ID:
+		o.paused = run.Action == actPause.ID
+		msg = "workload " + o.name + ": " + map[bool]string{true: "rollout pause", false: "resume"}[o.paused] + " requested"
 		w.changed(o, false)
 	case actDelete.ID:
 		for i, x := range w.objs {

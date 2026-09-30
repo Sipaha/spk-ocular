@@ -281,6 +281,34 @@ test('scale a deployment 2 → 1 in two steps', async ({ page }) => {
   }
 })
 
+test('roll a deployment back to its first revision from the table', async ({ page }) => {
+  const cleanup = ownDeployment('act-undo', 1) // revision 1: no env
+  try {
+    kubectl('-n', 'ocular-demo', 'set', 'env', 'deployment/act-undo', 'V=b') // revision 2
+    kubectl('-n', 'ocular-demo', 'rollout', 'status', 'deployment/act-undo', '--timeout=120s')
+    await openTarget(page, 'kind-ocular-dev')
+    const grid = await kindPage(page, 'Deployments')
+    await row(grid, 'act-undo').click({ button: 'right' })
+    await page.getByRole('menu', { name: 'Row actions' }).getByRole('menuitem', { name: 'Roll back…' }).click()
+    const dialog = page.getByRole('dialog', { name: 'Roll back act-undo' })
+    const radios = dialog.getByRole('radiogroup').getByRole('radio')
+    await expect(radios).toHaveCount(2)
+    await expect(radios.nth(0)).toBeDisabled() // revision 2, the current template
+    await dialog.getByRole('radiogroup').getByText('Revision 1').click()
+    await expect(dialog.getByRole('region', { name: 'Changes' })).toContainText('containers[nginx].env: removed')
+    await expect(dialog).toContainText('The pod template becomes that of revision 1; it becomes revision 3.')
+    await expect(dialog).toContainText('Permission: checked: allowed')
+    await dialog.getByRole('button', { name: 'Roll back' }).click()
+    await expect(page.getByRole('status')).toHaveText('deployment act-undo: rollback to revision 1 requested')
+    expect(kubectl('-n', 'ocular-demo', 'get', 'deployment', 'act-undo', '-o', 'jsonpath={.spec.template.spec.containers[0].env}')).toBe('')
+    await expect
+      .poll(() => kubectl('-n', 'ocular-demo', 'get', 'deployment', 'act-undo', '-o', 'jsonpath={.metadata.annotations.deployment\\.kubernetes\\.io/revision}'), { timeout: 30_000 })
+      .toBe('3')
+  } finally {
+    cleanup()
+  }
+})
+
 test('Delete on a pod row: the ReplicaSet creates a new one', async ({ page }) => {
   const cleanup = ownDeployment('act-del', 1)
   try {
