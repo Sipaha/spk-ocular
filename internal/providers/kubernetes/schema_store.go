@@ -347,19 +347,28 @@ func (s *session) tablesUnsupported(old *tableSchema) { s.markPlain(old.gvr) }
 // for the session (recorded even without an epoch); a Table probe in
 // flight is fenced, a Table epoch ends and its views open again plain.
 func (s *session) markPlain(gvr schema.GroupVersionResource) {
-	s.schemas.mu.Lock()
-	s.setPlainLocked(gvr)
-	var cur *tableSchema
-	if e := s.schemas.by[gvr]; e != nil {
-		if e.probe != nil {
-			e.gen++
-		}
-		cur = e.cur
-	}
-	s.schemas.mu.Unlock()
-	if cur != nil && cur.table {
+	if cur := s.setPlain(gvr); cur != nil {
 		s.schemaChanged(cur)
 	}
+}
+
+// setPlain records gvr's plain format and fences its Table probe in
+// flight; it returns the current Table epoch (to be ended), if any.
+func (s *session) setPlain(gvr schema.GroupVersionResource) *tableSchema {
+	s.schemas.mu.Lock()
+	defer s.schemas.mu.Unlock()
+	s.setPlainLocked(gvr)
+	e := s.schemas.by[gvr]
+	if e == nil {
+		return nil
+	}
+	if e.probe != nil {
+		e.gen++
+	}
+	if e.cur != nil && e.cur.table {
+		return e.cur
+	}
+	return nil
 }
 
 func (s *session) setPlainLocked(gvr schema.GroupVersionResource) {

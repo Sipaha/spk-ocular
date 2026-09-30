@@ -192,7 +192,11 @@ func (s *session) getTable(ctx context.Context, def *kindDef, ref core.Ref) (*un
 	s.schemas.mu.Unlock()
 	switch {
 	case servesNoTables(err):
-		go s.markPlain(def.gvr)
+		// Recorded before Get returns (a view opened next reads plain); the
+		// current Table epoch, if any, ends apart.
+		if cur := s.setPlain(def.gvr); cur != nil {
+			go s.schemaChanged(cur)
+		}
 		return nil, nil, nil
 	case errors.Is(err, errNotTable):
 		return nil, nil, nil
