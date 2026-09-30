@@ -24,7 +24,7 @@ import (
 // routes; post sends JSON with the token.
 func synthServer(t *testing.T) func(path string, body any) (int, []byte) {
 	t.Helper()
-	t.Setenv(paths.EnvHome, t.TempDir())
+	t.Setenv(paths.EnvHome, shortHome(t))
 	t.Setenv("HOME", t.TempDir())
 	t.Setenv("KUBECONFIG", "")
 	c, err := newCore(context.Background(), "browser", true)
@@ -99,7 +99,7 @@ func TestSyntheticActionsThroughTheAPI(t *testing.T) {
 // The desktop's test routes: loopback, a token, where to find both in the
 // data directory (owner-only), gone when stopped.
 func TestDesktopTestAPI(t *testing.T) {
-	t.Setenv(paths.EnvHome, t.TempDir())
+	t.Setenv(paths.EnvHome, shortHome(t))
 	t.Setenv("HOME", t.TempDir())
 	t.Setenv("KUBECONFIG", "")
 	c, err := newCore(context.Background(), "desktop", false)

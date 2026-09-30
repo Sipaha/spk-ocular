@@ -8,6 +8,7 @@ import (
 
 	"k8s.io/klog/v2"
 
+	"github.com/spk/spk-ocular/internal/agentapi"
 	"github.com/spk/spk-ocular/internal/api"
 	"github.com/spk/spk-ocular/internal/events"
 	"github.com/spk/spk-ocular/internal/paths"
@@ -26,6 +27,8 @@ type appCore struct {
 	Store     *store.Store
 	Emitter   *events.Emitter
 	Service   *api.Service
+	// Agent serves agent access over a unix socket (P14).
+	Agent *agentapi.Server
 }
 
 // newCore wires everything and starts the service's watchers. Nothing here
@@ -57,12 +60,22 @@ func newCore(ctx context.Context, mode string, withSynthetic bool) (*appCore, er
 	}
 	em := events.NewEmitter()
 	svc := api.NewService(reg, st, em, api.Options{Version: version, Mode: mode, Getenv: os.Getenv})
+	home, _ := os.UserHomeDir()
+	agent := agentapi.New(agentapi.Options{Service: svc, Store: st, Socket: p.AgentSocket, Lock: p.AgentLock, Version: version, Home: home})
+	svc.SetAgentControl(agent)
 	svc.Start(ctx)
-	return &appCore{Synthetic: syn, Paths: p, Store: st, Emitter: em, Service: svc}, nil
+	// A socket that cannot be served is not fatal: the UI shows why
+	// (AgentAccessStatus), the app works without agent access.
+	if err := agent.Start(); err != nil {
+		slog.Warn("agent access unavailable", "socket", p.AgentSocket, "err", err)
+	}
+	return &appCore{Synthetic: syn, Paths: p, Store: st, Emitter: em, Service: svc, Agent: agent}, nil
 }
 
-// Close stops the service before the store it writes to.
+// Close stops agent access (its writes use the service), then the service,
+// then the store they write to.
 func (c *appCore) Close() {
+	c.Agent.Close()
 	c.Service.Close()
 	_ = c.Store.Close()
 }

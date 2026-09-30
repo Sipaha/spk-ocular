@@ -19,12 +19,17 @@ import (
 const shutdownTimeout = 3 * time.Second
 
 func runBrowser(ctx context.Context, o browserOpts) error {
+	return serveBrowser(ctx, o, frontendFS())
+}
+
+// serveBrowser runs the browser mode with the given SPA (tests: their own).
+func serveBrowser(ctx context.Context, o browserOpts, dist fs.FS) error {
 	c, err := newCore(ctx, "browser", o.TestSynthetic)
 	if err != nil {
 		return err
 	}
 	defer c.Close()
-	h, _ := newBrowserHandler(c, frontendFS(), o.TestAPI)
+	h, _ := newBrowserHandler(c, dist, o.TestAPI)
 
 	// Request contexts derive from baseCtx so cancelBase ends long-lived
 	// requests (SSE) directly — Shutdown alone only waits for them.

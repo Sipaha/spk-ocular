@@ -10,6 +10,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/spk/spk-ocular/internal/api"
 )
 
 func sockDir(t *testing.T) string {
@@ -135,4 +137,26 @@ func TestPeerUIDReadsTheCredentials(t *testing.T) {
 	uid, err := peerUID(c)
 	require.NoError(t, err)
 	assert.Equal(t, os.Getuid(), uid)
+}
+
+// A server closed right after it started (the app quitting at once) stops
+// cleanly: no race with the serving goroutine, the socket is removed, a
+// second instance meanwhile reports other_instance.
+func TestServerStartsAndClosesAtOnce(t *testing.T) {
+	d := sockDir(t)
+	o := Options{Socket: filepath.Join(d, "agent.sock"), Lock: filepath.Join(d, "agent.sock.lock"), Version: "test"}
+	for range 3 {
+		s := New(o)
+		require.NoError(t, s.Start())
+		other := New(o)
+		require.NoError(t, other.Start())
+		st, _ := other.Status(t.Context())
+		assert.Equal(t, api.AgentOtherInstance, st.State)
+		other.Close()
+		st, _ = s.Status(t.Context())
+		assert.Equal(t, api.AgentServing, st.State)
+		s.Close()
+		_, err := os.Stat(o.Socket)
+		assert.True(t, os.IsNotExist(err), "removed at close: %v", err)
+	}
 }

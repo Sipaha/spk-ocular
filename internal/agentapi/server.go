@@ -88,15 +88,16 @@ func (s *Server) Start() error {
 		s.state, s.errMsg = api.AgentFailed, err.Error()
 		return err
 	}
-	s.sock = sock
-	s.srv = &http.Server{
+	srv := &http.Server{
 		Handler:           s.mux,
 		ReadHeaderTimeout: 5 * time.Second,
 		IdleTimeout:       120 * time.Second,
 	}
+	s.sock, s.srv = sock, srv
 	s.state, s.errMsg = api.AgentServing, ""
+	// The goroutine keeps its own srv: Close clears the fields.
 	go func() {
-		if err := s.srv.Serve(sock.ln); err != nil && !errors.Is(err, http.ErrServerClosed) && !errors.Is(err, net.ErrClosed) {
+		if err := srv.Serve(sock.ln); err != nil && !errors.Is(err, http.ErrServerClosed) && !errors.Is(err, net.ErrClosed) {
 			slog.Warn("agent socket stopped", "err", err)
 		}
 	}()
