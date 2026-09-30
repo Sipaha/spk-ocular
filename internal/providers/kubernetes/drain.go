@@ -209,11 +209,12 @@ func (s *session) prepareDrain(ctx context.Context, def *kindDef, plan core.Acti
 	}()
 	go func() { pdbs <- s.drainPDBs(ectx, inv.evict) }()
 	waitRights, waitPDBs := true, true
+	rightsDone := rights // nil once received: a closed channel is ready forever
 wait:
 	for waitRights || waitPDBs {
 		select {
-		case <-rights:
-			waitRights = false
+		case <-rightsDone:
+			waitRights, rightsDone = false, nil
 		case w := <-pdbs:
 			plan.Warnings, waitPDBs = append(plan.Warnings, w...), false
 		case <-ectx.Done():

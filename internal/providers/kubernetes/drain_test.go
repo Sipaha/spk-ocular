@@ -7,6 +7,7 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+	"syscall"
 	"testing"
 	"time"
 
@@ -449,6 +450,54 @@ func TestADrainsKnownDenialOutlivesALateCheck(t *testing.T) {
 		plan := prepare(t, s, nodeRef("w1", ""), "drain", core.ActionParams{})
 		assert.Equal(t, core.RightsUnknown, plan.Rights.State)
 	})
+}
+
+// latePDBDyn holds PodDisruptionBudget lists until the caller's context
+// ends — outside the fake client's lock.
+type latePDBDyn struct{ dynamic.Interface }
+
+func (d latePDBDyn) Resource(gvr schema.GroupVersionResource) dynamic.NamespaceableResourceInterface {
+	r := d.Interface.Resource(gvr)
+	if gvr != pdbGVR {
+		return r
+	}
+	return latePDBRes{r}
+}
+
+type latePDBRes struct {
+	dynamic.NamespaceableResourceInterface
+}
+
+func (r latePDBRes) Namespace(string) dynamic.ResourceInterface { return r }
+
+func (r latePDBRes) List(ctx context.Context, _ metav1.ListOptions) (*unstructured.UnstructuredList, error) {
+	<-ctx.Done()
+	return nil, ctx.Err()
+}
+
+func cpuTime(t *testing.T) time.Duration {
+	var u syscall.Rusage
+	require.NoError(t, syscall.Getrusage(syscall.RUSAGE_SELF, &u))
+	return time.Duration(u.Utime.Nano() + u.Stime.Nano())
+}
+
+// Rights answered, budgets late: the plan waits for the budgets without
+// spinning (a closed channel is received once).
+func TestADrainWaitingForItsBudgetsDoesNotSpin(t *testing.T) {
+	old := prepareExtrasTimeout
+	prepareExtrasTimeout = 400 * time.Millisecond
+	t.Cleanup(func() { prepareExtrasTimeout = old })
+	_, c := drainSession(t, workerPods()...)
+	var r ssarRules
+	r.install(c, func(map[string]any) bool { return true })
+	s := newSession("ctx", "h", latePDBDyn{c}, false)
+	t.Cleanup(s.Close)
+	before := cpuTime(t)
+	plan := prepare(t, s, nodeRef("w1", ""), "drain", core.ActionParams{})
+	used := cpuTime(t) - before
+	assert.Equal(t, core.RightsAllowed, plan.Rights.State)
+	assert.Contains(t, fmt.Sprint(plan.Warnings), "drain.pdbUnchecked")
+	assert.Less(t, used, 150*time.Millisecond, "waited %v of CPU for a 400 ms wait", used)
 }
 
 func TestDrainForecastsPodDisruptionBudgets(t *testing.T) {
