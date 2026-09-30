@@ -7,6 +7,9 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"sigs.k8s.io/yaml"
 )
 
 // lastAppliedKey is kubectl's annotation: hidden in the editor and never
@@ -171,4 +174,28 @@ func collisions(patch, orig, current map[string]any) []string {
 	walk(patch, orig, current, "")
 	sort.Strings(out)
 	return out
+}
+
+// editHeader opens the editor's text: what it does not show.
+const editHeader = "# status, metadata.managedFields and the last-applied annotation are not shown;\n# the editor does not change them. null removes a key; lists are replaced whole.\n"
+
+// editView is the document the editor shows for u: without status,
+// managedFields and the last-applied annotation, a Secret's values masked.
+// u itself is not changed.
+func editView(u *unstructured.Unstructured, secret bool) (string, error) {
+	o := u.DeepCopy().Object
+	delete(o, "status")
+	unstructured.RemoveNestedField(o, "metadata", "managedFields")
+	unstructured.RemoveNestedField(o, "metadata", "annotations", lastAppliedKey)
+	if ann, ok, _ := unstructured.NestedMap(o, "metadata", "annotations"); ok && len(ann) == 0 {
+		unstructured.RemoveNestedField(o, "metadata", "annotations")
+	}
+	if secret {
+		maskSecret(o)
+	}
+	y, err := yaml.Marshal(o)
+	if err != nil {
+		return "", err
+	}
+	return editHeader + string(y), nil
 }

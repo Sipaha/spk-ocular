@@ -3,6 +3,8 @@ package kubernetes
 import (
 	"strings"
 	"testing"
+
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 )
 
 var cmID = editIdentity{APIVersion: "v1", Kind: "ConfigMap", Name: "cfg", Namespace: "web", UID: "u1"}
@@ -120,5 +122,53 @@ func TestEditCollisionsAreChangesSinceOpeningThatThePatchOverwrites(t *testing.T
 	}
 	if got := collisions(map[string]any{"data": map[string]any{"a": "5"}}, orig, current); len(got) != 0 {
 		t.Fatalf("no collision expected, got %v", got)
+	}
+}
+
+func TestEditViewHidesWhatTheEditorDoesNotChange(t *testing.T) {
+	u := &unstructured.Unstructured{Object: map[string]any{
+		"apiVersion": "ocular.dev/v1", "kind": "Widget",
+		"metadata": map[string]any{
+			"name": "w", "namespace": "web", "uid": "u1", "resourceVersion": "7",
+			"managedFields": []any{map[string]any{"manager": "kubectl"}},
+			"annotations":   map[string]any{lastAppliedKey: "{}", "team": "a"},
+		},
+		"spec":   map[string]any{"big": int64(9007199254740993)},
+		"status": map[string]any{"phase": "Ready"},
+	}}
+	text, err := editView(u, false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.HasPrefix(text, "# ") {
+		t.Fatalf("no header comment:\n%s", text)
+	}
+	for _, hidden := range []string{"managedFields", lastAppliedKey, "status", "phase"} {
+		if strings.Contains(text, hidden+":") {
+			t.Fatalf("%s shown:\n%s", hidden, text)
+		}
+	}
+	doc := mustParse(t, text)
+	if got := toJSON(t, doc["spec"]); got != `{"big":9007199254740993}` {
+		t.Fatalf("spec = %s", got)
+	}
+	if got := toJSON(t, doc["metadata"].(map[string]any)["annotations"]); got != `{"team":"a"}` {
+		t.Fatalf("annotations = %s", got)
+	}
+	if u.Object["status"] == nil {
+		t.Fatal("the object itself must not change")
+	}
+
+	s := &unstructured.Unstructured{Object: map[string]any{
+		"apiVersion": "v1", "kind": "Secret",
+		"metadata": map[string]any{"name": "s", "namespace": "web", "uid": "u2", "annotations": map[string]any{lastAppliedKey: "{}"}},
+		"data":     map[string]any{"token": "eHl6"},
+	}}
+	text, err = editView(s, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(text, "eHl6") || !strings.Contains(text, "<3 bytes>") || strings.Contains(text, "annotations") {
+		t.Fatalf("secret view:\n%s", text)
 	}
 }
