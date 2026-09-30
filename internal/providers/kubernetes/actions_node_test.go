@@ -51,7 +51,7 @@ func TestNodesOfferTheirActions(t *testing.T) {
 	for _, a := range kindActions[nodesKind] {
 		ids = append(ids, a.ID)
 	}
-	assert.Equal(t, []string{"cordon", "uncordon"}, ids)
+	assert.Equal(t, []string{"cordon", "uncordon", "drain"}, ids)
 }
 
 func TestCordonAndUncordonPlans(t *testing.T) {

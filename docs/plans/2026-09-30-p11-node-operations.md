@@ -189,14 +189,14 @@ pod-ов через Eviction API, который соблюдает PodDisruptio
 - [x] kind: cordon → `spec.unschedulable` true, uncordon → false; повтор — `Unavailable`.
 
 ### Task 4. Drain: план (Go)
-- [ ] Разбор (таблица: DaemonSet, mirror, завершённый, удаляемый, без контроллера, `emptyDir`,
+- [x] Разбор (таблица: DaemonSet, mirror, завершённый, удаляемый, без контроллера, `emptyDir`,
   обычный), отпечатки и `Expect` (переход класса, смена владельца A→B при том же наборе UID —
   другой `Expect`), предел 500 (> 500, `continue`, запрет list — `Unavailable`), особые случаи
   (решение 6).
-- [ ] Права: уже закрытый узел + `patch nodes` запрещён + выселения разрешены — план не
+- [x] Права: уже закрытый узел + `patch nodes` запрещён + выселения разрешены — план не
   `denied`; роль с `resourceNames` ровно на pod-ы плана — разрешено; отказ по одному pod-у —
   `denied` с именем; не успели — `unknown`; параллельность ≤ 8 (счётчик в фейке).
-- [ ] Прогноз PDB: `disruptionsAllowed` 0, два PDB на pod, запрет/предел — «не проверены».
+- [x] Прогноз PDB: `disruptionsAllowed` 0, два PDB на pod, запрет/предел — «не проверены».
 
 ### Task 5. Drain: прогон (Go)
 - [ ] Ответы выселения (httptest, счётчик POST на каждую попытку): 201; 429 с

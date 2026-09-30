@@ -297,25 +297,12 @@ func (s *session) rights(ctx context.Context, def *kindDef, action string, u *un
 	if sub != "" {
 		attrs["subresource"] = sub
 	}
-	review := &unstructured.Unstructured{Object: map[string]any{
-		"apiVersion": "authorization.k8s.io/v1", "kind": "SelfSubjectAccessReview",
-		"spec": map[string]any{"resourceAttributes": attrs},
-	}}
-	out, err := s.dyn.Resource(ssarGVR).Create(ctx, review, metav1.CreateOptions{})
-	if err != nil {
-		return core.Rights{State: core.RightsUnknown, Reason: shortErr(err)}
-	}
-	allowed, found, _ := unstructured.NestedBool(out.Object, "status", "allowed")
-	if !found {
-		return core.Rights{State: core.RightsUnknown}
-	}
-	if allowed {
-		return core.Rights{State: core.RightsAllowed}
-	}
-	// Neither allowed nor denied, and the authorizer failed: no answer.
-	denied, _, _ := unstructured.NestedBool(out.Object, "status", "denied")
-	if e := str(out.Object, "status", "evaluationError"); !denied && e != "" {
-		return core.Rights{State: core.RightsUnknown, Reason: e}
+	st, why := s.access(ctx, attrs)
+	switch st {
+	case core.RightsAllowed:
+		return core.Rights{State: st}
+	case core.RightsUnknown:
+		return core.Rights{State: st, Reason: why}
 	}
 	what := def.gvr.Resource
 	if sub != "" {
@@ -325,8 +312,8 @@ func (s *session) rights(ctx context.Context, def *kindDef, action string, u *un
 	if ns := u.GetNamespace(); ns != "" {
 		reason += " in " + ns
 	}
-	if r := str(out.Object, "status", "reason"); r != "" {
-		reason += " (" + r + ")"
+	if why != "" {
+		reason += " (" + why + ")"
 	}
 	return core.Rights{State: core.RightsDenied, Reason: reason}
 }
