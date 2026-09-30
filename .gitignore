@@ -7,3 +7,4 @@
 /cmd/spk-ocular/dist/*
 !/cmd/spk-ocular/dist/.gitkeep
 coverage.*
+*.pid
