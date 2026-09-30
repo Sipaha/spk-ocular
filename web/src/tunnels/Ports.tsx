@@ -5,8 +5,9 @@ import type { ForwardInfo, ForwardPort, Ref } from '../api/types'
 import { Select } from '../components/Select'
 import { classLabel, t } from '../i18n'
 import { tunnels } from './store'
+import { errorDetail } from '../errors'
 
-const errText = (e: unknown) => (e instanceof ApiError ? `${classLabel(e.code)}: ${e.detail}` : e instanceof Error ? e.message : String(e))
+const errText = (e: unknown) => (e instanceof ApiError ? `${classLabel(e.code)}: ${errorDetail(e)}` : errorDetail(e))
 
 /** The details' "Ports" section: what can be forwarded, with "Forward". */
 export function PortsSection({ client, subject }: { client: Client; subject: Ref }) {

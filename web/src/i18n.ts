@@ -1126,15 +1126,16 @@ const providerTexts: Partial<Record<Language, Record<string, string>>> = {
 export function messageText(m: { key?: string; params?: Record<string, string>; text: string }): string {
   const tmpl = m.key ? providerTexts[current]?.[m.key] : undefined
   if (!tmpl) return m.text
-  let s = tmpl
-  for (const [k, v] of Object.entries(m.params ?? {})) s = s.replaceAll(`{${k}}`, v)
-  return s
+  // One pass over the template's own placeholders: a value is data (a
+  // server's text may hold "{name}" or "$&"), an unknown one stays.
+  const params = m.params ?? {}
+  return tmpl.replace(/\{(\w+)\}/g, (p, k: string) => (Object.hasOwn(params, k) ? params[k] : p))
 }
 
 export function t(key: MessageKey, vars?: Record<string, string | number>): string {
-  let s: string = dicts[current][key] ?? en[key]
-  if (vars) for (const [k, v] of Object.entries(vars)) s = s.replaceAll(`{${k}}`, String(v))
-  return s
+  const s: string = dicts[current][key] ?? en[key]
+  if (!vars) return s
+  return s.replace(/\{(\w+)\}/g, (p, k: string) => (Object.hasOwn(vars, k) ? String(vars[k]) : p))
 }
 
 /** A provider's own variant of a generic text (`<key>.<provider>`), else the generic one. */

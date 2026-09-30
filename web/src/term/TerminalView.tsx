@@ -11,6 +11,7 @@ import { dock, type TermTab } from '../dock/store'
 import { formatArgv } from './argv'
 import { copyText, readText } from './clipboard'
 import { PasteTooLargeError, TermConnection, wsBase, type TermEnd, type TermPhase } from './protocol'
+import { errorDetail } from '../errors'
 
 // Darcula, as the log viewer's ANSI palette (src/index.css).
 const theme: ITheme = {
@@ -47,7 +48,7 @@ export interface Props {
   mode: 'desktop' | 'browser'
 }
 
-const errText = (e: unknown) => (e instanceof ApiError ? `${classLabel(e.code)}: ${e.detail}` : e instanceof Error ? e.message : String(e))
+const errText = (e: unknown) => (e instanceof ApiError ? `${classLabel(e.code)}: ${errorDetail(e)}` : errorDetail(e))
 
 function describe(info: TerminalInfo): string {
   const tg = info.target

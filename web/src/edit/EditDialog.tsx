@@ -6,6 +6,7 @@ import { refTitle } from '../refs'
 import { useScopeWords } from '../scopeNames'
 import { EditDiff } from './EditDiff'
 import { withoutVersion } from './text'
+import { errorDetail } from '../errors'
 
 /** An edit to review: the object, its signed base, the text as given and as edited. */
 export interface EditReview extends EditPrepareRequest {
@@ -30,16 +31,15 @@ type Outcome =
 
 const btn = 'rounded-md px-3 py-1 outline-none focus:ring-2 focus:ring-accent focus:ring-offset-2 focus:ring-offset-panel disabled:opacity-50'
 
-const detailOf = (e: unknown) => (e instanceof ApiError ? e.detail || e.code : e instanceof Error ? e.message : String(e))
 const codeOf = (e: unknown) => (e instanceof ApiError ? e.code : 'internal')
 
 /** What a write's rejection means for the user. */
 function outcomeOf(e: unknown): Outcome {
   const code = codeOf(e)
   // No coded answer (the connection failed): the write may have been applied.
-  if (code === 'unknown' || !(e instanceof ApiError) || e.transport) return { type: 'unknown', text: `${t('edit.unknown')} ${detailOf(e)}` }
-  if (code === 'conflict') return { type: 'conflict', text: t('edit.conflict', { detail: detailOf(e) }) }
-  return { type: 'failed', text: t('edit.failed', { class: classLabel(code), detail: detailOf(e) }) }
+  if (code === 'unknown' || !(e instanceof ApiError) || e.transport) return { type: 'unknown', text: `${t('edit.unknown')} ${errorDetail(e)}` }
+  if (code === 'conflict') return { type: 'conflict', text: t('edit.conflict', { detail: errorDetail(e) }) }
+  return { type: 'failed', text: t('edit.failed', { class: classLabel(code), detail: errorDetail(e) }) }
 }
 
 /**
@@ -85,7 +85,7 @@ export function EditDialog({ client, req, onBack, onDone }: Props) {
       (e) => {
         if (!live.current || g !== gen.current) return
         setBusy(null)
-        setOutcome({ type: 'prepareFailed', text: t('edit.prepareFailed', { class: classLabel(codeOf(e)), detail: detailOf(e) }) })
+        setOutcome({ type: 'prepareFailed', text: t('edit.prepareFailed', { class: classLabel(codeOf(e)), detail: errorDetail(e) }) })
       },
     )
   }

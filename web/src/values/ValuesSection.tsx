@@ -5,6 +5,7 @@ import { classLabel, t } from '../i18n'
 import { showNotice } from '../store'
 import { copyValue } from './copy'
 import { ValueDialog, type ValueDialogMode } from './ValueDialog'
+import { errorDetail } from '../errors'
 
 interface Props {
   client: Client
@@ -27,7 +28,6 @@ const SHOWN_CHARS = 64 << 10
 
 const toolBtn = 'rounded-md border border-line px-1.5 py-0.5 text-xs text-fg-muted hover:bg-hover hover:text-fg disabled:pointer-events-none disabled:opacity-50'
 const codeOf = (e: unknown) => (e instanceof ApiError ? e.code : 'internal')
-const detailOf = (e: unknown) => (e instanceof ApiError ? e.detail || e.code : e instanceof Error ? e.message : String(e))
 
 /** A key's line: its value shown (of the listed version), being read, or why not. */
 type Line = { state: 'reading' } | { state: 'shown'; v: Value; whole: boolean } | { state: 'changed' } | { state: 'error'; text: string }
@@ -117,7 +117,7 @@ export function ValuesSection({ client, subject: given, revision, gone, kindTitl
         fetched.current = reload
         // The keys known last stay (an open dialog keeps its draft on them);
         // what is shown is hidden by the revision, never kept.
-        setList((l) => ({ data: l?.data, error: t('values.loadFailed', { class: classLabel(codeOf(e)), detail: detailOf(e) }) }))
+        setList((l) => ({ data: l?.data, error: t('values.loadFailed', { class: classLabel(codeOf(e)), detail: errorDetail(e) }) }))
       },
     )
     return () => {
@@ -165,7 +165,7 @@ export function ValuesSection({ client, subject: given, revision, gone, kindTitl
       },
       (e) => {
         if (!live.current || g !== gen.current || kg !== keyGen.current.get(key)) return
-        setLine(key, { state: 'error', text: t('values.readFailed', { class: classLabel(codeOf(e)), detail: detailOf(e) }) })
+        setLine(key, { state: 'error', text: t('values.readFailed', { class: classLabel(codeOf(e)), detail: errorDetail(e) }) })
       },
     )
   }
@@ -203,7 +203,7 @@ export function ValuesSection({ client, subject: given, revision, gone, kindTitl
         if (e instanceof StaleValue) {
           setLine(k.key, { state: 'changed' })
           setReload((n) => n + 1)
-        } else setLine(k.key, { state: 'error', text: e instanceof ApiError ? t('values.readFailed', { class: classLabel(e.code), detail: detailOf(e) }) : t('values.copyFailed', { detail: detailOf(e) }) })
+        } else setLine(k.key, { state: 'error', text: e instanceof ApiError ? t('values.readFailed', { class: classLabel(e.code), detail: errorDetail(e) }) : t('values.copyFailed', { detail: errorDetail(e) }) })
       },
     )
   }

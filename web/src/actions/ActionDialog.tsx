@@ -7,6 +7,7 @@ import { useScopeWords } from '../scopeNames'
 import { showNotice } from '../store'
 import { focusMark, restoreFocus } from '../shortcuts'
 import { ActionLists, Portions } from './ActionLists'
+import { errorDetail } from '../errors'
 
 /** An action chosen on an object: the dialog reviews it, then runs it. */
 export interface ActionRequest {
@@ -56,10 +57,10 @@ function outcomeOf(e: unknown): Outcome {
   // No coded answer (the connection failed): the request may have been applied.
   const transport = !(e instanceof ApiError) || e.transport
   return code === 'unknown' || transport
-    ? { type: 'unknown', text: `${t('action.unknown')} ${detailOf(e)}` }
+    ? { type: 'unknown', text: `${t('action.unknown')} ${errorDetail(e)}` }
     : code === 'conflict'
-      ? { type: 'conflict', text: t('action.conflict', { detail: detailOf(e) }) }
-      : { type: 'failed', text: t('action.failed', { class: classLabel(code), detail: detailOf(e) }) }
+      ? { type: 'conflict', text: t('action.conflict', { detail: errorDetail(e) }) }
+      : { type: 'failed', text: t('action.failed', { class: classLabel(code), detail: errorDetail(e) }) }
 }
 
 /** "2 of 3 done; 1 outcome unknown; 1 not run". */
@@ -80,7 +81,6 @@ function partialOf(res: ActionResult): Extract<Outcome, { type: 'partial' }> | n
   return { type: 'partial', text, parts: res.parts ?? [], unknown }
 }
 
-const detailOf = (e: unknown) => (e instanceof ApiError ? e.detail || e.code : e instanceof Error ? e.message : String(e))
 const codeOf = (e: unknown) => (e instanceof ApiError ? e.code : 'internal')
 
 /**
@@ -139,7 +139,7 @@ export function ActionDialog({ client, req, onClose, runTimeoutMs = RUN_TIMEOUT_
         if (!live.current || g !== gen.current) return
         setPlan(null)
         setBusy(null)
-        setOutcome({ type: 'prepareFailed', text: t('action.prepareFailed', { class: classLabel(codeOf(e)), detail: detailOf(e) }) })
+        setOutcome({ type: 'prepareFailed', text: t('action.prepareFailed', { class: classLabel(codeOf(e)), detail: errorDetail(e) }) })
       },
     )
   }

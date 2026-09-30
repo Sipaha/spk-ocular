@@ -29,6 +29,29 @@ describe('parseWailsError', () => {
     expect(e.code).toBe('internal')
     expect(e.transport).toBe(false)
   })
+  it('takes the reason from the cause the runtime attaches (the CodedError JSON)', () => {
+    const why = { key: 'kubernetes.error.changed', params: { kind: 'deployment', name: 'web' }, text: 'deployment web changed' }
+    const e = parseWailsError(Object.assign(new Error('conflict: deployment web changed'), { cause: { code: 'conflict', detail: 'deployment web changed', why } }))
+    expect(e.code).toBe('conflict')
+    expect(e.detail).toBe('deployment web changed')
+    expect(e.transport).toBe(false)
+    expect(e.why).toEqual(why)
+  })
+  it('a text-only reason is a reason; a malformed one is ignored', () => {
+    const ok = parseWailsError(Object.assign(new Error('conflict: x'), { cause: { code: 'conflict', why: { text: 'x' } } }))
+    expect(ok.why).toEqual({ text: 'x' })
+    for (const why of [{ key: 'k' }, { text: 1 }, { text: 'x', key: 2 }, { text: 'x', params: { a: 1 } }, { text: 'x', params: 'p' }, 'why', null]) {
+      const e = parseWailsError(Object.assign(new Error('conflict: x'), { cause: { code: 'conflict', why } }))
+      expect(e.why).toBeUndefined()
+      expect(e.detail).toBe('x')
+    }
+    expect(parseWailsError(Object.assign(new Error('conflict: x'), { cause: 'text' })).why).toBeUndefined()
+  })
+  it('a transport failure stays one whatever its cause says', () => {
+    const e = parseWailsError(Object.assign(new Error('Call to method failed'), { cause: { why: { text: 'x' } } }))
+    expect(e.transport).toBe(true)
+    expect(e.why).toBeUndefined()
+  })
   it('a message that is not a coded error is a transport failure', () => {
     const e = parseWailsError(new Error('Call to method failed: runtime not ready'))
     expect(e.transport).toBe(true)
@@ -54,6 +77,17 @@ describe('httpClient', () => {
     expect(url).toBe('/api/SelectTarget')
     expect((init.headers as Record<string, string>).Authorization).toBe('Bearer tok')
     expect(JSON.parse(init.body as string)).toEqual({ provider: 'kubernetes', id: 'x' })
+  })
+
+  it('an error answer carries its reason', async () => {
+    const why = { key: 'api.configChanged', params: { target: 'prod' }, text: 'the configuration of prod changed' }
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ code: 'conflict', detail: why.text, why }), { status: 400, headers: { 'content-type': 'application/json' } })))
+    const err = await httpClient.selectTarget('kubernetes', 'x').catch((e) => e)
+    expect(err.code).toBe('conflict')
+    expect(err.why).toEqual(why)
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ code: 'conflict', detail: 'd', why: { key: 'k' } }), { status: 400, headers: { 'content-type': 'application/json' } })))
+    const bad = await httpClient.selectTarget('kubernetes', 'x').catch((e) => e)
+    expect(bad.why).toBeUndefined()
   })
 
   it('a failed fetch is a transport ApiError', async () => {

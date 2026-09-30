@@ -3,6 +3,7 @@ import { ApiError, type Client } from '../api/client'
 import type { LogQuery, Ref } from '../api/types'
 import { append, EMPTY_WINDOW, entryChars, Ingest, MAX_LOG_CHARS, MAX_LOG_LINES, trim, type LogEntry, type Window } from './buffer'
 import { NdjsonDecoder, type Frame } from './ndjson'
+import { errorDetail } from '../errors'
 
 /** Coalescing window: received lines are applied at most this often. */
 export const LOG_FLUSH_MS = 80
@@ -258,7 +259,7 @@ export function useLogStream({ client, ref, query, paused, frozen }: Options) {
         if (!live || (ac.signal.aborted && ended)) return
         ac.abort() // a stream that cannot be read (a broken frame) must not stay open
         flush()
-        if (e instanceof ApiError) setStatus({ phase: e.code === 'gone' ? 'gone' : 'error', cls: e.code, message: e.detail })
+        if (e instanceof ApiError) setStatus({ phase: e.code === 'gone' ? 'gone' : 'error', cls: e.code, message: e.why ? errorDetail(e) : e.detail })
         else if (e instanceof SyntaxError || (e instanceof Error && e.message.includes('frame'))) setStatus((st) => ({ ...st, phase: 'error', message: e.message }))
         else setStatus((st) => ({ ...st, phase: ended ? st.phase : 'disconnected', message: e instanceof Error ? e.message : String(e) }))
       }

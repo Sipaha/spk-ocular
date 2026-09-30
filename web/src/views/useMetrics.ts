@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type { Client } from '../api/client'
 import type { MetricsView, Row, Usage } from '../api/types'
+import { errorDetail } from '../errors'
 
 export const METRICS_INTERVAL_MS = 15_000
 export const METRICS_ABSENT_RETRY_MS = 120_000
@@ -165,7 +166,7 @@ export function useMetrics(client: Client, viewId: string | null, enabled: boole
         // id and a new effect.)
         values.clear()
         shown = null
-        const message = (e as { detail?: string }).detail || (e instanceof Error ? e.message : String(e))
+        const message = errorDetail(e)
         setState({ viewId, m: { status: 'unavailable', message, values: {} } })
       } finally {
         if (inFlight === ac) inFlight = null

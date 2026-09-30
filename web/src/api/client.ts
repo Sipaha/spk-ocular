@@ -1,6 +1,6 @@
 import { Call, Events } from '@wailsio/runtime'
 import type { ActionParams, ActionPlan, ActionResult, ApiEvent, AppInfo, EditDoc, EditPlan, EditPrepareRequest, EditResult, EditRunRequest, EventType, ExecInfo,
-  KindsView, LogInfo, LogQuery, LogStreamInfo, MetricsView, Page, Query, RecentObject, Ref, Resource, ScopesView, TargetsView, TerminalInfo, TerminalRequest, ViewInfo, ForwardInfo, StartForwardRequest, Tunnel, Value, ValueEditRequest, ValueList, ValuePlan, ValueResult, ValueRunRequest } from './types'
+  KindsView, LogInfo, Message, LogQuery, LogStreamInfo, MetricsView, Page, Query, RecentObject, Ref, Resource, ScopesView, TargetsView, TerminalInfo, TerminalRequest, ViewInfo, ForwardInfo, StartForwardRequest, Tunnel, Value, ValueEditRequest, ValueList, ValuePlan, ValueResult, ValueRunRequest } from './types'
 
 export class ApiError extends Error {
   constructor(
@@ -8,6 +8,8 @@ export class ApiError extends Error {
     public detail: string,
     /** No coded answer came back (the connection failed, a bare HTTP status): whether the server acted is not known. */
     public transport = false,
+    /** The detail as a sentence by key (the UI says it in its language). */
+    public why?: Message,
   ) {
     super(detail ? `${code}: ${detail}` : code)
   }
@@ -108,8 +110,8 @@ async function post<T>(method: string, body: unknown, signal?: AbortSignal): Pro
   }
   const isJSON = r.headers.get('content-type')?.includes('application/json')
   if (!r.ok) {
-    const e = isJSON ? ((await r.json().catch(() => null)) as { code?: string; detail?: string } | null) : null
-    if (e?.code) throw new ApiError(e.code, e.detail ?? '')
+    const e = isJSON ? ((await r.json().catch(() => null)) as { code?: string; detail?: string; why?: unknown } | null) : null
+    if (e?.code) throw new ApiError(e.code, e.detail ?? '', false, asMessage(e.why))
     throw new ApiError(CodeInternal, `HTTP ${r.status}`, true)
   }
   return (isJSON ? await r.json() : undefined) as T
@@ -185,7 +187,20 @@ export function parseWailsError(err: unknown): ApiError {
   const i = msg.indexOf(': ')
   const code = i < 0 ? msg : msg.slice(0, i)
   if (!/^[a-z][a-z_]*$/.test(code)) return new ApiError(CodeInternal, msg, true)
-  return new ApiError(code, i < 0 ? '' : msg.slice(i + 2))
+  // The runtime puts the error's JSON (CodedError) on cause: its reason.
+  const cause = (err as { cause?: unknown })?.cause
+  const why = cause && typeof cause === 'object' ? asMessage((cause as { why?: unknown }).why) : undefined
+  return new ApiError(code, i < 0 ? '' : msg.slice(i + 2), false, why)
+}
+
+/** v as a provider's sentence if it has that shape (text; key and string params optional), else undefined. */
+export function asMessage(v: unknown): Message | undefined {
+  if (!v || typeof v !== 'object') return undefined
+  const m = v as { key?: unknown; params?: unknown; text?: unknown }
+  if (typeof m.text !== 'string') return undefined
+  if (m.key !== undefined && typeof m.key !== 'string') return undefined
+  if (m.params !== undefined && (!m.params || typeof m.params !== 'object' || Object.values(m.params).some((x) => typeof x !== 'string'))) return undefined
+  return m as Message
 }
 
 const FQN = 'github.com/spk/spk-ocular/internal/api/transport.API.'

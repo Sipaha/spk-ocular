@@ -14,6 +14,7 @@ import { ValuesSection } from '../values/ValuesSection'
 import { useView } from '../views/useView'
 import type { ViewHub } from '../views/viewSync'
 import { HealthDot, ResourceTable, healthText } from './ResourceTable'
+import { errorDetail } from '../errors'
 
 const YamlView = lazy(() => import('./YamlView'))
 
@@ -51,7 +52,6 @@ interface Editing {
 }
 
 const toolBtn = 'rounded-md border border-line px-2 py-0.5 text-xs text-fg-muted hover:bg-hover hover:text-fg disabled:pointer-events-none disabled:opacity-50'
-const errDetail = (e: unknown) => (e instanceof ApiError ? e.detail || e.code : e instanceof Error ? e.message : String(e))
 
 type Tab = 'details' | 'yaml'
 
@@ -142,7 +142,7 @@ export function ResourceDrawer({ client, hub, target, subject, onClose, hasLogs,
         setEdit({ key: k, doc, text: doc.text })
         setEditLoad(null)
       },
-      (e) => keyRef.current === k && setEditLoad({ key: k, error: t('edit.loadFailed', { class: classLabel(e instanceof ApiError ? e.code : 'internal'), detail: errDetail(e) }) }),
+      (e) => keyRef.current === k && setEditLoad({ key: k, error: t('edit.loadFailed', { class: classLabel(e instanceof ApiError ? e.code : 'internal'), detail: errorDetail(e) }) }),
     )
   }
   const review = () => {

@@ -6,6 +6,7 @@ import { classLabel, messageText, t } from '../i18n'
 import { refTitle } from '../refs'
 import { useScopeWords } from '../scopeNames'
 import { asText, fromBase64, toBase64, typedBytes, utf8, validKey } from './bytes'
+import { errorDetail } from '../errors'
 
 /** What the dialog does: set a key's value (a new key without key) or delete a key. */
 export interface ValueDialogMode {
@@ -30,7 +31,6 @@ interface Props {
 const btn = 'rounded-md px-3 py-1 outline-none focus:ring-2 focus:ring-accent focus:ring-offset-2 focus:ring-offset-panel disabled:opacity-50'
 const smallBtn = 'rounded-md border border-line px-2 py-0.5 text-xs text-fg-muted hover:bg-hover hover:text-fg disabled:opacity-50'
 const codeOf = (e: unknown) => (e instanceof ApiError ? e.code : 'internal')
-const detailOf = (e: unknown) => (e instanceof ApiError ? e.detail || e.code : e instanceof Error ? e.message : String(e))
 
 /** The draft's value as the shown one gives it. */
 const draftOf = (v: Value | undefined) => v?.value ?? ''
@@ -142,7 +142,7 @@ export function ValueDialog({ client, subject, list: listed, mode, shown, revisi
         (e) => {
           if (!live.current) return
           setLoading(false)
-          setNote(t('values.readFailed', { class: classLabel(codeOf(e)), detail: detailOf(e) }))
+          setNote(t('values.readFailed', { class: classLabel(codeOf(e)), detail: errorDetail(e) }))
         },
       )
   }
@@ -292,9 +292,9 @@ type Outcome = { type: 'prepareFailed' | 'conflict' | 'unknown' | 'failed'; text
 function outcomeOf(e: unknown): Outcome {
   const code = codeOf(e)
   // No coded answer (the connection failed): the write may have been applied.
-  if (code === 'unknown' || !(e instanceof ApiError) || e.transport) return { type: 'unknown', text: `${t('edit.unknown')} ${detailOf(e)}` }
-  if (code === 'conflict') return { type: 'conflict', text: t('edit.conflict', { detail: detailOf(e) }) }
-  return { type: 'failed', text: t('edit.failed', { class: classLabel(code), detail: detailOf(e) }) }
+  if (code === 'unknown' || !(e instanceof ApiError) || e.transport) return { type: 'unknown', text: `${t('edit.unknown')} ${errorDetail(e)}` }
+  if (code === 'conflict') return { type: 'conflict', text: t('edit.conflict', { detail: errorDetail(e) }) }
+  return { type: 'failed', text: t('edit.failed', { class: classLabel(code), detail: errorDetail(e) }) }
 }
 
 /**
@@ -337,7 +337,7 @@ function ValueReview({ client, req, kindTitle, title, onBack, onDone }: { client
       (e) => {
         if (!live.current || g !== gen.current) return
         setBusy(null)
-        setOutcome({ type: 'prepareFailed', text: t('edit.prepareFailed', { class: classLabel(codeOf(e)), detail: detailOf(e) }) })
+        setOutcome({ type: 'prepareFailed', text: t('edit.prepareFailed', { class: classLabel(codeOf(e)), detail: errorDetail(e) }) })
       },
     )
   }

@@ -1,6 +1,6 @@
 import { act, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ApiError } from '../api/client'
 import type { ActionDescriptor, ActionParams, ActionPlan, ActionResult, Ref } from '../api/types'
 import { initialState, useStore } from '../store'
@@ -42,8 +42,8 @@ function setup(action: ActionDescriptor, plan: (p: ActionParams) => ActionPlan |
   const f = fakeClient([k8s('prod')])
   f.client.prepareAction = vi.fn(async (_r: Ref, _a: string, p: ActionParams) => plan(p))
   const onClose = vi.fn()
-  render(<ActionDialog client={f.client} req={{ ref, action, kindTitle: 'Deployments' }} onClose={onClose} runTimeoutMs={timeout} />)
-  return { f, onClose, dialog: screen.getByRole('dialog') }
+  const { unmount } = render(<ActionDialog client={f.client} req={{ ref, action, kindTitle: 'Deployments' }} onClose={onClose} runTimeoutMs={timeout} />)
+  return { f, onClose, unmount, dialog: screen.getByRole('dialog') }
 }
 
 describe('ActionDialog', () => {
@@ -270,6 +270,61 @@ describe('ActionDialog', () => {
     await userEvent.click(await within(dialog).findByRole('button', { name: 'Restart' }))
     expect(await within(dialog).findByRole('alert')).toHaveTextContent('No answer within 0 s')
     expect(within(dialog).getByRole('button', { name: 'Close' })).toBeEnabled()
+  })
+
+  describe("in the UI's language (by key)", () => {
+    const done = { key: 'kubernetes.done.restart', params: { kind: 'deployment', name: 'api' }, text: 'deployment api: restart requested' }
+    const changed = { key: 'kubernetes.error.changed', params: { kind: 'deployment', name: 'api' }, text: 'deployment api changed since the action was reviewed; review it again' }
+    beforeEach(() => setLanguage('ru'))
+    afterEach(() => setLanguage('en'))
+
+    it('the notice of a success', async () => {
+      const { f, dialog, onClose } = setup(restart)
+      f.client.runAction = vi.fn(async () => ({ message: done }))
+      await userEvent.click(await within(dialog).findByRole('button', { name: 'Перезапустить' }))
+      await waitFor(() => expect(onClose).toHaveBeenCalled())
+      expect(useStore.getState().notice).toBe('deployment api: перезапуск запрошен')
+    })
+
+    it('a late success and a late refusal', async () => {
+      const first = setup(restart, undefined, 50)
+      const run = deferred<ActionResult>()
+      first.f.client.runAction = vi.fn(() => run.promise)
+      await userEvent.click(await within(first.dialog).findByRole('button', { name: 'Перезапустить' }))
+      await within(first.dialog).findByRole('alert')
+      await act(async () => run.resolve({ message: done }))
+      expect(within(first.dialog).getByRole('status')).toHaveTextContent('deployment api: перезапуск запрошен')
+      expect(useStore.getState().notice).toBe('deployment api: перезапуск запрошен')
+      first.unmount()
+
+      const second = setup(restart, undefined, 50)
+      const late = deferred<ActionResult>()
+      second.f.client.runAction = vi.fn(() => late.promise)
+      await userEvent.click(await within(second.dialog).findByRole('button', { name: 'Перезапустить' }))
+      await within(second.dialog).findByRole('alert')
+      await act(async () => late.reject(new ApiError('conflict', changed.text, false, changed)))
+      expect(within(second.dialog).getByRole('alert')).toHaveTextContent('deployment api изменился после просмотра — посмотрите снова')
+    })
+
+    it('a conflict says its reason; a server text stays as it is', async () => {
+      const { f, dialog } = setup(restart)
+      f.client.runAction = vi.fn(async () => {
+        throw new ApiError('conflict', changed.text, false, changed)
+      })
+      await userEvent.click(await within(dialog).findByRole('button', { name: 'Перезапустить' }))
+      const alert = await within(dialog).findByRole('alert')
+      expect(alert).toHaveTextContent('deployment api изменился после просмотра — посмотрите снова')
+      expect(alert).not.toHaveTextContent('review it again')
+    })
+
+    it('a lost connection stays "unknown" whatever reason it carries', async () => {
+      const { f, dialog } = setup(del)
+      f.client.runAction = vi.fn(async () => {
+        throw new ApiError('conflict', 'x', true, changed)
+      })
+      await userEvent.click(await within(dialog).findByRole('button', { name: 'Удалить' }))
+      expect(await within(dialog).findByRole('alert')).toHaveTextContent('неизвест')
+    })
   })
 
   describe('an answer after the timeout', () => {
