@@ -76,6 +76,9 @@ type KindDescriptor struct {
 	Forward bool `json:"forward,omitempty"`
 	// Actions objects of this kind offer (the session is an Actioner).
 	Actions []ActionDescriptor `json:"actions,omitempty"`
+	// Editable: objects of this kind can be edited as text (the session is
+	// an Editor).
+	Editable bool `json:"editable,omitempty"`
 	// Aliases are short names of the kind in palette commands (":po"),
 	// besides its id and title.
 	Aliases []string `json:"aliases,omitempty"`
