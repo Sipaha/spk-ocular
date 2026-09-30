@@ -83,3 +83,34 @@ func TestEveryDrainPodsReasonHasItsRunForm(t *testing.T) {
 		assert.Equal(t, m.Params, n.Params)
 	}
 }
+
+// Every action a kind offers says its result by key: write builds the key
+// from the action's ID ("done."+action), and msg panics on a key without
+// a text.
+func TestEveryActionHasItsDoneText(t *testing.T) {
+	acts := discoveredActions(apiResource{Group: "batch", Version: "v1", Resource: "cronjobs", Namespaced: true, Verbs: []string{"get", "patch", "delete"}})
+	for _, as := range kindActions {
+		acts = append(acts, as...)
+	}
+	ids := map[string]bool{}
+	for _, a := range acts {
+		ids[a.ID] = true
+		_, ok := messageTexts["done."+a.ID]
+		assert.True(t, ok, "no done.%s", a.ID)
+	}
+	// Every action write and the drain, run paths handle is enumerated.
+	assert.Len(t, ids, 9)
+	for _, id := range []string{"restart", "scale", "delete", "cordon", "uncordon", "drain", "suspend", "resume", "run"} {
+		assert.True(t, ids[id], id)
+	}
+}
+
+// A reason without its "nothing was written" form is said as text rather
+// than panicking in the run.
+func TestNotWrittenOfAnUnknownReasonIsText(t *testing.T) {
+	var n core.Message
+	require.NotPanics(t, func() {
+		n = notWritten(core.Message{Key: ProviderID + ".drain.other", Text: "the pods are elsewhere", Params: map[string]string{"x": "1"}})
+	})
+	assert.Equal(t, core.Message{Text: "the pods are elsewhere; nothing was written"}, n)
+}

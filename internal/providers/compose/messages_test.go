@@ -9,6 +9,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/spk/spk-ocular/internal/core"
 )
 
 // Every provider text has its Russian in the UI (providerTexts), with the
@@ -42,4 +44,16 @@ func TestTheUIsTranslationsCoverEveryMessage(t *testing.T) {
 func TestMessageParamsAreNotRescanned(t *testing.T) {
 	m := msg("act.stop", "name", "{signal}", "signal", "SIGTERM", "timeout", "10")
 	assert.Contains(t, m.Text, "{signal}")
+}
+
+// Every action of every kind says its result by key: the run builds the
+// key from the action's ID ("done."+action), and msg panics on a key
+// without a text.
+func TestEveryActionHasItsDoneText(t *testing.T) {
+	for _, acts := range [][]core.ActionDescriptor{containerKindActions, serviceKindActions} {
+		for _, a := range acts {
+			_, ok := messageTexts["done."+a.ID]
+			assert.True(t, ok, "no done.%s", a.ID)
+		}
+	}
 }

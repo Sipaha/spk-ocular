@@ -775,9 +775,13 @@ func stopWhy(ctx context.Context) core.Message {
 func ptr[T any](v T) *T { return &v }
 
 // notWritten is why (a reason the node's pods cannot be drained) said at
-// a run: nothing was written.
+// a run: nothing was written. A reason without its run form is said as
+// text: a run never panics over a missing sentence.
 func notWritten(why core.Message) core.Message {
 	key := strings.TrimPrefix(why.Key, ProviderID+".") + "NotWritten"
+	if _, ok := messageTexts[key]; !ok {
+		return core.Message{Text: why.Text + "; nothing was written"}
+	}
 	kv := make([]any, 0, 2*len(why.Params))
 	for k, v := range why.Params {
 		kv = append(kv, k, v)

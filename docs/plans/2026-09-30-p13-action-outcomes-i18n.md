@@ -207,9 +207,15 @@ Wails кладёт JSON самой ошибки). UI показывает при
 - P3-1 — `msg` паникует на неизвестном ключе, а два ключа строятся во время работы:
   `compose/actions.go` `msg("done."+action)` — уже после записи в Docker Engine; `notWritten` в
   `kubernetes/drain.go`. Нужен тест «у каждого действия compose/`done.`+id kubernetes есть
-  текст» и запасной текст без ключа в `notWritten` вместо паники.
+  текст» и запасной текст без ключа в `notWritten` вместо паники. ✅ Исправлено:
+  `TestEveryActionHasItsDoneText` в обоих провайдерах (kubernetes перечисляет `kindActions` и
+  действия CronJob из `discoveredActions`, проверяет полноту набора из 9 id); `notWritten` без
+  формы «nothing was written» отдаёт текст без ключа (`TestNotWrittenOfAnUnknownReasonIsText`).
+  Проверено мутацией: удалённый `done.suspend`/`done.stop` роняет тест, на старом коде
+  `notWritten` паниковал.
 - P3-2 — нет поведенческого теста `drain.podsUnreadableNotWritten` (список pod-ов не читается
-  на Run).
+  на Run). ✅ Исправлено: подтест «the pods unreadable» в `TestADrainNotMatchingItsPlanWritesNothing`
+  (ключ, причина в параметре, ни одной записи); мутация «`*why` вместо `notWritten`» роняет его.
 - P3-3 — `Object.hasOwn` (ES2022) в `messageText`/`t()` — оставить, пока цель сборки не
   понижена (заметка).
 - P3-4 — в русских `done.*` английский вид в единственном числе («deployment web: …»), `done.drain`

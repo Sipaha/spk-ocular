@@ -18,6 +18,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/dynamic"
 	dynamicfake "k8s.io/client-go/dynamic/fake"
+	k8stesting "k8s.io/client-go/testing"
 
 	"github.com/spk/spk-ocular/internal/core"
 	"github.com/spk/spk-ocular/internal/provider"
@@ -429,6 +430,20 @@ func TestADrainNotMatchingItsPlanWritesNothing(t *testing.T) {
 		}
 		_, err := runDrainPlan(s, plan)
 		assertSaid(t, err, provider.ClassConflict, "drain.tooManyNotWritten")
+		assert.Equal(t, 0, w.patches)
+		assert.Empty(t, w.calls())
+	})
+	t.Run("the pods unreadable", func(t *testing.T) {
+		s, c, w := runSession(t, twoPods()...)
+		plan := drainPlan(t, s)
+		c.PrependReactor("list", "pods", func(k8stesting.Action) (bool, kruntime.Object, error) {
+			return true, nil, apierrors.NewForbidden(schema.GroupResource{Resource: "pods"}, "", errors.New("rbac"))
+		})
+		_, err := runDrainPlan(s, plan)
+		assertSaid(t, err, provider.ClassConflict, "drain.podsUnreadableNotWritten")
+		var pe *provider.Error
+		require.ErrorAs(t, err, &pe)
+		assert.Contains(t, pe.Why.Params["reason"], "rbac")
 		assert.Equal(t, 0, w.patches)
 		assert.Empty(t, w.calls())
 	})
