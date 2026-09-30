@@ -32,6 +32,7 @@ var messageTexts = map[string]string{
 	"level.container":                 "Container",
 	"exec.noRunning":                  "The service has no running containers",
 	"exec.notRunning":                 "The container is {state}",
+	"exec.sizeNotSet":                 "The terminal size ({cols}×{rows}) could not be set in the container; resizing the window sets it.",
 }
 
 // msg builds the message key with params given as name, value pairs.

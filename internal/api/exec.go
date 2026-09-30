@@ -164,6 +164,16 @@ func (s *Service) ExecInfo(ctx context.Context, ref core.Ref) (core.ExecInfo, er
 	if err != nil {
 		return core.ExecInfo{}, fromProvider(err)
 	}
+	// Lists, never null on the wire (a provider without a level leaves it
+	// nil).
+	if info.Instances == nil {
+		info.Instances = []core.ExecInstance{}
+	}
+	for i := range info.Instances {
+		if info.Instances[i].Channels == nil {
+			info.Instances[i].Channels = []core.ExecChannel{}
+		}
+	}
 	return info, nil
 }
 

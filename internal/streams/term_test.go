@@ -19,6 +19,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/spk/spk-ocular/internal/core"
 	"github.com/spk/spk-ocular/internal/provider"
 )
 
@@ -235,6 +236,25 @@ func TestTermEchoesThenExitsInOrder(t *testing.T) {
 	assert.InDelta(t, len("hello exit 3\r"), iacks[len(iacks)-1]["n"], 0)
 	require.Eventually(t, func() bool { return ft.closed.Load() == 1 }, 5*time.Second, 10*time.Millisecond)
 	assert.Equal(t, 0, f.reg.Count(KindTerm))
+}
+
+// A provider's notice about the terminal reaches the page as a control
+// message, apart from the output.
+func TestTermNoticeReachesThePage(t *testing.T) {
+	f := newTermFixture(t, fastTimings)
+	ft := &fakeTerm{run: func(_ context.Context, tm provider.Terminal) (provider.ExitStatus, error) {
+		tm.Notice(core.Message{Key: "p.sizeNotSet", Text: "the size could not be set"})
+		_, _ = io.WriteString(tm.Stdout, "out")
+		return provider.ExitStatus{Code: 0, Known: true}, nil
+	}}
+	id, err := f.reg.AddTerm("term", ft, provider.TermSize{Cols: 80, Rows: 24})
+	require.NoError(t, err)
+	cl := newClient(f.dial(t, id))
+	assert.Equal(t, websocket.StatusNormalClosure, cl.waitClosed(t))
+	n := cl.controls("notice")
+	require.Len(t, n, 1)
+	assert.Equal(t, map[string]any{"key": "p.sizeNotSet", "text": "the size could not be set"}, n[0]["message"])
+	assert.Equal(t, "out", cl.output())
 }
 
 func TestTermResizeIsLatestWinsAndNeverBlocksTheReader(t *testing.T) {

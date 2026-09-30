@@ -153,6 +153,16 @@ describe('TermConnection', () => {
     expect(ws.closed).toBe(1000)
   })
 
+  it('passes a notice about the terminal to the sink; a malformed one is ignored', () => {
+    const notices: unknown[] = []
+    let ws!: FakeWS
+    new TermConnection('ws://x/term/1', { output: (_, cb) => cb(), phase: () => {}, end: () => {}, notice: (m) => notices.push(m) }, (u) => (ws = new FakeWS(u)))
+    ws.open()
+    ws.ctl({ k: 'notice', message: { key: 'compose.exec.sizeNotSet', text: 'size not set' } })
+    ws.ctl({ k: 'notice', message: 'bare' })
+    expect(notices).toEqual([{ key: 'compose.exec.sizeNotSet', text: 'size not set' }])
+  })
+
   it('an abnormal close without end is a lost connection, not an exit', () => {
     const { ws, ends } = setup()
     ws.open()

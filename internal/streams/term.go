@@ -12,6 +12,7 @@ import (
 
 	"github.com/coder/websocket"
 
+	"github.com/spk/spk-ocular/internal/core"
 	"github.com/spk/spk-ocular/internal/provider"
 )
 
@@ -21,7 +22,11 @@ import (
 //
 //	page→server  {"k":"resize","cols":N,"rows":N}  {"k":"ack","n":N}  {"k":"intr"}
 //	server→page  {"k":"state","state":"connecting|running"}  {"k":"iack","n":N}
+//	             {"k":"notice","message":{key,text,params}}
 //	             {"k":"exit","code":N}  {"k":"end",...}  then close 1000
+//
+// "notice" is about the terminal, not the command's output (its size
+// could not be set, …): the page shows it apart from the output.
 //
 // Both directions are credit-based with cumulative counters (a repeated
 // counter is harmless): the server sends output only while fewer than
@@ -183,6 +188,9 @@ func (b *termBridge) run(parent context.Context, sess TermSession, revoked func(
 			Stdin:  &firstRead{r: inR, first: b.markRunning},
 			Stdout: outW,
 			Sizes:  b.sizes,
+			Notice: func(m core.Message) {
+				b.send(websocket.MessageText, mustJSON(map[string]any{"k": "notice", "message": m}))
+			},
 		})
 		runDone <- runResult{st, err}
 	}()

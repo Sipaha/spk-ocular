@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -82,12 +83,12 @@ func (s *session) ExecInfo(ctx context.Context, ref core.Ref) (core.ExecInfo, er
 		return core.ExecInfo{}, err
 	}
 	label := msg("level.container")
-	info := core.ExecInfo{InstanceLabel: &label}
+	info := core.ExecInfo{InstanceLabel: &label, Instances: []core.ExecInstance{}}
 	for _, c := range cs {
 		if !execRunnable(c) {
 			continue
 		}
-		info.Instances = append(info.Instances, core.ExecInstance{ID: c.ID, Title: containerName(c), Ready: execReady(c)})
+		info.Instances = append(info.Instances, core.ExecInstance{ID: c.ID, Title: containerName(c), Ready: execReady(c), Channels: []core.ExecChannel{}})
 		if info.DefaultInstance == "" && execReady(c) {
 			info.DefaultInstance = c.ID
 		}
@@ -269,7 +270,9 @@ func (h *execHandle) Run(ctx context.Context, t provider.Terminal) (provider.Exi
 		// ignore the one sent with the start; failing, the TTY keeps the
 		// daemon's until the next), then each change.
 		go func() {
-			_ = cl.SetInitialSize(runCtx, xid, size)
+			if err := cl.SetInitialSize(runCtx, xid, size); err != nil && runCtx.Err() == nil && t.Notice != nil {
+				t.Notice(msg("exec.sizeNotSet", "cols", strconv.Itoa(int(size.Cols)), "rows", strconv.Itoa(int(size.Rows))))
+			}
 			for {
 				sz := t.Sizes.Next()
 				if sz == nil || runCtx.Err() != nil {
@@ -295,12 +298,17 @@ func (h *execHandle) Run(ctx context.Context, t provider.Terminal) (provider.Exi
 		return provider.ExitStatus{}, nil // ended, the code not observed
 	}
 	if st.Pid == 0 && (*st.ExitCode == 126 || *st.ExitCode == 127) {
-		// never started (runc said why in the stream); a process that ran
-		// and exited 127 has a pid
+		// never started (the runtime said why in the stream); a process
+		// that ran and exited 127 has a pid. 127: not found; 126: found
+		// but could not be run (permissions, format, working directory).
+		what := fmt.Sprintf("%q", h.argv[0])
 		if h.shell {
-			return provider.ExitStatus{}, &provider.Error{Class: provider.ClassInvalid, Message: "the container has no sh: run a command instead"}
+			what = "the shell"
+			if *st.ExitCode == 127 {
+				return provider.ExitStatus{}, &provider.Error{Class: provider.ClassInvalid, Message: "the container has no sh: run a command instead"}
+			}
 		}
-		return provider.ExitStatus{}, &provider.Error{Class: provider.ClassInvalid, Message: fmt.Sprintf("%q could not be started in the container", h.argv[0])}
+		return provider.ExitStatus{}, &provider.Error{Class: provider.ClassInvalid, Message: fmt.Sprintf("%s could not be started in the container (exit code %d; the reason is above)", what, *st.ExitCode)}
 	}
 	return provider.ExitStatus{Code: *st.ExitCode, Known: true}, nil
 }
@@ -308,13 +316,14 @@ func (h *execHandle) Run(ctx context.Context, t provider.Terminal) (provider.Exi
 // endOf waits briefly for exec inspect to report the command ended with a
 // code; false: not observed (still running, no code, or no answer).
 func (h *execHandle) endOf(ctx context.Context, xid string) (engine.ExecInspect, bool) {
-	deadline := time.Now().Add(execEndWait)
+	ctx, cancel := context.WithTimeout(ctx, execEndWait) // every inspect, not just between them
+	defer cancel()
 	for {
 		st, err := h.conn.cl.InspectExec(ctx, xid)
 		if err == nil && !st.Running {
 			return st, st.ExitCode != nil
 		}
-		if err != nil && engine.ClassOf(err) != provider.ClassUnavailable || time.Now().After(deadline) {
+		if err != nil && engine.ClassOf(err) != provider.ClassUnavailable || ctx.Err() != nil {
 			return engine.ExecInspect{}, false
 		}
 		select {

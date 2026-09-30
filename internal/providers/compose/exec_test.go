@@ -3,6 +3,7 @@ package compose
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"io"
 	"net/http"
 	"strings"
@@ -292,7 +293,7 @@ func TestExecCommandThatNeverStarted(t *testing.T) {
 
 	e.fe.SetExec(func(_ []string, _ bool, rw io.ReadWriter, _ <-chan [2]uint16) int {
 		_, _ = io.WriteString(rw, "exec: \"sh\": executable file not found in $PATH\r\n")
-		return enginefake.NotStarted(126)
+		return enginefake.NotStarted(127)
 	})
 	sh, err := e.s.PrepareExec(t.Context(), ctrRef(web), provider.ExecRequest{})
 	require.NoError(t, err)
@@ -300,6 +301,16 @@ func TestExecCommandThatNeverStarted(t *testing.T) {
 	_, _, err = run(t, sh, "", nil)
 	assert.Equal(t, provider.ClassInvalid, errClass(err))
 	assert.Contains(t, err.Error(), "no sh")
+
+	// 126: sh is there but could not be run — not "no sh"
+	e.fe.SetExec(func(_ []string, _ bool, rw io.ReadWriter, _ <-chan [2]uint16) int {
+		_, _ = io.WriteString(rw, "exec: \"sh\": permission denied\r\n")
+		return enginefake.NotStarted(126)
+	})
+	_, _, err = run(t, sh, "", nil)
+	assert.Equal(t, provider.ClassInvalid, errClass(err))
+	assert.NotContains(t, err.Error(), "no sh")
+	assert.Contains(t, err.Error(), "the shell could not be started")
 
 	e.fe.SetExec(func(_ []string, _ bool, _ io.ReadWriter, _ <-chan [2]uint16) int { return 127 })
 	st, _, err := run(t, sh, "", nil)
@@ -383,4 +394,89 @@ func TestExecCanceledWhileRunning(t *testing.T) {
 	case <-time.After(2 * time.Second):
 		t.Fatal("Run outlived its context")
 	}
+}
+
+// On the wire the lists are lists: a container has no channels ([]), and
+// no runnable container is an empty list, not null.
+func TestExecInfoListsAreNeverNull(t *testing.T) {
+	e := newTestEnv(t)
+	up := replica("aaaa1111", "p", "web", "1", "running")
+	down := replica("bbbb2222", "p", "db", "1", "exited")
+	e.fe.PutContainer(up)
+	e.fe.PutContainer(down)
+	info, err := e.s.ExecInfo(t.Context(), ctrRef(up))
+	require.NoError(t, err)
+	b, _ := json.Marshal(info)
+	assert.Contains(t, string(b), `"channels":[]`)
+	info, err = e.s.ExecInfo(t.Context(), ctrRef(down))
+	require.NoError(t, err)
+	b, _ = json.Marshal(info)
+	assert.Contains(t, string(b), `"instances":[]`)
+}
+
+// The end of a command is looked for within execEndWait as a whole: a
+// stalled exec inspect does not hold Run for the request timeout.
+func TestExecEndWaitBoundsAStalledInspect(t *testing.T) {
+	e := newTestEnv(t, func(c *engine.Config) { c.RequestTimeout = 30 * time.Second })
+	web := replica("aaaa1111", "p", "web", "1", "running")
+	e.fe.PutContainer(web)
+	release := make(chan struct{})
+	defer close(release)
+	e.fe.AddHook(func(_ http.ResponseWriter, _ *http.Request, p string) bool {
+		if !strings.HasPrefix(p, "/exec/") || !strings.HasSuffix(p, "/json") {
+			return false
+		}
+		<-release
+		return true
+	})
+	old := execEndWait
+	execEndWait = 300 * time.Millisecond
+	defer func() { execEndWait = old }()
+	h, err := e.s.PrepareExec(t.Context(), ctrRef(web), provider.ExecRequest{})
+	require.NoError(t, err)
+	defer h.Close()
+	t0 := time.Now()
+	st, _, err := run(t, h, "exit 0\n", nil)
+	require.NoError(t, err)
+	assert.False(t, st.Known, "the end was not observed")
+	assert.Less(t, time.Since(t0), 3*time.Second)
+}
+
+// A first size the daemon refuses is said to the page (the command runs
+// on, its output flows); the next resize sets it.
+func TestExecFirstSizeNotSetIsNoticed(t *testing.T) {
+	e := newTestEnv(t)
+	web := replica("aaaa1111", "p", "web", "1", "running")
+	e.fe.PutContainer(web)
+	e.fe.AddHook(func(w http.ResponseWriter, _ *http.Request, p string) bool {
+		if p != "/exec/exec1/resize" {
+			return false
+		}
+		w.WriteHeader(http.StatusForbidden)
+		return true
+	})
+	h, err := e.s.PrepareExec(t.Context(), ctrRef(web), provider.ExecRequest{})
+	require.NoError(t, err)
+	defer h.Close()
+	var mu sync.Mutex
+	var notices []core.Message
+	r, w := io.Pipe()
+	var out syncBuf
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		_, _ = h.Run(t.Context(), provider.Terminal{Stdin: r, Stdout: &out, Sizes: newSizes(provider.TermSize{Cols: 132, Rows: 40}), Notice: func(m core.Message) {
+			mu.Lock()
+			notices = append(notices, m)
+			mu.Unlock()
+		}})
+	}()
+	require.Eventually(t, func() bool { return strings.Contains(out.String(), "$ ") }, 5*time.Second, 5*time.Millisecond, "output flows")
+	require.Eventually(t, func() bool { mu.Lock(); defer mu.Unlock(); return len(notices) == 1 }, 5*time.Second, 5*time.Millisecond)
+	mu.Lock()
+	assert.Equal(t, "compose.exec.sizeNotSet", notices[0].Key)
+	assert.Equal(t, map[string]string{"cols": "132", "rows": "40"}, notices[0].Params)
+	mu.Unlock()
+	_, _ = io.WriteString(w, "exit 0\n")
+	<-done
 }

@@ -2,7 +2,10 @@
 //
 // Binary messages are terminal bytes; text messages are JSON control:
 //   page→server  {"k":"resize","cols","rows"}  {"k":"ack","n"}  {"k":"intr"}
-//   server→page  {"k":"state","state"}  {"k":"iack","n"}  {"k":"exit","code"}  {"k":"end",...}
+//   server→page  {"k":"state","state"}  {"k":"iack","n"}  {"k":"notice","message"}
+//                {"k":"exit","code"}  {"k":"end",...}
+// "notice" is about the terminal itself (its size could not be set, …), shown
+// apart from the output.
 //
 // Output credit: "ack" carries the cumulative number of output bytes the
 // terminal has *processed* (xterm's write callback), so a page that cannot
@@ -12,6 +15,8 @@
 // Ctrl+C is "intr", outside the window: the server drops input it still
 // queues (iack counts it) and writes ^C next, so it gets through even when
 // the command does not read and the window is exhausted.
+
+import type { Message } from '../api/types'
 
 export const IN_WINDOW = 256 << 10
 export const IN_CHUNK = 16 << 10
@@ -34,6 +39,8 @@ export interface TermSink {
   /** Output bytes; call done() once they are processed (credits the server). */
   output(data: Uint8Array, done: () => void): void
   phase(p: TermPhase): void
+  /** A notice about the terminal from the provider. */
+  notice?(m: Message): void
   /** The session is over (exit code first when known). */
   end(e: TermEnd): void
 }
@@ -137,7 +144,7 @@ export class TermConnection {
   }
 
   private onControl(text: string) {
-    let m: { k?: string; state?: string; n?: number; code?: number; reason?: string; class?: string; message?: string }
+    let m: { k?: string; state?: string; n?: number; code?: number; reason?: string; class?: string; message?: unknown }
     try {
       m = JSON.parse(text)
     } catch {
@@ -155,6 +162,11 @@ export class TermConnection {
         this.confirmed = m.n!
         this.pump()
         break
+      case 'notice': {
+        const msg = m.message as Message | undefined
+        if (msg && typeof msg.text === 'string') this.sink.notice?.(msg)
+        break
+      }
       case 'exit':
         if (typeof m.code === 'number') this.exitCode = m.code
         break
@@ -162,7 +174,7 @@ export class TermConnection {
         this.finish({
           reason: m.reason === 'done' || m.reason === 'gone' || m.reason === 'error' ? m.reason : 'error',
           class: m.class,
-          message: m.message,
+          message: typeof m.message === 'string' ? m.message : undefined,
         })
         break
     }

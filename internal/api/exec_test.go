@@ -54,6 +54,7 @@ func (h *echoHandle) Run(ctx context.Context, t provider.Terminal) (provider.Exi
 
 type execSession struct {
 	*fakeSession
+	info     *core.ExecInfo // nil: one pod with one container
 	mu       sync.Mutex
 	handles  []*echoHandle // prepared (the API's prototypes)
 	runs     []*echoHandle // copies that ran or were registered
@@ -61,6 +62,9 @@ type execSession struct {
 }
 
 func (e *execSession) ExecInfo(context.Context, core.Ref) (core.ExecInfo, error) {
+	if e.info != nil {
+		return *e.info, nil
+	}
 	return core.ExecInfo{Instances: []core.ExecInstance{{ID: "uid", Title: "p", Ready: true,
 		Channels: []core.ExecChannel{{ID: "app", Title: "app", Running: true}}, DefaultChannel: "app"}}, DefaultInstance: "uid"}, nil
 }
@@ -129,6 +133,26 @@ func echo(t *testing.T, c *websocket.Conn, text string) {
 }
 
 var termReq = TerminalRequest{Ref: podRef, Channel: "app", Cols: 80, Rows: 24}
+
+// A provider's nil lists go out as empty lists, never null.
+func TestExecInfoListsAreNeverNull(t *testing.T) {
+	s, k, _ := newExecService(t)
+	ctx := context.Background()
+	ref := core.Ref{Provider: "k", Target: "a", Kind: "pods", Name: "p"}
+	_, err := s.ExecInfo(ctx, ref)
+	require.NoError(t, err)
+	es := k.sessions[0]
+	es.info = &core.ExecInfo{Instances: []core.ExecInstance{{ID: "c1", Title: "c1"}}}
+	info, err := s.ExecInfo(ctx, ref)
+	require.NoError(t, err)
+	b, _ := json.Marshal(info)
+	assert.Contains(t, string(b), `"channels":[]`)
+	es.info = &core.ExecInfo{}
+	info, err = s.ExecInfo(ctx, ref)
+	require.NoError(t, err)
+	b, _ = json.Marshal(info)
+	assert.Contains(t, string(b), `"instances":[]`)
+}
 
 func TestTerminalsOutliveTheirSession(t *testing.T) {
 	ctx := context.Background()

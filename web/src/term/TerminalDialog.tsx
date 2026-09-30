@@ -27,8 +27,10 @@ export function TerminalDialog({ client, subject, onOpen, onClose }: Props) {
   useEffect(() => {
     let live = true
     client.execInfo(subject).then(
-      (i) => {
+      (raw) => {
         if (!live) return
+        // lists may come as null from an older or careless provider
+        const i: ExecInfo = { ...raw, instances: (raw.instances ?? []).map((x) => ({ ...x, channels: x.channels ?? [] })) }
         setInfo(i)
         const inst = i.instances.find((x) => x.id === i.defaultInstance) ?? i.instances[0]
         setInstance(inst?.id ?? '')

@@ -5,7 +5,7 @@ import '@xterm/xterm/css/xterm.css'
 import type { Client } from '../api/client'
 import { ApiError } from '../api/client'
 import type { TerminalInfo } from '../api/types'
-import { classLabel, t } from '../i18n'
+import { classLabel, messageText, t } from '../i18n'
 import { isShortcut } from '../keyboard'
 import { dock, type TermTab } from '../dock/store'
 import { formatArgv } from './argv'
@@ -131,6 +131,7 @@ export default function TerminalView({ client, tab, active, mode }: Props) {
       const conn = new TermConnection(`${base}/term/${encodeURIComponent(info.streamId)}`, {
         output: (data, done) => (gen === genRef.current ? term.write(data, done) : done()),
         phase: (p) => gen === genRef.current && setPhase(p),
+        notice: (m) => gen === genRef.current && setNotice(messageText(m)),
         end: (e) => {
           if (gen !== genRef.current) return
           setEnded(e)

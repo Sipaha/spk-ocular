@@ -53,6 +53,10 @@ type Terminal struct {
 	Stdin  io.Reader
 	Stdout io.Writer
 	Sizes  TermSizes
+	// Notice tells the page something about the terminal itself (not the
+	// command's output), e.g. that its size could not be set; nil: nobody
+	// listens. It does not block for long.
+	Notice func(core.Message)
 }
 
 type TermSize struct {

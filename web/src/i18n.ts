@@ -635,6 +635,7 @@ const providerTexts: Partial<Record<Language, Record<string, string>>> = {
     'compose.level.container': 'Контейнер',
     'compose.exec.noRunning': 'У сервиса нет запущенных контейнеров',
     'compose.exec.notRunning': 'Контейнер в состоянии {state}',
+    'compose.exec.sizeNotSet': 'Не удалось задать размер терминала ({cols}×{rows}) в контейнере; изменение размера окна задаст его.',
     'kubernetes.scope.singular': 'Namespace',
     'kubernetes.scope.plural': 'namespaces',
     'kubernetes.scope.all': 'Все namespaces',
