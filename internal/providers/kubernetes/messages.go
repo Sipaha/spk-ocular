@@ -104,6 +104,8 @@ var messageTexts = map[string]string{
 	"drain.why.keepsChanging":    "the pod keeps changing; try again",
 	"drain.why.timeUp":           "not started: the run's time ran out",
 	"drain.why.cancelled":        "not started: the run was cancelled",
+	"drain.why.nodeGone":         "the node no longer exists",
+	"drain.why.planChanged":      "the node or its pods changed after the review; review again",
 	"drain.pdbUnchecked":         "PodDisruptionBudgets were not checked (not all could be read in time); the server still consults them at each eviction.",
 	"edit.local":                 "Not checked by the server (a dry run of this resource is not proven to be safe): the result is computed locally.",
 	"edit.noDryRunWebhook":       "The server could not check the edit without writing it (an admission webhook does not support dry run): the result is computed locally.",

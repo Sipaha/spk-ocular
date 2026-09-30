@@ -323,6 +323,7 @@ func TestAFailedCordonEvictsNothing(t *testing.T) {
 	}{
 		{"refused", apierrors.NewForbidden(schema.GroupResource{Resource: "nodes"}, "w1", errors.New("rbac")), core.OutcomeRefused},
 		{"unknown", apierrors.NewInternalError(errors.New("boom")), core.OutcomeUnknown},
+		{"gone", apierrors.NewNotFound(schema.GroupResource{Resource: "nodes"}, "w1"), core.OutcomeRefused},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			s, _, w := runSession(t, twoPods()...)
@@ -332,7 +333,7 @@ func TestAFailedCordonEvictsNothing(t *testing.T) {
 			require.NoError(t, err, "a write was sent: a result, not an error")
 			assert.Empty(t, w.calls())
 			assert.Equal(t, []partSeen{
-				{"w1", tc.outcome, map[core.ActionOutcome]string{core.OutcomeRefused: "kubernetes.drain.why.refused", core.OutcomeUnknown: "kubernetes.drain.why.unknown"}[tc.outcome]},
+				{"w1", tc.outcome, map[string]string{"refused": "kubernetes.drain.why.refused", "unknown": "kubernetes.drain.why.unknown", "gone": "kubernetes.drain.why.nodeGone"}[tc.name]},
 				{"a/api-1", core.OutcomeSkipped, "kubernetes.drain.why.notCordoned"},
 				{"a/web-1", core.OutcomeSkipped, "kubernetes.drain.why.notCordoned"},
 				{"a/bare", core.OutcomeSkipped, "kubernetes.drain.why.bare"},
@@ -360,20 +361,48 @@ func TestACordonRetryChecksTheWholePlanAgain(t *testing.T) {
 		assert.Equal(t, 2, w.patches)
 		assert.Equal(t, core.OutcomeDone, res.Parts[0].Outcome)
 	})
-	t.Run("a pod changed meanwhile: a conflict, nothing written", func(t *testing.T) {
+	// The cordon was sent: a result with parts, not an error (the pods
+	// named by the plan last checked), and nothing evicted.
+	t.Run("a pod changed meanwhile: the cordon refused, nothing evicted", func(t *testing.T) {
 		s, c, w := runSession(t, twoPods()...)
 		plan := drainPlan(t, s)
 		w.cordonErr = func(int) error {
 			_ = c.Tracker().Update(nodeGVR, node("w1", "uid-w1", "6", false), "")
-			_ = c.Tracker().Update(podGVR, nodePod("a", "web-1", "uid-web-1", "w1", ownedBy("ReplicaSet", "other-rs", "uid-rs2")), "a")
+			_ = c.Tracker().Update(podGVR, nodePod("a", "web-1", "uid-web-1", "w1"), "a") // its controller gone
 			return apierrors.NewConflict(schema.GroupResource{Resource: "nodes"}, "w1", errors.New("modified"))
 		}
-		_, err := runDrainPlan(s, plan)
-		var pe *provider.Error
-		require.ErrorAs(t, err, &pe)
-		assert.Equal(t, provider.ClassConflict, pe.Class)
+		res, err := runDrainPlan(s, plan)
+		require.NoError(t, err)
 		assert.Equal(t, 1, w.patches)
 		assert.Empty(t, w.calls())
+		assert.Equal(t, []partSeen{
+			{"w1", core.OutcomeRefused, "kubernetes.drain.why.planChanged"},
+			{"a/api-1", core.OutcomeSkipped, "kubernetes.drain.why.notCordoned"},
+			{"a/web-1", core.OutcomeSkipped, "kubernetes.drain.why.notCordoned"},
+			{"a/bare", core.OutcomeSkipped, "kubernetes.drain.why.bare"},
+		}, partsOf(res))
+		assert.Equal(t, core.OutcomeRefused, res.Outcome)
+	})
+	t.Run("the time runs out before the retry: the cordon refused, nothing evicted", func(t *testing.T) {
+		s, c, w := runSession(t, twoPods()...)
+		plan := drainPlan(t, s)
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+		w.cordonErr = func(int) error {
+			_ = c.Tracker().Update(nodeGVR, node("w1", "uid-w1", "6", false), "")
+			cancel()
+			return apierrors.NewConflict(schema.GroupResource{Resource: "nodes"}, "w1", errors.New("modified"))
+		}
+		res, err := s.RunAction(ctx, provider.ActionRun{Ref: plan.Where.Ref, Action: "drain", Expect: plan.Expect})
+		require.NoError(t, err)
+		assert.Equal(t, 1, w.patches)
+		assert.Empty(t, w.calls())
+		require.NotEmpty(t, res.Parts)
+		assert.Equal(t, "w1", res.Parts[0].Title)
+		assert.Equal(t, core.OutcomeRefused, res.Parts[0].Outcome)
+		for _, p := range res.Parts[1:] {
+			assert.Equal(t, core.OutcomeSkipped, p.Outcome)
+		}
 	})
 }
 

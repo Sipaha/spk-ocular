@@ -1012,6 +1012,8 @@ const providerTexts: Partial<Record<Language, Record<string, string>>> = {
     'kubernetes.drain.why.keepsChanging': 'pod всё время меняется; повторите',
     'kubernetes.drain.why.timeUp': 'не начато: время прогона истекло',
     'kubernetes.drain.why.cancelled': 'не начато: прогон отменён',
+    'kubernetes.drain.why.nodeGone': 'узла больше нет',
+    'kubernetes.drain.why.planChanged': 'узел или его pod-ы изменились после просмотра; посмотрите снова',
     'kubernetes.drain.pdbUnchecked': 'PodDisruptionBudget-ы не проверены (не все удалось прочитать вовремя); сервер всё равно учитывает их при каждом выселении.',
     'kubernetes.edit.local': 'Не проверено сервером (безопасность dry-run для этого ресурса не доказана): результат рассчитан локально.',
     'kubernetes.edit.noDryRunWebhook': 'Сервер не смог проверить правку без записи (admission webhook не поддерживает dry-run): результат рассчитан локально.',

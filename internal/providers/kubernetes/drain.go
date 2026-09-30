@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -199,38 +200,41 @@ func (s *session) prepareDrain(ctx context.Context, def *kindDef, plan core.Acti
 
 	ectx, cancel := context.WithTimeout(ctx, prepareExtrasTimeout)
 	defer cancel()
-	type rightsAnswer struct {
-		r      core.Rights
-		denied []string
-	}
-	rights := make(chan rightsAnswer, 1)
+	tally := &rightsTally{}
+	rights := make(chan struct{})
 	pdbs := make(chan []core.Message, 1)
 	go func() {
-		r, denied := s.drainRights(ectx, u, cordon, inv.evict)
-		rights <- rightsAnswer{r, denied}
+		s.drainRights(ectx, u, cordon, inv.evict, tally)
+		close(rights)
 	}()
 	go func() { pdbs <- s.drainPDBs(ectx, inv.evict) }()
 	waitRights, waitPDBs := true, true
 wait:
 	for waitRights || waitPDBs {
 		select {
-		case a := <-rights:
-			plan.Rights, waitRights = a.r, false
-			if len(a.denied) > 0 {
-				l := core.ActionList{Title: msg("drain.list.denied"), Destructive: true}
-				for _, n := range a.denied {
-					l.Items = append(l.Items, core.ActionItem{Name: n})
-				}
-				plan.Lists = append(plan.Lists, l)
-			}
+		case <-rights:
+			waitRights = false
 		case w := <-pdbs:
 			plan.Warnings, waitPDBs = append(plan.Warnings, w...), false
 		case <-ectx.Done():
 			break wait
 		}
 	}
-	if waitRights {
-		plan.Rights = core.Rights{State: core.RightsUnknown, Reason: "the check took too long"}
+	select {
+	case <-rights: // finished as the time ran out
+		waitRights = false
+	default:
+	}
+	// What is known by now: a refusal already answered stays one even when
+	// a neighbouring check is late.
+	r, denied := tally.result(!waitRights)
+	plan.Rights = r
+	if len(denied) > 0 {
+		l := core.ActionList{Title: msg("drain.list.denied"), Destructive: true}
+		for _, n := range denied {
+			l.Items = append(l.Items, core.ActionItem{Name: n})
+		}
+		plan.Lists = append(plan.Lists, l)
 	}
 	if waitPDBs {
 		plan.Warnings = append(plan.Warnings, msg("drain.pdbUnchecked"))
@@ -303,11 +307,60 @@ func (s *session) access(ctx context.Context, attrs map[string]any) (core.Rights
 	return core.RightsDenied, str(out.Object, "status", "reason")
 }
 
+// rightsTally gathers a drain's rights as their checks answer, so that
+// what is known can be read at any moment (a deadline).
+type rightsTally struct {
+	mu         sync.Mutex
+	denied     []string // pods
+	nodeDenied string
+	unknown    bool
+}
+
+func (t *rightsTally) note(st core.RightsState, pod string) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	switch st {
+	case core.RightsDenied:
+		t.denied = append(t.denied, pod)
+	case core.RightsUnknown:
+		t.unknown = true
+	}
+}
+
+// result: denied when any known check refused (with the pods refused),
+// else unknown when any was unknown or not all answered (complete false).
+func (t *rightsTally) result(complete bool) (core.Rights, []string) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	denied := slices.Clone(t.denied)
+	sort.Strings(denied)
+	switch {
+	case t.nodeDenied != "" || len(denied) > 0:
+		reason := t.nodeDenied
+		if len(denied) > 0 {
+			if reason != "" {
+				reason += "; "
+			}
+			reason += fmt.Sprintf("you may not evict %d of the pods", len(denied))
+		}
+		if !complete {
+			reason += "; not all checked in time"
+		}
+		return core.Rights{State: core.RightsDenied, Reason: reason}, denied
+	case !complete:
+		return core.Rights{State: core.RightsUnknown, Reason: "the check took too long"}, nil
+	case t.unknown:
+		return core.Rights{State: core.RightsUnknown}, nil
+	}
+	return core.Rights{State: core.RightsAllowed}, nil
+}
+
 // drainRights checks only the writes of this plan: the node's patch when
 // it is to be cordoned, and the eviction of each pod by name (a role may
 // allow it for named pods only, so a namespace-wide refusal proves
-// nothing; a namespace-wide allowance covers its pods). denied: the pods.
-func (s *session) drainRights(ctx context.Context, node *unstructured.Unstructured, cordon bool, evict []drainPod) (core.Rights, []string) {
+// nothing; a namespace-wide allowance covers its pods). Answers go to t as
+// they come.
+func (s *session) drainRights(ctx context.Context, node *unstructured.Unstructured, cordon bool, evict []drainPod, t *rightsTally) {
 	sem := make(chan struct{}, drainParallel)
 	ask := func(attrs map[string]any) (core.RightsState, string) {
 		select {
@@ -318,35 +371,22 @@ func (s *session) drainRights(ctx context.Context, node *unstructured.Unstructur
 		defer func() { <-sem }()
 		return s.access(ctx, attrs)
 	}
-	var mu sync.Mutex
-	var denied []string
-	unknown, nodeDenied := false, ""
-	note := func(st core.RightsState, pod string) {
-		mu.Lock()
-		defer mu.Unlock()
-		switch st {
-		case core.RightsDenied:
-			denied = append(denied, pod)
-		case core.RightsUnknown:
-			unknown = true
-		}
-	}
 	var wg sync.WaitGroup
 	if cordon {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
 			st, why := ask(map[string]any{"verb": "patch", "group": "", "resource": "nodes", "namespace": "", "name": node.GetName()})
-			mu.Lock()
-			defer mu.Unlock()
+			t.mu.Lock()
+			defer t.mu.Unlock()
 			switch st {
 			case core.RightsDenied:
-				nodeDenied = "you may not patch nodes"
+				t.nodeDenied = "you may not patch nodes"
 				if why != "" {
-					nodeDenied += " (" + why + ")"
+					t.nodeDenied += " (" + why + ")"
 				}
 			case core.RightsUnknown:
-				unknown = true
+				t.unknown = true
 			}
 		}()
 	}
@@ -374,28 +414,13 @@ func (s *session) drainRights(ctx context.Context, node *unstructured.Unstructur
 				go func() {
 					defer pw.Done()
 					st, _ := ask(eviction(p.u.GetName()))
-					note(st, p.name())
+					t.note(st, p.name())
 				}()
 			}
 			pw.Wait()
 		}()
 	}
 	wg.Wait()
-	sort.Strings(denied)
-	switch {
-	case nodeDenied != "" || len(denied) > 0:
-		reason := nodeDenied
-		if len(denied) > 0 {
-			if reason != "" {
-				reason += "; "
-			}
-			reason += fmt.Sprintf("you may not evict %d of the pods", len(denied))
-		}
-		return core.Rights{State: core.RightsDenied, Reason: reason}, denied
-	case unknown:
-		return core.Rights{State: core.RightsUnknown}, nil
-	}
-	return core.Rights{State: core.RightsAllowed}, nil
 }
 
 // drainPDBs forecasts PodDisruptionBudgets of the pods to evict: those
@@ -528,21 +553,37 @@ func (s *session) runDrain(ctx context.Context, def *kindDef, run provider.Actio
 	var parts []core.ActionPart
 	var inv *drainInventory
 	var node *unstructured.Unstructured
+	sent := false // a cordon went out: from here on a result with parts
+	// stopped: a cordon sent and refused whose retry cannot go on (the
+	// plan no longer holds, the node is gone, the time is up) — the
+	// cordon's part refused, the pods last checked not started.
+	stopped := func(why core.Message) {
+		parts = append(parts, core.ActionPart{ID: "cordon", Title: node.GetName(), Outcome: core.OutcomeRefused, Why: &why})
+	}
 	for attempt := 1; ; attempt++ {
-		var err error
-		node, inv, err = s.drainCheck(ctx, def, run)
-		if err != nil {
+		n, i, err := s.drainCheck(ctx, def, run)
+		if err != nil && !sent {
 			return core.ActionResult{}, err
 		}
+		if err != nil {
+			stopped(cordonStopWhy(ctx, err))
+			break
+		}
+		node, inv = n, i
 		if boolAt(node.Object, "spec", "unschedulable") {
 			break
 		}
-		if err := ctx.Err(); err != nil {
+		if err := ctx.Err(); err != nil && !sent {
 			return core.ActionResult{}, &provider.Error{Class: provider.ClassUnavailable, Message: "nothing was written: " + err.Error()}
+		} else if err != nil {
+			stopped(stopWhy(ctx))
+			break
 		}
 		part, retry, err := s.drainCordon(ctx, def, run, node, attempt)
+		sent = true
 		if err != nil {
-			return core.ActionResult{}, err
+			stopped(cordonStopWhy(ctx, err))
+			break
 		}
 		if retry {
 			continue
@@ -592,8 +633,25 @@ func (s *session) drainCheck(ctx context.Context, def *kindDef, run provider.Act
 	return node, inv, nil
 }
 
+// cordonStopWhy: why a sent cordon ended without being written — its node
+// gone, the plan no longer the reviewed one, the run's time up.
+func cordonStopWhy(ctx context.Context, err error) core.Message {
+	var pe *provider.Error
+	switch {
+	case ctx.Err() != nil:
+		return stopWhy(ctx)
+	case errors.As(err, &pe) && pe.Class == provider.ClassGone:
+		return msg("drain.why.nodeGone")
+	case errors.As(err, &pe) && pe.Class == provider.ClassConflict:
+		return msg("drain.why.planChanged")
+	case errors.As(err, &pe):
+		return msg("drain.why.refused", "detail", pe.Message)
+	}
+	return msg("drain.why.refused", "detail", shortErr(err))
+}
+
 // drainCordon writes the cordon; retry: a version-only change refused it
-// (the whole plan checked again before). An error: nothing was written.
+// (the whole plan checked again before). An error: the node is gone.
 func (s *session) drainCordon(ctx context.Context, def *kindDef, run provider.ActionRun, node *unstructured.Unstructured, attempt int) (core.ActionPart, bool, error) {
 	part := core.ActionPart{ID: "cordon", Title: node.GetName()}
 	wctx, cancel := context.WithTimeout(ctx, drainWriteTimeout)

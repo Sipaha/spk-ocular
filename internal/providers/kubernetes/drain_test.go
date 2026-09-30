@@ -381,6 +381,76 @@ func TestDrainRightsAreOnlyThoseOfItsWrites(t *testing.T) {
 	})
 }
 
+// lateDyn holds the SelfSubjectAccessReviews late() picks until the
+// caller's context ends, then answers a little later still (a cancelled
+// request unwinding) — outside the fake client's lock.
+type lateDyn struct {
+	dynamic.Interface
+	late func(attrs map[string]any) bool
+}
+
+func (d lateDyn) Resource(gvr schema.GroupVersionResource) dynamic.NamespaceableResourceInterface {
+	r := d.Interface.Resource(gvr)
+	if gvr != ssarGVR {
+		return r
+	}
+	return lateRes{r, d.late}
+}
+
+type lateRes struct {
+	dynamic.NamespaceableResourceInterface
+	late func(attrs map[string]any) bool
+}
+
+func (r lateRes) Create(ctx context.Context, u *unstructured.Unstructured, o metav1.CreateOptions, sub ...string) (*unstructured.Unstructured, error) {
+	attrs, _, _ := unstructured.NestedMap(u.Object, "spec", "resourceAttributes")
+	if r.late(attrs) {
+		<-ctx.Done()
+		time.Sleep(50 * time.Millisecond)
+		return nil, ctx.Err()
+	}
+	return r.NamespaceableResourceInterface.Create(ctx, u, o, sub...)
+}
+
+func TestADrainsKnownDenialOutlivesALateCheck(t *testing.T) {
+	old := prepareExtrasTimeout
+	prepareExtrasTimeout = 80 * time.Millisecond
+	t.Cleanup(func() { prepareExtrasTimeout = old })
+	lateSession := func(t *testing.T, decide, late func(map[string]any) bool) *session {
+		_, c := drainSession(t, workerPods()...)
+		var r ssarRules
+		r.install(c, decide)
+		s := newSession("ctx", "h", lateDyn{c, late}, false)
+		t.Cleanup(s.Close)
+		return s
+	}
+	t.Run("the node patch denied, the evictions not answered in time", func(t *testing.T) {
+		s := lateSession(t,
+			func(a map[string]any) bool { return a["resource"] != "nodes" },
+			func(a map[string]any) bool { return a["subresource"] == "eviction" })
+		plan := prepare(t, s, nodeRef("w1", ""), "drain", core.ActionParams{})
+		assert.Equal(t, core.RightsDenied, plan.Rights.State, "a known refusal is not made unknown by a late neighbour")
+		assert.Contains(t, plan.Rights.Reason, "you may not patch nodes")
+		assert.Contains(t, plan.Rights.Reason, "not all checked in time")
+	})
+	t.Run("one pod denied by name, another not answered in time", func(t *testing.T) {
+		s := lateSession(t,
+			func(a map[string]any) bool { return a["resource"] == "nodes" },
+			func(a map[string]any) bool { return a["name"] == "web-1" })
+		plan := prepare(t, s, nodeRef("w1", ""), "drain", core.ActionParams{})
+		assert.Equal(t, core.RightsDenied, plan.Rights.State)
+		assert.Contains(t, plan.Rights.Reason, "you may not evict 1 of the pods")
+		assert.Equal(t, []string{"a/api-1"}, itemsOf(listTitled(t, plan, "drain.list.denied")), "the denied pod is named")
+	})
+	t.Run("nothing denied, one check late: unknown", func(t *testing.T) {
+		s := lateSession(t,
+			func(map[string]any) bool { return true },
+			func(a map[string]any) bool { return a["subresource"] == "eviction" })
+		plan := prepare(t, s, nodeRef("w1", ""), "drain", core.ActionParams{})
+		assert.Equal(t, core.RightsUnknown, plan.Rights.State)
+	})
+}
+
 func TestDrainForecastsPodDisruptionBudgets(t *testing.T) {
 	t.Run("none allowed now, two over one pod", func(t *testing.T) {
 		objs := append(workerPods(),
