@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { ApiError, type Client } from '../api/client'
-import type { ActionChoice, ActionDescriptor, ActionParams, ActionPart, ActionPlan, ActionResult, Ref, TerminalOpen } from '../api/types'
+import type { ActionChoice, ActionDescriptor, ActionParams, ActionPart, ActionPlan, ActionResult, Message, Ref, TerminalOpen } from '../api/types'
 import { actionLabel, classLabel, messageText, t } from '../i18n'
 import { refTitle } from '../refs'
 import { useScopeWords } from '../scopeNames'
@@ -456,7 +456,7 @@ export function ActionDialog({ client, req, onClose, onTerminal, runTimeoutMs = 
           )}
 
           {choosing && !!plan?.choices?.length && (
-            <Choices choices={plan.choices} chosen={chosen} disabled={busy === 'run' || sent || (chosen === null && !!plan.unavailable)} onChoose={choose} boxRef={choicesRef} />
+            <Choices title={param?.title} choices={plan.choices} chosen={chosen} disabled={busy === 'run' || sent || (chosen === null && !!plan.unavailable)} onChoose={choose} boxRef={choicesRef} />
           )}
 
           {counted && (
@@ -607,11 +607,12 @@ export function ActionDialog({ client, req, onClose, onTerminal, runTimeoutMs = 
 const dateTime = () => new Intl.DateTimeFormat(document.documentElement.lang || undefined, { dateStyle: 'short', timeStyle: 'medium' })
 
 /** The values a choice parameter may take, newest first as the provider gives them; one that cannot be chosen says why. */
-function Choices({ choices, chosen, disabled, onChoose, boxRef }: { choices: ActionChoice[]; chosen: string | null; disabled: boolean; onChoose: (v: string) => void; boxRef: React.RefObject<HTMLDivElement | null> }) {
+function Choices({ title, choices, chosen, disabled, onChoose, boxRef }: { title?: Message; choices: ActionChoice[]; chosen: string | null; disabled: boolean; onChoose: (v: string) => void; boxRef: React.RefObject<HTMLDivElement | null> }) {
   const now = useNow(10_000)
+  const heading = title ? messageText(title) : t('action.choices')
   return (
-    <div ref={boxRef} role="radiogroup" aria-label={t('action.choices')} className="flex flex-col gap-1">
-      <h3 className="mb-0.5 text-[12px] font-semibold uppercase tracking-wider text-fg-subtle">{t('action.choices')}</h3>
+    <div ref={boxRef} role="radiogroup" aria-label={heading} className="flex flex-col gap-1">
+      <h3 className="mb-0.5 text-[12px] font-semibold uppercase tracking-wider text-fg-subtle">{heading}</h3>
       {choices.map((c) => {
         const why = c.unavailable && messageText(c.unavailable)
         return (

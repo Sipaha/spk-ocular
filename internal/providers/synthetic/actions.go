@@ -27,13 +27,13 @@ var (
 	// and leaves its helper: the generic UI's lists and parts.
 	actEvacuate = core.ActionDescriptor{ID: "evacuate", Title: "Evacuate", Destructive: true}
 	// Rollouts: undo to a revision (a choice), pause and resume.
-	actUndo   = core.ActionDescriptor{ID: "undo", Title: "Roll back", Param: &core.ActionParam{Kind: core.ParamChoice}}
+	actUndo   = core.ActionDescriptor{ID: "undo", Title: "Roll back", Param: &core.ActionParam{Kind: core.ParamChoice, Title: &core.Message{Text: "Revision"}}}
 	actPause  = core.ActionDescriptor{ID: "pause", Title: "Pause rollout"}
 	actResume = core.ActionDescriptor{ID: "resume", Title: "Resume"}
 	// actDebug adds a debugger (a pod's debug container): an image (text)
 	// and a target (choice); its terminal attaches (the echo shell).
 	actDebug = core.ActionDescriptor{
-		ID: "debug", Title: "Debug", Param: &core.ActionParam{Kind: core.ParamChoice}, NoAgents: true,
+		ID: "debug", Title: "Debug", Param: &core.ActionParam{Kind: core.ParamChoice, Title: &core.Message{Text: "Target container"}}, NoAgents: true,
 		Text: &core.ActionText{Title: core.Message{Text: "Image"}, Default: "busybox:1.36", Max: 64},
 	}
 )

@@ -81,7 +81,7 @@ test('roll back to a chosen revision: the choices, the review of each, the chang
   await row(grid, 'web').click({ button: 'right' })
   await page.getByRole('menu', { name: 'Row actions' }).getByRole('menuitem', { name: 'Roll back…' }).click()
   const dialog = page.getByRole('dialog', { name: 'Roll back web' })
-  const choices = dialog.getByRole('radiogroup', { name: 'Choose' })
+  const choices = dialog.getByRole('radiogroup', { name: 'Revision' })
   const radios = choices.getByRole('radio')
   await expect(radios).toHaveCount(3)
   await expect(radios.nth(0)).toBeDisabled() // the current template

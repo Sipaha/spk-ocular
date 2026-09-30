@@ -39,6 +39,9 @@ type ActionParam struct {
 	Kind string `json:"kind"`
 	Min  int    `json:"min"`
 	Max  int    `json:"max"`
+	// Title heads a choice in the provider's words ("Revision"); nil — the
+	// UI's generic word.
+	Title *Message `json:"title,omitempty"`
 }
 
 const (

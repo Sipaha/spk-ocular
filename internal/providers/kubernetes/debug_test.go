@@ -107,6 +107,33 @@ func TestDebugPlanOffersTheTargetsWithTheDefaultChosen(t *testing.T) {
 	assert.Equal(t, ProviderID+".debug.seesAll", plan.Effects[1].Key)
 }
 
+// A sidecar (a restartable init container) is a target whatever its state
+// — crash-looping is the usual reason to debug it; plain init and debug
+// containers are not.
+func TestDebugOffersACrashLoopingSidecar(t *testing.T) {
+	p := debugPod(map[string]any{
+		"initContainers": []any{
+			map[string]any{"name": "setup", "image": "setup:1"},
+			map[string]any{"name": "mesh", "image": "mesh:3", "restartPolicy": "Always"},
+		},
+		"ephemeralContainers": []any{map[string]any{"name": "debugger-old", "image": "busybox:1.36"}},
+	}, nil)
+	p.Object["status"].(map[string]any)["initContainerStatuses"] = []any{
+		map[string]any{"name": "setup", "state": map[string]any{"terminated": map[string]any{"reason": "Completed"}}},
+		map[string]any{"name": "mesh", "state": map[string]any{"waiting": map[string]any{"reason": "CrashLoopBackOff"}}},
+	}
+	s, _ := debugSession(t, p, nsObject(nil))
+	plan := prepareDebugPlan(t, s, "", "mesh")
+	require.Nil(t, plan.Unavailable)
+	var values []string
+	for _, c := range plan.Choices {
+		values = append(values, c.Value)
+	}
+	assert.Equal(t, []string{"app", "side", "mesh"}, values)
+	assert.Equal(t, []string{"Image: mesh:3", "State: waiting: CrashLoopBackOff"}, core.Texts(plan.Choices[2].Details))
+	assert.Equal(t, "app", *prepareDebugPlan(t, s, "", "").Params.Choice, "the default stays a regular container")
+}
+
 func msgKeys(ms []core.Message) []string {
 	out := []string{}
 	for _, m := range ms {
@@ -336,4 +363,23 @@ func TestDebugRightsAskForTheAttachToo(t *testing.T) {
 	require.Len(t, asked, 2)
 	assert.Equal(t, "patch", asked[0]["verb"])
 	assert.Equal(t, "ephemeralcontainers", asked[0]["subresource"])
+}
+
+// The terminal waits for the debugger's start by watching its pod: a user
+// who may patch and attach but not watch is told so in the plan.
+func TestDebugRightsAskForTheWatchOfThePod(t *testing.T) {
+	s, c := debugSession(t, debugPod(nil, nil), nsObject(nil))
+	var asked []map[string]any
+	c.PrependReactor("create", "selfsubjectaccessreviews", func(a k8stesting.Action) (bool, kruntime.Object, error) {
+		u := a.(k8stesting.CreateAction).GetObject().(*unstructured.Unstructured).DeepCopy()
+		ra, _, _ := unstructured.NestedMap(u.Object, "spec", "resourceAttributes")
+		asked = append(asked, ra)
+		u.Object["status"] = map[string]any{"allowed": ra["verb"] != "watch"}
+		return true, u, nil
+	})
+	plan := prepareDebugPlan(t, s, "", "")
+	assert.Equal(t, core.RightsDenied, plan.Rights.State)
+	assert.Contains(t, plan.Rights.Reason, "watch pods")
+	require.Len(t, asked, 3)
+	assert.Equal(t, map[string]any{"verb": "watch", "group": "", "resource": "pods", "namespace": "ns", "name": "web-1"}, asked[2])
 }

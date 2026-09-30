@@ -210,6 +210,8 @@ export interface ActionParam {
   kind: string
   min: number
   max: number
+  /** the provider's heading of a choice ("Revision"); else a generic word */
+  title?: Message
 }
 
 export interface ActionDescriptor {

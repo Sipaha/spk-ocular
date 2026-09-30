@@ -105,6 +105,25 @@ func TestEveryActionHasItsDoneText(t *testing.T) {
 	}
 }
 
+// A choice is headed in the provider's words (a debugger's target, a
+// revision), not the UI's generic word.
+func TestEveryChoiceHasItsTitle(t *testing.T) {
+	n := 0
+	for _, as := range kindActions {
+		for _, a := range as {
+			if a.Param == nil || a.Param.Kind != core.ParamChoice {
+				continue
+			}
+			n++
+			if assert.NotNil(t, a.Param.Title, a.ID) {
+				_, ok := messageTexts[strings.TrimPrefix(a.Param.Title.Key, ProviderID+".")]
+				assert.True(t, ok, "%s: %s", a.ID, a.Param.Title.Key)
+			}
+		}
+	}
+	assert.Equal(t, 2, n, "debug and undo")
+}
+
 // A reason without its "nothing was written" form is said as text rather
 // than panicking in the run.
 func TestNotWrittenOfAnUnknownReasonIsText(t *testing.T) {

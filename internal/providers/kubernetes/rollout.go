@@ -25,7 +25,7 @@ import (
 // ReplicaSet the Deployment controls, named by the ReplicaSet (revision
 // numbers move with every rollback).
 var (
-	actUndo  = core.ActionDescriptor{ID: "undo", Title: "Roll back", Param: &core.ActionParam{Kind: core.ParamChoice}}
+	actUndo  = core.ActionDescriptor{ID: "undo", Title: "Roll back", Param: &core.ActionParam{Kind: core.ParamChoice, Title: msgp("undo.revisions")}}
 	actPause = core.ActionDescriptor{ID: "pause", Title: "Pause rollout"}
 )
 

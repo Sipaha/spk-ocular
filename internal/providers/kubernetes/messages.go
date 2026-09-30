@@ -119,6 +119,8 @@ var messageTexts = map[string]string{
 	"done.pause":                     "{kind} {name}: rollout pause requested",
 	"done.debug":                     "{kind} {name}: debug container {container} requested",
 	"debug.image":                    "Image",
+	"debug.targets":                  "Target container",
+	"undo.revisions":                 "Revision",
 	"debug.container":                "{name}",
 	"debug.targetImage":              "Image: {image}",
 	"debug.targetState":              "State: {state}",
@@ -132,7 +134,7 @@ var messageTexts = map[string]string{
 	"debug.sees":                     "It sees the processes of container {target} and shares the pod's network.",
 	"debug.seesAll":                  "It sees the processes of all the pod's containers and shares the pod's network.",
 	"debug.stays":                    "It cannot be removed: it stays in the pod's spec until the pod is recreated. It ends when you leave its shell or close its tab (Ctrl-C and Ctrl-D are sent). After a lost connection, or with a nested shell or a program ignoring those keys, it keeps running: “Reconnect” reaches it again. An ended debugger cannot be restarted.",
-	"debug.terminal":                 "A terminal opens in it. If the image takes longer than 2 minutes to pull, the tab stops waiting: the container starts later and waits for “Reconnect”.",
+	"debug.terminal":                 "A terminal opens in it. If the image takes longer than 2 minutes to pull, or the tab is closed while it starts, the tab stops waiting: the container starts later and waits for “Reconnect” until the pod is recreated.",
 	"debug.registry":                 "The node pulls the image from its registry: in a closed network use an image the node can reach.",
 	"debug.restricted":               "Namespace {namespace} enforces the restricted Pod Security level: a debug container without a securityContext is rejected.",
 	"debug.nameTaken":                "the pod already has another container named {container}; review again",
@@ -250,4 +252,10 @@ func msg(key string, kv ...any) core.Message {
 		m.Text = core.Format(tmpl, m.Params)
 	}
 	return m
+}
+
+// msgp is msg for a field that takes a *core.Message.
+func msgp(key string, kv ...any) *core.Message {
+	m := msg(key, kv...)
+	return &m
 }

@@ -45,7 +45,7 @@ const (
 )
 
 var actDebug = core.ActionDescriptor{
-	ID: "debug", Title: "Debug", Param: &core.ActionParam{Kind: core.ParamChoice}, NoAgents: true,
+	ID: "debug", Title: "Debug", Param: &core.ActionParam{Kind: core.ParamChoice, Title: msgp("debug.targets")}, NoAgents: true,
 	Text: &core.ActionText{Title: msg("debug.image"), Default: defaultDebugImage, Max: maxDebugImage},
 }
 
@@ -150,12 +150,25 @@ func debugTargets(u *unstructured.Unstructured) ([]core.ActionChoice, string) {
 			images[str(c, "name")] = str(c, "image")
 		}
 	}
-	for _, ch := range execChannels(u) {
-		if ch.Note == ctrEphemeral || ch.Note == ctrInit {
+	// From the spec, whatever the state (a crash-looping sidecar is the
+	// usual reason to debug it): the state is only a detail.
+	states := map[string]map[string]any{}
+	for _, key := range []string{"containerStatuses", "initContainerStatuses"} {
+		for _, cs := range slice(o, "status", key) {
+			st, _ := cs["state"].(map[string]any)
+			states[key+"/"+strOf(cs, "name")] = st
+		}
+	}
+	for _, ch := range podChannels(o, "spec") {
+		key := "containerStatuses/"
+		switch ch.Note {
+		case ctrEphemeral, ctrInit:
 			continue
+		case ctrSidecar:
+			key = "initContainerStatuses/"
 		}
 		c := core.ActionChoice{Value: ch.ID, Title: msg("debug.container", "name", ch.ID),
-			Details: []core.Message{msg("debug.targetImage", "image", images[ch.ID]), msg("debug.targetState", "state", nonEmpty(ch.State, "not started"))}}
+			Details: []core.Message{msg("debug.targetImage", "image", images[ch.ID]), msg("debug.targetState", "state", nonEmpty(stateText(states[key+ch.ID]), "not started"))}}
 		out = append(out, c)
 	}
 	def := ""

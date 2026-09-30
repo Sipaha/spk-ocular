@@ -301,6 +301,11 @@ func (s *session) rights(ctx context.Context, def *kindDef, action string, u *un
 		if a.State != core.RightsAllowed {
 			return a
 		}
+		// It waits for the debugger's start by watching the pod.
+		w := s.rightsTo(ctx, "watch", map[string]any{"verb": "watch", "group": "", "resource": "pods", "namespace": u.GetNamespace(), "name": u.GetName()}, "", u)
+		if w.State != core.RightsAllowed {
+			return w
+		}
 	}
 	if action == actUndo.ID && r.State != core.RightsDenied {
 		// The revisions are read at the run as well.

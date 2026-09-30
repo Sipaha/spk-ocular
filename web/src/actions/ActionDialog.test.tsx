@@ -1,4 +1,4 @@
-import { act, render, screen, waitFor, within } from '@testing-library/react'
+import { act, cleanup, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ApiError } from '../api/client'
@@ -635,6 +635,15 @@ describe('ActionDialog', () => {
       expect(within(dialog).getByRole('button', { name: 'Roll back' })).toBeDisabled()
       await waitFor(() => expect(radios[1]).toHaveFocus())
       expect(f.client.runAction).not.toHaveBeenCalled()
+    })
+
+    it("the choices are headed by the provider's title, else by the generic word", async () => {
+      const titled: ActionDescriptor = { ...undo, param: { ...undo.param!, title: { key: 'kubernetes.undo.revisions', text: 'Revision' } } }
+      const { dialog } = setup(titled, undoPlan)
+      expect(await within(dialog).findByRole('radiogroup', { name: 'Revision' })).toHaveTextContent(/^Revision/)
+      cleanup()
+      const generic = setup(undo, undoPlan)
+      expect(await within(generic.dialog).findByRole('radiogroup', { name: 'Choose' })).toBeInTheDocument()
     })
 
     it('a choice is reviewed at once; its changes come in portions; the reviewed choice runs', async () => {
