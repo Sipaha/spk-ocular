@@ -161,7 +161,8 @@ func Allows(gs []Grant, r Request) Decision {
 			d.NoConfirm = d.NoConfirm || g.NoConfirm && r.Destructive
 		case g.Kinds == nil:
 			sawAllKinds = true
-			d.OK = d.OK || !r.Destructive && !(r.Sensitive && r.Verb == VerbEdit)
+			sensitiveEdit := r.Sensitive && r.Verb == VerbEdit
+			d.OK = d.OK || !r.Destructive && !sensitiveEdit
 		}
 	}
 	switch {
