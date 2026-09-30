@@ -20,6 +20,8 @@ P13 — итоги и отказы действий на языке интерф
 P14 — доступ агентов (Claude/Codex) через unix-сокет `$SPK_OCULAR_HOME/agent.sock` —
 `docs/plans/2026-09-30-p14-agent-access.md` (спецификация `docs/specs/2026-09-30-agent-access-design.md`).
 P15 — Deployment: откат к выбранной ревизии, пауза и возобновление выкатки — `docs/plans/2026-10-01-p15-rollout.md`.
+P16 — отладочный (ephemeral) контейнер в pod-е с attach-терминалом (`kubectl debug -it`) —
+`docs/plans/2026-10-01-p16-debug-container.md`.
 Следующий этап — из бэклога; пользователь просил не ждать его выбора: агент выбирает сам (наибольшая
 ежедневная польза на живых кластерах) и записывает почему в план.
 
@@ -124,7 +126,8 @@ P15 — Deployment: откат к выбранной ревизии, пауза 
   `ack`, подтверждения ввода `iack`, resize «последнее значение», «вешание трубки» `^C ^D` при
   закрытии), `internal/api/exec.go` (открытие, прототипы для «Подключиться заново»),
   `internal/providers/kubernetes/exec.go` (снимок соединения `conn`, fallback WS → SPDY,
-  `upgrade.go` — отменяемое рукопожатие). Клиент — `web/src/term/` (`protocol.ts`,
+  `upgrade.go` — отменяемое рукопожатие), `attach.go` (attach к отладчику: ожидание запуска
+  watch-ем pod-а, `\n` после подключения, код выхода из статуса). Клиент — `web/src/term/` (`protocol.ts`,
   `TerminalView.tsx` — ленивый xterm, `TerminalDialog.tsx`, `argv.ts`), вкладки — `web/src/dock/`.
 - Туннели: `internal/forwards` (provider-агностичный менеджер: loopback-listener-ы, лимиты,
   поколения upstream-а, счётчики, `forwards_changed`), `internal/api/forwards.go`,
@@ -139,7 +142,9 @@ P15 — Deployment: откат к выбранной ревизии, пауза 
   drain — `drain.go` (классы pod-ов, отпечатки в `Expect`, прогноз PDB, права записей, прогон
   с частями; выселение — `actionWriter.evict`); CronJob (P12, обнаруженный вид): `cronjob.go`
   (`discoveredActions` — действия по точному GR и глаголам, suspend/resume), `cronjob_run.go`
-  (Run now: имя, подписанный грант, `spentGrants`, Job как у kubectl, `actionWriter.create`). Клиент — `web/src/actions/` (`Menu`,
+  (Run now: имя, подписанный грант, `spentGrants`, Job как у kubectl, `actionWriter.create`);
+  отладчик pod-а (P16) — `debug.go` (цели, грант имени, strategic merge patch
+  `pods/ephemeralcontainers`). Клиент — `web/src/actions/` (`Menu`,
   `ActionDialog`, `ActionLists` — списки плана `ActionPlan.Lists` и части результата порциями по
   50, без усечения; итог частей — `core.PartsOutcome`: unknown > refused > skipped > done),
   меню строки и `Delete` — `ResourceTable` (`rowMenu`, `onDelete`), «Действия ▾»
@@ -329,8 +334,15 @@ P15 — Deployment: откат к выбранной ревизии, пауза 
   протокола. — `TestTermClosingDropsQueuedInputAndHangsUpAfterIt`,
   `TestTermInterruptDropsQueuedInputAndGoesFirst`, `protocol.test.ts`.
 - Запуски терминала принадлежат ему в реестре потоков (owner `term:<id>`): `ForgetTerminal`
-  завершает подключённый и отзывает неподключённый; «Подключиться заново» и «забыть» атомарны. —
-  `TestForgettingATerminalEndsItsRuns`, `TestAReopenRacingForgetLeavesNoRun`.
+  завершает подключённый и отзывает неподключённый; «Подключиться заново» и «забыть» атомарны;
+  у вкладки один запуск — «Подключиться заново» сначала кончает прежний (подключённый или
+  ожидающий) под тем же замком (два attach к отладчику делили бы его stdin). —
+  `TestForgettingATerminalEndsItsRuns`, `TestAReopenRacingForgetLeavesNoRun`,
+  `TestReopeningATerminalReplacesItsRun`.
+- Кадр `end` потока (логи, терминал) несёт `why` — фразу провайдера по ключу (`Classifier`
+  возвращает её из `CodedError.Why`), UI говорит её на своём языке (`messageText`), иначе
+  `message`. — `TestStreamErrorEndsWithItsReasonByKey`, `TestTermRunErrorEndsWithItsReasonByKey`,
+  `protocol.test.ts`, `TerminalView.test.tsx`, `LogViewer.test.tsx`.
 - `Close` провайдерских хэндлов — никогда под блокировками API: под своим мьютексом регистрировать
   через `Registry.Register`/`RegisterTerm` и вызывать `release` после разблокировки. Сброс ввода
   по `intr` вычитает только снятое с очереди (пишущийся кусок остаётся в окне). —
@@ -435,6 +447,35 @@ P15 — Deployment: откат к выбранной ревизии, пауза 
   по виду. — `rollout_test.go`, `TestKindActionUndoToARevision` (и во время выкатки),
   `TestKindActionPauseAndResume`, e2e synth «roll back…», «pause and resume…», e2e-kind «roll a
   deployment back…».
+- Текстовое значение действия (P16, `ActionDescriptor.Text`/`ActionParams.Text`): одно поле рядом
+  с `Param`; `CheckParams` — у действия без `Text` отказ, пустое/длиннее `Max` байт — отказ, при
+  прогоне обязательно. Провайдер заполняет умолчания в `plan.Params` (образ, цель): диалог берёт
+  их как выбранные — план просмотрен сразу, Enter выполняет; изменённый текст — сначала просмотр
+  (Enter в поле, «Просмотреть»), выбор цели пересобирает план с тем же текстом; текст успешного
+  прогона запоминается на target (`target_state` `actionText.<id>`, JSON-строка) и идёт в первый
+  просмотр. `ActionResult.Terminal` — UI открывает вкладку терминала (`TermOpen.attach`,
+  заголовок «контейнер · pod»); у вкладки attach нет «Открыть новый терминал» (отладчик не
+  перезапустить). — `ActionDialog.test.tsx` «a text value…», `WorkspaceActions.test.tsx`,
+  `TerminalView.test.tsx`, e2e synth «debug…».
+- Отладчик pod-а (P16, как `kubectl debug -it --image --target`): действие только для
+  пользователей (`ActionDescriptor.NoAgents`: агенты его не видят в `ListKinds`, `PrepareAction`
+  агента — отказ, редактор грантов пропускает). Цели — контейнеры pod-а (по умолчанию —
+  контейнер по умолчанию), «без цели» — при `shareProcessNamespace`. Имя `debugger-<5>` — в
+  подписанном гранте (свой доменный тег), грант расходуется до записи; запись — один strategic
+  merge PATCH `pods/<имя>/ephemeralcontainers` с uid+resourceVersion (`stdin`, `tty`,
+  `IfNotPresent`, **без** `stdinOnce`); 409 — перечтение по UID: сначала имя (наш — тот же образ,
+  цель, `stdin`+`tty` — `done`; чужой — `conflict`), затем состояние гранта и повтор (≤ 3).
+  Недоступен — только по фазе/удалению/mirror; предупреждение — только при `enforce:
+  restricted` (нечитаемый namespace — без него). Права — `patch pods/ephemeralcontainers` и
+  `create pods/attach`. Терминал — attach (`ExecRequest.Attach`, канал обязан быть ephemeral в
+  spec, запускаться ещё не обязан): Run ждёт запуска watch-ем pod-а (120 с, `Notice` с причиной
+  ожидания; `ErrImagePull`/`ImagePullBackOff`/`InvalidImageName`/`ErrImageNeverPull`,
+  завершившийся отладчик, завершающийся pod — ошибка по ключу), после подключения шлёт один `\n`
+  (приглашение выведено до attach), код выхода — из `ephemeralContainerStatuses` (≤ 10 с, иначе
+  «неизвестен»). Закрытая вкладка завершает отладчик hang-up-ом моста (^C, ^D), обрыв связи с
+  кластером — нет («Подключиться заново» снова attach). В деталях pod-а — init-, sidecar- и
+  debug-контейнеры с образами. — `debug_test.go`, `attach_test.go`, `kind_debug_test.go`
+  (`TestKindDebugClosedTabEndsTheDebugger` — через настоящий мост), e2e-kind «debug a pod…».
 - Drain (P11) — как `kubectl drain` без `--force` и без ожидания: pod-ы узла — list по
   `spec.nodeName` с пределом 500; не узнать всех (ошибка, > 500, `continue`) — `Unavailable` и в
   плане, и в прогоне (ноль записей). Без контроллера — остаются и названы (части `skipped`),
@@ -660,6 +701,12 @@ P15 — Deployment: откат к выбранной ревизии, пауза 
   в pod-е; Playwright по умолчанию гасит webServer именно так — в конфигах `gracefulShutdown: SIGTERM`.
 - **`TMPDIR` с `..` в пути** роняет `TestSaveNeedsAnAllowedOriginAndWritesUnique` (сравнение
   путей): задавать канонический абсолютный путь.
+- **`stdinOnce` ephemeral-контейнера с `tty: true` ничего не завершает** (kind, containerd,
+  измерено в P16): ни обрыв attach, ни чистый EOF stdin не доходят до shell, контейнер остаётся
+  `running`, а второй attach принимает ввод. Завершает shell только ^C, пауза, ^D (одной записью
+  ^D теряется, пока shell обрабатывает прерывание) — это и делает hang-up моста. Тест, зовущий
+  `Run` напрямую, hang-up-а не видит: проверять закрытие вкладки через `streams` (httptest +
+  websocket).
 - **Предикат фолбэка exec на SPDY**: client-go v0.37 возвращает `UpgradeFailureError` из
   `k8s.io/streaming/pkg/httpstream`; одноимённый предикат устаревшего `apimachinery/pkg/util/httpstream`
   его не узнаёт (фолбэк не сработал бы никогда).

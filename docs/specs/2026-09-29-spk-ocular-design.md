@@ -86,7 +86,9 @@ read-only/protected-пометка contexts, трей, несколько акт
   (owner вверх, pods вниз, service → pods).
 - Логи: stream/follow, tail, выбор контейнера, previous, since, агрегация всех pod-ов workload
   в один поток с префиксом, поиск/фильтр, ANSI-цвета.
-- Exec в контейнер (xterm.js, TTY, resize). Сделано в P3.
+- Exec в контейнер (xterm.js, TTY, resize). Сделано в P3. Отладочный (ephemeral) контейнер в
+  pod-е с attach-терминалом, как `kubectl debug -it --image --target` (P16): образ и цель — в
+  просмотре, терминал открывается сам, закрытая вкладка завершает отладчик.
 - Port-forward: список активных туннелей, все закрываются при выходе. Сделано в P3.
 - Действия: restart (как `kubectl rollout restart`), scale, delete (+ delete pod для пересоздания);
   у узла — cordon, uncordon, drain (P11); у CronJob — приостановить, возобновить, запустить
