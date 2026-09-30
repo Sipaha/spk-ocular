@@ -222,7 +222,7 @@ scopes[{name, state, class?}]}` — при обходе у каждого scope 
 ## Задачи
 
 ### Task 1. Модель прав и хранение (Go)
-- [ ] `internal/agentgrant`: `Grant`, `ScopeSel{Mode one|all|cluster, Name}`, `Verb`,
+- [x] `internal/agentgrant`: `Grant`, `ScopeSel{Mode one|all|cluster, Name}`, `Verb`,
   `Target{Provider, Target, Title, Identity, Shown, Observed}`; `Validate` (cluster только
   `read`; `action:` с id; виды — непустые id или nil); `Allows(grants, req)` →
   `Decision{OK, Reason}` для (scope, вид, `Scoped`, `Sensitive`, глагол, `destructive`);
@@ -230,12 +230,13 @@ scopes[{name, state, class?}]}` — при обходе у каждого scope 
   Табличные тесты: каждая комбинация решения 1/3/6 (чувствительный вид при «все виды» —
   `edit` нет, `read` да; разрушающее при «все виды» — нет, поимённо — да; кластерный вид с
   `cluster` — только `read`; `action:restart` не даёт `action:delete`; `all` не даёт `cluster`).
-- [ ] `0003_agent_access.sql` + `store/agent.go`: `AgentTargets`, `AgentGrants`,
+- [x] `0003_agent_access.sql` + `store/agent.go`: `AgentTargets`, `AgentGrants`,
   `ReplaceAgentGrants(ctx, target, grants)` (одна транзакция: цель + строки; пустые строки —
   удалить цель), `RevokeAllAgentGrants`, `ObserveAgentIdentity`, `ReconfirmAgentTarget`;
   `AppendAudit` (агрегация чтений по минуте — upsert по ключу, ротация), `ListAudit` (фильтр,
   курсор `before`). Тесты store на временной базе: транзакционность замены, агрегация, ротация,
-  миграция поверх базы P13 (0002).
+  миграция поверх базы P13 (0002). Цель, снова указывающая туда, где выдана, возобновляет выдачи
+  сама (`observed` очищается); схема дублирует запрет кластерных записей (`CHECK`).
 
 ### Task 2. Опознание цели и каталог (Go)
 - [x] `core.Target.Identity` (`json:"-"`); kubernetes `describe` считает его (решение 2);
