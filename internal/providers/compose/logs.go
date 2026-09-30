@@ -463,7 +463,7 @@ func (g *logGroup) backlog(ctx context.Context, ms []*member) error {
 	var ids []int
 	for _, m := range ms {
 		for i, l := range m.backlogLines {
-			m.seen.read(l, m.backlogPartial && i == len(m.backlogLines)-1)
+			m.seen.read(l, m.backlogPartial && i == len(m.backlogLines)-1, true)
 		}
 		m.opened = m.backlogErr == nil || len(m.backlogLines) > 0
 		out, errs := m.split(m.backlogLines)
@@ -548,11 +548,15 @@ func errText(err error) string {
 // read (the anchor — the answer surely holds it), drops the records it
 // read before (known by time, stream and text) until the anchor, and
 // delivers the rest; an unknown record before the anchor is delivered with
-// a gap (a repeat or an old line beats a loss).
+// a gap (a repeat or an old line beats a loss). Records equal in time (to
+// the nanosecond), stream and text are one record to this: a rotation
+// that dropped one of two such and a new third one would go unnoticed.
 type seenLog struct {
 	ring []recordID // the last maxSeen records read, circular
 	next int
-	// anchor: the last record read that had a time.
+	// anchor: the last record delivered outside a replay that had a time
+	// (a replay does not move it: the delivered history ends there until
+	// the replay meets it, even when the attempt breaks).
 	anchor    recordID
 	anchorAt  time.Time
 	hasAnchor bool
@@ -596,8 +600,10 @@ func textSum(text string) uint64 {
 	return h
 }
 
-// read records a delivered record.
-func (s *seenLog) read(l logLine, partial bool) {
+// read records a delivered record; move: it is now the anchor (not while
+// a replay is before the anchor — the delivered history ends there until
+// the replay meets it, even when this attempt breaks).
+func (s *seenLog) read(l logLine, partial, move bool) {
 	id := idOf(l.stream, l.at, l.line.Text)
 	if len(s.ring) < maxSeen {
 		s.ring = append(s.ring, id)
@@ -605,15 +611,11 @@ func (s *seenLog) read(l logLine, partial bool) {
 		s.ring[s.next] = id
 		s.next = (s.next + 1) % maxSeen
 	}
-	s.moveAnchor(id, l.at, partial)
+	if move && !l.at.IsZero() {
+		s.anchor, s.anchorAt, s.hasAnchor, s.partial = id, l.at, true, partial
+	}
 	if !s.torn.IsZero() && l.stream == s.tornStream && l.at.Equal(s.torn) {
 		s.torn = time.Time{} // the cut line came whole
-	}
-}
-
-func (s *seenLog) moveAnchor(id recordID, at time.Time, partial bool) {
-	if !at.IsZero() {
-		s.anchor, s.anchorAt, s.hasAnchor, s.partial = id, at, true, partial
 	}
 }
 
@@ -666,7 +668,6 @@ func (r *replay) check(l logLine) (drop bool, skip int, unknown bool) {
 		if id == r.anchor && r.known[id] == 0 {
 			r.done = true
 		}
-		r.s.moveAnchor(id, l.at, r.s.partial && id == r.anchor)
 		return true, 0, false
 	}
 	a := r.anchor
@@ -1023,6 +1024,11 @@ func (m *member) pump(ctx context.Context, lr *engine.LogReader, rp *replay) (in
 				}
 				return n, true, nil
 			}
+			if !lr.EndedCleanly() {
+				// cut inside a frame (the gap was said): read again, the
+				// journal still holds the line whatever the container's state
+				return n, true, nil
+			}
 			if rp != nil && !rp.done && !rp.gapped {
 				// the answer ended before replaying what was delivered
 				if gerr := m.gap("lines around the reconnect may be missing or repeated (the log was rotated?)"); gerr != nil {
@@ -1064,7 +1070,7 @@ func (m *member) pump(ctx context.Context, lr *engine.LogReader, rp *replay) (in
 				return n, false, err
 			}
 		}
-		m.seen.read(l, rec.Partial)
+		m.seen.read(l, rec.Partial, rp == nil || rp.done)
 		l.line.Text = l.line.Text[skip:]
 		to := m.outID
 		if l.stream == engine.Stderr && !m.tty {

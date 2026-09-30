@@ -34,7 +34,7 @@ export default defineConfig({
   expect: { timeout: 20_000 },
   use: { baseURL: `http://127.0.0.1:${port}`, locale: 'en-US', screenshot: 'only-on-failure', viewport: { width: 1500, height: 850 } },
   webServer: {
-    command: `${bin} --browser --port ${port}`,
+    command: `${bin} --browser --test-api --port ${port}`, // --test-api: stats (feed_lists) for Read again
     url: `http://127.0.0.1:${port}/`,
     env: {
       SPK_OCULAR_HOME: join(root, 'data'),

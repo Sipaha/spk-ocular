@@ -1,5 +1,6 @@
 import { expect, test, type Page } from '@playwright/test'
 import { execFileSync } from 'node:child_process'
+import { stats } from './synth'
 
 // The Compose provider against the isolated test daemon (scripts/dind-seed.sh:
 // projects ocular-fixture and ocular-other). Every change of the daemon is
@@ -62,10 +63,12 @@ test('a stop and a start on the daemon show live; Read again keeps the rows', as
     docker('start', 'ocular-other-idle-1')
   }
   await expect(idle).toContainText('running')
-  // Read again reaches the provider and succeeds (not unsupported or gone)
+  // Read again reaches the provider and reads the containers anew (a list)
+  const lists = (await stats(page)).feed_lists
   const resync = page.waitForResponse((r) => r.url().endsWith('/api/ResyncView'))
   await page.getByRole('button', { name: /Read again/ }).click()
   expect((await resync).status()).toBe(200)
+  await expect.poll(async () => (await stats(page)).feed_lists).toBeGreaterThan(lists)
   await expect(idle).toContainText('running')
   await expect(page.getByRole('alert')).toHaveCount(0)
 })

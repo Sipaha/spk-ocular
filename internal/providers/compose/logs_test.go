@@ -926,3 +926,71 @@ func TestLogsBacklogBudgetCountsEmptyLines(t *testing.T) {
 		t.Fatalf("%d lines kept, truncated said: %v", n, sk.hadState("p-web-1", provider.LogTruncated))
 	}
 }
+
+// Re-review 2, P2: a replay cut between two known records (after dropping
+// the later-stamped A) must not move where the delivered history ends: the
+// next attempt repeats nothing.
+func TestLogsReplayCutBetweenKnownRecordsRepeatsNothing(t *testing.T) {
+	e := newLogEnv(t)
+	e.fe.Journal(e.c.ID, 1, e.at(3), "A")
+	e.fe.Journal(e.c.ID, 2, e.at(1), "B")
+	e.fe.Journal(e.c.ID, 2, e.at(2), "C")
+	e.fe.AddHook(logsHook(e.c.ID, true, 1, append(enginefake.Frame(1, append(stamped(e.at(3), "A"), '\n')), enginefake.Frame(3, []byte("the log file is corrupt"))...), false))
+	sk, _ := e.stream(e.containerRef(), follow())
+	sk.waitFor(t, "the error", func() bool { return sk.isReady() && sk.hadState("p-web-1", provider.LogError) })
+	for e.fe.LogFollowers(e.c.ID) == 0 {
+		time.Sleep(2 * time.Millisecond)
+	}
+	e.fe.Journal(e.c.ID, 2, e.at(4), "D")
+	sk.waitFor(t, "D", func() bool {
+		ts := sk.texts("p-web-1 (stderr)")
+		return len(ts) > 0 && ts[len(ts)-1] == "D"
+	})
+	if got := sk.texts("p-web-1 (stderr)"); !eq(got, "B", "C", "D") {
+		t.Fatalf("stderr %v", got)
+	}
+	if got := sk.texts("p-web-1"); !eq(got, "A") {
+		t.Fatalf("stdout %v", got)
+	}
+}
+
+// Re-review 2, P2: a replay that drops a record before the partial anchor
+// keeps the anchor partial: after the restart only the line's new part
+// comes, without a gap.
+func TestLogsPartialAnchorSurvivesAReplay(t *testing.T) {
+	e := newLogEnv(t)
+	e.fe.Journal(e.c.ID, 1, e.at(3), "A")
+	e.fe.JournalPartial(e.c.ID, 2, e.at(2), "B") // written after A, stamped before it
+	e.c.State = engine.ContainerState{Status: "exited"}
+	e.fe.PutContainer(e.c)
+	e.fe.EndLogs(e.c.ID)
+	sk, _ := e.stream(e.containerRef(), follow())
+	sk.waitFor(t, "waiting", func() bool {
+		return sk.isReady() && eq(sk.texts("p-web-1 (stderr)"), "B") && sk.lastState("p-web-1").State == provider.LogWaiting
+	})
+	e.fe.Journal(e.c.ID, 2, e.at(4), "C")
+	e.startContainer()
+	sk.waitFor(t, "C", func() bool { return len(sk.texts("p-web-1 (stderr)")) >= 2 })
+	if got := sk.texts("p-web-1 (stderr)"); !eq(got, "B", "C") || sk.hadState("p-web-1", provider.LogGap) {
+		t.Fatalf("stderr %v, gap %v", got, sk.hadState("p-web-1", provider.LogGap))
+	}
+}
+
+// Re-review 2, P2: a follow of a stopped container cut inside a frame is
+// read again (the journal still holds the whole line), not left waiting
+// for a start.
+func TestLogsCutReadOfAStoppedContainerIsRetried(t *testing.T) {
+	e := newLogEnv(t)
+	e.fe.Journal(e.c.ID, 1, e.at(1), "a")
+	e.fe.Journal(e.c.ID, 1, e.at(2), "b")
+	e.c.State = engine.ContainerState{Status: "exited"}
+	e.fe.PutContainer(e.c)
+	e.fe.EndLogs(e.c.ID)
+	whole := enginefake.Frame(1, append(stamped(e.at(2), "b"), '\n'))
+	e.fe.AddHook(logsHook(e.c.ID, false, 1, enginefake.Frame(1, append(stamped(e.at(1), "a"), '\n')), false))
+	e.fe.AddHook(logsHook(e.c.ID, true, 1, whole[:len(whole)-1], false))
+	q := follow()
+	q.Channel = channelStdout
+	sk, _ := e.stream(e.containerRef(), q)
+	sk.waitFor(t, "b after a retry", func() bool { return eq(sk.texts("p-web-1"), "a", "b") })
+}
