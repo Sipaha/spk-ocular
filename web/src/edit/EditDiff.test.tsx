@@ -35,7 +35,8 @@ describe('EditDiff', () => {
     await userEvent.click(within(d).getByRole('button', { name: 'Show the next 2000 lines (of 2000 more)' }))
     expect(has('new 3000')).toBe(true)
     expect(within(d).queryByRole('button', { name: /Show the next/ })).not.toBeInTheDocument()
-  })
+    // 6000 rendered rows in jsdom: seconds under a loaded make check.
+  }, 30_000)
 
   it('the removal of line 2001 among changed lines is reachable', async () => {
     const before = lines(2500, (i) => `a ${i + 1}`)

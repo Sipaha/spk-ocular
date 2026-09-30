@@ -19,30 +19,48 @@ type ActionDescriptor struct {
 
 // ActionParam is the one parameter an action takes.
 type ActionParam struct {
-	// Kind: "count" (an integer in Min..Max).
+	// Kind: "count" (an integer in Min..Max) or "choice" (one of the
+	// plan's Choices: they are live, the provider checks the value).
 	Kind string `json:"kind"`
 	Min  int    `json:"min"`
 	Max  int    `json:"max"`
 }
 
-const ParamCount = "count"
+const (
+	ParamCount  = "count"
+	ParamChoice = "choice"
+)
 
 // ActionParams are the values of an action's parameter.
 type ActionParams struct {
-	Count *int `json:"count,omitempty"`
+	Count  *int    `json:"count,omitempty"`
+	Choice *string `json:"choice,omitempty"`
 }
 
 // CheckParams: p carries exactly what d takes. A plan may be prepared
-// before the value is chosen (final false: a missing count is fine); a run
+// before the value is chosen (final false: a missing value is fine); a run
 // needs it (final true).
 func (d ActionDescriptor) CheckParams(p ActionParams, final bool) error {
 	if d.Param == nil {
-		if p.Count != nil {
+		if p.Count != nil || p.Choice != nil {
 			return fmt.Errorf("%s takes no parameters", d.ID)
 		}
 		return nil
 	}
+	if d.Param.Kind == ParamChoice {
+		switch {
+		case p.Count != nil:
+			return fmt.Errorf("%s takes a choice, not a count", d.ID)
+		case p.Choice == nil && final:
+			return fmt.Errorf("%s needs a choice", d.ID)
+		case p.Choice != nil && *p.Choice == "":
+			return fmt.Errorf("%s: the choice is empty", d.ID)
+		}
+		return nil
+	}
 	switch {
+	case p.Choice != nil:
+		return fmt.Errorf("%s takes a count, not a choice", d.ID)
 	case p.Count == nil && final:
 		return fmt.Errorf("%s needs a count", d.ID)
 	case p.Count == nil:
@@ -51,6 +69,21 @@ func (d ActionDescriptor) CheckParams(p ActionParams, final bool) error {
 		return fmt.Errorf("the count must be %d..%d", d.Param.Min, d.Param.Max)
 	}
 	return nil
+}
+
+// ActionChoice is one value a choice parameter may take (a revision to
+// roll back to), as the provider offers it now.
+type ActionChoice struct {
+	// Value is what ActionParams.Choice carries.
+	Value   string    `json:"value"`
+	Title   Message   `json:"title"`
+	Details []Message `json:"details,omitempty"`
+	// At: when it came to be, unix ms; 0 — unknown.
+	At int64 `json:"at,omitempty"`
+	// Current: what the object has now.
+	Current bool `json:"current,omitempty"`
+	// Unavailable: why it cannot be chosen.
+	Unavailable *Message `json:"unavailable,omitempty"`
 }
 
 // Message is a provider's sentence for the UI: Key (namespaced by the
@@ -106,6 +139,12 @@ type ActionPlan struct {
 	Rights   Rights    `json:"rights"`
 	// Unavailable: why the action cannot run in the object's state.
 	Unavailable *Message `json:"unavailable,omitempty"`
+	// Choices: the values a choice parameter may take now (with or
+	// without one chosen).
+	Choices []ActionChoice `json:"choices,omitempty"`
+	// Changes: what changes in the object itself (lines of a difference) —
+	// whole: the UI shows them in portions. Not objects: no grants apply.
+	Changes []Message `json:"changes,omitempty"`
 	// Lists: the objects the plan concerns, by group — whole: the UI shows
 	// them in portions, never a cut list.
 	Lists []ActionList `json:"lists,omitempty"`

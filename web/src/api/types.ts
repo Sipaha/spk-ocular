@@ -206,7 +206,7 @@ export interface SortSpec {
 // ---- actions (internal/core/action.go)
 
 export interface ActionParam {
-  /** 'count': an integer in min..max */
+  /** 'count': an integer in min..max; 'choice': one of the plan's choices */
   kind: string
   min: number
   max: number
@@ -221,6 +221,20 @@ export interface ActionDescriptor {
 
 export interface ActionParams {
   count?: number
+  choice?: string
+}
+
+/** One value a choice parameter may take, as the provider offers it now. */
+export interface ActionChoice {
+  value: string
+  title: Message
+  details?: Message[]
+  /** unix ms; absent — unknown */
+  at?: number
+  /** what the object has now */
+  current?: boolean
+  /** why it cannot be chosen */
+  unavailable?: Message
 }
 
 export type RightsState = 'allowed' | 'denied' | 'unknown'
@@ -246,6 +260,10 @@ export interface ActionPlan {
   rights: { state: RightsState; reason?: string }
   /** why it cannot run in the object's state */
   unavailable?: Message
+  /** the values a choice parameter may take now */
+  choices?: ActionChoice[]
+  /** what changes in the object itself (whole: shown in portions) */
+  changes?: Message[]
   /** the objects the plan concerns, by group (whole: never cut for display) */
   lists?: ActionList[]
   /** opaque: sent back with the run */
