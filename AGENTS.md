@@ -22,6 +22,8 @@ P14 — доступ агентов (Claude/Codex) через unix-сокет `$
 P15 — Deployment: откат к выбранной ревизии, пауза и возобновление выкатки — `docs/plans/2026-10-01-p15-rollout.md`.
 P16 — отладочный (ephemeral) контейнер в pod-е с attach-терминалом (`kubectl debug -it`) —
 `docs/plans/2026-10-01-p16-debug-container.md`.
+P17 (идёт) — действия над несколькими отмеченными строками и принудительное удаление pod-а —
+`docs/plans/2026-10-01-p17-bulk-actions.md`.
 Следующий этап — из бэклога; пользователь просил не ждать его выбора: агент выбирает сам (наибольшая
 ежедневная польза на живых кластерах) и записывает почему в план.
 
@@ -427,6 +429,8 @@ P16 — отладочный (ephemeral) контейнер в pod-е с attach-
   выбор — отказ, у «выбора» — число запрещено, прогон без выбора — отказ. UI: выбор сразу
   просматривается заново, стрелки продолжают выбирать (фокус остаётся), группа — одна остановка Tab,
   «Выполнить» — только с планом этого выбора; поздний план прежнего выбора не выполняется.
+  Заголовок выбора — словами провайдера (`ActionParam.Title`: «Контейнер-цель», «Ревизия»), без
+  него — общее «Выберите»; у каждого выбора Kubernetes он есть (`TestEveryChoiceHasItsTitle`).
   `ActionPlan.Changes` — строки изменений самого объекта, не объекты: у агентов их не судят гранты
   (`listsOutside` отказывает элементу `Lists` без `Ref`). — `core/action_test.go`,
   `ActionDialog.test.tsx` «a choice…», `agentapi` `TestAChoiceAndItsChangesReachAgents`.
@@ -459,15 +463,16 @@ P16 — отладочный (ephemeral) контейнер в pod-е с attach-
   `TerminalView.test.tsx`, e2e synth «debug…».
 - Отладчик pod-а (P16, как `kubectl debug -it --image --target`): действие только для
   пользователей (`ActionDescriptor.NoAgents`: агенты его не видят в `ListKinds`, `PrepareAction`
-  агента — отказ, редактор грантов пропускает). Цели — контейнеры pod-а (по умолчанию —
-  контейнер по умолчанию), «без цели» — при `shareProcessNamespace`. Имя `debugger-<5>` — в
+  агента — отказ, редактор грантов пропускает). Цели — обычные контейнеры и sidecar-ы из spec в
+  любом состоянии (падающий sidecar — обычная причина отладки; состояние — только в деталях;
+  по умолчанию — контейнер по умолчанию), «без цели» — при `shareProcessNamespace`. Имя `debugger-<5>` — в
   подписанном гранте (свой доменный тег), грант расходуется до записи; запись — один strategic
   merge PATCH `pods/<имя>/ephemeralcontainers` с uid+resourceVersion (`stdin`, `tty`,
   `IfNotPresent`, **без** `stdinOnce`); 409 — перечтение по UID: сначала имя (наш — тот же образ,
   цель, `stdin`+`tty` — `done`; чужой — `conflict`), затем состояние гранта и повтор (≤ 3).
   Недоступен — только по фазе/удалению/mirror; предупреждение — только при `enforce:
-  restricted` (нечитаемый namespace — без него). Права — `patch pods/ephemeralcontainers` и
-  `create pods/attach`. Терминал — attach (`ExecRequest.Attach`, канал обязан быть ephemeral в
+  restricted` (нечитаемый namespace — без него). Права — `patch pods/ephemeralcontainers`,
+  `create pods/attach` и `watch pods` (ожидание запуска смотрит pod); худший итог — итог. Терминал — attach (`ExecRequest.Attach`, канал обязан быть ephemeral в
   spec, запускаться ещё не обязан): Run ждёт запуска watch-ем pod-а (120 с, `Notice` с причиной
   ожидания; `ErrImagePull`/`ImagePullBackOff`/`InvalidImageName`/`ErrImageNeverPull`,
   завершившийся отладчик, завершающийся pod — ошибка по ключу), после подключения шлёт один `\n`
