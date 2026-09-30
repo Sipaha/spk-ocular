@@ -691,3 +691,40 @@ func TestTheCatalogIsTheMethods(t *testing.T) {
 	e.srv.Handler().ServeHTTP(w, httptest.NewRequest("POST", "/v1/Exec", strings.NewReader("{}")))
 	assert.Equal(t, http.StatusNotFound, w.Code)
 }
+
+// A choice reaches agents: prepared without one, the plan offers the
+// choices; with one, it says what changes — lines, not objects: the grants
+// judge objects only.
+func TestAChoiceAndItsChangesReachAgents(t *testing.T) {
+	e := newEnv(t)
+	e.grant(one("a", "action:undo"))
+	p := e.ok("PrepareAction", map[string]any{"ref": ref("a", "apps/deployments", "web"), "action": "undo"})
+	plan := p["plan"].(map[string]any)
+	choices := plan["choices"].([]any)
+	require.Len(t, choices, 2)
+	assert.Equal(t, map[string]any{"value": "web-2", "title": "Revision 2", "current": true, "unavailable": "revision 2 is the current template", "details": []any{"Images: app:b"}, "at": float64(1790762400000)}, choices[0])
+	assert.NotContains(t, plan, "changes")
+
+	p = e.ok("PrepareAction", map[string]any{"ref": ref("a", "apps/deployments", "web"), "action": "undo", "params": map[string]any{"choice": "web-1"}})
+	plan = p["plan"].(map[string]any)
+	assert.Equal(t, []any{"containers[app].image: app:b → app:a"}, plan["changes"])
+	require.NotEmpty(t, p["planId"], "changes are not objects outside the grant")
+	e.ok("RunAction", map[string]any{"planId": p["planId"]})
+	require.Len(t, e.runs(), 1)
+	require.NotNil(t, e.runs()[0].Params.Choice)
+	assert.Equal(t, "web-1", *e.runs()[0].Params.Choice)
+
+	code, out := e.call("PrepareAction", map[string]any{"ref": ref("a", "apps/deployments", "web"), "action": "undo", "params": map[string]any{"choice": "nope"}})
+	assert.Equal(t, http.StatusBadRequest, code, "%v", out)
+	assert.Contains(t, out["detail"], "no revision nope")
+}
+
+// A paused Deployment says so in its row (the health's reason).
+func TestAPausedObjectSaysSoInItsRow(t *testing.T) {
+	e := newEnv(t)
+	e.grant(one("b", "read"))
+	out := e.ok("ListObjects", with(tgt, "kind", "apps/deployments"))
+	rows := out["rows"].([]any)
+	require.Len(t, rows, 1)
+	assert.Equal(t, map[string]any{"state": "ok", "reason": "Paused"}, rows[0].(map[string]any)["health"])
+}

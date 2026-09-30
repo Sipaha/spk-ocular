@@ -54,7 +54,7 @@ func (s *Server) writeMethods() {
 type PrepareActionRequest struct {
 	Ref    core.Ref          `json:"ref" jsonschema:"required" jsonschema_description:"The object as ListObjects gave it."`
 	Action string            `json:"action" jsonschema:"required" jsonschema_description:"An action id from ListKinds (restart, scale, delete, ...)."`
-	Params core.ActionParams `json:"params,omitzero" jsonschema_description:"count for scale."`
+	Params core.ActionParams `json:"params,omitzero" jsonschema_description:"count for scale; choice for an action whose param kind is choice (undo): a value of the plan's choices — prepare without it first to get them."`
 }
 
 // PlanView is a plan as an agent reads it (the provider's English).
@@ -69,6 +69,8 @@ type PlanView struct {
 	Warnings    []string          `json:"warnings,omitempty"`
 	Rights      core.Rights       `json:"rights"`
 	Unavailable string            `json:"unavailable,omitempty" jsonschema_description:"Why it cannot run now (no planId then)."`
+	Choices     []ChoiceView      `json:"choices,omitempty" jsonschema_description:"The values params.choice may take now (one that cannot be chosen says why)."`
+	Changes     []string          `json:"changes,omitempty" jsonschema_description:"What changes in the object itself (lines of a difference)."`
 	Lists       []ListView        `json:"lists,omitempty"`
 	// Edit plans.
 	Before     string   `json:"before,omitempty"`
@@ -77,6 +79,15 @@ type PlanView struct {
 	Changed    bool     `json:"changed,omitempty"`
 	Rebased    bool     `json:"rebased,omitempty"`
 	Collisions []string `json:"collisions,omitempty"`
+}
+
+type ChoiceView struct {
+	Value       string   `json:"value"`
+	Title       string   `json:"title"`
+	Details     []string `json:"details,omitempty"`
+	At          int64    `json:"at,omitempty" jsonschema_description:"When it came to be, unix ms."`
+	Current     bool     `json:"current,omitempty"`
+	Unavailable string   `json:"unavailable,omitempty"`
 }
 
 type ListView struct {
@@ -111,6 +122,19 @@ func actionView(p core.ActionPlan) PlanView {
 		Effects: texts(p.Effects), Warnings: texts(p.Warnings), Rights: p.Rights}
 	if p.Unavailable != nil {
 		v.Unavailable = p.Unavailable.Text
+	}
+	for _, c := range p.Choices {
+		cv := ChoiceView{Value: c.Value, Title: c.Title.Text, At: c.At, Current: c.Current}
+		if len(c.Details) > 0 {
+			cv.Details = texts(c.Details)
+		}
+		if c.Unavailable != nil {
+			cv.Unavailable = c.Unavailable.Text
+		}
+		v.Choices = append(v.Choices, cv)
+	}
+	if len(p.Changes) > 0 {
+		v.Changes = texts(p.Changes)
 	}
 	for _, l := range p.Lists {
 		lv := ListView{Title: l.Title.Text, Destructive: l.Destructive, Items: []ItemView{}}

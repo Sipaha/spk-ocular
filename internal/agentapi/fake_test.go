@@ -77,11 +77,12 @@ var (
 	actScale   = core.ActionDescriptor{ID: "scale", Title: "Scale", Param: &core.ActionParam{Kind: core.ParamCount, Min: 0, Max: 10}}
 	actDelete  = core.ActionDescriptor{ID: "delete", Title: "Delete", Destructive: true}
 	actCordon  = core.ActionDescriptor{ID: "cordon", Title: "Cordon"}
+	actUndo    = core.ActionDescriptor{ID: "undo", Title: "Roll back", Param: &core.ActionParam{Kind: core.ParamChoice}}
 )
 
 var fakeKinds = []core.KindDescriptor{
 	{ID: "pods", Title: "Pods", Scoped: true, Logs: true, Columns: []core.Column{{ID: "name", Title: "Name"}, {ID: "cpu", Title: "CPU", Metric: true}, {ID: "age", Title: "Age", Type: core.ColAge}}},
-	{ID: "apps/deployments", Title: "Deployments", Scoped: true, Editable: true, Actions: []core.ActionDescriptor{actRestart, actScale, actDelete}, Columns: []core.Column{{ID: "name", Title: "Name"}}},
+	{ID: "apps/deployments", Title: "Deployments", Scoped: true, Editable: true, Actions: []core.ActionDescriptor{actRestart, actScale, actUndo, actDelete}, Columns: []core.Column{{ID: "name", Title: "Name"}}},
 	{ID: "secrets", Title: "Secrets", Scoped: true, Editable: true, Sensitive: true, Actions: []core.ActionDescriptor{actDelete}, Columns: []core.Column{{ID: "name", Title: "Name"}}},
 	{ID: "events", Title: "Events", Scoped: true, Columns: []core.Column{{ID: "name", Title: "Name"}}},
 	{ID: "nodes", Title: "Nodes", Actions: []core.ActionDescriptor{actCordon}, Columns: []core.Column{{ID: "name", Title: "Name"}}},
@@ -111,7 +112,11 @@ func (s *fakeSess) Close()            {}
 
 func rowOf(r core.Ref) core.Row {
 	n := 0.25
-	return core.Row{ID: r.Kind + "#" + r.UID, Ref: r, Cells: []core.Cell{core.TextCell(r.Name), {Num: &n}, core.TimeCell(0)}, Health: core.Health{State: core.HealthOK}}
+	h := core.Health{State: core.HealthOK}
+	if r.Name == "api" && r.Kind == "apps/deployments" {
+		h.Reason = "Paused"
+	}
+	return core.Row{ID: r.Kind + "#" + r.UID, Ref: r, Cells: []core.Cell{core.TextCell(r.Name), {Num: &n}, core.TimeCell(0)}, Health: h}
 }
 
 func (s *fakeSess) Watch(q provider.Query, sink provider.Sink) (func(), error) {
@@ -177,6 +182,19 @@ func (s *fakeSess) PrepareAction(_ context.Context, r core.Ref, action string, p
 		plan.Destructive = p.Count != nil && *p.Count == 0
 	case actDelete.ID:
 		plan.Destructive = true
+	case actUndo.ID:
+		why := core.Message{Text: "revision 2 is the current template"}
+		plan.Choices = []core.ActionChoice{
+			{Value: "web-2", Title: core.Message{Text: "Revision 2"}, Current: true, Unavailable: &why, Details: []core.Message{{Text: "Images: app:b"}}, At: 1790762400000},
+			{Value: "web-1", Title: core.Message{Text: "Revision 1"}},
+		}
+		switch {
+		case p.Choice == nil:
+		case *p.Choice == "web-1":
+			plan.Changes = []core.Message{{Text: "containers[app].image: app:b → app:a"}}
+		default:
+			return core.ActionPlan{}, &provider.Error{Class: provider.ClassInvalid, Message: "no revision " + *p.Choice}
+		}
 	}
 	if r.Name == "listy" {
 		plan.Lists = []core.ActionList{{Title: core.Message{Text: "Moved"}, Items: []core.ActionItem{{Name: "b/api-1", Ref: &core.Ref{Provider: "k", Target: "t", Scope: "b", Kind: "pods", Name: "api-1"}}}}}

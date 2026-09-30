@@ -138,7 +138,7 @@ export function problems(scopes: ScopeGrants[], options: (mode: AgentScope['mode
   return out
 }
 
-export type Warning = 'dockerRoot' | 'allScopes' | 'cluster' | 'editLogs' | 'operators' | 'noConfirm' | 'sensitiveByName'
+export type Warning = 'dockerRoot' | 'allScopes' | 'cluster' | 'editLogs' | 'operators' | 'noConfirm' | 'sensitiveByName' | 'undo'
 
 /** The spec's honest warnings for what the editor grants. */
 export function warnings(provider: string, scopes: ScopeGrants[], kinds: KindDescriptor[]): Warning[] {
@@ -152,6 +152,7 @@ export function warnings(provider: string, scopes: ScopeGrants[], kinds: KindDes
   if (has((s) => !!s.verbs[VERB_EDIT])) out.push('operators')
   const sensitive = new Set(kinds.filter((k) => k.sensitive).map((k) => k.id))
   if (has((s) => !!s.verbs[VERB_EDIT]?.kinds?.some((k) => sensitive.has(k)))) out.push('sensitiveByName')
+  if (has((s) => !!s.verbs['action:undo'])) out.push('undo')
   if (has((s) => Object.values(s.verbs).some((v) => v.noConfirm))) out.push('noConfirm')
   return out
 }
