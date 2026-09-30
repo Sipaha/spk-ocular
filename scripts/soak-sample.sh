@@ -5,6 +5,9 @@
 # phase label read from PHASE_FILE (what the scenario is doing now).
 # Refuses to start when the host is short of memory (MIN_AVAIL_MB, default
 # 8192): swapped-out pages leave Private_Dirty and fake a flat curve.
+# MODE=phase: one line at the end of each phase instead (when PHASE_FILE's
+# label changes; the line carries the phase that ended) — samples at the
+# same point of every cycle, so the phases' own peaks do not make noise.
 # Usage: soak-sample.sh <app pid> <app data dir> <out.csv>
 set -euo pipefail
 PID="${1:?app pid}"
@@ -14,6 +17,7 @@ INTERVAL="${INTERVAL:-60}"
 MINUTES="${MINUTES:-60}"
 MIN_AVAIL_MB="${MIN_AVAIL_MB:-8192}"
 PHASE_FILE="${PHASE_FILE:-}"
+MODE="${MODE:-interval}"
 here=$(dirname "$0")
 
 avail_mb() { awk '/^MemAvailable:/ { print int($2 / 1024) }' /proc/meminfo; }
@@ -29,7 +33,8 @@ token=$(sed -E 's/.*"token":"([^"]+)".*/\1/' "$info")
 fields="views caches_active caches_idle watchers deadlines cache_lists cache_watch_starts cache_initial_syncs streams terminals forwards goroutines heap_inuse sessions"
 echo "time,avail_mb,private_mb,pss_mb,swap_mb,pids,phase,${fields// /,}" > "$OUT"
 end=$(( $(date +%s) + MINUTES * 60 ))
-while [ "$(date +%s)" -le "$end" ]; do
+# sample <phase>: one CSV line.
+sample() {
   kill -0 "$PID" 2>/dev/null || { echo "app $PID is gone" >&2; exit 4; }
   mem=$(bash "$here/pss.sh" "$PID")
   total=$(echo "$mem" | tail -1)
@@ -43,8 +48,25 @@ while [ "$(date +%s)" -le "$end" ]; do
     v=$(echo "$stats" | sed -nE "s/.*\"$f\":([0-9]+).*/\1/p")
     row="$row,${v:-}"
   done
-  phase=""
-  [ -n "$PHASE_FILE" ] && phase=$(cat "$PHASE_FILE" 2>/dev/null || true)
-  echo "$(date +%s),$(avail_mb),$priv,$pss,$swap,$pids,$phase$row" >> "$OUT"
+  echo "$(date +%s),$(avail_mb),$priv,$pss,$swap,$pids,$1$row" >> "$OUT"
+}
+
+current_phase() { [ -n "$PHASE_FILE" ] && cat "$PHASE_FILE" 2>/dev/null || true; }
+
+if [ "$MODE" = phase ]; then
+  [ -n "$PHASE_FILE" ] || { echo "MODE=phase needs PHASE_FILE" >&2; exit 1; }
+  prev=$(current_phase)
+  while [ "$(date +%s)" -le "$end" ]; do
+    cur=$(current_phase)
+    if [ -n "$cur" ] && [ "$cur" != "$prev" ]; then
+      [ -n "$prev" ] && sample "$prev"
+      prev=$cur
+    fi
+    sleep 0.5
+  done
+  exit 0
+fi
+while [ "$(date +%s)" -le "$end" ]; do
+  sample "$(current_phase)"
   sleep "$INTERVAL"
 done
