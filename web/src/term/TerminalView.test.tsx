@@ -24,6 +24,7 @@ interface FakeConn {
   sink: TermSink
   live: boolean
   input: ReturnType<typeof vi.fn>
+  interrupt: ReturnType<typeof vi.fn>
   close(): void
   end(e: TermEnd): void
 }
@@ -73,7 +74,7 @@ vi.mock('./protocol', async (orig) => ({
       sink.phase('running')
     }
     resize() {}
-    interrupt() {}
+    interrupt = vi.fn()
     close() {
       this.live = false
     }
@@ -196,4 +197,35 @@ describe('terminal lifetime', () => {
     expect(client.forgetTerminal).toHaveBeenCalledWith('t-new')
   })
 
+})
+
+// WebKitGTK gives a Cyrillic key no Latin keyCode, and xterm builds Ctrl+letter
+// from keyCode: the control character is taken from the physical key.
+describe('Ctrl with a non-Latin layout', () => {
+  const key = (code: string, k: string, extra: Partial<KeyboardEvent> = {}) =>
+    ({ type: 'keydown', code, key: k, ctrlKey: true, preventDefault() {}, ...extra }) as Partial<KeyboardEvent>
+
+  it('sends the key\'s control character, Ctrl+C as an interrupt', async () => {
+    render(<TerminalView client={fakeClient() as unknown as Client} tab={tab} active mode="browser" />)
+    await waitFor(() => expect(h.conns).toHaveLength(1))
+    const term = h.terms[0]
+    const conn = h.conns[0]
+    expect(term.keys(key('KeyK', 'л'))).toBe(false)
+    expect(conn.input).toHaveBeenCalledWith('\x0b')
+    expect(term.keys(key('KeyC', 'с'))).toBe(false)
+    expect(conn.interrupt).toHaveBeenCalled()
+    expect(term.keys(key('BracketLeft', 'х'))).toBe(false)
+    expect(conn.input).toHaveBeenCalledWith('\x1b')
+  })
+
+  it('leaves Latin keys, Alt and non-letter keys to xterm', async () => {
+    render(<TerminalView client={fakeClient() as unknown as Client} tab={tab} active mode="browser" />)
+    await waitFor(() => expect(h.conns).toHaveLength(1))
+    const term = h.terms[0]
+    expect(term.keys(key('KeyK', 'k'))).toBe(true)
+    expect(term.keys(key('KeyK', 'л', { altKey: true }))).toBe(true)
+    expect(term.keys(key('F6', 'F6'))).toBe(true)
+    expect(term.keys({ type: 'keydown', code: 'KeyK', key: 'л', preventDefault() {} })).toBe(true)
+    expect(h.conns[0].input).not.toHaveBeenCalled()
+  })
 })

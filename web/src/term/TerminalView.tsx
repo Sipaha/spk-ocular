@@ -159,7 +159,7 @@ export default function TerminalView({ client, tab, active, mode }: Props) {
     fitRef.current = fit
     if (host.clientWidth > 0 && host.clientHeight > 0) fit.fit()
 
-    term.onData((d) => {
+    const send = (d: string) => {
       const c = connRef.current
       if (!c) return
       if (d === '\x03') {
@@ -171,7 +171,8 @@ export default function TerminalView({ client, tab, active, mode }: Props) {
       } catch (e) {
         if (e instanceof PasteTooLargeError) setNotice(t('term.pasteTooLarge'))
       }
-    })
+    }
+    term.onData(send)
     term.onBinary((d) => connRef.current?.input(Uint8Array.from(d, (ch) => ch.charCodeAt(0) & 0xff)))
     term.onResize(({ cols, rows }) => connRef.current?.resize(cols, rows))
     term.attachCustomKeyEventHandler((ev) => {
@@ -200,6 +201,12 @@ export default function TerminalView({ client, tab, active, mode }: Props) {
           }
           term.paste(text)
         })
+        return false
+      }
+      const ctl = layoutControl(ev)
+      if (ctl) {
+        ev.preventDefault()
+        send(ctl)
         return false
       }
       return true
@@ -318,4 +325,17 @@ function endText(e: TermEnd): string {
       return t('term.lost', { detail: e.message ?? '' })
   }
   return `${e.class ? classLabel(e.class) + ': ' : ''}${e.message ?? t('term.failed')}`
+}
+
+// Control characters by physical key for Ctrl with a non-Latin layout:
+// WebKitGTK gives a Cyrillic key no Latin keyCode, and xterm builds
+// Ctrl+letter from keyCode — Ctrl+C would not interrupt. Latin layouts stay
+// with xterm.
+const controlKeys: Record<string, string> = { BracketLeft: '\x1b', Backslash: '\x1c', BracketRight: '\x1d' }
+
+function layoutControl(ev: Pick<KeyboardEvent, 'code' | 'key' | 'ctrlKey' | 'altKey' | 'metaKey'>): string | null {
+  if (!ev.ctrlKey || ev.altKey || ev.metaKey || ev.key.length !== 1 || ev.key.charCodeAt(0) < 0x80) return null
+  const m = /^Key([A-Z])$/.exec(ev.code)
+  if (m) return String.fromCharCode(m[1].charCodeAt(0) - 64)
+  return controlKeys[ev.code] ?? null
 }
