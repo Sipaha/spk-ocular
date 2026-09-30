@@ -7,8 +7,8 @@ Go + Wails v3 + React. Спецификация: `docs/specs/2026-09-29-spk-ocul
 
 Статус: P0 (каркас), P1 (ресурсы, детали, метрики), P2 (логи), P3 (терминалы, туннели) и P4
 (действия restart/scale/delete) готовы — `docs/plans/`. P5 (Problems, палитра `Ctrl+K`,
-клавиатура, полировка) реализован и прошёл ревью; остаются зачётный часовой soak памяти и
-desktop-проверка (`docs/plans/2026-09-30-p5-problems-palette.md`, Task 8). Docker Compose provider
+клавиатура, полировка) готов (`docs/plans/2026-09-30-p5-problems-palette.md`; soak памяти принят на
+сборке P7 по критерию пользователя 2026-09-30). Docker Compose provider
 готов: P6 — просмотр и логи (`docs/plans/2026-09-30-p6-docker-compose.md`), P7 — терминал,
 статистика и действия (`docs/plans/2026-09-30-p7-compose-exec-stats-actions.md`). Дальше — бэклог.
 
