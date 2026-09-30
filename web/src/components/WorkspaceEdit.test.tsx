@@ -235,6 +235,27 @@ describe('editing an object in the details', () => {
     await waitFor(() => expect(podOpens()).toBe(before + 1))
   })
 
+  it('a kind served again with another scope (cluster-wide now) keeps the page while edits are held', async () => {
+    const { f, grid, drawer, v } = await openEditor()
+    await userEvent.click(screen.getByRole('button', { name: /^Pods/ }))
+    expect(within(grid).getByText('api-1')).toBeInTheDocument()
+    type(v, 'x: 1', 'x: 9')
+    const listKinds = f.client.listKinds as ReturnType<typeof vi.fn>
+    const podOpens = () => (f.client.openView as ReturnType<typeof vi.fn>).mock.calls.filter((c) => c[2].kind === 'pods' && !c[2].name).length
+    const before = podOpens()
+    listKinds.mockResolvedValue(kindsView([{ ...pods, scoped: false }, nodes], { rev: 2 }))
+    await act(async () => f.emit({ type: 'kinds_changed', payload: { provider: 'kubernetes', target: 'prod', session: 1, rev: 2 } }))
+    await waitFor(() => expect(listKinds).toHaveBeenCalledTimes(2))
+    await act(async () => new Promise((r) => setTimeout(r, 50)))
+    expect(podOpens()).toBe(before)
+    expect(screen.getByRole('dialog', { name: 'pods api-1' })).toBe(drawer)
+    expect((await editorView(drawer)).state.doc.toString()).toContain('x: 9')
+    // Dropped by the user: the page of the kind as served now.
+    await userEvent.keyboard('{Escape}')
+    await userEvent.click(await screen.findByRole('button', { name: 'Discard' }))
+    await waitFor(() => expect(f.client.openView).toHaveBeenLastCalledWith('kubernetes', 'prod', { kind: 'pods', scope: { mode: 'none' } }))
+  })
+
   it('says when the object changed on the server while its text is edited', async () => {
     const { f, drawer } = await openEditor()
     expect(within(drawer).queryByText(/changed on the server/)).not.toBeInTheDocument()

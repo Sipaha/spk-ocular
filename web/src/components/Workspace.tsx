@@ -98,6 +98,16 @@ export function Workspace({ client, hub, target }: { client: Client; hub: ViewHu
   // again after removed, a view that gave up; below) is a new page too.
   const pageScope = current?.scoped ? scope : { mode: 'none' as const }
   const pageKey = current ? `${current.id}#${renewed.get(current.id) ?? 0}/${JSON.stringify(pageScope)}` : ''
+  // The page shown. Whatever changes it on its own (a kind renewed, served
+  // again with another scope) waits while the open editor holds edits: a new
+  // page drops the editor, and nobody asked to leave. The user's navigation
+  // asks first (mayLeave), so it is never held here.
+  const holder = useEditHolder()
+  const live = current ? { key: pageKey, kind: current, scope: pageScope } : null
+  const [shown, setShown] = useState(live)
+  const keep = !!shown && shown.key !== live?.key && editsHeld()
+  if (!keep && (shown?.key !== live?.key || shown?.kind !== live?.kind)) setShown(live)
+  const page = keep ? shown : live
   // The page (by key) whose view gave up (ViewState.halted).
   const [halted, setHalted] = useState<string | null>(null)
   const onHalted = useCallback((key: string, h: boolean) => setHalted((old) => (h ? key : old === key ? null : old)), [])
@@ -182,7 +192,6 @@ export function Workspace({ client, hub, target }: { client: Client; hub: ViewHu
   // new page anyway). Renewals on their own wait while the open editor holds
   // edits (a new page drops it, and nobody asked to leave); they run once it
   // lets go.
-  const holder = useEditHolder()
   const renewedAt = useRef(new Map<string, string>())
   const seenAppeared = useRef(new Map<string, number>())
   const stamp = catalog.view ? `${catalog.view.session}/${catalog.view.rev}` : ''
@@ -312,20 +321,20 @@ export function Workspace({ client, hub, target }: { client: Client; hub: ViewHu
         <div className="flex min-h-0 flex-1 flex-col">
         {!ui || waiting ? (
           waiting ? <p className="px-4 py-6 text-center text-fg-subtle">{t('app.loading')}</p> : null
-        ) : kind === OVERVIEW || !current ? (
+        ) : (kind === OVERVIEW && !keep) || !page ? (
           <div className="min-h-0 flex-1 overflow-y-auto">
             <TargetDetails />
           </div>
         ) : (
           <ResourcePage
-            key={pageKey}
-            pageKey={pageKey}
+            key={page.key}
+            pageKey={page.key}
             onHalted={onHalted}
             client={client}
             hub={hub}
             target={target}
-            kind={current}
-            scope={pageScope}
+            kind={page.kind}
+            scope={page.scope}
             scopes={scopes}
             onScope={setScope}
             hasLogs={hasLogs}
