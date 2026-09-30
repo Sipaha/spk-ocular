@@ -30,35 +30,18 @@ import (
 
 const kindTarget = "kubeconfig:kind-ocular-dev"
 
-// kindAgent is the whole stack on the kind test cluster: the Kubernetes
-// provider reading only its kubeconfig, the service, the agent socket
-// served for real, and an agent's HTTP client on that socket.
-type kindAgent struct {
+// liveAgent is the whole stack on a real target: the service over one
+// provider, the agent socket served for real, and an agent's HTTP client
+// on that socket.
+type liveAgent struct {
 	t      *testing.T
-	kc     string
 	svc    *api.Service
+	st     *store.Store
 	client *http.Client
 }
 
-func newKindAgent(t *testing.T) *kindAgent {
+func serveAgent(t *testing.T, p provider.Provider) *liveAgent {
 	t.Helper()
-	kc := os.Getenv("OCULAR_KIND_KUBECONFIG")
-	if kc == "" {
-		t.Skip("OCULAR_KIND_KUBECONFIG not set (make test-kind)")
-	}
-	kc, _ = filepath.Abs(kc)
-	a := &kindAgent{t: t, kc: kc}
-	server := a.kubectl("config", "view", "--minify", "-o", "jsonpath={.clusters[0].cluster.server}")
-	u, err := url.Parse(server)
-	require.NoError(t, err)
-	require.Contains(t, []string{"127.0.0.1", "localhost", "::1"}, u.Hostname(), "the kind API server is on loopback")
-
-	p := kubernetes.NewWith(func(k string) string {
-		if k == "KUBECONFIG" {
-			return kc
-		}
-		return ""
-	}, t.TempDir())
 	reg, err := provider.NewRegistry(p)
 	require.NoError(t, err)
 	st, err := store.Open(context.Background(), filepath.Join(t.TempDir(), "db"))
@@ -73,11 +56,37 @@ func newKindAgent(t *testing.T) *kindAgent {
 	require.NoError(t, srv.Start())
 	t.Cleanup(srv.Close)
 	svc.SetAgentControl(srv)
-	a.svc = svc
-	a.client = &http.Client{Timeout: 60 * time.Second, Transport: &http.Transport{DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
+	return &liveAgent{t: t, svc: svc, st: st, client: &http.Client{Timeout: 60 * time.Second, Transport: &http.Transport{DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
 		var dl net.Dialer
 		return dl.DialContext(ctx, "unix", filepath.Join(d, "agent.sock"))
-	}}}
+	}}}}
+}
+
+// kindAgent is a liveAgent on the kind test cluster, its Kubernetes
+// provider reading only the cluster's kubeconfig.
+type kindAgent struct {
+	*liveAgent
+	kc string
+}
+
+func newKindAgent(t *testing.T) *kindAgent {
+	t.Helper()
+	kc := os.Getenv("OCULAR_KIND_KUBECONFIG")
+	if kc == "" {
+		t.Skip("OCULAR_KIND_KUBECONFIG not set (make test-kind)")
+	}
+	kc, _ = filepath.Abs(kc)
+	a := &kindAgent{liveAgent: &liveAgent{t: t}, kc: kc}
+	server := a.kubectl("config", "view", "--minify", "-o", "jsonpath={.clusters[0].cluster.server}")
+	u, err := url.Parse(server)
+	require.NoError(t, err)
+	require.Contains(t, []string{"127.0.0.1", "localhost", "::1"}, u.Hostname(), "the kind API server is on loopback")
+	a.liveAgent = serveAgent(t, kubernetes.NewWith(func(k string) string {
+		if k == "KUBECONFIG" {
+			return kc
+		}
+		return ""
+	}, t.TempDir()))
 	return a
 }
 
@@ -100,7 +109,7 @@ func (a *kindAgent) namespace(prefix string) string {
 }
 
 // call is one request of the agent: the HTTP status and the JSON answer.
-func (a *kindAgent) call(method string, body any, out any) int {
+func (a *liveAgent) call(method string, body any, out any) int {
 	a.t.Helper()
 	b, err := json.Marshal(body)
 	require.NoError(a.t, err)
@@ -119,7 +128,7 @@ func (a *kindAgent) call(method string, body any, out any) int {
 	return resp.StatusCode
 }
 
-func (a *kindAgent) objects(req ListObjectsRequest) (ObjectsView, int) {
+func (a *liveAgent) objects(req ListObjectsRequest) (ObjectsView, int) {
 	var v ObjectsView
 	return v, a.call("ListObjects", req, &v)
 }
