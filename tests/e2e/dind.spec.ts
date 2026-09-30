@@ -1,5 +1,6 @@
 import { expect, test, type Page } from '@playwright/test'
 import { execFileSync } from 'node:child_process'
+import { pickScope } from './fixtures'
 import { expectScreen, stats } from './synth'
 
 // The Compose provider against the isolated test daemon (scripts/dind-seed.sh:
@@ -16,9 +17,7 @@ async function openDind(page: Page, project = 'ocular-fixture') {
   await page.goto('/')
   await page.getByRole('option', { name: /^ocular-dind\b/ }).click()
   await expect(page.getByRole('navigation', { name: 'resources' })).toBeVisible()
-  const picker = page.getByRole('combobox', { name: 'Project' })
-  await expect(picker.locator('option', { hasText: project })).toBeAttached()
-  await picker.selectOption(project)
+  await pickScope(page, 'Project', project)
 }
 
 async function kindPage(page: Page, kind: string) {
@@ -48,7 +47,15 @@ test('containers, details with relations and the inspect YAML', async ({ page })
   await expect(drawer.getByRole('button', { name: /ocular-ext-net/ })).toBeVisible()
   await expect(drawer.getByRole('button', { name: /ocular-ext-vol/ })).toBeVisible()
   await drawer.getByRole('tab', { name: 'YAML' }).click()
-  await expect(drawer.locator('.cm-editor')).toContainText('com.docker.compose.service: web')
+  // The editor draws only what is in view: scroll down to the label.
+  const cm = drawer.locator('.cm-editor')
+  await expect
+    .poll(async () => {
+      if ((await cm.textContent())?.includes('com.docker.compose.service: web')) return true
+      await cm.locator('.cm-scroller').evaluate((el) => el.scrollBy(0, 200))
+      return false
+    })
+    .toBe(true)
 })
 
 test('a stop and a start on the daemon show live; Read again keeps the rows', async ({ page }) => {

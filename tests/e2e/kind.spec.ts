@@ -1,5 +1,6 @@
 import { expect, test, type Page } from '@playwright/test'
 import { execFileSync } from 'node:child_process'
+import { pickScope } from './fixtures'
 
 const kc = process.env.OCULAR_KIND_KUBECONFIG!
 const kubectl = (...args: string[]) => execFileSync('kubectl', ['--kubeconfig', kc, '--context', 'kind-ocular-dev', ...args], { encoding: 'utf8' })
@@ -12,8 +13,7 @@ async function openTarget(page: Page, name: string) {
 
 async function kindPage(page: Page, kind: string, ns = 'ocular-demo') {
   await page.getByRole('navigation', { name: 'resources' }).getByRole('button', { name: kind, exact: true }).click()
-  const picker = page.getByRole('combobox', { name: 'Namespace' })
-  if (ns && (await picker.count())) await picker.selectOption(ns)
+  if (ns && (await page.getByRole('button', { name: 'Namespace', exact: true }).count())) await pickScope(page, 'Namespace', ns)
   return page.getByRole('grid', { name: 'resources' })
 }
 
@@ -332,7 +332,7 @@ async function apiKind(page: Page, sub: string, kind: string, ns?: string) {
   if ((await head.getAttribute('aria-expanded')) === 'false') await head.click()
   await group.getByRole('button', { name: kind, exact: true }).click()
   await expect(page.getByRole('heading', { name: kind })).toBeVisible()
-  if (ns) await page.getByRole('combobox', { name: 'Namespace' }).selectOption(ns)
+  if (ns) await pickScope(page, 'Namespace', ns)
   return page.getByRole('grid', { name: 'resources' })
 }
 

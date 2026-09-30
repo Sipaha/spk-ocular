@@ -7,6 +7,7 @@ import { showNotice } from '../store'
 import { useScopeWords } from '../scopeNames'
 import { ActionDialog, type ActionRequest } from '../actions/ActionDialog'
 import type { MenuItem } from '../actions/Menu'
+import { ScopeSelect } from './ScopeSelect'
 import { metricsState, useMetrics } from '../views/useMetrics'
 import { useView } from '../views/useView'
 import { useKinds } from '../views/useKinds'
@@ -719,21 +720,15 @@ function ScopePicker({ scope, scopes, onScope }: { scope: ScopeSel; scopes: Scop
   const value = scope.mode === 'one' ? (scope.name ?? '') : ''
   const names = (scopes?.scopes ?? []).map((s) => s.name)
   if (value && !names.includes(value)) names.unshift(value)
-  return (
-    <select
-      aria-label={words.singular}
-      value={value}
-      onChange={(e) => onScope(e.target.value ? { mode: 'one', name: e.target.value } : { mode: 'all' })}
-      className="rounded-md border border-line bg-app px-2 py-1 outline-none focus:border-accent"
-    >
-      <option value="">{words.all}</option>
-      {names.map((n) => (
-        <option key={n} value={n}>
-          {n}
-        </option>
-      ))}
-    </select>
-  )
+  const choose = (n: string) => {
+    onScope(n ? { mode: 'one', name: n } : { mode: 'all' })
+    // A new scope is a new page: the picker that had focus is gone, the
+    // keyboard goes on in the new table.
+    setTimeout(() => {
+      if (document.activeElement === document.body || !document.activeElement) document.querySelector<HTMLElement>('[data-table-scroll]')?.focus()
+    })
+  }
+  return <ScopeSelect value={value} names={names} label={words.singular} allLabel={words.all} onChange={choose} />
 }
 
 function StatusBanner({ state, cls, message, empty, coverage }: { state: string; cls?: string; message?: string; empty: boolean; coverage?: SourceCoverage[] }) {

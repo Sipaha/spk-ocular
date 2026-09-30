@@ -7,6 +7,11 @@ import { kindsView, fakeClient, k8s, podRow, podsKind, scopeRow } from '../test/
 
 beforeEach(() => useStore.setState({ ...initialState }))
 
+async function pickScope(name: string) {
+  await userEvent.click(screen.getByRole('button', { name: 'Namespace' }))
+  await userEvent.keyboard(name + '{Enter}')
+}
+
 async function openProd(f: ReturnType<typeof fakeClient>) {
   f.state.view.selected = { provider: 'kubernetes', id: 'prod' }
   render(<App client={f.client} />)
@@ -22,13 +27,14 @@ describe('Workspace', () => {
     expect(within(grid).getByText('CrashLoopBackOff')).toHaveClass('text-danger')
     expect(f.client.openView).toHaveBeenCalledWith('kubernetes', 'prod', { kind: 'pods', scope: { mode: 'one', name: 'web' } })
     expect(within(grid).queryByText('Namespace')).not.toBeInTheDocument() // one namespace: no namespace column
-    expect(screen.getByRole('combobox', { name: 'Namespace' })).toHaveValue('web')
+    expect(screen.getByRole('button', { name: 'Namespace' })).toHaveTextContent('web')
   })
 
   it('switching to all namespaces reopens the view and shows the namespace column', async () => {
     const f = fakeClient([k8s('prod', { defaultScope: 'web' })])
     await openProd(f)
-    await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Namespace' }), '')
+    await userEvent.click(screen.getByRole('button', { name: 'Namespace' }))
+    await userEvent.click(screen.getByRole('option', { name: 'All namespaces' }))
     expect(f.client.openView).toHaveBeenLastCalledWith('kubernetes', 'prod', { kind: 'pods', scope: { mode: 'all' } })
     expect(f.client.closeView).toHaveBeenCalled()
     // a new scope is a new page (and a new grid)
@@ -62,6 +68,51 @@ describe('Workspace', () => {
     expect(alert).toHaveTextContent('Cannot show · access denied')
     expect(alert).toHaveTextContent('cannot list pods')
     expect(screen.queryByText('No objects')).not.toBeInTheDocument()
+  })
+
+  it('the namespace picker searches: the first found is marked, arrows move, Enter chooses', async () => {
+    const f = fakeClient([k8s('prod', { defaultScope: 'web' })])
+    f.client.listScopes = vi.fn(async () => ({ scopes: ['default', 'kube-system', 'team-a', 'team-b', 'web'].map((name) => ({ name })) }))
+    await openProd(f)
+    const button = screen.getByRole('button', { name: 'Namespace' })
+    await waitFor(() => expect(f.client.listScopes).toHaveBeenCalled())
+    await userEvent.click(button)
+    const search = screen.getByRole('combobox', { name: 'Find a namespace' })
+    expect(search).toHaveFocus()
+    // Unsearched: the current one is marked, "all" is on top.
+    const list = screen.getByRole('listbox', { name: 'Namespace' })
+    expect(within(list).getAllByRole('option')[0]).toHaveTextContent('All namespaces')
+    expect(within(list).getByRole('option', { selected: true })).toHaveTextContent('web')
+    expect(within(list).getByRole('option', { name: 'web' })).toBeInTheDocument() // the ✓ is not its name
+    await userEvent.keyboard('team')
+    expect(within(list).getAllByRole('option').map((o) => o.textContent)).toEqual(['team-a', 'team-b'])
+    expect(within(list).getByRole('option', { selected: true })).toHaveTextContent('team-a')
+    await userEvent.keyboard('{ArrowDown}')
+    expect(within(list).getByRole('option', { selected: true })).toHaveTextContent('team-b')
+    await userEvent.keyboard('{ArrowDown}') // wraps
+    expect(within(list).getByRole('option', { selected: true })).toHaveTextContent('team-a')
+    await userEvent.keyboard('{ArrowUp}{Enter}')
+    expect(f.client.openView).toHaveBeenLastCalledWith('kubernetes', 'prod', { kind: 'pods', scope: { mode: 'one', name: 'team-b' } })
+    expect(screen.queryByRole('listbox', { name: 'Namespace' })).not.toBeInTheDocument()
+    // The page is new: the keyboard goes on in its table.
+    await waitFor(() => expect(document.querySelector('[data-table-scroll]')).toHaveFocus())
+    expect(screen.getByRole('button', { name: 'Namespace' })).toHaveTextContent('team-b')
+
+    // Esc closes without a change, and nothing else (no drawer, no shortcut) sees it.
+    await userEvent.click(screen.getByRole('button', { name: 'Namespace' }))
+    await userEvent.keyboard('kube{Escape}')
+    expect(screen.queryByRole('listbox', { name: 'Namespace' })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Namespace' })).toHaveFocus()
+    expect(f.client.openView).toHaveBeenLastCalledWith('kubernetes', 'prod', { kind: 'pods', scope: { mode: 'one', name: 'team-b' } })
+    // Nothing found: Enter does nothing.
+    await userEvent.click(screen.getByRole('button', { name: 'Namespace' }))
+    await userEvent.keyboard('zzz')
+    expect(within(screen.getByRole('listbox', { name: 'Namespace' })).getByRole('status')).toHaveTextContent('Nothing found')
+    await userEvent.keyboard('{Enter}')
+    expect(screen.getByRole('listbox', { name: 'Namespace' })).toBeInTheDocument()
+    // A click elsewhere closes it.
+    await userEvent.click(screen.getByRole('grid', { name: 'resources' }))
+    expect(screen.queryByRole('listbox', { name: 'Namespace' })).not.toBeInTheDocument()
   })
 
   it('lets the user type a namespace when listing them is forbidden', async () => {
@@ -154,7 +205,7 @@ describe('Workspace details and state', () => {
     await openProd(f)
     expect(f.client.openView).toHaveBeenCalledTimes(1)
     expect(f.client.openView).toHaveBeenCalledWith('kubernetes', 'prod', { kind: 'pods', scope: { mode: 'one', name: 'data' } })
-    await userEvent.selectOptions(screen.getByRole('combobox', { name: 'Namespace' }), 'web')
+    await pickScope('web')
     expect(f.client.setTargetState).toHaveBeenCalledWith('kubernetes', 'prod', 'scope', '{"mode":"one","name":"web"}')
   })
 })
@@ -182,11 +233,12 @@ describe('live scopes', () => {
     f.client.listScopes = vi.fn(async () => ({ scopes: [{ name: 'default' }], kind: 'namespaces' }))
     f.state.rowsByKind.namespaces = [scopeRow('default'), scopeRow('web')]
     await openProd(f)
-    const picker = screen.getByRole('combobox', { name: 'Namespace' })
-    expect(await within(picker).findByRole('option', { name: 'web' })).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Namespace' }))
+    const list = screen.getByRole('listbox', { name: 'Namespace' })
+    expect(await within(list).findByRole('option', { name: 'web' })).toBeInTheDocument()
     f.state.rowsByKind.namespaces = [scopeRow('default'), scopeRow('web'), scopeRow('new-team')]
     await act(async () => f.emit({ type: 'view_changed', payload: { viewId: 'v-namespaces', version: 99 } }))
-    expect(await within(picker).findByRole('option', { name: 'new-team' })).toBeInTheDocument()
+    expect(await within(list).findByRole('option', { name: 'new-team' })).toBeInTheDocument()
     expect(f.client.openView).toHaveBeenCalledWith('kubernetes', 'prod', { kind: 'namespaces', scope: { mode: 'none' } })
   })
 })

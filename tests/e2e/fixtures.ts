@@ -1,3 +1,4 @@
+import { expect, type Page } from '@playwright/test'
 import { createHash } from 'node:crypto'
 import { mkdirSync, renameSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
@@ -69,4 +70,15 @@ export function dockerContexts(home: string) {
   })
   add('sock', `unix://${join(home, 'no-such', 'docker.sock')}`)
   writeAtomic(join(cfg, 'config.json'), JSON.stringify({ auths: { 'registry.example': { auth: 'U0VDUkVULWF1dGg=' } }, currentContext: 'sock' }))
+}
+
+/** Chooses a scope in the scope picker (label "Namespace", "Project"…):
+ * opens it, searches the name, takes the first found with Enter. */
+export async function pickScope(page: Page, label: string, name: string) {
+  await page.getByRole('button', { name: label, exact: true }).click()
+  const list = page.getByRole('listbox', { name: label })
+  await expect(list.getByRole('option', { name, exact: true })).toBeAttached()
+  await page.getByRole('combobox', { name: new RegExp(label, 'i') }).fill(name)
+  await page.keyboard.press('Enter')
+  await expect(page.getByRole('button', { name: label, exact: true })).toHaveText(name)
 }

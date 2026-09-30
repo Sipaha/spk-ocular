@@ -61,8 +61,8 @@ describe('a provider without Kubernetes knowledge', () => {
     expect(await within(grid).findByText('c1')).toBeInTheDocument()
     expect(f.client.openView).toHaveBeenCalledWith('other', 'site', { kind: 'crates', scope: { mode: 'one', name: 'blue' } })
     expect(f.client.openView).not.toHaveBeenCalledWith('other', 'site', expect.objectContaining({ kind: 'pods' }))
-    const picker = screen.getByRole('combobox', { name: 'Zone' })
-    expect(within(picker).getByRole('option', { name: 'All zones' })).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Zone' }))
+    expect(within(screen.getByRole('listbox', { name: 'Zone' })).getByRole('option', { name: 'All zones' })).toBeInTheDocument()
   })
 
   it('without a default kind or scope: the first view, all scopes, generic words', async () => {
@@ -70,9 +70,9 @@ describe('a provider without Kubernetes knowledge', () => {
     f.client.listKinds = vi.fn(async () => kindsView([boxes, { ...crates, default: false }]))
     render(<App client={f.client} />)
     await screen.findByRole('grid', { name: 'resources' })
-    expect(f.client.openView).toHaveBeenCalledWith('other', 'site', { kind: 'boxes', scope: { mode: 'all' } })
-    const picker = screen.getByRole('combobox', { name: 'Scope' })
-    expect(within(picker).getByRole('option', { name: 'All scopes' })).toBeInTheDocument()
+    // The grid is there a moment before the page's effect opens its view.
+    await waitFor(() => expect(f.client.openView).toHaveBeenCalledWith('other', 'site', { kind: 'boxes', scope: { mode: 'all' } }))
+    expect(screen.getByRole('button', { name: 'Scope' })).toHaveTextContent('All scopes')
   })
 
   it('scopes that cannot be listed are typed, named by the provider', async () => {

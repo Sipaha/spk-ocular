@@ -67,7 +67,7 @@ html { color-scheme: dark; font-size: 17px; }
 /* WebKitGTK draws <select> as a native GTK button (light gradient) whatever
    the page's colours: every select gets the app's own field look and arrow.
    Unlayered, so it wins over the utilities' right padding (the arrow). */
-select {
+select, .select-look {
   -webkit-appearance: none;
   appearance: none;
   background-color: var(--color-app);
@@ -79,7 +79,7 @@ select {
   padding-right: 1.5rem;
   cursor: pointer;
 }
-select:hover:not(:focus) { border-color: color-mix(in srgb, var(--color-fg-muted) 45%, var(--color-line)); }
+select:hover:not(:focus), .select-look:hover:not(:focus) { border-color: color-mix(in srgb, var(--color-fg-muted) 45%, var(--color-line)); }
 select:disabled { opacity: 0.5; cursor: default; }
 select option { background-color: var(--color-panel); color: var(--color-fg); }
 
