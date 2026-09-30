@@ -1,6 +1,7 @@
 import { t } from '../i18n'
 import { useStore } from '../store'
 import { TunnelsIndicator } from '../tunnels/TunnelsPanel'
+import { AgentsIndicator } from '../agents/AgentsPanel'
 
 export function StatusBar() {
   const info = useStore((s) => s.info)
@@ -13,6 +14,7 @@ export function StatusBar() {
         {!error && notice}
       </span>
       <TunnelsIndicator />
+      <AgentsIndicator />
       <span className="ml-auto">{info ? `${info.name} ${info.version} · ${t(info.mode === 'desktop' ? 'status.desktop' : 'status.browser')}` : ''}</span>
     </footer>
   )

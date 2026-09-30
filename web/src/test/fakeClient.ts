@@ -1,6 +1,6 @@
 import { vi } from 'vitest'
-import type { Client } from '../api/client'
-import type { ApiEvent, KindDescriptor, KindsView, Query, RecentObject, Ref, Row, Target, TargetsView, TerminalRequest, ViewStatus } from '../api/types'
+import { ApiError, type Client } from '../api/client'
+import type { AgentAccessStatus, AgentAuditEntry, AgentPending, AgentTarget, ApiEvent, KindDescriptor, KindsView, Query, RecentObject, Ref, Row, Target, TargetsView, TerminalRequest, ViewStatus } from '../api/types'
 
 export const k8s = (id: string, extra: Partial<Target> = {}): Target => ({
   provider: 'kubernetes',
@@ -36,6 +36,10 @@ export function fakeClient(targets: Target[]) {
     version: 0,
     recents: [] as RecentObject[],
     view: { groups: [{ provider: 'kubernetes', title: 'Kubernetes', targets, problems: [], scopeNames: k8sScopeNames }], selected: null } as TargetsView,
+    agentStatus: { state: 'serving', socket: '/home/u/.spk/ocular/agent.sock', instruction: 'SPK Ocular (Kubernetes/Docker): `curl -s --unix-socket ~/.spk/ocular/agent.sock http://ocular/v1`', pending: 0 } as AgentAccessStatus,
+    agentTargets: [] as AgentTarget[],
+    agentPending: [] as AgentPending[],
+    audit: [] as AgentAuditEntry[],
   }
   const client: Client = {
     appInfo: vi.fn(async () => ({ name: 'SPK Ocular', version: 'test', mode: 'browser' as const, language: 'en' as const })),
@@ -113,6 +117,36 @@ export function fakeClient(targets: Target[]) {
       target: { provider: req.ref.provider, target: req.ref.target, targetTitle: req.ref.target, ref: req.ref, instance: req.ref.name, channel: 'app' },
     })),
     streamBase: vi.fn(async () => '/streams/tok'),
+    agentAccessStatus: vi.fn(async () => structuredClone(state.agentStatus)),
+    listAgentGrants: vi.fn(async () => structuredClone(state.agentTargets)),
+    saveAgentGrants: vi.fn(async (provider: string, target: string, grants: AgentTarget['grants']) => {
+      state.agentTargets = state.agentTargets.filter((x) => !(x.provider === provider && x.target === target))
+      if (grants.length) state.agentTargets.push({ provider, target, title: target, identity: `https://${target}.example:6443`, grants: structuredClone(grants) })
+      listener?.({ type: 'agent_grants_changed' })
+    }),
+    revokeAllAgentGrants: vi.fn(async () => {
+      state.agentTargets = []
+      listener?.({ type: 'agent_grants_changed' })
+    }),
+    reconfirmAgentTarget: vi.fn(async (provider: string, target: string) => {
+      for (const x of state.agentTargets) {
+        if (x.provider === provider && x.target === target && x.observed) {
+          x.identity = x.observed
+          delete x.observed
+        }
+      }
+      listener?.({ type: 'agent_grants_changed' })
+    }),
+    listAgentPending: vi.fn(async () => structuredClone(state.agentPending)),
+    decideAgentPending: vi.fn(async (id: string) => {
+      if (!state.agentPending.some((p) => p.id === id)) throw new ApiError('gone', 'no such plan')
+      state.agentPending = state.agentPending.filter((p) => p.id !== id)
+      listener?.({ type: 'agent_pending_changed' })
+    }),
+    listAgentAudit: vi.fn(async (f) => {
+      const limit = f.limit ?? 500
+      return state.audit.filter((e) => (!f.agent || e.agent === f.agent) && (!f.target || e.target === f.target) && (!f.before || e.id < f.before)).slice(0, limit)
+    }),
     subscribeEvents: vi.fn((cb: (e: ApiEvent) => void) => {
       listener = cb
       return () => {

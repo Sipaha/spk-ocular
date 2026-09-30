@@ -8,6 +8,7 @@ import { buildItems, type PaletteItem, type Sources } from './items'
 import { scopeWords } from '../scopeNames'
 import { closePalette, usePalette } from './store'
 import { focusMark, restoreFocus } from '../shortcuts'
+import { agents } from '../agents/store'
 
 /** Ctrl+K: go to a view, context, namespace, row of the table or recent object. */
 export function Palette({ client, act }: { client: Client; act: Actions }) {
@@ -88,6 +89,7 @@ function PaletteDialog({ client, act }: { client: Client; act: Actions }) {
     if (a.type === 'target') void act.select(a.ref)
     else if (a.type === 'kind') host?.openKind(a.kind, a.filter ?? '')
     else if (a.type === 'scope') host?.setScope(a.scope)
+    else if (a.type === 'command') agents.showPanel('grants')
     else host?.openObject(a.ref)
   }
 

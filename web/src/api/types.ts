@@ -71,7 +71,15 @@ export interface AppInfo {
  * view_changed: {viewId, version} — pull; {viewId, gone: true} — reopen.
  * forwards_changed: the tunnels changed (counters at most once a second); call listForwards.
  */
-export type EventType = 'targets_changed' | 'resync' | 'view_changed' | 'forwards_changed' | 'kinds_changed'
+export type EventType =
+  | 'targets_changed'
+  | 'resync'
+  | 'view_changed'
+  | 'forwards_changed'
+  | 'kinds_changed'
+  | 'agent_grants_changed'
+  | 'agent_pending_changed'
+  | 'agent_audit_changed'
 
 export interface ApiEvent {
   type: EventType
@@ -167,6 +175,8 @@ export interface KindDescriptor {
   editable?: boolean
   /** Objects of this kind keep protected values by key (GetValues). */
   values?: boolean
+  /** Editing objects of this kind grants access beyond them (Secret, ServiceAccount, RBAC): agents get it only by name. */
+  sensitive?: boolean
   /** Actions objects of this kind offer (restart, scale, delete, …). */
   actions?: ActionDescriptor[]
   /** How a table of this kind is first sorted (else by the first column). */
@@ -675,4 +685,92 @@ export interface Tunnel {
   bytesOut: number
   lastError?: { class: string; message: string; at: string }
   started: string
+}
+
+// ---- agent access (internal/agentgrant, internal/api/agentaccess.go, internal/store/agent.go)
+
+/** one: a namespace / project; all: every one (later ones too); cluster: the objects outside them (read only). */
+export type AgentScopeMode = 'one' | 'all' | 'cluster'
+
+export interface AgentScope {
+  mode: AgentScopeMode
+  name?: string
+}
+
+/** One verb in one scope: read | logs | edit | action:<id>. */
+export interface AgentGrant {
+  scope: AgentScope
+  verb: string
+  /** null: every kind (not sensitive ones for edit, nothing destructive) */
+  kinds: string[] | null
+  /** a destructive plan runs without the user's confirmation */
+  noConfirm?: boolean
+}
+
+/** A target's grants and the identity they were given for. */
+export interface AgentTarget {
+  provider: string
+  target: string
+  /** the target's title when granted */
+  title: string
+  identity: string
+  /** another identity a call saw: the grants are suspended until reconfirmed */
+  observed?: string
+  grants: AgentGrant[]
+}
+
+export type AgentSocketState = 'serving' | 'other_instance' | 'failed'
+
+export interface AgentAccessStatus {
+  state: AgentSocketState
+  socket: string
+  /** the line for an agent's instructions */
+  instruction: string
+  error?: string
+  pending: number
+}
+
+/** An agent's destructive plan waiting for the user. */
+export interface AgentPending {
+  id: string
+  /** the name the agent gave (not verified) */
+  agent: string
+  at: string
+  expires: string
+  provider: string
+  target: string
+  targetTitle: string
+  ref: Ref
+  action?: ActionPlan
+  edit?: EditPlan
+}
+
+export interface AgentAuditFilter {
+  agent?: string
+  provider?: string
+  target?: string
+  /** records older than this id */
+  before?: number
+  limit?: number
+}
+
+export type AgentAuditPhase = 'read' | 'intent' | 'outcome' | 'refused'
+
+export interface AgentAuditEntry {
+  id: number
+  at: string
+  agent: string
+  method: string
+  provider?: string
+  target?: string
+  scope?: string
+  object?: string
+  verb?: string
+  destructive?: boolean
+  expectHash?: string
+  phase: AgentAuditPhase
+  outcome?: string
+  detail?: string
+  /** reads folded into this record */
+  count: number
 }

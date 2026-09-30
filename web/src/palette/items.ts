@@ -14,8 +14,9 @@ export type PaletteAction =
   | { type: 'target'; ref: TargetRef }
   | { type: 'scope'; scope: ScopeSel }
   | { type: 'object'; ref: Ref }
+  | { type: 'command'; id: 'agents' }
 
-export type Section = 'recent' | 'kind' | 'target' | 'scope' | 'object'
+export type Section = 'recent' | 'kind' | 'target' | 'scope' | 'object' | 'command'
 
 export interface PaletteItem {
   /** Stable across live updates: the cursor follows it. */
@@ -115,6 +116,11 @@ function objects(src: Sources): { rows: PaletteItem[]; recents: PaletteItem[] } 
   return { rows, recents }
 }
 
+/** The app's own panels, whatever the target. */
+const commands = (): { item: PaletteItem; texts: [string, number][] }[] => [
+  { item: { key: 'command:agents', section: 'command', label: t('agents.panel'), action: { type: 'command', id: 'agents' } }, texts: [[t('agents.panel'), 0], ['agents', -1000]] },
+]
+
 type Scored = { item: PaletteItem; score: number; order: number }
 
 function ranked(query: string, list: { item: PaletteItem; texts: [string, number][] }[]): PaletteItem[] {
@@ -141,7 +147,7 @@ function fuzzy(query: string, src: Sources): Built {
   const objs = rows.map((item) => ({ item, texts: [[item.label, 0]] as [string, number][] }))
   const recs = recents.map((item) => ({ item, texts: [[item.label, 0]] as [string, number][] }))
   // Nothing typed: what was opened last first; typed: ties go to live things.
-  const list = query.trim() ? [...kinds, ...targets, ...scopes, ...objs, ...recs] : [...recs, ...kinds, ...targets, ...scopes, ...objs]
+  const list = query.trim() ? [...kinds, ...targets, ...scopes, ...objs, ...recs, ...commands()] : [...recs, ...kinds, ...targets, ...scopes, ...objs, ...commands()]
   const items = ranked(query, list).slice(0, MAX_ITEMS)
   return { items, cursor: items[0]?.key ?? null }
 }

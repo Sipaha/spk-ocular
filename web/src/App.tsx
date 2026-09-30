@@ -16,11 +16,16 @@ import { openPalette } from './palette/store'
 import { cycleArea, globalShortcut } from './shortcuts'
 import { HelpDialog } from './components/HelpDialog'
 import { DiscardPrompt } from './edit/DiscardPrompt'
+import { AgentsPanel } from './agents/AgentsPanel'
+import { AgentConfirm } from './agents/ConfirmDialog'
+import { agentLoaders, agents, useAgents } from './agents/store'
 
 export function App({ client }: { client: Client }) {
   const act = useMemo(() => actions(client), [client])
   const hub = useMemo(() => new ViewHub(client), [client])
   const loadTunnels = useMemo(() => tunnelLoader(client), [client])
+  const loadAgents = useMemo(() => agentLoaders(client), [client])
+  const waiting = useAgents((s) => s.pending.length)
   const info = useStore((s) => s.info)
   const view = useStore((s) => s.view)
   const target = useStore((s) => selectedTarget(s.view))
@@ -53,11 +58,22 @@ export function App({ client }: { client: Client }) {
       if (e.type === 'resync') hub.resyncAll()
       if (e.type === 'targets_changed' || e.type === 'resync') void act.reload()
       if (e.type === 'forwards_changed' || e.type === 'resync') void loadTunnels()
+      if (e.type === 'agent_grants_changed' || e.type === 'resync') void loadAgents.grants()
+      if (e.type === 'agent_pending_changed' || e.type === 'resync') void loadAgents.pending()
+      if (e.type === 'agent_audit_changed' || e.type === 'resync') agents.auditChanged()
     })
     void act.init()
     void loadTunnels()
+    void loadAgents.grants()
+    void loadAgents.pending()
     return off
-  }, [client, act, hub, loadTunnels])
+  }, [client, act, hub, loadTunnels, loadAgents])
+
+  // Plans waiting for the user show in the title (the taskbar, another tab).
+  useEffect(() => {
+    const base = 'SPK Ocular'
+    document.title = waiting ? `(${waiting}) ${base}` : base
+  }, [waiting])
 
   // The app-wide keys (shortcuts.ts): not a terminal's, not under a modal dialog.
   const [help, setHelp] = useState(false)
@@ -126,6 +142,8 @@ export function App({ client }: { client: Client }) {
         </div>
       </div>
       <TunnelsPanel client={client} mode={info?.mode === 'desktop' ? 'desktop' : 'browser'} />
+      <AgentsPanel client={client} />
+      <AgentConfirm client={client} reload={loadAgents.pending} />
       <Palette client={client} act={act} />
       {help && <HelpDialog onClose={() => setHelp(false)} />}
       <DiscardPrompt />

@@ -1,5 +1,5 @@
 import { Call, Events } from '@wailsio/runtime'
-import type { ActionParams, ActionPlan, ActionResult, ApiEvent, AppInfo, EditDoc, EditPlan, EditPrepareRequest, EditResult, EditRunRequest, EventType, ExecInfo,
+import type { ActionParams, ActionPlan, AgentAccessStatus, AgentAuditEntry, AgentAuditFilter, AgentGrant, AgentPending, AgentTarget, ActionResult, ApiEvent, AppInfo, EditDoc, EditPlan, EditPrepareRequest, EditResult, EditRunRequest, EventType, ExecInfo,
   KindsView, LogInfo, Message, LogQuery, LogStreamInfo, MetricsView, Page, Query, RecentObject, Ref, Resource, ScopesView, TargetsView, TerminalInfo, TerminalRequest, ViewInfo, ForwardInfo, StartForwardRequest, Tunnel, Value, ValueEditRequest, ValueList, ValuePlan, ValueResult, ValueRunRequest } from './types'
 
 export class ApiError extends Error {
@@ -81,6 +81,21 @@ export interface Client {
   listForwards(): Promise<Tunnel[]>
   /** Desktop: a loopback URL with a token; browser: a path on this server. */
   streamBase(): Promise<string>
+  /** The agent socket's state and the line for agents' instructions. */
+  agentAccessStatus(): Promise<AgentAccessStatus>
+  /** Every target with grants; reload on 'agent_grants_changed'. */
+  listAgentGrants(): Promise<AgentTarget[]>
+  /** Sets a target's grants whole (none: revoked); a target granted anew is bound to what it points at now. */
+  saveAgentGrants(provider: string, target: string, grants: AgentGrant[]): Promise<void>
+  revokeAllAgentGrants(): Promise<void>
+  /** A suspended target's grants hold for what it points at now. */
+  reconfirmAgentTarget(provider: string, target: string): Promise<void>
+  /** Agents' destructive plans waiting for the user; reload on 'agent_pending_changed'. */
+  listAgentPending(): Promise<AgentPending[]>
+  /** gone: decided elsewhere or expired. */
+  decideAgentPending(id: string, approve: boolean): Promise<void>
+  /** The journal, newest first; reload on 'agent_audit_changed'. */
+  listAgentAudit(filter: AgentAuditFilter): Promise<AgentAuditEntry[]>
   subscribeEvents(onEvent: (e: ApiEvent) => void): () => void
 }
 
@@ -167,6 +182,14 @@ export const httpClient: Client = {
   stopForward: (id) => done(post('StopForward', { id })),
   listForwards: () => post('ListForwards', {}),
   streamBase: () => post('StreamBase', {}),
+  agentAccessStatus: () => post('AgentAccessStatus', {}),
+  listAgentGrants: () => post('ListAgentGrants', {}),
+  saveAgentGrants: (provider, target, grants) => done(post('SaveAgentGrants', { provider, target, grants })),
+  revokeAllAgentGrants: () => done(post('RevokeAllAgentGrants', {})),
+  reconfirmAgentTarget: (provider, target) => done(post('ReconfirmAgentTarget', { provider, target })),
+  listAgentPending: () => post('ListAgentPending', {}),
+  decideAgentPending: (id, approve) => done(post('DecideAgentPending', { id, approve })),
+  listAgentAudit: (filter) => post('ListAgentAudit', filter),
   subscribeEvents(onEvent) {
     const es = new EventSource(`/api/events?token=${encodeURIComponent(tokenMeta())}`)
     es.onmessage = (m) => onEvent(JSON.parse(m.data) as ApiEvent)
@@ -236,7 +259,7 @@ async function wcallAbortable<T>(signal: AbortSignal | undefined, method: string
   }
 }
 
-const EVENT_TYPES: EventType[] = ['targets_changed', 'resync', 'view_changed', 'forwards_changed', 'kinds_changed']
+const EVENT_TYPES: EventType[] = ['targets_changed', 'resync', 'view_changed', 'forwards_changed', 'kinds_changed', 'agent_grants_changed', 'agent_pending_changed', 'agent_audit_changed']
 
 export const wailsClient: Client = {
   appInfo: () => wcall('AppInfo'),
@@ -282,6 +305,14 @@ export const wailsClient: Client = {
   stopForward: (id) => wcall('StopForward', id),
   listForwards: () => wcall('ListForwards'),
   streamBase: () => wcall('StreamBase'),
+  agentAccessStatus: () => wcall('AgentAccessStatus'),
+  listAgentGrants: () => wcall('ListAgentGrants'),
+  saveAgentGrants: (provider, target, grants) => wcall('SaveAgentGrants', { provider, target, grants }),
+  revokeAllAgentGrants: () => wcall('RevokeAllAgentGrants'),
+  reconfirmAgentTarget: (provider, target) => wcall('ReconfirmAgentTarget', provider, target),
+  listAgentPending: () => wcall('ListAgentPending'),
+  decideAgentPending: (id, approve) => wcall('DecideAgentPending', { id, approve }),
+  listAgentAudit: (filter) => wcall('ListAgentAudit', filter),
   subscribeEvents(onEvent) {
     const offs = EVENT_TYPES.map((type) =>
       Events.On(type, (ev: { data: unknown }) => {

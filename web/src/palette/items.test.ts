@@ -36,7 +36,7 @@ const labels = (r: ReturnType<typeof buildItems>) => r.items.map((i) => `${i.sec
 const cursorItem = (r: ReturnType<typeof buildItems>) => r.items.find((i) => i.key === r.cursor)
 
 describe('buildItems — fuzzy', () => {
-  it('an empty query lists recent objects, views, contexts, namespaces, then the table; hidden views are not offered', () => {
+  it('an empty query lists recent objects, views, contexts, namespaces, the table, then the app\'s panels; hidden views are not offered', () => {
     const r = buildItems('', sources())
     expect(labels(r)).toEqual([
       'recent:api',
@@ -44,6 +44,7 @@ describe('buildItems — fuzzy', () => {
       'target:prod', 'target:dev',
       'scope:default', 'scope:demo', 'scope:demo-2', 'scope:all',
       'object:web-1', 'object:db-0',
+      'command:Agent access',
     ])
     expect(r.cursor).toBe(r.items[0].key)
   })
@@ -76,9 +77,16 @@ describe('buildItems — fuzzy', () => {
     expect(buildItems('p-', sources({ rows })).items).toHaveLength(200)
   })
 
-  it('without a target only contexts are offered', () => {
+  it('without a target only contexts and the app\'s panels are offered', () => {
     const r = buildItems('', sources({ kinds: [], scopes: [], rows: [], recents: [], scopeAliases: [], targetAliases: [] }))
-    expect(labels(r)).toEqual(['target:prod', 'target:dev'])
+    expect(labels(r)).toEqual(['target:prod', 'target:dev', 'command:Agent access'])
+  })
+
+  it('the agent access panel is found by its title and by "agents"', () => {
+    for (const q of ['agent acc', 'agents']) {
+      const r = buildItems(q, sources({ kinds: [], scopes: [], rows: [], recents: [] }))
+      expect(cursorItem(r)?.action).toEqual({ type: 'command', id: 'agents' })
+    }
   })
 })
 

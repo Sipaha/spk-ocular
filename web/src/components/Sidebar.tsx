@@ -4,6 +4,7 @@ import { providerText, t } from '../i18n'
 import { type Actions, matchesFilter, targetKey, useStore } from '../store'
 import { EyeIcon, ProviderIcon, SearchIcon, WarningIcon } from './icons'
 import { openPalette } from '../palette/store'
+import { agents, pendingOf, useAgents } from '../agents/store'
 
 export function Sidebar({ act }: { act: Actions }) {
   const view = useStore((s) => s.view)
@@ -117,6 +118,7 @@ function TargetRow({ target, act }: { target: Target; act: Actions }) {
   const key = targetKey(target)
   const selected = useStore((s) => (s.view?.selected ? targetKey(s.view.selected) === key : false))
   const cursor = useStore((s) => s.cursor === key)
+  const waiting = useAgents((s) => pendingOf(s.pending, target.provider, target.id))
   const ref = useRef<HTMLDivElement>(null)
   useEffect(() => {
     if (cursor) ref.current?.scrollIntoView({ block: 'nearest' })
@@ -142,6 +144,20 @@ function TargetRow({ target, act }: { target: Target; act: Actions }) {
             <span title={providerText('target.currentHint', target.provider)} className="shrink-0 rounded bg-panel px-1 text-[11px] text-fg-muted">
               {t('target.current')}
             </span>
+          )}
+          {waiting > 0 && (
+            <button
+              type="button"
+              title={t('agents.waitingHint')}
+              aria-label={`${t('agents.waitingHint')}: ${waiting}`}
+              className="ml-auto shrink-0 rounded bg-warning/20 px-1 text-[11px] font-semibold text-warning"
+              onClick={(e) => {
+                e.stopPropagation()
+                agents.bringBack()
+              }}
+            >
+              {waiting}
+            </button>
           )}
         </span>
         {target.subtitle && target.subtitle !== target.title && (
