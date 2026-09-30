@@ -35,6 +35,8 @@ interface UIState {
 
 /** A navigation subgroup's key in target_state "navOpen". */
 const subKey = (group: string, sub: string) => `${group}/${sub}`
+/** A foldable group's key in "navOpen" (a subgroup's always has a "/"). */
+const groupKey = (group: string) => `group:${group}`
 
 function parseOpen(st: Record<string, string>): string[] {
   try {
@@ -227,33 +229,60 @@ export function Workspace({ client, hub, target }: { client: Client; hub: ViewHu
     <div className="flex min-h-0 flex-1">
       <nav aria-label="resources" data-area="nav" onKeyDown={onNavKey} className="w-48 shrink-0 overflow-y-auto border-r border-line bg-sidebar/60 px-2 py-3">
         <NavItem active={kind === OVERVIEW} onClick={() => setKind(OVERVIEW)} label={t('nav.overview')} />
-        {groups.map((g) => (
-          <section key={g.group} className="mt-3" aria-label={g.group}>
-            <h3 className="flex px-2 pb-1 text-[11px] font-semibold uppercase tracking-wider text-fg-subtle">
-              <span className="min-w-0 flex-1 truncate">{g.group}</span>
-              {g.subgrouped && (
-                <span className="font-normal" title={t('nav.kinds', { count: g.count })}>
-                  {g.count}
-                </span>
-              )}
-            </h3>
-            {g.items.map((it) =>
-              'kind' in it ? (
-                <NavItem key={it.kind.id} active={kind === it.kind.id} onClick={() => setKind(it.kind.id)} label={it.kind.title} hint={it.kind.subgroup} />
+        {groups.map((g) => {
+          // A group of subgroups (API groups: the rare and the custom) folds
+          // whole, folded by default; folded, it still shows the kind open.
+          const open = !g.subgrouped || navOpen.includes(groupKey(g.group))
+          const activeIn = g.items.flatMap((it) => ('kind' in it ? [it.kind] : it.kinds)).find((k) => k.id === kind)
+          return (
+            <section key={g.group} className="mt-3" aria-label={g.group}>
+              {g.subgrouped ? (
+                <button
+                  data-nav-item
+                  tabIndex={-1}
+                  aria-expanded={open}
+                  onClick={() => toggleSub(groupKey(g.group), !open)}
+                  onKeyDown={(e) => {
+                    if ((e.key === 'ArrowRight' && !open) || (e.key === 'ArrowLeft' && open)) {
+                      e.preventDefault()
+                      toggleSub(groupKey(g.group), !open)
+                    }
+                  }}
+                  className="flex w-full items-center gap-1 rounded-md px-2 pb-1 text-left text-[11px] font-semibold uppercase tracking-wider text-fg-subtle hover:text-fg"
+                >
+                  <span aria-hidden className={['inline-block w-2.5 shrink-0 text-[8px] transition-transform', open ? 'rotate-90' : ''].join(' ')}>
+                    ▶
+                  </span>
+                  <span className="min-w-0 flex-1 truncate">{g.group}</span>
+                  <span className="font-normal" title={t('nav.kinds', { count: g.count })}>
+                    {g.count}
+                  </span>
+                </button>
               ) : (
-                <NavSubgroup
-                  key={it.sub}
-                  label={it.sub}
-                  kinds={it.kinds}
-                  open={navOpen.includes(subKey(g.group, it.sub))}
-                  onToggle={(open) => toggleSub(subKey(g.group, it.sub), open)}
-                  active={kind}
-                  onPick={setKind}
-                />
-              ),
-            )}
-          </section>
-        ))}
+                <h3 className="flex px-2 pb-1 text-[11px] font-semibold uppercase tracking-wider text-fg-subtle">
+                  <span className="min-w-0 flex-1 truncate">{g.group}</span>
+                </h3>
+              )}
+              {!open && activeIn && <NavItem active onClick={() => setKind(activeIn.id)} label={activeIn.title} hint={activeIn.subgroup} />}
+              {open &&
+                g.items.map((it) =>
+                  'kind' in it ? (
+                    <NavItem key={it.kind.id} active={kind === it.kind.id} onClick={() => setKind(it.kind.id)} label={it.kind.title} hint={it.kind.subgroup} />
+                  ) : (
+                    <NavSubgroup
+                      key={it.sub}
+                      label={it.sub}
+                      kinds={it.kinds}
+                      open={navOpen.includes(subKey(g.group, it.sub))}
+                      onToggle={(o) => toggleSub(subKey(g.group, it.sub), o)}
+                      active={kind}
+                      onPick={setKind}
+                    />
+                  ),
+                )}
+            </section>
+          )
+        })}
         <CatalogNote view={catalog.view} />
         {kindsError && <p className="mt-3 px-2 text-xs text-danger">{kindsError}</p>}
         <button

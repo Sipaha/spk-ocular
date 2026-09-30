@@ -189,7 +189,7 @@ func (c *catalog) publish(d discovered, answered bool) uint64 {
 	case !answered || len(unconfirmed) > 0:
 		state = catalogPartial
 	}
-	reg := newKindRegistry(append(append([]*kindDef{}, c.static.list...), defs...)...)
+	reg := newKindRegistry(navOrder(c.static.list, defs)...)
 	removed := map[string]bool{}
 	for _, d := range defs {
 		c.known[d.desc.ID] = true
@@ -276,6 +276,77 @@ func discoveredDefs(static *kindRegistry, rs []apiResource) []*kindDef {
 	return out
 }
 
+// placedKinds: well-known built-ins without a described projection, shown
+// in the section of the navigation a user looks for them in (as Lens does),
+// in this order after the section's described kinds; new sections follow
+// the described ones in the order they first appear here. Everything else
+// served (custom resources, rare built-ins) stays under API groups.
+var placedKinds = []struct {
+	gr      schema.GroupResource
+	section string
+}{
+	{schema.GroupResource{Group: "batch", Resource: "jobs"}, "Workloads"},
+	{schema.GroupResource{Group: "batch", Resource: "cronjobs"}, "Workloads"},
+	{schema.GroupResource{Resource: "replicationcontrollers"}, "Workloads"},
+	{schema.GroupResource{Resource: "endpoints"}, "Network"},
+	{schema.GroupResource{Group: "discovery.k8s.io", Resource: "endpointslices"}, "Network"},
+	{schema.GroupResource{Group: "networking.k8s.io", Resource: "networkpolicies"}, "Network"},
+	{schema.GroupResource{Group: "networking.k8s.io", Resource: "ingressclasses"}, "Network"},
+	{schema.GroupResource{Group: "autoscaling", Resource: "horizontalpodautoscalers"}, "Config"},
+	{schema.GroupResource{Resource: "resourcequotas"}, "Config"},
+	{schema.GroupResource{Resource: "limitranges"}, "Config"},
+	{schema.GroupResource{Group: "policy", Resource: "poddisruptionbudgets"}, "Config"},
+	{schema.GroupResource{Group: "scheduling.k8s.io", Resource: "priorityclasses"}, "Config"},
+	{schema.GroupResource{Group: "node.k8s.io", Resource: "runtimeclasses"}, "Config"},
+	{schema.GroupResource{Group: "coordination.k8s.io", Resource: "leases"}, "Config"},
+	{schema.GroupResource{Group: "admissionregistration.k8s.io", Resource: "mutatingwebhookconfigurations"}, "Config"},
+	{schema.GroupResource{Group: "admissionregistration.k8s.io", Resource: "validatingwebhookconfigurations"}, "Config"},
+	{schema.GroupResource{Group: "apiextensions.k8s.io", Resource: "customresourcedefinitions"}, "Cluster"},
+	{schema.GroupResource{Resource: "persistentvolumeclaims"}, "Storage"},
+	{schema.GroupResource{Resource: "persistentvolumes"}, "Storage"},
+	{schema.GroupResource{Group: "storage.k8s.io", Resource: "storageclasses"}, "Storage"},
+	{schema.GroupResource{Resource: "serviceaccounts"}, "Access Control"},
+	{schema.GroupResource{Group: "rbac.authorization.k8s.io", Resource: "roles"}, "Access Control"},
+	{schema.GroupResource{Group: "rbac.authorization.k8s.io", Resource: "rolebindings"}, "Access Control"},
+	{schema.GroupResource{Group: "rbac.authorization.k8s.io", Resource: "clusterroles"}, "Access Control"},
+	{schema.GroupResource{Group: "rbac.authorization.k8s.io", Resource: "clusterrolebindings"}, "Access Control"},
+}
+
+// navOrder lays the kinds out for the navigation: the described ones, each
+// section's placed kinds right after its described ones, then the new
+// sections (placedKinds order), then API groups in discovery order.
+func navOrder(static, defs []*kindDef) []*kindDef {
+	placed := map[string][]*kindDef{}
+	var rest []*kindDef
+	for _, d := range defs {
+		if d.place > 0 {
+			placed[d.desc.Group] = append(placed[d.desc.Group], d)
+		} else {
+			rest = append(rest, d)
+		}
+	}
+	for _, l := range placed {
+		sort.SliceStable(l, func(i, j int) bool { return l[i].place < l[j].place })
+	}
+	last := map[string]int{}
+	for i, d := range static {
+		last[d.desc.Group] = i
+	}
+	out := make([]*kindDef, 0, len(static)+len(defs))
+	for i, d := range static {
+		out = append(out, d)
+		if last[d.desc.Group] == i {
+			out = append(out, placed[d.desc.Group]...)
+			delete(placed, d.desc.Group)
+		}
+	}
+	for _, pk := range placedKinds {
+		out = append(out, placed[pk.section]...)
+		delete(placed, pk.section)
+	}
+	return append(out, rest...)
+}
+
 // discoveredDef describes a served resource generically: name, scope, age
 // (the table's columns come with its first answer — Table, P8 Task 2).
 func discoveredDef(r apiResource) *kindDef {
@@ -296,6 +367,14 @@ func discoveredDef(r apiResource) *kindDef {
 		aliases = append(aliases, r.Singular)
 	}
 	aliases = append(aliases, r.Resource)
+	group := discoveredGroup
+	place := 0
+	for i, pk := range placedKinds {
+		if pk.gr == (schema.GroupResource{Group: r.Group, Resource: r.Resource}) {
+			group, sub, place = pk.section, "", i+1
+			break
+		}
+	}
 	cols := []core.Column{colName}
 	if r.Namespaced {
 		cols = append(cols, colNS)
@@ -303,9 +382,10 @@ func discoveredDef(r apiResource) *kindDef {
 	cols = append(cols, colAge)
 	d := &kindDef{
 		desc: core.KindDescriptor{
-			ID: id, Title: pluralTitle(r.Kind, r.Resource), Singular: singular, Group: discoveredGroup, Subgroup: sub,
+			ID: id, Title: pluralTitle(r.Kind, r.Resource), Singular: singular, Group: group, Subgroup: sub,
 			Columns: cols, Scoped: r.Namespaced, Aliases: aliases,
 		},
+		place:      place,
 		gvr:        schema.GroupVersionResource{Group: r.Group, Version: r.Version, Resource: r.Resource},
 		namespaced: r.Namespaced,
 		kind:       r.Kind,

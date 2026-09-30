@@ -63,7 +63,7 @@ func TestKindCatalogFollowsTheServedResources(t *testing.T) {
 		assert.Contains(t, byID, id)
 	}
 	assert.Equal(t, "Jobs", byID["batch/jobs"].Title)
-	assert.Equal(t, "batch", byID["batch/jobs"].Subgroup)
+	assert.Equal(t, "Workloads", byID["batch/jobs"].Group)
 	assert.Contains(t, byID["persistentvolumeclaims"].Aliases, "pvc")
 	assert.NotContains(t, byID, "events.k8s.io/events", "the events kind shows them")
 

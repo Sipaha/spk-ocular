@@ -14,7 +14,9 @@ const discovered = (id: string, title: string, subgroup: string, extra: Partial<
 })
 const widgets = discovered('ocular.dev/widgets', 'Widgets', 'ocular.dev', { aliases: ['wd', 'widget', 'widgets'] })
 const gadgets = discovered('ocular.dev/gadgets', 'Gadgets', 'ocular.dev', { scoped: false })
-const jobs = discovered('batch/jobs', 'Jobs', 'batch')
+// A well-known built-in the provider places in a section (not API groups).
+const jobs: KindDescriptor = { ...discovered('batch/jobs', 'Jobs', ''), group: 'Workloads', subgroup: undefined }
+const foos = discovered('x.io/foos', 'Foos', 'x.io')
 
 const catalog = (kinds: KindDescriptor[], over: Partial<KindsView> = {}): KindsView => ({ kinds, rev: 1, state: 'ready', session: 1, ...over })
 
@@ -25,28 +27,43 @@ async function open(f: ReturnType<typeof fakeClient>) {
 }
 
 describe('navigation of discovered kinds', () => {
-  it('groups them by API group, collapsed by default; one kind has no level; the header counts kinds', async () => {
+  it('API groups fold whole, folded by default; inside, groups by API group; one kind has no level; the header counts kinds', async () => {
     const f = fakeClient([k8s('prod')])
-    f.client.listKinds = vi.fn(async () => catalog([podsKind, widgets, gadgets, jobs]))
+    f.client.listKinds = vi.fn(async () => catalog([podsKind, jobs, widgets, gadgets, foos]))
     const nav = await open(f)
-    const section = await within(nav).findByRole('region', { name: 'API groups' })
-    expect(within(section).getByText('3')).toBeInTheDocument()
+    // Placed kinds sit in their section.
+    const workloads = await within(nav).findByRole('region', { name: 'Workloads' })
+    expect(within(workloads).getByRole('button', { name: 'Jobs' })).toBeInTheDocument()
+    const section = within(nav).getByRole('region', { name: 'API groups' })
+    const head = within(section).getByRole('button', { name: /API groups/ })
+    expect(head).toHaveAttribute('aria-expanded', 'false')
+    expect(head).toHaveTextContent('3')
+    expect(within(section).queryByRole('button', { name: /ocular\.dev/ })).not.toBeInTheDocument()
+    expect(within(section).queryByRole('button', { name: 'Foos' })).not.toBeInTheDocument()
+
+    await userEvent.click(head)
+    expect(head).toHaveAttribute('aria-expanded', 'true')
+    expect(f.client.setTargetState).toHaveBeenLastCalledWith('kubernetes', 'prod', 'navOpen', JSON.stringify(['group:API groups']))
     const sub = within(section).getByRole('button', { name: /ocular\.dev/ })
     expect(sub).toHaveAttribute('aria-expanded', 'false')
     expect(within(section).queryByRole('button', { name: 'Widgets' })).not.toBeInTheDocument()
-    expect(within(section).getByRole('button', { name: 'Jobs' })).toBeInTheDocument()
+    expect(within(section).getByRole('button', { name: 'Foos' })).toBeInTheDocument() // one kind: no level
 
     await userEvent.click(sub)
     expect(sub).toHaveAttribute('aria-expanded', 'true')
     await userEvent.click(within(section).getByRole('button', { name: 'Widgets' }))
-    expect(f.client.setTargetState).toHaveBeenCalledWith('kubernetes', 'prod', 'navOpen', JSON.stringify(['API groups/ocular.dev']))
+    expect(f.client.setTargetState).toHaveBeenCalledWith('kubernetes', 'prod', 'navOpen', JSON.stringify(['group:API groups', 'API groups/ocular.dev']))
     expect(f.client.openView).toHaveBeenLastCalledWith('kubernetes', 'prod', expect.objectContaining({ kind: 'ocular.dev/widgets' }))
+    // Folded again, the open kind stays in sight.
+    await userEvent.click(head)
+    expect(within(section).getByRole('button', { name: 'Widgets' })).toHaveAttribute('aria-current', 'page')
+    expect(within(section).queryByRole('button', { name: 'Gadgets' })).not.toBeInTheDocument()
   })
 
   it('remembers what was expanded; a collapsed subgroup still shows the open kind', async () => {
     const f = fakeClient([k8s('prod')])
     f.client.listKinds = vi.fn(async () => catalog([podsKind, widgets, gadgets, discovered('x.io/foos', 'Foos', 'x.io'), discovered('x.io/bars', 'Bars', 'x.io')]))
-    f.client.getTargetState = vi.fn(async () => ({ navOpen: JSON.stringify(['API groups/x.io']), kind: JSON.stringify('ocular.dev/widgets') }))
+    f.client.getTargetState = vi.fn(async () => ({ navOpen: JSON.stringify(['group:API groups', 'API groups/x.io']), kind: JSON.stringify('ocular.dev/widgets') }))
     const nav = await open(f)
     const ocular = await within(nav).findByRole('group', { name: 'ocular.dev' })
     expect(within(ocular).getByRole('button', { name: /^ocular\.dev/ })).toHaveAttribute('aria-expanded', 'false')
@@ -59,6 +76,7 @@ describe('navigation of discovered kinds', () => {
   it('→ expands and ← collapses a subgroup from the keyboard', async () => {
     const f = fakeClient([k8s('prod')])
     f.client.listKinds = vi.fn(async () => catalog([podsKind, widgets, gadgets]))
+    f.client.getTargetState = vi.fn(async () => ({ navOpen: JSON.stringify(['group:API groups']) }))
     const nav = await open(f)
     const sub = await within(nav).findByRole('button', { name: /^ocular\.dev/ })
     sub.focus()

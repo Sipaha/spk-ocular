@@ -322,9 +322,11 @@ test('a user without the right sees it in the review', async ({ page }) => {
 
 // ---- P8: every listable resource (discovery + server-side Tables)
 
-/** The navigation's discovered kind (its API group subgroup expanded). */
+/** The navigation's discovered kind (API groups and its subgroup expanded). */
 async function apiKind(page: Page, sub: string, kind: string, ns?: string) {
   const nav = page.getByRole('navigation', { name: 'resources' })
+  const fold = nav.getByRole('region', { name: 'API groups' }).getByRole('button', { name: /^API groups/ })
+  if ((await fold.getAttribute('aria-expanded')) === 'false') await fold.click()
   const group = nav.getByRole('group', { name: sub })
   const head = group.getByRole('button', { name: new RegExp(`^${sub.replace(/\./g, '\\.')}`) })
   if ((await head.getAttribute('aria-expanded')) === 'false') await head.click()
@@ -337,7 +339,9 @@ async function apiKind(page: Page, sub: string, kind: string, ns?: string) {
 test('custom resources: API groups in the navigation, the CRD columns, live changes', async ({ page }) => {
   await openTarget(page, 'kind-ocular-dev')
   const section = page.getByRole('navigation', { name: 'resources' }).getByRole('region', { name: 'API groups' })
-  await expect(section.getByRole('button', { name: /^ocular\.dev/ })).toHaveAttribute('aria-expanded', 'false')
+  // The rare and the custom: folded by default.
+  await expect(section.getByRole('button', { name: /^API groups/ })).toHaveAttribute('aria-expanded', 'false')
+  await expect(section.getByRole('button', { name: /^ocular\.dev/ })).toBeHidden()
   const grid = await apiKind(page, 'ocular.dev', 'Widgets', 'ocular-crd')
   // kubectl get's columns (Detail is wide: a fact of the details)
   await expect(grid.getByRole('columnheader')).toHaveText([/Name/, /Size/, /Phase/, /Ready/, /Since/])
@@ -376,9 +380,10 @@ test('the palette opens a custom resource by its short name', async ({ page }) =
   await expect(page.getByRole('heading', { name: 'Widgets' })).toBeVisible()
 })
 
-test('built-ins without a described view: Jobs with the server columns', async ({ page }) => {
+test('built-ins without a described view: Jobs in Workloads with the server columns', async ({ page }) => {
   await openTarget(page, 'kind-ocular-dev')
-  const grid = await apiKind(page, 'batch', 'Jobs', 'ocular-crd')
+  const grid = await kindPage(page, 'Jobs', 'ocular-crd')
+  await expect(page.getByRole('navigation', { name: 'resources' }).getByRole('region', { name: 'Workloads' }).getByRole('button', { name: 'Jobs', exact: true })).toBeVisible()
   await expect(grid.getByRole('columnheader')).toHaveText([/Name/, /Status/, /Completions/, /Duration/, /Age/])
   await expect(row(grid, 'once')).toContainText('Complete')
   await expect(row(grid, 'once')).toContainText('1/1')

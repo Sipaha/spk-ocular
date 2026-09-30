@@ -11,7 +11,10 @@ import (
 
 // kindDef describes one Kubernetes kind for the generic view machinery.
 type kindDef struct {
-	desc       core.KindDescriptor
+	desc core.KindDescriptor
+	// place: a discovered well-known built-in's rank in placedKinds + 1
+	// (it sits in a section of the navigation); 0: under API groups.
+	place      int
 	gvr        schema.GroupVersionResource
 	namespaced bool
 	// keep is the field whitelist for list caches (see trim): everything

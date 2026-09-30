@@ -92,7 +92,11 @@ P9 — правка YAML объекта Kubernetes с просмотром и о
   эпоха на GVR (`schema.go`, `schema_store.go`: проба `limit=1` через `provider.ViewDescriber`,
   `Query.Schema`, поколение против устаревших проб, закреплённый обычный формат, перепроверка
   по отпечатку CRD и `F5`). Клиент — `web/src/views/useKinds.ts` (перечитывание каталога),
-  `navGroups`/`NavSubgroup`/`CatalogNote` в `Workspace.tsx`, `schema_changed`/`removed` в
+  `navGroups`/`NavSubgroup`/`CatalogNote` в `Workspace.tsx`. Известные встроенные ресурсы без
+  своей проекции (Jobs, PVC, RBAC, HPA…) каталог кладёт в разделы навигации, как Lens
+  (`placedKinds`/`navOrder` в `catalog.go`; решение пользователя 2026-09-30), в «API groups»
+  остаются CRD и редкое; группа из подгрупп сворачивается целиком и свёрнута по умолчанию
+  (`group:<имя>` в `navOpen`), `schema_changed`/`removed` в
   `viewSync.ts`.
 - `internal/streams` — потоки для UI (логи): реестр одноразовых id с owner-ом сессии, NDJSON-
   писатель (коалесцирование, «толчок», heartbeat, дедлайн записи), обработчик с guard-ами

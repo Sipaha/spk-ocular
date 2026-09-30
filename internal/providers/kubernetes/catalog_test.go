@@ -163,8 +163,38 @@ func TestCatalogAddsServedResourcesTheDescribedKindsDoNotCover(t *testing.T) {
 	assert.ElementsMatch(t, []string{"wd", "widget", "widgets"}, w.Aliases)
 	assert.Equal(t, []core.ActionDescriptor{actDelete}, w.Actions)
 	assert.Equal(t, "events", w.EventsKind)
-	assert.Equal(t, "core", byID["persistentvolumeclaims"].Subgroup)
+	// Well-known built-ins sit in the sections a user looks for them in
+	// (as in Lens), not under API groups; custom resources stay there.
+	assert.Equal(t, "Storage", byID["persistentvolumeclaims"].Group)
+	assert.Empty(t, byID["persistentvolumeclaims"].Subgroup)
+	assert.Equal(t, "Workloads", byID["batch/jobs"].Group)
+	assert.Empty(t, byID["batch/jobs"].Subgroup)
+	assert.Equal(t, discoveredGroup, byID["other.example/pods"].Group)
 	assert.Equal(t, "PersistentVolumeClaims", byID["persistentvolumeclaims"].Title)
+	// A placed kind follows the described ones of its section, in the
+	// placement's order; the sections keep the navigation's order.
+	var order []string
+	for _, d := range s.reg.descriptors() {
+		if d.Group == "Workloads" || d.Group == "Storage" {
+			order = append(order, d.ID)
+		}
+	}
+	lastDescribed := -1
+	for i, id := range order {
+		if !ids[id].discovered && ids[id].desc.Group == "Workloads" {
+			lastDescribed = i
+		}
+	}
+	require.GreaterOrEqual(t, lastDescribed, 0)
+	assert.Equal(t, "batch/jobs", order[lastDescribed+1], "Jobs right after the described workloads: %v", order)
+	groups := []string{}
+	for _, d := range s.reg.descriptors() {
+		if len(groups) == 0 || groups[len(groups)-1] != d.Group {
+			groups = append(groups, d.Group)
+		}
+	}
+	assert.Equal(t, discoveredGroup, groups[len(groups)-1], "API groups last: %v", groups)
+	assert.Less(t, indexOf(groups, "Cluster"), indexOf(groups, "Storage"), "%v", groups)
 	assert.Empty(t, byID["ocular.dev/gadgets"].Actions, "no delete verb")
 	assert.False(t, byID["ocular.dev/gadgets"].Scoped)
 	// The described kinds keep their own names; a lookalike does not take them.
@@ -705,4 +735,13 @@ func TestAnOldCRDTimerCallbackKeepsTheNewTimer(t *testing.T) {
 	tr.stop()
 	tr.fire(oldGen + 1)
 	assert.Zero(t, refreshes.Load(), "a stopped trigger refreshes nothing")
+}
+
+func indexOf(l []string, x string) int {
+	for i, v := range l {
+		if v == x {
+			return i
+		}
+	}
+	return -1
 }
