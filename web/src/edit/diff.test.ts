@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { diffLines, hunks, type DiffLine } from './diff'
+import { diff, diffLines, hunks, type DiffLine } from './diff'
 
 const ops = (d: DiffLine[]) => d.map((l) => `${l.op}${l.text}`)
 
@@ -57,6 +57,40 @@ describe('diffLines', () => {
     expect(performance.now() - t).toBeLessThan(500)
     expect(d.filter((l) => l.op === '-')).toHaveLength(5000)
     expect(d.filter((l) => l.op === '+')).toHaveLength(5000)
+  })
+})
+
+describe('diffLines worst cases stay bounded', () => {
+  it('300k short lines replaced whole', () => {
+    const a = Array.from({ length: 300_000 }, (_, i) => `a${i % 7}`).join('\n')
+    const b = Array.from({ length: 300_000 }, (_, i) => `b${i % 5}`).join('\n')
+    const t = performance.now()
+    const d = diffLines(a, b)
+    expect(performance.now() - t).toBeLessThan(400)
+    expect(d.filter((l) => l.op !== '+').map((l) => l.text).join('\n')).toBe(a)
+    expect(d.filter((l) => l.op !== '-').map((l) => l.text).join('\n')).toBe(b)
+  })
+
+  it('interleaved changes beyond the budget: both sides still rebuild, marked approximate', () => {
+    const a = Array.from({ length: 20_000 }, (_, i) => (i % 2 ? `same${i}` : `a${i}`))
+    const b = Array.from({ length: 20_000 }, (_, i) => (i % 2 ? `same${i}` : `b${i}`))
+    const t = performance.now()
+    const r = diff(a.join('\n'), b.join('\n'))
+    const d = r.lines
+    expect(performance.now() - t).toBeLessThan(400)
+    expect(r.approximate).toBe(true)
+    expect(diff('a\nb', 'a\nc').approximate).toBe(false)
+    expect(d.filter((l) => l.op !== '+').map((l) => l.text)).toEqual(a)
+    expect(d.filter((l) => l.op !== '-').map((l) => l.text)).toEqual(b)
+  })
+
+  it('one 3 MB line', () => {
+    const a = 'x'.repeat(3_000_000)
+    const b = 'x'.repeat(2_999_999) + 'y'
+    const t = performance.now()
+    const d = diffLines(`k: 1\n${a}`, `k: 1\n${b}`)
+    expect(performance.now() - t).toBeLessThan(200)
+    expect(d.map((l) => l.op)).toEqual([' ', '-', '+'])
   })
 })
 

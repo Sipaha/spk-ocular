@@ -16,14 +16,26 @@ export interface Hunk {
   lines: DiffLine[]
 }
 
-/** Beyond this many differences the middle is shown as replaced whole:
- * the search stays bounded (O((N+M)·D)) for unrelated texts. */
-const MAX_EDITS = 2000
+/** Work bound of one diff: the search keeps at most this many diagonal
+ * cells (4 bytes each, ~4 MB) and does at most WORK steps; beyond either,
+ * the middle is shown as replaced whole (Approximate). */
+const MAX_CELLS = 1_000_000
+const WORK = 5_000_000
 
 const split = (s: string) => (s === '' ? [] : s.replace(/\n$/, '').split('\n'))
 
-/** The shortest line diff (Myers), common ends trimmed first. */
-export function diffLines(before: string, after: string): DiffLine[] {
+export interface Diff {
+  lines: DiffLine[]
+  /** The budget ran out: part of it is shown as replaced whole, not minimal. */
+  approximate: boolean
+}
+
+/** The shortest line diff (Myers) within a bounded budget. */
+export const diffLines = (before: string, after: string): DiffLine[] => diff(before, after).lines
+
+/** A line diff, common ends trimmed first; lines compare as interned
+ * numbers; beyond the budget the middle is replaced whole (approximate). */
+export function diff(before: string, after: string): Diff {
   const a = split(before)
   const b = split(after)
   let pre = 0
@@ -32,58 +44,73 @@ export function diffLines(before: string, after: string): DiffLine[] {
   while (suf < a.length - pre && suf < b.length - pre && a[a.length - 1 - suf] === b[b.length - 1 - suf]) suf++
   const out: DiffLine[] = []
   for (let i = 0; i < pre; i++) out.push({ op: ' ', text: a[i], a: i + 1, b: i + 1 })
-  middle(a, b, pre, a.length - suf, pre, b.length - suf, out)
+  const exact = middle(a, b, pre, a.length - suf, pre, b.length - suf, out)
   for (let k = suf; k > 0; k--) {
     const i = a.length - k
     const j = b.length - k
     out.push({ op: ' ', text: a[i], a: i + 1, b: j + 1 })
   }
-  return out
+  return { lines: out, approximate: !exact }
 }
 
-function middle(a: string[], b: string[], a0: number, a1: number, b0: number, b1: number, out: DiffLine[]) {
+/** Appends the middle's diff; false when the budget ran out. */
+function middle(a: string[], b: string[], a0: number, a1: number, b0: number, b1: number, out: DiffLine[]): boolean {
   const n = a1 - a0
   const m = b1 - b0
-  const replace = () => {
+  const replace = (exact: boolean) => {
     for (let i = a0; i < a1; i++) out.push({ op: '-', text: a[i], a: i + 1 })
     for (let j = b0; j < b1; j++) out.push({ op: '+', text: b[j], b: j + 1 })
+    return exact
   }
-  if (n === 0 || m === 0) return replace()
-  const max = Math.min(n + m, MAX_EDITS)
-  const off = max + 1
-  // v[k + off]: the furthest x on diagonal k; one copy kept per step d.
-  let v = new Int32Array(2 * max + 3)
+  if (n === 0 || m === 0) return replace(true)
+  // Lines as numbers: a snake compares ints, not (long) strings.
+  const ids = new Map<string, number>()
+  const id = (s: string) => {
+    let v = ids.get(s)
+    if (v === undefined) ids.set(s, (v = ids.size))
+    return v
+  }
+  const x0 = Int32Array.from({ length: n }, (_, i) => id(a[a0 + i]))
+  const y0 = Int32Array.from({ length: m }, (_, j) => id(b[b0 + j]))
+  const max = n + m
+  // trace[d]: the furthest x on diagonals -d..d (index k + d) after step d.
   const trace: Int32Array[] = []
+  const at = (d: number, k: number) => (k < -d || k > d ? -1 : trace[d][k + d])
+  let cells = 0
+  let work = 0
   let found = -1
   for (let d = 0; d <= max && found < 0; d++) {
-    trace.push(v.slice())
-    const next = v.slice()
+    cells += 2 * d + 1
+    if (cells > MAX_CELLS || work > WORK) return replace(false)
+    const row = new Int32Array(2 * d + 1)
     for (let k = -d; k <= d; k += 2) {
-      let x = k === -d || (k !== d && v[k - 1 + off] < v[k + 1 + off]) ? v[k + 1 + off] : v[k - 1 + off] + 1
+      let x = d === 0 ? 0 : k === -d || (k !== d && at(d - 1, k - 1) < at(d - 1, k + 1)) ? at(d - 1, k + 1) : at(d - 1, k - 1) + 1
       let y = x - k
-      while (x < n && y < m && a[a0 + x] === b[b0 + y]) {
+      const sx = x
+      while (x < n && y < m && x0[x] === y0[y]) {
         x++
         y++
       }
-      next[k + off] = x
+      work += 1 + x - sx
+      row[k + d] = x
       if (x >= n && y >= m) {
         found = d
         break
       }
     }
-    v = next
+    work += d
+    trace.push(row)
   }
-  if (found < 0) return replace()
-  // Walk back from (n, m) through the kept rows.
+  if (found < 0) return replace(false)
+  // Walk back from (n, m).
   const rev: DiffLine[] = []
   let x = n
   let y = m
   for (let d = found; d > 0; d--) {
-    const pv = trace[d]
     const k = x - y
-    const down = k === -d || (k !== d && pv[k - 1 + off] < pv[k + 1 + off])
+    const down = k === -d || (k !== d && at(d - 1, k - 1) < at(d - 1, k + 1))
     const pk = down ? k + 1 : k - 1
-    const px = pv[pk + off]
+    const px = at(d - 1, pk)
     const py = px - pk
     // The snake after the edit: down ends at (px, py + 1), right at (px + 1, py).
     while (x > px && y > py && (down ? y > py + 1 : x > px + 1)) {
@@ -105,6 +132,7 @@ function middle(a: string[], b: string[], a0: number, a1: number, b0: number, b1
     rev.push({ op: ' ', text: a[a0 + x], a: a0 + x + 1, b: b0 + y + 1 })
   }
   for (let i = rev.length - 1; i >= 0; i--) out.push(rev[i])
+  return true
 }
 
 /** Changes with `context` unchanged lines around them; longer unchanged
