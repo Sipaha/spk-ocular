@@ -117,6 +117,7 @@ type LogReader struct {
 	lines      [3]lineAsm // by Stream
 	queue      []LogRecord
 	err        error // after the queue: io.EOF or the failure
+	damaged    bool  // the stream ended inside a frame (see EndedCleanly)
 	scratch    []byte
 }
 
@@ -159,6 +160,16 @@ func (r *LogReader) Next() (LogRecord, error) {
 	}
 	return LogRecord{}, r.err
 }
+
+// EndedCleanly: the stream is over and ended with a clean EOF (a Partial
+// record then is the log's real last line, not a cut one). A stream cut
+// inside a frame is not clean: its Partial is a damaged prefix.
+func (r *LogReader) EndedCleanly() bool { return errors.Is(r.err, io.EOF) && !r.damaged }
+
+// Pending is how many decoded records the next Next calls return without
+// reading: at 0 the next Next may wait for the daemon (buffered bytes of
+// an incomplete frame or line do not make a record).
+func (r *LogReader) Pending() int { return len(r.queue) }
 
 // Close ends the stream.
 func (r *LogReader) Close() error {
@@ -242,6 +253,7 @@ func (r *LogReader) fillFrame() {
 // end finishes the stream: open lines become Partial records, then the
 // gap marker (if any); err is returned after them.
 func (r *LogReader) end(err error, gap string) {
+	r.damaged = gap != ""
 	r.flush()
 	if gap != "" {
 		r.queue = append(r.queue, LogRecord{Gap: gap})

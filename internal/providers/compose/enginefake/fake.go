@@ -19,6 +19,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -75,8 +76,43 @@ type Engine struct {
 
 type logState struct {
 	data      []byte
-	followers map[chan []byte]struct{}
+	followers map[chan []byte]logOpts
 	ended     bool
+	// journal: the logs are Journal lines, served like the json-file
+	// driver (since, tail, streams, timestamps applied) instead of data.
+	journal bool
+	entries []logEntry
+}
+
+type logEntry struct {
+	stream byte
+	at     time.Time
+	text   string
+}
+
+// logOpts: what a logs request asked for.
+type logOpts struct {
+	stdout, stderr, stamps, tty bool
+	since                       time.Time
+	tail                        int // < 0: all
+}
+
+func (o logOpts) wants(e logEntry) bool {
+	if e.stream == 2 && !o.tty {
+		return o.stderr
+	}
+	return o.stdout || o.tty && o.stderr
+}
+
+func (o logOpts) format(e logEntry) []byte {
+	text := e.text + "\n"
+	if o.stamps {
+		text = e.at.UTC().Format(time.RFC3339Nano) + " " + text
+	}
+	if o.tty {
+		return []byte(text)
+	}
+	return Frame(e.stream, []byte(text))
 }
 
 type subscriber struct {
@@ -393,6 +429,49 @@ func (e *Engine) AppendLogs(id string, data []byte) {
 	}
 }
 
+// Journal adds a line to the container's log journal (stream 1 stdout, 2
+// stderr) and sends it to the followers that asked for its stream. A
+// container with a journal is served from it (see logState.journal).
+func (e *Engine) Journal(id string, stream byte, at time.Time, text string) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	st := e.logState(id)
+	st.journal = true
+	ent := logEntry{stream: stream, at: at, text: text}
+	st.entries = append(st.entries, ent)
+	for ch, o := range st.followers {
+		if !o.wants(ent) {
+			continue
+		}
+		select {
+		case ch <- o.format(ent):
+		default:
+			panic("enginefake: a logs follower is 1024 chunks behind")
+		}
+	}
+}
+
+// RotateJournal drops the journal lines before t (a rotated log file).
+func (e *Engine) RotateJournal(id string, t time.Time) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	st := e.logState(id)
+	var keep []logEntry
+	for _, ent := range st.entries {
+		if !ent.at.Before(t) {
+			keep = append(keep, ent)
+		}
+	}
+	st.entries = keep
+}
+
+// ResumeLogs lets follows of the container follow again (it started).
+func (e *Engine) ResumeLogs(id string) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.logState(id).ended = false
+}
+
 // EndLogs ends the container's followed logs streams (EOF) and makes later
 // follows end after the data too.
 func (e *Engine) EndLogs(id string) {
@@ -416,7 +495,7 @@ func (e *Engine) LogFollowers(id string) int {
 func (e *Engine) logState(id string) *logState {
 	st := e.logs[id]
 	if st == nil {
-		st = &logState{followers: map[chan []byte]struct{}{}}
+		st = &logState{followers: map[chan []byte]logOpts{}}
 		e.logs[id] = st
 	}
 	return st
@@ -578,7 +657,7 @@ func (e *Engine) serve(w http.ResponseWriter, r *http.Request) {
 	case path == "/images/json":
 		e.list(w, r, e.images, imageFilters, func(raw []byte) any { return imageSummary(raw) })
 	case strings.HasPrefix(path, "/images/") && strings.HasSuffix(path, "/json"):
-		e.inspect(w, e.images, strings.TrimSuffix(strings.TrimPrefix(path, "/images/"), "/json"), "image", nil)
+		e.inspect(w, e.images, strings.TrimSuffix(strings.TrimPrefix(path, "/images/"), "/json"), "image", imageTagged)
 	case path == "/events":
 		e.serveEvents(w, r)
 	default:
@@ -651,7 +730,7 @@ func (e *Engine) inspect(w http.ResponseWriter, m map[string][]byte, ref, kind s
 	if !ok {
 		var found [][]byte
 		for id, b := range m {
-			if strings.HasPrefix(id, ref) || name != nil && name(b) == ref {
+			if strings.HasPrefix(id, ref) || name != nil && slices.Contains(strings.Split(name(b), "\n"), ref) {
 				found = append(found, b)
 			}
 		}
@@ -734,15 +813,54 @@ func (e *Engine) serveEvents(w http.ResponseWriter, r *http.Request) {
 }
 
 func (e *Engine) serveLogs(w http.ResponseWriter, r *http.Request, id string) {
+	q := r.URL.Query()
+	on := func(k string) bool { return q.Get(k) == "1" || q.Get(k) == "true" }
+	o := logOpts{stdout: on("stdout"), stderr: on("stderr"), stamps: on("timestamps"), tail: -1}
+	if t := q.Get("tail"); t != "" && t != "all" {
+		_, _ = fmt.Sscanf(t, "%d", &o.tail)
+	}
+	if sv := q.Get("since"); sv != "" {
+		sec, frac, _ := strings.Cut(sv, ".")
+		var a, b int64
+		_, _ = fmt.Sscanf(sec, "%d", &a)
+		if frac != "" {
+			frac = (frac + "000000000")[:9]
+			_, _ = fmt.Sscanf(frac, "%d", &b)
+		}
+		o.since = time.Unix(a, b)
+	}
 	e.mu.Lock()
-	_, known := e.containers[id]
+	raw, known := e.containers[id]
+	if known {
+		o.tty = decode[engine.ContainerInspect](raw).Config.Tty
+	}
 	st := e.logState(id)
-	data := append([]byte(nil), st.data...)
-	follow := r.URL.Query().Get("follow") == "1" || r.URL.Query().Get("follow") == "true"
+	var data []byte
+	if st.journal {
+		// since is positional, like the json-file reader: from the first
+		// line stamped at or after it, everything after in journal order.
+		var picked []logEntry
+		from := o.since.IsZero()
+		for _, ent := range st.entries {
+			from = from || !ent.at.Before(o.since)
+			if o.wants(ent) && from {
+				picked = append(picked, ent)
+			}
+		}
+		if o.tail >= 0 && len(picked) > o.tail {
+			picked = picked[len(picked)-o.tail:]
+		}
+		for _, ent := range picked {
+			data = append(data, o.format(ent)...)
+		}
+	} else {
+		data = append([]byte(nil), st.data...)
+	}
+	follow := on("follow")
 	var ch chan []byte
-	if follow && !st.ended {
+	if follow && !st.ended && known {
 		ch = make(chan []byte, 1024)
-		st.followers[ch] = struct{}{}
+		st.followers[ch] = o
 	}
 	e.mu.Unlock()
 	if ch != nil {
@@ -756,7 +874,11 @@ func (e *Engine) serveLogs(w http.ResponseWriter, r *http.Request, id string) {
 		writeError(w, http.StatusNotFound, "No such container: "+id)
 		return
 	}
-	w.Header().Set("Content-Type", "application/vnd.docker.multiplexed-stream")
+	if o.tty {
+		w.Header().Set("Content-Type", "application/vnd.docker.raw-stream")
+	} else {
+		w.Header().Set("Content-Type", "application/vnd.docker.multiplexed-stream")
+	}
 	w.WriteHeader(http.StatusOK)
 	fl := w.(http.Flusher)
 	_, _ = w.Write(data)
@@ -844,6 +966,12 @@ func containerName(raw []byte) string {
 	return strings.TrimPrefix(decode[engine.ContainerInspect](raw).Name, "/")
 }
 
+// imageTagged: an image is found by any of its tags (the name argument
+// of inspect compares with one string; a tag list is joined by '\n').
+func imageTagged(raw []byte) string {
+	return strings.Join(decode[engine.ImageInspect](raw).RepoTags, "\n")
+}
+
 func nameField(raw []byte) string {
 	return decode[struct{ Name string }](raw).Name
 }
@@ -881,8 +1009,9 @@ func eventMatches(ev engine.Event, f engine.Filters) bool {
 			switch k {
 			case "type":
 				ok = ev.Type == v
-			case "event":
-				ok = ev.Action == v
+			case "event": // like moby: "health_status: healthy" matches health_status
+				action, _, _ := strings.Cut(ev.Action, ":")
+				ok = ev.Action == v || action == v
 			case "label":
 				ok = labelMatch(ev.Actor.Attributes, v)
 			case "container", "network", "volume", "image":
