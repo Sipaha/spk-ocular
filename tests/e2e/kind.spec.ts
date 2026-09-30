@@ -518,3 +518,76 @@ test('edit a ConfigMap as YAML: reviewed by the server, written once; a refusal 
     kubectl('-n', 'ocular-demo', 'delete', 'configmap', 'e2e-edit', '--ignore-not-found', '--wait=false')
   }
 })
+
+test('Secret values: show, copy and change a key; the value leaves only in RevealValue', async ({ page }) => {
+  const MARKER = 'MARKER-e2e-4a7d-value'
+  const b64 = Buffer.from(MARKER).toString('base64')
+  // Every answer but RevealValue's, and every event, is checked for the value.
+  const bodies: string[] = []
+  const reads: Promise<void>[] = []
+  page.on('response', (r) => {
+    const u = new URL(r.url())
+    if (!u.pathname.startsWith('/api/') || u.pathname === '/api/events' || u.pathname === '/api/RevealValue') return
+    reads.push(r.text().then((t) => void bodies.push(`${u.pathname} ${t}`), () => {}))
+  })
+  await page.addInitScript(() => {
+    const w = window as unknown as { __sse: string[] }
+    w.__sse = []
+    const ES = window.EventSource
+    window.EventSource = class extends ES {
+      constructor(url: string | URL, init?: EventSourceInit) {
+        super(url, init)
+        this.addEventListener('message', (m) => w.__sse.push(String((m as MessageEvent).data)))
+      }
+    } as typeof EventSource
+  })
+  await page.context().grantPermissions(['clipboard-read', 'clipboard-write'])
+  kubectl('-n', 'ocular-demo', 'create', 'secret', 'generic', 'e2e-values', `--from-literal=pin=${MARKER}`, '--from-literal=user=admin')
+  try {
+    await openTarget(page, 'kind-ocular-dev')
+    const grid = await kindPage(page, 'Secrets')
+    await row(grid, 'e2e-values').click()
+    const drawer = page.getByRole('dialog', { name: 'secrets e2e-values' })
+    const values = drawer.getByRole('region', { name: 'Values' })
+    const pin = values.locator('[data-value-key="pin"]')
+    await expect(pin).toContainText(`${MARKER.length} B`)
+    await expect(drawer).not.toContainText(MARKER)
+
+    await pin.getByRole('button', { name: 'Show' }).click()
+    await expect(pin.locator('[data-value]')).toHaveText(MARKER)
+    await pin.getByRole('button', { name: 'Hide' }).click()
+    await expect(drawer).not.toContainText(MARKER)
+
+    await pin.getByRole('button', { name: 'Copy' }).click()
+    await expect(page.getByText('The value of key pin is copied')).toBeVisible()
+    expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(MARKER)
+    await expect(drawer).not.toContainText(MARKER)
+
+    await pin.getByRole('button', { name: 'Change' }).click()
+    const dialog = page.getByRole('dialog', { name: /^Change value/ })
+    await expect(dialog.getByRole('button', { name: /Review/ })).toBeDisabled() // not loaded yet
+    await dialog.getByRole('button', { name: 'Load current' }).click()
+    await expect(dialog.getByLabel('Value')).toHaveValue(MARKER)
+    await dialog.getByLabel('Value').fill('e2e-new')
+    await page.keyboard.press('ControlOrMeta+Enter')
+    const review = page.getByRole('dialog', { name: /^Change value/ })
+    await expect(review).toContainText('checked by the server without writing')
+    await expect(review).toContainText(`${MARKER.length} → 7 B`)
+    await expect(review.getByLabel('where')).toContainText('Namespaceocular-demo')
+    expect(kubectl('-n', 'ocular-demo', 'get', 'secret', 'e2e-values', '-o', 'jsonpath={.data.pin}')).toBe(b64) // reviewed only
+    await review.getByRole('button', { name: 'Apply' }).click()
+    await expect(page.getByText('Key pin is written')).toBeVisible()
+    await expect(review).toBeHidden()
+    expect(Buffer.from(kubectl('-n', 'ocular-demo', 'get', 'secret', 'e2e-values', '-o', 'jsonpath={.data.pin}'), 'base64').toString()).toBe('e2e-new')
+    await expect(pin).toContainText('7 B')
+  } finally {
+    kubectl('-n', 'ocular-demo', 'delete', 'secret', 'e2e-values', '--ignore-not-found', '--wait=false')
+  }
+  await Promise.all(reads)
+  const sse = await page.evaluate(() => (window as unknown as { __sse: string[] }).__sse)
+  expect(bodies.length).toBeGreaterThan(5)
+  for (const s of [...bodies, ...sse]) {
+    expect(s).not.toContain(MARKER)
+    expect(s).not.toContain(b64)
+  }
+})
