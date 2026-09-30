@@ -99,6 +99,15 @@ func (w *API) PrepareAction(req api.ActionRequest) (core.ActionPlan, error) {
 func (w *API) RunAction(req api.ActionRunRequest) (core.ActionResult, error) {
 	return w.a.RunAction(context.Background(), req)
 }
+func (w *API) GetEditSource(ref core.Ref) (core.EditDoc, error) {
+	return w.a.GetEditSource(context.Background(), ref)
+}
+func (w *API) PrepareEdit(req api.EditPrepareRequest) (core.EditPlan, error) {
+	return w.a.PrepareEdit(context.Background(), req)
+}
+func (w *API) RunEdit(req api.EditRunRequest) (core.EditResult, error) {
+	return w.a.RunEdit(context.Background(), req)
+}
 func (w *API) ForwardInfo(ref core.Ref) (core.ForwardInfo, error) {
 	return w.a.ForwardInfo(context.Background(), ref)
 }

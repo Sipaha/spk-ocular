@@ -236,6 +236,55 @@ export interface ActionPlan {
   expect: string
 }
 
+/** An object's text for the editor (GetEditSource). */
+export interface EditDoc {
+  /** the object, with the UID read */
+  ref: Ref
+  text: string
+  /** signed by the backend: sent back with the original text */
+  base: string
+}
+
+/** What an edit would do, read without changing anything. */
+export interface EditPlan {
+  where: LiveTarget
+  /** the object now and the expected result, as the editor shows objects */
+  before: string
+  after: string
+  /** after is the server's dry run (a prediction); else computed locally */
+  checked: boolean
+  changed: boolean
+  /** the object changed since the text was read: the edit lies over it */
+  rebased?: boolean
+  /** fields the edit overwrites that changed since the text was read */
+  collisions?: string[]
+  destructive?: boolean
+  warnings?: Message[]
+  rights: { state: RightsState; reason?: string }
+  /** the server refused the edit */
+  unavailable?: Message
+  /** present only when the plan can be written */
+  token?: string
+}
+
+export interface EditPrepareRequest {
+  ref: Ref
+  base: string
+  original: string
+  edited: string
+}
+
+export interface EditRunRequest extends EditPrepareRequest {
+  token: string
+}
+
+/** An edit was written; actual is the object as written (may differ from the plan's after). */
+export interface EditResult {
+  message: string
+  version?: string
+  actual?: string
+}
+
 export type ActionOutcome = 'done' | 'refused' | 'unknown' | 'skipped'
 
 /** One write of a run (a service's container): its object and outcome. */

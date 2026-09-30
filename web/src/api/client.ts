@@ -1,5 +1,5 @@
 import { Call, Events } from '@wailsio/runtime'
-import type { ActionParams, ActionPlan, ActionResult, ApiEvent, AppInfo, EventType, ExecInfo,
+import type { ActionParams, ActionPlan, ActionResult, ApiEvent, AppInfo, EditDoc, EditPlan, EditPrepareRequest, EditResult, EditRunRequest, EventType, ExecInfo,
   KindsView, LogInfo, LogQuery, LogStreamInfo, MetricsView, Page, Query, RecentObject, Ref, Resource, ScopesView, TargetsView, TerminalInfo, TerminalRequest, ViewInfo, ForwardInfo, StartForwardRequest, Tunnel } from './types'
 
 export class ApiError extends Error {
@@ -57,6 +57,12 @@ export interface Client {
   prepareAction(ref: Ref, action: string, params: ActionParams): Promise<ActionPlan>
   /** Runs a confirmed plan: its object, params, expect and target revision. */
   runAction(plan: ActionPlan): Promise<ActionResult>
+  /** An object's text for the editor, with a signed base. */
+  getEditSource(ref: Ref): Promise<EditDoc>
+  /** What an edit would do (nothing changes); a plan that can be written has a token. */
+  prepareEdit(req: EditPrepareRequest): Promise<EditPlan>
+  /** Writes a reviewed plan once (its token). */
+  runEdit(req: EditRunRequest): Promise<EditResult>
   forwardInfo(ref: Ref): Promise<ForwardInfo>
   /** Listens on loopback and connects once; a failed first connect rejects (conflict: the local port is taken). */
   startForward(req: StartForwardRequest): Promise<Tunnel>
@@ -139,6 +145,9 @@ export const httpClient: Client = {
   forgetTerminal: (terminalId) => done(post('ForgetTerminal', { terminalId })),
   prepareAction: (ref, action, params) => post('PrepareAction', { ref, action, params }),
   runAction: (plan) => post('RunAction', runRequest(plan)),
+  getEditSource: (ref) => post('GetEditSource', ref),
+  prepareEdit: (req) => post('PrepareEdit', req),
+  runEdit: (req) => post('RunEdit', req),
   forwardInfo: (ref) => post('ForwardInfo', ref),
   startForward: (req) => post('StartForward', req),
   stopForward: (id) => done(post('StopForward', { id })),
@@ -234,6 +243,9 @@ export const wailsClient: Client = {
   forgetTerminal: (terminalId) => wcall('ForgetTerminal', terminalId),
   prepareAction: (ref, action, params) => wcall('PrepareAction', { ref, action, params }),
   runAction: (plan) => wcall('RunAction', runRequest(plan)),
+  getEditSource: (ref) => wcall('GetEditSource', ref),
+  prepareEdit: (req) => wcall('PrepareEdit', req),
+  runEdit: (req) => wcall('RunEdit', req),
   forwardInfo: (ref) => wcall('ForwardInfo', ref),
   startForward: (req) => wcall('StartForward', req),
   stopForward: (id) => wcall('StopForward', id),

@@ -94,6 +94,12 @@ type API interface {
 	// RunAction performs a confirmed plan on the confirmed object (its UID)
 	// in the session the target's revision was checked against.
 	RunAction(ctx context.Context, req ActionRunRequest) (core.ActionResult, error)
+	// GetEditSource reads an object's text for the editor with a signed
+	// base; PrepareEdit reviews an edit (nothing changes) and signs a plan
+	// that can be written; RunEdit writes that plan once.
+	GetEditSource(ctx context.Context, ref core.Ref) (core.EditDoc, error)
+	PrepareEdit(ctx context.Context, req EditPrepareRequest) (core.EditPlan, error)
+	RunEdit(ctx context.Context, req EditRunRequest) (core.EditResult, error)
 	// ForwardInfo: the ports of an object that can be forwarded.
 	ForwardInfo(ctx context.Context, ref core.Ref) (core.ForwardInfo, error)
 	// StartForward starts a tunnel (owned by the app, not the session):

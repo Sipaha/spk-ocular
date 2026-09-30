@@ -186,6 +186,15 @@ func (h *HTTP) routes() {
 	h.mux.HandleFunc("POST /api/RunAction", handle(func(ctx context.Context, r *api.ActionRunRequest) (any, error) {
 		return h.api.RunAction(ctx, *r)
 	}))
+	h.mux.HandleFunc("POST /api/GetEditSource", handle(func(ctx context.Context, r *core.Ref) (any, error) {
+		return h.api.GetEditSource(ctx, *r)
+	}))
+	h.mux.HandleFunc("POST /api/PrepareEdit", handle(func(ctx context.Context, r *api.EditPrepareRequest) (any, error) {
+		return h.api.PrepareEdit(ctx, *r)
+	}))
+	h.mux.HandleFunc("POST /api/RunEdit", handle(func(ctx context.Context, r *api.EditRunRequest) (any, error) {
+		return h.api.RunEdit(ctx, *r)
+	}))
 	h.mux.HandleFunc("POST /api/ForwardInfo", handle(func(ctx context.Context, r *core.Ref) (any, error) {
 		return h.api.ForwardInfo(ctx, *r)
 	}))
