@@ -242,23 +242,25 @@ export function ResourceDrawer({ client, hub, target, subject, onClose, hasLogs,
               </button>
             )}
             {onTerminal && hasExec?.(current.kind) && (
-              <>
+              // A split button: the terminal at once, or ▾ to choose the
+              // container and the command first.
+              <span className="inline-flex">
                 <button
-                  className="rounded-md border border-line px-2 py-0.5 text-xs text-fg-muted hover:bg-hover hover:text-fg"
+                  className="rounded-l-md border border-line px-2 py-0.5 text-xs text-fg-muted hover:bg-hover hover:text-fg"
                   onClick={() => onTerminal({ ...(r?.ref ?? current), provider: target.provider, target: target.id }, false)}
                   title={t('term.openHint')}
                 >
                   {t('term.open')}
                 </button>
                 <button
-                  className="rounded-md border border-line px-2 py-0.5 text-xs text-fg-muted hover:bg-hover hover:text-fg"
+                  className="-ml-px rounded-r-md border border-line px-1.5 py-0.5 text-xs text-fg-muted hover:bg-hover hover:text-fg"
                   onClick={() => onTerminal({ ...(r?.ref ?? current), provider: target.provider, target: target.id }, true)}
                   title={t('term.dialogHint')}
                   aria-label={t('term.dialog')}
                 >
-                  …
+                  ▾
                 </button>
-              </>
+              </span>
             )}
             {editableOf?.(current.kind) && (
               <button className={toolBtn} disabled={!canEdit || !!editing || loadingEdit} onClick={startEdit} title={t('edit.openHint')}>
