@@ -187,13 +187,18 @@ type session struct {
 	beforeWrite func(action string, u *unstructured.Unstructured)
 	// problemSources are what a Problems view observes (tests replace them).
 	problemSources []problemSource
+	// incarnation tells this session's run grants from another's (P12);
+	// spent: the run grants already sent.
+	incarnation string
+	spent       spentGrants
 }
 
 func newSession(target, hash string, dyn dynamic.Interface, watchList bool) *session {
 	ctx, cancel := context.WithCancel(context.Background())
 	s := &session{
 		ctx: ctx, cancel: cancel, target: target, hash: hash, dyn: dyn, caches: newCacheManager(dyn, watchList), now: time.Now, problemSources: problemSources,
-		conn: newConn(&rest.Config{Host: "https://cluster.invalid"}, dyn, target, target, hash),
+		conn:        newConn(&rest.Config{Host: "https://cluster.invalid"}, dyn, target, target, hash),
+		incarnation: randomHex(16), spent: spentGrants{byNonce: map[string]time.Time{}},
 	}
 	s.cat = newCatalog(ctx, allKinds, nil)
 	s.caches.onSchema = s.schemaChanged

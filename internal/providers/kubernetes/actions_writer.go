@@ -27,6 +27,8 @@ type actionWriter interface {
 	// evict asks for a pod's eviction (policy/v1 Eviction) with its UID and
 	// version as preconditions.
 	evict(ctx context.Context, ns, name, uid, rv string) error
+	// create posts obj to its collection (a Job of Run now).
+	create(ctx context.Context, gvr schema.GroupVersionResource, ns string, obj *unstructured.Unstructured) error
 }
 
 // eviction is the body of a pod's eviction request.
@@ -106,6 +108,15 @@ func (w *restWriter) evict(ctx context.Context, ns, name, uid, rv string) error 
 	return w.c.Post().AbsPath(objectPath(podsKind.gvr, ns, name, "eviction")...).SetHeader("Content-Type", "application/json").Body(body).MaxRetries(0).Do(ctx).Error()
 }
 
+func (w *restWriter) create(ctx context.Context, gvr schema.GroupVersionResource, ns string, obj *unstructured.Unstructured) error {
+	body, err := obj.MarshalJSON()
+	if err != nil {
+		return err
+	}
+	p := objectPath(gvr, ns, "", "")
+	return w.c.Post().AbsPath(p[:len(p)-1]...).SetHeader("Content-Type", "application/json").Body(body).MaxRetries(0).Do(ctx).Error()
+}
+
 // dynWriter writes through a dynamic client (fake clients in tests: no
 // transport, no retries).
 type dynWriter struct{ dyn dynamic.Interface }
@@ -133,6 +144,11 @@ func (w dynWriter) editPatch(ctx context.Context, gvr schema.GroupVersionResourc
 
 func (w dynWriter) evict(ctx context.Context, ns, name, uid, rv string) error {
 	_, err := w.dyn.Resource(podsKind.gvr).Namespace(ns).Create(ctx, &unstructured.Unstructured{Object: eviction(ns, name, uid, rv)}, metav1.CreateOptions{}, "eviction")
+	return err
+}
+
+func (w dynWriter) create(ctx context.Context, gvr schema.GroupVersionResource, ns string, obj *unstructured.Unstructured) error {
+	_, err := w.dyn.Resource(gvr).Namespace(ns).Create(ctx, obj, metav1.CreateOptions{})
 	return err
 }
 

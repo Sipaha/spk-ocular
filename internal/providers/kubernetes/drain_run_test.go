@@ -51,6 +51,10 @@ func (w *drainRec) patch(ctx context.Context, gvr schema.GroupVersionResource, n
 	return err
 }
 
+func (w *drainRec) create(context.Context, schema.GroupVersionResource, string, *unstructured.Unstructured) error {
+	return errors.New("a drain never creates")
+}
+
 func (w *drainRec) delete(context.Context, schema.GroupVersionResource, string, string, metav1.DeleteOptions) error {
 	return errors.New("a drain never deletes")
 }

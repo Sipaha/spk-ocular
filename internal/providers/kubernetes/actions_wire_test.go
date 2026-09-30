@@ -230,3 +230,45 @@ func TestAnEvictionIsOneRequestOnTheWire(t *testing.T) {
 		})
 	}
 }
+
+// A Job of Run now is one POST to its collection, whatever the answer —
+// client-go would resend a 503 with Retry-After.
+func TestACreateIsOneRequestOnTheWire(t *testing.T) {
+	for _, tc := range []struct {
+		code   int
+		reason string
+	}{{503, "ServiceUnavailable"}, {429, "TooManyRequests"}, {201, ""}} {
+		t.Run(fmt.Sprint(tc.code), func(t *testing.T) {
+			var mu sync.Mutex
+			var posts []string
+			var body map[string]any
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				mu.Lock()
+				posts = append(posts, r.Method+" "+r.URL.Path)
+				_ = json.NewDecoder(r.Body).Decode(&body)
+				mu.Unlock()
+				if tc.code == 201 {
+					w.Header().Set("Content-Type", "application/json")
+					w.WriteHeader(201)
+					_, _ = io.WriteString(w, `{"apiVersion":"batch/v1","kind":"Job","metadata":{"name":"j"}}`)
+					return
+				}
+				statusReply(w, tc.code, tc.reason, true)
+			}))
+			t.Cleanup(srv.Close)
+			wr, err := newRESTWriter(&rest.Config{Host: srv.URL})
+			require.NoError(t, err)
+			job := &unstructured.Unstructured{Object: map[string]any{"apiVersion": "batch/v1", "kind": "Job", "metadata": map[string]any{"name": "j", "namespace": "a"}}}
+			err = wr.create(context.Background(), jobsV1GVR, "a", job)
+			if tc.code == 201 {
+				require.NoError(t, err)
+			} else {
+				require.Error(t, err)
+			}
+			mu.Lock()
+			defer mu.Unlock()
+			assert.Equal(t, []string{"POST /apis/batch/v1/namespaces/a/jobs"}, posts)
+			assert.Equal(t, "j", body["metadata"].(map[string]any)["name"])
+		})
+	}
+}

@@ -25,6 +25,9 @@ func discoveredActions(r apiResource) []core.ActionDescriptor {
 	if gvr == cronJobsV1GVR && r.has("get") && r.has("patch") {
 		out = append(out, actSuspend, actResume)
 	}
+	if gvr == cronJobsV1GVR && r.has("get") {
+		out = append(out, actRunNow)
+	}
 	if r.has("delete") {
 		out = append(out, actDelete)
 	}

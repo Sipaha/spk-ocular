@@ -595,3 +595,56 @@ spec:
 	require.NoError(t, err)
 	assert.Equal(t, "false", suspend())
 }
+
+// Run now on a suspended CronJob whose history limit is 0: the Job with the
+// reviewed name is made as kubectl makes it, runs, and the controller
+// deletes it once finished; the same review never sends another Job.
+func TestKindActionCronJobRunNow(t *testing.T) {
+	c := kindActionCluster(t)
+	require.Eventually(t, func() bool { return c.sess.Catalog().State == core.CatalogReady }, 30*time.Second, 20*time.Millisecond)
+	c.apply(`apiVersion: batch/v1
+kind: CronJob
+metadata: {name: yearly}
+spec:
+  schedule: "0 0 1 1 *"
+  suspend: true
+  successfulJobsHistoryLimit: 0
+  jobTemplate:
+    metadata: {labels: {app: yearly}}
+    spec:
+      template:
+        spec:
+          restartPolicy: Never
+          terminationGracePeriodSeconds: 1
+          containers: [{name: app, image: "busybox:1.36", command: ["true"]}]
+`)
+	uid := c.kubectlNS("get", "cronjob", "yearly", "-o", "jsonpath={.metadata.uid}")
+	ref := core.Ref{Provider: ProviderID, Target: c.sess.target, Scope: c.ns, Kind: "batch/cronjobs", Name: "yearly", UID: uid}
+	plan := c.prepare(ref, "run", core.ActionParams{})
+	require.Nil(t, plan.Unavailable)
+	assert.Equal(t, core.RightsAllowed, plan.Rights.State)
+	var job string
+	for _, e := range plan.Effects {
+		if e.Key == "kubernetes.cronjob.run" {
+			job = e.Params["job"]
+		}
+	}
+	require.Regexp(t, `^yearly-manual-[a-z0-9]{5}$`, job)
+
+	res, err := c.sess.RunAction(context.Background(), provider.ActionRun{Ref: plan.Where.Ref, Action: "run", Expect: plan.Expect})
+	require.NoError(t, err)
+	assert.Contains(t, res.Message, job)
+	created := c.kubectlNS("get", "job", job, "-o", `jsonpath={.metadata.annotations.cronjob\.kubernetes\.io/instantiate} {.metadata.labels.app} {.metadata.ownerReferences[0].kind}/{.metadata.ownerReferences[0].uid}/{.metadata.ownerReferences[0].controller}`)
+	assert.Equal(t, "manual yearly CronJob/"+uid+"/true", created)
+
+	// Finished, it is deleted by the history limit 0.
+	require.Eventually(t, func() bool {
+		_, err := c.run("-n", c.ns, "get", "job", job)
+		return err != nil
+	}, 120*time.Second, time.Second, "the finished Job is deleted by the CronJob's history limit")
+	_, err = c.sess.RunAction(context.Background(), provider.ActionRun{Ref: plan.Where.Ref, Action: "run", Expect: plan.Expect})
+	var pe *provider.Error
+	require.ErrorAs(t, err, &pe)
+	assert.Equal(t, provider.ClassConflict, pe.Class, "the review was run once")
+	assert.Empty(t, c.kubectlNS("get", "jobs", "-o", "name"), "no second Job")
+}

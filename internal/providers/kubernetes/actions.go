@@ -226,8 +226,11 @@ func (s *session) RunAction(ctx context.Context, run provider.ActionRun) (core.A
 	if err != nil {
 		return core.ActionResult{}, err
 	}
-	if run.Action == actDrain.ID {
+	switch run.Action {
+	case actDrain.ID:
 		return s.runDrain(ctx, def, run)
+	case actRunNow.ID:
+		return s.runNow(ctx, def, run)
 	}
 	if !sameRoute(def, run.Expect) {
 		// Reviewed through another version or scope of the resource: never
@@ -391,6 +394,9 @@ func (s *session) PrepareAction(ctx context.Context, ref core.Ref, action string
 	fx := effects(def, action, p, u)
 	plan.Effects, plan.Warnings = fx.effects, fx.warnings
 	plan.Destructive = plan.Destructive || fx.destructive
+	if action == actRunNow.ID {
+		plan = s.prepareRunNow(def, plan, u)
+	}
 
 	// The optional parts, in parallel within one deadline; an answer that
 	// ignores it (a stuck transport) is not waited for.

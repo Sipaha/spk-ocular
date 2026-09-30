@@ -55,6 +55,10 @@ func (w *editRec) delete(context.Context, schema.GroupVersionResource, string, s
 	return errors.New("unexpected delete")
 }
 
+func (w *editRec) create(context.Context, schema.GroupVersionResource, string, *unstructured.Unstructured) error {
+	return errors.New("an edit never creates")
+}
+
 func (w *editRec) evict(context.Context, string, string, string, string) error {
 	return errors.New("unexpected eviction")
 }

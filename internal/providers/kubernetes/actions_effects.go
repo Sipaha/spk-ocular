@@ -296,6 +296,10 @@ func (s *session) rights(ctx context.Context, def *kindDef, action string, u *un
 		verb = "delete"
 	}
 	attrs := map[string]any{"verb": verb, "group": def.gvr.Group, "resource": def.gvr.Resource, "namespace": u.GetNamespace(), "name": u.GetName()}
+	if action == actRunNow.ID { // a Job in the CronJob's namespace
+		verb = "create"
+		attrs = map[string]any{"verb": verb, "group": jobsV1GVR.Group, "resource": jobsV1GVR.Resource, "namespace": u.GetNamespace()}
+	}
 	if sub != "" {
 		attrs["subresource"] = sub
 	}
@@ -306,7 +310,7 @@ func (s *session) rights(ctx context.Context, def *kindDef, action string, u *un
 	case core.RightsUnknown:
 		return core.Rights{State: st, Reason: why}
 	}
-	what := def.gvr.Resource
+	what := attrs["resource"].(string)
 	if sub != "" {
 		what += "/" + sub
 	}

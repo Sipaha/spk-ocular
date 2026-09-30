@@ -96,14 +96,14 @@ func actionIDs(s *session, kind string) []string {
 func TestCronJobsGetTheirActions(t *testing.T) {
 	t.Run("batch/v1 with patch", func(t *testing.T) {
 		s := cronJobSession(t, cronJobsV1)
-		assert.Equal(t, []string{"suspend", "resume", "delete"}, actionIDs(s, "batch/cronjobs"))
+		assert.Equal(t, []string{"suspend", "resume", "run", "delete"}, actionIDs(s, "batch/cronjobs"))
 	})
 	t.Run("without patch: no suspend or resume", func(t *testing.T) {
 		v := cronJobsV1
 		v.res = []v2res{v.res[0]}
 		v.res[0].verbs = lw
 		s := cronJobSession(t, v)
-		assert.Equal(t, []string{"delete"}, actionIDs(s, "batch/cronjobs"))
+		assert.Equal(t, []string{"run", "delete"}, actionIDs(s, "batch/cronjobs"))
 	})
 	t.Run("another version: only delete", func(t *testing.T) {
 		v := cronJobsV1
