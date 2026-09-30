@@ -25,13 +25,30 @@ var knownCauses = map[metav1.CauseType]bool{
 // original cannot tell what to strip). Only known enum values count, in
 // the provider's own words.
 func secretSafe(err error) core.Message {
+	return secretSafeAs(err, false)
+}
+
+// secretReadSafe is secretSafe for reading a Secret (its details, keys and
+// values): the same rule, words of a read.
+func secretReadSafe(err error) core.Message {
+	return secretSafeAs(err, true)
+}
+
+func secretSafeAs(err error, read bool) core.Message {
+	other := "edit.hiddenOther"
+	if read {
+		other = "secret.hiddenReadOther"
+	}
 	var se apierrors.APIStatus
 	if !errors.As(err, &se) {
-		return msg("edit.hiddenOther")
+		return msg(other)
 	}
 	st := se.Status()
 	switch st.Reason {
 	case metav1.StatusReasonInvalid, metav1.StatusReasonBadRequest, metav1.StatusReasonRequestEntityTooLarge, metav1.StatusReasonUnsupportedMediaType:
+		if read {
+			return msg(other)
+		}
 		n := 0
 		if st.Details != nil {
 			for _, c := range st.Details.Causes {
@@ -45,11 +62,14 @@ func secretSafe(err error) core.Message {
 		}
 		return msg("edit.hiddenInvalid")
 	case metav1.StatusReasonForbidden, metav1.StatusReasonUnauthorized:
+		if read {
+			return msg("secret.hiddenReadForbidden")
+		}
 		return msg("edit.hiddenForbidden")
 	case metav1.StatusReasonConflict, metav1.StatusReasonAlreadyExists:
 		return msg("edit.hiddenConflict")
 	case metav1.StatusReasonNotFound, metav1.StatusReasonGone:
 		return msg("edit.hiddenGone")
 	}
-	return msg("edit.hiddenOther")
+	return msg(other)
 }

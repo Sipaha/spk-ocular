@@ -71,8 +71,13 @@ func (s *session) Get(ctx context.Context, ref core.Ref) (*core.Resource, error)
 		}
 	}
 	if err != nil {
-		class, msg := classify(err)
-		return nil, &provider.Error{Class: class, Message: msg}
+		class, text := classify(err)
+		if def == secretsKind {
+			// A Secret's refusal is said without the server's strings
+			// (secretSafe): a message may carry a value.
+			text = secretReadSafe(err).Text
+		}
+		return nil, &provider.Error{Class: class, Message: text}
 	}
 	if ref.UID != "" && string(u.GetUID()) != ref.UID {
 		// Same name, another object: never show it as the one clicked.

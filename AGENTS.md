@@ -360,8 +360,10 @@ P9 — правка YAML объекта Kubernetes с просмотром и о
   изменяющего запроса, план опасный; просмотр ограничен сроком и кончается с сессией. —
   `edit_session_test.go`, `edit_dryrun_test.go`, `TestKindEdit*`.
 - Правка Secret — только `metadata`; строки сервера об объекте Secret (message, reason,
-  cause) не показываются никогда — только известные значения перечислений своими словами. —
-  `TestSecretRefusalsNeverPrintServerStrings`, `TestASecretsReadRefusalsAreHidden`.
+  cause) не показываются никогда — только известные значения перечислений своими словами
+  (`secretSafe` для записи, `secretReadSafe` для чтения: детали, источник правки). —
+  `TestSecretRefusalsNeverPrintServerStrings`, `TestASecretsReadRefusalsAreHidden`,
+  `TestASecretsDetailsRefusalsAreHidden`.
 - Несохранённые правки не теряются молча: всё, что уводит от редактора (закрытие деталей, Esc,
   связи, вкладка, другой объект, вид, scope, target, палитра), идёт через `mayLeave`
   (`web/src/edit/guard.ts`) — «Отбросить правки?» с фокусом на «Продолжить правку» (вопрос держит

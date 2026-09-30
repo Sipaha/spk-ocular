@@ -636,3 +636,31 @@ func TestPrepareEditIsBoundedAndEndsWithTheSession(t *testing.T) {
 		assertClass(t, wait(t, prepare(s, request(doc, base, edited(doc)))), provider.ClassUnavailable)
 	})
 }
+
+// The details of a Secret never print the server's strings either: a
+// refusal (a webhook, an aggregated server) may carry a value.
+func TestASecretsDetailsRefusalsAreHidden(t *testing.T) {
+	sec := &unstructured.Unstructured{Object: map[string]any{"apiVersion": "v1", "kind": "Secret", "type": "Opaque",
+		"metadata": map[string]any{"name": "s", "namespace": "ns", "uid": "uid-s", "resourceVersion": "3"},
+		"data":     map[string]any{"pin": "bWFya2VyLTQyNDI="}}}
+	c := editClient(sec)
+	s := newSession("ctx", "h", c, false)
+	t.Cleanup(s.Close)
+	ref := core.Ref{Provider: ProviderID, Target: "ctx", Scope: "ns", Kind: "secrets", Name: "s"}
+	for name, refusal := range map[string]error{
+		"forbidden": apierrors.NewForbidden(schema.GroupResource{Resource: "secrets"}, "s", errors.New("marker-4242 bWFya2VyLTQyNDI=")),
+		"internal":  apierrors.NewInternalError(errors.New("marker-4242 bWFya2VyLTQyNDI=")),
+		"not found": apierrors.NewNotFound(schema.GroupResource{Resource: "secrets"}, "marker-4242"),
+	} {
+		c.PrependReactor("get", "secrets", func(k8stesting.Action) (bool, runtime.Object, error) { return true, nil, refusal })
+		_, err := s.Get(context.Background(), ref)
+		require.Error(t, err, name)
+		assert.NotContains(t, err.Error(), "marker-4242", name)
+		assert.NotContains(t, err.Error(), "bWFya2VyLTQyNDI=", name)
+	}
+	c.PrependReactor("get", "secrets", func(k8stesting.Action) (bool, runtime.Object, error) {
+		return true, nil, apierrors.NewForbidden(schema.GroupResource{Resource: "secrets"}, "s", errors.New("no"))
+	})
+	_, err := s.Get(context.Background(), ref)
+	assertClass(t, err, provider.ClassForbidden)
+}

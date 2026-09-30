@@ -867,6 +867,8 @@ const providerTexts: Partial<Record<Language, Record<string, string>>> = {
     'kubernetes.edit.hiddenConflict': 'Secret тем временем изменился; сообщение сервера скрыто: в нём могут быть значения Secret.',
     'kubernetes.edit.hiddenGone': 'Secret больше не существует; сообщение сервера скрыто: в нём могут быть значения Secret.',
     'kubernetes.edit.hiddenOther': 'Сервер не принял правку; его сообщение скрыто: в нём могут быть значения Secret.',
+    'kubernetes.secret.hiddenReadForbidden': 'Сервер не дал прочитать Secret; его сообщение скрыто: в нём могут быть значения Secret.',
+    'kubernetes.secret.hiddenReadOther': 'Secret не удалось прочитать; сообщение сервера скрыто: в нём могут быть значения Secret.',
   },
 }
 

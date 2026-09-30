@@ -69,7 +69,7 @@ func (s *session) editGet(ctx context.Context, def *kindDef, ref core.Ref) (*uns
 	var se apierrors.APIStatus
 	if def == secretsKind && errors.As(err, &se) {
 		class, _ := classify(err)
-		return nil, &provider.Error{Class: class, Message: secretSafe(err).Text}
+		return nil, &provider.Error{Class: class, Message: secretReadSafe(err).Text}
 	}
 	var pe *provider.Error
 	if errors.As(err, &pe) {
