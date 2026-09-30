@@ -272,5 +272,5 @@ func TestKindMetrics(t *testing.T) {
 	}
 	nodes, err := src.Metrics(context.Background(), provider.Query{Kind: "nodes", Scope: core.ScopeSel{Mode: core.ScopeNone}}, nil)
 	require.NoError(t, err)
-	assert.Len(t, nodes.Values, 1, "the control-plane node, keyed by its UID")
+	assert.Len(t, nodes.Values, 2, "the control plane and the drain worker, keyed by their UIDs")
 }

@@ -32,8 +32,11 @@ P10 — значения Secret: показать, скопировать, из�
 - `make lint` — go vet и golangci-lint (с тегами desktop и без) + eslint + tsc.
 - **`make check`** — гейт перед каждым коммитом: lint, все тесты, обе сборки.
 - `make pss PID=<pid>` — Private_Dirty/PSS процесса и его WebKit-детей (бюджет ~150 МБ Private_Dirty).
-- Реальный кластер (kind в Docker; `KIND=<путь>`, если kind не в PATH): `make kind-up` (kubeconfig —
-  `build/kind-ocular-dev.kubeconfig`, никогда не в `~/.kube`), `make test-kind` (Go-тесты `*Kind*`),
+- Реальный кластер (kind в Docker; `KIND=<путь>`, если kind не в PATH): `make kind-up` (по
+  `scripts/kind-config.yaml`: control-plane без taint-а + worker `ocular-dev-worker` с taint-ом
+  и меткой `ocular.dev/drain=only` — только для drain-фикстур P11; kubeconfig —
+  `build/kind-ocular-dev.kubeconfig`, никогда не в `~/.kube`; `kind-down` — с тем же
+  `--kubeconfig`), `make test-kind` (Go-тесты `*Kind*`),
   `make e2e-kind` (Playwright), `make kind-down`. Обе цели **падают**, если кластера нет, и сами
   сидируют фикстуры (`scripts/kind-seed.sh`, `kind-rbac.sh`, `kind-metrics.sh`). Нагрузка —
   `scripts/kind-load.sh <kubeconfig> [up|down]`, замер — `node tests/e2e/measure-kind.mjs <bin>

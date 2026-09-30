@@ -82,7 +82,8 @@ clean:
 pss:
 	bash scripts/pss.sh $(PID)
 
-# Disposable test cluster (kind, in Docker). The kubeconfig goes to build/,
+# Disposable test cluster (kind, in Docker): a control plane and a tainted
+# worker for drain tests (scripts/kind-config.yaml). The kubeconfig goes to build/,
 # never into ~/.kube. KIND=path/to/kind if it is not on PATH.
 KIND ?= kind
 KIND_CLUSTER ?= ocular-dev
@@ -90,11 +91,11 @@ KIND_KUBECONFIG ?= $(CURDIR)/build/kind-$(KIND_CLUSTER).kubeconfig
 
 kind-up:
 	mkdir -p build
-	$(KIND) get clusters | grep -qx '$(KIND_CLUSTER)' || $(KIND) create cluster --name $(KIND_CLUSTER) --kubeconfig $(KIND_KUBECONFIG) --wait 120s
+	$(KIND) get clusters | grep -qx '$(KIND_CLUSTER)' || $(KIND) create cluster --name $(KIND_CLUSTER) --config scripts/kind-config.yaml --kubeconfig $(KIND_KUBECONFIG) --wait 180s
 	$(KIND) get kubeconfig --name $(KIND_CLUSTER) > $(KIND_KUBECONFIG)
 
 kind-down:
-	$(KIND) delete cluster --name $(KIND_CLUSTER)
+	$(KIND) delete cluster --name $(KIND_CLUSTER) --kubeconfig $(KIND_KUBECONFIG)
 	rm -f $(KIND_KUBECONFIG)
 
 # Real-cluster tests. Fails (not skips) when the cluster is not there.
