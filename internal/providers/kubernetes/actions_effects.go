@@ -3,6 +3,7 @@ package kubernetes
 import (
 	"context"
 	"fmt"
+	"sort"
 	"strings"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -75,6 +76,11 @@ func effects(def *kindDef, action string, p core.ActionParams, u *unstructured.U
 		}
 		if def == podsKind {
 			fx.warnings = append(fx.warnings, msg("delete.notEviction"))
+		}
+		if fin := u.GetFinalizers(); len(fin) > 0 {
+			sorted := append([]string{}, fin...)
+			sort.Strings(sorted)
+			fx.effects = append(fx.effects, msg("delete.finalizers", "finalizers", strings.Join(sorted, ", ")))
 		}
 		fx.effects = append(fx.effects, msg("delete.requested"))
 	}

@@ -38,13 +38,34 @@ func (s *session) Get(ctx context.Context, ref core.Ref) (*core.Resource, error)
 	}
 	ctx, cancel := context.WithTimeout(ctx, getTimeout)
 	defer cancel()
-	res := s.dyn.Resource(def.gvr)
 	var u *unstructured.Unstructured
+	var fs []core.Detail
+	var health core.Health
 	var err error
-	if def.namespaced {
-		u, err = res.Namespace(ref.Scope).Get(ctx, ref.Name, metav1.GetOptions{})
-	} else {
-		u, err = res.Get(ctx, ref.Name, metav1.GetOptions{})
+	if def.discovered && s.tables != nil {
+		u, fs, err = s.getTable(ctx, def, ref)
+		if u != nil {
+			health = genericHealth(u)
+			delete(u.Object, cellsField)
+		}
+	}
+	if u == nil && err == nil { // a described kind, or no Tables for the resource
+		res := s.dyn.Resource(def.gvr)
+		if def.namespaced {
+			u, err = res.Namespace(ref.Scope).Get(ctx, ref.Name, metav1.GetOptions{})
+		} else {
+			u, err = res.Get(ctx, ref.Name, metav1.GetOptions{})
+		}
+		if err == nil {
+			// Health and table facts come from the same projection the list uses.
+			proj := u.DeepCopy()
+			if def.pre != nil {
+				def.pre(proj)
+			}
+			var cells []core.Cell
+			cells, health, _ = def.project(trim(proj, def.keep), s.now())
+			fs = facts(def, u, cells)
+		}
 	}
 	if err != nil {
 		class, msg := classify(err)
@@ -69,16 +90,10 @@ func (s *session) Get(ctx context.Context, ref core.Ref) (*core.Resource, error)
 		return nil, &provider.Error{Class: provider.ClassInternal, Message: err.Error()}
 	}
 
-	// Health and table facts come from the same projection the list uses.
-	proj := u.DeepCopy()
-	if def.pre != nil {
-		def.pre(proj)
-	}
-	cells, health, _ := def.project(trim(proj, def.keep), s.now())
 	out := &core.Resource{
 		Ref:    core.Ref{Provider: ProviderID, Target: s.target, Scope: u.GetNamespace(), Kind: def.desc.ID, Name: u.GetName(), UID: string(u.GetUID())},
 		Health: health,
-		Facts:  facts(def, u, cells),
+		Facts:  fs,
 		YAML:   string(y),
 	}
 	rels, truncated, relErr := s.relations(ctx, def, u)
@@ -112,13 +127,36 @@ func maskSecret(o map[string]any) {
 	}
 }
 
-// facts: the kind's table cells (except name/scope/metrics), then labels.
-func facts(def *kindDef, u *unstructured.Unstructured, cells []core.Cell) []core.Detail {
+// factsHead: what every object's facts begin with.
+func factsHead(u *unstructured.Unstructured) []core.Detail {
 	out := []core.Detail{{Key: "kind", Value: str(u.Object, "kind")}}
 	if u.GetNamespace() != "" {
 		out = append(out, core.Detail{Key: "namespace", Value: u.GetNamespace()})
 	}
-	out = append(out, core.Detail{Key: "created", Value: u.GetCreationTimestamp().UTC().Format(time.RFC3339)})
+	return append(out, core.Detail{Key: "created", Value: u.GetCreationTimestamp().UTC().Format(time.RFC3339)})
+}
+
+// labelFacts: the labels as one fact.
+func labelFacts(u *unstructured.Unstructured) []core.Detail {
+	l := u.GetLabels()
+	if len(l) == 0 {
+		return nil
+	}
+	keys := make([]string, 0, len(l))
+	for k := range l {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	parts := make([]string, 0, len(keys))
+	for _, k := range keys {
+		parts = append(parts, k+"="+l[k])
+	}
+	return []core.Detail{{Key: "labels", Value: strings.Join(parts, "\n")}}
+}
+
+// facts: the kind's table cells (except name/scope/metrics), then labels.
+func facts(def *kindDef, u *unstructured.Unstructured, cells []core.Cell) []core.Detail {
+	out := factsHead(u)
 	for i, c := range def.desc.Columns {
 		if i == 0 || c.ScopeColumn || c.Metric || c.Type == core.ColAge || i >= len(cells) {
 			continue
@@ -132,30 +170,70 @@ func facts(def *kindDef, u *unstructured.Unstructured, cells []core.Cell) []core
 			out = append(out, core.Detail{Key: "container " + str(c, "name"), Value: str(c, "image")})
 		}
 	}
-	if l := u.GetLabels(); len(l) > 0 {
-		keys := make([]string, 0, len(l))
-		for k := range l {
-			keys = append(keys, k)
-		}
-		sort.Strings(keys)
-		parts := make([]string, 0, len(keys))
-		for _, k := range keys {
-			parts = append(parts, k+"="+l[k])
-		}
-		out = append(out, core.Detail{Key: "labels", Value: strings.Join(parts, "\n")})
-	}
-	return out
+	return append(out, labelFacts(u)...)
 }
 
-// kindFor maps an apiVersion+Kind (owner references, backends) to our
-// kind id; "" when Ocular does not show that kind.
-func kindFor(apiVersion, kind string) string {
+// getTable reads one object of a discovered kind as a Table: facts are all
+// the server's columns, the wide ones too. The answer's columns are checked
+// against the kind's current schema (other columns end its epoch; the
+// facts themselves follow the answer). nil, nil: no Table for the resource
+// (the plain read follows).
+func (s *session) getTable(ctx context.Context, def *kindDef, ref core.Ref) (*unstructured.Unstructured, []core.Detail, error) {
+	ns := ""
+	if def.namespaced {
+		ns = ref.Scope
+	}
+	cols, row, err := s.tables.get(ctx, def.gvr, ns, ref.Name)
+	switch {
+	case apierrors.IsNotAcceptable(err) || errors.Is(err, errNotTable):
+		return nil, nil, nil
+	case err != nil:
+		return nil, nil, err
+	}
+	s.schemas.mu.Lock()
+	cur := s.schemas.entry(def.gvr).cur
+	s.schemas.mu.Unlock()
+	if cur != nil && cur.table && !cur.matches(cols) {
+		go s.schemaChanged(cur)
+	}
+	age := map[int]bool{}
+	if cur != nil && cur.matches(cols) {
+		age = cur.age
+	}
+	fs := factsHead(row)
+	named := false
+	cells, _ := row.Object[cellsField].([]any)
+	for i, c := range cols {
+		if c.Format == "name" && !named {
+			named = true
+			continue
+		}
+		if age[i] || i >= len(cells) {
+			continue // the creation time is a fact already
+		}
+		if v := tableCell(c.Type, cells[i]).Text; v != "" {
+			fs = append(fs, core.Detail{Key: c.Name, Value: v})
+		}
+	}
+	return row, append(fs, labelFacts(row)...), nil
+}
+
+// kindFor maps an apiVersion+Kind (owner references, involved objects) to
+// a kind of the session's catalog; "" when Ocular does not show that kind.
+func (s *session) kindFor(apiVersion, kind string) string {
 	group := ""
 	if i := strings.Index(apiVersion, "/"); i >= 0 {
 		group = apiVersion[:i]
 	}
-	for _, d := range allKinds.list {
-		if !d.virtual && d.gvr.Group == group && strings.EqualFold(kindOf(d), kind) {
+	for _, d := range s.cat.snap().reg.list {
+		if d.virtual || d.gvr.Group != group {
+			continue
+		}
+		k := kindOf(d)
+		if d.discovered {
+			k = d.kind
+		}
+		if strings.EqualFold(k, kind) {
 			return d.desc.ID
 		}
 	}
@@ -206,7 +284,7 @@ func (s *session) relations(ctx context.Context, def *kindDef, u *unstructured.U
 	var trunc bool
 	ns := u.GetNamespace()
 	for _, o := range u.GetOwnerReferences() {
-		r := core.Ref{Provider: ProviderID, Target: s.target, Scope: ns, Kind: kindFor(o.APIVersion, o.Kind), Name: o.Name, UID: string(o.UID)}
+		r := core.Ref{Provider: ProviderID, Target: s.target, Scope: ns, Kind: s.kindFor(o.APIVersion, o.Kind), Name: o.Name, UID: string(o.UID)}
 		inert := r.Kind == ""
 		if inert {
 			r.Kind = strings.ToLower(o.Kind) // shown, not openable
@@ -269,7 +347,7 @@ func eventSubject(s *session, u *unstructured.Unstructured) core.Relation {
 	o := u.Object
 	kind := str(o, "involvedObject", "kind")
 	r := core.Ref{Provider: ProviderID, Target: s.target, Scope: str(o, "involvedObject", "namespace"),
-		Kind: kindFor(str(o, "involvedObject", "apiVersion"), kind), Name: str(o, "involvedObject", "name"), UID: str(o, "involvedObject", "uid")}
+		Kind: s.kindFor(str(o, "involvedObject", "apiVersion"), kind), Name: str(o, "involvedObject", "name"), UID: str(o, "involvedObject", "uid")}
 	inert := r.Kind == "" || r.UID == ""
 	if r.Kind == "" {
 		r.Kind = strings.ToLower(kind)

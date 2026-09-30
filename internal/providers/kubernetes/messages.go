@@ -44,6 +44,7 @@ var messageTexts = map[string]string{
 	"delete.recreatedBy":   "{ownerKind} {owner} may create it again.",
 	"delete.notEviction":   "This is not an eviction: PodDisruptionBudgets are not consulted.",
 	"delete.requested":     "Deletion is requested: finalizers and grace periods may keep it for a while.",
+	"delete.finalizers":    "Deletion waits for its finalizers: {finalizers}.",
 	"pod.noController":     "It has no controller: nothing recreates it.",
 	"pod.job":              "Job {owner} may create a new pod if it has not completed.",
 	"pod.otherController":  "It belongs to {ownerKind} {owner}: whether it is recreated depends on that controller.",

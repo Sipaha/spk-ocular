@@ -722,6 +722,7 @@ const providerTexts: Partial<Record<Language, Record<string, string>>> = {
     'kubernetes.delete.recreatedBy': '{ownerKind} {owner} может создать его снова.',
     'kubernetes.delete.notEviction': 'Это не eviction: PodDisruptionBudget-ы не учитываются.',
     'kubernetes.delete.requested': 'Запрошено удаление: finalizers и grace period могут задержать его.',
+    'kubernetes.delete.finalizers': 'Удаление ждёт finalizers: {finalizers}.',
     'kubernetes.pod.noController': 'У него нет контроллера: никто не создаст его снова.',
     'kubernetes.pod.job': 'Job {owner} может создать новый pod, если ещё не завершён.',
     'kubernetes.pod.otherController': 'Он принадлежит {ownerKind} {owner}: пересоздание зависит от этого контроллера.',

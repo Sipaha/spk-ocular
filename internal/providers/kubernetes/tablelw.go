@@ -190,6 +190,24 @@ func (c *tableClient) list(ctx context.Context, gvr schema.GroupVersionResource,
 	return p, nil
 }
 
+// get reads one object as a Table: the columns and the row's object.
+func (c *tableClient) get(ctx context.Context, gvr schema.GroupVersionResource, ns, name string) ([]metav1.TableColumnDefinition, *unstructured.Unstructured, error) {
+	resp, err := c.do(ctx, gvr, c.url(gvr, ns, name, url.Values{"includeObject": {"Object"}}), acceptTable)
+	if err != nil {
+		return nil, nil, err
+	}
+	defer func() { _ = resp.Body.Close() }()
+	var d tableDoc
+	if err := json.NewDecoder(resp.Body).Decode(&d); err != nil {
+		return nil, nil, err
+	}
+	if d.Kind != "Table" || len(d.Rows) != 1 {
+		return nil, nil, errNotTable
+	}
+	u, err := rowObject(d.Rows[0].Object, d.Rows[0].Cells)
+	return d.ColumnDefinitions, u, err
+}
+
 // rowObject: a row's object with its cells. Decoded like the API
 // machinery does (whole numbers are int64: metadata.generation and the
 // like read through unstructured's accessors).

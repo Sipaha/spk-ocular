@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
@@ -85,12 +86,26 @@ func (s *session) actionTarget(ref core.Ref, action string, p core.ActionParams,
 	return def, d, nil
 }
 
-// actionExpect fingerprints the action, its parameters and the state of u
-// the effects depend on (status churn is not part of it).
+// actionExpect fingerprints the route the plan was read through (the
+// resource's version and scope: a discovered kind may move between them)
+// and the action, its parameters and the state of u the effects depend on
+// (status churn is not part of it): "<route>-<state>".
 func actionExpect(def *kindDef, action string, p core.ActionParams, u *unstructured.Unstructured) string {
 	b, _ := json.Marshal(map[string]any{"action": action, "params": p, "state": effectState(def, action, u)})
 	sum := sha256.Sum256(b)
-	return hex.EncodeToString(sum[:12])
+	return routeOf(def) + "-" + hex.EncodeToString(sum[:12])
+}
+
+// routeOf fingerprints where a kind's objects are read and written.
+func routeOf(def *kindDef) string {
+	sum := sha256.Sum256([]byte(fmt.Sprintf("%s|%t", def.gvr, def.namespaced)))
+	return hex.EncodeToString(sum[:4])
+}
+
+// sameRoute: the plan (its Expect) was read through def's route.
+func sameRoute(def *kindDef, expect string) bool {
+	r, _, ok := strings.Cut(expect, "-")
+	return ok && r == routeOf(def)
 }
 
 func effectState(def *kindDef, action string, u *unstructured.Unstructured) map[string]any {
@@ -118,6 +133,10 @@ func effectState(def *kindDef, action string, u *unstructured.Unstructured) map[
 		if sts {
 			st["claims"], st["whenDeleted"] = len(slice(o, "spec", "volumeClaimTemplates")), str(o, "spec", "persistentVolumeClaimRetentionPolicy", "whenDeleted")
 		}
+		// The deletion waits for them (the plan says which).
+		fin := append([]string{}, u.GetFinalizers()...)
+		sort.Strings(fin)
+		st["finalizers"] = fin
 		if c := metav1.GetControllerOf(u); c != nil {
 			st["controller"] = c.Kind + "/" + c.Name + "/" + string(c.UID)
 		}
@@ -161,6 +180,9 @@ func actionUnavailable(def *kindDef, action string, u *unstructured.Unstructured
 
 // singular: "deployment", as in sentences.
 func singular(def *kindDef) string {
+	if def.discovered {
+		return strings.ToLower(def.desc.Singular)
+	}
 	return strings.ToLower(kindSingular[def])
 }
 
@@ -182,6 +204,11 @@ func (s *session) RunAction(ctx context.Context, run provider.ActionRun) (core.A
 	def, _, err := s.actionTarget(run.Ref, run.Action, run.Params, true)
 	if err != nil {
 		return core.ActionResult{}, err
+	}
+	if !sameRoute(def, run.Expect) {
+		// Reviewed through another version or scope of the resource: never
+		// read or written through the current one instead.
+		return core.ActionResult{}, &provider.Error{Class: provider.ClassConflict, Message: fmt.Sprintf("the API resource of %s changed since the action was reviewed; review it again", def.desc.Title)}
 	}
 	for attempt := 0; ; attempt++ {
 		u, err := s.getConfirmed(ctx, run.Ref)

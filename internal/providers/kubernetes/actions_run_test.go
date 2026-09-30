@@ -175,7 +175,7 @@ func TestAPausedDeploymentIsNotRestarted(t *testing.T) {
 
 func TestAReplacedObjectIsGone(t *testing.T) {
 	s, c := actionSession(t, workload("Deployment", "web", "uid-new", "9", nil))
-	_, err := s.RunAction(context.Background(), provider.ActionRun{Ref: deployWebRef, Action: "delete", Expect: "x"})
+	_, err := s.RunAction(context.Background(), provider.ActionRun{Ref: deployWebRef, Action: "delete", Expect: routeOf(deploymentsKind) + "-x"})
 	assertClass(t, err, provider.ClassGone)
 	assert.Empty(t, writes(c))
 }
