@@ -276,7 +276,7 @@ function Details(props: { client: Client; hub: ViewHub; target: { provider: stri
           ))}
         </section>
       )}
-      <dl className="grid grid-cols-[max-content_1fr] gap-x-6 gap-y-1.5">
+      <dl className="grid grid-cols-[fit-content(35%)_1fr] gap-x-6 gap-y-1.5">
         {r.facts.map((f) => (
           <div key={f.key} className="contents">
             <dt className="text-fg-muted">{detailLabel(f.key)}</dt>

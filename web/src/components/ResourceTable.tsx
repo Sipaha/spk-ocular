@@ -135,11 +135,16 @@ export function ResourceTable({ columns, rows, hideScope, filter, selected, onSe
     initialRect: { width: 1000, height: 800 },
   })
 
-  const template = visibleCols.map(({ c }) => (c.width ? `${c.width}px` : 'minmax(120px, 1fr)')).join(' ')
+  // A flexible name — the row's identity (a container's or pod's name, long
+  // and alike in its prefix) — gets a double share, the others one.
+  const least = (c: Column) => c.width || (c.id === 'name' ? 180 : 120)
+  const template = visibleCols
+    .map(({ c }) => (c.width ? `${c.width}px` : c.id === 'name' ? 'minmax(180px, 2fr)' : 'minmax(120px, 1fr)'))
+    .join(' ')
   // The columns' least width, set on the header and the rows: Chromium does
   // not count the overflowing tracks of the (absolute) rows fully, so the
   // last columns could not be scrolled to.
-  const minWidth = visibleCols.reduce((sum, { c }) => sum + (c.width || 120), 0)
+  const minWidth = visibleCols.reduce((sum, { c }) => sum + least(c), 0)
 
   const onKey = (e: React.KeyboardEvent) => {
     if (!sorted.length) return
