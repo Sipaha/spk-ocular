@@ -612,6 +612,7 @@ const providerTexts: Partial<Record<Language, Record<string, string>>> = {
     'compose.scope.singular': 'Проект',
     'compose.scope.plural': 'проекты',
     'compose.scope.all': 'Все проекты',
+    'compose.notCovered.unlabelled': 'контейнеры без label-ов Compose',
     'kubernetes.scope.singular': 'Namespace',
     'kubernetes.scope.plural': 'namespaces',
     'kubernetes.scope.all': 'Все namespaces',

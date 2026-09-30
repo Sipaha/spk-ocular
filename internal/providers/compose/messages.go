@@ -10,9 +10,10 @@ import (
 // knows in its language (web/src/i18n.ts, providerTexts) with the same
 // parameters, the rest in this English.
 var messageTexts = map[string]string{
-	"scope.singular": "Project",
-	"scope.plural":   "projects",
-	"scope.all":      "All projects",
+	"scope.singular":        "Project",
+	"scope.plural":          "projects",
+	"scope.all":             "All projects",
+	"notCovered.unlabelled": "containers without Compose labels",
 }
 
 // msg builds the message key with params given as name, value pairs.
