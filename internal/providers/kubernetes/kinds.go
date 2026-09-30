@@ -147,6 +147,7 @@ func (r *kindRegistry) descriptors() []core.KindDescriptor {
 		} else {
 			desc.Actions = d.actions
 		}
+		desc.Editable = editable(d)
 		desc.Default = d == podsKind
 		if d != eventsKind {
 			desc.EventsKind = eventsKind.desc.ID

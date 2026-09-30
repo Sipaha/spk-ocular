@@ -181,6 +181,8 @@ type session struct {
 	conn *conn
 	// writer sends actions' writes (nil: through dyn — fake clients in tests).
 	writer actionWriter
+	// edits: which routes are proven to honour dryRun (PrepareEdit).
+	edits dryRunProofs
 	// beforeWrite (tests) runs between an action's read and its write.
 	beforeWrite func(action string, u *unstructured.Unstructured)
 	// problemSources are what a Problems view observes (tests replace them).

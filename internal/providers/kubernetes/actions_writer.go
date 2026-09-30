@@ -20,6 +20,9 @@ import (
 type actionWriter interface {
 	patch(ctx context.Context, gvr schema.GroupVersionResource, ns, name string, pt types.PatchType, data []byte, sub string) error
 	delete(ctx context.Context, gvr schema.GroupVersionResource, ns, name string, opts metav1.DeleteOptions) error
+	// editPatch sends an edit (a JSON merge patch) with strict field
+	// validation, as a dry run or for real; the answer is the object.
+	editPatch(ctx context.Context, gvr schema.GroupVersionResource, ns, name string, data []byte, dryRun bool) ([]byte, error)
 }
 
 // restWriter: the dynamic client's REST setup, requests with MaxRetries(0).
@@ -55,6 +58,14 @@ func (w *restWriter) patch(ctx context.Context, gvr schema.GroupVersionResource,
 	return w.c.Patch(pt).AbsPath(objectPath(gvr, ns, name, sub)...).Body(data).MaxRetries(0).Do(ctx).Error()
 }
 
+func (w *restWriter) editPatch(ctx context.Context, gvr schema.GroupVersionResource, ns, name string, data []byte, dryRun bool) ([]byte, error) {
+	r := w.c.Patch(types.MergePatchType).AbsPath(objectPath(gvr, ns, name, "")...).Param("fieldValidation", "Strict")
+	if dryRun {
+		r = r.Param("dryRun", "All")
+	}
+	return r.Body(data).MaxRetries(0).Do(ctx).Raw()
+}
+
 func (w *restWriter) delete(ctx context.Context, gvr schema.GroupVersionResource, ns, name string, opts metav1.DeleteOptions) error {
 	opts.TypeMeta = metav1.TypeMeta{APIVersion: "v1", Kind: "DeleteOptions"}
 	body, err := json.Marshal(opts)
@@ -75,6 +86,18 @@ func (w dynWriter) patch(ctx context.Context, gvr schema.GroupVersionResource, n
 	}
 	_, err := w.dyn.Resource(gvr).Namespace(ns).Patch(ctx, name, pt, data, metav1.PatchOptions{}, subs...)
 	return err
+}
+
+func (w dynWriter) editPatch(ctx context.Context, gvr schema.GroupVersionResource, ns, name string, data []byte, dryRun bool) ([]byte, error) {
+	opts := metav1.PatchOptions{FieldValidation: "Strict"}
+	if dryRun {
+		opts.DryRun = []string{metav1.DryRunAll}
+	}
+	u, err := w.dyn.Resource(gvr).Namespace(ns).Patch(ctx, name, types.MergePatchType, data, opts)
+	if err != nil {
+		return nil, err
+	}
+	return u.MarshalJSON()
 }
 
 func (w dynWriter) delete(ctx context.Context, gvr schema.GroupVersionResource, ns, name string, opts metav1.DeleteOptions) error {
