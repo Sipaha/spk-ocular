@@ -763,6 +763,12 @@ const providerTexts: Partial<Record<Language, Record<string, string>>> = {
     'kubernetes.hpa.tooMany': 'Проверены не все автоскейлеры (их слишком много).',
     'kubernetes.unavailable.deleting': '{kind} {name} удаляется',
     'kubernetes.unavailable.paused': 'deployment {name} приостановлен: сначала возобновите rollout',
+    'kubernetes.edit.hiddenInvalid': 'Сервер счёл правку неверной; его сообщение скрыто: в нём могут быть значения Secret.',
+    'kubernetes.edit.hiddenInvalidFields': 'Сервер счёл неверными поля ({count}); его сообщение скрыто: в нём могут быть значения Secret.',
+    'kubernetes.edit.hiddenForbidden': 'Сервер отказал в правке; его сообщение скрыто: в нём могут быть значения Secret.',
+    'kubernetes.edit.hiddenConflict': 'Secret тем временем изменился; сообщение сервера скрыто: в нём могут быть значения Secret.',
+    'kubernetes.edit.hiddenGone': 'Secret больше не существует; сообщение сервера скрыто: в нём могут быть значения Secret.',
+    'kubernetes.edit.hiddenOther': 'Сервер не принял правку; его сообщение скрыто: в нём могут быть значения Secret.',
   },
 }
 
