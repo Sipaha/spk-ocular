@@ -378,11 +378,11 @@ type Tail struct {
 	Truncated bool         `json:"truncated,omitempty"`
 }
 
-// errTailEnd stops a provider's stream: the tail is complete or full.
-var errTailEnd = errors.New("tail complete")
+// errTailEnd stops a provider's stream: the tail is full.
+var errTailEnd = errors.New("tail full")
 
 // TailLogs reads the backlog of an object's logs (maxTailLines lines and
-// maxTailBytes of text at most) and stops at its end.
+// maxTailBytes of text at most): never followed, the stream ends after it.
 func (c *AgentCall) TailLogs(req TailRequest) (Tail, error) {
 	if req.TailLines < 1 || req.TailLines > maxTailLines {
 		return Tail{}, coded(CodeBadRequest, fmt.Errorf("tailLines must be 1..%d", maxTailLines))
@@ -415,9 +415,10 @@ func (c *AgentCall) TailLogs(req TailRequest) (Tail, error) {
 	return sink.out, nil
 }
 
-// tailSink collects a tail; it ends the stream at the backlog's end
-// (Ready) or when full (maxTailLines over all sources: each has its own
-// TailLines).
+// tailSink collects a tail; it ends the stream when full (maxTailLines
+// over all sources: each has its own TailLines). Ready is no end: a pod's
+// own stream sends it before its lines, and a stream without Follow ends
+// by itself after the backlog.
 type tailSink struct {
 	bytes int
 	full  bool
@@ -451,4 +452,4 @@ func (t *tailSink) State(id int, st provider.LogState) error {
 	return nil
 }
 
-func (t *tailSink) Ready() error { return errTailEnd }
+func (t *tailSink) Ready() error { return nil }

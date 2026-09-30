@@ -2,7 +2,6 @@ package api
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"strings"
 	"sync"
@@ -416,15 +415,18 @@ func TestTailLogs(t *testing.T) {
 	p := agentWrapped{k, func(a *agentSession) provider.Session {
 		a.logs = func(q provider.LogQuery, sink provider.LogSink) error {
 			asked = q
+			// As a pod's own stream does: Ready first (its backlog is the
+			// start of its stream), then the lines; without Follow the
+			// stream ends by itself.
 			_ = sink.Source(1, "k1", "web-1", "main")
 			_ = sink.Source(2, "k2", "web-2", "main")
-			_ = sink.Lines(1, []provider.LogLine{{TS: "t1", Text: "one"}, {TS: "t2", Text: strings.Repeat("x", 100), Flags: provider.LineCut}})
-			_ = sink.State(2, provider.LogState{State: provider.LogWaiting, Message: "not started"})
-			_ = sink.Lines(2, []provider.LogLine{{TS: "t3", Text: "two"}})
 			if err := sink.Ready(); err != nil {
 				return err
 			}
-			return errors.New("followed past the backlog")
+			_ = sink.Lines(1, []provider.LogLine{{TS: "t1", Text: "one"}, {TS: "t2", Text: strings.Repeat("x", 100), Flags: provider.LineCut}})
+			_ = sink.State(2, provider.LogState{State: provider.LogWaiting, Message: "not started"})
+			_ = sink.Lines(2, []provider.LogLine{{TS: "t3", Text: "two"}})
+			return nil
 		}
 		return loggingSession{a}
 	}}
