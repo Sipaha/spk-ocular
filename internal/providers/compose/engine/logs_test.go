@@ -213,6 +213,10 @@ func TestTimestampsAreParsed(t *testing.T) {
 	assert.Equal(t, time.Date(2026, 9, 30, 10, 0, 0, 123456789, time.UTC), got[0].Time)
 	assert.Equal(t, "first half second half", string(got[1].Line))
 	assert.Equal(t, engine.Stderr, got[1].Stream)
+	// a line of several messages: Time is its start, End its last message's
+	assert.Equal(t, time.Date(2026, 9, 30, 10, 0, 1, 5e8, time.UTC), got[1].Time)
+	assert.Equal(t, time.Date(2026, 9, 30, 10, 0, 2, 0, time.UTC), got[1].End)
+	assert.Equal(t, got[0].Time, got[0].End)
 	assert.Equal(t, time.Date(2026, 9, 30, 10, 0, 1, 5e8, time.UTC), got[1].Time)
 	assert.Equal(t, "no timestamp here", string(got[2].Line))
 	assert.True(t, got[2].Time.IsZero())

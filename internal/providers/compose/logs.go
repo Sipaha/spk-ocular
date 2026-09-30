@@ -563,6 +563,7 @@ type seenLog struct {
 	// the replay meets it, even when the attempt breaks).
 	anchor    recordID
 	anchorAt  time.Time
+	anchorEnd time.Time // its last message's time: where it ends in the journal
 	hasAnchor bool
 	// anchorN: records equal to the anchor read up to it (kept apart from
 	// the ring, which may drop them).
@@ -580,10 +581,12 @@ type seenLog struct {
 // what was written within the stamps' skew before the anchor.
 const maxSeen = 512
 
-// replaySkew bounds how much later than the anchor a record written before
-// it can be stamped (stdout and stderr are stamped apart, by microseconds):
-// an unknown record later than this is past the anchor — which is gone
-// (rotated) when the replay has not met it.
+// replaySkew bounds how much later than the end of the anchor (its last
+// message) a record written before it can be stamped (stdout and stderr
+// are stamped apart, by microseconds): an unknown record begun later than
+// this is past the anchor — which is gone (rotated) when the replay has not
+// met it. A heuristic: a daemon clock stepping back more than this during
+// a replay's span could end one early (a repeat, after the gap).
 const replaySkew = time.Second
 
 // recordID tells records apart: time, stream, and the text's length and
@@ -633,22 +636,24 @@ func (s *seenLog) read(l logLine, partial, move bool) {
 	}
 	s.count[id]++
 	if move {
-		s.moveAnchor(id, l.at, partial)
+		s.moveAnchor(id, l.at, l.end, partial)
 	}
 	if !s.torn.IsZero() && l.stream == s.tornStream && l.at.Equal(s.torn) {
 		s.torn = time.Time{} // the cut line came whole
 	}
 }
 
-func (s *seenLog) moveAnchor(id recordID, at time.Time, partial bool) {
+// moveAnchor: id is the new anchor; its count is of the records equal to
+// it that were read (the ring's, at least one).
+func (s *seenLog) moveAnchor(id recordID, at, end time.Time, partial bool) {
 	if at.IsZero() {
 		return
 	}
-	n := 1
-	if s.hasAnchor && id == s.anchor {
-		n = s.anchorN + 1
+	if end.IsZero() || end.Before(at) {
+		end = at
 	}
-	s.anchor, s.anchorAt, s.hasAnchor, s.partial, s.anchorN = id, at, true, partial, n
+	s.anchor, s.anchorAt, s.anchorEnd, s.hasAnchor, s.partial = id, at, end, true, partial
+	s.anchorN = max(s.count[id], 1)
 }
 
 // tear notes a line whose read was cut before its end.
@@ -670,7 +675,7 @@ func (s *seenLog) since() time.Time {
 
 // replay starts matching an answer since since().
 func (s *seenLog) replay() *replay {
-	r := &replay{s: s, done: !s.hasAnchor, anchor: s.anchor, anchorAt: s.anchorAt, anchorLeft: s.anchorN, partial: s.partial, known: make(map[recordID]int, len(s.count))}
+	r := &replay{s: s, done: !s.hasAnchor, anchor: s.anchor, anchorEnd: s.anchorEnd, anchorLeft: s.anchorN, partial: s.partial, known: make(map[recordID]int, len(s.count))}
 	for id, n := range s.count {
 		if id != s.anchor {
 			r.known[id] = n
@@ -684,7 +689,7 @@ type replay struct {
 	s          *seenLog
 	known      map[recordID]int // besides the anchor
 	anchor     recordID
-	anchorAt   time.Time
+	anchorEnd  time.Time
 	anchorLeft int
 	partial    bool
 	done       bool // the anchor was met (or is gone): the rest is new
@@ -693,6 +698,7 @@ type replay struct {
 	// position when the anchor turns out gone at the answer's end.
 	last        recordID
 	lastAt      time.Time
+	lastEnd     time.Time
 	lastPartial bool
 }
 
@@ -703,8 +709,7 @@ func (r *replay) abandon() {
 		return
 	}
 	r.done = true
-	r.s.anchorN = 0
-	r.s.moveAnchor(r.last, r.lastAt, r.lastPartial)
+	r.s.moveAnchor(r.last, r.lastAt, r.lastEnd, r.lastPartial)
 }
 
 // check decides a record of the answer: drop (read before), or deliver
@@ -716,7 +721,7 @@ func (r *replay) check(l logLine, partial bool) (drop bool, skip int, unknown bo
 	}
 	id := idOf(l.stream, l.at, l.line.Text)
 	if !l.at.IsZero() {
-		r.last, r.lastAt, r.lastPartial = id, l.at, partial
+		r.last, r.lastAt, r.lastEnd, r.lastPartial = id, l.at, l.end, partial
 	}
 	if id == r.anchor && r.anchorLeft > 0 {
 		if r.anchorLeft--; r.anchorLeft == 0 {
@@ -736,17 +741,19 @@ func (r *replay) check(l logLine, partial bool) (drop bool, skip int, unknown bo
 	if !r.s.torn.IsZero() && l.stream == r.s.tornStream && l.at.Equal(r.s.torn) {
 		return false, 0, false // the cut line, expected
 	}
-	if l.at.Sub(r.anchorAt) > replaySkew {
-		r.done = true // past where the anchor was: it is gone
+	if l.at.Sub(r.anchorEnd) > replaySkew {
+		r.done = true // begun after the anchor ended: the anchor is gone
 	}
 	return false, 0, true
 }
 
-// logLine is a record as delivered: the line and its stream and time.
+// logLine is a record as delivered: the line and its stream and time (at:
+// its start; end: its last message's).
 type logLine struct {
 	line   provider.LogLine
 	stream engine.Stream
 	at     time.Time
+	end    time.Time
 }
 
 // member streams one container.
@@ -924,7 +931,7 @@ func toLine(rec engine.LogRecord) logLine {
 	if rec.Truncated {
 		l.Flags |= provider.LineCut
 	}
-	return logLine{line: l, stream: rec.Stream, at: rec.Time}
+	return logLine{line: l, stream: rec.Stream, at: rec.Time, end: rec.End}
 }
 
 // follow streams the member live until it is removed, ctx ends (nil) or

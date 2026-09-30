@@ -178,11 +178,26 @@ Actions: restart/stop/start/rm), «Ключевые технические ре�
 ## Задачи
 
 ### Task 0. Спайк на dind
-- [ ] Exec через `net/http` 101 (tcp dind): байты после заголовков, отмена до/после 101,
+- [x] Exec через `net/http` 101 (tcp dind): байты после заголовков, отмена до/после 101,
   `exec inspect` после конца, resize, ответ на paused/stopped контейнер, код 126/127 для
   отсутствующей команды; stats `one-shot` и без (поля cgroup v2 dind, `online_cpus`,
   `precpu`); stop с `t=`, 304 у повторного stop/start, restart; remove запущенного — 409.
   Итог — раздел «Спайк» здесь.
+
+  **Спайк (2026-09-30, dind Docker 29, API 1.54, `net/http` без своего upgrade):**
+  `POST /exec/{id}/start` с `Upgrade: tcp` → `101 UPGRADED`, `Content-Type:
+  application/vnd.docker.raw-stream` (TTY), тело — `io.ReadWriteCloser`; stdin пишется в
+  него, вывод `\r\n`; отмена контекста запроса после 101 соединение **не** закрывает (нужен
+  свой `Close`). `exec inspect` после конца: `ExitCode` 3/7 верны; отсутствующая команда —
+  всё равно 101, текст `OCI runtime exec failed: … no such file or directory` **в потоке**,
+  `ExitCode 127`, `Pid 0` (так и различать «нет команды»: код 126/127 и Pid 0). Команда
+  shell по умолчанию в busybox → `sh`. Exec в контейнер на паузе/остановленный — create
+  **409** с текстом демона («is paused, unpause…», «is not running»). Stats: `one-shot=true`
+  — 3 мс, precpu нули; без него — ровно ~1 с, precpu заполнен; cgroup v2: `inactive_file`,
+  `online_cpus` 16; остановленный — 200 с нулями и `read` = нулевое время (→ «нет
+  значения»). stop `t=1` — 204 за 1,16 с, повторный stop — **304**; start — 204, повторный —
+  304; remove запущенного — **409** «container is running: stop the container before
+  removing or force remove»; restart остановленного — 204 (запускает).
 
 ### Task 1. Клиент Engine: POST, exec, stats, действия (решение 1)
 - [ ] `engine/calls.go`/`exec.go`/`stats.go`; классы «до/после отправки», 304; `enginefake`

@@ -1064,3 +1064,54 @@ func TestLogsAnchorOutlivesTheRing(t *testing.T) {
 		t.Fatalf("%d x-s, gap %v", n, sk.hadState("p-web-1", provider.LogGap))
 	}
 }
+
+// Re-review 4, P2: a line assembled over a long time (its start stamped
+// long before the lines written meanwhile) is still the anchor: records
+// written before its end are not "past it".
+func TestLogsLongAssembledAnchorIsMet(t *testing.T) {
+	e := newLogEnv(t)
+	e.fe.JournalPartial(e.c.ID, 1, e.at(1), "A")
+	for i := range maxSeen + 50 {
+		e.fe.Journal(e.c.ID, 2, e.at(11).Add(time.Duration(i)), fmt.Sprintf("x%d", i))
+	}
+	e.fe.Journal(e.c.ID, 1, e.at(21), "B") // ends the line A began
+	q := follow()
+	q.TailLines = provider.TailAll
+	sk, _ := e.stream(e.containerRef(), q)
+	sk.waitFor(t, "the backlog", func() bool { return sk.isReady() && eq(sk.texts("p-web-1"), "AB") })
+	e.stopContainer(sk, "p-web-1")
+	e.startContainer()
+	for e.fe.LogFollowers(e.c.ID) == 0 {
+		time.Sleep(2 * time.Millisecond)
+	}
+	e.fe.Journal(e.c.ID, 1, e.at(31), "D")
+	sk.waitFor(t, "D", func() bool {
+		ts := sk.texts("p-web-1")
+		return len(ts) > 0 && ts[len(ts)-1] == "D"
+	})
+	if got := sk.texts("p-web-1"); !eq(got, "AB", "D") {
+		t.Fatalf("stdout %v", got)
+	}
+}
+
+// Re-review 4, P2: records equal to the anchor that are not next to it
+// (X, Y, X) count: the replay ends at the last X, nothing repeats.
+func TestLogsAnchorEqualToAnEarlierRecord(t *testing.T) {
+	e := newLogEnv(t)
+	e.fe.Journal(e.c.ID, 1, e.at(2), "X")
+	e.fe.Journal(e.c.ID, 2, e.at(2), "Y")
+	e.fe.Journal(e.c.ID, 1, e.at(2), "X")
+	sk, _ := e.stream(e.containerRef(), follow())
+	sk.waitFor(t, "the backlog", func() bool { return sk.isReady() && eq(sk.texts("p-web-1"), "X", "X") })
+	for e.fe.LogFollowers(e.c.ID) == 0 {
+		time.Sleep(2 * time.Millisecond)
+	}
+	e.fe.Journal(e.c.ID, 2, e.at(3), "D")
+	sk.waitFor(t, "D", func() bool {
+		ts := sk.texts("p-web-1 (stderr)")
+		return len(ts) > 0 && ts[len(ts)-1] == "D"
+	})
+	if !eq(sk.texts("p-web-1"), "X", "X") || !eq(sk.texts("p-web-1 (stderr)"), "Y", "D") || sk.hadState("p-web-1", provider.LogGap) {
+		t.Fatalf("stdout %v, stderr %v, gap %v", sk.texts("p-web-1"), sk.texts("p-web-1 (stderr)"), sk.hadState("p-web-1", provider.LogGap))
+	}
+}

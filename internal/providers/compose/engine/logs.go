@@ -52,6 +52,10 @@ type LogRecord struct {
 	// Time: the line's timestamp (zero without Timestamps, or when the
 	// line did not start with one).
 	Time time.Time
+	// End: the timestamp of the line's last message (a line longer than
+	// the driver's message, or continued after a restart, is several) —
+	// where it ends in the journal; Time when it is one message.
+	End time.Time
 	// Line without its newline (and a TTY's trailing \r). Owned by the
 	// record.
 	Line []byte
@@ -124,6 +128,7 @@ type LogReader struct {
 type lineAsm struct {
 	buf []byte
 	cut bool
+	end time.Time // the latest continuation's timestamp
 }
 
 func (a *lineAsm) open() bool { return len(a.buf) > 0 || a.cut }
@@ -281,8 +286,8 @@ func (r *LogReader) flush() {
 func (r *LogReader) feed(s Stream, p []byte, frameStart bool) {
 	a := &r.lines[s]
 	if frameStart && r.stamp && a.open() {
-		if _, rest, ok := splitTimestamp(p); ok {
-			p = rest
+		if t, rest, ok := splitTimestamp(p); ok {
+			p, a.end = rest, t
 		}
 	}
 	for len(p) > 0 {
@@ -318,8 +323,12 @@ func (r *LogReader) emit(s Stream, partial bool) {
 	if rec.Line == nil {
 		rec.Line = []byte{}
 	}
+	rec.End = rec.Time
+	if !a.end.IsZero() {
+		rec.End = a.end
+	}
 	r.queue = append(r.queue, rec)
-	a.buf, a.cut = a.buf[:0], false
+	a.buf, a.cut, a.end = a.buf[:0], false, time.Time{}
 }
 
 // splitTimestamp splits "<RFC3339Nano> <rest>".
