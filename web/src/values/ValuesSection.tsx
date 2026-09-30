@@ -257,12 +257,17 @@ function KeyLine(props: {
   const text = shown ? (shown.whole || shown.v.value.length <= SHOWN_CHARS ? shown.v.value : shown.v.value.slice(0, SHOWN_CHARS)) : ''
   return (
     <li className="px-2 py-1.5" data-value-key={k.key}>
-      <div className="flex flex-wrap items-center gap-1.5">
-        <span className="min-w-0 flex-1 break-all font-mono text-[13px]">{k.key}</span>
-        <span className="text-xs text-fg-subtle">
-          {t('values.bytes', { n: k.size })}
-          {!k.text && ` · ${t('values.binary')}`}
-        </span>
+      {/* The key and what it holds; the actions on one line beside it, or
+          under it when the panel is too narrow (never past its edge). */}
+      <div className="flex flex-wrap items-start gap-x-2 gap-y-1">
+        <div className="min-w-16 flex-1">
+          <div className="break-all font-mono text-[13px]">{k.key}</div>
+          <div className="text-xs text-fg-subtle">
+            <span className="whitespace-nowrap">{t('values.bytes', { n: k.size })}</span>
+            {!k.text && <span className="whitespace-nowrap"> · {t('values.binary')}</span>}
+          </div>
+        </div>
+        <div className="ml-auto flex shrink-0 gap-1">
         {shown || line?.state === 'reading' ? (
           // While reading too: a slow answer can be given up.
           <button className={toolBtn} onClick={onHide}>
@@ -282,6 +287,7 @@ function KeyLine(props: {
         <button className={`${toolBtn} hover:text-danger`} onClick={onDelete} title={t('values.deleteHint')}>
           {t('values.delete')}
         </button>
+        </div>
       </div>
       {line?.state === 'reading' && <p className="mt-1 text-xs text-fg-subtle">{t('values.reading')}</p>}
       {line?.state === 'changed' && (
@@ -296,6 +302,7 @@ function KeyLine(props: {
       )}
       {shown && (
         <>
+          {!shown.v.text && <p className="mt-1 text-xs text-fg-subtle">{t('values.base64Caption')}</p>}
           <pre data-value className="mt-1 max-h-80 overflow-auto rounded bg-hover/50 px-2 py-1 font-mono text-xs break-all whitespace-pre-wrap">
             {text}
           </pre>

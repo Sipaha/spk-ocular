@@ -13,6 +13,7 @@ Go + Wails v3 + React. Спецификация: `docs/specs/2026-09-29-spk-ocul
 статистика и действия (`docs/plans/2026-09-30-p7-compose-exec-stats-actions.md`). P8 — все
 ресурсы API (discovery + server-side Table: CRD, Jobs, PVC…) — `docs/plans/2026-09-30-p8-generic-resources.md`.
 P9 — правка YAML объекта Kubernetes с просмотром и одной записью — `docs/plans/2026-09-30-p9-edit-yaml.md`.
+P10 — значения Secret: показать, скопировать, изменить/добавить/удалить ключ — `docs/plans/2026-09-30-p10-secret-values.md`.
 
 ## Сборка и тесты
 
@@ -135,6 +136,14 @@ P9 — правка YAML объекта Kubernetes с просмотром и о
   последствия, права; запись — один PATCH с uid+resourceVersion просмотра), `edit_errors.go`
   (`secretSafe`). Клиент — `web/src/edit/` (`diff.ts`, `EditDiff`, `EditDialog`, `guard.ts` +
   `DiscardPrompt`), редактор — `YamlView` (`editable`), кнопка/`E`/полоса — `ResourceDrawer`.
+- Значения Secret (P10): `provider.ValueHolder` (`Values`, `RevealValue`, `PrepareValueEdit`,
+  `RunValueEdit`), `KindDescriptor.Values`; `internal/api/values.go` (база `vbase` и грант
+  `vgrant` — HMAC-конверты P9 своих видов; строгое декодирование значения `text`|`base64`,
+  пределы 1 МиБ байт / 1,5 МиБ ввода до провайдера; `Cache-Control: no-store` у `RevealValue`);
+  Kubernetes — `values.go` (HMAC-отпечатки ключей ключом процесса, дайджест итоговой записи,
+  dry-run, потребители по spec pod-ов, сверка ответа записи с ожидаемым набором). Клиент —
+  `web/src/values/` (`ValuesSection` в деталях, `ValueDialog` с просмотром, `copy.ts` — очередь
+  записей в буфер, `bytes.ts` — текст/base64 как в Go).
 - Problems: `internal/providers/kubernetes/problems.go` — вид `problems` как набор обычных
   `viewWatch` (pods, workloads, services, ingresses, nodes, Warning events) через фильтрующие
   адаптеры `problemsFeed` в один sink (Reset источника → явные удаления), ID строки
@@ -364,6 +373,17 @@ P9 — правка YAML объекта Kubernetes с просмотром и о
   (`secretSafe` для записи, `secretReadSafe` для чтения: детали, источник правки). —
   `TestSecretRefusalsNeverPrintServerStrings`, `TestASecretsReadRefusalsAreHidden`,
   `TestASecretsDetailsRefusalsAreHidden`.
+- Значение Secret покидает Go только в ответе `RevealValue` (один ключ, свежий GET, сверка
+  UID): не в списках, деталях, базе, гранте, плане, результате, ошибках (`secretSafe`/
+  `secretReadSafe`), логах, SSE, SQLite; в UI — только в состоянии секции (не в `title`/
+  `aria-label`/хранилищах), скрывается при уходе, смене вкладки и ревизии; поздний ответ
+  показа/копирования отбрасывается по поколению, живости, UID и версии; копирования — одно
+  поколение на приложение, записи в буфер по очереди, «скопировано» — только после успеха
+  записи. Правка ключа пишет только просмотренное: грант — HMAC итоговой записи (маршрут,
+  объект, версия, ключ, операция, присутствие, байты), нетронутое поле ≠ пустое значение,
+  удаление ключа всегда опасно, «кто читает» неизвестно ≠ «никто». — `internal/api/values_test.go`,
+  `values_test.go`, `TestKindValues*`, `ValuesSection.test.tsx`, `copy.test.ts`, e2e-kind
+  «Secret values…».
 - Несохранённые правки не теряются молча: всё, что уводит от редактора (закрытие деталей, Esc,
   связи, вкладка, другой объект, вид, scope, target, палитра), идёт через `mayLeave`
   (`web/src/edit/guard.ts`) — «Отбросить правки?» с фокусом на «Продолжить правку» (вопрос держит

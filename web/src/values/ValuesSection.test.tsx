@@ -67,7 +67,7 @@ function setup(version = '7') {
       listed = v
       r.rerender(view(v))
     },
-    row: (key: string) => screen.getByText(key, { selector: 'span' }).closest('li') as HTMLElement,
+    row: (key: string) => screen.getByText(key, { selector: 'div' }).closest('li') as HTMLElement,
   }
 }
 
@@ -76,7 +76,7 @@ describe('ValuesSection', () => {
     const { f, row, container } = setup()
     await screen.findByText('password')
     expect(row('password')).toHaveTextContent(`${MARKER.length} B`)
-    expect(row('tls.key')).toHaveTextContent('binary, as base64')
+    expect(row('tls.key')).toHaveTextContent('binary')
     expect(container).not.toHaveTextContent(MARKER)
     expect(f.client.revealValue).not.toHaveBeenCalled()
 
