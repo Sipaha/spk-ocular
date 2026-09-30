@@ -99,6 +99,11 @@ func sessionFor(cfg *rest.Config, target, title, hash string) (*session, error) 
 	}
 	sess := newSession(target, hash, dyn, true)
 	sess.conn = newConn(cfg, dyn, target, title, hash)
+	if sess.tables, err = newTableClient(cfg); err != nil {
+		sess.Close()
+		return nil, err
+	}
+	sess.caches.tables = sess.tables
 	get, err := httpGetter(cfg)
 	if err != nil {
 		sess.Close()
@@ -161,10 +166,16 @@ type session struct {
 	cat           *catalog
 	kindsListener atomic.Pointer[func(rev uint64)]
 	crdWatch      sync.Once
-	now           func() time.Time
-	metrics       metricsCache
-	logs          logFetcher    // nil: no logs (tests without a server)
-	slots         chan struct{} // the provider's logSlots; nil: unlimited
+	// tables reads discovered kinds as server-side Tables (nil in tests:
+	// the plain format); schemas are their column epochs; crdDenied — no
+	// right to read CRDs (no provenance from them).
+	tables    *tableClient
+	schemas   schemaStore
+	crdDenied atomic.Bool
+	now       func() time.Time
+	metrics   metricsCache
+	logs      logFetcher    // nil: no logs (tests without a server)
+	slots     chan struct{} // the provider's logSlots; nil: unlimited
 	// conn is the connection snapshot live resources (terminals, tunnels)
 	// keep; it outlives the session.
 	conn *conn
@@ -183,6 +194,7 @@ func newSession(target, hash string, dyn dynamic.Interface, watchList bool) *ses
 		conn: newConn(&rest.Config{Host: "https://cluster.invalid"}, dyn, target, target, hash),
 	}
 	s.cat = newCatalog(ctx, allKinds, nil)
+	s.caches.onSchema = s.schemaChanged
 	return s
 }
 
@@ -205,6 +217,7 @@ func (s *session) kindsChanged(rev uint64) {
 			}
 		}
 	}
+	s.forgetSchemas(snap.reg)
 	if d := snap.reg.byID[crdKindID]; d != nil && d.discovered {
 		s.crdWatch.Do(func() { go s.watchCRDs(d.gvr) })
 	}
@@ -221,8 +234,14 @@ func (s *session) Catalog() core.KindCatalog {
 }
 
 func (s *session) OnKindsChanged(f func(rev uint64)) { s.kindsListener.Store(&f) }
-func (s *session) RefreshKinds()                     { s.cat.refresh() }
-func (s *session) KindRemoved(id string) bool        { return s.cat.snap().removed[id] }
+
+// RefreshKinds (F5): discover again, and check the columns in use (a CRD's
+// printer columns may change without an event we can see).
+func (s *session) RefreshKinds() {
+	s.cat.refresh()
+	go s.revalidate(nil)
+}
+func (s *session) KindRemoved(id string) bool { return s.cat.snap().removed[id] }
 
 // kind is the current catalog's kind with that id (nil: none).
 func (s *session) kind(id string) *kindDef { return s.cat.snap().reg.byID[id] }
@@ -263,6 +282,12 @@ func (s *session) Watch(q provider.Query, sink provider.Sink) (func(), error) {
 		return nil, &provider.Error{Class: provider.ClassInternal, Message: "invalid scope selector"}
 	case def == problemsKind:
 		return s.watchProblems(q, sink)
+	case def.discovered:
+		sch := s.currentSchema(def, q.Schema)
+		if sch == nil {
+			return nil, &provider.Error{Class: provider.ClassSchemaChanged, Message: def.desc.Title + ": the columns changed; opening again"}
+		}
+		def = sch.def
 	}
 	return s.watchDef(def, q, "", sink)
 }
@@ -276,7 +301,7 @@ func (s *session) watchDef(def *kindDef, q provider.Query, selector string, sink
 	if !q.Scope.Valid() {
 		return nil, &provider.Error{Class: provider.ClassInternal, Message: "invalid scope selector"}
 	}
-	key := cacheKey{gvr: def.gvr, selector: selector}
+	key := cacheKey{gvr: def.gvr, selector: selector, sch: def.schema}
 	if def.namespaced && q.Scope.Mode == core.ScopeOne {
 		key.namespace = q.Scope.Name
 	}
@@ -303,10 +328,15 @@ func (s *session) watchDef(def *kindDef, q provider.Query, selector string, sink
 	c.mu.Lock()
 	c.watchers[w] = struct{}{}
 	c.mu.Unlock()
-	if s.cat.snap().removed[def.desc.ID] {
-		// Removed while opening (the catalog's walk may not have seen this
-		// watcher): the view ends at once, without observing anything.
+	// Removed, or its schema epoch ended, while opening (the walks may not
+	// have seen this watcher): the view ends at once, observing nothing.
+	switch {
+	case s.cat.snap().removed[def.desc.ID]:
 		w.markRemoved()
+	case def.schema != nil && def.schema.retired.Load():
+		w.end(provider.ClassSchemaChanged, def.desc.Title+": the columns changed; opening again")
+	}
+	if w.isStopped() {
 		s.detach(c, w)
 		return func() {}, nil
 	}

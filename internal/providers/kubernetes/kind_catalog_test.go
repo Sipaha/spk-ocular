@@ -86,8 +86,12 @@ func TestKindCatalogFollowsTheServedResources(t *testing.T) {
 	_, err = probes.Create(context.Background(), &unstructured.Unstructured{Object: map[string]any{
 		"apiVersion": "ocular.dev/v1", "kind": "Probe", "metadata": map[string]any{"name": "one"}}}, metav1.CreateOptions{})
 	require.NoError(t, err)
+	desc, q, err := s.DescribeView(context.Background(), provider.Query{Kind: "ocular.dev/probes", Scope: core.ScopeSel{Mode: core.ScopeAll}})
+	require.NoError(t, err)
+	assert.Equal(t, []string{"name", "age"}, colIDs(desc.Columns), "a CRD without columns: Name and its Age")
+	assert.Equal(t, core.ColAge, desc.Columns[1].Type, "the CRD read: its default Age is the creation time")
 	sink := &recordingStatusSink{}
-	stop, err := s.Watch(provider.Query{Kind: "ocular.dev/probes", Scope: core.ScopeSel{Mode: core.ScopeAll}}, sink)
+	stop, err := s.Watch(q, sink)
 	require.NoError(t, err)
 	defer stop()
 	require.Eventually(t, func() bool { return sink.last().State == provider.StatusReady }, 30*time.Second, 20*time.Millisecond)

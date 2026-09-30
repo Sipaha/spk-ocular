@@ -66,6 +66,14 @@ type Cataloger interface {
 	KindRemoved(id string) bool
 }
 
+// ViewDescriber is implemented by sessions whose kinds' columns are known
+// per view (server-side tables): OpenView asks for the view's descriptor —
+// which may read the server, bounded by ctx — and opens the query it
+// returns (bound to those columns: Query.Schema).
+type ViewDescriber interface {
+	DescribeView(ctx context.Context, q Query) (core.KindDescriptor, Query, error)
+}
+
 // Query is what a view shows. It is immutable for the view's lifetime.
 type Query struct {
 	Kind  string        `json:"kind"`
@@ -75,6 +83,9 @@ type Query struct {
 	Subject *core.Ref `json:"subject,omitempty"`
 	// Name narrows to one object by name (an open details panel follows it).
 	Name string `json:"name,omitempty"`
+	// Schema binds the view to the columns its descriptor has (set by the
+	// API from ViewDescriber; 0: the kind's fixed columns).
+	Schema uint64 `json:"schema,omitempty"`
 }
 
 // Sink receives a watch's deliveries. Apply is called synchronously from the
@@ -114,10 +125,13 @@ const (
 	ClassGone         ErrorClass = "gone"
 	// ClassRemoved: the kind is no longer served (a CRD deleted); unlike
 	// gone, reopening the view cannot help.
-	ClassRemoved     ErrorClass = "removed"
-	ClassNotFound    ErrorClass = "not_found"
-	ClassUnsupported ErrorClass = "unsupported"
-	ClassConflict    ErrorClass = "conflict"
+	ClassRemoved ErrorClass = "removed"
+	// ClassSchemaChanged: the kind's columns changed; the view ended — open
+	// it again (it gets the new columns).
+	ClassSchemaChanged ErrorClass = "schema_changed"
+	ClassNotFound      ErrorClass = "not_found"
+	ClassUnsupported   ErrorClass = "unsupported"
+	ClassConflict      ErrorClass = "conflict"
 	// ClassUnknown: a change was sent but its outcome is not known (the
 	// connection ended before the answer); never retried automatically.
 	ClassUnknown ErrorClass = "unknown"

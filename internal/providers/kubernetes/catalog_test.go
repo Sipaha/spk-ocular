@@ -685,3 +685,24 @@ func TestADeniedCRDStreamStopsTheTrigger(t *testing.T) {
 	time.Sleep(1500 * time.Millisecond) // past the first backoff
 	assert.Equal(t, int32(1), watches.Load())
 }
+
+// Review 2026-09-30 (Codex, fe1d532 P3): a timer callback already on its
+// way when a newer timer replaced it does not forget the newer one.
+func TestAnOldCRDTimerCallbackKeepsTheNewTimer(t *testing.T) {
+	var refreshes atomic.Int32
+	tr := &crdTrigger{refresh: func() { refreshes.Add(1) }}
+	tr.changed()
+	tr.mu.Lock()
+	oldGen := tr.gen
+	tr.mu.Unlock()
+	tr.changed()    // replaces the first timer
+	tr.fire(oldGen) // the first timer's callback, late
+	tr.mu.Lock()
+	owned := tr.timer != nil
+	tr.mu.Unlock()
+	assert.True(t, owned, "the newer timer is still the trigger's")
+	assert.Zero(t, refreshes.Load(), "the late callback refreshed nothing")
+	tr.stop()
+	tr.fire(oldGen + 1)
+	assert.Zero(t, refreshes.Load(), "a stopped trigger refreshes nothing")
+}

@@ -41,7 +41,8 @@ type viewWatch struct {
 	mu        sync.Mutex
 	synced    bool
 	stopped   bool
-	removed   bool                // the kind is no longer served: final
+	endClass  provider.ErrorClass // the view ended (removed, schema changed): final
+	endMsg    string
 	release   func()              // ends the observation (handler, cache lease); once
 	ended     bool                // removed and ended: a release set later runs at once
 	deadlines map[string]deadline // object key -> when to re-project which incarnation
@@ -146,11 +147,11 @@ func metaKey(u metav1.Object) string {
 func (w *viewWatch) status() provider.ViewStatus {
 	tr := w.c.transport()
 	w.mu.Lock()
-	synced, removed := w.synced, w.removed
+	synced, endClass, endMsg := w.synced, w.endClass, w.endMsg
 	w.mu.Unlock()
 	switch {
-	case removed:
-		return provider.ViewStatus{State: provider.StatusError, Class: provider.ClassRemoved, Message: w.def.desc.Title + " are no longer served by the API"}
+	case endClass != "":
+		return provider.ViewStatus{State: provider.StatusError, Class: endClass, Message: endMsg}
 	case !synced && tr.failing:
 		return provider.ViewStatus{State: provider.StatusError, Class: tr.class, Message: tr.message}
 	case !synced:
@@ -174,19 +175,23 @@ func (w *viewWatch) pushStatus() {
 	w.sink.Apply(provider.Delta{Status: &st}) // the view drops an unchanged status
 }
 
-// markRemoved ends the view: its kind is not served any more. The final
-// status is the last delivery (under the order gate: no row or deadline
-// after it), then the observation is released — the cache may go and its
-// reflector stops asking for a resource that is not served. Reopening is a
-// new view.
+// markRemoved ends the view: its kind is not served any more.
 func (w *viewWatch) markRemoved() {
+	w.end(provider.ClassRemoved, w.def.desc.Title+" are no longer served by the API")
+}
+
+// end ends the view with a final status (removed; schema changed — the UI
+// opens it again). The status is the last delivery (under the order gate:
+// no row or deadline after it), then the observation is released — the
+// cache may go and its reflector stops. Reopening is a new view.
+func (w *viewWatch) end(class provider.ErrorClass, msg string) {
 	w.order.Lock()
 	if w.isStopped() {
 		w.order.Unlock()
 		return
 	}
 	w.mu.Lock()
-	w.removed = true
+	w.endClass, w.endMsg = class, msg
 	w.mu.Unlock()
 	st := w.status()
 	w.sink.Apply(provider.Delta{Status: &st})

@@ -33,6 +33,9 @@ type kindDef struct {
 	kind       string
 	verbs      []string
 	actions    []core.ActionDescriptor
+	// schema: the epoch of columns this def projects by (a discovered kind
+	// as a view shows it); nil for the catalog's kinds.
+	schema *tableSchema
 }
 
 // fields is a whitelist tree: true keeps a value whole; a nested fields

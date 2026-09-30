@@ -143,3 +143,104 @@ k -n ocular-demo rollout status deploy/web --timeout=180s
 k -n ocular-demo rollout status sts/db --timeout=180s
 k -n ocular-demo rollout status deploy/chatter --timeout=180s
 k -n ocular-demo wait --for=condition=Ready pod/noshell --timeout=120s
+
+# P8: custom resources and built-ins without a described projection.
+k apply -f - <<'YAML'
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata: {name: widgets.ocular.dev}
+spec:
+  group: ocular.dev
+  scope: Namespaced
+  names: {plural: widgets, singular: widget, kind: Widget, shortNames: [wd]}
+  versions:
+  - name: v1
+    served: true
+    storage: true
+    subresources: {status: {}}
+    additionalPrinterColumns:
+    - {name: Size, type: integer, jsonPath: .spec.size}
+    - {name: Phase, type: string, jsonPath: .status.phase}
+    - {name: Ready, type: string, jsonPath: '.status.conditions[?(@.type=="Ready")].status'}
+    - {name: Detail, type: string, jsonPath: .spec.detail, priority: 1}
+    - {name: Since, type: date, jsonPath: .metadata.creationTimestamp}
+    schema:
+      openAPIV3Schema: {type: object, x-kubernetes-preserve-unknown-fields: true}
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata: {name: gadgets.ocular.dev}
+spec:
+  group: ocular.dev
+  scope: Cluster
+  names: {plural: gadgets, singular: gadget, kind: Gadget}
+  versions:
+  - {name: v1, served: true, storage: true, schema: {openAPIV3Schema: {type: object, x-kubernetes-preserve-unknown-fields: true}}}
+YAML
+k wait --for=condition=Established crd/widgets.ocular.dev crd/gadgets.ocular.dev --timeout=60s
+k apply -f - <<'YAML'
+apiVersion: v1
+kind: Namespace
+metadata: {name: ocular-crd}
+---
+apiVersion: ocular.dev/v1
+kind: Widget
+metadata: {name: alpha, namespace: ocular-crd}
+spec: {size: 3, detail: first}
+---
+# Deleting beta waits for its finalizer (tests remove it).
+apiVersion: ocular.dev/v1
+kind: Widget
+metadata: {name: beta, namespace: ocular-crd, finalizers: [ocular.dev/hold]}
+spec: {size: 7, detail: second}
+---
+apiVersion: ocular.dev/v1
+kind: Widget
+metadata: {name: gamma, namespace: ocular-crd}
+spec: {size: 1, detail: third}
+---
+apiVersion: ocular.dev/v1
+kind: Gadget
+metadata: {name: g1}
+spec: {}
+---
+apiVersion: batch/v1
+kind: Job
+metadata: {name: once, namespace: ocular-crd}
+spec:
+  backoffLimit: 0
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+      - {name: app, image: "busybox:1.36", command: ["sh", "-c", "echo done"]}
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata: {name: yearly, namespace: ocular-crd}
+spec:
+  schedule: "0 0 1 1 *"
+  suspend: true
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          restartPolicy: Never
+          containers:
+          - {name: app, image: "busybox:1.36", command: ["true"]}
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata: {name: data, namespace: ocular-crd}
+spec:
+  accessModes: [ReadWriteOnce]
+  resources: {requests: {storage: 1Mi}}
+YAML
+# Status: alpha ready (observed), beta not ready, gamma's Ready is stale
+# (observed an older generation).
+st() { k -n ocular-crd patch widget "$1" --subresource=status --type=merge -p "$2" >/dev/null; }
+gen() { k -n ocular-crd get widget "$1" -o jsonpath='{.metadata.generation}'; }
+st alpha "{\"status\":{\"phase\":\"Running\",\"conditions\":[{\"type\":\"Ready\",\"status\":\"True\",\"reason\":\"AllGood\",\"observedGeneration\":$(gen alpha)}]}}"
+st beta "{\"status\":{\"phase\":\"Failing\",\"conditions\":[{\"type\":\"Ready\",\"status\":\"False\",\"reason\":\"Broken\",\"message\":\"the widget is broken\",\"observedGeneration\":$(gen beta)}]}}"
+st gamma "{\"status\":{\"phase\":\"Running\",\"conditions\":[{\"type\":\"Ready\",\"status\":\"True\",\"reason\":\"AllGood\",\"observedGeneration\":$(( $(gen gamma) - 1 ))}]}}"
+k -n ocular-crd wait --for=condition=Complete job/once --timeout=120s

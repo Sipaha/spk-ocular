@@ -161,3 +161,58 @@ func TestRefreshKindsAsksTheSession(t *testing.T) {
 	defer cs.cmu.Unlock()
 	assert.Equal(t, 1, cs.refreshes)
 }
+
+// describingSession binds views to per-view columns (server-side tables).
+type describingSession struct {
+	fakeSession
+	mu      sync.Mutex
+	watched []provider.Query
+}
+
+func (d *describingSession) DescribeView(_ context.Context, q provider.Query) (core.KindDescriptor, provider.Query, error) {
+	q.Schema = 7
+	return core.KindDescriptor{ID: q.Kind, Title: "Pods", Columns: []core.Column{{ID: "size", Title: "Size", Type: core.ColNumber}}}, q, nil
+}
+
+func (d *describingSession) Watch(q provider.Query, sink provider.Sink) (func(), error) {
+	d.mu.Lock()
+	d.watched = append(d.watched, q)
+	d.mu.Unlock()
+	return d.fakeSession.Watch(q, sink)
+}
+
+type describingProvider struct {
+	*openable
+	last *describingSession
+}
+
+func (p *describingProvider) Open(ctx context.Context, target string) (provider.Session, error) {
+	fs, _ := p.openable.Open(ctx, target)
+	p.last = &describingSession{fakeSession: fakeSession{target: target, hash: fs.ConfigHash()}}
+	return p.last, nil
+}
+
+// OpenView takes a describing session's columns and opens the query it
+// bound; a schema sent by the page is never trusted.
+func TestOpenViewUsesTheSessionsViewDescriptor(t *testing.T) {
+	p := &describingProvider{openable: newOpenable("a")}
+	s, _ := newService(t, p)
+	info, err := s.OpenView(context.Background(), OpenViewRequest{Provider: "k", Target: "a", Query: provider.Query{Kind: "pods", Scope: allScopes, Schema: 99}})
+	require.NoError(t, err)
+	assert.Equal(t, "size", info.Kind.Columns[0].ID)
+	p.last.mu.Lock()
+	defer p.last.mu.Unlock()
+	require.Len(t, p.last.watched, 1)
+	assert.Equal(t, uint64(7), p.last.watched[0].Schema)
+}
+
+// Without a describer the page's schema is dropped.
+func TestOpenViewDropsAPagesSchema(t *testing.T) {
+	k := newOpenable("a")
+	s, _ := newService(t, k)
+	info, err := s.OpenView(context.Background(), OpenViewRequest{Provider: "k", Target: "a", Query: provider.Query{Kind: "pods", Scope: allScopes, Schema: 99}})
+	require.NoError(t, err)
+	_, q, _, err := s.views.Info(info.ViewID)
+	require.NoError(t, err)
+	assert.Zero(t, q.Schema)
+}

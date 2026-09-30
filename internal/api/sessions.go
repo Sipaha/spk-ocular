@@ -228,7 +228,16 @@ func (s *Service) OpenView(ctx context.Context, req OpenViewRequest) (ViewInfo, 
 		}
 		return ViewInfo{}, coded(CodeUnsupported, fmt.Errorf("unknown kind %q", req.Query.Kind))
 	}
-	id, err := s.views.Open(e.owner, e.sess, req.Query)
+	q := req.Query
+	q.Schema = 0 // only the session binds a view to columns
+	if d, ok := e.sess.(provider.ViewDescriber); ok {
+		desc, bound, err := d.DescribeView(ctx, q)
+		if err != nil {
+			return ViewInfo{}, fromProvider(err)
+		}
+		kind, q = &desc, bound
+	}
+	id, err := s.views.Open(e.owner, e.sess, q)
 	if errors.Is(err, views.ErrGone) {
 		return ViewInfo{}, coded(CodeGone, errors.New("the session was replaced while opening; retry"))
 	}

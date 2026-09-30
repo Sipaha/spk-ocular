@@ -27,6 +27,8 @@ type cacheKey struct {
 	gvr       schema.GroupVersionResource
 	namespace string // "" = all namespaces / cluster-scoped
 	selector  string // field selector
+	// sch: a discovered kind's schema epoch (its rows are that epoch's).
+	sch *tableSchema
 }
 
 // transport is a cache's connection state, shared by its views.
@@ -110,9 +112,13 @@ func (c *informerCache) transport() transport {
 type cacheManager struct {
 	dyn       dynamic.Interface
 	watchList bool
-	now       func() time.Time
-	grace     time.Duration
-	maxIdle   int
+	// tables reads discovered kinds as server-side Tables (nil: the plain
+	// format through dyn); onSchema is told of an answer of another schema.
+	tables   *tableClient
+	onSchema func(old *tableSchema)
+	now      func() time.Time
+	grace    time.Duration
+	maxIdle  int
 
 	mu     sync.Mutex
 	caches map[cacheKey]*informerCache
@@ -158,7 +164,19 @@ func (m *cacheManager) start(key cacheKey, def *kindDef) *informerCache {
 	if key.namespace != "" {
 		ri = res.Namespace(key.namespace)
 	}
-	lw := &statusListWatch{res: ri, selector: key.selector, report: c.setTransport, ended: c.streamEnded, watchList: m.watchList, counts: &m.counts}
+	var lw cache.ListerWatcher = &statusListWatch{res: ri, selector: key.selector, report: c.setTransport, ended: c.streamEnded, watchList: m.watchList, counts: &m.counts}
+	if sch := key.sch; sch != nil && sch.table && m.tables != nil {
+		lw = &tableListWatch{c: m.tables, gvr: key.gvr, namespace: key.namespace, selector: key.selector, report: c.setTransport, ended: c.streamEnded, counts: &m.counts,
+			check: func(cols []metav1.TableColumnDefinition) error {
+				if sch.retired.Load() || !sch.matches(cols) {
+					if m.onSchema != nil {
+						m.onSchema(sch)
+					}
+					return errSchemaChanged
+				}
+				return nil
+			}}
+	}
 	c.inf = cache.NewSharedIndexInformerWithOptions(lw, &unstructured.Unstructured{}, cache.SharedIndexInformerOptions{
 		ObjectDescription: key.gvr.String(),
 	})
@@ -269,6 +287,35 @@ func (m *cacheManager) stats() (active, idle int) {
 		c.mu.Unlock()
 	}
 	return active, idle
+}
+
+// retire stops the caches of an ended schema epoch at once (their views
+// ended first): no request of the old epoch goes on.
+func (m *cacheManager) retire(sch *tableSchema) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for k, c := range m.caches {
+		if k.sch == sch {
+			delete(m.caches, k)
+			close(c.stop)
+		}
+	}
+}
+
+// routeOf: the namespace and selector of a leased cache of the epoch (the
+// scope a re-probe may use); false if no view uses the epoch.
+func (m *cacheManager) routeOf(sch *tableSchema) (ns, selector string, ok bool) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for k, c := range m.caches {
+		c.mu.Lock()
+		leased := c.leases > 0
+		c.mu.Unlock()
+		if k.sch == sch && leased {
+			return k.namespace, k.selector, true
+		}
+	}
+	return "", "", false
 }
 
 // allWatchers: the views on every cache now.

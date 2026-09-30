@@ -7,6 +7,7 @@ import (
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/watch"
 )
@@ -30,10 +31,13 @@ var (
 	crdBackoffMax = 5 * time.Minute
 )
 
-// crdTrigger coalesces CRD changes into catalog refreshes.
+// crdTrigger coalesces CRD changes into catalog refreshes. Each timer
+// carries its generation: a callback already on its way when a newer
+// timer replaced it (or the trigger stopped) does nothing.
 type crdTrigger struct {
 	mu      sync.Mutex
 	timer   *time.Timer
+	gen     uint64
 	first   time.Time // the first change not yet refreshed for
 	refresh func()
 }
@@ -47,12 +51,18 @@ func (t *crdTrigger) changed() {
 	} else {
 		t.timer.Stop()
 	}
+	t.gen++
+	gen := t.gen
 	delay := min(crdDebounce, t.first.Add(crdMaxDelay).Sub(now))
-	t.timer = time.AfterFunc(max(delay, 0), t.fire)
+	t.timer = time.AfterFunc(max(delay, 0), func() { t.fire(gen) })
 }
 
-func (t *crdTrigger) fire() {
+func (t *crdTrigger) fire(gen uint64) {
 	t.mu.Lock()
+	if gen != t.gen {
+		t.mu.Unlock()
+		return
+	}
 	t.timer = nil
 	t.mu.Unlock()
 	t.refresh()
@@ -61,6 +71,7 @@ func (t *crdTrigger) fire() {
 func (t *crdTrigger) stop() {
 	t.mu.Lock()
 	defer t.mu.Unlock()
+	t.gen++
 	if t.timer != nil {
 		t.timer.Stop()
 		t.timer = nil
@@ -161,8 +172,28 @@ func (s *session) followCRDs(w watch.Interface, rv string, changed func()) (stri
 			}
 			if ev.Type != watch.Bookmark {
 				changed()
+				if u, ok := ev.Object.(*unstructured.Unstructured); ok {
+					s.crdChanged(u)
+				}
 			}
 		}
+	}
+}
+
+// crdChanged: a CRD's printer columns may have changed — the schemas of
+// its resource's versions in use are checked again.
+func (s *session) crdChanged(u *unstructured.Unstructured) {
+	group, plural := str(u.Object, "spec", "group"), str(u.Object, "spec", "names", "plural")
+	s.schemas.mu.Lock()
+	var gvrs []schema.GroupVersionResource
+	for gvr := range s.schemas.by {
+		if gvr.Group == group && gvr.Resource == plural {
+			gvrs = append(gvrs, gvr)
+		}
+	}
+	s.schemas.mu.Unlock()
+	for _, gvr := range gvrs {
+		go s.revalidate(&gvr)
 	}
 }
 
