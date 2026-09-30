@@ -153,6 +153,18 @@ describe('TermConnection', () => {
     expect(ws.closed).toBe(1000)
   })
 
+  it('an end carries the provider\'s reason by key; a malformed one is ignored', () => {
+    const { ws, ends } = setup()
+    ws.open()
+    const why = { key: 'kubernetes.debug.ended', text: 'debugger d has ended', params: { container: 'd' } }
+    ws.ctl({ k: 'end', reason: 'error', class: 'gone', message: 'debugger d has ended', why })
+    expect(ends).toEqual([{ reason: 'error', class: 'gone', message: 'debugger d has ended', why }])
+    const second = setup()
+    second.ws.open()
+    second.ws.ctl({ k: 'end', reason: 'error', class: 'gone', message: 'm', why: 'bare' })
+    expect(second.ends).toEqual([{ reason: 'error', class: 'gone', message: 'm' }])
+  })
+
   it('passes a notice about the terminal to the sink; a malformed one is ignored', () => {
     const notices: unknown[] = []
     let ws!: FakeWS

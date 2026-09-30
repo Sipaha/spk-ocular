@@ -16,6 +16,7 @@
 // queues (iack counts it) and writes ^C next, so it gets through even when
 // the command does not read and the window is exhausted.
 
+import { asMessage } from '../api/client'
 import type { Message } from '../api/types'
 
 export const IN_WINDOW = 256 << 10
@@ -31,6 +32,8 @@ export interface TermEnd {
   reason: 'done' | 'error' | 'gone' | 'closed'
   class?: string
   message?: string
+  /** the provider's own reason by key (said in the UI's language) */
+  why?: Message
   /** exit code, when the command's end was observed */
   code?: number
 }
@@ -144,7 +147,7 @@ export class TermConnection {
   }
 
   private onControl(text: string) {
-    let m: { k?: string; state?: string; n?: number; code?: number; reason?: string; class?: string; message?: unknown }
+    let m: { k?: string; state?: string; n?: number; code?: number; reason?: string; class?: string; message?: unknown; why?: unknown }
     try {
       m = JSON.parse(text)
     } catch {
@@ -175,6 +178,7 @@ export class TermConnection {
           reason: m.reason === 'done' || m.reason === 'gone' || m.reason === 'error' ? m.reason : 'error',
           class: m.class,
           message: typeof m.message === 'string' ? m.message : undefined,
+          ...(asMessage(m.why) ? { why: asMessage(m.why) } : {}),
         })
         break
     }

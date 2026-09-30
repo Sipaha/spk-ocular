@@ -217,7 +217,7 @@ func (b *termBridge) run(parent context.Context, sess TermSession, revoked func(
 		switch {
 		case runErr != nil && !errors.Is(runErr, context.Canceled):
 			end.Reason = "error"
-			end.Class, end.Message = b.classify(runErr)
+			end.Class, end.Message, end.Why = b.classify(runErr)
 		case runErr == nil && st.Known:
 			b.send(websocket.MessageText, mustJSON(map[string]any{"k": "exit", "code": st.Code}))
 		}

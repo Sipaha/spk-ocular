@@ -9,7 +9,7 @@ export type Frame =
   | { k: 'state'; s: number; state: string; class?: string; msg?: string }
   | { k: 'ready' }
   | { k: 'ping' }
-  | { k: 'end'; reason: 'done' | 'gone' | 'error'; class?: string; message?: string }
+  | { k: 'end'; reason: 'done' | 'gone' | 'error'; class?: string; message?: string; why?: unknown }
 
 /** Line flags (provider.LineCut / LineNoTime). */
 export const LINE_CUT = 1

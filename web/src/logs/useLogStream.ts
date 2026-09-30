@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { ApiError, type Client } from '../api/client'
+import { ApiError, asMessage, type Client } from '../api/client'
+import { messageText } from '../i18n'
 import type { LogQuery, Ref } from '../api/types'
 import { append, EMPTY_WINDOW, entryChars, Ingest, MAX_LOG_CHARS, MAX_LOG_LINES, trim, type LogEntry, type Window } from './buffer'
 import { NdjsonDecoder, type Frame } from './ndjson'
@@ -218,7 +219,7 @@ export function useLogStream({ client, ref, query, paused, frozen }: Options) {
           ended = true
           flush()
           setStatus((st) =>
-            f.reason === 'done' ? { ...st, phase: 'done' } : f.reason === 'gone' ? { ...st, phase: 'gone' } : { ...st, phase: 'error', cls: f.class, message: f.message },
+            f.reason === 'done' ? { ...st, phase: 'done' } : f.reason === 'gone' ? { ...st, phase: 'gone' } : { ...st, phase: 'error', cls: f.class, message: ((why) => (why ? messageText(why) : f.message))(asMessage(f.why)) },
           )
           break
       }

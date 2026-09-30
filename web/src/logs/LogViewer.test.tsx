@@ -73,6 +73,19 @@ describe('LogViewer', () => {
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2))
   })
 
+  it('a stream ending with the provider\'s reason says it by key', async () => {
+    const { client: c } = fakeClient([k8s('dev')])
+    const s1 = stream()
+    vi.stubGlobal('fetch', vi.fn(async () => s1.response))
+    render(<LogViewer client={c} subject={pod} active />)
+    act(() => {
+      s1.send({ k: 'end', reason: 'error', class: 'gone', message: 'raw server words', why: { key: 'test.unknown', text: 'the provider says so' } })
+      s1.close()
+    })
+    await screen.findByText(/the provider says so/)
+    expect(screen.queryByText(/raw server words/)).not.toBeInTheDocument()
+  })
+
   it('shows why a stream could not be opened', async () => {
     const { client: c } = fakeClient([k8s('dev')])
     const { ApiError } = await import('../api/client')

@@ -328,7 +328,7 @@ function endText(e: TermEnd): string {
     case 'closed':
       return t('term.lost', { detail: e.message ?? '' })
   }
-  return `${e.class ? classLabel(e.class) + ': ' : ''}${e.message ?? t('term.failed')}`
+  return `${e.class ? classLabel(e.class) + ': ' : ''}${e.why ? messageText(e.why) : (e.message ?? t('term.failed'))}`
 }
 
 // Control characters by physical key for Ctrl with a non-Latin layout:

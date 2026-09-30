@@ -730,6 +730,7 @@ describe('ActionDialog', () => {
       await waitFor(() => expect(confirm).toHaveFocus())
       expect(within(dialog).getByRole('textbox', { name: 'Image' })).toHaveValue('busybox:1.36')
       expect(within(dialog).getByRole('radio', { name: /app/ })).toBeChecked()
+      expect(within(dialog).getByRole('radio', { name: /app/ }).closest('label')).toHaveTextContent(/^app$/) // the value only where it says more than the title
       expect(dialog).toHaveTextContent('debugger with busybox:1.36 sees app')
       expect(f.client.prepareAction).toHaveBeenCalledTimes(1)
       await userEvent.keyboard('{Enter}')

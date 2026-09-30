@@ -463,6 +463,23 @@ func TestTermRunErrorsEndWithoutExit(t *testing.T) {
 	}
 }
 
+// A provider's own reason (a debugger that ended) travels by key.
+func TestTermRunErrorEndsWithItsReasonByKey(t *testing.T) {
+	why := &core.Message{Key: "kubernetes.debug.ended", Text: "debugger d has ended", Params: map[string]string{"container": "d"}}
+	f := newFixture(t, HandlerOptions{AllowOrigin: testOrigin, Classify: func(err error) (string, string, *core.Message) { return "gone", err.Error(), why }})
+	f.h.term = fastTimings
+	ft := &fakeTerm{run: func(context.Context, provider.Terminal) (provider.ExitStatus, error) {
+		return provider.ExitStatus{}, errors.New("debugger d has ended")
+	}}
+	id, err := f.reg.AddTerm("term", ft, provider.TermSize{Cols: 80, Rows: 24})
+	require.NoError(t, err)
+	cl := newClient(f.dial(t, id))
+	cl.waitClosed(t)
+	ends := cl.controls("end")
+	require.Len(t, ends, 1)
+	assert.Equal(t, map[string]any{"key": "kubernetes.debug.ended", "text": "debugger d has ended", "params": map[string]any{"container": "d"}}, ends[0]["why"])
+}
+
 func TestTermPageClosingCancelsTheCommand(t *testing.T) {
 	f := newTermFixture(t, fastTimings)
 	cancelled := make(chan struct{})

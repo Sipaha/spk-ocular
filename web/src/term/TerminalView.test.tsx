@@ -7,6 +7,7 @@ import type { TermTab } from '../dock/store'
 import type { TermEnd, TermSink } from './protocol'
 import TerminalView from './TerminalView'
 import { dock } from '../dock/store'
+import { setLanguage } from '../i18n'
 
 // jsdom cannot run xterm (no canvas, no layout): a stand-in that keeps the
 // handlers the view installs.
@@ -278,6 +279,20 @@ describe('a debugger’s tab (attach)', () => {
     act(() => h.conns[0].end({ reason: 'closed', message: 'connection lost' }))
     act(() => screen.getByRole('button', { name: 'Reconnect' }).click())
     await waitFor(() => expect(client.reopenTerminal).toHaveBeenCalled())
+  })
+
+  it('the reason of its end is said in the UI\'s language', async () => {
+    setLanguage('ru')
+    try {
+      render(<TerminalView client={fakeClient() as unknown as Client} tab={attachTab} active mode="browser" />)
+      await waitFor(() => expect(h.conns).toHaveLength(1))
+      act(() =>
+        h.conns[0].end({ reason: 'error', class: 'gone', message: 'debugger d has ended; open a new one (Debug…)', why: { key: 'kubernetes.debug.ended', text: 'debugger d has ended; open a new one (Debug…)', params: { container: 'd' } } }),
+      )
+      expect(screen.getByRole('alert')).toHaveTextContent('отладчик d завершился; откройте новый («Отладить…»)')
+    } finally {
+      setLanguage('en')
+    }
   })
 
   it('an ended debugger offers no new terminal (it cannot restart): its text says to debug again', async () => {

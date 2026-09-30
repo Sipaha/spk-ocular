@@ -114,7 +114,7 @@ func (s *Service) registerStream(e *sessionEntry, run streams.Func) (string, err
 }
 
 // StreamErrorClass classifies a failed stream for its end frame.
-func StreamErrorClass(err error) (string, string) {
+func StreamErrorClass(err error) (string, string, *core.Message) {
 	ce := fromProvider(err)
-	return ce.Code, ce.Detail
+	return ce.Code, ce.Detail, ce.Why
 }

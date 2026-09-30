@@ -12,6 +12,8 @@ import (
 	"time"
 
 	"github.com/coder/websocket"
+
+	"github.com/spk/spk-ocular/internal/core"
 )
 
 // End is the last frame of every stream.
@@ -22,10 +24,14 @@ type End struct {
 	Reason  string `json:"reason"`
 	Class   string `json:"class,omitempty"`
 	Message string `json:"message,omitempty"`
+	// Why: the provider's own sentence by key (the page says it in its
+	// language); Message is its English text.
+	Why *core.Message `json:"why,omitempty"`
 }
 
-// Classifier maps a stream error to an error class for the end frame.
-type Classifier func(error) (class, message string)
+// Classifier maps a stream error to an error class for the end frame, and
+// the provider's own sentence when it is one.
+type Classifier func(error) (class, message string, why *core.Message)
 
 // Handler serves /<token>/logs/<id> (and /<token>/save, see save.go)
 // relative to where it is mounted. Every request must carry the token (32
@@ -59,7 +65,7 @@ func NewHandler(reg *Registry, o HandlerOptions) *Handler {
 	_, _ = rand.Read(raw[:])
 	cl := o.Classify
 	if cl == nil {
-		cl = func(err error) (string, string) { return "internal", err.Error() }
+		cl = func(err error) (string, string, *core.Message) { return "internal", err.Error(), nil }
 	}
 	return &Handler{
 		reg: reg, token: []byte(base64.RawURLEncoding.EncodeToString(raw[:])), classify: cl,
@@ -154,7 +160,7 @@ func (h *Handler) serveStream(w http.ResponseWriter, r *http.Request, id string)
 		return
 	case runErr != nil && !errors.Is(runErr, context.Canceled):
 		end.Reason = "error"
-		end.Class, end.Message = h.classify(runErr)
+		end.Class, end.Message, end.Why = h.classify(runErr)
 	}
 	_ = out.Frame(end)
 	out.close()

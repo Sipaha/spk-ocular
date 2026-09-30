@@ -639,7 +639,7 @@ function Choices({ choices, chosen, disabled, onChoose, boxRef }: { choices: Act
                     {t('action.choiceAge', { age: formatAge(now - c.at) })}
                   </span>
                 )}
-                <span className="ml-2 font-mono text-xs text-fg-subtle">{c.value}</span>
+                {c.value !== messageText(c.title) && <span className="ml-2 font-mono text-xs text-fg-subtle">{c.value}</span>}
               </span>
               {!!c.details?.length && <span className="break-all text-xs text-fg-muted">{c.details.map((d) => messageText(d)).join(' · ')}</span>}
             </span>

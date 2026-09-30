@@ -19,6 +19,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/spk/spk-ocular/internal/core"
 	"github.com/spk/spk-ocular/internal/provider"
 )
 
@@ -197,11 +198,23 @@ func TestConnectRacingCloseOwnerNeverRunsAfterIt(t *testing.T) {
 }
 
 func TestStreamErrorEndsWithClass(t *testing.T) {
-	f := newFixture(t, HandlerOptions{Classify: func(err error) (string, string) { return "forbidden", err.Error() }})
+	f := newFixture(t, HandlerOptions{Classify: func(err error) (string, string, *core.Message) { return "forbidden", err.Error(), nil }})
 	id, err := f.reg.Add("o", func(context.Context, *Writer) error { return errors.New("pods/log is forbidden") })
 	require.NoError(t, err)
 	fr := frames(t, f.get(t, "/"+f.h.Token()+"/logs/"+id, nil).Body)
 	assert.Equal(t, map[string]any{"k": "end", "reason": "error", "class": "forbidden", "message": "pods/log is forbidden"}, fr[len(fr)-1])
+}
+
+// The provider's own sentence travels by key: the page says it in its
+// language.
+func TestStreamErrorEndsWithItsReasonByKey(t *testing.T) {
+	why := &core.Message{Key: "test.ended", Text: "it ended", Params: map[string]string{"name": "x"}}
+	f := newFixture(t, HandlerOptions{Classify: func(err error) (string, string, *core.Message) { return "gone", err.Error(), why }})
+	id, err := f.reg.Add("o", func(context.Context, *Writer) error { return errors.New("it ended") })
+	require.NoError(t, err)
+	fr := frames(t, f.get(t, "/"+f.h.Token()+"/logs/"+id, nil).Body)
+	assert.Equal(t, map[string]any{"k": "end", "reason": "error", "class": "gone", "message": "it ended",
+		"why": map[string]any{"key": "test.ended", "text": "it ended", "params": map[string]any{"name": "x"}}}, fr[len(fr)-1])
 }
 
 func TestLimitCountsRegisteredAndConnected(t *testing.T) {
