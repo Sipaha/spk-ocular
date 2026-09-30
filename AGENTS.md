@@ -19,7 +19,9 @@ P12 — CronJob: приостановить, возобновить, запус�
 P13 — итоги и отказы действий на языке интерфейса — `docs/plans/2026-09-30-p13-action-outcomes-i18n.md`.
 P14 — доступ агентов (Claude/Codex) через unix-сокет `$SPK_OCULAR_HOME/agent.sock` —
 `docs/plans/2026-09-30-p14-agent-access.md` (спецификация `docs/specs/2026-09-30-agent-access-design.md`).
-Следующий этап — из бэклога, выбирает пользователь.
+P15 — Deployment: откат к выбранной ревизии, пауза и возобновление выкатки — `docs/plans/2026-10-01-p15-rollout.md`.
+Следующий этап — из бэклога; пользователь просил не ждать его выбора: агент выбирает сам (наибольшая
+ежедневная польза на живых кластерах) и записывает почему в план.
 
 ## Сборка и тесты
 
@@ -364,7 +366,8 @@ P14 — доступ агентов (Claude/Codex) через unix-сокет `$
   `internal/api/actions_test.go`, `TestKindActionOnAnObjectReplacedBetweenReadAndWrite`,
   `TestKindActionReplicasChangedAfterThePlanIsAConflict`.
 - Повтор записи — только при отказе предусловия (409 — не 422: провал JSON Patch `test` не
-  отличим от отказа валидации, поэтому scale — merge patch `/scale` с uid+RV) и только
+  отличим от отказа валидации, поэтому scale — merge patch `/scale` с uid+RV, а откат — JSON Patch
+  с версией через `replace /metadata/resourceVersion`, проверено на kind) и только
   когда перечитывание доказало, что записи не было (тот же UID и `Expect`, другая версия), ≤ 3.
   Запись действия — ровно один HTTP-запрос: `restWriter` (`actions_writer.go`) с
   `MaxRetries(0)`, не dynamic client (client-go сам переотправляет ответы 5xx/429 с
@@ -407,6 +410,30 @@ P14 — доступ агентов (Claude/Codex) через unix-сокет `$
   AlreadyExists — `conflict`, 5xx/обрыв — `unknown` с именем Job. `status.active` — наблюдение
   на момент просмотра, не в `Expect`. — `cronjob_test.go`, `cronjob_run_test.go`,
   `TestACreateIsOneRequestOnTheWire`, `TestKindActionCronJob*`, e2e-kind «a CronJob…».
+- Параметр «выбор» (P15, `core.ParamChoice`): варианты — в самом плане (`ActionPlan.Choices`,
+  живые, значение сверяет провайдер), выбранное — `ActionParams.Choice`; у действия без параметра
+  выбор — отказ, у «выбора» — число запрещено, прогон без выбора — отказ. UI: выбор сразу
+  просматривается заново, стрелки продолжают выбирать (фокус остаётся), группа — одна остановка Tab,
+  «Выполнить» — только с планом этого выбора; поздний план прежнего выбора не выполняется.
+  `ActionPlan.Changes` — строки изменений самого объекта, не объекты: у агентов их не судят гранты
+  (`listsOutside` отказывает элементу `Lists` без `Ref`). — `core/action_test.go`,
+  `ActionDialog.test.tsx` «a choice…», `agentapi` `TestAChoiceAndItsChangesReachAgents`.
+- Откат Deployment (P15, как `kubectl rollout undo --to-revision`): ревизии — ReplicaSet-ы под его
+  controller UID с `deployment.kubernetes.io/revision` (и сведённые в 0), новейшие ≤ 50; значение —
+  имя RS (номер переезжает при откате); текущая — шаблон равен шаблону Deployment без
+  `pod-template-hash` в метках шаблона. Свой путь `runUndo`: каждая попытка перечитывает Deployment
+  по UID и его RS; `Expect` — uid/deleting/paused/шаблон/replicas/strategy Deployment-а, uid/номер/
+  шаблон выбранного RS и новейший номер, без версий (статус крутится — повтор, не отказ);
+  `failedWrite` пересчитывает `Expect` тем же путём. Запись — один JSON Patch: `test /metadata/uid`,
+  `replace /metadata/resourceVersion`, `replace /spec/template` (шаблон RS без хэша), change-cause —
+  как у ревизии (прочие аннотации не трогаются); тело — из прочитанного в этой попытке. На паузе —
+  недоступен («сначала возобновите»). Права — patch deployments и list replicasets. Разница
+  шаблонов — пути, именованные списки (containers, env, volumes) по имени и поштучно, `env` с
+  `valueFrom` — ссылкой (`secretKeyRef x/key`), не значением. Pause/resume — merge patch
+  `spec.paused` с uid + rv, `Expect` — paused и generation; id `resume` общий с CronJob, ветвление
+  по виду. — `rollout_test.go`, `TestKindActionUndoToARevision` (и во время выкатки),
+  `TestKindActionPauseAndResume`, e2e synth «roll back…», «pause and resume…», e2e-kind «roll a
+  deployment back…».
 - Drain (P11) — как `kubectl drain` без `--force` и без ожидания: pod-ы узла — list по
   `spec.nodeName` с пределом 500; не узнать всех (ошибка, > 500, `continue`) — `Unavailable` и в
   плане, и в прогоне (ноль записей). Без контроллера — остаются и названы (части `skipped`),
