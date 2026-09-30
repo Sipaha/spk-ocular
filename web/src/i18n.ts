@@ -630,6 +630,8 @@ const providerTexts: Partial<Record<Language, Record<string, string>>> = {
     'compose.error.notObserved': '{feed} не наблюдаются',
     'compose.error.notFound': '{kind} {name} не найден',
     'compose.error.gone': '{kind} {name} больше нет: его имя теперь у другого объекта',
+    'compose.logs.stream': 'Поток',
+    'compose.logs.allStreams': 'stdout и stderr',
     'kubernetes.scope.singular': 'Namespace',
     'kubernetes.scope.plural': 'namespaces',
     'kubernetes.scope.all': 'Все namespaces',

@@ -27,6 +27,8 @@ var messageTexts = map[string]string{
 	"error.notObserved":               "the {feed} are not observed",
 	"error.notFound":                  "{kind} {name} is not found",
 	"error.gone":                      "{kind} {name} no longer exists: another object has its name now",
+	"logs.stream":                     "Stream",
+	"logs.allStreams":                 "stdout and stderr",
 }
 
 // msg builds the message key with params given as name, value pairs.
