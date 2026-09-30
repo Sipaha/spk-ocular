@@ -240,6 +240,8 @@ describe('agent access: confirmation', () => {
     expect(f.client.decideAgentPending).toHaveBeenCalledWith('p1', false)
     const next = await screen.findByRole('dialog', { name: 'Agent “claude” asks you to confirm' })
     await waitFor(() => expect(next).toHaveTextContent('api-p2'))
+    // The next plan's dialog has the focus too (not given back behind it).
+    expect(within(next).getByRole('button', { name: 'No' })).toHaveFocus()
     expect(document.title).toBe('(1) SPK Ocular')
     await user.click(within(next).getByRole('button', { name: 'Yes, run it' }))
     expect(f.client.decideAgentPending).toHaveBeenLastCalledWith('p2', true)

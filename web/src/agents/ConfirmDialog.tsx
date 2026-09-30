@@ -29,7 +29,21 @@ export function AgentConfirm({ client, reload }: { client: Client; reload: () =>
   const asideIds = useAgents((s) => s.asideIds)
   const queue = shownPending({ pending, asideIds })
   if (!queue.length) return null
-  return <Dialog key={queue[0].id} client={client} p={queue[0]} more={queue.length - 1} reload={reload} />
+  return (
+    <Queue>
+      <Dialog key={queue[0].id} client={client} p={queue[0]} more={queue.length - 1} reload={reload} />
+    </Queue>
+  )
+}
+
+/**
+ * Lives while plans wait: the focus goes back where it was only when the
+ * last dialog closes, not between two (the next dialog's "No" keeps it).
+ */
+function Queue({ children }: { children: React.ReactNode }) {
+  const [mark] = useState(focusMark)
+  useEffect(() => () => restoreFocus(mark), [mark])
+  return children
 }
 
 function Dialog({ client, p, more, reload }: { client: Client; p: AgentPending; more: number; reload: () => void }) {
@@ -38,7 +52,6 @@ function Dialog({ client, p, more, reload }: { client: Client; p: AgentPending; 
   const [now, setNow] = useState(() => Date.now())
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [mark] = useState(focusMark)
   const lock = useRef(false)
   const noRef = useRef<HTMLButtonElement>(null)
   const box = useRef<HTMLDivElement>(null)
@@ -48,7 +61,6 @@ function Dialog({ client, p, more, reload }: { client: Client; p: AgentPending; 
   }, [])
   // Destructive: the focus starts at "No".
   useLayoutEffect(() => noRef.current?.focus(), [])
-  useEffect(() => () => restoreFocus(mark), [mark])
 
   const expired = Date.parse(p.expires) <= now
   const decide = async (approve: boolean) => {
