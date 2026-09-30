@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { ApiError, type Client } from '../api/client'
-import type { ActionDescriptor, ActionParams, ActionPlan, Ref } from '../api/types'
+import type { ActionDescriptor, ActionParams, ActionPart, ActionPlan, ActionResult, Ref } from '../api/types'
 import { actionLabel, classLabel, messageText, t } from '../i18n'
 import { refTitle } from '../refs'
 import { useScopeWords } from '../scopeNames'
@@ -30,6 +30,8 @@ type Outcome =
   | { type: 'failed'; text: string }
   /** An answer after the timeout said it was done. */
   | { type: 'lateDone'; text: string }
+  /** Some parts were done, then one was refused or its outcome is unknown. */
+  | { type: 'partial'; text: string; parts: ActionPart[]; unknown: boolean }
 
 const RUN_TIMEOUT_MS = 60_000
 
@@ -39,6 +41,13 @@ const RUN_TIMEOUT_MS = 60_000
 const btn = 'rounded-md px-3 py-1 outline-none focus:ring-2 focus:ring-accent focus:ring-offset-2 focus:ring-offset-panel disabled:opacity-50'
 
 class RunTimeout extends Error {}
+
+const partClass: Record<ActionPart['outcome'], string> = {
+  done: 'text-success',
+  refused: 'text-danger',
+  unknown: 'text-warning',
+  skipped: 'text-fg-subtle',
+}
 
 /** What a run's rejection means for the user. */
 function outcomeOf(e: unknown): Outcome {
@@ -50,6 +59,23 @@ function outcomeOf(e: unknown): Outcome {
     : code === 'conflict'
       ? { type: 'conflict', text: t('action.conflict', { detail: detailOf(e) }) }
       : { type: 'failed', text: t('action.failed', { class: classLabel(code), detail: detailOf(e) }) }
+}
+
+/** "2 of 3 done; 1 outcome unknown; 1 not run". */
+export function partsSummary(parts: ActionPart[]): string {
+  const n = (o: ActionPart['outcome']) => parts.filter((p) => p.outcome === o).length
+  const out = [t('action.partsDone', { done: n('done'), total: parts.length })]
+  if (n('refused')) out.push(t('action.partsRefused', { n: n('refused') }))
+  if (n('unknown')) out.push(t('action.partsUnknown', { n: n('unknown') }))
+  if (n('skipped')) out.push(t('action.partsSkipped', { n: n('skipped') }))
+  return out.join('; ')
+}
+
+/** A result that did not finish (null: done). */
+function partialOf(res: ActionResult): Extract<Outcome, { type: 'partial' }> | null {
+  if (!res.outcome || res.outcome === 'done') return null
+  const unknown = res.outcome === 'unknown'
+  return { type: 'partial', text: t(unknown ? 'action.partialUnknown' : 'action.partialRefused'), parts: res.parts ?? [], unknown }
 }
 
 const detailOf = (e: unknown) => (e instanceof ApiError ? e.detail || e.code : e instanceof Error ? e.message : String(e))
@@ -179,8 +205,19 @@ export function ActionDialog({ client, req, onClose, runTimeoutMs = RUN_TIMEOUT_
         if (message) showNotice(message)
       } else showNotice(`${where}${out.type === 'lateDone' ? out.text : `${actionLabel(action)} ${refTitle(plan.where.ref)}: ${out.text}`}`, 10_000)
     }
+    // What a result says, for a notice: the sum of its parts or its message.
+    const told = (res: ActionResult) => (res.parts?.length ? `${actionLabel(action)} ${refTitle(plan.where.ref)}: ${partsSummary(res.parts)}` : res.message)
     answer.then(
-      (res) => lateAnswer({ type: 'lateDone', text: t('action.lateDone', { message: res.message }) }, res.message),
+      (res) => {
+        const partial = partialOf(res)
+        if (!partial) return lateAnswer({ type: 'lateDone', text: t('action.lateDone', { message: told(res) }) }, told(res))
+        if (!timedOut) return
+        if (live.current && lateFor.current === op) {
+          lateFor.current = 0
+          setOutcome({ ...partial, text: t('action.late', { text: partial.text }) })
+          showNotice(told(res))
+        } else showNotice(`${where}${actionLabel(action)} ${refTitle(plan.where.ref)}: ${t('action.late', { text: partsSummary(partial.parts) })}`, 10_000)
+      },
       (e) => lateAnswer({ ...outcomeOf(e), text: t('action.late', { text: outcomeOf(e).text }) }),
     )
     try {
@@ -194,10 +231,17 @@ export function ActionDialog({ client, req, onClose, runTimeoutMs = RUN_TIMEOUT_
         }),
       ])
       // Told even when the dialog is gone (another target was chosen meanwhile).
-      if (live.current) {
-        showNotice(res.message)
+      const partial = partialOf(res)
+      if (!live.current) showNotice(`${plan.where.targetTitle} · ${told(res)}`, partial ? 10_000 : undefined)
+      else if (partial) {
+        // The dialog stays: what was done and what not, part by part.
+        showNotice(told(res), 10_000)
+        setOutcome(partial)
+        setBusy(null)
+      } else {
+        showNotice(told(res))
         onClose()
-      } else showNotice(`${plan.where.targetTitle} · ${res.message}`)
+      }
     } catch (e) {
       const out: Outcome = e instanceof RunTimeout ? { type: 'unknown', text: t('action.timeout', { sec: Math.round(runTimeoutMs / 1000) }) } : outcomeOf(e)
       if (!live.current) {
@@ -239,7 +283,7 @@ export function ActionDialog({ client, req, onClose, runTimeoutMs = RUN_TIMEOUT_
   const name = refTitle(where?.ref ?? ref)
   const scope = where?.ref.scope ?? ref.scope
   const label = actionLabel(action)
-  const unknownOrDone = outcome?.type === 'unknown' || outcome?.type === 'lateDone'
+  const unknownOrDone = outcome?.type === 'unknown' || outcome?.type === 'lateDone' || outcome?.type === 'partial'
 
   return (
     <div className="absolute inset-0 z-20 flex items-start justify-center bg-black/40 pt-20" onMouseDown={(e) => e.target === e.currentTarget && close()}>
@@ -348,9 +392,22 @@ export function ActionDialog({ client, req, onClose, runTimeoutMs = RUN_TIMEOUT_
             {outcome.text}
           </p>
         ) : outcome && (
-          <p role="alert" className={['rounded-md px-3 py-2', outcome.type === 'unknown' || outcome.type === 'conflict' ? 'bg-warning/10 text-warning' : 'bg-danger/10 text-danger'].join(' ')}>
+          <p role="alert" className={['rounded-md px-3 py-2', outcome.type === 'unknown' || outcome.type === 'conflict' || (outcome.type === 'partial' && outcome.unknown) ? 'bg-warning/10 text-warning' : 'bg-danger/10 text-danger'].join(' ')}>
             {outcome.text}
           </p>
+        )}
+        {outcome?.type === 'partial' && outcome.parts.length > 0 && (
+          <ul aria-label={t('action.parts')} className="space-y-0.5 rounded-md border border-line px-3 py-2 text-xs">
+            {outcome.parts.map((p) => (
+              <li key={p.id} className="flex gap-2">
+                <span className="min-w-0 break-all font-mono">{p.title}</span>
+                <span className={partClass[p.outcome]}>
+                  {t(`action.part.${p.outcome}`)}
+                  {p.message && p.outcome !== 'done' ? ` · ${p.message}` : ''}
+                </span>
+              </li>
+            ))}
+          </ul>
         )}
 
         <div className="flex justify-end gap-2">

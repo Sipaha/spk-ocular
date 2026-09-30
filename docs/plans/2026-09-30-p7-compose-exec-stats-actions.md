@@ -315,6 +315,39 @@ Actions: restart/stop/start/rm), «Ключевые технические ре�
   сервис — закреплённый набор, остановка на первом отказе, Parts; vitest диалога; dind; e2e
   dind.
 
+  **Сделано** (e2e dind — вместе с Tasks 2/4, см. Task 6): `core.ActionResult{Message,
+  Outcome, Parts[]{ID, Title, Outcome, Message}}`, `ActionOutcome` done|refused|unknown|
+  skipped; api ставит `done`, если провайдер не сказал. `compose/actions.go`: контейнер —
+  restart/stop/start/delete («Remove», destructive), сервис — restart/stop/start. План:
+  свежие inspect-ы (сервис — члены из фида, каждый inspect-ом сейчас; удалённый — вне
+  набора), последствия с ключами `compose.act.*` (сигнал `StopSignal` иначе SIGTERM, таймаут
+  `StopTimeout` иначе 10; 0 — «сразу SIGKILL», −1 — «ждёт без SIGKILL»; AutoRemove; политика
+  `always`; удаление — «тома и образ остаются»; у сервиса — «не затрагивается: причина» для
+  неподходящих членов), Unavailable (start запущенного/приостановленного, stop не
+  запущенного, delete запущенного — «сначала остановите», removing/dead; сервис — нет
+  подходящих членов), Warnings (Engine без предусловий; у сервиса — набор закреплён,
+  изменение до запуска → conflict, появившиеся во время — не затрагиваются), Rights
+  unknown. Expect — sha256 от действия и по каждому члену (id, StartedAt, status, running/
+  paused/restarting/dead, сигнал, таймаут, AutoRemove, политика). `RunAction`: свежий набор
+  один раз, несовпадение → `conflict` до первой записи; контейнер — ошибки как раньше (404 →
+  `gone`, 409 демона → `bad_request` его словами, 5xx/нет ответа после отправки →
+  `unknown`, 304 → done «was running/stopped already»); сервис — по членам в порядке
+  реплик, первый отказ/unknown — остальные `skipped`, ответ — результат с `Parts` без
+  ошибки. UI: `ActionDialog` — итог с частями остаётся в диалоге (список «Итог», у каждой
+  части исход и причина), уведомление-сводка «Restart api: выполнено 1 из 3; результат
+  неизвестен: 1; не выполнялось: 1»; поздний ответ (после таймаута) с частями заменяет
+  «неизвестно» в своём диалоге или уходит уведомлением с целью. i18n `act.stop`/`act.start`,
+  `action.part.*`, `action.parts*`, RU для `compose.act.*`. Фейк Engine: код выхода по
+  сигналу (137 при t=0), AutoRemove удаляет после stop, start приостановленного — 409.
+  Тесты: фейк (последствия и параметры, Unavailable по состояниям, точный `t=`, conflict по
+  StartedAt/таймауту/сигналу/AutoRemove/состоянию без записей, 304/409/404/5xx, сервис по
+  порядку реплик и «не затрагивается», изменённый набор → conflict, остановка на первом
+  отказе/unknown с Parts, удаление), api (Outcome по умолчанию, Parts насквозь), vitest
+  (unknown/refused части, все done, поздний ответ в диалоге и уведомлением), dind
+  `TestDindActions` (свой проект: stop/start сервиса с частями и SIGINT/2 с из compose,
+  restart контейнера, conflict после внешнего restart, удаление запущенного — Unavailable,
+  остановленного — удалён).
+
 ### Task 6. Desktop, документы, ревью
 - [ ] Desktop под Xvfb (русская раскладка): терминал контейнера и сервиса, CPU/Memory,
   диалоги действий и Parts — скриншоты; Private_Dirty с открытым терминалом и метриками.

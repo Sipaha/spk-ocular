@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"strings"
 	"testing"
@@ -248,4 +249,118 @@ func TestDindMetrics(t *testing.T) {
 	if *u.Memory < mem/2 || *u.Memory > mem*2 {
 		t.Errorf("service memory %v vs members %v", *u.Memory, mem)
 	}
+}
+
+const dindActionsApp = `services:
+  web:
+    image: busybox:latest
+    command: ["sleep", "infinity"]
+    stop_signal: SIGINT
+    stop_grace_period: 2s
+    deploy: {replicas: 2}
+`
+
+// Actions on the real daemon, on a project of the test's own: a service's
+// stop and start with their parts (the plan shows the containers' own stop
+// signal and timeout), a container's restart, a conflict after a change
+// made outside, and removal (refused plan while running).
+func TestDindActions(t *testing.T) {
+	host := dindHost(t)
+	s := dindSession(t, host)
+	name := fmt.Sprintf("ocular-a%d", time.Now().UnixNano()%1_000_000)
+	file := dindProject(t, host, name, dindActionsApp)
+	dindVerify(t, host)
+	dindDocker(t, host, "compose", "-f", file, "up", "-d", "--wait")
+	ctx, cancel := context.WithTimeout(t.Context(), 2*time.Minute)
+	defer cancel()
+	svc := core.Ref{Provider: ProviderID, Target: "context:dind", Scope: name, Kind: KindServices, Name: name + "/web"}
+	var plan core.ActionPlan
+	var err error
+	deadline := time.Now().Add(20 * time.Second)
+	for { // the feed sees both replicas
+		plan, err = s.PrepareAction(ctx, svc, "stop", core.ActionParams{})
+		if err == nil && len(plan.Effects) == 2 || time.Now().After(deadline) {
+			break
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	if err != nil || plan.Unavailable != nil || len(plan.Effects) != 2 {
+		t.Fatalf("service stop plan: %+v %v", plan, err)
+	}
+	if p := plan.Effects[0].Params; plan.Effects[0].Key != "compose.act.stop" || p["signal"] != "SIGINT" || p["timeout"] != "2" {
+		t.Errorf("the containers' own stop: %+v", plan.Effects[0])
+	}
+	dindVerify(t, host)
+	res, err := s.RunAction(ctx, provider.ActionRun{Ref: svc, Action: "stop", Expect: plan.Expect})
+	if err != nil || res.Outcome != core.OutcomeDone || len(res.Parts) != 2 {
+		t.Fatalf("service stop: %+v %v", res, err)
+	}
+	for _, p := range res.Parts {
+		c, err := s.cl.InspectContainer(ctx, p.ID)
+		if err != nil || c.State.Running || p.Outcome != core.OutcomeDone {
+			t.Errorf("%s after stop: %+v %+v %v", p.Title, p, c.State, err)
+		}
+	}
+	t.Logf("service stop: %s", res.Message)
+
+	plan, err = s.PrepareAction(ctx, svc, "start", core.ActionParams{})
+	for i := 0; err == nil && plan.Unavailable != nil && i < 100; i++ { // the feed saw them stop
+		time.Sleep(100 * time.Millisecond)
+		plan, err = s.PrepareAction(ctx, svc, "start", core.ActionParams{})
+	}
+	if err != nil || plan.Unavailable != nil {
+		t.Fatalf("service start plan: %+v %v", plan, err)
+	}
+	dindVerify(t, host)
+	res, err = s.RunAction(ctx, provider.ActionRun{Ref: svc, Action: "start", Expect: plan.Expect})
+	if err != nil || res.Outcome != core.OutcomeDone || len(res.Parts) != 2 {
+		t.Fatalf("service start: %+v %v", res, err)
+	}
+	one, err := s.cl.InspectContainer(ctx, res.Parts[0].ID)
+	if err != nil || !one.State.Running {
+		t.Fatalf("started: %+v %v", one.State, err)
+	}
+	ctr := containerRef(&one)
+	ctr.Target = "context:dind"
+
+	plan, err = s.PrepareAction(ctx, ctr, "restart", core.ActionParams{})
+	if err != nil || plan.Unavailable != nil {
+		t.Fatalf("restart plan: %+v %v", plan, err)
+	}
+	dindVerify(t, host)
+	if res, err = s.RunAction(ctx, provider.ActionRun{Ref: ctr, Action: "restart", Expect: plan.Expect}); err != nil {
+		t.Fatalf("restart: %v", err)
+	}
+	after, err := s.cl.InspectContainer(ctx, one.ID)
+	if err != nil || !after.State.Running || !after.State.StartedAt.After(one.State.StartedAt.Time) {
+		t.Errorf("restarted: %+v %v", after.State, err)
+	}
+
+	plan, err = s.PrepareAction(ctx, ctr, "stop", core.ActionParams{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	dindVerify(t, host)
+	dindDocker(t, host, "restart", "-t", "0", one.ID) // a change made outside
+	if _, err = s.RunAction(ctx, provider.ActionRun{Ref: ctr, Action: "stop", Expect: plan.Expect}); errClass(err) != provider.ClassConflict {
+		t.Errorf("a stop reviewed before a restart made outside: %v", err)
+	}
+
+	plan, err = s.PrepareAction(ctx, ctr, "delete", core.ActionParams{})
+	if err != nil || plan.Unavailable == nil || plan.Unavailable.Key != "compose.act.stopFirst" {
+		t.Errorf("removing a running container: %+v %v", plan.Unavailable, err)
+	}
+	dindDocker(t, host, "stop", "-t", "0", one.ID)
+	plan, err = s.PrepareAction(ctx, ctr, "delete", core.ActionParams{})
+	if err != nil || plan.Unavailable != nil {
+		t.Fatalf("remove plan: %+v %v", plan, err)
+	}
+	dindVerify(t, host)
+	if res, err = s.RunAction(ctx, provider.ActionRun{Ref: ctr, Action: "delete", Expect: plan.Expect}); err != nil {
+		t.Fatalf("remove: %v", err)
+	}
+	if _, err := s.cl.InspectContainer(ctx, one.ID); !engine.IsNotFound(err) {
+		t.Errorf("removed container still inspects: %v", err)
+	}
+	t.Logf("remove: %s", res.Message)
 }

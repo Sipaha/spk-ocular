@@ -2,7 +2,7 @@ import { act, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { ApiError } from '../api/client'
-import type { ActionDescriptor, ActionParams, ActionPlan, Ref } from '../api/types'
+import type { ActionDescriptor, ActionParams, ActionPlan, ActionResult, Ref } from '../api/types'
 import { initialState, useStore } from '../store'
 import { setLanguage } from '../i18n'
 import { fakeClient, k8s, k8sScopeNames } from '../test/fakeClient'
@@ -326,6 +326,76 @@ describe('ActionDialog', () => {
       expect(within(second).queryByRole('alert')).not.toBeInTheDocument()
       expect(within(second).getByRole('button', { name: 'Delete' })).toBeEnabled()
       expect(useStore.getState().notice).toBe('prod-ctx · Restart api: The answer came late: Failed · access denied: nope')
+    })
+  })
+
+  describe('a run of several parts (a service\'s containers)', () => {
+    const parts = (last: 'unknown' | 'refused'): ActionResult => ({
+      message: '1 of 3 containers restarted',
+      outcome: last,
+      parts: [
+        { id: 'c1', title: 'web-1', outcome: 'done', message: 'container web-1 restarted' },
+        { id: 'c2', title: 'web-2', outcome: last, message: 'no answer within 25s' },
+        { id: 'c3', title: 'web-3', outcome: 'skipped' },
+      ],
+    })
+
+    it('an unknown part: the dialog stays with every part; a notice sums it up', async () => {
+      const { f, dialog, onClose } = setup(restart)
+      f.client.runAction = vi.fn(async () => parts('unknown'))
+      await userEvent.click(await within(dialog).findByRole('button', { name: 'Restart' }))
+      expect(await within(dialog).findByRole('alert')).toHaveTextContent('the outcome of a part is not known')
+      const list = within(dialog).getByRole('list', { name: 'Result' })
+      const items = within(list).getAllByRole('listitem').map((li) => li.textContent)
+      expect(items).toEqual(['web-1Done', 'web-2Outcome unknown · no answer within 25s', 'web-3Not run'])
+      expect(useStore.getState().notice).toBe('Restart api: 1 of 3 done; 1 outcome unknown; 1 not run')
+      expect(within(dialog).queryByRole('button', { name: 'Restart' })).not.toBeInTheDocument()
+      expect(within(dialog).getByRole('button', { name: 'Close' })).toBeEnabled()
+      expect(onClose).not.toHaveBeenCalled()
+    })
+
+    it('a refused part: said as a refusal', async () => {
+      const { f, dialog } = setup(restart)
+      f.client.runAction = vi.fn(async () => parts('refused'))
+      await userEvent.click(await within(dialog).findByRole('button', { name: 'Restart' }))
+      expect(await within(dialog).findByRole('alert')).toHaveTextContent('Stopped at a refusal')
+      expect(useStore.getState().notice).toBe('Restart api: 1 of 3 done; 1 refused; 1 not run')
+    })
+
+    it('all parts done: closes like a single run, the notice counts them', async () => {
+      const { f, dialog, onClose } = setup(restart)
+      f.client.runAction = vi.fn(async () => ({
+        message: '2 of 2 containers restarted',
+        outcome: 'done' as const,
+        parts: [{ id: 'c1', title: 'web-1', outcome: 'done' as const }, { id: 'c2', title: 'web-2', outcome: 'done' as const }],
+      }))
+      await userEvent.click(await within(dialog).findByRole('button', { name: 'Restart' }))
+      await waitFor(() => expect(onClose).toHaveBeenCalled())
+      expect(useStore.getState().notice).toBe('Restart api: 2 of 2 done')
+    })
+
+    it('late: its dialog shows the parts instead of "unknown"', async () => {
+      const { f, dialog } = setup(restart, undefined, 50)
+      const run = deferred<ActionResult>()
+      f.client.runAction = vi.fn(() => run.promise)
+      await userEvent.click(await within(dialog).findByRole('button', { name: 'Restart' }))
+      expect(await within(dialog).findByRole('alert')).toHaveTextContent('No answer within 0 s')
+      await act(async () => run.resolve(parts('unknown')))
+      expect(within(dialog).getByRole('alert')).toHaveTextContent('The answer came late: Stopped: the outcome of a part is not known')
+      expect(within(dialog).getByRole('list', { name: 'Result' })).toHaveTextContent('web-2Outcome unknown')
+    })
+
+    it('late, its dialog closed: a notice with where and the sum', async () => {
+      const f = fakeClient([k8s('prod')])
+      f.client.prepareAction = vi.fn(async (_r: Ref, _a: string, p: ActionParams) => planOf(restart, p))
+      const run = deferred<ActionResult>()
+      f.client.runAction = vi.fn(() => run.promise)
+      const { unmount } = render(<ActionDialog client={f.client} req={{ ref, action: restart, kindTitle: 'Service' }} onClose={() => {}} runTimeoutMs={50} />)
+      await userEvent.click(await screen.findByRole('button', { name: 'Restart' }))
+      await screen.findByRole('alert')
+      unmount()
+      await act(async () => run.resolve(parts('refused')))
+      expect(useStore.getState().notice).toBe('prod-ctx · Restart api: The answer came late: 1 of 3 done; 1 refused; 1 not run')
     })
   })
 

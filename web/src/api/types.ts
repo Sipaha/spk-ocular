@@ -223,8 +223,24 @@ export interface ActionPlan {
   expect: string
 }
 
+export type ActionOutcome = 'done' | 'refused' | 'unknown' | 'skipped'
+
+/** One write of a run (a service's container): its object and outcome. */
+export interface ActionPart {
+  id: string
+  title: string
+  outcome: ActionOutcome
+  message?: string
+}
+
+/**
+ * A run's answer. Several writes report each in parts; outcome is done only
+ * when every part is (absent: done — older answers).
+ */
 export interface ActionResult {
   message: string
+  outcome?: Exclude<ActionOutcome, 'skipped'>
+  parts?: ActionPart[]
 }
 
 export type ScopeMode = 'all' | 'one' | 'none'
