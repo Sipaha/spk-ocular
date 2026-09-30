@@ -154,3 +154,54 @@ test('stop and start a service from its row menu: its container, the plan, the s
     docker('start', 'ocular-other-idle-1')
   }
 })
+
+test('a terminal in a chosen replica runs in that container', async ({ page }) => {
+  await openDind(page)
+  const grid = await kindPage(page, 'Services')
+  await row(grid, 'logger').click()
+  await page.keyboard.press('Shift+S')
+  const dlg = page.getByRole('dialog', { name: 'Open a terminal' })
+  await dlg.getByRole('combobox').first().selectOption({ label: 'ocular-fixture-logger-2' })
+  await dlg.getByRole('button', { name: 'Open' }).click()
+  await expectScreen(page, '# ', 30_000)
+  const hostname = docker('inspect', '-f', '{{.Config.Hostname}}', 'ocular-fixture-logger-2').trim()
+  await page.keyboard.type('echo host=$(hostname)')
+  await page.keyboard.press('Enter')
+  await expectScreen(page, `host=${hostname}`)
+})
+
+// The dialog's handling of a run of several parts, on a real plan (the
+// logger's two replicas); the run's answer is the page's own (nothing is
+// sent to the daemon), as a refused second replica would give it.
+test('a service run of several parts: each part in the dialog, the sum in a notice', async ({ page }) => {
+  await openDind(page)
+  const grid = await kindPage(page, 'Services')
+  let ran = 0
+  await page.route('**/api/RunAction', async (route) => {
+    ran++
+    await route.fulfill({
+      json: {
+        message: '1 of 2 containers restarted; 1 refused',
+        outcome: 'refused',
+        parts: [
+          { id: 'a', title: 'ocular-fixture-logger-1', outcome: 'done', message: 'container ocular-fixture-logger-1 restarted' },
+          { id: 'b', title: 'ocular-fixture-logger-2', outcome: 'refused', message: 'the Docker Engine refused: cannot restart' },
+        ],
+      },
+    })
+  })
+  await row(grid, 'logger').click({ button: 'right' })
+  await page.getByRole('menu').getByRole('menuitem', { name: /^Restart/ }).click()
+  const dialog = page.getByRole('dialog', { name: 'Restart logger' })
+  await expect(dialog).toContainText('Restarts ocular-fixture-logger-1')
+  await expect(dialog).toContainText('Restarts ocular-fixture-logger-2')
+  await dialog.getByRole('button', { name: 'Restart' }).click()
+  await expect(dialog.getByRole('alert')).toContainText('Stopped at a refusal')
+  const parts = dialog.getByRole('list', { name: 'Result' }).getByRole('listitem')
+  await expect(parts).toHaveText(['ocular-fixture-logger-1Done', 'ocular-fixture-logger-2Refused · the Docker Engine refused: cannot restart'])
+  await expect(page.getByRole('status')).toHaveText('Restart logger: 1 of 2 done; 1 refused')
+  await expect(dialog.getByRole('button', { name: 'Restart' })).toHaveCount(0)
+  await dialog.getByRole('button', { name: 'Close' }).click()
+  await expect(dialog).toBeHidden()
+  expect(ran).toBe(1)
+})
