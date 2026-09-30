@@ -331,6 +331,48 @@ describe('ViewSync: the kind ends (review)', () => {
   })
 })
 
+describe('ViewSync: halted (the view does nothing more by itself)', () => {
+  it('is set when an open fails, the kind is removed, retries or reopens run out; a working view is not', async () => {
+    vi.useFakeTimers()
+    const failed = new ViewSync(client({ openView: vi.fn(async () => { throw new ApiError('unsupported', 'unknown kind') }) }), 'kubernetes', 't', q)
+    expect(failed.snapshot().halted).toBe(false)
+    await failed.open()
+    expect(failed.snapshot().halted).toBe(true)
+
+    const removed = new ViewSync(client({ getRows: vi.fn(async () => { throw new ApiError('removed', 'no longer served') }) }), 'kubernetes', 't', q)
+    await removed.open()
+    await vi.advanceTimersByTimeAsync(0)
+    expect(removed.snapshot().halted).toBe(true)
+
+    let n = 0
+    const schema = new ViewSync(
+      client({
+        openView: vi.fn(async () => ({ viewId: `v${++n}`, kind: widgetsKind(['name']) })),
+        getRows: vi.fn(async (id: string) => page({ viewId: id, reset: true, version: 1, status: { state: 'error', class: 'schema_changed', message: 'changed' } })),
+      }),
+      'kubernetes', 't', q,
+    )
+    void schema.open()
+    await vi.advanceTimersByTimeAsync(1_000)
+    expect(schema.snapshot().halted).toBe(false) // still reopening
+    await vi.advanceTimersByTimeAsync(60_000)
+    expect(schema.snapshot().halted).toBe(true)
+
+    // Pulls that ran out of retries: halted until a later pull works.
+    const getRows = vi.fn().mockRejectedValue(new ApiError('internal', 'boom'))
+    const pulls = new ViewSync(client({ getRows }), 'kubernetes', 't', q)
+    await pulls.open()
+    await vi.advanceTimersByTimeAsync(0)
+    expect(pulls.snapshot().halted).toBe(false) // retrying
+    await vi.advanceTimersByTimeAsync(60_000)
+    expect(pulls.snapshot().halted).toBe(true)
+    getRows.mockResolvedValue(page({ reset: true, version: 2 }))
+    pulls.onChanged({ version: 2 })
+    await vi.advanceTimersByTimeAsync(0)
+    expect(pulls.snapshot().halted).toBe(false)
+  })
+})
+
 describe('ViewHub', () => {
   beforeEach(() => vi.useFakeTimers())
 

@@ -2,6 +2,7 @@ import { act, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { App } from '../App'
+import { ApiError } from '../api/client'
 import type { KindDescriptor, KindsView } from '../api/types'
 import { initialState, useStore } from '../store'
 import { fakeClient, k8s, podsKind } from '../test/fakeClient'
@@ -226,6 +227,96 @@ describe('a kind that comes back', () => {
     listKinds.mockResolvedValue(catalog([podsKind, jobs], { rev: 3 }))
     await act(async () => f.emit({ type: 'kinds_changed', payload: { provider: 'kubernetes', target: 'prod', session: 1, rev: 3 } }))
     expect(await within(nav).findByRole('button', { name: 'Jobs' })).toBeInTheDocument()
+    await waitFor(() => expect(screen.queryByRole('alert')).not.toBeInTheDocument())
+  })
+})
+
+describe('a page whose view gave up', () => {
+  const jobsOpens = (f: ReturnType<typeof fakeClient>) => (f.client.openView as ReturnType<typeof vi.fn>).mock.calls.filter((c) => c[2].kind === 'batch/jobs').length
+  const unsupported = () => new ApiError('unsupported', 'unknown kind batch/jobs')
+
+  it('a new session listing the kind again opens a fresh view, even with the same kinds', async () => {
+    const f = fakeClient([k8s('prod')])
+    const listKinds = vi.fn(async () => catalog([podsKind, jobs]))
+    f.client.listKinds = listKinds
+    f.client.getTargetState = vi.fn(async () => ({ kind: JSON.stringify('batch/jobs') }))
+    await open(f)
+    await screen.findByRole('heading', { name: 'Jobs' })
+    await waitFor(() => expect(jobsOpens(f)).toBe(1))
+    // The target was reconfigured: the old view is gone and reopens in session 2
+    // before it discovered Jobs; the UI never sees session 2 without them.
+    const openView = f.client.openView as ReturnType<typeof vi.fn>
+    openView.mockRejectedValueOnce(unsupported()).mockRejectedValueOnce(unsupported())
+    await act(async () => f.emit({ type: 'view_changed', payload: { viewId: 'v-batch/jobs', gone: true } }))
+    expect(await screen.findByRole('alert')).toHaveTextContent('unknown kind')
+    listKinds.mockResolvedValue(catalog([podsKind, jobs], { session: 2, rev: 2 }))
+    await act(async () => f.emit({ type: 'kinds_changed', payload: { provider: 'kubernetes', target: 'prod', session: 2, rev: 2 } }))
+    await waitFor(() => expect(screen.queryByRole('alert')).not.toBeInTheDocument())
+    expect(screen.getByRole('heading', { name: 'Jobs' })).toBeInTheDocument()
+  })
+
+  it('a view that failed after the listing that serves its kind opens once more (bounded, no polling)', async () => {
+    const f = fakeClient([k8s('prod')])
+    const listKinds = vi.fn(async () => catalog([podsKind, jobs]))
+    f.client.listKinds = listKinds
+    f.client.getTargetState = vi.fn(async () => ({ kind: JSON.stringify('batch/jobs') }))
+    await open(f)
+    await screen.findByRole('heading', { name: 'Jobs' })
+    listKinds.mockResolvedValue(catalog([podsKind, jobs], { session: 2, rev: 1 }))
+    await act(async () => f.emit({ type: 'kinds_changed', payload: { provider: 'kubernetes', target: 'prod', session: 2, rev: 1 } }))
+    await waitFor(() => expect(listKinds).toHaveBeenCalledTimes(2))
+    const before = jobsOpens(f)
+    const openView = f.client.openView as ReturnType<typeof vi.fn>
+    openView.mockRejectedValueOnce(unsupported())
+    await act(async () => f.emit({ type: 'view_changed', payload: { viewId: 'v-batch/jobs', gone: true } }))
+    await waitFor(() => expect(jobsOpens(f)).toBe(before + 2))
+    await waitFor(() => expect(screen.queryByRole('alert')).not.toBeInTheDocument())
+    // Failing again with the same listing: the page says so and stops.
+    openView.mockRejectedValue(unsupported())
+    await act(async () => f.emit({ type: 'view_changed', payload: { viewId: 'v-batch/jobs', gone: true } }))
+    expect(await screen.findByRole('alert')).toHaveTextContent('unknown kind')
+    const settled = jobsOpens(f)
+    await act(async () => new Promise((r) => setTimeout(r, 50)))
+    expect(jobsOpens(f)).toBeLessThanOrEqual(settled + 1)
+    const last = jobsOpens(f)
+    await act(async () => new Promise((r) => setTimeout(r, 50)))
+    expect(jobsOpens(f)).toBe(last)
+  })
+
+  it('clicking a served kind whose view ended "removed" opens a new view (the catalog never showed it gone)', async () => {
+    const f = fakeClient([k8s('prod')])
+    f.client.listKinds = vi.fn(async () => catalog([podsKind, jobs]))
+    f.client.getTargetState = vi.fn(async () => ({ kind: JSON.stringify('batch/jobs') }))
+    const nav = await open(f)
+    await screen.findByRole('heading', { name: 'Jobs' })
+    // Deleted and created again, coalesced: no listing without Jobs.
+    f.state.statusByKind['batch/jobs'] = { state: 'error', class: 'removed', message: 'Jobs are no longer served by the API' }
+    await act(async () => f.emit({ type: 'view_changed', payload: { viewId: 'v-batch/jobs', version: 50 } }))
+    expect(await screen.findByRole('alert')).toHaveTextContent('no longer served by the API')
+    await act(async () => new Promise((r) => setTimeout(r, 50)))
+    expect(screen.getByRole('alert')).toHaveTextContent('no longer served by the API')
+    const before = jobsOpens(f)
+    delete f.state.statusByKind['batch/jobs']
+    await userEvent.click(within(nav).getByRole('button', { name: 'Jobs' }))
+    await waitFor(() => expect(jobsOpens(f)).toBe(before + 1))
+    await waitFor(() => expect(screen.queryByRole('alert')).not.toBeInTheDocument())
+  })
+
+  it('the palette opening the kind of a page whose view gave up opens a new view too', async () => {
+    const f = fakeClient([k8s('prod')])
+    f.client.listKinds = vi.fn(async () => catalog([podsKind, jobs]))
+    f.client.getTargetState = vi.fn(async () => ({ kind: JSON.stringify('batch/jobs') }))
+    await open(f)
+    await screen.findByRole('heading', { name: 'Jobs' })
+    f.state.statusByKind['batch/jobs'] = { state: 'error', class: 'removed', message: 'Jobs are no longer served by the API' }
+    await act(async () => f.emit({ type: 'view_changed', payload: { viewId: 'v-batch/jobs', version: 50 } }))
+    expect(await screen.findByRole('alert')).toHaveTextContent('no longer served by the API')
+    await act(async () => new Promise((r) => setTimeout(r, 50)))
+    const before = jobsOpens(f)
+    delete f.state.statusByKind['batch/jobs']
+    await userEvent.keyboard('{Control>}k{/Control}')
+    await userEvent.keyboard(':jobs{Enter}')
+    await waitFor(() => expect(jobsOpens(f)).toBe(before + 1))
     await waitFor(() => expect(screen.queryByRole('alert')).not.toBeInTheDocument())
   })
 })

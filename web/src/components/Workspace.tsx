@@ -77,10 +77,26 @@ export function Workspace({ client, hub, target }: { client: Client; hub: ViewHu
   // Last kind and scope per target (SQLite target_state); null until loaded,
   // so the default view is not opened only to be replaced.
   const [ui, setUI] = useState<UIState | null>(null)
+  // Per kind, how many times its page was started anew (the page key).
+  const [renewed, setRenewed] = useState<ReadonlyMap<string, number>>(new Map())
+  const renew = useCallback((k: string) => setRenewed((old) => new Map(old).set(k, (old.get(k) ?? 0) + 1)), [])
   // No remembered kind: the provider's default one (else the first in the navigation).
   const defaultKind = kinds?.find((k) => k.default && !k.hidden)?.id ?? kinds?.find((k) => !k.hidden)?.id ?? ''
   const kind = ui?.kind || defaultKind
   const scope: ScopeSel = ui?.scope ?? { mode: 'all' }
+  const groups = useMemo(() => navGroups(kinds ?? []), [kinds])
+  // A kind a later listing no longer has keeps its page: it says why.
+  const current = kinds?.find((k) => k.id === kind) ?? catalog.removed.get(kind)
+  // The remembered kind may be a discovered one not listed yet.
+  const waiting = !current && kind !== OVERVIEW && !!kind && catalog.view?.state === 'discovering'
+  // A new kind or scope is a new page: selection, filter and an open drawer
+  // belong to the table they were made in. A kind served again (after
+  // removed) is a new page too, and so is a renewed one (below).
+  const pageScope = current?.scoped ? scope : { mode: 'none' as const }
+  const pageKey = current ? `${current.id}#${catalog.appeared.get(current.id) ?? 0}.${renewed.get(current.id) ?? 0}/${JSON.stringify(pageScope)}` : ''
+  // The page (by key) whose view gave up (ViewState.halted).
+  const [halted, setHalted] = useState<string | null>(null)
+  const onHalted = useCallback((key: string, h: boolean) => setHalted((old) => (h ? key : old === key ? null : old)), [])
   const remember = (next: UIState) => {
     // Navigation drops the palette's requests: they were for the page it opened.
     setFilterReq(null)
@@ -89,7 +105,14 @@ export function Workspace({ client, hub, target }: { client: Client; hub: ViewHu
     void client.setTargetState(target.provider, target.id, 'kind', JSON.stringify(next.kind)).catch(() => {})
     void client.setTargetState(target.provider, target.id, 'scope', JSON.stringify(next.scope)).catch(() => {})
   }
-  const setKind = (k: string) => remember({ kind: k, scope })
+  // Asked for again while its view gave up: a new page, if the kind is served.
+  const again = (k: string) => {
+    if (k === kind && halted === pageKey && kinds?.some((d) => d.id === k)) renew(k)
+  }
+  const setKind = (k: string) => {
+    again(k)
+    remember({ kind: k, scope })
+  }
   const setScope = (s: ScopeSel) => remember({ kind, scope: s })
   // Palette requests to the page (a filter for its table, an object to open);
   // the page applies each once (by seq).
@@ -140,11 +163,18 @@ export function Workspace({ client, hub, target }: { client: Client; hub: ViewHu
     }
   }, [client, target.provider, target.id, defaultScope])
 
-  const groups = useMemo(() => navGroups(kinds ?? []), [kinds])
-  // A kind a later listing no longer has keeps its page: it says why.
-  const current = kinds?.find((k) => k.id === kind) ?? catalog.removed.get(kind)
-  // The remembered kind may be a discovered one not listed yet.
-  const waiting = !current && kind !== OVERVIEW && !!kind && catalog.view?.state === 'discovering'
+  // A page whose view gave up while a listing serves its kind (a new session
+  // that discovered it again, one it opened too early in, a kind deleted and
+  // created again between two listings) gets one new page per listing: no
+  // polling, no loop. Explicit navigation to it renews it too (setKind).
+  const renewedAt = useRef(new Map<string, string>())
+  const stamp = catalog.view ? `${catalog.view.session}/${catalog.view.rev}` : ''
+  useEffect(() => {
+    if (!current || halted !== pageKey || !kinds?.some((k) => k.id === current.id)) return
+    if (renewedAt.current.get(current.id) === stamp) return
+    renewedAt.current.set(current.id, stamp)
+    renew(current.id)
+  }, [current, halted, pageKey, kinds, stamp, renew])
 
   // The palette acts through the latest state of this workspace.
   const paletteActs = useRef<Pick<PaletteHost, 'openKind' | 'setScope' | 'openObject'> | null>(null)
@@ -152,6 +182,7 @@ export function Workspace({ client, hub, target }: { client: Client; hub: ViewHu
     paletteActs.current = {
       openKind: (k, filter) => {
         if (k !== kind) setKind(k)
+        else again(k)
         setFilterReq({ value: filter, seq: ++reqSeq.current })
       },
       setScope,
@@ -230,15 +261,14 @@ export function Workspace({ client, hub, target }: { client: Client; hub: ViewHu
           </div>
         ) : (
           <ResourcePage
-            // A new kind or scope is a new page: selection, filter and an open
-            // drawer belong to the table they were made in.
-            // A kind served again (after removed / a new session) is a new page too.
-            key={`${current.id}#${catalog.appeared.get(current.id) ?? 0}/${JSON.stringify(current.scoped ? scope : { mode: 'none' })}`}
+            key={pageKey}
+            pageKey={pageKey}
+            onHalted={onHalted}
             client={client}
             hub={hub}
             target={target}
             kind={current}
-            scope={current.scoped ? scope : { mode: 'none' }}
+            scope={pageScope}
             scopes={scopes}
             onScope={setScope}
             hasLogs={hasLogs}
@@ -413,6 +443,9 @@ function CatalogNote({ view }: { view: KindsView | null }) {
 }
 
 function ResourcePage(props: {
+  pageKey: string
+  /** Tells the workspace whether the page's view gave up. */
+  onHalted: (key: string, halted: boolean) => void
   client: Client
   hub: ViewHub
   target: Target
@@ -431,10 +464,14 @@ function ResourcePage(props: {
   filterReq?: PageReq<string> | null
   openReq?: PageReq<Ref> | null
 }) {
-  const { client, hub, target, kind, scope, scopes, onScope, hasLogs, onLogs, hasExec, onTerminal, hasForward, actionsOf, onAction, eventsKindOf, filterReq, openReq } = props
+  const { pageKey, onHalted, client, hub, target, kind, scope, scopes, onScope, hasLogs, onLogs, hasExec, onTerminal, hasForward, actionsOf, onAction, eventsKindOf, filterReq, openReq } = props
   const scopeKey = JSON.stringify(scope)
   const query = useMemo(() => ({ kind: kind.id, scope: JSON.parse(scopeKey) as ScopeSel }), [kind.id, scopeKey])
   const view = useView(hub, target.provider, target.id, query)
+  useEffect(() => {
+    onHalted(pageKey, view.halted)
+    return () => onHalted(pageKey, false)
+  }, [onHalted, pageKey, view.halted])
   const [filter, setFilter] = useState(filterReq?.value ?? '')
   const [selected, setSelected] = useState<string | null>(null)
   const [open, setOpen] = useState<Ref | null>(openReq?.value ?? null)

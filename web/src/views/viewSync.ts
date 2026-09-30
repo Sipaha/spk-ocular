@@ -15,6 +15,9 @@ export interface ViewState {
   status: ViewStatus
   /** OpenView failed (unknown kind, target gone, ...). */
   openError: string | null
+  /** The view does nothing more by itself: its open failed, its kind is no
+   * longer served, or retries and reopens ran out. A new view may do better. */
+  halted: boolean
 }
 
 type Timers = { setTimeout: typeof setTimeout; clearTimeout: typeof clearTimeout }
@@ -46,7 +49,7 @@ export class ViewSync {
   /** A reopened view's kind, shown with its first snapshot. */
   private pendingKind: KindDescriptor | null = null
   private rows = new Map<string, Row>()
-  private state: ViewState = { viewId: null, kind: null, resync: false, rows: [], status: { state: 'loading' }, openError: null }
+  private state: ViewState = { viewId: null, kind: null, resync: false, rows: [], status: { state: 'loading' }, openError: null, halted: false }
   private listeners = new Set<() => void>()
 
   constructor(
@@ -87,7 +90,7 @@ export class ViewSync {
     this.force = false
     this.ended = false
     // No id while reopening: metrics must not poll the previous view.
-    if (this.state.viewId !== null) this.emit({ viewId: null })
+    if (this.state.viewId !== null || this.state.halted) this.emit({ viewId: null, halted: false })
     try {
       const info = await this.client.openView(this.provider, this.target, this.query)
       if (this.disposed || gen !== this.generation) {
@@ -113,7 +116,7 @@ export class ViewSync {
         return
       }
       if (codeOf(e) === 'removed') this.end(errText(e))
-      else this.emit({ openError: errText(e), status: { state: 'error', class: codeOf(e), message: errText(e) } })
+      else this.emit({ openError: errText(e), status: { state: 'error', class: codeOf(e), message: errText(e) }, halted: true })
     }
   }
 
@@ -122,7 +125,7 @@ export class ViewSync {
   private reopenForSchema(e: unknown) {
     const n = ++this.schemaReopens
     if (n > MAX_RETRIES) {
-      this.emit({ status: { state: 'error', class: 'schema_changed', message: errText(e) } })
+      this.emit({ status: { state: 'error', class: 'schema_changed', message: errText(e) }, halted: true })
       return
     }
     if (n === 1) {
@@ -145,7 +148,7 @@ export class ViewSync {
     this.retryTimer = null
     this.rows = new Map()
     this.pendingKind = null
-    this.emit({ rows: [], status: { state: 'error', class: 'removed', message } })
+    this.emit({ rows: [], status: { state: 'error', class: 'removed', message }, halted: true })
   }
 
   /** view_changed for this view. */
@@ -211,7 +214,7 @@ export class ViewSync {
           if (gen === this.generation) void this.pull()
         }, delay)
       } else {
-        this.emit({ status: { state: 'error', class: codeOf(e), message: errText(e) } })
+        this.emit({ status: { state: 'error', class: codeOf(e), message: errText(e) }, halted: true })
       }
     } finally {
       if (gen === this.generation) this.pulling = false
@@ -227,7 +230,7 @@ export class ViewSync {
     this.cursor = p.version
     const kind = p.reset && this.pendingKind ? { kind: this.pendingKind } : {}
     if (p.reset) this.pendingKind = null
-    this.emit({ rows: Array.from(this.rows.values()), status: p.status, ...kind })
+    this.emit({ rows: Array.from(this.rows.values()), status: p.status, halted: false, ...kind })
   }
 
   /** Starts (or restarts after dispose — React StrictMode remounts). */
