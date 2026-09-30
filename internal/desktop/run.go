@@ -31,7 +31,8 @@ func Run(ctx context.Context, o Options) error {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	if cutOffBusFor(runtime.GOOS, sessionBusState()) {
+	bus := sessionBusState()
+	if cutOffBusFor(runtime.GOOS, bus) {
 		cutOffSessionBus() // before application.New() initializes GTK
 	}
 
@@ -50,7 +51,9 @@ func Run(ctx context.Context, o Options) error {
 		},
 	})
 
-	// Relay core events to the page (Wails events; payload is the one arg).
+	// Relay core events to the page (Wails events; payload is the one arg);
+	// agents' waiting plans also wake the window's own watch.
+	pendingWake := make(chan struct{}, 1)
 	go func() {
 		sub, unsub := o.Emitter.Subscribe()
 		defer unsub()
@@ -61,13 +64,19 @@ func Run(ctx context.Context, o Options) error {
 			case <-sub.Wake():
 				for _, ev := range sub.Drain() {
 					app.Event.Emit(ev.Type, ev.Payload)
+					if ev.Type == api.EventAgentPendingChanged {
+						select {
+						case pendingWake <- struct{}{}:
+						default:
+						}
+					}
 				}
 			}
 		}
 	}()
 
-	app.Window.NewWithOptions(application.WebviewWindowOptions{
-		Title:  "SPK Ocular",
+	win := app.Window.NewWithOptions(application.WebviewWindowOptions{
+		Title:  windowTitle,
 		Width:  1280,
 		Height: 820,
 		// Matches --color-app in web/src/index.css: no light flash before
@@ -78,6 +87,8 @@ func Run(ctx context.Context, o Options) error {
 		Linux:            application.LinuxWindow{WebviewGpuPolicy: webviewGPUPolicy(os.Getenv("SPK_OCULAR_GPU"))},
 	})
 
+	go watchPending(ctx, o.Service, win, bus == busOK, pendingWake)
+
 	go func() {
 		<-ctx.Done()
 		if !shutDown.Load() { // the caller's ctx ended (SIGINT); not our own shutdown
@@ -85,6 +96,38 @@ func Run(ctx context.Context, o Options) error {
 		}
 	}()
 	return app.Run()
+}
+
+// watchPending shows the agents' plans waiting for the user's confirmation
+// even when the window is hidden: its title counts them, and more of them
+// than before is a desktop notification (a live bus only). The window is
+// never raised.
+func watchPending(ctx context.Context, svc api.API, win *application.WebviewWindow, canNotify bool, wake <-chan struct{}) {
+	var p pendingNotice
+	var shown uint32 // the notification to replace
+	info, _ := svc.AppInfo(ctx)
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-wake:
+		}
+		st, err := svc.AgentAccessStatus(ctx)
+		if err != nil {
+			continue
+		}
+		title, notify := p.update(st.Pending, info.Language)
+		win.SetTitle(title)
+		if notify && canNotify {
+			summary, body := notification(st.Pending, info.Language)
+			id, err := sendNotification(summary, body, shown)
+			if err != nil {
+				slog.Warn("desktop notification not shown", "err", err)
+				continue
+			}
+			shown = id
+		}
+	}
 }
 
 func webviewGPUPolicy(env string) application.WebviewGpuPolicy {

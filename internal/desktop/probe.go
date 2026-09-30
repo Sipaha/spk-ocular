@@ -1,5 +1,6 @@
 // Package desktop is the Wails shell: one window over the api.API service.
-// No tray and no notifications — closing the window quits the app.
+// No tray — closing the window quits the app. The only desktop
+// notification: agents' plans waiting for the user's confirmation (P14).
 package desktop
 
 import "time"

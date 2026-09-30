@@ -3,6 +3,7 @@
 package desktop
 
 import (
+	"context"
 	"log/slog"
 	"os"
 	"time"
@@ -44,4 +45,27 @@ func cutOffSessionBus() {
 	if err := os.Setenv("DBUS_SESSION_BUS_ADDRESS", deadBusAddress); err != nil {
 		slog.Warn("could not cut off the D-Bus session bus", "err", err)
 	}
+}
+
+// notifyTimeout bounds one desktop notification (the bus answered the
+// startup probe, but may hang later).
+const notifyTimeout = 2 * time.Second
+
+// sendNotification shows a desktop notification (org.freedesktop.
+// Notifications), replacing the one with id replaces (0: none); it returns
+// the new one's id. The window is never raised.
+func sendNotification(summary, body string, replaces uint32) (uint32, error) {
+	conn, err := dbus.ConnectSessionBus()
+	if err != nil {
+		return 0, err
+	}
+	defer func() { _ = conn.Close() }()
+	ctx, cancel := context.WithTimeout(context.Background(), notifyTimeout)
+	defer cancel()
+	var id uint32
+	err = conn.Object("org.freedesktop.Notifications", "/org/freedesktop/Notifications").
+		CallWithContext(ctx, "org.freedesktop.Notifications.Notify", 0,
+			"SPK Ocular", replaces, "", summary, body, []string{}, map[string]dbus.Variant{}, int32(-1)).
+		Store(&id)
+	return id, err
 }
