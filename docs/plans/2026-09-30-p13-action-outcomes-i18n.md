@@ -150,8 +150,13 @@ Wails кладёт JSON самой ошибки). UI показывает при
 - [x] Страж исходников (решение 6), мутация.
 
 ### Task 3. Compose: успех и отказы ключами
-- [ ] Ключи успеха `writeAction` и отказов `actions.go`; `resource.go` отдаёт `Why`; части
-  `refused`/`unknown` с `Why`. Русский, тест покрытия, табличный тест, страж.
+- [x] Ключи успеха `writeAction` и отказов `actions.go`; `resource.go` и общий `container()`
+  (`logs.go`) отдают `Why`; части
+  `refused`/`unknown` с `Why`. Русский, тест покрытия, табличный тест, страж. Тексты движка
+  о неизвестном итоге (`… the Docker Engine may have done it` из `engine/writes.go`: 5xx, обрыв
+  после отправки) — текст транспорта, как сетевые ошибки kubernetes: без ключа, UI обрамляет
+  их своим «итог неизвестен». Сводка итога сервиса (`partsSummary`) — только `Text`: UI
+  показывает свою сводку частей.
 
 ### Task 4. UI
 - [ ] Типы (`ActionResult.message: ProviderMessage`, `ActionPart` без `message`,

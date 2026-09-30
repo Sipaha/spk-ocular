@@ -2,6 +2,8 @@ package compose
 
 import (
 	"net/http"
+	"os"
+	"regexp"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -153,6 +155,7 @@ func TestActionsUnavailableInTheContainersState(t *testing.T) {
 	assert.Equal(t, []string{"act.remove"}, keys(plan.Effects))
 	_, err = e.s.PrepareAction(t.Context(), svcRef("p", "web"), "delete", core.ActionParams{})
 	assert.Equal(t, provider.ClassUnsupported, errClass(err), "a service is not removed here")
+	assert.Equal(t, "act.noAction", saidKey(t, err))
 }
 
 // A run sends exactly the timeout the plan showed, once, and says what
@@ -168,6 +171,7 @@ func TestStopRunsWithTheShownTimeout(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, core.OutcomeDone, res.Outcome)
 	assert.Equal(t, "container p-web-1 stopped", res.Message.Text)
+	assert.Equal(t, "compose.done.stop", res.Message.Key)
 	assert.Empty(t, res.Parts)
 	assert.Equal(t, []string{"POST /containers/aaaa1111/stop t=0"}, writes(e))
 	got, err := e.s.cl.InspectContainer(t.Context(), c.ID)
@@ -195,11 +199,13 @@ func TestARunRefusesAChangedContainerBeforeWriting(t *testing.T) {
 		e.fe.PutContainer(x)
 		_, err = e.s.RunAction(t.Context(), runOf(plan, ctrRef(c)))
 		assert.Equal(t, provider.ClassConflict, errClass(err))
+		assert.Equal(t, "act.changedContainer", saidKey(t, err))
 	}
 	e.fe.PutContainer(c)
 	e.fe.RemoveContainer(c.ID)
 	_, err = e.s.RunAction(t.Context(), runOf(plan, ctrRef(c)))
 	assert.Equal(t, provider.ClassNotFound, errClass(err), "removed: nothing to act on")
+	assert.Equal(t, "error.containerRemoved", saidKey(t, err))
 	assert.Empty(t, writes(e), "nothing was sent")
 
 	other := replica("bbbb2222", "p", "web", "1", "exited")
@@ -210,6 +216,7 @@ func TestARunRefusesAChangedContainerBeforeWriting(t *testing.T) {
 	e.fe.PutContainer(other)
 	_, err = e.s.RunAction(t.Context(), runOf(plan, ctrRef(other)))
 	assert.Equal(t, provider.ClassConflict, errClass(err))
+	assert.Equal(t, "act.changedContainer", saidKey(t, err))
 	assert.Empty(t, writes(e))
 }
 
@@ -223,11 +230,12 @@ func TestContainerRunAnswers(t *testing.T) {
 		body   string
 		class  provider.ErrorClass
 		msg    string
+		key    string
 	}{
-		{"not modified", http.StatusNotModified, "", "", "container p-web-1 was running already"},
-		{"refused", http.StatusConflict, `{"message":"cannot start: port is already allocated"}`, provider.ClassInvalid, "port is already allocated"},
-		{"gone", http.StatusNotFound, `{"message":"No such container"}`, provider.ClassGone, "removed meanwhile"},
-		{"5xx", http.StatusInternalServerError, `{"message":"driver failed"}`, provider.ClassUnknown, "may have done it"},
+		{"not modified", http.StatusNotModified, "", "", "container p-web-1 was running already", "compose.done.alreadyRunning"},
+		{"refused", http.StatusConflict, `{"message":"cannot start: port is already allocated"}`, provider.ClassInvalid, "port is already allocated", "act.engineRefused"},
+		{"gone", http.StatusNotFound, `{"message":"No such container"}`, provider.ClassGone, "removed meanwhile", "act.removedMeanwhile"},
+		{"5xx", http.StatusInternalServerError, `{"message":"driver failed"}`, provider.ClassUnknown, "may have done it", ""},
 	}
 	for _, x := range cases {
 		t.Run(x.name, func(t *testing.T) {
@@ -249,9 +257,11 @@ func TestContainerRunAnswers(t *testing.T) {
 			if x.class == "" {
 				require.NoError(t, err)
 				assert.Equal(t, x.msg, res.Message.Text)
+				assert.Equal(t, x.key, res.Message.Key)
 				return
 			}
 			assert.Equal(t, x.class, errClass(err))
+			assert.Equal(t, x.key, saidKey(t, err))
 			assert.Contains(t, err.Error(), x.msg)
 		})
 	}
@@ -309,6 +319,7 @@ func TestServiceRunRefusesAChangedSet(t *testing.T) {
 	}, 5*time.Second, 20*time.Millisecond)
 	_, err = e.s.RunAction(t.Context(), runOf(plan, svcRef("p", "web")))
 	assert.Equal(t, provider.ClassConflict, errClass(err))
+	assert.Equal(t, "act.changedService", saidKey(t, err))
 	assert.Empty(t, writes(e))
 }
 
@@ -323,6 +334,7 @@ func TestServiceRunRefusesASetChangedUnseen(t *testing.T) {
 	e.fe.PutContainer(replica("bbbb2222", "p", "web", "2", "running")) // no event
 	_, err = e.s.RunAction(t.Context(), runOf(plan, svcRef("p", "web")))
 	assert.Equal(t, provider.ClassConflict, errClass(err))
+	assert.Equal(t, "act.changedService", saidKey(t, err))
 	assert.Empty(t, writes(e))
 }
 
@@ -366,6 +378,9 @@ func TestServiceRunStopsAtTheFirstFailure(t *testing.T) {
 			assert.Equal(t, core.OutcomeDone, res.Parts[0].Outcome)
 			assert.Equal(t, x.outcome, res.Parts[1].Outcome)
 			assert.Contains(t, res.Parts[1].Why.Text, "it failed")
+			if x.outcome == core.OutcomeRefused {
+				assert.Equal(t, "compose.act.engineRefused", res.Parts[1].Why.Key, "the refusal's sentence, by key")
+			}
 			assert.Equal(t, core.ActionPart{ID: cs[2].ID, Title: "p-web-3", Outcome: core.OutcomeSkipped}, res.Parts[2])
 			assert.Equal(t, x.summary, res.Message.Text)
 			assert.Len(t, writes(e), 2, "the third was never sent")
@@ -384,7 +399,34 @@ func TestRemoveRun(t *testing.T) {
 	res, err := e.s.RunAction(t.Context(), runOf(plan, ctrRef(c)))
 	require.NoError(t, err)
 	assert.Equal(t, "container p-web-1 removed", res.Message.Text)
+	assert.Equal(t, "compose.done.delete", res.Message.Key)
 	assert.Equal(t, []string{"DELETE /containers/aaaa1111"}, writes(e))
 	_, err = e.s.cl.InspectContainer(t.Context(), c.ID)
 	assert.True(t, engine.IsNotFound(err))
+}
+
+// saidKey is the key (without "compose.") of the provider's sentence err
+// carries ("": none), after checking its English is the error's text.
+func saidKey(t *testing.T, err error) string {
+	t.Helper()
+	var pe *provider.Error
+	require.ErrorAs(t, err, &pe)
+	if pe.Why == nil {
+		return ""
+	}
+	assert.Equal(t, pe.Why.Text, pe.Message)
+	return strings.TrimPrefix(pe.Why.Key, ProviderID+".")
+}
+
+// Our sentences on an action's path are built by key (provider.Said); a
+// guard beside the behaviour tests above.
+func TestActionErrorsAreSaidByKey(t *testing.T) {
+	bad := regexp.MustCompile(`provider\.Error\{[^}]*Message:\s*(fmt\.Sprintf|"|[\w.]+\.Text\b|msg\()`)
+	for _, f := range []string{"actions.go", "resource.go"} {
+		src, err := os.ReadFile(f)
+		require.NoError(t, err)
+		for i, line := range strings.Split(string(src), "\n") {
+			assert.False(t, bad.MatchString(line), "%s:%d: %s", f, i+1, strings.TrimSpace(line))
+		}
+	}
 }

@@ -99,13 +99,13 @@ func (s *session) container(ctx context.Context, ref core.Ref) (*engine.Containe
 	c, err := s.cl.InspectContainer(ctx, ref.Name)
 	switch {
 	case engine.IsNotFound(err):
-		return nil, &provider.Error{Class: provider.ClassNotFound, Message: "the container was removed"}
+		return nil, provider.Said(provider.ClassNotFound, msg("error.containerRemoved"))
 	case err != nil:
 		return nil, providerError(err)
 	case c.Config.Labels[LabelProject] == "":
-		return nil, &provider.Error{Class: provider.ClassNotFound, Message: "the container is not part of a Compose project"}
+		return nil, provider.Said(provider.ClassNotFound, msg("error.notCompose"))
 	case ref.UID != "" && c.ID != ref.UID:
-		return nil, &provider.Error{Class: provider.ClassGone, Message: "the container was removed and another took its name"}
+		return nil, provider.Said(provider.ClassGone, msg("error.containerReplaced"))
 	}
 	return &c, nil
 }
@@ -114,7 +114,7 @@ func (s *session) container(ctx context.Context, ref core.Ref) (*engine.Containe
 func (s *session) serviceMembers(ctx context.Context, ref core.Ref) ([]*engine.ContainerInspect, error) {
 	project, service, ok := strings.Cut(ref.Name, "/")
 	if !ok {
-		return nil, &provider.Error{Class: provider.ClassInvalid, Message: fmt.Sprintf("%q is not a service key (project/service)", ref.Name)}
+		return nil, provider.Said(provider.ClassInvalid, msg("act.notServiceKey", "key", strconv.Quote(ref.Name)))
 	}
 	fs, err := s.acquire([]Feed{FeedContainers})
 	if err != nil {

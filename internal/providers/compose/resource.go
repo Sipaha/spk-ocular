@@ -36,10 +36,10 @@ const (
 func resourceOf(w *World, ref core.Ref, now time.Time) (*core.Resource, error) {
 	feeds := kindFeeds(ref.Kind)
 	if feeds == nil {
-		return nil, &provider.Error{Class: provider.ClassUnsupported, Message: msg("error.unknownKind", "kind", ref.Kind).Text}
+		return nil, provider.Said(provider.ClassUnsupported, msg("error.unknownKind", "kind", ref.Kind))
 	}
 	if !w.Has[feeds[0]] {
-		return nil, &provider.Error{Class: provider.ClassInternal, Message: msg("error.notObserved", "feed", feeds[0].String()).Text}
+		return nil, provider.Said(provider.ClassInternal, msg("error.notObserved", "feed", feeds[0].String()))
 	}
 	x := newIndex(w)
 	var res *core.Resource
@@ -72,11 +72,11 @@ func resourceOf(w *World, ref core.Ref, now time.Time) (*core.Resource, error) {
 		}
 	}
 	if res == nil {
-		return nil, &provider.Error{Class: provider.ClassNotFound, Message: msg("error.notFound", "kind", ref.Kind, "name", shown(ref)).Text}
+		return nil, provider.Said(provider.ClassNotFound, msg("error.notFound", "kind", ref.Kind, "name", shown(ref)))
 	}
 	if ref.UID != "" && ref.UID != res.Ref.UID {
 		// The same key, another object: never shown as the one asked for.
-		return nil, &provider.Error{Class: provider.ClassGone, Message: msg("error.gone", "kind", ref.Kind, "name", shown(ref)).Text}
+		return nil, provider.Said(provider.ClassGone, msg("error.gone", "kind", ref.Kind, "name", shown(ref)))
 	}
 	sortRelations(res.Relations)
 	res.Relations, res.RelationsTruncated = capRelations(res.Relations)

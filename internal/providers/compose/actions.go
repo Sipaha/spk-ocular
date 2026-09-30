@@ -57,7 +57,7 @@ func actionOf(kind, id string) (core.ActionDescriptor, error) {
 			return a, nil
 		}
 	}
-	return core.ActionDescriptor{}, &provider.Error{Class: provider.ClassUnsupported, Message: fmt.Sprintf("%s cannot be %s", kind, id)}
+	return core.ActionDescriptor{}, provider.Said(provider.ClassUnsupported, msg("act.noAction", "kind", kind, "action", id))
 }
 
 // stopTimeout is the container's stop timeout in seconds (the daemon's
@@ -195,7 +195,7 @@ func (s *session) actionObjects(ctx context.Context, ref core.Ref) ([]*engine.Co
 	}
 	project, service, ok := strings.Cut(ref.Name, "/")
 	if !ok {
-		return nil, &provider.Error{Class: provider.ClassInvalid, Message: fmt.Sprintf("%q is not a service key (project/service)", ref.Name)}
+		return nil, provider.Said(provider.ClassInvalid, msg("act.notServiceKey", "key", strconv.Quote(ref.Name)))
 	}
 	listed, err := s.cl.ListContainers(ctx, engine.Filters{"label": {LabelProject + "=" + project, LabelService + "=" + service}})
 	if err != nil {
@@ -214,7 +214,7 @@ func (s *session) actionObjects(ctx context.Context, ref core.Ref) ([]*engine.Co
 	}
 	out := membersOf(objs, project, service) // not one-off, in replica order
 	if len(out) == 0 {
-		return nil, &provider.Error{Class: provider.ClassNotFound, Message: "the service has no containers"}
+		return nil, provider.Said(provider.ClassNotFound, msg("act.noContainers"))
 	}
 	return out, nil
 }
@@ -293,23 +293,23 @@ func (s *session) RunAction(ctx context.Context, run provider.ActionRun) (core.A
 		return core.ActionResult{}, err
 	}
 	if actionExpect(run.Action, cs) != run.Expect {
-		return core.ActionResult{}, &provider.Error{Class: provider.ClassConflict, Message: fmt.Sprintf("%s changed since the action was reviewed; review it again", shownKind(run.Ref))}
+		return core.ActionResult{}, provider.Said(provider.ClassConflict, changedSince(run.Ref))
 	}
 	if run.Ref.Kind == KindContainers {
 		c := cs[0]
 		if why := actionUnavailable(run.Action, c); why != nil {
-			return core.ActionResult{}, &provider.Error{Class: provider.ClassConflict, Message: why.Text}
+			return core.ActionResult{}, provider.Said(provider.ClassConflict, *why)
 		}
 		m, err := s.writeAction(ctx, run.Action, c)
 		if err != nil {
 			return core.ActionResult{}, err
 		}
-		return core.ActionResult{Message: core.Message{Text: m}, Outcome: core.OutcomeDone}, nil
+		return core.ActionResult{Message: m, Outcome: core.OutcomeDone}, nil
 	}
 	on, _ := touched(run.Action, cs)
 	if len(on) == 0 { // the fingerprint held: the plan said so too
 		_, service, _ := strings.Cut(run.Ref.Name, "/")
-		return core.ActionResult{}, &provider.Error{Class: provider.ClassConflict, Message: msg("act.serviceNone."+run.Action, "service", service).Text}
+		return core.ActionResult{}, provider.Said(provider.ClassConflict, msg("act.serviceNone."+run.Action, "service", service))
 	}
 	res := core.ActionResult{Outcome: core.OutcomeDone, Parts: make([]core.ActionPart, 0, len(on))}
 	for _, c := range on {
@@ -355,13 +355,14 @@ func isUnknown(err error) bool {
 	return errors.As(err, &pe) && pe.Class == provider.ClassUnknown
 }
 
-// shownKind names ref for a message: "container web-1", "service web".
-func shownKind(ref core.Ref) string {
+// changedSince: ref ("container web-1", "service web") changed since the
+// action was reviewed.
+func changedSince(ref core.Ref) core.Message {
 	if ref.Kind == KindServices {
 		_, service, _ := strings.Cut(ref.Name, "/")
-		return "service " + service
+		return msg("act.changedService", "name", service)
 	}
-	return "container " + shown(ref)
+	return msg("act.changedContainer", "name", shown(ref))
 }
 
 // actionPast: "stopped", … for messages.
@@ -389,7 +390,7 @@ func partsSummary(action string, parts []core.ActionPart) string {
 // writeAction sends the action for c (once). Its errors: gone (removed
 // meanwhile), invalid (the daemon refused it — 409, with its words),
 // unknown (sent, no usable answer), the transport's classes.
-func (s *session) writeAction(ctx context.Context, action string, c *engine.ContainerInspect) (string, error) {
+func (s *session) writeAction(ctx context.Context, action string, c *engine.ContainerInspect) (core.Message, error) {
 	name := containerName(c)
 	var (
 		already bool
@@ -407,17 +408,17 @@ func (s *session) writeAction(ctx context.Context, action string, c *engine.Cont
 	}
 	switch {
 	case engine.IsNotFound(err):
-		return "", &provider.Error{Class: provider.ClassGone, Message: fmt.Sprintf("container %s was removed meanwhile", name)}
+		return core.Message{}, provider.Said(provider.ClassGone, msg("act.removedMeanwhile", "name", name))
 	case engine.ClassOf(err) == provider.ClassConflict:
 		var pe *provider.Error
 		_ = errors.As(providerError(err), &pe)
-		return "", &provider.Error{Class: provider.ClassInvalid, Message: "the Docker Engine refused: " + pe.Message}
+		return core.Message{}, provider.Said(provider.ClassInvalid, msg("act.engineRefused", "detail", pe.Message))
 	case err != nil:
-		return "", providerError(err)
+		return core.Message{}, providerError(err)
 	case already && action == actStart.ID:
-		return fmt.Sprintf("container %s was running already", name), nil
+		return msg("done.alreadyRunning", "name", name), nil
 	case already:
-		return fmt.Sprintf("container %s was stopped already", name), nil
+		return msg("done.alreadyStopped", "name", name), nil
 	}
-	return fmt.Sprintf("container %s %s", name, actionPast[action]), nil
+	return msg("done."+action, "name", name), nil
 }
