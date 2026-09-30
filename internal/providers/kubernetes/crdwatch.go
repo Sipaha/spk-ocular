@@ -173,18 +173,32 @@ func (s *session) followCRDs(w watch.Interface, rv string, changed func()) (stri
 			if ev.Type != watch.Bookmark {
 				changed()
 				if u, ok := ev.Object.(*unstructured.Unstructured); ok {
-					s.crdChanged(u)
+					if ev.Type == watch.Deleted {
+						s.crdDeleted(u.GetName())
+					} else {
+						s.crdChanged(u)
+					}
 				}
 			}
 		}
 	}
 }
 
-// crdChanged: a CRD's printer columns may have changed — the schemas of
-// its resource's versions in use are checked again.
+// crdChanged: a CRD's printer columns (or scope, versions) may have
+// changed — if what the columns are made of did, the schemas of its
+// resource's versions are checked again (one check at a time each).
 func (s *session) crdChanged(u *unstructured.Unstructured) {
 	group, plural := str(u.Object, "spec", "group"), str(u.Object, "spec", "names", "plural")
+	p := crdPrint(u)
 	s.schemas.mu.Lock()
+	if s.schemas.crdPrints == nil {
+		s.schemas.crdPrints = map[string]string{}
+	}
+	if s.schemas.crdPrints[u.GetName()] == p {
+		s.schemas.mu.Unlock()
+		return // status, labels, …: the columns are what they were
+	}
+	s.schemas.crdPrints[u.GetName()] = p
 	var gvrs []schema.GroupVersionResource
 	for gvr := range s.schemas.by {
 		if gvr.Group == group && gvr.Resource == plural {
@@ -195,6 +209,14 @@ func (s *session) crdChanged(u *unstructured.Unstructured) {
 	for _, gvr := range gvrs {
 		go s.revalidate(&gvr)
 	}
+}
+
+// crdDeleted: the CRD is gone (the catalog removes its kinds); a CRD of
+// the name created later is compared afresh.
+func (s *session) crdDeleted(name string) {
+	s.schemas.mu.Lock()
+	delete(s.schemas.crdPrints, name)
+	s.schemas.mu.Unlock()
 }
 
 // sleep waits d unless the session ends first (false).

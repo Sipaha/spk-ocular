@@ -288,10 +288,109 @@ func TestTableUnderAnInformer(t *testing.T) {
 // A row's object reads like the dynamic client's: whole numbers are int64
 // (metadata.generation through the accessors).
 func TestTableRowObjectNumbers(t *testing.T) {
-	u, err := rowObject([]byte(`{"apiVersion":"ocular.dev/v1","kind":"Widget","metadata":{"name":"a","generation":2},"spec":{"size":5,"ratio":0.5}}`), []any{"a", float64(5)})
+	u, err := rowObject([]byte(`{"apiVersion":"ocular.dev/v1","kind":"Widget","metadata":{"name":"a","generation":2},"spec":{"size":5,"ratio":0.5}}`), false)
 	require.NoError(t, err)
 	assert.Equal(t, int64(2), u.GetGeneration())
 	assert.Equal(t, int64(5), u.Object["spec"].(map[string]any)["size"])
 	assert.Equal(t, 0.5, u.Object["spec"].(map[string]any)["ratio"])
 	assert.Equal(t, 5.0, *tableCell("integer", int64(5)).Num)
+}
+
+// A row without its object (null, not an object, no metadata or no name)
+// is a failed answer, never a panic or a row without identity (Codex P2-1
+// of c932672).
+func TestTableRowWithoutItsObjectIsAnError(t *testing.T) {
+	bad := []string{`null`, `"x"`, `{"apiVersion":"ocular.dev/v1","kind":"Widget"}`, `{"metadata":null}`, `{"metadata":{"namespace":"ns"}}`}
+	for _, raw := range bad {
+		_, err := rowObject([]byte(raw), false)
+		assert.Error(t, err, raw)
+	}
+	ts := &tableServer{list: func(url.Values) (int, any) {
+		return 200, map[string]any{"kind": "Table", "apiVersion": "meta.k8s.io/v1", "metadata": map[string]any{"resourceVersion": "10"},
+			"columnDefinitions": widgetCols, "rows": []any{map[string]any{"cells": []any{"a", 5, nil}, "object": nil}}}
+	}}
+	_, err := widgetsLW(ts.start(t), nil, nil).List(metav1.ListOptions{})
+	assert.Error(t, err)
+
+	ws := &tableServer{hold: 2 * time.Second, events: []map[string]any{
+		{"type": "ADDED", "object": map[string]any{"kind": "Table", "apiVersion": "meta.k8s.io/v1", "metadata": map[string]any{}, "columnDefinitions": widgetCols,
+			"rows": []any{map[string]any{"cells": []any{"a", 5, nil}, "object": nil}}}},
+	}}
+	var mu sync.Mutex
+	var reported []error
+	w, err := widgetsLW(ws.start(t), nil, func(err error) { mu.Lock(); reported = append(reported, err); mu.Unlock() }).Watch(metav1.ListOptions{ResourceVersion: "10"})
+	require.NoError(t, err)
+	defer w.Stop()
+	select {
+	case ev, ok := <-w.ResultChan():
+		assert.False(t, ok, "no event without an object: %v", ev)
+	case <-time.After(5 * time.Second):
+		t.Fatal("the stream did not end")
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	require.NotEmpty(t, reported)
+	assert.Error(t, reported[len(reported)-1])
+}
+
+// The server writes the columns with the stream's first event whatever its
+// type: a first BOOKMARK's columns are checked too (Codex P2-7 of c932672).
+func TestTableWatchChecksTheColumnsOfAFirstBookmark(t *testing.T) {
+	bm := map[string]any{"apiVersion": "ocular.dev/v1", "kind": "Widget", "metadata": map[string]any{"resourceVersion": "20"}}
+	ts := &tableServer{hold: 2 * time.Second, events: []map[string]any{
+		{"type": "BOOKMARK", "object": map[string]any{"kind": "Table", "apiVersion": "meta.k8s.io/v1", "metadata": map[string]any{"resourceVersion": "20"},
+			"columnDefinitions": widgetCols, "rows": []any{map[string]any{"cells": []any{"", nil, nil}, "object": bm}}}},
+		{"type": "MODIFIED", "object": tableJSON(nil, "", "", nil, widgetObj("alpha", "21"))},
+	}}
+	var mu sync.Mutex
+	var reported []error
+	lw := widgetsLW(ts.start(t), func([]metav1.TableColumnDefinition) error { return errSchemaChanged },
+		func(err error) { mu.Lock(); reported = append(reported, err); mu.Unlock() })
+	w, err := lw.Watch(metav1.ListOptions{ResourceVersion: "10", AllowWatchBookmarks: true})
+	require.NoError(t, err)
+	defer w.Stop()
+	select {
+	case ev, ok := <-w.ResultChan():
+		assert.False(t, ok, "nothing after headers of another schema: %v", ev)
+	case <-time.After(5 * time.Second):
+		t.Fatal("the stream did not end")
+	}
+	mu.Lock()
+	defer mu.Unlock()
+	assert.Contains(t, reported, errSchemaChanged)
+}
+
+// Evidence that the resource cannot answer Tables (406, a plain list) is
+// told once to notTable; failures that say nothing of the format are not.
+func TestTableListWatchTellsWhenTablesAreNotServed(t *testing.T) {
+	answers := []struct {
+		code int
+		body any
+		not  bool
+	}{
+		{406, "not acceptable", true},
+		{200, map[string]any{"kind": "WidgetList", "apiVersion": "ocular.dev/v1", "items": []any{}}, true},
+		{200, map[string]any{"kind": "Status", "apiVersion": "v1", "status": "Failure", "code": 500}, false},
+		{500, map[string]any{"kind": "Status", "apiVersion": "v1", "status": "Failure", "code": 500}, false},
+		{410, map[string]any{"kind": "Status", "apiVersion": "v1", "status": "Failure", "reason": "Expired", "code": 410}, false},
+	}
+	for _, a := range answers {
+		ts := &tableServer{list: func(url.Values) (int, any) { return a.code, a.body }}
+		lw := widgetsLW(ts.start(t), nil, nil)
+		var told int
+		lw.notTable = func() { told++ }
+		_, err := lw.List(metav1.ListOptions{})
+		assert.Error(t, err)
+		assert.Equal(t, a.not, told == 1, "%d %v: told %d", a.code, a.body, told)
+	}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusNotAcceptable) }))
+	t.Cleanup(srv.Close)
+	c, err := newTableClient(&rest.Config{Host: srv.URL})
+	require.NoError(t, err)
+	lw := widgetsLW(c, nil, nil)
+	var told int
+	lw.notTable = func() { told++ }
+	_, err = lw.Watch(metav1.ListOptions{ResourceVersion: "10"})
+	assert.True(t, apierrors.IsNotAcceptable(err), "%v", err)
+	assert.Equal(t, 1, told, "a watch refused 406")
 }

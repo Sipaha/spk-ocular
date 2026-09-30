@@ -116,9 +116,11 @@ type cacheManager struct {
 	// format through dyn); onSchema is told of an answer of another schema.
 	tables   *tableClient
 	onSchema func(old *tableSchema)
-	now      func() time.Time
-	grace    time.Duration
-	maxIdle  int
+	// onNotTable is told the resource showed it does not serve Tables.
+	onNotTable func(old *tableSchema)
+	now        func() time.Time
+	grace      time.Duration
+	maxIdle    int
 
 	mu     sync.Mutex
 	caches map[cacheKey]*informerCache
@@ -175,6 +177,11 @@ func (m *cacheManager) start(key cacheKey, def *kindDef) *informerCache {
 					return errSchemaChanged
 				}
 				return nil
+			},
+			notTable: func() {
+				if m.onNotTable != nil {
+					m.onNotTable(sch)
+				}
 			}}
 	}
 	c.inf = cache.NewSharedIndexInformerWithOptions(lw, &unstructured.Unstructured{}, cache.SharedIndexInformerOptions{

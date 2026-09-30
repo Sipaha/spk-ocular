@@ -51,6 +51,22 @@ var errSchemaChanged = errors.New("the columns of this resource changed")
 // errNotTable: a Table was asked for and something else came.
 var errNotTable = errors.New("the server did not answer with a table")
 
+// errPlainList: a Table was asked for and the resource's plain list came —
+// evidence that the resource does not serve Tables (like a 406).
+var errPlainList = fmt.Errorf("%w: a plain list came", errNotTable)
+
+// servesNoTables: err is evidence that the resource cannot answer Tables
+// (not a failure that says nothing of the format: 410, 5xx, a Status).
+func servesNoTables(err error) bool {
+	return apierrors.IsNotAcceptable(err) || errors.Is(err, errPlainList)
+}
+
+// plainList: a body is a list of the resource's objects in the plain
+// format (not a Table, not a Status, not garbage).
+func plainList(kind string, items json.RawMessage) bool {
+	return kind != "Status" && strings.HasSuffix(kind, "List") && len(items) > 0 && items[0] == '['
+}
+
 // tableClient reads resources as Tables over cfg's transport.
 type tableClient struct {
 	hc   *http.Client
@@ -79,6 +95,8 @@ type tableDoc struct {
 		Cells  []any           `json:"cells"`
 		Object json.RawMessage `json:"object"`
 	} `json:"rows"`
+	// Items: a plain list's (a server answering without a Table).
+	Items json.RawMessage `json:"items"`
 }
 
 // tablePage is one list answer.
@@ -176,16 +194,19 @@ func (c *tableClient) list(ctx context.Context, gvr schema.GroupVersionResource,
 		return nil, err
 	}
 	if d.Kind != "Table" {
+		if plainList(d.Kind, d.Items) {
+			return nil, errPlainList
+		}
 		return nil, errNotTable
 	}
 	p := &tablePage{cols: d.ColumnDefinitions, rv: d.Metadata.ResourceVersion, cont: d.Metadata.Continue, remaining: d.Metadata.RemainingItemCount}
 	p.items = make([]unstructured.Unstructured, 0, len(d.Rows))
 	for _, r := range d.Rows {
-		u, err := rowObject(r.Object, r.Cells)
+		u, err := rowObject(r.Object, false)
 		if err != nil {
 			return nil, err
 		}
-		p.items = append(p.items, *u)
+		p.items = append(p.items, *withCells(u, r.Cells))
 	}
 	return p, nil
 }
@@ -204,23 +225,39 @@ func (c *tableClient) get(ctx context.Context, gvr schema.GroupVersionResource, 
 	if d.Kind != "Table" || len(d.Rows) != 1 {
 		return nil, nil, errNotTable
 	}
-	u, err := rowObject(d.Rows[0].Object, d.Rows[0].Cells)
-	return d.ColumnDefinitions, u, err
+	u, err := rowObject(d.Rows[0].Object, false)
+	if err != nil {
+		return nil, nil, err
+	}
+	return d.ColumnDefinitions, withCells(u, d.Rows[0].Cells), nil
 }
 
-// rowObject: a row's object with its cells. Decoded like the API
-// machinery does (whole numbers are int64: metadata.generation and the
-// like read through unstructured's accessors).
-func rowObject(raw json.RawMessage, cells []any) (*unstructured.Unstructured, error) {
-	m := map[string]any{}
+// rowObject: a row's object, decoded like the API machinery does (whole
+// numbers are int64: metadata.generation and the like read through
+// unstructured's accessors). An object is required, with metadata; a
+// row's (not a BOOKMARK's) also with its name.
+func rowObject(raw json.RawMessage, bookmark bool) (*unstructured.Unstructured, error) {
+	var m map[string]any
 	if err := utiljson.Unmarshal(raw, &m); err != nil {
 		return nil, fmt.Errorf("a table row without its object: %w", err)
 	}
+	md, _ := m["metadata"].(map[string]any)
+	if md == nil {
+		return nil, errors.New("a table row without its object")
+	}
+	if name, _ := md["name"].(string); !bookmark && name == "" {
+		return nil, errors.New("a table row whose object has no name")
+	}
+	return &unstructured.Unstructured{Object: m}, nil
+}
+
+// withCells: u carrying a row's cells (for the cache's projection).
+func withCells(u *unstructured.Unstructured, cells []any) *unstructured.Unstructured {
 	if cells == nil {
 		cells = []any{}
 	}
-	m[cellsField] = cells
-	return &unstructured.Unstructured{Object: m}, nil
+	u.Object[cellsField] = cells
+	return u
 }
 
 // watch opens a Table watch stream. check sees the columns of the first
@@ -285,19 +322,21 @@ func (w *tableWatch) event(t watch.EventType, raw json.RawMessage) (watch.Event,
 		w.mismatch(errNotTable)
 		return watch.Event{}, false
 	}
-	if d.ColumnDefinitions != nil && t != watch.Bookmark {
+	// The server writes the columns with the stream's first event, whatever
+	// its type (a BOOKMARK's too).
+	if len(d.ColumnDefinitions) > 0 {
 		if err := w.check(d.ColumnDefinitions); err != nil {
 			w.mismatch(err)
 			return watch.Event{}, false
 		}
 	}
-	u, err := rowObject(d.Rows[0].Object, d.Rows[0].Cells)
+	u, err := rowObject(d.Rows[0].Object, t == watch.Bookmark)
 	if err != nil {
 		w.mismatch(err)
 		return watch.Event{}, false
 	}
-	if t == watch.Bookmark {
-		delete(u.Object, cellsField) // RV and annotations only, as the server sent them
+	if t != watch.Bookmark { // a BOOKMARK: RV and annotations only, as the server sent them
+		withCells(u, d.Rows[0].Cells)
 	}
 	return watch.Event{Type: t, Object: u}, true
 }
@@ -324,6 +363,15 @@ type tableListWatch struct {
 	report    transportReport
 	ended     func()
 	counts    *requestCounts
+	// notTable is told of evidence that the resource does not serve
+	// Tables (406, a plain list): the epoch moves to the plain format.
+	notTable func()
+}
+
+func (lw *tableListWatch) tell(err error) {
+	if lw.notTable != nil && servesNoTables(err) {
+		lw.notTable()
+	}
 }
 
 var (
@@ -346,6 +394,7 @@ func (lw *tableListWatch) ListWithContext(ctx context.Context, o metav1.ListOpti
 	if err == nil {
 		err = lw.check(p.cols) // a page of another schema is not applied
 	}
+	lw.tell(err)
 	lw.report(err)
 	if err != nil {
 		return nil, err
@@ -371,6 +420,7 @@ func (lw *tableListWatch) WatchWithContext(ctx context.Context, o metav1.ListOpt
 		if errors.Is(err, context.Canceled) && ctx.Err() != nil {
 			err = fmt.Errorf("watch did not start within %s: %w", watchEstablishTimeout, context.DeadlineExceeded)
 		}
+		lw.tell(err)
 		lw.report(err)
 		return nil, err
 	}

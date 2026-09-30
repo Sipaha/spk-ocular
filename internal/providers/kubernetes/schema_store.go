@@ -23,12 +23,25 @@ var probeTimeout = 15 * time.Second
 type schemaEntry struct {
 	cur   *tableSchema // nil: none (not probed yet, or the last one changed)
 	probe chan struct{}
+	// gen grows with every invalidation (the epoch ended, a CRD changed,
+	// F5, the resource no longer served): a probe begun before publishes
+	// nothing.
+	gen uint64
+	// checking: a revalidation runs (one at a time); again — asked for
+	// while it ran (one more follows, however many asked).
+	checking, again bool
 }
 
 type schemaStore struct {
 	mu     sync.Mutex
 	by     map[schema.GroupVersionResource]*schemaEntry
 	epochs uint64 // epochs given so far (never reused within the session)
+	// plain: resources that showed they do not serve Tables (406, a plain
+	// list) — the plain format for the rest of the session.
+	plain map[schema.GroupVersionResource]bool
+	// crdPrints: per CRD, what its resource's columns are made of (scope,
+	// versions, printer columns): a CRD event that keeps it checks nothing.
+	crdPrints map[string]string
 }
 
 func (st *schemaStore) entry(gvr schema.GroupVersionResource) *schemaEntry {
@@ -107,22 +120,35 @@ func (s *session) schemaFor(ctx context.Context, def *kindDef, q provider.Query)
 		}
 		ch := make(chan struct{})
 		e.probe = ch
+		gen := e.gen
 		s.schemas.mu.Unlock()
 		sch, err := s.probeSchema(ctx, def, q)
 		s.schemas.mu.Lock()
 		e.probe = nil
 		close(ch)
-		if err == nil && e.cur == nil {
+		switch {
+		case s.ctx.Err() != nil:
+			s.schemas.mu.Unlock()
+			return nil, &provider.Error{Class: provider.ClassUnavailable, Message: "the connection to the cluster was closed"}
+		case err != nil:
+			s.schemas.mu.Unlock()
+			class, msg := classify(err)
+			return nil, &provider.Error{Class: class, Message: msg}
+		case e.gen != gen:
+			// Invalidated while probing (a CRD changed, F5): the answer may
+			// be the old one's. Probe again — on the route still served.
+			s.schemas.mu.Unlock()
+			if d := s.kind(def.desc.ID); d == nil || d.gvr != def.gvr {
+				return nil, &provider.Error{Class: provider.ClassSchemaChanged, Message: def.desc.Title + ": the API resource changed; opening again"}
+			}
+			continue
+		case e.cur == nil:
 			s.schemas.epochs++
 			sch.epoch = s.schemas.epochs
 			e.cur = sch
 		}
 		cur := e.cur
 		s.schemas.mu.Unlock()
-		if err != nil {
-			class, msg := classify(err)
-			return nil, &provider.Error{Class: class, Message: msg}
-		}
 		return cur, nil
 	}
 }
@@ -132,6 +158,7 @@ func (s *session) schemaFor(ctx context.Context, def *kindDef, q provider.Query)
 func (s *session) probeSchema(ctx context.Context, def *kindDef, q provider.Query) (*tableSchema, error) {
 	ctx, cancel := context.WithTimeout(ctx, probeTimeout)
 	defer cancel()
+	defer context.AfterFunc(s.ctx, cancel)() // it ends with the session too
 	ns := ""
 	if def.namespaced && q.Scope.Mode == core.ScopeOne {
 		ns = q.Scope.Name
@@ -144,6 +171,12 @@ func (s *session) probeSchema(ctx context.Context, def *kindDef, q provider.Quer
 }
 
 func (s *session) probeRoute(ctx context.Context, def *kindDef, ns string, o metav1.ListOptions) (*tableSchema, error) {
+	s.schemas.mu.Lock()
+	plain := s.schemas.plain[def.gvr]
+	s.schemas.mu.Unlock()
+	if plain {
+		return newTableSchema(def, 0, false, nil, nil), nil
+	}
 	cols, table, err := s.tables.probe(ctx, def.gvr, ns, o)
 	if err != nil {
 		return nil, err
@@ -172,12 +205,17 @@ func (c *tableClient) probe(ctx context.Context, gvr schema.GroupVersionResource
 	var d struct {
 		Kind              string                         `json:"kind"`
 		ColumnDefinitions []metav1.TableColumnDefinition `json:"columnDefinitions"`
+		Items             json.RawMessage                `json:"items"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&d); err != nil {
 		return nil, false, err
 	}
-	if d.Kind != "Table" {
+	switch {
+	case d.Kind == "Table":
+	case plainList(d.Kind, d.Items):
 		return nil, false, nil // a list of objects: no Tables here
+	default: // a Status, garbage: nothing said of the format
+		return nil, false, fmt.Errorf("%s: an unexpected answer (%q) to a list", gvr.Resource, d.Kind)
 	}
 	if len(d.ColumnDefinitions) == 0 {
 		return nil, false, fmt.Errorf("%s: a table without columns", gvr.Resource)
@@ -204,6 +242,15 @@ func (s *session) crdColumns(ctx context.Context, gvr schema.GroupVersionResourc
 	case err != nil:
 		return crdColumns{}
 	}
+	// The baseline a CRD event is compared with (an event's is newer).
+	s.schemas.mu.Lock()
+	if s.schemas.crdPrints == nil {
+		s.schemas.crdPrints = map[string]string{}
+	}
+	if _, ok := s.schemas.crdPrints[u.GetName()]; !ok {
+		s.schemas.crdPrints[u.GetName()] = crdPrint(u)
+	}
+	s.schemas.mu.Unlock()
 	return crdColumnsOf(u, gvr.Version)
 }
 
@@ -212,13 +259,32 @@ func crdColumnsOf(u *unstructured.Unstructured, version string) crdColumns {
 		if str(v, "name") != version {
 			continue
 		}
-		out := crdColumns{found: true, printer: map[string]string{}}
+		out := crdColumns{found: true}
 		for _, c := range slice(v, "additionalPrinterColumns") {
-			out.printer[str(c, "name")] = str(c, "jsonPath")
+			out.printer = append(out.printer, printerColumn{name: str(c, "name"), typ: str(c, "type"), jsonPath: str(c, "jsonPath"), priority: i64(c, "priority")})
 		}
 		return out
 	}
 	return crdColumns{}
+}
+
+// crdPrint: what of a CRD its resource's columns are made of — scope,
+// versions served, printer columns (not status, labels, …).
+func crdPrint(u *unstructured.Unstructured) string {
+	type version struct {
+		Name    string `json:"name"`
+		Served  any    `json:"served"`
+		Printer any    `json:"printer"`
+	}
+	var vs []version
+	for _, v := range slice(u.Object, "spec", "versions") {
+		vs = append(vs, version{Name: str(v, "name"), Served: v["served"], Printer: v["additionalPrinterColumns"]})
+	}
+	b, _ := json.Marshal(struct {
+		Scope    string    `json:"scope"`
+		Versions []version `json:"versions"`
+	}{str(u.Object, "spec", "scope"), vs})
+	return string(b)
 }
 
 // currentSchema: def's schema for a view bound to epoch (no I/O). nil: the
@@ -248,6 +314,7 @@ func (s *session) schemaChanged(old *tableSchema) {
 		return // already ended
 	}
 	e.cur = nil
+	e.gen++
 	old.retired.Store(true)
 	s.schemas.mu.Unlock()
 	s.endViews(func(w *viewWatch) bool { return w.def.schema == old }, provider.ClassSchemaChanged,
@@ -264,42 +331,102 @@ func (s *session) endViews(match func(*viewWatch) bool, class provider.ErrorClas
 	}
 }
 
-// revalidate probes the schemas in use again (a CRD changed, F5): one whose
-// answer shows other columns or another provenance ends. gvr nil: all.
+// tablesUnsupported: old's resource showed it does not serve Tables (a
+// 406 or a plain list to a Table list or watch). The plain format sticks
+// for the session; old's epoch ends and its views open again in it.
+func (s *session) tablesUnsupported(old *tableSchema) {
+	s.schemas.mu.Lock()
+	if s.schemas.plain == nil {
+		s.schemas.plain = map[schema.GroupVersionResource]bool{}
+	}
+	s.schemas.plain[old.gvr] = true
+	s.schemas.mu.Unlock()
+	s.schemaChanged(old)
+}
+
+// revalidate checks the schemas in use again (a CRD changed, F5): one whose
+// answer shows other columns or another provenance ends; a first probe in
+// flight is fenced (its answer may be the old one's). only nil: all.
 func (s *session) revalidate(only *schema.GroupVersionResource) {
 	if s.tables == nil {
 		return
 	}
 	s.schemas.mu.Lock()
-	var cur []*tableSchema
+	var gvrs []schema.GroupVersionResource
 	for gvr, e := range s.schemas.by {
-		if e.cur != nil && (only == nil || *only == gvr) {
-			cur = append(cur, e.cur)
+		if only != nil && *only != gvr {
+			continue
+		}
+		switch {
+		case e.cur != nil:
+			gvrs = append(gvrs, gvr)
+		case e.probe != nil:
+			e.gen++
 		}
 	}
 	s.schemas.mu.Unlock()
-	for _, sch := range cur {
-		ns, sel, used := s.caches.routeOf(sch)
-		if !used {
-			// No view uses it: forget it, the next view probes afresh.
-			s.schemas.mu.Lock()
-			if e := s.schemas.entry(sch.gvr); e.cur == sch {
-				e.cur = nil
-				sch.retired.Store(true)
-			}
+	for _, gvr := range gvrs {
+		s.revalidateOne(gvr)
+	}
+}
+
+// revalidateOne: one check of a resource at a time; asks while it runs
+// coalesce into one more check after it.
+func (s *session) revalidateOne(gvr schema.GroupVersionResource) {
+	s.schemas.mu.Lock()
+	e := s.schemas.by[gvr]
+	if e == nil {
+		s.schemas.mu.Unlock()
+		return
+	}
+	if e.checking {
+		e.again = true
+		s.schemas.mu.Unlock()
+		return
+	}
+	e.checking = true
+	s.schemas.mu.Unlock()
+	for {
+		s.checkSchema(e)
+		s.schemas.mu.Lock()
+		if !e.again || s.ctx.Err() != nil {
+			e.checking, e.again = false, false
 			s.schemas.mu.Unlock()
-			continue
+			return
 		}
-		ctx, cancel := context.WithTimeout(s.ctx, probeTimeout)
-		o := metav1.ListOptions{Limit: 1, FieldSelector: sel}
-		next, err := s.probeRoute(ctx, sch.def, ns, o)
-		cancel()
-		if err != nil {
-			continue // not an answer about the columns: the views say what fails
+		e.again = false
+		s.schemas.mu.Unlock()
+	}
+}
+
+// checkSchema probes e's current schema with the route of a view using it;
+// unused, it is forgotten (the next view probes afresh).
+func (s *session) checkSchema(e *schemaEntry) {
+	s.schemas.mu.Lock()
+	sch := e.cur
+	s.schemas.mu.Unlock()
+	if sch == nil {
+		return
+	}
+	ns, sel, used := s.caches.routeOf(sch)
+	if !used {
+		s.schemas.mu.Lock()
+		if e.cur == sch {
+			e.cur = nil
+			e.gen++
+			sch.retired.Store(true)
 		}
-		if !next.same(sch) {
-			s.schemaChanged(sch)
-		}
+		s.schemas.mu.Unlock()
+		return
+	}
+	ctx, cancel := context.WithTimeout(s.ctx, probeTimeout)
+	defer cancel()
+	next, err := s.probeRoute(ctx, sch.def, ns, metav1.ListOptions{Limit: 1, FieldSelector: sel})
+	if err != nil {
+		return // not an answer about the columns: the views say what fails
+	}
+	if !next.same(sch) {
+		s.schemaChanged(sch)
 	}
 }
 
@@ -314,7 +441,11 @@ func (s *session) forgetSchemas(reg *kindRegistry) {
 	s.schemas.mu.Lock()
 	var ended []*tableSchema
 	for gvr, e := range s.schemas.by {
-		if !served[gvr] && e.probe == nil {
+		switch {
+		case served[gvr]:
+		case e.probe != nil:
+			e.gen++ // its answer is not published: the route is gone
+		default:
 			if e.cur != nil {
 				e.cur.retired.Store(true)
 				ended = append(ended, e.cur)

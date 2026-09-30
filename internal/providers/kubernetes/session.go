@@ -195,6 +195,7 @@ func newSession(target, hash string, dyn dynamic.Interface, watchList bool) *ses
 	}
 	s.cat = newCatalog(ctx, allKinds, nil)
 	s.caches.onSchema = s.schemaChanged
+	s.caches.onNotTable = s.tablesUnsupported
 	return s
 }
 

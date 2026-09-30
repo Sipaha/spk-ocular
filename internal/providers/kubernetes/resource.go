@@ -184,15 +184,20 @@ func (s *session) getTable(ctx context.Context, def *kindDef, ref core.Ref) (*un
 		ns = ref.Scope
 	}
 	cols, row, err := s.tables.get(ctx, def.gvr, ns, ref.Name)
+	s.schemas.mu.Lock()
+	cur := s.schemas.entry(def.gvr).cur
+	s.schemas.mu.Unlock()
 	switch {
-	case apierrors.IsNotAcceptable(err) || errors.Is(err, errNotTable):
+	case servesNoTables(err):
+		if cur != nil && cur.table {
+			go s.tablesUnsupported(cur)
+		}
+		return nil, nil, nil
+	case errors.Is(err, errNotTable):
 		return nil, nil, nil
 	case err != nil:
 		return nil, nil, err
 	}
-	s.schemas.mu.Lock()
-	cur := s.schemas.entry(def.gvr).cur
-	s.schemas.mu.Unlock()
 	if cur != nil && cur.table && !cur.matches(cols) {
 		go s.schemaChanged(cur)
 	}

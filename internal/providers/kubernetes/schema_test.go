@@ -85,7 +85,7 @@ func TestPlainSchema(t *testing.T) {
 // Age is the creation time only by known provenance: an exact built-in
 // resource's "Age", or the CRD's own column path; never the description.
 func TestAgeProvenance(t *testing.T) {
-	cols := []metav1.TableColumnDefinition{{Name: "Name", Format: "name"}, {Name: "Since", Type: "date"},
+	cols := []metav1.TableColumnDefinition{{Name: "Name", Type: "string", Format: "name"}, {Name: "Since", Type: "date"},
 		{Name: "Age", Type: "date", Description: "CreationTimestamp is a timestamp representing the server time"}}
 	gr := func(g, r string) schema.GroupResource { return schema.GroupResource{Group: g, Resource: r} }
 	assert.Equal(t, map[int]bool{2: true}, ageColumns(gr("batch", "jobs"), cols, crdColumns{}))
@@ -93,18 +93,38 @@ func TestAgeProvenance(t *testing.T) {
 	assert.Empty(t, ageColumns(gr("networking.k8s.io", "foos"), cols, crdColumns{}), "a CRD in a built-in group's name")
 	assert.Empty(t, ageColumns(gr("gateway.networking.k8s.io", "gateways"), cols, crdColumns{}))
 	assert.Empty(t, ageColumns(gr("ocular.dev", "widgets"), cols, crdColumns{}), "the CRD not read: server text")
-	assert.Equal(t, map[int]bool{2: true}, ageColumns(gr("ocular.dev", "gadgets"), cols, crdColumns{found: true}), "no printer columns: the default Age")
+	nameAge := []metav1.TableColumnDefinition{{Name: "Name", Type: "string", Format: "name"}, {Name: "Age", Type: "date"}}
+	assert.Equal(t, map[int]bool{1: true}, ageColumns(gr("ocular.dev", "gadgets"), nameAge, crdColumns{found: true}), "no printer columns: the default Age")
+	assert.Empty(t, ageColumns(gr("ocular.dev", "gadgets"), cols, crdColumns{found: true}), "not the server's default columns: text")
 	assert.Equal(t, map[int]bool{1: true}, ageColumns(gr("ocular.dev", "widgets"), cols,
-		crdColumns{found: true, printer: map[string]string{"Since": ".metadata.creationTimestamp", "Age": ".status.lastSeen"}}))
+		crdColumns{found: true, printer: []printerColumn{{name: "Since", typ: "date", jsonPath: ".metadata.creationTimestamp"}, {name: "Age", typ: "date", jsonPath: ".status.lastSeen"}}}))
 
 	crd := &unstructured.Unstructured{Object: map[string]any{"spec": map[string]any{"versions": []any{
-		map[string]any{"name": "v1beta1", "additionalPrinterColumns": []any{map[string]any{"name": "Old", "jsonPath": ".metadata.creationTimestamp"}}},
-		map[string]any{"name": "v1", "additionalPrinterColumns": []any{map[string]any{"name": "Since", "jsonPath": ".metadata.creationTimestamp"}}},
+		map[string]any{"name": "v1beta1", "additionalPrinterColumns": []any{map[string]any{"name": "Old", "type": "date", "jsonPath": ".metadata.creationTimestamp"}}},
+		map[string]any{"name": "v1", "additionalPrinterColumns": []any{map[string]any{"name": "Since", "type": "date", "priority": int64(1), "jsonPath": ".metadata.creationTimestamp"}}},
 		map[string]any{"name": "v2"},
 	}}}}
-	assert.Equal(t, crdColumns{found: true, printer: map[string]string{"Since": ".metadata.creationTimestamp"}}, crdColumnsOf(crd, "v1"))
-	assert.Equal(t, crdColumns{found: true, printer: map[string]string{}}, crdColumnsOf(crd, "v2"))
+	assert.Equal(t, crdColumns{found: true, printer: []printerColumn{{name: "Since", typ: "date", priority: 1, jsonPath: ".metadata.creationTimestamp"}}}, crdColumnsOf(crd, "v1"))
+	assert.Equal(t, crdColumns{found: true}, crdColumnsOf(crd, "v2"))
 	assert.Equal(t, crdColumns{}, crdColumnsOf(crd, "v3"))
+}
+
+// Printer column names need not be unique: provenance goes by position (the
+// server's columns are Name, then the printer columns in order), so only the
+// column whose own path is the creation time is a live age; columns that do
+// not line up with the CRD's are the server's text (Codex P2-5 of c932672).
+func TestAgeProvenanceByPositionNotName(t *testing.T) {
+	gr := schema.GroupResource{Group: "ocular.dev", Resource: "leases"}
+	printer := []printerColumn{
+		{name: "Since", typ: "date", jsonPath: ".status.lastRenewal"},
+		{name: "Since", typ: "date", jsonPath: ".metadata.creationTimestamp"},
+	}
+	cols := []metav1.TableColumnDefinition{{Name: "Name", Type: "string", Format: "name"}, {Name: "Since", Type: "date"}, {Name: "Since", Type: "date"}}
+	assert.Equal(t, map[int]bool{2: true}, ageColumns(gr, cols, crdColumns{found: true, printer: printer}))
+	shifted := []metav1.TableColumnDefinition{{Name: "Name", Type: "string", Format: "name"}, {Name: "Since", Type: "date"}}
+	assert.Empty(t, ageColumns(gr, shifted, crdColumns{found: true, printer: printer}), "another count: nothing lines up")
+	retyped := []metav1.TableColumnDefinition{{Name: "Name", Type: "string", Format: "name"}, {Name: "Since", Type: "date"}, {Name: "Since", Type: "string"}}
+	assert.Empty(t, ageColumns(gr, retyped, crdColumns{found: true, printer: printer}), "another type: nothing lines up")
 }
 
 func TestGenericHealth(t *testing.T) {

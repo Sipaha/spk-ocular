@@ -293,32 +293,53 @@ func init() {
 	}
 }
 
-// crdColumns: what a CRD says of its columns in one version — printer
-// columns by name with their JSONPath; none: the server's default (Name,
-// Age of the creation time).
+// crdColumns: what a CRD says of its columns in one version — its printer
+// columns in order; none: the server's default (Age of the creation time).
 type crdColumns struct {
 	found   bool
-	printer map[string]string // column name → JSONPath
+	printer []printerColumn
 }
+
+// printerColumn: one of a CRD version's additionalPrinterColumns (names
+// need not be unique).
+type printerColumn struct {
+	name, typ, jsonPath string
+	priority            int64
+}
+
+// crdDefaultColumns: the columns a CRD version without printer columns is
+// served with (after Name).
+var crdDefaultColumns = []printerColumn{{name: "Age", typ: "date", jsonPath: ".metadata.creationTimestamp"}}
 
 // ageColumns: the server columns that are the creation time by known
 // provenance (see builtinAge, crdColumns); a column's description is no
-// proof (a CRD author writes it).
+// proof (a CRD author writes it). A CRD's columns go by position — the
+// server serves Name, then the printer columns in order — and only when
+// every one lines up (name, type, priority) with what the CRD says.
 func ageColumns(gr schema.GroupResource, cols []metav1.TableColumnDefinition, crd crdColumns) map[int]bool {
 	out := map[int]bool{}
-	for i, c := range cols {
-		switch {
-		case builtinAge[gr]:
+	switch {
+	case builtinAge[gr]:
+		for i, c := range cols {
 			if c.Name == "Age" {
 				out[i] = true
 			}
-		case crd.found && len(crd.printer) == 0:
-			if c.Name == "Age" {
-				out[i] = true
+		}
+	case crd.found:
+		printer := crd.printer
+		if len(printer) == 0 {
+			printer = crdDefaultColumns
+		}
+		if len(cols) != len(printer)+1 || cols[0].Format != "name" {
+			return out
+		}
+		for j, p := range printer {
+			c := cols[j+1]
+			if c.Name != p.name || c.Type != p.typ || int64(c.Priority) != p.priority {
+				return map[int]bool{}
 			}
-		case crd.found:
-			if crd.printer[c.Name] == ".metadata.creationTimestamp" {
-				out[i] = true
+			if p.jsonPath == ".metadata.creationTimestamp" {
+				out[j+1] = true
 			}
 		}
 	}

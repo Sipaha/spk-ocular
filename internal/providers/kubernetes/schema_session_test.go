@@ -18,6 +18,7 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	dynamicfake "k8s.io/client-go/dynamic/fake"
 	"k8s.io/client-go/rest"
 	k8stesting "k8s.io/client-go/testing"
 
@@ -37,6 +38,18 @@ type widgetsAPI struct {
 	probes  atomic.Int32 // limit=1 requests
 	queries []url.Values
 	streams []chan map[string]any
+	// watch406: watches are refused 406 (lists still answer Tables).
+	watch406 bool
+	// probeBody: a 200 body limit=1 requests get instead of the table.
+	probeBody any
+	// probeDelay holds limit=1 requests (inflight/maxInflight count them);
+	// probeHold holds them until closed or the request is cancelled
+	// (probeCancelled counts the latter).
+	probeDelay     time.Duration
+	probeHold      chan struct{}
+	inflight       atomic.Int32
+	maxInflight    atomic.Int32
+	probeCancelled atomic.Int32
 }
 
 func (a *widgetsAPI) setCols(c []metav1.TableColumnDefinition) {
@@ -62,12 +75,37 @@ func (a *widgetsAPI) serve(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	a.mu.Lock()
 	a.queries = append(a.queries, q)
-	status, plain, cols, objs := a.status, a.plain, a.cols, a.objs
+	status, plain, cols, objs, w406, probeBody, delay, hold := a.status, a.plain, a.cols, a.objs, a.watch406, a.probeBody, a.probeDelay, a.probeHold
 	a.mu.Unlock()
 	if q.Get("limit") == "1" {
 		a.probes.Add(1)
+		n := a.inflight.Add(1)
+		for m := a.maxInflight.Load(); n > m; m = a.maxInflight.Load() {
+			if a.maxInflight.CompareAndSwap(m, n) {
+				break
+			}
+		}
+		if delay > 0 {
+			time.Sleep(delay)
+		}
+		if hold != nil {
+			select {
+			case <-hold:
+			case <-r.Context().Done():
+				a.probeCancelled.Add(1)
+			}
+		}
+		a.inflight.Add(-1)
+		if probeBody != nil {
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(probeBody)
+			return
+		}
 	}
 	switch {
+	case w406 && q.Get("watch") == "true":
+		w.WriteHeader(http.StatusNotAcceptable)
+		return
 	case status != 0:
 		w.WriteHeader(status)
 		_ = json.NewEncoder(w).Encode(map[string]any{"kind": "Status", "apiVersion": "v1", "status": "Failure", "code": status, "reason": http.StatusText(status)})
@@ -293,7 +331,8 @@ func TestCRDColumnPathMakesALiveAge(t *testing.T) {
 	crdObj := crd("widgets.ocular.dev")
 	crdObj.Object["spec"] = map[string]any{"group": "ocular.dev", "names": map[string]any{"plural": "widgets"}, "versions": []any{
 		map[string]any{"name": "v1", "additionalPrinterColumns": []any{
-			map[string]any{"name": "Size", "jsonPath": ".spec.size"}, map[string]any{"name": "Since", "jsonPath": ".metadata.creationTimestamp"}}}}}
+			map[string]any{"name": "Size", "type": "integer", "jsonPath": ".spec.size"}, map[string]any{"name": "Since", "type": "date", "jsonPath": ".metadata.creationTimestamp"},
+			map[string]any{"name": "Detail", "type": "string", "priority": int64(1), "jsonPath": ".spec.detail"}}}}}
 	api := newWidgetsAPI()
 	s, _ := tableSession(t, api, crdObj)
 	d, _, err := s.DescribeView(context.Background(), provider.Query{Kind: "ocular.dev/widgets", Scope: allNS})
@@ -314,3 +353,168 @@ func TestCRDColumnPathMakesALiveAge(t *testing.T) {
 }
 
 var errForbiddenCRD = apierrors.NewForbidden(crdGVR.GroupResource(), "widgets.ocular.dev", errors.New("rbac"))
+
+// A resource whose lists answer Tables but whose watch is refused 406
+// cannot be kept live as Tables: the epoch ends once, the next open reads
+// the plain format and stays there (Codex P2-2 of c932672).
+func TestAWatchRefusingTablesMovesTheResourceToThePlainFormat(t *testing.T) {
+	api := newWidgetsAPI()
+	api.watch406 = true
+	s, _ := tableSession(t, api)
+	_, q, err := s.DescribeView(context.Background(), provider.Query{Kind: "ocular.dev/widgets", Scope: allNS})
+	require.NoError(t, err)
+	sink := &deltaSink{}
+	stop, err := s.Watch(q, sink)
+	require.NoError(t, err)
+	defer stop()
+	require.Eventually(t, func() bool { st := sink.status(); return st != nil && st.Class == provider.ClassSchemaChanged }, 5*time.Second, 5*time.Millisecond)
+	probes := api.probes.Load()
+	d, q2, err := s.DescribeView(context.Background(), provider.Query{Kind: "ocular.dev/widgets", Scope: allNS})
+	require.NoError(t, err)
+	assert.Equal(t, []core.Column{colName, colNS, colAge}, d.Columns)
+	assert.Greater(t, q2.Schema, q.Schema)
+	assert.Equal(t, probes, api.probes.Load(), "the plain format sticks: no probe asks for a Table again")
+	stop2, err := s.Watch(q2, &deltaSink{})
+	require.NoError(t, err)
+	stop2()
+}
+
+// A probe answered 200 with something that is neither a Table nor a list
+// (a Status, garbage) is no evidence of the plain format.
+func TestAProbeAnsweredWithAStatusIsAnError(t *testing.T) {
+	api := newWidgetsAPI()
+	api.probeBody = map[string]any{"kind": "Status", "apiVersion": "v1", "status": "Failure", "code": 500}
+	s, _ := tableSession(t, api)
+	_, _, err := s.DescribeView(context.Background(), provider.Query{Kind: "ocular.dev/widgets", Scope: allNS})
+	require.Error(t, err)
+	api.mu.Lock()
+	api.probeBody = nil
+	api.mu.Unlock()
+	d, _, err := s.DescribeView(context.Background(), provider.Query{Kind: "ocular.dev/widgets", Scope: allNS})
+	require.NoError(t, err)
+	assert.Equal(t, []string{"name", "namespace", "size", "since"}, colIDs(d.Columns), "Tables after all")
+}
+
+// A probe in flight when the CRD changes answers for the old CRD: its
+// result is not published, the schema is probed again (Codex P2-3 of
+// c932672).
+func TestARevalidationFencesAProbeInFlight(t *testing.T) {
+	crdObj := crd("widgets.ocular.dev")
+	crdObj.Object["spec"] = map[string]any{"group": "ocular.dev", "names": map[string]any{"plural": "widgets"}, "versions": []any{
+		map[string]any{"name": "v1", "additionalPrinterColumns": []any{
+			map[string]any{"name": "Size", "type": "integer", "jsonPath": ".spec.size"}, map[string]any{"name": "Since", "type": "date", "jsonPath": ".metadata.creationTimestamp"},
+			map[string]any{"name": "Detail", "type": "string", "priority": int64(1), "jsonPath": ".spec.detail"}}}}}
+	api := newWidgetsAPI()
+	s, _ := tableSession(t, api, crdObj.DeepCopy())
+	entered, release := make(chan struct{}), make(chan struct{})
+	var reads atomic.Int32
+	s.dyn.(interface {
+		PrependReactor(string, string, k8stesting.ReactionFunc)
+	}).PrependReactor("get", "customresourcedefinitions", func(k8stesting.Action) (bool, runtime.Object, error) {
+		if reads.Add(1) == 1 {
+			close(entered)
+			<-release
+			return true, crdObj.DeepCopy(), nil // the CRD as it was
+		}
+		return false, nil, nil
+	})
+	type res struct {
+		d   core.KindDescriptor
+		err error
+	}
+	done := make(chan res, 1)
+	go func() {
+		d, _, err := s.DescribeView(context.Background(), provider.Query{Kind: "ocular.dev/widgets", Scope: allNS})
+		done <- res{d, err}
+	}()
+	<-entered
+	// The CRD's Since is no longer the creation time.
+	changed := crdObj.DeepCopy()
+	cols := changed.Object["spec"].(map[string]any)["versions"].([]any)[0].(map[string]any)["additionalPrinterColumns"].([]any)
+	cols[1].(map[string]any)["jsonPath"] = ".status.since"
+	// Through the tracker: the client's lock is held by the reactor.
+	require.NoError(t, s.dyn.(*dynamicfake.FakeDynamicClient).Tracker().Update(crdGVR, changed, "", metav1.UpdateOptions{}))
+	s.crdChanged(changed)
+	close(release)
+	r := <-done
+	require.NoError(t, r.err)
+	assert.Equal(t, core.ColText, r.d.Columns[3].Type, "the old CRD's provenance was published")
+	assert.Equal(t, int32(2), reads.Load())
+}
+
+// Revalidations of one resource share one probe at a time, however many
+// CRD events and F5s ask (Codex P2-4 of c932672).
+func TestRevalidationsOfAResourceShareOneFlight(t *testing.T) {
+	api := newWidgetsAPI()
+	s, _ := tableSession(t, api)
+	_, q, err := s.DescribeView(context.Background(), provider.Query{Kind: "ocular.dev/widgets", Scope: allNS})
+	require.NoError(t, err)
+	sink := &deltaSink{}
+	stop, err := s.Watch(q, sink)
+	require.NoError(t, err)
+	defer stop()
+	require.Eventually(t, func() bool { st := sink.status(); return st != nil && st.State == provider.StatusReady }, 5*time.Second, 5*time.Millisecond)
+	api.mu.Lock()
+	api.probeDelay = 100 * time.Millisecond
+	api.mu.Unlock()
+	before := api.probes.Load()
+	gvr := widgetsGVR
+	var wg sync.WaitGroup
+	for range 12 {
+		wg.Add(2)
+		go func() { defer wg.Done(); s.revalidate(&gvr) }()
+		go func() { defer wg.Done(); s.revalidate(nil) }()
+	}
+	wg.Wait()
+	assert.Equal(t, int32(1), api.maxInflight.Load(), "one probe of the resource at a time")
+	assert.LessOrEqual(t, api.probes.Load()-before, int32(2), "asks while one runs coalesce into one more")
+}
+
+// A CRD event that does not touch what the columns are made of (status,
+// labels) checks nothing again.
+func TestACRDEventWithTheSameColumnsChecksNothing(t *testing.T) {
+	crdObj := crd("widgets.ocular.dev")
+	crdObj.Object["spec"] = map[string]any{"group": "ocular.dev", "names": map[string]any{"plural": "widgets"}, "versions": []any{
+		map[string]any{"name": "v1", "additionalPrinterColumns": []any{map[string]any{"name": "Size", "type": "integer", "jsonPath": ".spec.size"}}}}}
+	api := newWidgetsAPI()
+	s, _ := tableSession(t, api, crdObj.DeepCopy())
+	_, q, err := s.DescribeView(context.Background(), provider.Query{Kind: "ocular.dev/widgets", Scope: allNS})
+	require.NoError(t, err)
+	stop, err := s.Watch(q, &deltaSink{})
+	require.NoError(t, err)
+	defer stop()
+	before := api.probes.Load()
+	status := crdObj.DeepCopy()
+	status.Object["status"] = map[string]any{"acceptedNames": map[string]any{"plural": "widgets"}}
+	status.SetLabels(map[string]string{"x": "y"})
+	s.crdChanged(status)
+	time.Sleep(200 * time.Millisecond)
+	assert.Equal(t, before, api.probes.Load(), "nothing of the columns changed")
+	cols := status.Object["spec"].(map[string]any)["versions"].([]any)[0].(map[string]any)
+	cols["additionalPrinterColumns"] = []any{map[string]any{"name": "Size", "type": "string", "jsonPath": ".spec.size"}}
+	s.crdChanged(status)
+	require.Eventually(t, func() bool { return api.probes.Load() > before }, 5*time.Second, 5*time.Millisecond, "the printer columns changed")
+}
+
+// The first probe of a view ends with its session (and publishes nothing
+// into a closed one) (Codex P2-6 of c932672).
+func TestSessionCloseCancelsASchemaProbe(t *testing.T) {
+	api := newWidgetsAPI()
+	api.probeHold = make(chan struct{})
+	defer close(api.probeHold)
+	s, _ := tableSession(t, api)
+	done := make(chan error, 1)
+	go func() {
+		_, _, err := s.DescribeView(context.Background(), provider.Query{Kind: "ocular.dev/widgets", Scope: allNS})
+		done <- err
+	}()
+	require.Eventually(t, func() bool { return api.inflight.Load() == 1 }, 5*time.Second, 5*time.Millisecond)
+	s.Close()
+	select {
+	case err := <-done:
+		assert.Error(t, err)
+	case <-time.After(3 * time.Second):
+		t.Fatal("the probe outlived its session")
+	}
+	require.Eventually(t, func() bool { return api.probeCancelled.Load() == 1 }, 3*time.Second, 5*time.Millisecond)
+}
