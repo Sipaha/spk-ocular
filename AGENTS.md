@@ -17,8 +17,9 @@ P10 — значения Secret: показать, скопировать, из�
 P11 — узлы: cordon, uncordon, drain — `docs/plans/2026-09-30-p11-node-operations.md`.
 P12 — CronJob: приостановить, возобновить, запустить сейчас — `docs/plans/2026-09-30-p12-cronjob-actions.md`.
 P13 — итоги и отказы действий на языке интерфейса — `docs/plans/2026-09-30-p13-action-outcomes-i18n.md`.
-Следующий этап — доступ агентов через unix-сокет: дизайн закрыт ревью
-(`docs/specs/2026-09-30-agent-access-design.md`), план — следующим.
+P14 — доступ агентов (Claude/Codex) через unix-сокет `$SPK_OCULAR_HOME/agent.sock` —
+`docs/plans/2026-09-30-p14-agent-access.md` (спецификация `docs/specs/2026-09-30-agent-access-design.md`).
+Следующий этап — из бэклога, выбирает пользователь.
 
 ## Сборка и тесты
 
@@ -198,7 +199,18 @@ P13 — итоги и отказы действий на языке интерф
   `items`/`refuse` у evacuate; `mutate` — чужое изменение/замена; `reset`).
 - `internal/execshim` — shim для exec-плагинов kubeconfig (таймаут, смерть вместе с приложением).
 - `internal/store` — SQLite, миграции `migrations/NNNN_*.sql`, `ui_prefs`, `target_state`,
-  `recent_objects` (≤ 50 на target, ≤ 500 всего).
+  `recent_objects` (≤ 50 на target, ≤ 500 всего); доступ агентов (`agent.go`): `agent_targets`
+  (опознание выданной цели и увиденное другое), `agent_grants`, `agent_audit` (чтения —
+  одной записью в минуту, ротация 20000).
+- Доступ агентов (P14): `internal/agentgrant` — модель прав и чистые решения (`Allows`,
+  `ReadableScopes`, `Validate`); `internal/api/agent.go` — `AgentCall` (вызов агента держит
+  сессию цели; снимок вида, хвост логов, метрики, опознание) и UI-методы прав/ожиданий/журнала;
+  `internal/agentapi` — сокет (`socket.go`: `flock`, 0600, `SO_PEERCRED`), каталог методов
+  (`methods.go`, схемы `invopop/jsonschema`), проверка прав (`access.go`), чтения (`read.go`),
+  записи и планы (`write.go`), ожидания подтверждения (`pending.go`), `AgentControl` для UI
+  (`control.go`). Поднимается в `newCore` для всех режимов. UI — `web/src/agents`;
+  desktop — заголовок и уведомление D-Bus (`internal/desktop/pending.go`). Проверить руками:
+  `curl -s --unix-socket $SPK_OCULAR_HOME/agent.sock http://ocular/v1`.
 - `internal/desktop` — Wails-окно, D-Bus probe, GPU policy. `cmd/spk-ocular` — cobra, режимы.
 - `web/` — React/Vite/Tailwind/zustand; `tests/e2e/` — Playwright.
 
@@ -503,6 +515,22 @@ P13 — итоги и отказы действий на языке интерф
   `TestDindServiceLogsThroughRestart`.
 - Каталог данных — `~/.spk/ocular` (`SPK_OCULAR_HOME`); временные файлы агентов — в
   `.agents/tmp` solution, не в `/tmp`.
+- Права агента проверяются в `agentapi` до вызова сервиса, по каталогу сессии (namespaced или
+  нет — `KindDescriptor.Scoped`); вниз для namespaced вида идёт только `ScopeOne` по выданным
+  именам (`ScopeAll` — только у выдачи «все namespace-ы»); строки и связи ещё раз фильтруются
+  по scope. — `TestMethodsNeedTheirGrant`, `TestScopedKindsNeedTheirScope`,
+  `TestFanOutOverTheNamespacesGranted`, `TestRelationsAndProblemsAreFiltered`.
+- Агенту не выдаются id UI (`viewId`, `terminalId`, …) и внутренности плана (`Expect`, база и
+  токен правки): только `planId`/`sourceId`/`runId` из реестров `agentapi`. Права и опознание
+  цели проверяются снова в момент записи. — `TestGrantsAreCheckedAgainAtEveryStep`,
+  `TestATargetPointedElsewhereSuspendsItsGrants`.
+- Разрушающий план агента — только по виду, выданному поимённо, и ждёт «Да» в UI, если у выдачи
+  нет «без подтверждения»; записи объектов вне namespace-ов агенту недоступны; списки плана
+  вне выданных scope-ов — отказ. — `TestADestructivePlanWaitsForTheUser`,
+  `TestAPlanNamingObjectsOutsideTheGrantIsRefused`, `agentgrant` `TestAllows`.
+- Ручные запуски приложения (проверки, скриншоты) — только с изолированными `HOME`,
+  `DOCKER_CONFIG`, `SPK_OCULAR_HOME` и `KUBECONFIG` тестового кластера; цель выбирать по точному
+  имени, не «первую». — однажды запуск с настоящим HOME открыл чужой (рабочий) кластер.
 
 ## Things that bite
 
@@ -661,3 +689,10 @@ P13 — итоги и отказы действий на языке интерф
 - **`t.Context()` уже отменён в `t.Cleanup`** — ожидания в cleanup-ах — с `context.Background()`.
 - Кандидат из соседей, ещё не встреченный здесь: fetch с `Blob`/`FormData`-телом через `wails://`
   роняет WebKitGTK (сохранение логов в desktop — строковым телом на loopback).
+- **Поток логов одного pod-а шлёт `Ready` до строк** («его backlog — начало потока»), группы и
+  Compose — после backlog-а. Кто собирает хвост без `Follow`, не должен кончать на `Ready`:
+  поток без `Follow` кончается сам (`api.tailSink`; нашёл kind-тест агента).
+- **Путь unix-сокета ≤ 108 байт** (`sun_path`): `t.TempDir()` с длинным `TMPDIR` не годится —
+  в тестах `sockDir`/`shortHome`.
+- **Desktop в `dbus-run-session` показывает окно через ~25 с** (частная шина без portal-а:
+  ожидание активации), в обычной сессии — сразу; не регрессия — так же у сборки до P14.
