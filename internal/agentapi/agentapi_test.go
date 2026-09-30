@@ -620,6 +620,16 @@ func TestClosingEndsTheWaitingPlans(t *testing.T) {
 	assert.True(t, IsGone(e.svc.DecideAgentPending(context.Background(), api.DecideAgentPendingRequest{ID: id, Approve: true})))
 }
 
+// A plan reaching the queue after Close began is refused, not left
+// waiting unanswered and unjournaled.
+func TestNoPlanWaitsAfterClose(t *testing.T) {
+	e := newEnv(t)
+	e.srv.Close()
+	_, err := e.srv.pend.add(&plan{agent: "claude"})
+	assert.True(t, IsGone(err), "%v", err)
+	assert.Empty(t, e.srv.pend.list())
+}
+
 func TestPendingPlansExpireAndAreBounded(t *testing.T) {
 	e := newEnv(t)
 	e.grant(one("a", "action:delete", "apps/deployments"))

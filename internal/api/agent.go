@@ -399,7 +399,12 @@ func (c *AgentCall) TailLogs(req TailRequest) (Tail, error) {
 	sink := &tailSink{}
 	q := provider.LogQuery{Channel: req.Channel, Previous: req.Previous, TailLines: req.TailLines, SinceTime: req.SinceTime}
 	err := src.StreamLogs(ctx, req.Ref, q, sink)
-	if ctx.Err() != nil && c.ctx.Err() == nil { // out of time: what came
+	if c.ctx.Err() != nil {
+		// The session closed (or the agent left): not a complete answer,
+		// though a backlog without follow ends with what it read.
+		return Tail{}, c.fail(c.ctx.Err())
+	}
+	if ctx.Err() != nil { // out of time: what came
 		sink.out.Truncated, err = true, nil
 	}
 	if err != nil {

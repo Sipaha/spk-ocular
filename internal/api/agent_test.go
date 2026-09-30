@@ -257,6 +257,35 @@ func TestAConfigChangeEndsAnAgentsCall(t *testing.T) {
 	assert.Equal(t, int32(1), k.last().stops.Load(), "its watch stopped")
 }
 
+// A tail whose session closed meanwhile (a configuration change) is gone,
+// not a complete answer, though the provider's backlog ended without error.
+func TestATailOfAClosedSessionIsGone(t *testing.T) {
+	k := newAgentProvider("a")
+	started, release := make(chan struct{}), make(chan struct{})
+	p := agentWrapped{k, func(a *agentSession) provider.Session {
+		a.logs = func(_ provider.LogQuery, sink provider.LogSink) error {
+			close(started)
+			<-release
+			_ = sink.Source(1, "k1", "web-1", "main")
+			_ = sink.Lines(1, []provider.LogLine{{TS: "t1", Text: "part"}})
+			return nil
+		}
+		return loggingSession{a}
+	}}
+	s, _ := newService(t, p)
+	c := call(t, s, "a")
+	errc := make(chan error, 1)
+	go func() {
+		_, err := c.TailLogs(TailRequest{Ref: row("a", "web-1").Ref, TailLines: 10})
+		errc <- err
+	}()
+	<-started
+	k.setHash("a", "h2")
+	s.revalidateSessions(context.Background(), "k")
+	close(release)
+	assert.True(t, IsCoded(<-errc, CodeGone))
+}
+
 func TestSnapshotAppliesDeltasByContract(t *testing.T) {
 	k := newAgentProvider("a")
 	k.script = func(a *agentSession) {

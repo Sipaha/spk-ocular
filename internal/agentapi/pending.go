@@ -60,6 +60,10 @@ func newPendingSet(s *Server) *pendingSet {
 // add makes p wait for the user (limit: too many wait).
 func (ps *pendingSet) add(p *plan) (*pendingRun, error) {
 	ps.mu.Lock()
+	if ps.closed {
+		ps.mu.Unlock()
+		return nil, &api.CodedError{Code: api.CodeGone, Detail: "Ocular is closing"}
+	}
 	ps.sweepLocked()
 	if ps.awaitingLocked() >= maxPending {
 		ps.mu.Unlock()
