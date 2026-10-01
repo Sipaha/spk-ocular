@@ -92,6 +92,16 @@ P18 (идёт) — переключение между целями без по�
   FQN `github.com/spk/spk-ocular/internal/api/transport.API.<Method>`). Новый метод API = метод в
   интерфейсе + `Service` + маршрут в `http.go` + метод в `wails.go` + `web/src/api/client.ts`.
   Ошибки HTTP-транспорта — статус 400 с классом в `code` (`forbidden`, `conflict`, `unknown`, …).
+- Недавние сессии и фон (P18): `internal/api/sessions.go` — `Service.current/left`,
+  `selectSession` (две последние покинутые остаются; занятые потоками и агентами не закрываются),
+  жнец (`recentIdle` 10 мин / `sessionIdle` 60 с), `CloseTarget`; `provider.Backgrounder`
+  (`internal/provider`) зовётся для каждой не выбранной сессии, включая открытые агентами
+  (`kubernetes/background.go` — флаг фона для `execshim`, `cacheManager.setBackground`,
+  `lost` по `unauthorized`); `TargetsView.open` + событие `targets_changed` при открытии/
+  закрытии сессии. Клиент: точка «Подключение открыто» и «Закрыть подключение» в сайдбаре
+  (`web/src/components/Sidebar.tsx` — title подсказки на строке опции, не на точке: title
+  листового элемента попадает в accessible name опции), снимок страницы — `pageMemo.ts`,
+  вкладки логов любых целей живут — `web/src/dock/`.
 - `internal/events` — `Emitter` (почтовый ящик «последнее событие на (type, key)» у каждого
   подписчика, переполнение → `resync`) + `Coalescer`.
 - `internal/views` — provider-агностичный hot-layer видов: `View` (строки, версии, надгробия,
@@ -648,6 +658,41 @@ P18 (идёт) — переключение между целями без по�
 - Ручные запуски приложения (проверки, скриншоты) — только с изолированными `HOME`,
   `DOCKER_CONFIG`, `SPK_OCULAR_HOME` и `KUBECONFIG` тестового кластера; цель выбирать по точному
   имени, не «первую». — однажды запуск с настоящим HOME открыл чужой (рабочий) кластер.
+- Недавние цели остаются открытыми (P18): выбор цели не закрывает сессии двух последних
+  покинутых (`recentTargets = 2`); занятые (потоки логов, вызовы агентов) выбором не закрываются
+  никогда; недавняя без views и потоков — через `recentIdle = 10 мин` от ухода, текущая и прочие
+  — через `sessionIdle = 60 с`. — переключение prod↔stage↔dev не должно холодить возврат. —
+  `sessions_test.go`, kind `TestKindWarmReturnMakesNoLists`.
+- Фон провайдера (P18, `provider.Backgrounder`): сессия каждой не выбранной цели — в фоне
+  (включая открытые агентами); простаивающие кэши в фоне не вытесняются по `cacheGrace`, только
+  сверх `maxIdleCaches` (самые старые); при возврате `cacheGrace` считается с возврата. Тёплый
+  возврат не делает новых запросов: ни LIST, ни initial-sync watch (WatchList). — тёплый путь
+  доказан отсутствием запросов, не только временем. — `cache_test.go`, kind
+  `TestKindWarmReturnMakesNoLists`.
+- Exec-плагин в фоне — без головы (P18): `execshim` видит флаг фона сессии
+  (`$SPK_OCULAR_HOME/run/bg-*`); при нём плагин запускается со stdin `/dev/null`, без
+  `DISPLAY`/`WAYLAND_DISPLAY`/`DBUS_SESSION_BUS_ADDRESS`/`BROWSER`/`GPG_TTY`/`SSH_ASKPASS`,
+  `KUBERNETES_EXEC_INFO.interactive=false`, таймаут 15 с. Провал в фоне — `unauthorized`, сессия
+  зовёт `lost()` один раз и закрывается: точка «открыто» гаснет, вкладки логов кончаются «для
+  продолжения нужен вход — выберите цель»; агентам тот же ответ — «вход в кластер выполняет
+  человек: выберите цель в Ocular» (и в тексте `GET /v1`). — фон не должен открывать окно входа
+  или блокировать учётку фоновыми неудачами. — `execshim_test.go`, kind
+  `TestKindBackgroundSurvivesAPluginRenewal`, `TestKindBackgroundAPluginNeedingAPersonIsLost`.
+- Снимок страницы цели (P18): вид, scope, фильтр, сортировка по видам (`kindId → {col, dir}`),
+  строка курсора, открытые детали и их вкладка — в памяти (`web/src/components/pageMemo.ts`),
+  пишется при уходе и смене вида; при возврате главнее `target_state`; снимок не удаляется
+  никогда, вида нет в каталоге — вид по умолчанию; отметки (P17) не сохраняются. — возврат
+  через час — тот же вид и фильтр. — `Workspace.test.tsx`.
+- Вкладки логов чужих целей остаются (P18): `dock.keepLogsOf` нет; вкладка помечена чужой
+  (бейдж цели) и продолжает получать строки, пока жива сессия; конец сессии — вкладка кончается
+  с `why` (`api.closedByUser`, `api.loginNeeded`, `api.loginByPerson` — на языке UI через
+  `messageText`, кнопка «Открыть заново»). — потоки не теряются молча при переключении. —
+  `Dock.test.tsx`, `LogViewer.test.tsx`, e2e synth `warm.spec.ts`.
+- «Закрыть подключение» (P18, `CloseTarget`): закрывает сессию не выбранной цели (views, потоки,
+  кэши; точка «открыто» гаснет), выбранной — отказ; вызов агента в полёте не обрывается —
+  сессия закрывается с последним вызовом; следующий вызов агента откроет цель снова (сказано в
+  подсказке пункта меню). — пользователь должен видеть и уметь прекратить фоновые watch-и к
+  prod-кластеру. — `sessions_test.go` `TestCloseTarget*`, e2e synth `warm.spec.ts`.
 
 ## Things that bite
 

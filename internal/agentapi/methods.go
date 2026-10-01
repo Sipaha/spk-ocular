@@ -91,6 +91,8 @@ func (s *Server) intro() Intro {
 			"A destructive plan waits for the user's confirmation in the SPK Ocular window unless its grant says otherwise: " +
 				"Run* then answers state awaiting_confirmation with a runId; ask GetRun (it waits up to 25 s) and tell your user to confirm in Ocular.",
 			"Errors are {code, detail}: forbidden says what is not granted.",
+			"A call that needs a cluster login answers unauthorized (a login is done by a person: the user selects the target in Ocular); " +
+				"tell your user and retry after they select it.",
 		},
 		Methods: "/v1/methods",
 	}
