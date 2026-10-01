@@ -151,6 +151,16 @@ export function actions(client: Client) {
       if (now?.provider === ref.provider && now.id === ref.id) return select(ref)
       return new Promise((resolve) => mayLeave(() => resolve(select(ref)), resolve))
     },
+    // Closing a session is not a selection: no edit guard. The server's
+    // targets_changed lands with the reload.
+    async closeTarget(ref: TargetRef) {
+      try {
+        await client.closeTarget(ref.provider, ref.id)
+      } catch (e) {
+        useStore.setState({ actionError: errText(e) })
+      }
+      await reload()
+    },
     setFilter(filter: string) {
       useStore.setState((s) => {
         const visible = visibleTargets(s.view, filter)

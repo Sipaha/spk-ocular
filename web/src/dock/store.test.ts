@@ -8,17 +8,15 @@ const pod = (name: string) => ({ provider: 'kubernetes', target: 'prod', kind: '
 beforeEach(() => useDock.setState({ tabs: [], active: null }))
 
 describe('dock tabs', () => {
-  it('another target closes its log tabs and keeps terminals', () => {
+  it('tabs of several targets live side by side', () => {
     dock.openLogs(prod, 'prod', pod('a'))
+    dock.openLogs(dev, 'dev', pod('a'))
     dock.openTerminal(prod, 'prod', { ref: pod('a') })
     dock.openTerminal(prod, 'prod', { ref: pod('a') })
-    expect(useDock.getState().tabs.map((t) => t.kind)).toEqual(['logs', 'term', 'term'])
-    dock.keepLogsOf(dev)
     const { tabs, active } = useDock.getState()
-    expect(tabs.map((t) => t.kind)).toEqual(['term', 'term'])
-    expect(tabs[0].id).not.toBe(tabs[1].id) // two shells in one pod
-    expect(tabs.every((t) => t.target.id === 'prod')).toBe(true)
-    expect(active).toBe(tabs[1].id)
+    expect(tabs.map((t) => `${t.kind}:${t.target.id}`)).toEqual(['logs:prod', 'logs:dev', 'term:prod', 'term:prod'])
+    expect(tabs[2].id).not.toBe(tabs[3].id) // two shells in one pod
+    expect(active).toBe(tabs[3].id)
   })
 
   it('one log tab per object; closing activates a neighbour', () => {

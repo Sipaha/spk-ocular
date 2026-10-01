@@ -11,6 +11,8 @@ export interface Target {
   title: string
   subtitle?: string
   current?: boolean
+  /** A live session (the target stays warm in the background). */
+  open?: boolean
   details?: Detail[]
   /** The scope a first visit shows (k8s: the context's namespace); absent: all. */
   defaultScope?: string

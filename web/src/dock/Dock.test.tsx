@@ -32,7 +32,7 @@ async function setup() {
 }
 
 describe('terminal tabs', () => {
-  it('S opens a terminal; another target closes log tabs but not terminals, which then show their context', async () => {
+  it('S opens a terminal; another target keeps log tabs and terminals, which then show their context', async () => {
     const { grid, user } = await setup()
     await user.click(await within(grid).findByText('api-1'))
     await user.keyboard('s')
@@ -43,11 +43,28 @@ describe('terminal tabs', () => {
 
     await user.click(screen.getByRole('option', { name: /dev/ }))
     await screen.findByRole('heading', { name: 'Pods' })
-    await waitFor(() => expect(dockTabs()).toHaveLength(1))
+    await waitFor(() => expect(within(dockTabs()[1]).getByText('prod')).toBeInTheDocument())
+    expect(dockTabs().map((t) => t.dataset.tabKind)).toEqual(['term', 'logs']) // P18: recent targets stay open
     const term = dockTabs()[0]
-    expect(term).toHaveAttribute('data-tab-kind', 'term')
     expect(within(term).getByText('prod')).toBeInTheDocument() // visible, not only a tooltip
     expect(screen.getByTestId('term-api-1')).toBeInTheDocument()
+    vi.unstubAllGlobals()
+  })
+
+  it("a log tab of another target keeps receiving lines", async () => {
+    let ctl!: ReadableStreamDefaultController<Uint8Array>
+    const { grid, user } = await setup()
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(new ReadableStream<Uint8Array>({ start: (c) => void (ctl = c) }))))
+    await user.click(await within(grid).findByText('api-1'))
+    await user.keyboard('l')
+    await waitFor(() => expect(ctl).toBeDefined())
+    await user.click(screen.getByRole('option', { name: /dev/ }))
+    await waitFor(() => expect(within(dockTabs()[0]).getByText('prod')).toBeInTheDocument())
+    const send = (f: unknown) => ctl.enqueue(new TextEncoder().encode(JSON.stringify(f) + '\n'))
+    send({ k: 'source', id: 1, key: 'api-1/app', label: 'api-1/app', channel: 'app' })
+    send({ k: 'lines', s: 1, l: [['2026-10-01T10:00:00Z', 'still streaming after the switch']] })
+    send({ k: 'ready' })
+    expect(await screen.findByText(/still streaming after the switch/)).toBeInTheDocument()
     vi.unstubAllGlobals()
   })
 

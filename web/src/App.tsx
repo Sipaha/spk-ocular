@@ -33,10 +33,10 @@ export function App({ client }: { client: Client }) {
   const targetProvider = target?.provider
   const targetId = target?.id
 
-  // Another target: its log tabs close (their session goes), terminals stay;
-  // the panel height is remembered per target.
+  // A selected target: the bottom panel's height is remembered per target.
+  // Its log and terminal tabs stay across switches (recent targets keep
+  // their sessions in the background; a closed session ends its log tabs).
   useEffect(() => {
-    dock.keepLogsOf(targetProvider && targetId ? { provider: targetProvider, id: targetId } : null)
     if (!targetProvider || !targetId) return
     let live = true
     client.getTargetState(targetProvider, targetId).then(

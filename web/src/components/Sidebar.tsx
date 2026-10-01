@@ -1,15 +1,17 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { Target, TargetGroup } from '../api/types'
 import { providerText, t } from '../i18n'
 import { type Actions, matchesFilter, targetKey, useStore } from '../store'
 import { EyeIcon, ProviderIcon, SearchIcon, WarningIcon } from './icons'
 import { openPalette } from '../palette/store'
 import { agents, pendingOf, useAgents } from '../agents/store'
+import { Menu, type MenuItem } from '../actions/Menu'
 
 export function Sidebar({ act }: { act: Actions }) {
   const view = useStore((s) => s.view)
   const filter = useStore((s) => s.filter)
   const listRef = useRef<HTMLDivElement>(null)
+  const [menu, setMenu] = useState<{ target: Target; at: { x: number; y: number } } | null>(null)
 
   const onListKey = (e: React.KeyboardEvent) => {
     if (e.key === 'ArrowDown') {
@@ -77,13 +79,33 @@ export function Sidebar({ act }: { act: Actions }) {
         aria-label="targets"
         className="min-h-0 flex-1 overflow-y-auto px-2 pb-3 outline-none"
       >
-        {view?.groups.map((g) => <Group key={g.provider} group={g} act={act} />)}
+        {view?.groups.map((g) => <Group key={g.provider} group={g} act={act} onMenu={(target, at) => setMenu({ target, at })} />)}
       </div>
+      {menu && (
+        <Menu
+          items={targetMenuItems(menu.target, act)}
+          at={menu.at}
+          label={t('target.menu')}
+          onClose={() => setMenu(null)}
+        />
+      )}
     </aside>
   )
 }
 
-function Group({ group, act }: { group: TargetGroup; act: Actions }) {
+/** The target's context menu: closing its connection is not offered on the selected target. */
+function targetMenuItems(target: Target, act: Actions): MenuItem[] {
+  return [
+    {
+      id: 'close',
+      label: t('target.close'),
+      hint: t('target.closeHint'),
+      onSelect: () => void act.closeTarget(target),
+    },
+  ]
+}
+
+function Group({ group, act, onMenu }: { group: TargetGroup; act: Actions; onMenu: (target: Target, at: { x: number; y: number }) => void }) {
   const filter = useStore((s) => s.filter)
   const visible = group.targets.filter((x) => matchesFilter(x, filter))
   return (
@@ -108,13 +130,13 @@ function Group({ group, act }: { group: TargetGroup; act: Actions }) {
       )}
       {group.targets.length > 0 && visible.length === 0 && <p className="px-2 py-1 text-xs text-fg-subtle">{t('sidebar.empty')}</p>}
       {visible.map((x) => (
-        <TargetRow key={x.id} target={x} act={act} />
+        <TargetRow key={x.id} target={x} act={act} onMenu={onMenu} />
       ))}
     </section>
   )
 }
 
-function TargetRow({ target, act }: { target: Target; act: Actions }) {
+function TargetRow({ target, act, onMenu }: { target: Target; act: Actions; onMenu: (target: Target, at: { x: number; y: number }) => void }) {
   const key = targetKey(target)
   const selected = useStore((s) => (s.view?.selected ? targetKey(s.view.selected) === key : false))
   const cursor = useStore((s) => s.cursor === key)
@@ -130,13 +152,26 @@ function TargetRow({ target, act }: { target: Target; act: Actions }) {
       aria-selected={selected}
       data-cursor={cursor || undefined}
       onClick={() => act.select(target)}
+      onContextMenu={
+        selected
+          ? undefined
+          : (e) => {
+              e.preventDefault()
+              onMenu(target, { x: e.clientX, y: e.clientY })
+            }
+      }
+      // The "open" hint goes here, not on the dot: a leaf's title or
+      // aria-label would join the option's accessible name (name-from-
+      // content) and break getByRole({ name }); the row's own title is a
+      // fallback only, its content names it.
+      title={!selected && target.open ? t('target.openHint') : undefined}
       className={[
         'group flex cursor-default items-center gap-2 rounded-md px-2 py-1.5',
         selected ? 'bg-active' : 'hover:bg-hover',
         cursor && !selected ? 'ring-1 ring-line ring-inset' : '',
       ].join(' ')}
     >
-      <span className={['h-1.5 w-1.5 shrink-0 rounded-full', selected ? 'bg-accent' : 'bg-fg-subtle/60'].join(' ')} />
+      <span className={['h-1.5 w-1.5 shrink-0 rounded-full', selected || target.open ? 'bg-accent' : 'bg-fg-subtle/60'].join(' ')} />
       <span className="min-w-0 flex-1">
         <span className="flex items-center gap-1.5">
           <span className="truncate">{target.title}</span>

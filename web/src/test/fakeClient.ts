@@ -49,6 +49,9 @@ export function fakeClient(targets: Target[]) {
       if (!all.some((x) => x.provider === provider && x.id === id)) throw new Error('not_found: no target')
       state.view.selected = { provider, id }
     }),
+    closeTarget: vi.fn(async (provider: string, id: string) => {
+      for (const g of state.view.groups) for (const t of g.targets) if (t.provider === provider && t.id === id) t.open = false
+    }),
     listKinds: vi.fn(async () => kindsView([podsKind])),
     refreshKinds: vi.fn(async () => {}),
     listScopes: vi.fn(async () => ({ scopes: [{ name: 'default' }, { name: 'web' }] })),

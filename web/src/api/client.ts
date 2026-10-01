@@ -21,6 +21,8 @@ export interface Client {
   listTargets(): Promise<TargetsView>
   /** Remembers the choice across restarts; not_found if the target is gone. */
   selectTarget(provider: string, id: string): Promise<void>
+  /** Closes the target's session (its views and streams end); refused on the selected target. */
+  closeTarget(provider: string, id: string): Promise<void>
   /** The session's kinds with the catalog's revision (a "kinds_changed" event tells of a new one). */
   listKinds(provider: string, target: string): Promise<KindsView>
   /** Reads the target's kinds again in the background (F5); a change comes as "kinds_changed". */
@@ -149,6 +151,7 @@ export const httpClient: Client = {
   appInfo: () => post('AppInfo', {}),
   listTargets: () => post('ListTargets', {}),
   selectTarget: (provider, id) => done(post('SelectTarget', { provider, id })),
+  closeTarget: (provider, id) => done(post('CloseTarget', { provider, id })),
   listKinds: (provider, target) => post('ListKinds', { provider, target }),
   refreshKinds: (provider, target) => done(post('RefreshKinds', { provider, target })),
   listScopes: (provider, target) => post('ListScopes', { provider, target }),
@@ -266,6 +269,7 @@ export const wailsClient: Client = {
   appInfo: () => wcall('AppInfo'),
   listTargets: () => wcall('ListTargets'),
   selectTarget: (provider, id) => wcall('SelectTarget', provider, id),
+  closeTarget: (provider, id) => wcall('CloseTarget', provider, id),
   listKinds: (provider, target) => wcall('ListKinds', provider, target),
   refreshKinds: (provider, target) => wcall('RefreshKinds', provider, target),
   listScopes: (provider, target) => wcall('ListScopes', provider, target),

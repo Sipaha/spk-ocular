@@ -86,6 +86,20 @@ describe('LogViewer', () => {
     expect(screen.queryByText(/raw server words/)).not.toBeInTheDocument()
   })
 
+  it('a stream its session ended says why (P18: closed by the user, a login needed)', async () => {
+    const { client: c } = fakeClient([k8s('dev')])
+    const s1 = stream()
+    vi.stubGlobal('fetch', vi.fn(async () => s1.response))
+    render(<LogViewer client={c} subject={pod} active />)
+    act(() => {
+      s1.send({ k: 'end', reason: 'gone', why: { key: 'api.closedByUser', text: 'the connection to the target was closed' } })
+      s1.close()
+    })
+    await waitFor(() => expect(screen.getByLabelText('stream state')).toHaveTextContent('the connection to the target was closed'))
+    expect(screen.getByLabelText('stream state')).toHaveTextContent('The session was closed')
+    expect(screen.getByRole('button', { name: 'Reopen' })).toBeInTheDocument()
+  })
+
   it('shows why a stream could not be opened', async () => {
     const { client: c } = fakeClient([k8s('dev')])
     const { ApiError } = await import('../api/client')

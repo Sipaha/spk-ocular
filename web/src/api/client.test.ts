@@ -79,6 +79,15 @@ describe('httpClient', () => {
     expect(JSON.parse(init.body as string)).toEqual({ provider: 'kubernetes', id: 'x' })
   })
 
+  it('closeTarget posts the target', async () => {
+    const fetchMock = vi.fn(async () => new Response(null, { status: 204 }))
+    vi.stubGlobal('fetch', fetchMock)
+    await httpClient.closeTarget('kubernetes', 'x')
+    const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit]
+    expect(url).toBe('/api/CloseTarget')
+    expect(JSON.parse(init.body as string)).toEqual({ provider: 'kubernetes', id: 'x' })
+  })
+
   it('an error answer carries its reason', async () => {
     const why = { key: 'api.configChanged', params: { target: 'prod' }, text: 'the configuration of prod changed' }
     vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ code: 'conflict', detail: why.text, why }), { status: 400, headers: { 'content-type': 'application/json' } })))

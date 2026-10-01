@@ -218,9 +218,14 @@ export function useLogStream({ client, ref, query, paused, frozen }: Options) {
         case 'end':
           ended = true
           flush()
-          setStatus((st) =>
-            f.reason === 'done' ? { ...st, phase: 'done' } : f.reason === 'gone' ? { ...st, phase: 'gone' } : { ...st, phase: 'error', cls: f.class, message: ((why) => (why ? messageText(why) : f.message))(asMessage(f.why)) },
-          )
+          setStatus((st) => {
+            const why = asMessage(f.why)
+            // "gone" also says why (closed by the user, a login needed): the
+            // bare phase text reads like a context change, which it may not be.
+            if (f.reason === 'done') return { ...st, phase: 'done' }
+            if (f.reason === 'gone') return why ? { ...st, phase: 'gone', message: messageText(why) } : { ...st, phase: 'gone' }
+            return { ...st, phase: 'error', cls: f.class, message: why ? messageText(why) : f.message }
+          })
           break
       }
     }

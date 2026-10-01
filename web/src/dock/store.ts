@@ -3,9 +3,10 @@ import type { Ref, TargetRef } from '../api/types'
 import { refTitle } from '../refs'
 
 // The bottom panel's tabs live above the per-target Workspace: log tabs
-// belong to their target (its session) and close when another target is
-// selected; terminal tabs belong to the app and stay (their target is
-// shown on the tab when it is not the current one).
+// belong to their target and stay while its session lives (a recent target
+// keeps running in the background; the tab says whose it is when it is not
+// the current one); terminal tabs belong to the app and stay too. Closing
+// the target's session ends its log tabs' streams ("gone").
 
 export interface TermOpen {
   ref: Ref
@@ -81,15 +82,6 @@ export const dock = {
       const rest = s.tabs.filter((x) => x.id !== id)
       const active = s.active === id ? (rest[Math.min(i, rest.length - 1)]?.id ?? null) : s.active
       return { tabs: rest, active }
-    })
-  },
-  /** Another target is selected: its log tabs go (their session is closing), terminals stay. */
-  keepLogsOf(target: TargetRef | null) {
-    useDock.setState((s) => {
-      const keep = s.tabs.filter((t) => t.kind !== 'logs' || (target && targetKey(t.target) === targetKey(target)))
-      if (keep.length === s.tabs.length) return {}
-      const active = keep.some((t) => t.id === s.active) ? s.active : (keep[keep.length - 1]?.id ?? null)
-      return { tabs: keep, active }
     })
   },
   setHeight(h: number) {
