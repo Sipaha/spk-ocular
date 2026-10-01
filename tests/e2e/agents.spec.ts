@@ -119,7 +119,7 @@ test('revoked grants take effect at once', async ({ page }) => {
   expect((list.body.rows as { ref: { name: string } }[]).map((r) => r.ref.name)).toEqual(['parcel-3'])
   await page.getByRole('button', { name: 'Agents', exact: true }).click()
   const panel = page.getByRole('dialog', { name: 'Agent access' })
-  await panel.getByRole('button', { name: /^demo/ }).click()
+  await panel.getByRole('button', { name: /^demo(?!2)/ }).click()
   await panel.getByRole('region', { name: 'demo' }).getByRole('button', { name: 'Revoke all of this target' }).click()
   await expect(panel.getByText('granted: 1')).toBeHidden()
   expect((await agent('ListObjects', { ...target, kind: 'parcels' })).status).toBe(403)

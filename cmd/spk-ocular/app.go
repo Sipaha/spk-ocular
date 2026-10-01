@@ -54,6 +54,11 @@ func newCore(ctx context.Context, mode string, withSynthetic bool) (*appCore, er
 	var syn *synthetic.Provider
 	if withSynthetic {
 		syn = synthetic.New()
+		// A second synthetic target (--test-api only): lets e2e switch
+		// between two warm targets (P18).
+		if os.Getenv("SPK_OCULAR_TEST_SYNTH_SECOND") != "" {
+			syn.EnableSecondTarget()
+		}
 		providers = append(providers, syn)
 	}
 	reg, err := provider.NewRegistry(providers...)

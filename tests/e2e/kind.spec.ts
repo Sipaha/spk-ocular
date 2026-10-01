@@ -89,6 +89,29 @@ test('a namespace-limited user: denied is explained, own namespace works', async
   await expect(row(grid, 'crashloop')).toBeVisible()
 })
 
+// P18: two contexts on the same cluster (the viewer's kubeconfig is a second
+// file). The left target stays warm in the background — its dot says so —
+// and the return shows the rows at once, not a cold open with a loading
+// state.
+test('a warm return to a recent target shows rows at once', async ({ page }) => {
+  await openTarget(page, 'kind-ocular-dev')
+  const grid = await kindPage(page, 'Pods')
+  await expect(row(grid, /^web-/).first()).toBeVisible()
+  // To B: the second context on the same cluster.
+  await openTarget(page, 'ocular-viewer')
+  const vgrid = page.getByRole('grid', { name: 'resources' })
+  await expect(row(vgrid, /^web-/).first()).toBeVisible()
+  // A stays open in the background: the dot's tooltip on its row.
+  const admin = page.getByRole('option', { name: /^kind-ocular-dev\b/ })
+  await expect(admin).toHaveAttribute('title', /Connection open/)
+  // Back to A: the rows are there at once (a cold open re-syncs for seconds;
+  // the warm budget is 150 ms, the allowance here is generous already).
+  await admin.click()
+  await page.getByRole('navigation', { name: 'resources' }).getByRole('button', { name: 'Pods', exact: true }).click()
+  const back = page.getByRole('grid', { name: 'resources' })
+  await expect(row(back, /^web-/).first()).toBeVisible({ timeout: 1500 })
+})
+
 // Review 2026-09-29: a ConfigMap value change does not change its table row;
 // the open YAML must still refresh.
 test('open details follow changes the table does not show', async ({ page }) => {

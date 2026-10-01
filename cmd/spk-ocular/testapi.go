@@ -38,6 +38,7 @@ func testRoutes(c *appCore) http.Handler {
 		// Push lines/states into the synthetic provider's open log streams.
 		mux.HandleFunc("POST /api/_test/logs/emit", func(w http.ResponseWriter, r *http.Request) {
 			var req struct {
+				Target string          `json:"target,omitempty"` // default: demo
 				Object string          `json:"object"`
 				Event  synthetic.Event `json:"event"`
 			}
@@ -45,8 +46,11 @@ func testRoutes(c *appCore) http.Handler {
 				http.Error(w, err.Error(), http.StatusBadRequest)
 				return
 			}
+			if req.Target == "" {
+				req.Target = synthetic.Target
+			}
 			w.Header().Set("Content-Type", "application/json")
-			_ = json.NewEncoder(w).Encode(map[string]int{"delivered": c.Synthetic.Emit(req.Object, req.Event)})
+			_ = json.NewEncoder(w).Encode(map[string]int{"delivered": c.Synthetic.Emit(req.Target, req.Object, req.Event)})
 		})
 	}
 	if c.Synthetic != nil {

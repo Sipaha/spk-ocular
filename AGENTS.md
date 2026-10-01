@@ -209,7 +209,10 @@ P18 (идёт) — переключение между целями без по�
   эхо-терминал и порты (`live.go`), переконфигурация (`POST /api/_test/synthetic/reconfigure`),
   вид Workloads с действиями (`actions.go`; `evacuate` — списки плана и части результата
   для общего UI; `POST /api/_test/synthetic/controls` — права, отказ, `unknown`, задержка,
-  `items`/`refuse` у evacuate; `mutate` — чужое изменение/замена; `reset`).
+  `items`/`refuse` у evacuate; `mutate` — чужое изменение/замена; `reset`). Вторая цель
+  `demo2` со своими потоками — по `SPK_OCULAR_TEST_SYNTH_SECOND=1` у тест-сервера (e2e
+  переключает две тёплые цели, P18); `/api/_test/logs/emit` принимает `target` (по умолчанию
+  `demo`).
 - `internal/execshim` — shim для exec-плагинов kubeconfig (таймаут, смерть вместе с приложением).
 - `internal/store` — SQLite, миграции `migrations/NNNN_*.sql`, `ui_prefs`, `target_state`,
   `recent_objects` (≤ 50 на target, ≤ 500 всего); доступ агентов (`agent.go`): `agent_targets`

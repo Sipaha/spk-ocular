@@ -97,7 +97,14 @@ func (s *session) PrepareExec(_ context.Context, ref core.Ref, req provider.Exec
 }
 
 func liveTarget(ref core.Ref, hash string) core.LiveTarget {
-	return core.LiveTarget{Provider: ID, Target: Target, TargetTitle: Target, Endpoint: "synthetic.local", ConfigHash: hash, Ref: ref}
+	return core.LiveTarget{Provider: ID, Target: ref.Target, TargetTitle: ref.Target, Endpoint: endpoint(ref.Target), ConfigHash: hash, Ref: ref}
+}
+
+func endpoint(target string) string {
+	if target == Target2 {
+		return "synthetic-2.local"
+	}
+	return "synthetic.local"
 }
 
 // prepareAttach: a workload's debugger (added by debug) — its echo shell.
