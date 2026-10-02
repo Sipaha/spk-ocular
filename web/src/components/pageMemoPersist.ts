@@ -57,34 +57,63 @@ function validPage(p: PageMemo | undefined): PageMemo | undefined {
  * the pending snapshot now (leaving the target must not lose the last
  * second).
  */
-export function createMemoWriter(client: Client, provider: string, target: string) {
+function memoWriter(client: Client, provider: string, target: string) {
   let last: string | null = null
+  let inFlight: string | null = null
   let timer: ReturnType<typeof setTimeout> | null = null
   let pending: string | null = null
-  const write = (json: string) => {
-    last = json
-    void client.setTargetState(provider, target, pageMemoKeyName, json).catch(() => {})
+  const clearTimer = () => {
+    if (timer !== null) clearTimeout(timer)
+    timer = null
   }
   const flush = () => {
-    if (timer) {
-      clearTimeout(timer)
-      timer = null
-    }
-    if (pending !== null) {
-      write(pending)
-      pending = null
-    }
+    clearTimer()
+    if (inFlight !== null) return
+    const json = pending
+    pending = null
+    if (json === null || json === last) return
+    inFlight = json
+    void client.setTargetState(provider, target, pageMemoKeyName, json).then(
+      () => { last = json },
+      () => { last = null }, // a failed write is not proof of persistence
+    ).finally(() => {
+      inFlight = null
+      // If a newer snapshot is still being edited, respect its debounce.
+      // Otherwise a flush requested during the write can now finish.
+      if (timer === null) flush()
+    })
   }
   return {
-    /** Called on every change notification of the shown memo. */
     note(m: TargetMemo) {
       const json = serializeMemo(m)
-      if (json === null || json === last) return
-      pending = json
-      if (!timer) timer = setTimeout(flush, debounceMs)
+      clearTimer()
+      // Every notification supersedes the pending value, including a
+      // return to the saved value or a snapshot too large to persist.
+      pending = json === (inFlight ?? last) ? null : json
+      if (pending !== null) timer = setTimeout(flush, debounceMs)
     },
     flush,
   }
+}
+
+// Keep a target's writer across Workspace unmounts: a slow request from
+// before A → B → A must finish before the next write to A. The client is
+// weakly held; targets already have application-lifetime page memos.
+const writers = new WeakMap<Client, Map<string, ReturnType<typeof memoWriter>>>()
+
+export function createMemoWriter(client: Client, provider: string, target: string) {
+  let byTarget = writers.get(client)
+  if (!byTarget) {
+    byTarget = new Map()
+    writers.set(client, byTarget)
+  }
+  const key = JSON.stringify([provider, target])
+  let writer = byTarget.get(key)
+  if (!writer) {
+    writer = memoWriter(client, provider, target)
+    byTarget.set(key, writer)
+  }
+  return writer
 }
 
 /** Wires a target's Workspace to persist its page snapshot (P19). */

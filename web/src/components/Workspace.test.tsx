@@ -389,13 +389,14 @@ describe('page snapshot across restarts (P19)', () => {
     await within(grid).findByText('db-0')
     await userEvent.click(within(rowOf(grid, 'api-1')).getByRole('checkbox'))
     await userEvent.keyboard('/')
-    await userEvent.keyboard('db')
+    await userEvent.keyboard('api')
+    expect(within(rowOf(grid, 'api-1')).getByRole('checkbox')).toBeChecked()
     const written = vi.mocked(f.client.setTargetState)
     await waitFor(
       () => {
         const call = written.mock.calls.find((c) => c[2] === 'pageMemo')
         expect(call).toBeDefined()
-        expect(call![3]).toContain('"filter":"db"')
+        expect(call![3]).toContain('"filter":"api"')
       },
       { timeout: 4000 },
     )
@@ -416,10 +417,9 @@ describe('page snapshot across restarts (P19)', () => {
     fireEvent.change(screen.getByRole('textbox', { name: 'Filter rows' }), { target: { value: 'x'.repeat(5000) } })
     expect(screen.getByRole('textbox', { name: 'Filter rows' })).toHaveValue('x'.repeat(5000))
     await new Promise((r) => setTimeout(r, 1600))
-    // the mount wrote the small initial memo once; the over-cap filter never leaves
+    // The oversized current state also cancels the pending initial snapshot.
     const written = vi.mocked(f.client.setTargetState)
     const writes = written.mock.calls.filter((c) => c[2] === 'pageMemo')
-    expect(writes.length).toBeGreaterThan(0)
-    expect(writes.every((w) => ((JSON.parse(w[3]).page?.filter ?? '') as string).length < 100)).toBe(true)
+    expect(writes).toHaveLength(0)
   })
 })

@@ -162,8 +162,7 @@ export function Workspace({ client, hub, target }: { client: Client; hub: ViewHu
   const [openReq, setOpenReq] = useState<PageReq<Ref> | null>(null)
   const reqSeq = useRef(0)
 
-  // Tabs live in the dock above this (keyed) Workspace: log tabs close when
-  // another target is selected, terminals stay.
+  // Tabs live in the dock above this keyed Workspace and survive target switches.
   const targetRef = useMemo(() => ({ provider: target.provider, id: target.id }), [target.provider, target.id])
   const openLogs = useCallback((ref: Ref) => dock.openLogs(targetRef, target.title, ref), [targetRef, target.title])
   const [termDialog, setTermDialog] = useState<Ref | null>(null)

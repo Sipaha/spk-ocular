@@ -90,10 +90,10 @@ func runTerm(h provider.ExecHandle) *term {
 	t.sizes.ch <- provider.TermSize{Cols: 80, Rows: 24}
 	go func() {
 		st, err := h.Run(context.Background(), provider.Terminal{Stdin: inR, Stdout: t, Sizes: t.sizes})
-		t.res <- result{st, err}
 		_ = inR.Close()
 		close(t.sizes.done)
 		h.Close()
+		t.res <- result{st, err} // completion includes releasing the handle
 	}()
 	return t
 }

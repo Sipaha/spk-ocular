@@ -63,7 +63,8 @@ func (s *lineSink) Ready() error {
 func TestSecondTargetHasItsOwnRowsAndLogFeed(t *testing.T) {
 	p := New()
 	p.EnableSecondTarget()
-	ctx := context.Background()
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
 	s1, err := p.Open(ctx, Target)
 	require.NoError(t, err)
 	s2, err := p.Open(ctx, Target2)
@@ -88,30 +89,48 @@ func TestSecondTargetHasItsOwnRowsAndLogFeed(t *testing.T) {
 	// Log feeds are per target: a push to demo/api reaches no demo2 stream.
 	l1 := &lineSink{ready: make(chan struct{})}
 	l2 := &lineSink{ready: make(chan struct{})}
-	go func() {
-		_ = s1.(provider.LogSource).StreamLogs(ctx, core.Ref{Provider: ID, Target: Target, Kind: Kind, Name: "api"}, provider.LogQuery{Follow: true}, l1)
+	done := make(chan error, 2)
+	defer func() {
+		cancel()
+		for range 2 {
+			select {
+			case <-done:
+			case <-time.After(5 * time.Second):
+				t.Error("log stream did not stop")
+			}
+		}
 	}()
 	go func() {
-		_ = s2.(provider.LogSource).StreamLogs(ctx, core.Ref{Provider: ID, Target: Target2, Kind: Kind, Name: "api"}, provider.LogQuery{Follow: true}, l2)
+		done <- s1.(provider.LogSource).StreamLogs(ctx, core.Ref{Provider: ID, Target: Target, Kind: Kind, Name: "api"}, provider.LogQuery{Follow: true}, l1)
 	}()
-	<-l1.ready
-	<-l2.ready
+	go func() {
+		done <- s2.(provider.LogSource).StreamLogs(ctx, core.Ref{Provider: ID, Target: Target2, Kind: Kind, Name: "api"}, provider.LogQuery{Follow: true}, l2)
+	}()
+	for _, ready := range []chan struct{}{l1.ready, l2.ready} {
+		select {
+		case <-ready:
+		case <-time.After(5 * time.Second):
+			t.Fatal("log stream did not become ready")
+		}
+	}
 
-	// Streams are scoped by target even for the same object name. (Ready
-	// fires before the stream registers as a subscriber: emit until the
-	// delivery count says both streams are in place.)
-	ev1 := Event{Source: -1, Lines: []string{"line on demo"}}
-	ev2 := Event{Source: -1, Lines: []string{"line on demo2"}}
-	require.Eventually(t, func() bool { return p.Emit(Target, "api", ev1) == 1 }, 5*time.Second, 50*time.Millisecond)
-	require.Eventually(t, func() bool { return p.Emit(Target2, "api", ev2) == 1 }, 5*time.Second, 50*time.Millisecond)
+	// Ready precedes subscription. Wait for registration without emitting
+	// probe lines, then send one terminating event to each target. Once both
+	// streams finish, no late cross-target delivery can escape the assertions.
 	require.Eventually(t, func() bool {
-		return l1.has("line on demo") && l2.has("line on demo2")
+		p.mu.Lock()
+		defer p.mu.Unlock()
+		return len(p.subs) == 2
 	}, 5*time.Second, 5*time.Millisecond)
-	time.Sleep(100 * time.Millisecond) // a misdirected push would have arrived by now
+	assert.Equal(t, 1, p.Emit(Target, "api", Event{Source: -1, Lines: []string{"line on demo"}, End: true}))
+	assert.Equal(t, 1, p.Emit(Target2, "api", Event{Source: -1, Lines: []string{"line on demo2"}, End: true}))
+	require.Eventually(t, func() bool {
+		p.mu.Lock()
+		defer p.mu.Unlock()
+		return len(p.subs) == 0
+	}, 5*time.Second, 5*time.Millisecond)
+	assert.True(t, l1.has("line on demo"))
 	assert.False(t, l1.has("line on demo2"))
+	assert.True(t, l2.has("line on demo2"))
 	assert.False(t, l2.has("line on demo"))
-	assert.Contains(t, l1.lines, "line on demo")
-	assert.NotContains(t, l1.lines, "line on demo2")
-	assert.Contains(t, l2.lines, "line on demo2")
-	assert.NotContains(t, l2.lines, "line on demo")
 }
