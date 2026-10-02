@@ -74,3 +74,10 @@ func (s *Store) TargetState(ctx context.Context, provider, target string) (map[s
 	}
 	return out, rows.Err()
 }
+
+// DeleteTargetStateKey removes one per-target value across all targets; the
+// e2e test API uses it to give every spec a clean page snapshot (P19).
+func (s *Store) DeleteTargetStateKey(ctx context.Context, key string) error {
+	_, err := s.db.ExecContext(ctx, `DELETE FROM target_state WHERE key = ?`, key)
+	return err
+}

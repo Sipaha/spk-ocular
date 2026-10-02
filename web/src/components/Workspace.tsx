@@ -4,7 +4,8 @@ import type { ActionDescriptor, KindDescriptor, KindsView, MetricsView, Ref, Row
 import { ApiError } from '../api/client'
 import { actionLabel, classLabel, t } from '../i18n'
 import { showNotice, targetKey } from '../store'
-import { memoOf, pageMemoKey, remember as rememberPage, rememberSort } from './pageMemo'
+import { memoOf, pageMemoKey, remember as rememberPage, rememberSort, seedPersisted } from './pageMemo'
+import { parseMemo, useMemoPersist } from './pageMemoPersist'
 import { useScopeWords } from '../scopeNames'
 import { refTitle } from '../refs'
 import { ActionDialog, type ActionRequest } from '../actions/ActionDialog'
@@ -107,6 +108,9 @@ export function Workspace({ client, hub, target }: { client: Client; hub: ViewHu
   const defaultKind = kinds?.find((k) => k.default && !k.hidden)?.id ?? kinds?.find((k) => !k.hidden)?.id ?? ''
   const kind = ui?.kind || defaultKind
   const scope: ScopeSel = ui?.scope ?? { mode: 'all' }
+  // P19: the page snapshot (filter/sort/details) is written back to
+  // target_state debounced, and survives an app restart.
+  useMemoPersist(client, target.provider, target.id, tkey)
   const groups = useMemo(() => navGroups(kinds ?? []), [kinds])
   // A kind a later listing no longer has keeps its page: it says why.
   const current = kinds?.find((k) => k.id === kind) ?? catalog.removed.get(kind)
@@ -201,6 +205,8 @@ export function Workspace({ client, hub, target }: { client: Client; hub: ViewHu
           if (!live) return
           const ui = parseState(st, fallback)
           const nav = parseOpen(st)
+          const persisted = parseMemo(st.pageMemo)
+          if (persisted) seedPersisted(tkey, persisted)
           setUI(ui)
           setNavOpen(nav)
           rememberPage(tkey, { ui, navOpen: nav })

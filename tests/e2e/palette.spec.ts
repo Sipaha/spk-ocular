@@ -1,4 +1,5 @@
-import { expect, test, type Page } from '@playwright/test'
+import { expect, type Page } from '@playwright/test'
+import { test } from './fixtures'
 
 // The Ctrl+K palette against the synthetic provider: views by alias, rows of
 // the current table, recent objects (persisted in SQLite), a context switch.

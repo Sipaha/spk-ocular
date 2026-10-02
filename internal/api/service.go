@@ -281,6 +281,16 @@ func (s *Service) SetTargetState(ctx context.Context, providerID, target, key, v
 	return nil
 }
 
+// ResetTargetStateKey removes one per-target UI state key across all
+// targets; the e2e test API uses it to give every spec a clean page
+// snapshot (P19).
+func (s *Service) ResetTargetStateKey(ctx context.Context, key string) error {
+	if err := s.store.DeleteTargetStateKey(ctx, key); err != nil {
+		return coded(CodeInternal, err)
+	}
+	return nil
+}
+
 // Stats is a snapshot for leak checks and measurements (test API only).
 func (s *Service) Stats() map[string]any {
 	var ms runtime.MemStats

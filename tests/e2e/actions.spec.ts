@@ -1,4 +1,5 @@
-import { expect, test, type Locator, type Page } from '@playwright/test'
+import { expect, type Locator, type Page } from '@playwright/test'
+import { test } from './fixtures'
 import { activePanel, expectScreen, reconfigure, token } from './synth'
 
 // Actions on the synthetic Workloads (web: 2 replicas; db: 1 and an

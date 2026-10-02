@@ -1,4 +1,5 @@
-import { expect, test, type Page } from '@playwright/test'
+import { expect, type Page } from '@playwright/test'
+import { test } from './fixtures'
 
 async function token(page: Page) {
   return (await page.locator('meta[name="spk-ocular-api-token"]').getAttribute('content'))!

@@ -1,4 +1,5 @@
-import { expect, test, type Page } from '@playwright/test'
+import { expect, type Page } from '@playwright/test'
+import { test } from './fixtures'
 import { EXTRA, ONE, TWO, env, kubeconfig, writeAtomic } from './fixtures'
 
 const e = env(process.env.E2E_ROOT!)

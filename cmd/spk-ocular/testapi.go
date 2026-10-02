@@ -93,6 +93,17 @@ func testRoutes(c *appCore) http.Handler {
 		debug.FreeOSMemory()
 		w.WriteHeader(http.StatusNoContent)
 	})
+	// Give every spec a clean page snapshot (P19): the shared e2e instance
+	// keeps target_state, and without this a previous spec's restored page
+	// (filter, sort, open details) would leak into the next one. The key
+	// names the web client's pageMemoPersist.
+	mux.HandleFunc("POST /api/_test/ui-state/reset", func(w http.ResponseWriter, r *http.Request) {
+		if err := c.Service.ResetTargetStateKey(r.Context(), "pageMemo"); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
+	})
 	return mux
 }
 

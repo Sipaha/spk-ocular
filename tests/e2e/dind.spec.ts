@@ -1,4 +1,5 @@
-import { expect, test, type Page } from '@playwright/test'
+import { expect, type Page } from '@playwright/test'
+import { test } from './fixtures'
 import { execFileSync } from 'node:child_process'
 import { pickOption, pickScope, selects } from './fixtures'
 import { expectScreen, stats } from './synth'

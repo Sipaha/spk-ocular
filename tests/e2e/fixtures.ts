@@ -1,7 +1,28 @@
-import { expect, type Locator, type Page } from '@playwright/test'
+import { expect, test as base, type Locator, type Page } from '@playwright/test'
 import { createHash } from 'node:crypto'
 import { mkdirSync, renameSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
+
+/**
+ * The e2e suites share one app instance and its data dir; since P19 the
+ * page snapshot (filter/sort/open details) persists there. Every spec
+ * starts clean: the app's test API wipes the persisted snapshot (all e2e
+ * configs run the app with --test-api). Specs that manage the app's
+ * lifecycle themselves (the restart spec) import `test` from
+ * @playwright/test instead.
+ */
+export const test = base.extend<{ cleanPageMemo: void }>({
+  cleanPageMemo: [
+    async ({ page }, use) => {
+      const html = await (await page.request.get('/')).text()
+      const token = html.match(/spk-ocular-api-token" content="([^"]+)"/)?.[1]
+      const res = await page.request.post('/api/_test/ui-state/reset', { headers: { Authorization: `Bearer ${token}` } })
+      expect(res.ok()).toBeTruthy()
+      await use()
+    },
+    { auto: true },
+  ],
+})
 
 /** Minimal kubeconfig; names are quoted (YAML 1.1: bare y/n/on/off are bools). */
 export function kubeconfig(current: string, ...names: string[]): string {

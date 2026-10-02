@@ -1,4 +1,5 @@
-import { expect, test, type Page } from '@playwright/test'
+import { expect, type Page } from '@playwright/test'
+import { test } from './fixtures'
 import { token } from './synth'
 
 // The generic UI takes everything from the provider's metadata (P6 Task 1):

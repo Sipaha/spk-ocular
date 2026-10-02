@@ -1,4 +1,5 @@
-import { expect, test } from '@playwright/test'
+import { expect } from '@playwright/test'
+import { test } from './fixtures'
 
 // The keyboard against the synthetic provider: areas (F6), views by arrows,
 // the help (?), a table page, and the palette from the bottom panel.

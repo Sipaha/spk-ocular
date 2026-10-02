@@ -1,4 +1,5 @@
-import { expect, test, type Page } from '@playwright/test'
+import { expect, type Page } from '@playwright/test'
+import { test } from './fixtures'
 import { createServer, type Server } from 'node:net'
 import { expectScreen, reconfigure, selectObject, since, stats } from './synth'
 import { selects } from './fixtures'

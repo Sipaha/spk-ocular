@@ -1,4 +1,4 @@
-import { act, render, screen, waitFor, within } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { App } from '../App'
@@ -353,5 +353,73 @@ describe('switching targets (P18)', () => {
     f.client.listKinds = vi.fn(async () => kindsView([podsKind])) // the CRD went meanwhile
     await userEvent.click(screen.getByRole('option', { name: /prod/ }))
     expect(await screen.findByRole('heading', { name: 'Pods' })).toBeInTheDocument()
+  })
+})
+
+describe('page snapshot across restarts (P19)', () => {
+  const nameHead = (grid: HTMLElement) => within(grid).getByRole('columnheader', { name: /^Name[^a-z]*$/ })
+  const rowOf = (grid: HTMLElement, name: string) => within(grid).getByText(name).closest('[role="row"]') as HTMLElement
+
+  it('restores the page — filter, sort, cursor, details and their tab — from the persisted memo', async () => {
+    const f = fakeClient([k8s('prod')])
+    f.state.rows = [podRow('api-1', 'web'), podRow('api-2', 'web'), podRow('db-0', 'data')]
+    f.client.getTargetState = vi.fn(async () => ({
+      kind: '"pods"',
+      scope: '{"mode":"all"}',
+      pageMemo: JSON.stringify({
+        v: 1,
+        sorts: { pods: { col: 'name', desc: true } },
+        page: { key: 'pods/{"mode":"all"}', filter: 'api', selected: 'uid-web-api-2', open: { provider: 'kubernetes', target: 'prod', kind: 'pods', name: 'api-2', uid: 'uid-web-api-2' }, tab: 'yaml' },
+      }),
+    }))
+    const grid = await openProd(f)
+    await within(grid).findByText('api-1')
+    expect(screen.getByRole('textbox', { name: 'Filter rows' })).toHaveValue('api')
+    expect(within(grid).queryByText('db-0')).toBeNull()
+    expect(nameHead(grid)).toHaveAttribute('aria-sort', 'descending')
+    expect(rowOf(grid, 'api-2')).toHaveAttribute('aria-selected', 'true')
+    const drawer = await screen.findByRole('dialog', { name: 'pods api-2' })
+    expect(within(drawer).getByRole('tab', { name: 'YAML' })).toHaveAttribute('aria-selected', 'true')
+  })
+
+  it('persists the page memo debounced; marks are never in it', async () => {
+    const f = fakeClient([k8s('prod')])
+    f.state.rows = [podRow('api-1', 'web'), podRow('db-0', 'data')]
+    const grid = await openProd(f)
+    await within(grid).findByText('db-0')
+    await userEvent.click(within(rowOf(grid, 'api-1')).getByRole('checkbox'))
+    await userEvent.keyboard('/')
+    await userEvent.keyboard('db')
+    const written = vi.mocked(f.client.setTargetState)
+    await waitFor(
+      () => {
+        const call = written.mock.calls.find((c) => c[2] === 'pageMemo')
+        expect(call).toBeDefined()
+        expect(call![3]).toContain('"filter":"db"')
+      },
+      { timeout: 4000 },
+    )
+    const json = written.mock.calls.find((c) => c[2] === 'pageMemo')![3]
+    expect(json).not.toContain('marked')
+    const memo = JSON.parse(json)
+    expect(memo.v).toBe(1)
+    expect(Object.keys(memo).sort()).toEqual(['page', 'sorts', 'v'])
+  })
+
+  it('a page past the server cap stays in memory but is not persisted', async () => {
+    const f = fakeClient([k8s('prod')])
+    f.state.rows = [podRow('api-1', 'web')]
+    await openProd(f)
+    const grid = await screen.findByRole('grid', { name: 'resources' })
+    await within(grid).findByText('api-1')
+    await userEvent.keyboard('/')
+    fireEvent.change(screen.getByRole('textbox', { name: 'Filter rows' }), { target: { value: 'x'.repeat(5000) } })
+    expect(screen.getByRole('textbox', { name: 'Filter rows' })).toHaveValue('x'.repeat(5000))
+    await new Promise((r) => setTimeout(r, 1600))
+    // the mount wrote the small initial memo once; the over-cap filter never leaves
+    const written = vi.mocked(f.client.setTargetState)
+    const writes = written.mock.calls.filter((c) => c[2] === 'pageMemo')
+    expect(writes.length).toBeGreaterThan(0)
+    expect(writes.every((w) => ((JSON.parse(w[3]).page?.filter ?? '') as string).length < 100)).toBe(true)
   })
 })

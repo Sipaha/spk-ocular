@@ -77,3 +77,20 @@ func TestTargetStateLists(t *testing.T) {
 	m, _ = s.TargetState(ctx, "k", "zzz")
 	assert.Empty(t, m)
 }
+
+func TestDeleteTargetStateKeyRemovesOneKeyAcrossTargets(t *testing.T) {
+	ctx := context.Background()
+	s := open(t, filepath.Join(t.TempDir(), "db"))
+	require.NoError(t, s.SetTargetState(ctx, "k", "a", "pageMemo", `{"v":1}`))
+	require.NoError(t, s.SetTargetState(ctx, "k", "b", "pageMemo", `{"v":1}`))
+	require.NoError(t, s.SetTargetState(ctx, "k", "a", "kind", `"pods"`))
+
+	require.NoError(t, s.DeleteTargetStateKey(ctx, "pageMemo"))
+
+	m, err := s.TargetState(ctx, "k", "a")
+	require.NoError(t, err)
+	assert.Equal(t, map[string]string{"kind": `"pods"`}, m, "other keys survive")
+	m, _ = s.TargetState(ctx, "k", "b")
+	assert.Empty(t, m)
+	require.NoError(t, s.DeleteTargetStateKey(ctx, "pageMemo"), "nothing to remove is not an error")
+}

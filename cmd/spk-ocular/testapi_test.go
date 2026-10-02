@@ -96,6 +96,28 @@ func TestSyntheticActionsThroughTheAPI(t *testing.T) {
 	assert.Equal(t, http.StatusNotFound, code)
 }
 
+// The ui-state reset gives the next e2e spec a clean page snapshot (P19):
+// the shared e2e instance keeps target_state, and without the reset a
+// previous spec's restored page (filter, sort, open details) would leak
+// into the next one. Only the page memo key goes.
+func TestUIStateResetRoute(t *testing.T) {
+	post := synthServer(t)
+	set := func(key, value string) {
+		code, body := post("/api/SetTargetState", map[string]any{"provider": synthetic.ID, "target": synthetic.Target, "key": key, "value": value})
+		require.Equal(t, http.StatusOK, code, string(body))
+	}
+	set("pageMemo", `{"v":1}`)
+	set("kind", `"services"`)
+
+	code, _ := post("/api/_test/ui-state/reset", nil)
+	require.Equal(t, http.StatusNoContent, code)
+
+	code, body := post("/api/GetTargetState", map[string]any{"provider": synthetic.ID, "target": synthetic.Target})
+	require.Equal(t, http.StatusOK, code)
+	assert.NotContains(t, string(body), "pageMemo")
+	assert.Contains(t, string(body), `"kind"`)
+}
+
 // The desktop's test routes: loopback, a token, where to find both in the
 // data directory (owner-only), gone when stopped.
 func TestDesktopTestAPI(t *testing.T) {

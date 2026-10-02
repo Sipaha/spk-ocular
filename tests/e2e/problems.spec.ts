@@ -1,4 +1,5 @@
-import { expect, test } from '@playwright/test'
+import { expect } from '@playwright/test'
+import { test } from './fixtures'
 import { token } from './synth'
 
 // The synthetic Problems view: rows point at Services and Workloads, one is

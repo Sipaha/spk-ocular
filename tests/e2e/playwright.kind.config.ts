@@ -29,7 +29,9 @@ export default defineConfig({
   expect: { timeout: 20_000 },
   use: { baseURL: `http://127.0.0.1:${port}`, locale: 'en-US', screenshot: 'only-on-failure', viewport: { width: 1500, height: 850 } },
   webServer: {
-    command: `${bin} --browser --port ${port}`,
+    // --test-api: the e2e fixture wipes the persisted page snapshot between
+    // specs (P19), so no spec inherits another's filter/sort/open details.
+    command: `${bin} --browser --port ${port} --test-api`,
     url: `http://127.0.0.1:${port}/`,
     env: {
       SPK_OCULAR_HOME: join(root, 'data'),
