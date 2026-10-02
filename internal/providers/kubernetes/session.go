@@ -300,6 +300,8 @@ func (s *session) Watch(q provider.Query, sink provider.Sink) (func(), error) {
 		return nil, &provider.Error{Class: provider.ClassUnsupported, Message: fmt.Sprintf("unknown kind %q", q.Kind)}
 	case !q.Scope.Valid():
 		return nil, &provider.Error{Class: provider.ClassInternal, Message: "invalid scope selector"}
+	case q.Scope.Mode == core.ScopeSome && def.desc.Scoped:
+		return provider.WatchScopes(q, sink, s.Watch)
 	case def == problemsKind:
 		return s.watchProblems(q, sink)
 	case def.discovered:
@@ -320,6 +322,11 @@ func (s *session) watchDef(def *kindDef, q provider.Query, selector string, sink
 	}
 	if !q.Scope.Valid() {
 		return nil, &provider.Error{Class: provider.ClassInternal, Message: "invalid scope selector"}
+	}
+	// A subject may only narrow the selected scopes, never replace them.
+	if def.namespaced && q.Subject != nil && q.Scope.Mode == core.ScopeOne && q.Scope.Name != q.Subject.Scope {
+		sink.Apply(provider.Delta{Status: &provider.ViewStatus{State: provider.StatusReady}})
+		return func() {}, nil
 	}
 	key := cacheKey{gvr: def.gvr, selector: selector, sch: def.schema}
 	if def.namespaced && q.Scope.Mode == core.ScopeOne {

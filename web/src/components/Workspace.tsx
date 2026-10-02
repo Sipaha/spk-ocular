@@ -4,9 +4,11 @@ import type { Client } from '../api/client'
 import type { ActionDescriptor, KindDescriptor, KindsView, MetricsView, Ref, Row, ScopeSel, ScopesView, SourceCoverage, Target } from '../api/types'
 import { ApiError } from '../api/client'
 import { actionLabel, classLabel, t } from '../i18n'
-import { showNotice, targetKey } from '../store'
+import { showNotice, targetKey, useStore } from '../store'
 import { memoOf, pageMemoKey, remember as rememberPage, rememberSort, seedPersisted } from './pageMemo'
 import { parseMemo, useMemoPersist } from './pageMemoPersist'
+import { persistNavigation, persistTargetEntries } from './navigationPersist'
+import { columnWidthsKey, parseColumnWidths } from './columnWidths'
 import { useScopeWords } from '../scopeNames'
 import { refTitle } from '../refs'
 import { ActionDialog, type ActionRequest } from '../actions/ActionDialog'
@@ -14,20 +16,19 @@ import { Menu, type MenuItem } from '../actions/Menu'
 import { BulkActionDialog, type BulkItem, type BulkRequest } from '../actions/BulkActionDialog'
 import { bulkActions } from '../actions/bulk'
 import { ScopeSelect } from './ScopeSelect'
+import { createSelectMemory, type SelectMemory } from './Select'
+import { parseScope, scopeSet, selectedScopes } from '../scopes'
 import { metricsState, useMetrics } from '../views/useMetrics'
 import { useView } from '../views/useView'
 import { useKinds } from '../views/useKinds'
 import type { ViewHub } from '../views/viewSync'
 import { ResourceDrawer } from './ResourceDrawer'
 import { matchesRow, ResourceTable } from './ResourceTable'
-import { TargetDetails } from './TargetDetails'
-import { SearchIcon, WarningIcon } from './icons'
+import { SearchIcon, StarIcon, WarningIcon } from './icons'
 import { dock } from '../dock/store'
 import { editsHeld, mayLeave, useEditHolder } from '../edit/guard'
 import { TerminalDialog } from '../term/TerminalDialog'
 import { lend, type PaletteHost } from '../palette/store'
-
-const OVERVIEW = '__overview'
 
 /** A request from the palette to the page: applied once, by seq. */
 interface PageReq<T> {
@@ -65,18 +66,30 @@ function parseState(st: Record<string, string>, fallback: UIState): UIState {
   const kind = parse(st.kind)
   const scope = parse(st.scope)
   return {
-    kind: typeof kind === 'string' ? kind : fallback.kind,
-    scope: scope && typeof scope.mode === 'string' ? (scope as ScopeSel) : fallback.scope,
+    kind: typeof kind === 'string' && kind !== '__overview' ? kind : fallback.kind,
+    scope: parseScope(scope) ?? fallback.scope,
   }
 }
 
 /** The selected target: kind navigation + the current table. */
-export function Workspace({ client, hub, target }: { client: Client; hub: ViewHub; target: Target }) {
+export function Workspace({ client, hub, target, onFavorite, onMoveFavorite }: {
+  client: Client; hub: ViewHub; target: Target
+  onFavorite: (provider: string, kind: string, favorite: boolean) => void
+  onMoveFavorite: (provider: string, kind: string, before: string) => void
+}) {
   const navigationWidth = usePanelWidths((s) => s.navigation)
+  const favoriteKinds = useStore((s) => s.favoriteKinds)
+  const favoritesReady = useStore((s) => s.favoritesReady)
+  const resourceFilter = useStore((s) => s.resourceFilter)
+  const [dragFavorite, setDragFavorite] = useState<string | null>(null)
+  const [favoriteDrop, setFavoriteDrop] = useState<{ id: string; edge: 'before' | 'after' } | null>(null)
+  const favorites = useMemo(() => new Set(favoriteKinds.filter((f) => f.provider === target.provider).map((f) => f.kind)), [favoriteKinds, target.provider])
+  const toggleFavorite = (id: string) => onFavorite(target.provider, id, !favorites.has(id))
   const catalog = useKinds(client, hub, target.provider, target.id)
   const kinds = catalog.view?.kinds ?? null
   const kindsError = catalog.error
   const [scopes, setScopes] = useState<ScopesView | null>(null)
+  const [scopeMenu] = useState(createSelectMemory)
   // The target as it was left in this run (P18): shown at once, before
   // target_state answers.
   const tkey = targetKey({ provider: target.provider, id: target.id })
@@ -97,7 +110,7 @@ export function Workspace({ client, hub, target }: { client: Client; hub: ViewHu
   const [checkLeft, setCheckLeft] = useState(() => !!memoOf(tkey).ui)
   if (checkLeft && ui && kinds && catalog.view?.state !== 'discovering') {
     setCheckLeft(false)
-    if (ui.kind && ui.kind !== OVERVIEW && !kinds.some((k) => k.id === ui.kind)) {
+    if (ui.kind && !kinds.some((k) => k.id === ui.kind)) {
       const next = { ...ui, kind: '' }
       rememberPage(tkey, { ui: next })
       setUI(next)
@@ -108,16 +121,25 @@ export function Workspace({ client, hub, target }: { client: Client; hub: ViewHu
   const renew = useCallback((k: string) => setRenewed((old) => new Map(old).set(k, (old.get(k) ?? 0) + 1)), [])
   // No remembered kind: the provider's default one (else the first in the navigation).
   const defaultKind = kinds?.find((k) => k.default && !k.hidden)?.id ?? kinds?.find((k) => !k.hidden)?.id ?? ''
-  const kind = ui?.kind || defaultKind
+  // Old installs may have left the removed Overview page selected.
+  const kind = ui?.kind && ui.kind !== '__overview' ? ui.kind : defaultKind
   const scope: ScopeSel = ui?.scope ?? { mode: 'all' }
   // P19: the page snapshot (filter/sort/details) is written back to
   // target_state debounced, and survives an app restart.
   useMemoPersist(client, target.provider, target.id, tkey)
-  const groups = useMemo(() => navGroups(kinds ?? []), [kinds])
+  const matchingKinds = useMemo(() => {
+    const q = resourceFilter.trim().toLowerCase()
+    return (kinds ?? []).filter((k) => !k.hidden && (!q || [k.id, k.title, k.singular, k.group, k.subgroup, ...(k.aliases ?? [])].some((name) => name?.toLowerCase().includes(q))))
+  }, [kinds, resourceFilter])
+  // A kind lives in exactly one place: Favorites or its original group.
+  const groups = useMemo(() => navGroups(matchingKinds.filter((k) => !favorites.has(k.id))), [matchingKinds, favorites])
+  const visibleFavorites = useMemo(() => favoriteKinds.filter((f) => f.provider === target.provider)
+    .map((f) => matchingKinds.find((k) => k.id === f.kind)).filter((k): k is KindDescriptor => !!k), [favoriteKinds, target.provider, matchingKinds])
+  const clearFavoriteDrag = () => { setDragFavorite(null); setFavoriteDrop(null) }
   // A kind a later listing no longer has keeps its page: it says why.
   const current = kinds?.find((k) => k.id === kind) ?? catalog.removed.get(kind)
   // The remembered kind may be a discovered one not listed yet.
-  const waiting = !current && kind !== OVERVIEW && !!kind && catalog.view?.state === 'discovering'
+  const waiting = !current && !!kind && catalog.view?.state === 'discovering'
   // A new kind or scope is a new page: selection, filter and an open drawer
   // belong to the table they were made in. A renewed one (a kind served
   // again after removed, a view that gave up; below) is a new page too.
@@ -142,8 +164,7 @@ export function Workspace({ client, hub, target }: { client: Client; hub: ViewHu
     setOpenReq(null)
     setUI(next)
     rememberPage(tkey, { ui: next })
-    void client.setTargetState(target.provider, target.id, 'kind', JSON.stringify(next.kind)).catch(() => {})
-    void client.setTargetState(target.provider, target.id, 'scope', JSON.stringify(next.scope)).catch(() => {})
+    void persistNavigation(client, target.provider, target.id, next).catch(() => showNotice(t('scope.notSaved')))
   }
   // Asked for again while its view gave up: a new page, if the kind is served.
   const again = (k: string) => {
@@ -170,7 +191,7 @@ export function Workspace({ client, hub, target }: { client: Client; hub: ViewHu
   const [termDialog, setTermDialog] = useState<Ref | null>(null)
   const openTerminal = useCallback(
     (ref: Ref, dialog: boolean) => (dialog ? setTermDialog(ref) : dock.openTerminal(targetRef, target.title, { ref })),
-    [targetRef, target.title],
+    [targetRef, target.title, setTermDialog],
   )
   const hasLogs = useCallback((kindId: string) => !!kinds?.find((k) => k.id === kindId)?.logs, [kinds])
   const hasExec = useCallback((kindId: string) => !!kinds?.find((k) => k.id === kindId)?.exec, [kinds])
@@ -185,14 +206,14 @@ export function Workspace({ client, hub, target }: { client: Client; hub: ViewHu
   const openAction = useCallback(
     (ref: Ref, action: ActionDescriptor) =>
       setActionReq({ ref, action, kindTitle: kindTitleOf(ref.kind), seq: ++actionSeq.current }),
-    [kindTitleOf],
+    [kindTitleOf, setActionReq],
   )
   // One action on several marked objects; onDone unmarks the rows done.
   const [bulkReq, setBulkReq] = useState<(BulkRequest & { seq: number; onDone: (ids: string[]) => void }) | null>(null)
   const openBulk = useCallback(
     (items: BulkItem[], action: ActionDescriptor, onDone: (ids: string[]) => void) =>
       setBulkReq({ items, action, kindTitleOf, onDone, seq: ++actionSeq.current }),
-    [kindTitleOf],
+    [kindTitleOf, setBulkReq],
   )
 
   useEffect(() => {
@@ -210,7 +231,7 @@ export function Workspace({ client, hub, target }: { client: Client; hub: ViewHu
           if (persisted) seedPersisted(tkey, persisted)
           setUI(ui)
           setNavOpen(nav)
-          rememberPage(tkey, { ui, navOpen: nav })
+          rememberPage(tkey, { ui, navOpen: nav, columnWidths: parseColumnWidths(st) })
         },
         () => live && setUI(fallback),
       )
@@ -262,8 +283,8 @@ export function Workspace({ client, hub, target }: { client: Client; hub: ViewHu
       setScope,
       openObject: (ref) =>
         mayLeave(() => {
-          // The overview has no table to open details over: the object's kind's table.
-          if (kind === OVERVIEW || !current) {
+          // With no table yet, open the object's kind to host its details.
+          if (!current) {
             const k = kinds?.some((d) => d.id === ref.kind) ? ref.kind : (kinds?.find((d) => !d.hidden)?.id ?? kind)
             again(k)
             remember({ kind: k, scope })
@@ -290,12 +311,65 @@ export function Workspace({ client, hub, target }: { client: Client; hub: ViewHu
   return (
     <div className="flex min-h-0 flex-1">
       <div className="relative shrink-0" style={{ width: navigationWidth, maxWidth: '25vw' }}>
-      <nav aria-label="resources" data-area="nav" onKeyDown={onNavKey} className="h-full overflow-y-auto border-r border-line bg-sidebar/60 px-2 py-3">
-        <NavItem active={kind === OVERVIEW} onClick={() => setKind(OVERVIEW)} label={t('nav.overview')} />
+      <nav aria-label="resources" data-area="nav" onKeyDown={onNavKey} className="resource-nav">
+        <label className="resource-nav-filter field-shell">
+          <SearchIcon className="h-3.5 w-3.5 shrink-0 text-fg-subtle" />
+          <input value={resourceFilter} onChange={(e) => useStore.setState({ resourceFilter: e.target.value })}
+            data-resource-filter data-area-focus={resourceFilter ? '' : undefined}
+            aria-label={t('nav.filter')} placeholder={t('nav.filter')} spellCheck={false}
+            className="min-w-0 w-full bg-transparent text-fg outline-none placeholder:text-fg-subtle"
+            onKeyDown={(e) => {
+              if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); useStore.setState({ resourceFilter: '' }) }
+              else if (e.key === 'ArrowDown' || e.key === 'Enter') {
+                e.preventDefault(); e.stopPropagation()
+                const item = e.currentTarget.closest('nav')?.querySelector<HTMLButtonElement>('[data-nav-item]')
+                item?.focus()
+                if (e.key === 'Enter' && matchingKinds.length === 1) item?.click()
+              }
+            }} />
+        </label>
+        <div className="resource-nav-list min-h-0 flex-1 overflow-y-auto pb-3" data-resource-nav-list>
+        <section className="mt-3" aria-label={t('nav.favorites')}>
+          <h3 className="nav-group-heading">{t('nav.favorites')}</h3>
+          {visibleFavorites.map((k, i) => (
+            <NavItem key={k.id} active={kind === k.id} onClick={() => setKind(k.id)} label={k.title} hint={k.subgroup}
+              favorite onFavorite={() => toggleFavorite(k.id)} favoriteDisabled={!favoritesReady}
+              moveUp={i > 0 ? () => onMoveFavorite(target.provider, k.id, visibleFavorites[i - 1].id) : undefined}
+              moveDown={i < visibleFavorites.length - 1 ? () => onMoveFavorite(target.provider, k.id, visibleFavorites[i + 2]?.id ?? '') : undefined}
+              drag={{ active: dragFavorite === k.id, edge: favoriteDrop?.id === k.id ? favoriteDrop.edge : undefined,
+                onStart: (e) => {
+                  if ((e.target as Element).closest('.nav-favorite')) { e.preventDefault(); return }
+                  e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', k.id)
+                  setDragFavorite(k.id)
+                },
+                onEnd: clearFavoriteDrag,
+                onOver: (e) => {
+                  if (!dragFavorite || dragFavorite === k.id) return
+                  e.preventDefault(); e.dataTransfer.dropEffect = 'move'
+                  const r = e.currentTarget.getBoundingClientRect()
+                  const edge = e.clientY < r.top + r.height / 2 ? 'before' : 'after'
+                  setFavoriteDrop((old) => old?.id === k.id && old.edge === edge ? old : { id: k.id, edge })
+                },
+                onDrop: (e) => {
+                  if (!dragFavorite) return
+                  e.preventDefault(); e.stopPropagation()
+                  if (dragFavorite !== k.id) {
+                    const r = e.currentTarget.getBoundingClientRect()
+                    const rest = visibleFavorites.filter((f) => f.id !== dragFavorite)
+                    const before = e.clientY < r.top + r.height / 2 ? k.id : rest[rest.findIndex((f) => f.id === k.id) + 1]?.id ?? ''
+                    onMoveFavorite(target.provider, dragFavorite, before)
+                  }
+                  clearFavoriteDrag()
+                },
+              }} />
+          ))}
+          {!resourceFilter.trim() && !matchingKinds.some((k) => favorites.has(k.id)) && <p className="px-2 text-[12px] text-fg-subtle">{t(favoritesReady ? 'nav.favoritesHint' : 'nav.favoritesUnavailable')}</p>}
+        </section>
+        {resourceFilter.trim() && !matchingKinds.length && <p role="status" className="px-2 py-2 text-fg-subtle">{t('nav.noMatches')}</p>}
         {groups.map((g) => {
           // A group of subgroups (API groups: the rare and the custom) folds
           // whole, folded by default; folded, it still shows the kind open.
-          const open = !g.subgrouped || navOpen.includes(groupKey(g.group))
+          const open = !!resourceFilter.trim() || !g.subgrouped || navOpen.includes(groupKey(g.group))
           const activeIn = g.items.flatMap((it) => ('kind' in it ? [it.kind] : it.kinds)).find((k) => k.id === kind)
           return (
             <section key={g.group} className="mt-3" aria-label={g.group}>
@@ -311,7 +385,7 @@ export function Workspace({ client, hub, target }: { client: Client; hub: ViewHu
                       toggleSub(groupKey(g.group), !open)
                     }
                   }}
-                  className="flex w-full items-center gap-1 rounded-md px-2 pb-1 text-left text-[12px] font-semibold uppercase tracking-wider text-fg-subtle hover:text-fg"
+                  className="nav-group-heading w-full items-center gap-1 rounded-md text-left hover:text-fg"
                 >
                   <span aria-hidden className={['inline-block w-2.5 shrink-0 text-[9px] transition-transform', open ? 'rotate-90' : ''].join(' ')}>
                     ▶
@@ -322,24 +396,29 @@ export function Workspace({ client, hub, target }: { client: Client; hub: ViewHu
                   </span>
                 </button>
               ) : (
-                <h3 className="flex px-2 pb-1 text-[12px] font-semibold uppercase tracking-wider text-fg-subtle">
+                <h3 className="nav-group-heading">
                   <span className="min-w-0 flex-1 truncate">{g.group}</span>
                 </h3>
               )}
-              {!open && activeIn && <NavItem active onClick={() => setKind(activeIn.id)} label={activeIn.title} hint={activeIn.subgroup} />}
+              {!open && activeIn && !favorites.has(activeIn.id) && <NavItem active onClick={() => setKind(activeIn.id)} label={activeIn.title} hint={activeIn.subgroup}
+                favorite={false} onFavorite={() => toggleFavorite(activeIn.id)} favoriteDisabled={!favoritesReady} />}
               {open &&
                 g.items.map((it) =>
                   'kind' in it ? (
-                    <NavItem key={it.kind.id} active={kind === it.kind.id} onClick={() => setKind(it.kind.id)} label={it.kind.title} hint={it.kind.subgroup} />
+                    <NavItem key={it.kind.id} active={kind === it.kind.id && !favorites.has(it.kind.id)} onClick={() => setKind(it.kind.id)} label={it.kind.title} hint={it.kind.subgroup}
+                      favorite={favorites.has(it.kind.id)} onFavorite={() => toggleFavorite(it.kind.id)} favoriteDisabled={!favoritesReady} />
                   ) : (
                     <NavSubgroup
                       key={it.sub}
                       label={it.sub}
                       kinds={it.kinds}
-                      open={navOpen.includes(subKey(g.group, it.sub))}
+                      open={!!resourceFilter.trim() || navOpen.includes(subKey(g.group, it.sub))}
                       onToggle={(o) => toggleSub(subKey(g.group, it.sub), o)}
                       active={kind}
                       onPick={setKind}
+                      favorites={favorites}
+                      onFavorite={toggleFavorite}
+                      favoritesReady={favoritesReady}
                     />
                   ),
                 )}
@@ -357,16 +436,17 @@ export function Workspace({ client, hub, target }: { client: Client; hub: ViewHu
         >
           {t('nav.refresh')} <span className="opacity-70">F5</span>
         </button>
+        </div>
       </nav>
       <PanelResize label={t('panels.navigation')} value={navigationWidth} min={140} max={() => Math.min(360, window.innerWidth * 0.25)} onDone={(navigation) => usePanelWidths.setState({ navigation })} />
       </div>
-      <main className="flex min-w-0 flex-1 flex-col">
+      <main className="flex min-w-0 flex-1 flex-col overflow-hidden">
         <div className="flex min-h-0 flex-1 flex-col">
         {!ui || waiting || (!kinds && !kindsError) ? (
           <LoadingState />
-        ) : (kind === OVERVIEW && !keep) || !page ? (
-          <div className="min-h-0 flex-1 overflow-y-auto">
-            <TargetDetails />
+        ) : !page ? (
+          <div role={kindsError ? 'alert' : 'status'} className="p-4 text-fg-muted">
+            {kindsError || t('nav.noKinds')}
           </div>
         ) : (
           <ResourcePage
@@ -379,6 +459,7 @@ export function Workspace({ client, hub, target }: { client: Client; hub: ViewHu
             kind={page.kind}
             scope={page.scope}
             scopes={scopes}
+            scopeMenu={scopeMenu}
             onScope={setScope}
             hasLogs={hasLogs}
             onLogs={openLogs}
@@ -437,6 +518,7 @@ export function Workspace({ client, hub, target }: { client: Client; hub: ViewHu
 
 /** Views by arrows, Home and End (one tab stop: the current view); Enter opens. */
 function onNavKey(e: React.KeyboardEvent<HTMLElement>) {
+  if (e.target instanceof HTMLInputElement) return
   const items = [...e.currentTarget.querySelectorAll<HTMLElement>('[data-nav-item]')]
   const i = items.indexOf(document.activeElement as HTMLElement)
   const to = e.key === 'ArrowDown' ? i + 1 : e.key === 'ArrowUp' ? i - 1 : e.key === 'Home' ? 0 : e.key === 'End' ? items.length - 1 : null
@@ -488,25 +570,60 @@ export function navGroups(kinds: KindDescriptor[]): NavGroup[] {
   return out
 }
 
-function NavItem({ active, onClick, label, hint, nested }: { active: boolean; onClick: () => void; label: string; hint?: string; nested?: boolean }) {
+function NavItem({ active, onClick, label, hint, nested, favorite, onFavorite, favoriteDisabled, moveUp, moveDown, drag }: {
+  active: boolean; onClick: () => void; label: string; hint?: string; nested?: boolean
+  favorite?: boolean; onFavorite?: () => void; favoriteDisabled?: boolean
+  moveUp?: () => void; moveDown?: () => void
+  drag?: { active: boolean; edge?: 'before' | 'after'; onStart: (e: React.DragEvent<HTMLDivElement>) => void; onEnd: () => void; onOver: (e: React.DragEvent<HTMLDivElement>) => void; onDrop: (e: React.DragEvent<HTMLDivElement>) => void }
+}) {
+  const [menu, setMenu] = useState<{ x: number; y: number } | null>(null)
+  const favoriteLabel = t(favorite ? 'nav.favoriteRemove' : 'nav.favoriteAdd', { kind: label })
   // A view opened elsewhere (the palette, a remembered one) is shown in the navigation.
   const ref = useRef<HTMLButtonElement>(null)
   useEffect(() => {
     if (active) ref.current?.scrollIntoView({ block: 'nearest' })
   }, [active])
   return (
+    <div className="resource-nav-row group/nav relative" draggable={drag ? true : undefined}
+      data-favorite-dragging={drag?.active || undefined} data-favorite-drop={drag?.edge}
+      onDragStart={drag?.onStart} onDragEnd={drag?.onEnd} onDragOver={drag?.onOver} onDrop={drag?.onDrop}>
     <button
       ref={ref}
       onClick={onClick}
+      aria-keyshortcuts={onFavorite ? 'Shift+F10' : undefined}
+      onContextMenu={onFavorite && !favoriteDisabled ? (e) => {
+        e.preventDefault()
+        e.currentTarget.focus()
+        setMenu({ x: e.clientX, y: e.clientY })
+      } : undefined}
+      onKeyDown={onFavorite && !favoriteDisabled ? (e) => {
+        if ((e.shiftKey && e.key === 'F10') || e.key === 'ContextMenu') {
+          e.preventDefault(); e.stopPropagation()
+          const r = e.currentTarget.getBoundingClientRect()
+          setMenu({ x: r.left, y: r.bottom })
+        }
+      } : undefined}
       data-nav-item
       tabIndex={active ? 0 : -1}
       data-area-focus={active ? '' : undefined}
       aria-current={active ? 'page' : undefined}
       title={hint ? `${label} · ${hint}` : label}
-      className={['block w-full truncate rounded-md py-1 text-left', nested ? 'pr-2 pl-5' : 'px-2', active ? 'bg-active text-fg' : 'text-fg-muted hover:bg-hover hover:text-fg'].join(' ')}
+      className={['nav-item block w-full truncate rounded-md py-1 text-left', nested ? 'pr-2 pl-5' : 'px-2', active ? 'text-fg' : 'text-fg-muted hover:bg-hover hover:text-fg', onFavorite ? 'pr-8' : ''].join(' ')}
     >
       {label}
     </button>
+    {onFavorite && <button type="button" tabIndex={-1} aria-label={favoriteLabel} title={favoriteLabel} aria-pressed={!!favorite}
+      disabled={favoriteDisabled} onClick={onFavorite}
+      className={`nav-favorite absolute right-1 top-1/2 -translate-y-1/2 rounded p-1 hover:bg-hover disabled:opacity-30 ${favorite ? 'text-accent' : 'text-fg-subtle opacity-0 group-hover/nav:opacity-100 group-focus-within/nav:opacity-100'}`}>
+      <StarIcon className="h-3.5 w-3.5" filled={favorite} />
+    </button>}
+    {menu && onFavorite && <Menu label={t('nav.resourceMenu')} at={menu} onClose={() => setMenu(null)}
+      items={[
+        { id: 'favorite', label: favoriteLabel, onSelect: onFavorite },
+        ...(moveUp ? [{ id: 'up', label: t('nav.favoriteUp'), onSelect: moveUp }] : []),
+        ...(moveDown ? [{ id: 'down', label: t('nav.favoriteDown'), onSelect: moveDown }] : []),
+      ]} />}
+    </div>
   )
 }
 
@@ -519,8 +636,11 @@ function NavSubgroup(props: {
   onToggle: (open: boolean) => void
   active: string
   onPick: (kind: string) => void
+  favorites: ReadonlySet<string>
+  onFavorite: (kind: string) => void
+  favoritesReady: boolean
 }) {
-  const { label, kinds, open, onToggle, active, onPick } = props
+  const { label, kinds, open, onToggle, active, onPick, favorites, onFavorite, favoritesReady } = props
   const shown = open ? kinds : kinds.filter((k) => k.id === active)
   return (
     <div role="group" aria-label={label}>
@@ -545,7 +665,8 @@ function NavSubgroup(props: {
         <span className="shrink-0 text-[12px] text-fg-subtle">{kinds.length}</span>
       </button>
       {shown.map((k) => (
-        <NavItem key={k.id} nested active={active === k.id} onClick={() => onPick(k.id)} label={k.title} hint={label} />
+        <NavItem key={k.id} nested active={active === k.id && !favorites.has(k.id)} onClick={() => onPick(k.id)} label={k.title} hint={label}
+          favorite={favorites.has(k.id)} onFavorite={() => onFavorite(k.id)} favoriteDisabled={!favoritesReady} />
       ))}
     </div>
   )
@@ -578,6 +699,7 @@ function ResourcePage(props: {
   kind: KindDescriptor
   scope: ScopeSel
   scopes: ScopesView | null
+  scopeMenu: SelectMemory
   onScope: (s: ScopeSel) => void
   hasLogs: (kindId: string) => boolean
   onLogs: (ref: Ref) => void
@@ -596,7 +718,7 @@ function ResourcePage(props: {
   /** The target's key in pageMemo (P18): this page's part is restored once. */
   memoKey: string
 }) {
-  const { pageKey, onHalted, client, hub, target, kind, scope, scopes, onScope, hasLogs, onLogs, hasExec, onTerminal, hasForward, actionsOf, onAction, onBulk, eventsKindOf, editableOf, valuesOf, kindTitleOf, filterReq, openReq, memoKey: tkey } = props
+  const { pageKey, onHalted, client, hub, target, kind, scope, scopes, scopeMenu, onScope, hasLogs, onLogs, hasExec, onTerminal, hasForward, actionsOf, onAction, onBulk, eventsKindOf, editableOf, valuesOf, kindTitleOf, filterReq, openReq, memoKey: tkey } = props
   const scopeKey = JSON.stringify(scope)
   const query = useMemo(() => ({ kind: kind.id, scope: JSON.parse(scopeKey) as ScopeSel }), [kind.id, scopeKey])
   const view = useView(hub, target.provider, target.id, query)
@@ -617,6 +739,7 @@ function ResourcePage(props: {
     rememberPage(tkey, { page: { key: memoKey, filter, selected, open, tab: drawerTab } })
   }, [tkey, memoKey, filter, selected, open, drawerTab])
   const [leftSort] = useState(() => memoOf(tkey).sorts[kind.id])
+  const [leftWidths] = useState(() => memoOf(tkey).columnWidths?.[kind.id])
   // Another object's details drop the open editor's edits: asked first.
   const setOpen = (ref: Ref | null) => mayLeave(() => setOpenNow(ref))
   // A palette request applies once, also to a page already open.
@@ -702,9 +825,9 @@ function ResourcePage(props: {
 
   return (
     <>
-      <header className="flex shrink-0 items-center gap-3 border-b border-line px-4 py-2">
-        <h1 className="text-[16px] font-semibold">{kind.title}</h1>
-        <span className="text-xs text-fg-subtle" aria-label="count">
+      <header className="resource-toolbar">
+        <h1 className="resource-title">{kind.title}</h1>
+        <span className="resource-count" aria-label="count">
           {view.status.state === 'loading' && !view.rows.length ? '…' : view.rows.length}
         </span>
         {marked.size > 0 && (
@@ -728,12 +851,12 @@ function ResourcePage(props: {
         )}
         {barMenu && marked.size > 0 && <Menu items={markedMenu()} at={barMenu} label={t('bulk.menu')} onClose={() => setBarMenu(null)} />}
         {kind.scoped && (scopes?.kind && !scopes.error ? (
-          <LiveScopePicker hub={hub} target={target} scopeKind={scopes.kind} scope={scope} scopes={scopes} onScope={onScope} />
+          <LiveScopePicker hub={hub} target={target} scopeKind={scopes.kind} scope={scope} scopes={scopes} scopeMenu={scopeMenu} onScope={onScope} />
         ) : (
-          <ScopePicker scope={scope} scopes={scopes} onScope={onScope} />
+          <ScopePicker scope={scope} scopes={scopes} scopeMenu={scopeMenu} onScope={onScope} />
         ))}
         {view.resync && <ResyncButton client={client} viewId={view.viewId} />}
-        <label className="ml-auto flex w-64 items-center gap-2 rounded-md border border-line bg-app px-2 py-1 focus-within:border-accent">
+        <label className="resource-filter field-shell">
           <SearchIcon className="h-3.5 w-3.5 text-fg-subtle" />
           <input
             data-primary-filter
@@ -757,7 +880,7 @@ function ResourcePage(props: {
         </label>
       </header>
       <StatusBanner title={kind.title} state={view.status.state} cls={view.status.class} message={view.status.message} empty={view.rows.length === 0} coverage={view.status.coverage} />
-      {view.status.coverage && <CoverageNote coverage={view.status.coverage} notCovered={view.kind?.notCovered ?? kind.notCovered} />}
+      {view.status.coverage && <CoverageNote coverage={view.status.coverage} notCovered={view.kind?.notCovered ?? kind.notCovered} compact={scope.mode === 'some'} />}
       {metrics && <MetricsNote metrics={metrics} />}
       <div className="relative flex min-h-0 flex-1 flex-col">
         <div data-area="table" aria-busy={view.status.state === 'loading'} className="flex min-h-0 flex-1 flex-col">
@@ -792,6 +915,11 @@ function ResourcePage(props: {
           defaultSort={view.kind?.sort ?? kind.sort}
           initialSort={leftSort}
           onSort={(s) => rememberSort(tkey, kind.id, s)}
+          initialWidths={leftWidths}
+          onWidths={(widths) => {
+            rememberPage(tkey, { columnWidths: { ...memoOf(tkey).columnWidths, [kind.id]: widths } })
+            void persistTargetEntries(client, target.provider, target.id, { [columnWidthsKey(kind.id)]: JSON.stringify(widths) }).catch(() => showNotice(t('table.widthsNotSaved')))
+          }}
         />
         </div>
         {open && (
@@ -857,9 +985,10 @@ function LiveScopePicker(props: {
   scopeKind: string
   scope: ScopeSel
   scopes: ScopesView
+  scopeMenu: SelectMemory
   onScope: (s: ScopeSel) => void
 }) {
-  const { hub, target, scopeKind, scope, scopes, onScope } = props
+  const { hub, target, scopeKind, scope, scopes, scopeMenu, onScope } = props
   const query = useMemo(() => ({ kind: scopeKind, scope: { mode: 'none' as const } }), [scopeKind])
   const view = useView(hub, target.provider, target.id, query)
   const live = useMemo(
@@ -868,20 +997,20 @@ function LiveScopePicker(props: {
   )
   const liveNames = useMemo(() => (live === scopes ? null : live?.scopes.map((s) => s.name)) ?? null, [live, scopes])
   useEffect(() => (liveNames ? lend('liveScopes', liveNames) : undefined), [liveNames])
-  return <ScopePicker scope={scope} scopes={live} onScope={onScope} />
+  return <ScopePicker scope={scope} scopes={live} scopeMenu={scopeMenu} onScope={onScope} />
 }
 
-function ScopePicker({ scope, scopes, onScope }: { scope: ScopeSel; scopes: ScopesView | null; onScope: (s: ScopeSel) => void }) {
-  const [typed, setTyped] = useState(scope.mode === 'one' ? (scope.name ?? '') : '')
+function ScopePicker({ scope, scopes, onScope, scopeMenu }: { scope: ScopeSel; scopes: ScopesView | null; scopeMenu: SelectMemory; onScope: (s: ScopeSel) => void }) {
+  const [typed, setTyped] = useState(selectedScopes(scope).join(', '))
   const words = useScopeWords()
   if (scopes?.error) {
-    // Listing scopes is forbidden (or failed): the user can still type one.
+    // Listing scopes is forbidden (or failed): explicit names still work, separated by commas.
     return (
       <form
         className="flex items-center gap-1"
         onSubmit={(e) => {
           e.preventDefault()
-          onScope(typed.trim() ? { mode: 'one', name: typed.trim() } : { mode: 'all' })
+          onScope(typed.trim() ? scopeSet(typed.split(',').map((n) => n.trim()).filter(Boolean)) : { mode: 'all' })
         }}
       >
         <input
@@ -889,24 +1018,21 @@ function ScopePicker({ scope, scopes, onScope }: { scope: ScopeSel; scopes: Scop
           onChange={(e) => setTyped(e.target.value)}
           placeholder={t('scope.type', { scope: words.singular.toLowerCase() })}
           aria-label={words.singular}
-          title={t('scope.cannotList', { scopes: words.plural, error: scopes.error.detail || scopes.error.code })}
+          title={`${t('scope.cannotList', { scopes: words.plural, error: scopes.error.detail || scopes.error.code })}. ${t('scope.typeMany')}`}
+          aria-description={t('scope.typeMany')}
           className="w-44 rounded-md border border-line bg-app px-2 py-1 outline-none focus:border-accent"
         />
       </form>
     )
   }
-  const value = scope.mode === 'one' ? (scope.name ?? '') : ''
-  const names = (scopes?.scopes ?? []).map((s) => s.name)
-  if (value && !names.includes(value)) names.unshift(value)
-  const choose = (n: string) => {
-    onScope(n ? { mode: 'one', name: n } : { mode: 'all' })
-    // A new scope is a new page: the picker that had focus is gone, the
-    // keyboard goes on in the new table.
-    setTimeout(() => {
+  const names = [...new Set([...(scopes?.scopes ?? []).map((s) => s.name), ...selectedScopes(scope)])].sort()
+  const choose = (next: ScopeSel) => {
+    onScope(next)
+    if (!scopeMenu.read().open) setTimeout(() => {
       if (document.activeElement === document.body || !document.activeElement) document.querySelector<HTMLElement>('[data-table-scroll]')?.focus()
     })
   }
-  return <ScopeSelect value={value} names={names} label={words.singular} allLabel={words.all} onChange={choose} />
+  return <ScopeSelect value={scope} names={names} label={words.singular} allLabel={words.all} onChange={choose} memory={scopeMenu} />
 }
 
 function LoadingState({ title, compact = false }: { title?: string; compact?: boolean }) {
@@ -941,6 +1067,10 @@ function StatusBanner({ title, state, cls, message, empty, coverage }: { title: 
  * and — apart and more visible — the sources it could not observe now. */
 /** Why metric columns are empty, or that they cover only the first rows. */
 function MetricsNote({ metrics }: { metrics: MetricsView }) {
+  if (metrics.coverage?.length) return <p role="note" aria-label={t('metrics.label')} className="mx-4 my-1 text-xs text-warning"
+    title={metrics.coverage.map((c) => `${c.source}: ${c.message ?? c.class}`).join('\n')}>
+    {t('metrics.label')}: {t('coverage.notObserved')} — {metrics.coverage.map((c) => `${c.source} (${classLabel(c.class ?? 'unavailable')})`).join(', ')}
+  </p>
   if (metrics.status === 'ok' && !metrics.limit) return null
   const failed = metrics.status !== 'ok'
   return (
@@ -950,8 +1080,9 @@ function MetricsNote({ metrics }: { metrics: MetricsView }) {
   )
 }
 
-function CoverageNote({ coverage, notCovered }: { coverage: SourceCoverage[]; notCovered?: string[] }) {
+function CoverageNote({ coverage, notCovered, compact = false }: { coverage: SourceCoverage[]; notCovered?: string[]; compact?: boolean }) {
   const missing = coverage.filter((c) => c.state !== 'ready')
+  if (compact && !missing.length && !notCovered?.length) return null
   const why = (c: SourceCoverage) =>
     c.state === 'denied' ? classLabel(c.class ?? 'forbidden') : c.state === 'error' ? classLabel(c.class ?? 'internal') : t(c.state === 'stale' ? 'coverage.stale' : 'coverage.loading')
   return (
@@ -961,10 +1092,10 @@ function CoverageNote({ coverage, notCovered }: { coverage: SourceCoverage[]; no
           {t('coverage.notObserved')}: {missing.map((c) => `${c.source} (${why(c)})`).join(', ')}
         </p>
       )}
-      <p role="note" aria-label={t('coverage.label')} className="text-fg-subtle">
+      {!compact || notCovered?.length ? <p role="note" aria-label={t('coverage.label')} className="text-fg-subtle">
         {t('coverage.checked')}: {coverage.map((c) => c.source).join(', ')}
         {notCovered?.length ? ` · ${t('coverage.notChecked')}: ${notCovered.join(', ')}` : ''}
-      </p>
+      </p> : null}
     </div>
   )
 }

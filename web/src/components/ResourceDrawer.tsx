@@ -208,10 +208,10 @@ export function ResourceDrawer({ client, hub, target, subject, initialTab, onTab
   const moved = !!editing?.doc.version && !!revision && revision !== editing.doc.version
 
   return (
-    <aside ref={panelRef} style={{ width: detailsWidth ?? 'min(720px,55%)', maxWidth: 'calc(100% - 100px)' }} role="dialog" aria-label={`${current.kind} ${title}`} data-area="details" tabIndex={-1} className="absolute inset-y-0 right-0 z-10 flex flex-col border-l border-line bg-app shadow-2xl outline-none">
+    <aside ref={panelRef} style={{ width: detailsWidth ?? 'min(720px,55%)', maxWidth: 'calc(100% - 100px)' }} role="dialog" aria-label={`${current.kind} ${title}`} data-area="details" tabIndex={-1} className="resource-drawer absolute inset-y-0 right-0 z-10 flex flex-col border-l border-line outline-none">
       {/* Name first, whole; the object's tools on a line of their own. */}
       <PanelResize label={t('panels.details')} reverse value={detailsWidth ?? 720} min={280} max={() => Math.max(100, (panelRef.current?.parentElement?.clientWidth ?? window.innerWidth) - 100)} onDone={(details) => usePanelWidths.setState({ details })} />
-      <header className="border-b border-line px-4 py-2">
+      <header className="drawer-heading">
         {stack.length > 1 && (
           // Where the relations led: each step is a way back.
           <nav aria-label={t('drawer.path')} className="mb-1 flex min-w-0 flex-wrap items-center gap-1 text-xs text-fg-subtle">
@@ -243,8 +243,8 @@ export function ResourceDrawer({ client, hub, target, subject, initialTab, onTab
               ←
             </button>
           )}
-          <span className="shrink-0 text-xs uppercase tracking-wide text-fg-subtle">{current.kind}</span>
-          <h2 className="min-w-0 flex-1 truncate font-semibold" title={title}>
+          <span className="drawer-kind shrink-0">{current.kind}</span>
+          <h2 className="drawer-title min-w-0 flex-1 truncate" title={title}>
             {title}
           </h2>
           <button className="rounded px-2 text-lg leading-none text-fg-muted hover:bg-hover hover:text-fg" onClick={close} aria-label={t('drawer.close')}>
@@ -252,7 +252,7 @@ export function ResourceDrawer({ client, hub, target, subject, initialTab, onTab
           </button>
         </div>
         {hasTools && (
-          <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+          <div className="drawer-tools">
             {onLogs && hasLogs?.(current.kind) && (
               <button
                 className="rounded-md border border-line px-2 py-0.5 text-xs text-fg-muted hover:bg-hover hover:text-fg"
@@ -314,7 +314,7 @@ export function ResourceDrawer({ client, hub, target, subject, initialTab, onTab
           </div>
         )}
       </header>
-      <nav className="flex gap-1 border-b border-line px-3" role="tablist">
+      <nav className="drawer-tabs flex gap-1 border-b border-line px-3" role="tablist">
         {(['details', 'yaml'] as Tab[]).map((tb) => (
           <button
             key={tb}
@@ -426,7 +426,7 @@ function Details(props: { client: Client; hub: ViewHub; target: { provider: stri
     return [...m.entries()]
   }, [r.relations])
   return (
-    <div className="space-y-5 p-4">
+    <div className="space-y-4 px-4 py-2">
       {r.health.state !== 'ok' && (
         <section className={['rounded-md border border-line px-3 py-2', healthText[r.health.state]].join(' ')} aria-label={t('drawer.health')}>
           {(r.health.issues ?? [{ state: r.health.state, reason: r.health.reason ?? '', message: r.health.message }]).map((i, n) => (

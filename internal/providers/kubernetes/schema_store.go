@@ -62,6 +62,9 @@ var _ provider.ViewDescriber = (*session)(nil)
 // resource's current schema epoch (probing the server once when there is
 // none) and binds the query to it. Described kinds keep their columns.
 func (s *session) DescribeView(ctx context.Context, q provider.Query) (core.KindDescriptor, provider.Query, error) {
+	if !q.Scope.Valid() {
+		return core.KindDescriptor{}, q, &provider.Error{Class: provider.ClassInvalid, Message: "invalid scope selector"}
+	}
 	def := s.kind(q.Kind)
 	if def == nil {
 		if s.KindRemoved(q.Kind) {
@@ -70,7 +73,7 @@ func (s *session) DescribeView(ctx context.Context, q provider.Query) (core.Kind
 		return core.KindDescriptor{}, q, &provider.Error{Class: provider.ClassUnsupported, Message: fmt.Sprintf("unknown kind %q", q.Kind)}
 	}
 	desc := s.descriptor(def)
-	if !def.discovered {
+	if !def.discovered || (def.namespaced && q.Scope.Mode == core.ScopeSome && len(q.Scope.Names) == 0) {
 		return desc, q, nil
 	}
 	sch, err := s.schemaFor(ctx, def, q)
@@ -171,6 +174,20 @@ func (s *session) probeSchema(ctx context.Context, def *kindDef, q provider.Quer
 	o := metav1.ListOptions{Limit: 1}
 	if q.Name != "" {
 		o.FieldSelector = "metadata.name=" + q.Name
+	}
+	if def.namespaced && q.Scope.Mode == core.ScopeSome {
+		var last error
+		for _, name := range q.Scope.SelectedNames() {
+			sch, err := s.probeRoute(ctx, def, name, o)
+			if err == nil {
+				return sch, nil
+			}
+			last = err
+			if ctx.Err() != nil {
+				break
+			}
+		}
+		return nil, last
 	}
 	return s.probeRoute(ctx, def, ns, o)
 }

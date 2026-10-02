@@ -2,6 +2,25 @@
 
 type P = { className?: string }
 
+export const InfoIcon = ({ className }: P) => (
+  <svg viewBox="0 0 24 24" className={className} aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
+    <circle cx="12" cy="12" r="9" />
+    <path d="M12 11v6M12 7h.01" />
+  </svg>
+)
+
+export const StarIcon = ({ className, filled = false }: P & { filled?: boolean }) => (
+  <svg viewBox="0 0 24 24" className={className} aria-hidden="true" fill={filled ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round">
+    <path d="m12 3 2.8 5.7 6.3.9-4.55 4.4 1.07 6.25L12 17.3l-5.62 2.95 1.07-6.25L2.9 9.6l6.3-.9Z" />
+  </svg>
+)
+
+export const CloseIcon = ({ className }: P) => (
+  <svg viewBox="0 0 24 24" className={className} aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+    <path d="m5 5 14 14M19 5 5 19" />
+  </svg>
+)
+
 export const EyeIcon = ({ className }: P) => (
   <svg viewBox="0 0 24 24" className={className} aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="2">
     <path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12Z" />

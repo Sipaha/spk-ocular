@@ -48,6 +48,16 @@ describe('terminal tabs', () => {
     const term = dockTabs()[0]
     expect(within(term).getByText('prod')).toBeInTheDocument() // visible, not only a tooltip
     expect(screen.getByTestId('term-api-1')).toBeInTheDocument()
+    // The badge and empty tab space activate it too; a larger close
+    // button must not make the activation area depend on the title width.
+    await user.click(within(term).getByText('prod'))
+    expect(term).toHaveAttribute('aria-selected', 'true')
+    const logs = dockTabs()[1]
+    await user.click(logs)
+    expect(logs).toHaveAttribute('aria-selected', 'true')
+    await user.click(within(term).getByRole('button', { name: 'Close tab' }))
+    expect(dockTabs()).toEqual([logs])
+    expect(logs).toHaveAttribute('aria-selected', 'true')
     vi.unstubAllGlobals()
   })
 

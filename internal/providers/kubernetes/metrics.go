@@ -55,6 +55,42 @@ var errNoMetricsAPI = &provider.Error{Class: provider.ClassUnsupported, Message:
 // rowIDs are not needed: one list answers for every row of the query (and
 // is shared by the callers of the same query for metricsTTL).
 func (s *session) Metrics(ctx context.Context, q provider.Query, _ []string) (provider.Metrics, error) {
+	if !q.Scope.Valid() {
+		return provider.Metrics{}, &provider.Error{Class: provider.ClassInvalid, Message: "invalid scope selector"}
+	}
+	if q.Kind == podsKind.desc.ID && q.Scope.Mode == core.ScopeSome {
+		out := provider.Metrics{Values: map[string]provider.Usage{}}
+		var firstError error
+		succeeded := len(q.Scope.Names) == 0
+		for _, name := range q.Scope.SelectedNames() {
+			child := q
+			child.Scope = core.ScopeSel{Mode: core.ScopeOne, Name: name}
+			m, err := s.Metrics(ctx, child, nil)
+			if err != nil {
+				class, message := classify(err)
+				var pe *provider.Error
+				if errors.As(err, &pe) {
+					class, message = pe.Class, pe.Message
+				}
+				out.Coverage = append(out.Coverage, coverageOf(name, provider.ViewStatus{State: provider.StatusError, Class: class, Message: message}))
+				if firstError == nil {
+					firstError = err
+				}
+				continue
+			}
+			succeeded = true
+			for id, usage := range m.Values {
+				out.Values[id] = usage
+			}
+			if m.Timestamp.After(out.Timestamp) {
+				out.Timestamp, out.Window = m.Timestamp, m.Window
+			}
+		}
+		if !succeeded {
+			return provider.Metrics{}, firstError
+		}
+		return out, nil
+	}
 	var gvr, objGVR schema.GroupVersionResource
 	ns := ""
 	switch q.Kind {

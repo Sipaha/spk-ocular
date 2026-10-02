@@ -110,16 +110,15 @@ describe('Palette', () => {
     await waitFor(() => expect(f.client.selectTarget).toHaveBeenCalledWith('kubernetes', 'dev'))
   })
 
-  it('offers recent objects of the current target, and opens one from the overview', async () => {
+  it('offers recent objects of the current target, and opens another kind without replacing the current table', async () => {
     const f = setup()
     f.state.recents = [{ ref: { provider: 'kubernetes', target: 'prod', scope: 'web', kind: 'apps/deployments', name: 'old-web', uid: 'u-old' }, title: 'old-web', openedAt: 1 }]
     await openApp(f)
-    await userEvent.click(screen.getByRole('button', { name: 'Overview' }))
     const dlg = await openPalette()
     const first = await within(dlg).findByRole('option', { name: /old-web/ })
     expect(first).toHaveTextContent('Recent')
     await userEvent.keyboard('{Enter}')
-    expect(await screen.findByRole('heading', { name: 'Deployments' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'Pods' })).toBeInTheDocument()
     expect(await screen.findByRole('dialog', { name: 'apps/deployments old-web' })).toBeInTheDocument()
     expect(f.client.getResource).toHaveBeenLastCalledWith(expect.objectContaining({ name: 'old-web', uid: 'u-old' }))
   })

@@ -90,7 +90,7 @@ export function Menu({ items, at, label, onClose }: Props) {
       aria-label={label}
       onKeyDown={onKey}
       onContextMenu={(e) => e.preventDefault()}
-      className="fixed z-30 min-w-44 rounded-md border border-line bg-panel py-1 shadow-2xl"
+      className="popup-menu fixed z-30 min-w-44 rounded-md border border-line bg-panel"
       style={{ left: pos.x, top: pos.y }}
     >
       {items.map((it) => (

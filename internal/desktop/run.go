@@ -81,7 +81,7 @@ func Run(ctx context.Context, o Options) error {
 		Height: 820,
 		// Matches --color-app in web/src/index.css: no light flash before
 		// the webview paints.
-		BackgroundColour: application.NewRGBA(30, 31, 34, 255),
+		BackgroundColour: application.NewRGBA(21, 24, 30, 255),
 		URL:              "/",
 		DevToolsEnabled:  devToolsEnabled,
 		Linux:            application.LinuxWindow{WebviewGpuPolicy: webviewGPUPolicy(os.Getenv("SPK_OCULAR_GPU"))},

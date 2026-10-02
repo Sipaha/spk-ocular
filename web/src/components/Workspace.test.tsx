@@ -2,7 +2,8 @@ import { act, fireEvent, render, screen, waitFor, within } from '@testing-librar
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { App } from '../App'
-import { initialState, useStore } from '../store'
+import { initialState, targetKey, useStore } from '../store'
+import { remember } from './pageMemo'
 import { kindsView, fakeClient, k8s, podRow, podsKind, scopeRow } from '../test/fakeClient'
 
 beforeEach(() => useStore.setState({ ...initialState }))
@@ -19,6 +20,18 @@ async function openProd(f: ReturnType<typeof fakeClient>) {
 }
 
 describe('Workspace', () => {
+  it.each(['disk', 'memory'])('a removed Overview selection from %s opens the default kind with its scope', async (source) => {
+    const f = fakeClient([k8s('prod')])
+    const ui = { kind: '__overview', scope: { mode: 'one' as const, name: 'web' } }
+    if (source === 'memory') remember(targetKey({ provider: 'kubernetes', id: 'prod' }), { ui })
+    else vi.mocked(f.client.getTargetState).mockResolvedValue({ kind: JSON.stringify(ui.kind), scope: JSON.stringify(ui.scope) })
+    await openProd(f)
+    expect(await screen.findByRole('heading', { name: 'Pods' })).toBeInTheDocument()
+    expect(f.client.openView).toHaveBeenCalledWith('kubernetes', 'prod', { kind: 'pods', scope: ui.scope })
+    expect(screen.queryByRole('button', { name: 'Overview' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('dialog', { name: 'Connection information' })).not.toBeInTheDocument()
+  })
+
   it('shows loading through target state, opening the view and its initial snapshot', async () => {
     const f = fakeClient([k8s('prod')])
     f.state.view.selected = { provider: 'kubernetes', id: 'prod' }
@@ -109,11 +122,11 @@ describe('Workspace', () => {
     expect(within(list).getByRole('option', { name: 'web' })).toBeInTheDocument() // the ✓ is not its name
     await userEvent.keyboard('team')
     expect(within(list).getAllByRole('option').map((o) => o.textContent)).toEqual(['team-a', 'team-b'])
-    expect(within(list).getByRole('option', { selected: true })).toHaveTextContent('team-a')
+    expect(document.getElementById(search.getAttribute('aria-activedescendant')!)).toHaveTextContent('team-a')
     await userEvent.keyboard('{ArrowDown}')
-    expect(within(list).getByRole('option', { selected: true })).toHaveTextContent('team-b')
+    expect(document.getElementById(search.getAttribute('aria-activedescendant')!)).toHaveTextContent('team-b')
     await userEvent.keyboard('{ArrowDown}') // wraps
-    expect(within(list).getByRole('option', { selected: true })).toHaveTextContent('team-a')
+    expect(document.getElementById(search.getAttribute('aria-activedescendant')!)).toHaveTextContent('team-a')
     await userEvent.keyboard('{ArrowUp}{Enter}')
     expect(f.client.openView).toHaveBeenLastCalledWith('kubernetes', 'prod', { kind: 'pods', scope: { mode: 'one', name: 'team-b' } })
     expect(screen.queryByRole('listbox', { name: 'Namespace' })).not.toBeInTheDocument()

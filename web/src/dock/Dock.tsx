@@ -1,11 +1,11 @@
 import { PanelResize } from '../components/PanelResize'
+import { CloseIcon } from '../components/icons'
 import { lazy, Suspense } from 'react'
 import type { Client } from '../api/client'
 import type { TargetRef } from '../api/types'
 import { t } from '../i18n'
 import { reconfigured, useStore } from '../store'
 import { dock, MIN_DOCK, useDock, type DockTab } from './store'
-import { openPalette } from '../palette/store'
 
 // Heavy parts are lazy chunks: the log viewer (virtual list, ANSI, search
 // worker) and the terminal (xterm).
@@ -34,7 +34,7 @@ export function Dock({ client, current, mode, onHeightDone }: Props) {
   return (
     <section aria-label={t('dock.label')} data-area="dock" className="flex shrink-0 flex-col border-t border-line bg-app" style={{ height }}>
       <PanelResize label={t('logs.resize')} axis="height" reverse value={height} min={MIN_DOCK} max={() => window.innerHeight * 0.85} onDone={(h) => { dock.setHeight(h); onHeightDone(h) }} />
-      <div role="tablist" className="flex shrink-0 items-end gap-0.5 overflow-x-auto border-b border-line bg-sidebar/60 px-2 pt-1">
+      <div role="tablist" className="dock-tabs">
         {tabs.map((tb) => (
           <TabHandle
             key={tb.id}
@@ -44,15 +44,6 @@ export function Dock({ client, current, mode, onHeightDone }: Props) {
             stale={tb.kind === 'term' && reconfigured(targets, tb.target.provider, tb.target.id, tb.rev)}
           />
         ))}
-        {/* In a terminal Ctrl+K is the program's: the palette is here. */}
-        <button
-          className="ml-auto mb-0.5 shrink-0 rounded border border-line px-1.5 text-[12px] text-fg-subtle hover:bg-hover hover:text-fg"
-          onClick={openPalette}
-          aria-label={`${t('palette.label')} (Ctrl+K)`}
-          title={t('palette.label')}
-        >
-          Ctrl+K
-        </button>
       </div>
       <div className="relative min-h-0 flex-1">
         {tabs.map((tb) => (
@@ -78,10 +69,11 @@ function TabHandle({ tab, active, foreign, stale }: { tab: DockTab; active: bool
       role="tab"
       aria-selected={active}
       data-tab-kind={tab.kind}
-      className={['group flex max-w-72 items-center gap-1 rounded-t-md border border-b-0 px-2 py-0.5 text-xs', active ? 'border-line bg-app text-fg' : 'border-transparent text-fg-muted hover:text-fg'].join(' ')}
+      onClick={() => dock.activate(tab.id)}
+      className={['dock-tab group flex max-w-72 items-center gap-1 rounded-t-md border border-b-0 px-2 py-0.5 text-xs', active ? 'border-line bg-app text-fg' : 'border-transparent text-fg-muted hover:text-fg'].join(' ')}
     >
       {tab.kind === 'term' && <span aria-hidden className="font-mono text-[11px] text-fg-subtle">{'>_'}</span>}
-      <button className="min-w-0 truncate" onClick={() => dock.activate(tab.id)} title={tip} data-area-focus={active ? '' : undefined}>
+      <button className="min-w-0 truncate" title={tip} data-area-focus={active ? '' : undefined}>
         {tab.title}
       </button>
       {foreign && (
@@ -91,8 +83,8 @@ function TabHandle({ tab, active, foreign, stale }: { tab: DockTab; active: bool
         </span>
       )}
       {stale && <Reconfigured />}
-      <button className="rounded px-1 text-fg-subtle hover:bg-hover hover:text-fg" onClick={() => dock.close(tab.id)} aria-label={t('logs.closeTab')}>
-        ×
+      <button className="flex h-6 w-6 shrink-0 items-center justify-center rounded text-fg-muted hover:bg-hover hover:text-fg" onClick={(e) => { e.stopPropagation(); dock.close(tab.id) }} aria-label={t('logs.closeTab')} title={t('logs.closeTab')}>
+        <CloseIcon className="h-4 w-4" />
       </button>
     </div>
   )

@@ -49,7 +49,7 @@ type crateWatcher struct {
 func (c *crateWatcher) rows(reads int) []core.Row {
 	var out []core.Row
 	for _, x := range allCrates {
-		if c.q.Scope.Mode == core.ScopeOne && c.q.Scope.Name != x.zone || c.q.Name != "" && c.q.Name != x.key {
+		if !c.q.Scope.Contains(x.zone) || c.q.Name != "" && c.q.Name != x.key {
 			continue
 		}
 		out = append(out, core.Row{

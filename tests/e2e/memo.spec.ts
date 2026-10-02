@@ -112,3 +112,68 @@ test('the page snapshot survives an app restart', async ({ browser }) => {
     if (app) await stop(app)
   }
 })
+
+test('scope set, global favorites and column widths survive an app restart', async ({ browser }) => {
+  mkdirSync(scratch, { recursive: true })
+  const root = mkdtempSync(join(scratch, 'scopes-restart-'))
+  const e = env(root)
+  writeAtomic(e.one, ONE)
+  const port = await freePort()
+  let app: ChildProcess | undefined
+  const page = await browser.newPage()
+  const url = `http://127.0.0.1:${port}/`
+  try {
+    app = await start(port, e)
+    await page.goto(url)
+    await page.getByRole('option', { name: /^demo\b/ }).click()
+    const input = page.getByRole('textbox', { name: 'Zone', exact: true })
+    await input.fill('green, blue')
+    await input.press('Enter')
+    await expect(input).toHaveValue('blue, green')
+    const nameWidth = page.getByRole('grid', { name: 'resources' }).getByRole('separator', { name: 'Resize column Name', exact: true })
+    await nameWidth.focus()
+    await page.keyboard.press('Home')
+    await page.keyboard.press('Shift+ArrowRight')
+    await page.getByRole('navigation', { name: 'resources' }).getByRole('button', { name: 'Crates', exact: true }).hover()
+    await page.getByRole('button', { name: 'Add Crates to favorites', exact: true }).click()
+    const favorites = page.getByRole('region', { name: 'Favorites', exact: true })
+    await page.getByRole('navigation', { name: 'resources' }).getByRole('button', { name: 'Parcels', exact: true }).hover()
+    await page.getByRole('button', { name: 'Add Parcels to favorites', exact: true }).click()
+    await favorites.getByRole('button', { name: 'Parcels', exact: true }).dragTo(favorites.getByRole('button', { name: 'Crates', exact: true }), { targetPosition: { x: 20, y: 2 } })
+    await expect(favorites.locator('[data-nav-item]')).toHaveText(['Parcels', 'Crates'])
+    await page.getByRole('option', { name: /^demo2\b/ }).click()
+    await expect(favorites.getByRole('button', { name: 'Crates', exact: true })).toBeVisible()
+    await page.getByRole('option', { name: /^demo\b/ }).click()
+    await expect(input).toHaveValue('blue, green')
+    const tok = await page.locator('meta[name="spk-ocular-api-token"]').getAttribute('content')
+    await expect.poll(async () => {
+      const res = await page.request.post(`${url}api/GetTargetState`, {
+        headers: { Authorization: `Bearer ${tok}`, Origin: new URL(url).origin }, data: { provider: 'synthetic', target: 'demo' },
+      })
+      const state = await res.json()
+      return state.scope ? JSON.parse(state.scope) : null
+    }).toEqual({ mode: 'some', names: ['blue', 'green'] })
+    await expect.poll(async () => {
+      const res = await page.request.post(`${url}api/GetTargetState`, { headers: { Authorization: `Bearer ${tok}`, Origin: new URL(url).origin }, data: { provider: 'synthetic', target: 'demo' } })
+      const state = await res.json()
+      return state['columnWidths.crates'] ? JSON.parse(state['columnWidths.crates']) : null
+    }).toEqual({ name: 98 })
+    await expect.poll(async () => {
+      const res = await page.request.post(`${url}api/GetFavoriteKinds`, { headers: { Authorization: `Bearer ${tok}`, Origin: new URL(url).origin } })
+      return await res.json()
+    }).toEqual([{ provider: 'synthetic', kind: 'parcels' }, { provider: 'synthetic', kind: 'crates' }])
+    await stop(app)
+    app = await start(port, e)
+    await page.goto(url)
+    await expect(input).toHaveValue('blue, green')
+    await expect(favorites.getByRole('button', { name: 'Crates', exact: true })).toBeVisible()
+    await expect(nameWidth).toHaveAttribute('aria-valuenow', '98')
+    await expect(favorites.locator('[data-nav-item]')).toHaveText(['Parcels', 'Crates'])
+    const grid = page.getByRole('grid', { name: 'resources' })
+    await expect(grid.getByRole('gridcell', { name: 'alpha', exact: true })).toBeVisible()
+    await expect(grid.getByRole('gridcell', { name: 'gamma', exact: true })).toBeVisible()
+  } finally {
+    await page.close()
+    if (app) await stop(app)
+  }
+})

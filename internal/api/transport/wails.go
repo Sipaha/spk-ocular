@@ -71,6 +71,16 @@ func (w *API) CancelMetrics(viewID string, seq uint64) error {
 func (w *API) GetTargetState(provider, target string) (map[string]string, error) {
 	return w.a.GetTargetState(context.Background(), provider, target)
 }
+
+func (w *API) GetFavoriteKinds() ([]api.FavoriteKind, error) {
+	return w.a.GetFavoriteKinds(context.Background())
+}
+func (w *API) SetKindFavorite(req api.KindFavoriteRequest) error {
+	return w.a.SetKindFavorite(context.Background(), req)
+}
+func (w *API) MoveFavoriteKind(req api.MoveFavoriteKindRequest) error {
+	return w.a.MoveFavoriteKind(context.Background(), req)
+}
 func (w *API) SetTargetState(provider, target, key, value string) error {
 	return w.a.SetTargetState(context.Background(), provider, target, key, value)
 }

@@ -603,7 +603,7 @@ func (s *Service) GetMetrics(ctx context.Context, req MetricsRequest) (MetricsVi
 		}
 		return MetricsView{Status: ce.Code, Message: ce.Detail, Values: map[string]provider.Usage{}}, nil
 	}
-	out := MetricsView{Status: "ok", Timestamp: m.Timestamp, Window: m.Window, Values: map[string]provider.Usage{}}
+	out := MetricsView{Status: "ok", Timestamp: m.Timestamp, Window: m.Window, Values: map[string]provider.Usage{}, Coverage: m.Coverage}
 	if cut {
 		out.Limit = MaxMetricRows
 	}

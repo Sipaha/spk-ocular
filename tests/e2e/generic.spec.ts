@@ -86,3 +86,196 @@ test('Read again: the button and F5 (also from a field) go to the open view', as
   await expect(reads()).toHaveText(String(before + 2))
   await expect(page.getByRole('heading', { name: 'Crates', level: 1 })).toBeVisible() // not reloaded
 })
+
+test('scope checkboxes keep the popup and exact set; text chooses one; the set survives target and page changes', async ({ page }) => {
+  // Keep the provider's denied-list fixture intact for the typed fallback
+  // specs; only this browser is given a catalog of its real zones.
+  await page.route('**/api/ListScopes', (route) => route.fulfill({ json: { scopes: ['blue', 'green', 'empty'].map((name) => ({ name })) } }))
+  await forgetDemo(page)
+  await page.getByRole('option', { name: /^demo\b/ }).click()
+  const grid = page.getByRole('grid', { name: 'resources' })
+  const picker = page.getByRole('button', { name: 'Zone', exact: true })
+  await expect(grid.getByRole('gridcell', { name: 'alpha', exact: true })).toBeVisible()
+  await picker.click()
+  const search = page.getByRole('combobox', { name: 'Find a zone' })
+  await search.fill('green')
+  await page.getByRole('checkbox', { name: 'green', exact: true }).click()
+  await expect(search).toHaveValue('green')
+  await expect(search).toBeFocused()
+  await expect(grid.getByRole('gridcell', { name: 'gamma', exact: true })).toBeVisible()
+  await expect(grid.getByRole('gridcell', { name: 'alpha', exact: true })).toBeVisible()
+  await search.fill('')
+  await expect(page.getByRole('checkbox', { name: 'blue', exact: true })).toBeChecked()
+  await page.keyboard.press('Escape')
+  await page.getByRole('navigation', { name: 'resources' }).getByRole('button', { name: 'Parcels', exact: true }).click()
+  await expect(picker).toHaveText('blue, green')
+  await page.getByRole('option', { name: /^demo2\b/ }).click()
+  await page.getByRole('option', { name: /^demo\b/ }).click()
+  await expect(picker).toHaveText('blue, green')
+  await page.getByRole('navigation', { name: 'resources' }).getByRole('button', { name: 'Crates', exact: true }).click()
+  await picker.click()
+  await page.getByRole('option', { name: 'green', exact: true }).locator('span').last().click()
+  await expect(page.getByRole('listbox', { name: 'Zone' })).toHaveCount(0)
+  await expect(picker).toHaveText('green')
+  await expect(grid.getByRole('gridcell', { name: 'alpha', exact: true })).toHaveCount(0)
+  await expect(grid.getByRole('gridcell', { name: 'gamma', exact: true })).toBeVisible()
+  await picker.click()
+  await page.getByRole('checkbox', { name: 'green', exact: true }).click()
+  await expect(picker).toHaveText('Nothing selected')
+  await expect(grid.getByRole('gridcell')).toHaveCount(0)
+  await page.getByRole('option', { name: 'All zones', exact: true }).click()
+  await expect(grid.getByRole('gridcell', { name: 'alpha', exact: true })).toBeVisible()
+  await expect(grid.getByRole('gridcell', { name: 'gamma', exact: true })).toBeVisible()
+})
+
+test('a denied scope catalog accepts several explicit names without widening the view', async ({ page }) => {
+  const grid = await openDemo(page)
+  const input = page.getByRole('textbox', { name: 'Zone', exact: true })
+  await input.fill('green, blue, green')
+  await input.press('Enter')
+  await expect(input).toHaveValue('blue, green')
+  await expect(grid.getByRole('gridcell', { name: 'alpha', exact: true })).toBeVisible()
+  await expect(grid.getByRole('gridcell', { name: 'gamma', exact: true })).toBeVisible()
+  await input.fill('green, empty')
+  await input.press('Enter')
+  await expect(grid.getByRole('gridcell', { name: 'alpha', exact: true })).toHaveCount(0)
+  await expect(grid.getByRole('gridcell', { name: 'gamma', exact: true })).toBeVisible()
+})
+
+test('global favorites can be added, opened and removed from any connection', async ({ page }) => {
+  await openDemo(page)
+  const tok = await token(page)
+  try {
+    const nav = page.getByRole('navigation', { name: 'resources' })
+    await nav.getByRole('button', { name: 'Services', exact: true }).hover()
+    await nav.getByRole('button', { name: 'Add Services to favorites', exact: true }).click()
+    await expect(page.getByRole('heading', { name: 'Crates', exact: true })).toBeVisible()
+    const favorites = page.getByRole('region', { name: 'Favorites', exact: true })
+    await expect(nav.getByRole('button', { name: 'Services', exact: true })).toHaveCount(1)
+    await expect(nav.getByRole('region', { name: 'Synthetic', exact: true }).getByRole('button', { name: 'Services', exact: true })).toHaveCount(0)
+    await favorites.getByRole('button', { name: 'Services', exact: true }).click()
+    await expect(page.getByRole('heading', { name: 'Services', exact: true })).toBeVisible()
+    await page.getByRole('option', { name: /^demo2\b/ }).click()
+    await expect(favorites.getByRole('button', { name: 'Services', exact: true })).toBeVisible()
+    await expect(nav.getByRole('button', { name: 'Services', exact: true })).toHaveCount(1)
+    await favorites.getByRole('button', { name: 'Services', exact: true }).focus()
+    await page.keyboard.press('Shift+F10')
+    await page.getByRole('menuitem', { name: 'Remove Services from favorites', exact: true }).click()
+    await expect(favorites.getByRole('button', { name: 'Services', exact: true })).toHaveCount(0)
+    await expect(nav.getByRole('region', { name: 'Synthetic', exact: true }).getByRole('button', { name: 'Services', exact: true })).toBeVisible()
+    await page.getByRole('option', { name: /^demo\b/ }).click()
+    await expect(favorites.getByRole('button', { name: 'Services', exact: true })).toHaveCount(0)
+    await expect(page.getByRole('heading', { name: 'Services', exact: true })).toBeVisible()
+  } finally {
+    const res = await page.request.post('/api/SetKindFavorite', { headers: { Authorization: `Bearer ${tok}`, Origin: new URL(page.url()).origin }, data: { provider: 'synthetic', kind: 'services', favorite: false } })
+    expect(res.ok()).toBeTruthy()
+  }
+})
+
+test('favorite stars stay clickable beside the native scrollbar in an overflowing navigation', async ({ page }) => {
+  await page.setViewportSize({ width: 960, height: 360 })
+  await openDemo(page)
+  const tok = await token(page)
+  const nav = page.getByRole('navigation', { name: 'resources' })
+  const list = nav.locator('[data-resource-nav-list]')
+  const favorites = nav.getByRole('region', { name: 'Favorites', exact: true })
+  try {
+    expect(await list.evaluate((e) => e.scrollHeight > e.clientHeight)).toBe(true)
+    for (const adding of [true, false]) {
+      const button = (adding ? nav : favorites).getByRole('button', {
+        name: adding ? 'Add Services to favorites' : 'Remove Services from favorites', exact: true,
+      })
+      await button.scrollIntoViewIfNeeded()
+      await button.hover()
+      const box = (await button.boundingBox())!
+      const viewport = (await list.boundingBox())!
+      // GTK's overlay scrollbar intercepts the trailing strip even when hidden;
+      // Chromium hit testing alone cannot detect it. Keep the whole button clear.
+      expect(viewport.x + viewport.width - box.x - box.width).toBeGreaterThanOrEqual(24)
+      const point = { x: box.x + box.width - 1, y: box.y + box.height / 2 }
+      expect(await button.evaluate((e, p) => e.contains(document.elementFromPoint(p.x, p.y)), point)).toBe(true)
+      const scrollTop = await list.evaluate((e) => e.scrollTop)
+      await page.mouse.click(point.x, point.y)
+      await expect(favorites.getByRole('button', { name: 'Services', exact: true })).toHaveCount(adding ? 1 : 0)
+      await expect(page.getByRole('heading', { name: 'Crates', exact: true })).toBeVisible()
+      expect(await list.evaluate((e) => e.scrollTop)).toBe(scrollTop)
+    }
+  } finally {
+    const res = await page.request.post('/api/SetKindFavorite', { headers: { Authorization: `Bearer ${tok}`, Origin: new URL(page.url()).origin }, data: { provider: 'synthetic', kind: 'services', favorite: false } })
+    expect(res.ok()).toBeTruthy()
+  }
+})
+
+test('resource navigation search filters kinds and favorites without filtering table rows', async ({ page }) => {
+  const grid = await openDemo(page)
+  const search = page.getByRole('textbox', { name: 'Filter resources', exact: true })
+  await search.fill('parc')
+  const nav = page.getByRole('navigation', { name: 'resources' })
+  await expect(nav.getByRole('button', { name: 'Crates', exact: true })).toHaveCount(0)
+  await expect(nav.getByRole('button', { name: 'Parcels', exact: true })).toBeVisible()
+  await expect(grid.getByRole('gridcell', { name: 'alpha', exact: true })).toBeVisible()
+  await search.press('Enter')
+  await expect(page.getByRole('heading', { name: 'Parcels', exact: true })).toBeVisible()
+  await search.fill('no-matching-kind')
+  await expect(nav.getByRole('status')).toHaveText('No matching resources')
+  await search.press('Escape')
+  await expect(search).toHaveValue('')
+  await expect(nav.getByRole('button', { name: 'Crates', exact: true })).toBeVisible()
+})
+
+test('column boundaries resize headers and rows together, keep sorting, restore across scopes and reset', async ({ page }) => {
+  const grid = await openDemo(page)
+  const name = grid.getByRole('columnheader', { name: /^Name/ })
+  const handle = grid.getByRole('separator', { name: 'Resize column Name', exact: true })
+  const before = await name.boundingBox()
+  const grip = await handle.boundingBox()
+  if (!before || !grip) throw new Error('column is not laid out')
+  const sort = await name.getAttribute('aria-sort')
+  let writes = 0
+  page.on('request', (r) => { if (r.url().endsWith('/api/SetTargetState') && r.postDataJSON()?.key === 'columnWidths.crates') writes++ })
+  await page.mouse.move(grip.x + grip.width / 2, grip.y + grip.height / 2)
+  await page.mouse.down()
+  await page.mouse.move(grip.x + grip.width / 2 + 100, grip.y + grip.height / 2, { steps: 8 })
+  await expect.poll(async () => Math.round((await name.boundingBox())!.width)).toBe(Math.round(before.width + 100))
+  expect(writes).toBe(0)
+  const cell = grid.getByRole('gridcell', { name: 'alpha', exact: true })
+  expect(Math.abs((await cell.boundingBox())!.width - (await name.boundingBox())!.width)).toBeLessThan(1)
+  await page.mouse.up()
+  await expect.poll(() => writes).toBe(1)
+  await expect(name).toHaveAttribute('aria-sort', sort!)
+  const zone = page.getByRole('textbox', { name: 'Zone', exact: true })
+  await zone.fill('blue, green')
+  await zone.press('Enter')
+  await expect.poll(async () => Math.round((await name.boundingBox())!.width)).toBe(Math.round(before.width + 100))
+  await expect(grid.getByRole('columnheader', { name: 'Zone', exact: true })).toBeVisible()
+  await handle.dblclick()
+  await expect.poll(() => grid.evaluate((e) => e.style.getPropertyValue('--column-0'))).toBe('')
+  await expect(name).toHaveAttribute('aria-sort', sort!)
+})
+
+test('favorites drag and drop changes the shared order without opening a resource', async ({ page }) => {
+  await openDemo(page)
+  const tok = await token(page)
+  try {
+    const nav = page.getByRole('navigation', { name: 'resources' })
+    for (const title of ['Services', 'Crates', 'Parcels']) {
+      await nav.getByRole('button', { name: title, exact: true }).hover()
+      await nav.getByRole('button', { name: `Add ${title} to favorites`, exact: true }).click()
+    }
+    const fav = page.getByRole('region', { name: 'Favorites', exact: true })
+    const rows = fav.locator('[data-nav-item]')
+    await expect(rows).toHaveText(['Services', 'Crates', 'Parcels'])
+    await fav.getByRole('button', { name: 'Parcels', exact: true }).dragTo(fav.getByRole('button', { name: 'Services', exact: true }), { targetPosition: { x: 20, y: 2 } })
+    await expect(rows).toHaveText(['Parcels', 'Services', 'Crates'])
+    await expect(page.getByRole('heading', { name: 'Crates', exact: true })).toBeVisible()
+    await page.getByRole('option', { name: /^demo2\b/ }).click()
+    await expect(rows).toHaveText(['Parcels', 'Services', 'Crates'])
+    await fav.getByRole('button', { name: 'Parcels', exact: true }).dragTo(fav.getByRole('button', { name: 'Crates', exact: true }), { targetPosition: { x: 20, y: 28 } })
+    await expect(rows).toHaveText(['Services', 'Crates', 'Parcels'])
+  } finally {
+    for (const kind of ['services', 'crates', 'parcels']) {
+      const res = await page.request.post('/api/SetKindFavorite', { headers: { Authorization: `Bearer ${tok}`, Origin: new URL(page.url()).origin }, data: { provider: 'synthetic', kind, favorite: false } })
+      expect(res.ok()).toBeTruthy()
+    }
+  }
+})

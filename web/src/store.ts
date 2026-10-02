@@ -1,7 +1,8 @@
 import { create } from 'zustand'
 import type { Client } from './api/client'
 import { mayLeave } from './edit/guard'
-import type { AppInfo, Target, TargetRef, TargetsView } from './api/types'
+import type { AppInfo, FavoriteKind, Target, TargetRef, TargetsView } from './api/types'
+import { t } from './i18n'
 
 export interface State {
   info: AppInfo | null
@@ -11,8 +12,11 @@ export interface State {
   /** A short status message ("deployment web: restart requested"). */
   notice: string | null
   filter: string
+  resourceFilter: string
   /** Keyboard cursor in the filtered list (target key), separate from the selection. */
   cursor: string | null
+  favoriteKinds: FavoriteKind[]
+  favoritesReady: boolean
 }
 
 export const initialState: State = {
@@ -22,7 +26,10 @@ export const initialState: State = {
   actionError: null,
   notice: null,
   filter: '',
+  resourceFilter: '',
   cursor: null,
+  favoriteKinds: [],
+  favoritesReady: false,
 }
 
 export const useStore = create<State>(() => ({ ...initialState }))
@@ -86,6 +93,26 @@ export function actions(client: Client) {
   // quick clicks must not persist A after B because A's request was slower.
   let selecting = false
   let nextSelect: TargetRef | null = null
+  let favoritesQueue = Promise.resolve()
+  let confirmedFavorites: FavoriteKind[] | null = null
+  type FavoriteChange = { apply: (items: FavoriteKind[]) => FavoriteKind[]; write: () => Promise<void> }
+  const favoritePending: FavoriteChange[] = []
+  const changeFavorites = (change: FavoriteChange) => {
+    if (!useStore.getState().favoritesReady) return
+    confirmedFavorites ??= useStore.getState().favoriteKinds.slice()
+    favoritePending.push(change)
+    useStore.setState((s) => ({ favoriteKinds: change.apply(s.favoriteKinds) }))
+    favoritesQueue = favoritesQueue.then(async () => {
+      try {
+        await change.write()
+        confirmedFavorites = change.apply(confirmedFavorites!)
+      } catch { showNotice(t('nav.favoritesSaveFailed')) }
+      favoritePending.shift()
+      useStore.setState({ favoriteKinds: favoritePending.reduce((items, op) => op.apply(items), confirmedFavorites!) })
+    })
+    return favoritesQueue
+  }
+  let favoritesLoad: Promise<void> | null = null
 
   async function reload() {
     if (inFlight) {
@@ -142,7 +169,34 @@ export function actions(client: Client) {
       } catch (e) {
         useStore.setState({ loadError: errText(e) })
       }
+      if (!useStore.getState().favoritesReady) {
+        favoritesLoad ??= client.getFavoriteKinds().then(
+          (favoriteKinds) => { useStore.setState({ favoriteKinds, favoritesReady: true }) },
+          () => { showNotice(t('nav.favoritesLoadFailed')) },
+        ).finally(() => { favoritesLoad = null })
+        await favoritesLoad
+      }
       await reload()
+    },
+    setKindFavorite(provider: string, kind: string, favorite: boolean) {
+      const matches = (f: FavoriteKind) => f.provider === provider && f.kind === kind
+      return changeFavorites({
+        apply: (items) => favorite ? items.some(matches) ? items : [...items, { provider, kind }] : items.filter((f) => !matches(f)),
+        write: () => client.setKindFavorite(provider, kind, favorite),
+      })
+    },
+    moveFavoriteKind(provider: string, kind: string, before: string) {
+      return changeFavorites({
+        apply: (items) => {
+          const item = items.find((f) => f.provider === provider && f.kind === kind)
+          if (!item || before === kind) return items
+          const next = items.filter((f) => f !== item)
+          const index = before ? next.findIndex((f) => f.provider === provider && f.kind === before) : -1
+          next.splice(index < 0 ? next.length : index, 0, item)
+          return next
+        },
+        write: () => client.moveFavoriteKind(provider, kind, before),
+      })
     },
     reload,
     // Another target drops the open editor's edits: asked first (edit/guard).

@@ -5,8 +5,9 @@ import { actions, selectedTarget, useStore } from './store'
 import { ViewHub } from './views/viewSync'
 import { Workspace } from './components/Workspace'
 import { Sidebar } from './components/Sidebar'
+import { AppHeader } from './components/AppHeader'
 import { StatusBar } from './components/StatusBar'
-import { TargetDetails } from './components/TargetDetails'
+import { EmptyWorkspace } from './components/TargetDetails'
 import { Dock } from './dock/Dock'
 import { dock } from './dock/store'
 import { TunnelsPanel } from './tunnels/TunnelsPanel'
@@ -121,14 +122,15 @@ export function App({ client }: { client: Client }) {
 
   return (
     <div className="relative flex h-full flex-col">
+      <AppHeader target={target} onHelp={() => setHelp(true)} />
       <div className="flex min-h-0 flex-1">
         <Sidebar act={act} />
         <div className="flex min-w-0 flex-1 flex-col">
           {target ? (
-            <Workspace key={`${target.provider}/${target.id}`} client={client} hub={hub} target={target} />
+            <Workspace key={`${target.provider}/${target.id}`} client={client} hub={hub} target={target} onFavorite={act.setKindFavorite} onMoveFavorite={act.moveFavoriteKind} />
           ) : (
             <main className="min-h-0 min-w-0 flex-1 overflow-y-auto">
-              <TargetDetails />
+              <EmptyWorkspace />
             </main>
           )}
           <Dock

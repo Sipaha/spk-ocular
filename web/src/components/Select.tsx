@@ -10,6 +10,32 @@ export interface SelectOption {
   pinned?: boolean
 }
 
+/** Owned by one workspace; survives its scope-keyed page, never another target. */
+interface SelectSnapshot {
+  open?: boolean
+  query?: string
+  index?: number | null
+  scroll?: number
+  focus?: 'search' | 'list'
+}
+
+export interface SelectMemory {
+  read: () => SelectSnapshot
+  update: (patch: Partial<SelectSnapshot>) => void
+}
+export function createSelectMemory(): SelectMemory {
+  let snapshot: SelectSnapshot = {}
+  return { read: () => snapshot, update: (patch) => { snapshot = { ...snapshot, ...patch } } }
+}
+
+interface Multiple {
+  selected: string[]
+  summary: string
+  onToggle: (value: string) => void
+  /** An edit confirmation must appear above a closed picker. */
+  closeOnToggle?: () => boolean
+}
+
 interface Props {
   value: string
   options: SelectOption[]
@@ -22,6 +48,8 @@ interface Props {
   /** The button's look (size): the field it stands in. */
   className?: string
   disabled?: boolean
+  memory?: SelectMemory
+  multiple?: Multiple
 }
 
 const BUTTON = 'select-look max-w-full truncate rounded-md border border-line bg-app py-1 pl-2 pr-7 text-left outline-none focus:border-accent disabled:opacity-50'
@@ -33,8 +61,12 @@ const BUTTON = 'select-look max-w-full truncate rounded-md border border-line bg
  * elsewhere closes; a letter jumps to the next option starting with it; with
  * search, typing filters and marks the first found.
  */
-export function Select({ value, options, label, onChange, search, searchLabel, className, disabled }: Props) {
-  const [open, setOpen] = useState(false)
+export function Select({ value, options, label, onChange, search, searchLabel, className, disabled, memory, multiple }: Props) {
+  const [open, setOpenNow] = useState(memory?.read().open ?? false)
+  const setOpen = (next: boolean) => {
+    memory?.update(next ? { open: true } : { open: false, query: '', index: null, scroll: 0, focus: 'search' })
+    setOpenNow(next)
+  }
   const button = useRef<HTMLButtonElement>(null)
   const current = options.find((o) => o.value === value)
   const withSearch = search ?? options.length > 12
@@ -57,11 +89,11 @@ export function Select({ value, options, label, onChange, search, searchLabel, c
         aria-expanded={open}
         title={label}
         disabled={disabled}
-        onClick={() => setOpen((o) => !o)}
+        onClick={() => setOpen(!open)}
         onKeyDown={onKey}
         className={[BUTTON, className ?? ''].join(' ')}
       >
-        {current?.label ?? value}
+        {multiple?.summary ?? current?.label ?? value}
       </button>
       {open && (
         <List
@@ -75,6 +107,8 @@ export function Select({ value, options, label, onChange, search, searchLabel, c
             if (back) button.current?.focus()
           }}
           onChange={onChange}
+          memory={memory}
+          multiple={multiple}
         />
       )}
     </>
@@ -89,16 +123,21 @@ interface ListProps {
   anchor: React.RefObject<HTMLButtonElement | null>
   onClose: (back: boolean) => void
   onChange: (value: string) => void
+  memory?: SelectMemory
+  multiple?: Multiple
 }
 
-function List({ value, options, label, search, anchor, onClose, onChange }: ListProps) {
+function List({ value, options, label, search, anchor, onClose, onChange, memory, multiple }: ListProps) {
   const id = useId()
-  const [query, setQuery] = useState('')
-  const [index, setIndex] = useState<number | null>(null)
+  const [query, setQueryNow] = useState(memory?.read().query ?? '')
+  const [index, setIndexNow] = useState<number | null>(memory?.read().index ?? null)
+  const setQuery = (next: string) => { memory?.update({ query: next }); setQueryNow(next) }
+  const setIndex = (next: number | null) => { memory?.update({ index: next }); setIndexNow(next) }
   const [pos, setPos] = useState<{ left: number; top?: number; bottom?: number; minWidth: number; maxHeight: number } | null>(null)
   const box = useRef<HTMLDivElement>(null)
   const list = useRef<HTMLDivElement>(null)
   const input = useRef<HTMLInputElement>(null)
+  const restoredScroll = useRef(memory?.read().scroll ?? 0)
   const close = useRef(onClose)
   useEffect(() => {
     close.current = onClose
@@ -139,7 +178,7 @@ function List({ value, options, label, search, anchor, onClose, onChange }: List
   }, [anchor])
 
   useEffect(() => {
-    ;(input.current ?? list.current)?.focus()
+    ;(memory?.read().focus === 'list' ? list.current : input.current ?? list.current)?.focus()
     const onDown = (e: MouseEvent) => {
       const el = e.target as Node
       if (box.current?.contains(el) || anchor.current?.contains(el)) return
@@ -159,15 +198,25 @@ function List({ value, options, label, search, anchor, onClose, onChange }: List
       document.removeEventListener('mousedown', onDown, true)
       document.removeEventListener('scroll', onScroll, true)
     }
-  }, [anchor])
+  }, [anchor, memory])
   useLayoutEffect(() => {
+    if (restoredScroll.current && list.current) {
+      list.current.scrollTop = restoredScroll.current
+      if (pos) restoredScroll.current = 0
+      return
+    }
     list.current?.querySelector(`[data-index="${active}"]`)?.scrollIntoView?.({ block: 'nearest' })
   }, [active, pos])
 
   const choose = (o: SelectOption) => {
     if (o.disabled) return
     onClose(true)
-    if (o.value !== value) onChange(o.value)
+    if (multiple || o.value !== value) onChange(o.value)
+  }
+  const toggle = (o: SelectOption) => {
+    if (!multiple || o.disabled || o.pinned) return
+    if (multiple.closeOnToggle?.()) onClose(true)
+    multiple.onToggle(o.value)
   }
   const onKey = (e: React.KeyboardEvent) => {
     if (e.nativeEvent.isComposing) return
@@ -190,7 +239,9 @@ function List({ value, options, label, search, anchor, onClose, onChange }: List
     else if (e.key === 'End') at(firstEnabled(n - 1, -1))
     else if (e.key === 'PageDown') page(1)
     else if (e.key === 'PageUp') page(-1)
-    else if (e.key === 'Enter' || (e.key === ' ' && !search)) {
+    else if (e.key === ' ' && multiple && e.target !== input.current) {
+      if (active >= 0) toggle(items[active])
+    } else if (e.key === 'Enter' || (e.key === ' ' && !search)) {
       if (active >= 0) choose(items[active])
     } else if (e.key === 'Escape') onClose(true)
     else if (e.key === 'Tab') {
@@ -231,6 +282,7 @@ function List({ value, options, label, search, anchor, onClose, onChange }: List
           <SearchIcon className="h-3.5 w-3.5 shrink-0 text-fg-subtle" />
           <input
             ref={input}
+            onFocus={() => { memory?.update({ focus: 'search' }) }}
             role="combobox"
             aria-label={search}
             aria-expanded="true"
@@ -252,8 +304,11 @@ function List({ value, options, label, search, anchor, onClose, onChange }: List
         ref={list}
         id={`${id}-list`}
         role="listbox"
+        onFocus={() => { memory?.update({ focus: 'list' }) }}
+        aria-multiselectable={multiple ? true : undefined}
         aria-label={label}
-        tabIndex={search ? undefined : -1}
+        tabIndex={multiple ? 0 : search ? undefined : -1}
+        onScroll={(e) => { memory?.update({ scroll: e.currentTarget.scrollTop }) }}
         aria-activedescendant={!search && active >= 0 ? optId(active) : undefined}
         style={{ maxHeight: pos?.maxHeight ?? 320 }}
         className="overflow-y-auto py-1 outline-none focus-visible:outline-none"
@@ -264,7 +319,8 @@ function List({ value, options, label, search, anchor, onClose, onChange }: List
             id={optId(i)}
             data-index={i}
             role="option"
-            aria-selected={i === active}
+            aria-label={o.label}
+            aria-selected={multiple ? (o.pinned ? value === '' : multiple.selected.includes(o.value)) : i === active}
             aria-disabled={o.disabled || undefined}
             onMouseDown={(e) => e.preventDefault()}
             onClick={() => choose(o)}
@@ -276,9 +332,13 @@ function List({ value, options, label, search, anchor, onClose, onChange }: List
               o.pinned ? 'italic' : '',
             ].join(' ')}
           >
-            <span aria-hidden="true" className="w-3 shrink-0 text-accent">
-              {o.value === value ? '✓' : ''}
-            </span>
+            {multiple && !o.pinned ? (
+              <input type="checkbox" aria-label={o.label} checked={multiple.selected.includes(o.value)} tabIndex={-1}
+                onClick={(e) => e.stopPropagation()} onChange={() => toggle(o)}
+                className="h-4 w-4 shrink-0 cursor-pointer accent-accent" />
+            ) : (
+              <span aria-hidden="true" className="w-4 shrink-0 text-accent">{o.value === value ? '✓' : ''}</span>
+            )}
             <span className="min-w-0 truncate">{o.label}</span>
           </div>
         ))}

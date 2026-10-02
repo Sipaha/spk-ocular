@@ -251,6 +251,8 @@ type Metrics struct {
 	Timestamp time.Time        `json:"timestamp"`
 	Window    string           `json:"window,omitempty"`
 	Values    map[string]Usage `json:"-"`
+	// Coverage reports scopes whose metrics failed while other scopes answered.
+	Coverage []SourceCoverage `json:"coverage,omitempty"`
 }
 
 // Usage: CPU in cores, Memory in bytes; nil — that metric is unknown (the

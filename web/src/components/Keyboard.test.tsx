@@ -56,18 +56,20 @@ describe('keyboard', () => {
     await userEvent.keyboard('{ArrowDown}')
     expect(within(nav).getByRole('button', { name: 'Nodes' })).toHaveFocus()
     await userEvent.keyboard('{Home}')
-    expect(within(nav).getByRole('button', { name: 'Overview' })).toHaveFocus()
+    expect(within(nav).getByRole('button', { name: 'Pods' })).toHaveFocus()
     await userEvent.keyboard('{End}{Enter}')
     expect(await screen.findByRole('heading', { name: 'Nodes' })).toBeInTheDocument()
   })
 
   it('table: PageDown/PageUp by a page, Home and End', async () => {
-    // jsdom renders what fits its 800px box plus the overscan (38 rows of 30px).
-    const { grid, scroll } = await openProd(38)
-    Object.defineProperty(scroll, 'clientHeight', { value: 10 * 30 }) // jsdom has no layout: ten rows fit
+    // Stay inside jsdom's 800px box + overscan; real off-screen reveal is
+    // covered in e2e. Give paging ten actual row heights, independent of density.
+    const { grid, scroll } = await openProd(35)
+    const rowHeight = Number.parseFloat(grid.querySelector<HTMLElement>('[data-row-id]')!.style.height)
+    Object.defineProperty(scroll, 'clientHeight', { value: 10 * rowHeight })
     scroll.focus()
     await userEvent.keyboard('{End}')
-    expect(selectedName(grid)).toBe('p-37')
+    expect(selectedName(grid)).toBe('p-34')
     await userEvent.keyboard('{Home}')
     expect(selectedName(grid)).toBe('p-00')
     await userEvent.keyboard('{PageDown}')
@@ -181,12 +183,15 @@ describe('keyboard', () => {
     expect(screen.getByRole('listbox', { name: 'targets' })).toHaveFocus()
   })
 
-  it('the bottom panel has a palette button (in a terminal Ctrl+K is the program\'s)', async () => {
+  it('the palette button stays in the app header without a duplicate in the dock', async () => {
     const { scroll } = await openProd()
     scroll.focus()
     await userEvent.keyboard('{ArrowDown}l')
     const panel = await screen.findByRole('region', { name: /panel/i })
-    await userEvent.click(within(panel).getByRole('button', { name: 'Go to (Ctrl+K)' }))
+    expect(within(panel).queryByRole('button', { name: 'Go to (Ctrl+K)' })).toBeNull()
+    const palette = screen.getByRole('button', { name: 'Go to (Ctrl+K)' })
+    expect(palette.closest('header')).toHaveClass('app-header')
+    await userEvent.click(palette)
     expect(await screen.findByRole('dialog', { name: 'Go to' })).toBeInTheDocument()
   })
 })

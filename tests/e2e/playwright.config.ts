@@ -7,11 +7,11 @@ const port = Number(process.env.E2E_PORT ?? 5191)
 // The config is evaluated by the runner AND again in every worker: create the
 // scratch dir once (runner) and hand it to the workers through the env they
 // inherit — a second mkdtemp would point the specs at files the server never
-// reads. Scratch state stays inside the repo (gitignored).
+// reads. Scratch state stays inside the solution’s .agents/tmp.
 let root = process.env.E2E_ROOT
 if (!root) {
-  mkdirSync(join(import.meta.dirname, '.run'), { recursive: true })
-  root = mkdtempSync(join(import.meta.dirname, '.run', 'e2e-'))
+  mkdirSync(join(import.meta.dirname, '../../../.agents/tmp'), { recursive: true })
+  root = mkdtempSync(join(import.meta.dirname, '../../../.agents/tmp', 'e2e-'))
   const e = env(root)
   writeAtomic(e.one, ONE)
   writeAtomic(e.two, TWO)
@@ -26,6 +26,7 @@ const bin = process.env.E2E_BIN ?? '../../build/bin/spk-ocular'
 
 export default defineConfig({
   testDir: '.',
+  outputDir: join(import.meta.dirname, '../../../.agents/tmp/playwright-e2e'),
   testMatch: 'targets.spec.ts',
   workers: 1, // one app instance, shared state — specs restore what they change
   use: { baseURL: `http://127.0.0.1:${port}`, locale: 'en-US', screenshot: 'only-on-failure' },

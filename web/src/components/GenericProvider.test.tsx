@@ -81,7 +81,7 @@ describe('a provider without Kubernetes knowledge', () => {
     await screen.findByRole('grid', { name: 'resources' })
     const input = screen.getByRole('textbox', { name: 'Zone' })
     expect(input).toHaveAttribute('placeholder', 'Type a zone')
-    expect(input).toHaveAttribute('title', 'Cannot list zones: no list')
+    expect(input).toHaveAttribute('title', 'Cannot list zones: no list. Separate multiple names with commas')
     await userEvent.type(input, 'green{Enter}')
     expect(f.client.openView).toHaveBeenLastCalledWith('other', 'site', { kind: 'crates', scope: { mode: 'one', name: 'green' } })
   })

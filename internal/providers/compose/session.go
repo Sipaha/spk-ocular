@@ -410,6 +410,9 @@ func (s *session) Watch(q provider.Query, sink provider.Sink) (func(), error) {
 	case q.Subject != nil:
 		return nil, &provider.Error{Class: provider.ClassUnsupported, Message: "Docker objects have no events view"}
 	}
+	if q.Scope.Mode == core.ScopeSome && (q.Kind == KindServices || q.Kind == KindContainers || q.Kind == KindNetworks || q.Kind == KindVolumes) {
+		return provider.WatchScopes(q, sink, s.Watch)
+	}
 	fs, err := s.acquire(kinds)
 	if err != nil {
 		return nil, err

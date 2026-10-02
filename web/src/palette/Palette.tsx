@@ -129,8 +129,8 @@ function PaletteDialog({ client, act }: { client: Client; act: Actions }) {
 
   return (
     <div className="fixed inset-0 z-40 flex items-start justify-center bg-black/40 pt-[12vh]" onMouseDown={(e) => e.target === e.currentTarget && closePalette()}>
-      <div role="dialog" aria-modal="true" aria-label={t('palette.label')} className="flex max-h-[70vh] w-[min(640px,92%)] flex-col overflow-hidden rounded-lg border border-line bg-panel shadow-2xl" onKeyDown={onKey}>
-        <label className="flex items-center gap-2 border-b border-line px-3 py-2">
+      <div role="dialog" aria-modal="true" aria-label={t('palette.label')} className="palette-dialog flex max-h-[70vh] w-[min(640px,92%)] flex-col overflow-hidden border border-line bg-panel" onKeyDown={onKey}>
+        <label className="palette-search flex items-center gap-3 border-b border-line">
           <SearchIcon className="h-4 w-4 shrink-0 text-fg-subtle" />
           <input
             ref={input}
@@ -150,7 +150,7 @@ function PaletteDialog({ client, act }: { client: Client; act: Actions }) {
             className="w-full bg-transparent text-[16px] outline-none placeholder:text-fg-subtle"
           />
         </label>
-        <div ref={list} id="palette-list" role="listbox" aria-label={t('palette.label')} className="min-h-0 flex-1 overflow-y-auto py-1">
+        <div ref={list} id="palette-list" role="listbox" aria-label={t('palette.label')} className="palette-options min-h-0 flex-1 overflow-y-auto">
           {built.items.map((item, i) => (
             <div
               key={item.key}
@@ -160,7 +160,7 @@ function PaletteDialog({ client, act }: { client: Client; act: Actions }) {
               onMouseDown={(e) => e.preventDefault()}
               onClick={() => run(item)}
               onMouseMove={() => item.key !== cursor && setMoved(item.key)}
-              className={['flex cursor-pointer items-baseline gap-3 px-3 py-1.5', i === index ? 'bg-active text-fg' : 'text-fg-muted'].join(' ')}
+              className={['palette-option flex cursor-pointer items-baseline gap-3 px-3 py-1.5', i === index ? 'bg-active text-fg' : 'text-fg-muted'].join(' ')}
             >
               <span className="w-20 shrink-0 truncate text-[12px] uppercase tracking-wide text-fg-subtle">{item.section === 'scope' ? sources.scopeWords?.singular : t(`palette.section.${item.section}` as MessageKey)}</span>
               <span className="min-w-0 flex-1 truncate text-fg">{item.label}</span>

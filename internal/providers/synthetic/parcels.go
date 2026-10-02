@@ -56,7 +56,7 @@ func (ps *parcels) deliverLocked() {
 	for w := range ps.watchers {
 		var rows []core.Row
 		for _, p := range ps.objs {
-			if w.q.Scope.Mode == core.ScopeOne && w.q.Scope.Name != p.zone || w.q.Name != "" && w.q.Name != p.name {
+			if !w.q.Scope.Contains(p.zone) || w.q.Name != "" && w.q.Name != p.name {
 				continue
 			}
 			rows = append(rows, core.Row{

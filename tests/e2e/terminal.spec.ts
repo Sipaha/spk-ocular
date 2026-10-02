@@ -22,6 +22,15 @@ const sizes = async (page: Page) => [...((await screen(page).textContent()) ?? '
 
 test('typing, output and the size the terminal opened with', async ({ page }) => {
   await openShell(page)
+  // xterm resolves the shared CSS tokens; production CSS must keep all
+  // sixteen ANSI colours, including ones referenced only at runtime.
+  const colors = await page.evaluate(() => {
+    const css = getComputedStyle(document.documentElement)
+    return Array.from({ length: 16 }, (_, i) => css.getPropertyValue(`--color-ansi-${i}`).trim())
+  })
+  expect(colors.filter(Boolean)).toHaveLength(16)
+  const appBackground = await page.locator('body').evaluate((el) => getComputedStyle(el).backgroundColor)
+  await expect(activePanel(page).locator('.xterm-scrollable-element')).toHaveCSS('background-color', appBackground)
   await run(page, 'hello there')
   await expectScreen(page, 'you said: hello there')
   const [first] = await sizes(page)
@@ -65,7 +74,9 @@ test('an exit code is shown; Reconnect starts the shell again', async ({ page })
   await alert.getByRole('button', { name: 'Reconnect' }).click()
   await expectScreen(page, 'reconnected')
   await expect(alert).toHaveCount(0)
-  await expect.poll(async () => (await screen(page).textContent())?.match(/synthetic terminal on api/g)?.length).toBe(2)
+  // xterm exposes only visible rows; the old greeting can be in scrollback.
+  // A greeting AFTER the reconnect marker proves the new shell has started.
+  await expectScreen(page, /reconnected[\s\S]*synthetic terminal on api/)
   await run(page, 'again')
   await expectScreen(page, 'you said: again')
 })

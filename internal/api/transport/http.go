@@ -146,6 +146,15 @@ func (h *HTTP) routes() {
 	h.mux.HandleFunc("POST /api/GetTargetState", handle(func(ctx context.Context, r *targetReq) (any, error) {
 		return h.api.GetTargetState(ctx, r.Provider, r.Target)
 	}))
+	h.mux.HandleFunc("POST /api/GetFavoriteKinds", handle(func(ctx context.Context, _ *struct{}) (any, error) {
+		return h.api.GetFavoriteKinds(ctx)
+	}))
+	h.mux.HandleFunc("POST /api/SetKindFavorite", handle(func(ctx context.Context, r *api.KindFavoriteRequest) (any, error) {
+		return nil, h.api.SetKindFavorite(ctx, *r)
+	}))
+	h.mux.HandleFunc("POST /api/MoveFavoriteKind", handle(func(ctx context.Context, r *api.MoveFavoriteKindRequest) (any, error) {
+		return nil, h.api.MoveFavoriteKind(ctx, *r)
+	}))
 	h.mux.HandleFunc("POST /api/SetTargetState", handle(func(ctx context.Context, r *struct {
 		Provider string `json:"provider"`
 		Target   string `json:"target"`

@@ -43,6 +43,12 @@ export interface ScopeNames {
   all: Message
 }
 
+/** A resource kind, shared by every connection of its provider. */
+export interface FavoriteKind {
+  provider: string
+  kind: string
+}
+
 /** An object whose details were opened (its UID as of then). */
 export interface RecentObject {
   ref: Ref
@@ -481,11 +487,12 @@ export interface TerminalOpen {
   attach?: boolean
 }
 
-export type ScopeMode = 'all' | 'one' | 'none'
+export type ScopeMode = 'all' | 'one' | 'some' | 'none'
 
 export interface ScopeSel {
   mode: ScopeMode
   name?: string
+  names?: string[]
 }
 
 export interface Query {
@@ -574,6 +581,7 @@ export interface Usage {
 }
 
 export interface MetricsView {
+  coverage?: SourceCoverage[]
   /** "ok" or an error class: unsupported (no metrics API), forbidden, ... */
   status: string
   /** The error's detail (not "ok"). */

@@ -1,4 +1,4 @@
-import { act, render, screen, within } from '@testing-library/react'
+import { act, fireEvent, render, screen, within } from '@testing-library/react'
 import { useState } from 'react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
@@ -15,6 +15,25 @@ const row = (name: string): Row =>
   ({ id: `id-${name}`, ref: { provider: 'p', target: 't', kind: 'k', name }, cells: [{ text: name }], health: { state: 'ok' } }) as unknown as Row
 
 const ok = (values: MetricsView['values']): MetricsView => ({ status: 'ok', values })
+
+it('column resizing changes a shared width without sorting; double-click resets it', async () => {
+  const save = vi.fn()
+  const sort = vi.fn()
+  render(<ResourceTable columns={columns} rows={[row('a')]} hideScope={false} filter="" selected={null} onSelect={() => {}} onSort={sort} onWidths={save} initialWidths={{ cpu: 170 }} />)
+  const grid = screen.getByRole('grid')
+  expect(grid.style.getPropertyValue('--column-1')).toBe('170px')
+  const handle = screen.getByRole('separator', { name: 'Resize column Name' })
+  vi.spyOn(handle.parentElement!, 'getBoundingClientRect').mockReturnValue({ width: 220 } as DOMRect)
+  handle.focus()
+  await userEvent.keyboard('{ArrowRight}')
+  expect(grid.style.getPropertyValue('--column-0')).toBe('230px')
+  expect(save).toHaveBeenLastCalledWith({ name: 230, cpu: 170 })
+  expect(sort).not.toHaveBeenCalled()
+  fireEvent.doubleClick(handle)
+  expect(grid.style.getPropertyValue('--column-0')).toBe('')
+  expect(save).toHaveBeenLastCalledWith({ cpu: 170 })
+  expect(sort).not.toHaveBeenCalled()
+})
 
 const names = () => within(screen.getByRole('grid')).getAllByRole('row').slice(1).map((r) => within(r).getAllByRole('gridcell')[0].textContent)
 

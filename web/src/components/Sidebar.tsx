@@ -3,8 +3,7 @@ import { useEffect, useRef, useState } from 'react'
 import type { Target, TargetGroup } from '../api/types'
 import { providerText, t } from '../i18n'
 import { type Actions, matchesFilter, targetKey, useStore } from '../store'
-import { EyeIcon, ProviderIcon, SearchIcon, WarningIcon } from './icons'
-import { openPalette } from '../palette/store'
+import { ProviderIcon, SearchIcon, WarningIcon } from './icons'
 import { agents, pendingOf, useAgents } from '../agents/store'
 import { Menu, type MenuItem } from '../actions/Menu'
 
@@ -48,19 +47,7 @@ export function Sidebar({ act }: { act: Actions }) {
   return (
     <aside data-area="targets" style={{ width, maxWidth: '30vw' }} className="relative flex h-full shrink-0 flex-col border-r border-line bg-sidebar">
       <PanelResize label={t('panels.targets')} value={width} min={160} max={() => Math.min(420, window.innerWidth * 0.3)} onDone={(targets) => usePanelWidths.setState({ targets })} />
-      <div className="flex items-center gap-2 px-4 pt-4 pb-3">
-        <EyeIcon className="h-5 w-5 text-accent" />
-        <span className="text-[16px] font-semibold tracking-tight">SPK Ocular</span>
-        <button
-          className="ml-auto rounded border border-line px-1.5 py-0.5 text-[12px] text-fg-subtle hover:bg-hover hover:text-fg"
-          onClick={openPalette}
-          title={t('palette.label')}
-          aria-label={`${t('palette.label')} (Ctrl+K)`}
-        >
-          Ctrl+K
-        </button>
-      </div>
-      <label className="mx-3 mb-2 flex items-center gap-2 rounded-md border border-line bg-app px-2 py-1.5 focus-within:border-accent">
+      <label className="target-filter field-shell">
         <SearchIcon className="h-3.5 w-3.5 text-fg-subtle" />
         <input
           data-target-filter
@@ -80,7 +67,7 @@ export function Sidebar({ act }: { act: Actions }) {
         data-area-focus
         onKeyDown={onListKey}
         aria-label="targets"
-        className="min-h-0 flex-1 overflow-y-auto px-2 pb-3 outline-none"
+        className="target-list min-h-0 flex-1 overflow-y-auto px-2 pb-3 outline-none"
       >
         {view?.groups.map((g) => <Group key={g.provider} group={g} act={act} onMenu={(target, at) => setMenu({ target, at })} />)}
       </div>
@@ -113,7 +100,7 @@ function Group({ group, act, onMenu }: { group: TargetGroup; act: Actions; onMen
   const visible = group.targets.filter((x) => matchesFilter(x, filter))
   return (
     <section className="mt-2" aria-label={group.title}>
-      <h2 className="flex items-center gap-1.5 px-2 pb-1 text-[12px] font-semibold uppercase tracking-wider text-fg-subtle">
+      <h2 className="sidebar-group-heading">
         <ProviderIcon provider={group.provider} className="h-3.5 w-3.5" />
         <span className="flex-1">{group.title}</span>
         <span className="font-normal">{group.targets.length}</span>
@@ -169,7 +156,7 @@ function TargetRow({ target, act, onMenu }: { target: Target; act: Actions; onMe
       // fallback only, its content names it.
       title={!selected && target.open ? t('target.openHint') : undefined}
       className={[
-        'group flex cursor-default items-center gap-2 rounded-md px-2 py-1.5',
+        'target-row group flex cursor-default items-center gap-2 rounded-md px-2 py-1.5',
         selected ? 'bg-active' : 'hover:bg-hover',
         cursor && !selected ? 'ring-1 ring-line ring-inset' : '',
       ].join(' ')}

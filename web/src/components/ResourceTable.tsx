@@ -1,5 +1,6 @@
 import { useVirtualizer } from '@tanstack/react-virtual'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
+import { ColumnResize } from './ColumnResize'
 import type { Cell, Column, HealthState, MetricsView, Row, SortSpec } from '../api/types'
 import { formatAge, formatBytes, formatCPU } from '../format'
 import { isShortcut } from '../keyboard'
@@ -7,7 +8,7 @@ import { Menu, type MenuItem } from '../actions/Menu'
 import { t } from '../i18n'
 import { useNow } from '../views/useView'
 
-const ROW_H = 30
+const ROW_H = 32
 
 export interface Sort {
   col: number
@@ -45,6 +46,8 @@ interface Props {
   /** The sort the table was left with (a column id), before defaultSort; onSort hears each chosen. */
   initialSort?: { col: string; desc: boolean }
   onSort?: (s: { col: string; desc: boolean }) => void
+  initialWidths?: Record<string, number>
+  onWidths?: (widths: Record<string, number>) => void
   /** The table of its area (F6 focuses it); not a table inside details. */
   areaFocus?: boolean
   /**
@@ -122,8 +125,16 @@ export function matchesRow(r: Row, f: string): boolean {
   return r.cells.some((c) => (c.text ?? '').toLowerCase().includes(needle)) || (r.health.reason ?? '').toLowerCase().includes(needle)
 }
 
-export function ResourceTable({ columns, rows, hideScope, filter, selected, reveal, onSelect, onOpen, onLogs, onTerminal, metrics, onVisibleRows, rowMenu, onDelete, defaultSort, initialSort, onSort, areaFocus, marked, onMarked }: Props) {
+export function ResourceTable({ columns, rows, hideScope, filter, selected, reveal, onSelect, onOpen, onLogs, onTerminal, metrics, onVisibleRows, rowMenu, onDelete, defaultSort, initialSort, onSort, initialWidths, onWidths, areaFocus, marked, onMarked }: Props) {
   const now = useNow(10_000)
+  const [widths, setWidths] = useState<Record<string, number>>(initialWidths ?? {})
+  const resizeColumn = (id: string, width: number | null) => {
+    const next = { ...widths }
+    if (width === null) delete next[id]
+    else next[id] = width
+    setWidths(next)
+    onWidths?.(next)
+  }
   const [menu, setMenu] = useState<{ items: MenuItem[]; label: string; at: { x: number; y: number } } | null>(null)
   const openMenu = (r: Row, at: { x: number; y: number }) => {
     const m = rowMenu?.(r) ?? []
@@ -239,12 +250,13 @@ export function ResourceTable({ columns, rows, hideScope, filter, selected, reve
   const least = (c: Column) => c.width || (c.id === 'name' ? 180 : 120)
   const marking = !!onMarked
   const template = (marking ? `${MARK_W}px ` : '') + visibleCols
-    .map(({ c }) => (c.width ? `${c.width}px` : c.id === 'name' ? 'minmax(180px, 2fr)' : 'minmax(120px, 1fr)'))
+    .map(({ c, i }) => `var(--column-${i}, ${c.width ? `${c.width}px` : c.id === 'name' ? 'minmax(180px, 2fr)' : 'minmax(120px, 1fr)'})`)
     .join(' ')
   // The columns' least width, set on the header and the rows: Chromium does
   // not count the overflowing tracks of the (absolute) rows fully, so the
   // last columns could not be scrolled to.
-  const minWidth = visibleCols.reduce((sum, { c }) => sum + least(c), marking ? MARK_W : 0)
+  const minWidth = `calc(${[`${marking ? MARK_W : 0}px`, ...visibleCols.map(({ c, i }) => `var(--column-${i}, ${least(c)}px)`)].join(' + ')})`
+  const widthStyle = Object.fromEntries(columns.flatMap((c, i) => widths[c.id] ? [[`--column-${i}`, `${widths[c.id]}px`]] : [])) as CSSProperties
 
   // Marks: a click with Ctrl toggles one, with Shift marks the range from
   // the last toggled row (the anchor) in the shown order.
@@ -319,26 +331,28 @@ export function ResourceTable({ columns, rows, hideScope, filter, selected, reve
   }
 
   return (
-    <div className="flex min-h-0 min-w-0 flex-1 flex-col" role="grid" aria-rowcount={sorted.length} aria-label="resources">
+    <div className="resource-grid flex min-h-0 min-w-0 flex-1 flex-col" style={widthStyle} role="grid" aria-rowcount={sorted.length} aria-label="resources">
       {/* The header scrolls sideways with the rows (a narrow window), never the page. */}
-      <div ref={headRef} className="shrink-0 overflow-hidden border-b border-line bg-sidebar [scrollbar-gutter:stable]">
-        <div className="grid text-[12px] font-semibold uppercase tracking-wide text-fg-subtle" style={{ gridTemplateColumns: template, minWidth }} role="row">
+      <div ref={headRef} className="resource-grid-header shrink-0 overflow-hidden border-b border-line [scrollbar-gutter:stable]">
+        <div className="grid" style={{ gridTemplateColumns: template, minWidth }} role="row">
           {marking && (
             <span role="columnheader" className="flex items-center justify-center">
               <MarkBox state={allState} label={t('table.markAll')} onToggle={() => (markAll(), focusTable())} />
             </span>
           )}
           {visibleCols.map(({ c, i }) => (
+            <div key={c.id} className="relative min-w-0">
             <button
-              key={c.id}
               role="columnheader"
               aria-sort={sort.col === i ? (sort.desc ? 'descending' : 'ascending') : 'none'}
               onClick={() => setSort((s) => ({ col: i, desc: s.col === i ? !s.desc : false, clicks: s.clicks + 1 }))}
-              className={['truncate px-3 py-1.5 text-left hover:text-fg', isNumeric(c) ? 'text-right' : ''].join(' ')}
+              className={['h-full w-full truncate px-3 py-1.5 text-left hover:text-fg', isNumeric(c) ? 'text-right' : ''].join(' ')}
             >
               {c.title}
               {sort.col === i && <span className="ml-1">{sort.desc ? '↓' : '↑'}</span>}
             </button>
+            <ColumnResize column={c.title} variable={`--column-${i}`} value={widths[c.id] ?? least(c)} onDone={(width) => resizeColumn(c.id, width)} />
+            </div>
           ))}
         </div>
       </div>
@@ -383,7 +397,7 @@ export function ResourceTable({ columns, rows, hideScope, filter, selected, reve
                   })
                 }
                 title={r.health.message ? `${r.health.reason}: ${r.health.message}` : r.health.reason}
-                className={['absolute left-0 grid w-full cursor-default items-center border-b border-line/40', isSel ? 'bg-active' : isMarked ? 'bg-marked' : 'hover:bg-hover'].join(' ')}
+                className={['resource-row absolute left-0 grid w-full cursor-default items-center border-b border-line/40', isSel ? 'bg-active' : isMarked ? 'bg-marked' : 'hover:bg-hover'].join(' ')}
                 style={{ top: vi.start, height: ROW_H, gridTemplateColumns: template, minWidth }}
               >
                 {marking && (
@@ -393,6 +407,7 @@ export function ResourceTable({ columns, rows, hideScope, filter, selected, reve
                 )}
                 {visibleCols.map(({ c, i }) => {
                   const cell = cellOf(r, i)
+                  const text = cellText(c, cell, now)
                   // No status column (a table of the server's columns): the
                   // row's health is a dot by its first cell.
                   const dotHere = c.type === 'status' || (!hasStatus && i === 0)
@@ -400,6 +415,7 @@ export function ResourceTable({ columns, rows, hideScope, filter, selected, reve
                     <span
                       key={c.id}
                       role="gridcell"
+                      title={(dotHere && r.health.message ? `${text}\n${r.health.message}` : text) || undefined}
                       className={[
                         'truncate px-3',
                         isNumeric(c) ? 'text-right font-mono text-[13px]' : '',
@@ -409,7 +425,7 @@ export function ResourceTable({ columns, rows, hideScope, filter, selected, reve
                       ].join(' ')}
                     >
                       {dotHere && <HealthDot state={r.health.state} muted={c.type === 'status' && cell?.muted} />}
-                      {cellText(c, cell, now)}
+                      {text}
                     </span>
                   )
                 })}

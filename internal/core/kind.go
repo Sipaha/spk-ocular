@@ -1,5 +1,7 @@
 package core
 
+import "slices"
+
 // ColumnType tells the UI how to render and sort a column.
 type ColumnType string
 
@@ -143,23 +145,49 @@ type ScopeMode string
 const (
 	ScopeAll  ScopeMode = "all"  // every scope the user can see
 	ScopeOne  ScopeMode = "one"  // ScopeSel.Name
+	ScopeSome ScopeMode = "some" // explicit Names; empty means no scopes, never all
 	ScopeNone ScopeMode = "none" // unscoped kinds
 )
 
 type ScopeSel struct {
-	Mode ScopeMode `json:"mode"`
-	Name string    `json:"name,omitempty"`
+	Mode  ScopeMode `json:"mode"`
+	Name  string    `json:"name,omitempty"`
+	Names []string  `json:"names,omitempty"`
 }
 
 // Valid checks the selector's shape.
 func (s ScopeSel) Valid() bool {
 	switch s.Mode {
 	case ScopeAll, ScopeNone:
-		return s.Name == ""
+		return s.Name == "" && len(s.Names) == 0
 	case ScopeOne:
-		return s.Name != ""
+		return s.Name != "" && len(s.Names) == 0
+	case ScopeSome:
+		return s.Name == "" && !slices.Contains(s.Names, "")
 	}
 	return false
+}
+
+// SelectedNames returns a sorted, independent set for an explicit selector.
+func (s ScopeSel) SelectedNames() []string {
+	if s.Mode == ScopeOne {
+		return []string{s.Name}
+	}
+	names := slices.Clone(s.Names)
+	slices.Sort(names)
+	return slices.Compact(names)
+}
+
+// Contains tests membership without turning an empty explicit set into all.
+func (s ScopeSel) Contains(name string) bool {
+	switch s.Mode {
+	case ScopeOne:
+		return s.Name == name
+	case ScopeSome:
+		return slices.Contains(s.Names, name)
+	default:
+		return s.Mode == ScopeAll || s.Mode == ScopeNone
+	}
 }
 
 type Scope struct {

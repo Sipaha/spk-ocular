@@ -120,8 +120,23 @@ read-only/protected-пометка contexts, трей, несколько акт
   навигация. Горячие клавиши по `KeyboardEvent.code` — работают в русской раскладке.
   Разделы навигации — как в Lens (решение пользователя 2026-09-30): Workloads (с Jobs,
   CronJobs), Network, Config (HPA, квоты, PDB…), Storage, Access Control; «API groups» — CRD и
-  редкое, свёрнута по умолчанию. Размер интерфейса (решение пользователя): текст 14px, строки
-  таблицы 30px; терминал открывается кнопкой «Терминал ▾» (▾ — контейнер и команда).
+  редкое, свёрнута по умолчанию. Размер интерфейса: текст 14px, строки таблицы 32px.
+  В редизайне 2026-10-02 пользователь выбрал баланс с небольшим уклоном к большей плотности:
+  графитовые поверхности, общий заголовок с текущей целью, инструменты логов переносятся
+  группами (`docs/plans/2026-10-02-interface-redesign.md`). Терминал открывается кнопкой
+  «Терминал ▾» (▾ — контейнер и команда).
+  Уточнения 2026-10-02: заголовки Connections/Resources убраны, оба списка имеют
+  закреплённые поля поиска. Favorites общие для всех подключений: добавление/удаление
+  звёздочкой и порядок через D&D с линией вставки, сохранение между запусками.
+  Избранный вид исключается из исходного раздела (также в поиске) и возвращается
+  туда после удаления из избранного; пустые разделы скрываются.
+  Несколько scope выбираются флажками без закрытия списка; строка/Enter выбирает
+  ровно один, пустой набор не означает «все». Kubernetes читает выбранные namespaces
+  отдельно, включая метрики, с раздельным RBAC. Границы колонок таблиц перетаскиваются;
+  основные таблицы сохраняют ширины по цели, виду и ID колонки; двойной щелчок сбрасывает.
+  Сведения о подключении открываются в модальном окне кнопкой ⓘ рядом с именем цели
+  в шапке; пункт Overview удалён. Таблица, её фильтр и несохранённая правка остаются
+  на месте при открытии/закрытии окна. Старый выбор Overview заменяется видом по умолчанию.
 
 ## Стек
 
@@ -273,8 +288,9 @@ type Ref struct {
     Provider, Target, Scope, Kind, Name, UID string
 }
 
-// Scope-селектор явный: все / один / неприменимо — не через "".
-type ScopeSel struct { Mode ScopeMode; Name string } // ScopeAll | ScopeOne | ScopeNone
+// Scope-селектор явный: все / один / набор / неприменимо — не через "".
+type ScopeSel struct { Mode ScopeMode; Name string; Names []string } // all | one | some | none
+// some с пустым Names означает пустой набор, никогда all.
 
 type Health struct {                 // сводка = проблема с наивысшим приоритетом
     State  HealthState               // ok|progressing|warning|error|terminating|unknown
@@ -487,7 +503,8 @@ target, kind, scope, name, uid, title, opened_at; ≤ 50 на target, ≤ 500 в
   `keyboard.ts`, `Splitter`, иконки, i18n ru/en, `useFrames`.
 - **SPK-launcher**: пайплайн логов (`useLogStream`, `useLogFilter`, `LogViewport`,
   `logSelection`, `LogViewer`), UI-примитивы (`Modal`/`ConfirmModal`, `ContextMenu`, `Toast`,
-  `BottomPanel`, `RightDrawer`, `CodeEditor`, `StatusBadge`), палитра Darcula/Lens;
+  `BottomPanel`, `RightDrawer`, `CodeEditor`, `StatusBadge`); текущая палитра Ocular —
+  собственная графитовая (`web/src/index.css`), цвета ANSI сохранены;
   для Compose — определение Docker endpoint и `stats.go`. Код launcher — пользователя,
   переносится как есть (решение 2026-09-29).
 - Пишем с нуля: Kubernetes-provider, терминал xterm.js, port-forward, палитра команд,

@@ -64,6 +64,19 @@ async function openEditor() {
 }
 
 describe('editing an object in the details', () => {
+  it('opening and closing connection information preserves unsaved YAML without asking to discard it', async () => {
+    const { drawer, v } = await openEditor()
+    type(v, 'x: 1', 'x: 2')
+    await userEvent.click(screen.getByRole('button', { name: 'Connection information' }))
+    expect(screen.getByRole('dialog', { name: 'Connection information' })).toBeInTheDocument()
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
+    await userEvent.keyboard('{Escape}')
+    expect(drawer).toBeInTheDocument()
+    expect(await editorView(drawer)).toBe(v)
+    expect(v.state.doc.toString()).toContain('x: 2')
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
+  })
+
   it('offers Edit only for editable kinds', async () => {
     const { grid } = await openProd()
     await userEvent.click(within(grid).getByText('api-1'))
@@ -181,7 +194,7 @@ describe('editing an object in the details', () => {
     await asks(() => userEvent.click(within(drawer).getByRole('tab', { name: 'Details' })))
     await asks(() => userEvent.click(within(grid).getByText('api-2')))
     expect(screen.getByRole('dialog', { name: 'pods api-1' })).toBeInTheDocument()
-    await asks(() => userEvent.click(screen.getByRole('button', { name: /Nodes/ })))
+    await asks(() => userEvent.click(screen.getByRole('button', { name: 'Nodes' })))
     await asks(() => userEvent.click(screen.getByText('stage')))
     expect(f.client.selectTarget).not.toHaveBeenCalled()
 

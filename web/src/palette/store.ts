@@ -10,7 +10,7 @@ export interface PaletteHost {
   /** Opens a view; filter replaces the table filter ('' clears it). */
   openKind(kind: string, filter: string): void
   setScope(scope: ScopeSel): void
-  /** Opens an object's details (switching from the overview to a table if needed). */
+  /** Opens an object's details (opening a table if none is available yet). */
   openObject(ref: Ref): void
 }
 

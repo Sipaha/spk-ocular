@@ -57,6 +57,10 @@ type API interface {
 	// kind and scope) as opaque JSON strings by key.
 	GetTargetState(ctx context.Context, provider, target string) (map[string]string, error)
 	SetTargetState(ctx context.Context, provider, target, key, value string) error
+	// Favorite kinds are global UI preferences, independent of any target.
+	GetFavoriteKinds(ctx context.Context) ([]FavoriteKind, error)
+	SetKindFavorite(ctx context.Context, req KindFavoriteRequest) error
+	MoveFavoriteKind(ctx context.Context, req MoveFavoriteKindRequest) error
 	// RecentObjects: the target's objects whose details were opened, newest
 	// first (at most 50 per target).
 	RecentObjects(ctx context.Context, provider, target string) ([]RecentObject, error)
@@ -143,8 +147,27 @@ type API interface {
 	ListAgentAudit(ctx context.Context, f store.AuditFilter) ([]store.AuditEntry, error)
 }
 
+type FavoriteKind struct {
+	Provider string `json:"provider"`
+	Kind     string `json:"kind"`
+}
+
+type KindFavoriteRequest struct {
+	Provider string `json:"provider"`
+	Kind     string `json:"kind"`
+	Favorite bool   `json:"favorite"`
+}
+
+type MoveFavoriteKindRequest struct {
+	Provider string `json:"provider"`
+	Kind     string `json:"kind"`
+	// Before is a kind of the same provider; empty moves to the end.
+	Before string `json:"before"`
+}
+
 type MetricsView struct {
-	Status string `json:"status"`
+	Status   string                    `json:"status"`
+	Coverage []provider.SourceCoverage `json:"coverage,omitempty"`
 	// Message: the error's detail (Status is not "ok").
 	Message string `json:"message,omitempty"`
 	// Limit: with "ok", only the first Limit of the asked rows were (more

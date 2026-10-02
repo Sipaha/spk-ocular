@@ -219,9 +219,9 @@ function Stream({ client, subject, active, query, toolbar, view }: { client: Cli
 
   return (
     <div ref={rootRef} className="flex h-full min-h-0 flex-col" onKeyDown={onKeyDown}>
-      <div className="flex shrink-0 flex-wrap items-center gap-1.5 border-b border-line px-2 py-1 text-xs">
-        {toolbar}
-        <Sep />
+      <div className="log-toolbar">
+        <div role="group" aria-label={t('shell.logSource')} className="log-control-group">{toolbar}</div>
+        <div role="group" aria-label={t('shell.logSearch')} className="log-control-group">
         <input
           ref={searchRef}
           value={f.search}
@@ -251,7 +251,8 @@ function Stream({ client, subject, active, query, toolbar, view }: { client: Cli
         </span>
         {f.regexState === 'slow' && <span className="text-warning">{t('logs.regexSlow')}</span>}
         {f.regexState === 'invalid' && <span className="text-warning">{t('logs.regexInvalid', { error: f.regexError ?? '' })}</span>}
-        <Sep />
+        </div>
+        <div role="group" aria-label={t('shell.logFilter')} className="log-control-group">
         <input
           value={f.filterText}
           onChange={(e) => f.setFilterText(e.target.value)}
@@ -261,18 +262,18 @@ function Stream({ client, subject, active, query, toolbar, view }: { client: Cli
           spellCheck={false}
           className="w-32 rounded border border-line bg-app px-2 py-0.5 outline-none focus:border-accent"
         />
-        <Sep />
         {LOG_LEVELS.map((l) => (
           <button
             key={l}
             onClick={() => f.toggleLevel(l)}
             aria-pressed={f.levels.has(l)}
-            className={['rounded px-1.5 py-0.5 font-medium', f.levels.has(l) ? `${LEVEL_CLASS[l]} bg-hover` : 'text-fg-subtle line-through'].join(' ')}
+            className={['log-level rounded px-1.5 py-0.5 font-medium', f.levels.has(l) ? `${LEVEL_CLASS[l]} bg-hover` : 'text-fg-subtle'].join(' ')}
           >
             {l}
           </button>
         ))}
-        <Sep />
+        </div>
+        <div role="group" aria-label={t('shell.logDisplay')} className="log-control-group">
         <Toggle on={showTime} onClick={() => setShowTime(!showTime)} title={t('logs.time.tooltip')}>
           {t('logs.time')}
         </Toggle>
@@ -282,7 +283,8 @@ function Stream({ client, subject, active, query, toolbar, view }: { client: Cli
         <Toggle on={wrap} onClick={() => setWrap(!wrap)} title={t('logs.wrap.tooltip')}>
           {t('logs.wrap')}
         </Toggle>
-        <span className="flex-1" />
+        </div>
+        <div role="group" aria-label={t('shell.logActions')} className="log-control-group log-actions">
         <Btn onClick={copyShown} title={t('logs.copy.tooltip')}>
           {t('logs.copy')}
         </Btn>
@@ -292,6 +294,7 @@ function Stream({ client, subject, active, query, toolbar, view }: { client: Cli
         <Btn onClick={clear} title={t('logs.clear.tooltip')}>
           {t('logs.clear')}
         </Btn>
+        </div>
       </div>
       {(problems.length > 0 || status.notice) && <Problems problems={problems} notice={status.notice} labels={labels} />}
       <LogViewport
@@ -309,7 +312,7 @@ function Stream({ client, subject, active, query, toolbar, view }: { client: Cli
         selectAllRef={selectAllRef}
         onSelectingChange={setSelecting}
       />
-      <div className="flex shrink-0 items-center gap-3 border-t border-line px-3 py-0.5 text-[12px] text-fg-subtle">
+      <div className="log-status flex shrink-0 items-center gap-3 border-t border-line px-3 py-0.5 text-[12px] text-fg-subtle">
         <span aria-label="line count">
           {f.filtered.length !== win.entries.length
             ? t('logs.linesOf', { count: f.filtered.length, total: win.entries.length })
@@ -354,8 +357,6 @@ function Problems({ problems, notice, labels }: { problems: LogSource[]; notice?
     </div>
   )
 }
-
-const Sep = () => <span className="mx-0.5 h-4 w-px bg-line" />
 
 function Btn({ children, ...p }: { children: ReactNode; onClick: () => void; title?: string; disabled?: boolean }) {
   return (

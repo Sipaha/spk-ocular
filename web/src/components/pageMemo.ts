@@ -11,6 +11,7 @@ export interface TargetMemo {
   /** The kind and scope shown. */
   ui?: { kind: string; scope: ScopeSel }
   navOpen?: string[]
+  columnWidths?: Record<string, Record<string, number>>
   /** Per kind: the column it was sorted by. */
   sorts: Record<string, { col: string; desc: boolean }>
   /** The page shown last: its filter, cursor, open details and their tab. */

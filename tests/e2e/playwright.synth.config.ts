@@ -8,8 +8,8 @@ import { ONE, env, writeAtomic, noDockerEnv } from './fixtures'
 const port = Number(process.env.E2E_SYNTH_PORT ?? 5192)
 let root = process.env.E2E_SYNTH_ROOT
 if (!root) {
-  mkdirSync(join(import.meta.dirname, '.run'), { recursive: true })
-  root = mkdtempSync(join(import.meta.dirname, '.run', 'synth-'))
+  mkdirSync(join(import.meta.dirname, '../../../.agents/tmp'), { recursive: true })
+  root = mkdtempSync(join(import.meta.dirname, '../../../.agents/tmp', 'synth-'))
   writeAtomic(env(root).one, ONE)
   process.env.E2E_SYNTH_ROOT = root
 }
@@ -18,6 +18,7 @@ const bin = process.env.E2E_BIN ?? '../../build/bin/spk-ocular'
 
 export default defineConfig({
   testDir: '.',
+  outputDir: join(import.meta.dirname, '../../../.agents/tmp/playwright-synth'),
   testMatch: ['logs.spec.ts', 'agents.spec.ts', 'terminal.spec.ts', 'tunnels.spec.ts', 'actions.spec.ts', 'problems.spec.ts', 'palette.spec.ts', 'keyboard.spec.ts', 'generic.spec.ts', 'warm.spec.ts'],
   workers: 1,
   use: { baseURL: `http://127.0.0.1:${port}`, locale: 'en-US', screenshot: 'only-on-failure', permissions: ['clipboard-read', 'clipboard-write'] },

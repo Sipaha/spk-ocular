@@ -72,7 +72,7 @@ describe('Problems', () => {
       problem('pods#crash', 'pods', 'crash', 'error', 4, 5),
       problem('pods#new', 'pods', 'new-warn', 'warning', 3, 2),
     ])
-    expect(within(screen.getByRole('navigation', { name: 'resources' })).getByRole('button', { name: /Problems/ })).toHaveAttribute('aria-current', 'page')
+    expect(within(screen.getByRole('navigation', { name: 'resources' })).getByRole('button', { name: 'Problems' })).toHaveAttribute('aria-current', 'page')
     await within(grid).findByText('crash')
     expect(names(grid)).toEqual(['crash', 'new-warn', 'old-warn', 'pod/a'])
   })
@@ -107,15 +107,15 @@ describe('Problems', () => {
     const alert = await screen.findByRole('note', { name: 'Not observed' })
     expect(alert).toHaveTextContent('Not observed: Nodes (cluster-wide) (access denied), Warning events (loading)')
     expect(alert).toHaveClass('text-warning')
-    expect(screen.getByText('No problems in what could be observed.')).toBeInTheDocument()
+    expect(screen.getByText('No objects in what could be observed.')).toBeInTheDocument()
     expect(screen.queryByText('No objects')).not.toBeInTheDocument()
   })
 
   // Review 2026-09-30 (Codex, P5): with every source ready the coverage
-  // vanished — "No problems found" then hid what is never looked at.
+  // vanished — "No objects found" then hid what is never looked at.
   it('always says what is checked and what is not, also with full coverage', async () => {
     await openProblems([], { state: 'ready', coverage: [{ source: 'Pods', state: 'ready' }, { source: 'Nodes (cluster-wide)', state: 'ready' }] })
-    expect(await screen.findByText('No problems found.')).toBeInTheDocument()
+    expect(await screen.findByText('No objects found.')).toBeInTheDocument()
     expect(screen.queryByRole('note', { name: 'Not observed' })).not.toBeInTheDocument()
     const scope = screen.getByRole('note', { name: 'Coverage' })
     expect(scope).toHaveTextContent('Checked: Pods, Nodes (cluster-wide) · not checked: Jobs, custom resources')

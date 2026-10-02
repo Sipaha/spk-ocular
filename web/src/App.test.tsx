@@ -1,9 +1,9 @@
-import { act, render, screen, waitFor } from '@testing-library/react'
+import { act, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { beforeEach, describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { App } from './App'
 import { initialState, useStore } from './store'
-import { fakeClient, k8s } from './test/fakeClient'
+import { fakeClient, k8s, podRow } from './test/fakeClient'
 
 beforeEach(() => useStore.setState({ ...initialState }))
 
@@ -18,9 +18,65 @@ describe('App', () => {
     await userEvent.click(screen.getByRole('option', { name: /dev/ }))
     expect(await screen.findByRole('heading', { name: 'Pods' })).toBeInTheDocument()
     expect(screen.getByRole('option', { name: /dev/ })).toHaveAttribute('aria-selected', 'true')
-    await userEvent.click(screen.getByRole('button', { name: 'Overview' }))
+    expect(screen.queryByRole('button', { name: 'Overview' })).not.toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Connection information' }))
     expect(await screen.findByRole('heading', { name: 'dev' })).toBeInTheDocument()
     expect(screen.getByText('https://dev.example:6443')).toBeInTheDocument()
+  })
+
+  it('connection information keeps the table and filter mounted, traps focus, and returns it on close', async () => {
+    const f = fakeClient([k8s('prod')])
+    f.state.view.selected = { provider: 'kubernetes', id: 'prod' }
+    f.state.rows = [podRow('api-1', 'web')]
+    render(<App client={f.client} />)
+    const grid = await screen.findByRole('grid', { name: 'resources' })
+    const filter = screen.getByRole('textbox', { name: 'Filter rows' })
+    await userEvent.type(filter, 'api')
+    const opened = vi.mocked(f.client.openView).mock.calls.length
+    const trigger = screen.getByRole('button', { name: 'Connection information' })
+    await userEvent.click(trigger)
+    const dialog = screen.getByRole('dialog', { name: 'Connection information' })
+    const close = within(dialog).getByRole('button', { name: 'Close' })
+    expect(close).toHaveFocus()
+    await userEvent.tab()
+    expect(within(dialog).getByLabelText('Connection information')).toHaveFocus()
+    await userEvent.tab()
+    expect(close).toHaveFocus()
+    await userEvent.tab({ shift: true })
+    expect(dialog).toContainElement(document.activeElement as HTMLElement)
+    await userEvent.keyboard('{Control>}k{/Control}{F6}')
+    expect(screen.queryByRole('dialog', { name: 'Go to' })).not.toBeInTheDocument()
+    expect(dialog).toContainElement(document.activeElement as HTMLElement)
+    await userEvent.keyboard('{Escape}')
+    expect(dialog).not.toBeInTheDocument()
+    expect(trigger).toHaveFocus()
+    expect(screen.getByRole('grid', { name: 'resources' })).toBe(grid)
+    expect(filter).toHaveValue('api')
+    expect(f.client.openView).toHaveBeenCalledTimes(opened)
+    await userEvent.click(trigger)
+    await userEvent.click(screen.getByRole('dialog', { name: 'Connection information' }).parentElement!)
+    expect(screen.queryByRole('dialog', { name: 'Connection information' })).not.toBeInTheDocument()
+    expect(trigger).toHaveFocus()
+  })
+
+  it('connection information follows live details and closes when its target disappears', async () => {
+    const target = k8s('prod')
+    const f = fakeClient([target])
+    f.state.view.selected = { provider: 'kubernetes', id: 'prod' }
+    render(<App client={f.client} />)
+    await screen.findByRole('grid', { name: 'resources' })
+    await userEvent.click(screen.getByRole('button', { name: 'Connection information' }))
+    target.details = [{ key: 'server', value: 'https://new.example:6443' }]
+    act(() => f.emit({ type: 'targets_changed' }))
+    expect(await screen.findByText('https://new.example:6443')).toBeInTheDocument()
+    f.state.view.groups[0].targets = []
+    act(() => f.emit({ type: 'targets_changed' }))
+    await screen.findByText('Pick a context on the left')
+    expect(screen.queryByRole('dialog', { name: 'Connection information' })).not.toBeInTheDocument()
+    f.state.view.groups[0].targets = [target]
+    act(() => f.emit({ type: 'targets_changed' }))
+    await screen.findByRole('button', { name: 'Connection information' })
+    expect(screen.queryByRole('dialog', { name: 'Connection information' })).not.toBeInTheDocument()
   })
 
   it('"/" focuses the filter; arrows and Enter select from the keyboard', async () => {

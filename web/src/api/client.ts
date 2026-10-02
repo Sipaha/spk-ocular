@@ -1,4 +1,5 @@
 import { Call, Events } from '@wailsio/runtime'
+import type { FavoriteKind } from './types'
 import type { ActionParams, ActionPlan, AgentAccessStatus, AgentAuditEntry, AgentAuditFilter, AgentGrant, AgentPending, AgentTarget, ActionResult, ApiEvent, AppInfo, EditDoc, EditPlan, EditPrepareRequest, EditResult, EditRunRequest, EventType, ExecInfo,
   KindsView, LogInfo, Message, LogQuery, LogStreamInfo, MetricsView, Page, Query, RecentObject, Ref, Resource, ScopesView, TargetsView, TerminalInfo, TerminalRequest, ViewInfo, ForwardInfo, StartForwardRequest, Tunnel, Value, ValueEditRequest, ValueList, ValuePlan, ValueResult, ValueRunRequest } from './types'
 
@@ -43,6 +44,9 @@ export interface Client {
   getMetrics(viewId: string, rowIds: string[], signal?: AbortSignal): Promise<MetricsView>
   getTargetState(provider: string, target: string): Promise<Record<string, string>>
   setTargetState(provider: string, target: string, key: string, value: string): Promise<void>
+  getFavoriteKinds(): Promise<FavoriteKind[]>
+  setKindFavorite(provider: string, kind: string, favorite: boolean): Promise<void>
+  moveFavoriteKind(provider: string, kind: string, before: string): Promise<void>
   /** The target's objects whose details were opened, newest first. */
   recentObjects(provider: string, target: string): Promise<RecentObject[]>
   /** Records a successful open of an object's details. */
@@ -164,6 +168,9 @@ export const httpClient: Client = {
   getMetrics: (viewId, rowIds, signal) => post('GetMetrics', { viewId, rowIds, seq: nextMetricsSeq() }, signal),
   getTargetState: (provider, target) => post('GetTargetState', { provider, target }),
   setTargetState: (provider, target, key, value) => done(post('SetTargetState', { provider, target, key, value })),
+  getFavoriteKinds: () => post('GetFavoriteKinds', {}),
+  setKindFavorite: (provider, kind, favorite) => done(post('SetKindFavorite', { provider, kind, favorite })),
+  moveFavoriteKind: (provider, kind, before) => done(post('MoveFavoriteKind', { provider, kind, before })),
   recentObjects: (provider, target) => post('RecentObjects', { provider, target }),
   touchRecent: (ref, title) => done(post('TouchRecent', { ref, title })),
   logInfo: (ref) => post('LogInfo', ref),
@@ -288,6 +295,9 @@ export const wailsClient: Client = {
   },
   getTargetState: (provider, target) => wcall('GetTargetState', provider, target),
   setTargetState: (provider, target, key, value) => wcall('SetTargetState', provider, target, key, value),
+  getFavoriteKinds: () => wcall('GetFavoriteKinds'),
+  setKindFavorite: (provider, kind, favorite) => wcall('SetKindFavorite', { provider, kind, favorite }),
+  moveFavoriteKind: (provider, kind, before) => wcall('MoveFavoriteKind', { provider, kind, before }),
   recentObjects: (provider, target) => wcall('RecentObjects', provider, target),
   touchRecent: (ref, title) => wcall('TouchRecent', { ref, title }),
   logInfo: (ref) => wcall('LogInfo', ref),

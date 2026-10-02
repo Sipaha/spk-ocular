@@ -179,7 +179,7 @@ describe('the catalog in an open target', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent('no longer served by the API')
   })
 
-  it('a remembered discovered kind waits for discovery instead of falling back to the overview', async () => {
+  it('a remembered discovered kind waits for discovery instead of showing an empty state', async () => {
     const f = fakeClient([k8s('prod')])
     const listKinds = vi.fn(async () => catalog([podsKind], { state: 'discovering' }))
     f.client.listKinds = listKinds
@@ -338,4 +338,3 @@ describe('a page whose view gave up', () => {
     await waitFor(() => expect(screen.queryByRole('alert')).not.toBeInTheDocument())
   })
 })
-

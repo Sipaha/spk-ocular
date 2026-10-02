@@ -13,29 +13,34 @@ import { copyText, readText } from './clipboard'
 import { PasteTooLargeError, TermConnection, wsBase, type TermEnd, type TermPhase } from './protocol'
 import { errorDetail } from '../errors'
 
-// Darcula, as the log viewer's ANSI palette (src/index.css).
-const theme: ITheme = {
-  background: '#1e1f22',
-  foreground: '#dfe1e5',
-  cursor: '#dfe1e5',
-  cursorAccent: '#1e1f22',
-  selectionBackground: '#2e436e',
-  black: '#4b4e55',
-  red: '#f0524f',
-  green: '#5c962c',
-  yellow: '#c0a13a',
-  blue: '#3993d4',
-  magenta: '#a771bf',
-  cyan: '#00a3a3',
-  white: '#bcbec4',
-  brightBlack: '#6f737a',
-  brightRed: '#ff4050',
-  brightGreen: '#4fc414',
-  brightYellow: '#e5bf00',
-  brightBlue: '#1fb0ff',
-  brightMagenta: '#ed7eed',
-  brightCyan: '#00e5e5',
-  brightWhite: '#ffffff',
+// xterm needs resolved colours, so read the same tokens as the rest of the
+// interface when mounting, after the stylesheet has loaded.
+function terminalTheme(): ITheme {
+  const css = getComputedStyle(document.documentElement)
+  const color = (name: string) => css.getPropertyValue(`--color-${name}`).trim() || undefined
+  return {
+    background: color('app'),
+    foreground: color('fg'),
+    cursor: color('fg'),
+    cursorAccent: color('app'),
+    selectionBackground: color('active'),
+    black: color('ansi-0'),
+    red: color('ansi-1'),
+    green: color('ansi-2'),
+    yellow: color('ansi-3'),
+    blue: color('ansi-4'),
+    magenta: color('ansi-5'),
+    cyan: color('ansi-6'),
+    white: color('ansi-7'),
+    brightBlack: color('ansi-8'),
+    brightRed: color('ansi-9'),
+    brightGreen: color('ansi-10'),
+    brightYellow: color('ansi-11'),
+    brightBlue: color('ansi-12'),
+    brightMagenta: color('ansi-13'),
+    brightCyan: color('ansi-14'),
+    brightWhite: color('ansi-15'),
+  }
 }
 
 const FONT = '"JetBrains Mono", "SF Mono", "Cascadia Code", "Fira Code", "Roboto Mono", ui-monospace, Menlo, Consolas, monospace'
@@ -147,7 +152,7 @@ export default function TerminalView({ client, tab, active, mode }: Props) {
 
     const term = new Terminal({
       scrollback: 5000,
-      theme,
+      theme: terminalTheme(),
       fontFamily: FONT,
       fontSize: 14,
       cursorBlink: true,
