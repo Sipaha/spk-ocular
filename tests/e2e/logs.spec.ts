@@ -129,3 +129,56 @@ test('the app select of the toolbar: focused list, live lines do not close it, E
   await page.keyboard.press('Shift+Tab')
   await expect(panel.getByRole('button', { name: 'Channel', exact: true })).toBeFocused()
 })
+
+test('panels resize independently while active logs keep streaming', async ({ page }) => {
+  await page.setViewportSize({ width: 1600, height: 1000 })
+  const panel = await openLogs(page, 'api')
+  const targets = page.locator('[data-area="targets"]')
+  const navigation = page.locator('[data-area="nav"]')
+  const details = page.locator('[data-area="details"]')
+  const drag = async (label: string, dx: number, dy: number) => {
+    const box = (await page.getByRole('separator', { name: label, exact: true }).boundingBox())!
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2)
+    await page.mouse.down()
+    await page.mouse.move(box.x + box.width / 2 + dx, box.y + box.height / 2 + dy, { steps: 12 })
+    await page.mouse.up()
+  }
+  const tw = (await targets.boundingBox())!.width
+  await drag('Resize targets panel', 60, 0)
+  expect((await targets.boundingBox())!.width).toBeCloseTo(tw + 60, 0)
+  const nw = (await navigation.boundingBox())!.width
+  await drag('Resize resource navigation', 60, 0)
+  expect((await navigation.boundingBox())!.width).toBeCloseTo(nw + 60, 0)
+  const dw = (await details.boundingBox())!.width
+  await drag('Resize details panel', -60, 0)
+  expect((await details.boundingBox())!.width).toBeCloseTo(dw + 60, 0)
+  await page.getByRole('separator', { name: 'Resize details panel' }).press('ArrowRight')
+  expect((await details.boundingBox())!.width).toBeCloseTo(dw + 40, 0)
+
+  // Exercise the expensive case: a full buffer and new lines during drag.
+  await emit(page, 'api', { lines: Array.from({ length: 20000 }, (_, i) => `INFO buffered line ${i}`) })
+  await expect(panel.getByText('INFO buffered line 19999', { exact: true })).toBeVisible()
+  const separator = page.getByRole('separator', { name: 'Resize the bottom panel' })
+  const box = (await separator.boundingBox())!
+  const x = box.x + 80
+  const y = box.y + 2
+  await page.mouse.move(x, y)
+  await page.mouse.down()
+  const latencies: number[] = []
+  for (let i = 1; i <= 12; i++) {
+    const now = Date.now()
+    await page.mouse.move(x, y - i * 10)
+    await emit(page, 'api', { lines: [`INFO during resize ${i}`] })
+    await page.evaluate(() => new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))))
+    expect(Math.abs((await separator.boundingBox())!.y - (box.y - i * 10))).toBeLessThan(3)
+    latencies.push(Date.now() - now)
+  }
+  await page.mouse.up()
+  await expect(panel.getByText('INFO during resize 12', { exact: true })).toBeVisible()
+  console.log('resize step ms including emit and two frames:', JSON.stringify(latencies))
+  if (process.env.E2E_PANELS_SCREENSHOT) await page.screenshot({ path: process.env.E2E_PANELS_SCREENSHOT })
+  // Navigation keeps the user's widths; the table still has room.
+  await page.getByRole('option', { name: /^demo2\b/ }).click()
+  expect((await targets.boundingBox())!.width).toBeCloseTo(tw + 60, 0)
+  expect((await navigation.boundingBox())!.width).toBeCloseTo(nw + 60, 0)
+})

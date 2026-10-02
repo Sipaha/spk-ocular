@@ -1,3 +1,4 @@
+import { PanelResize, usePanelWidths } from './PanelResize'
 import { lazy, Suspense, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { ApiError, type Client } from '../api/client'
 import type { ActionDescriptor, EditDoc, Relation, Ref, Resource } from '../api/types'
@@ -59,6 +60,8 @@ const toolBtn = 'rounded-md border border-line px-2 py-0.5 text-xs text-fg-muted
 type Tab = 'details' | 'yaml'
 
 export function ResourceDrawer({ client, hub, target, subject, initialTab, onTab, onClose, hasLogs, onLogs, hasExec, onTerminal, hasForward, actionsOf, onAction, eventsKindOf, editableOf, valuesOf, kindTitleOf }: Props) {
+  const detailsWidth = usePanelWidths((s) => s.details)
+  const panelRef = useRef<HTMLElement>(null)
   const [stack, setStack] = useState<Ref[]>([subject])
   const [tab, setTab] = useState<Tab>(initialTab === 'yaml' ? 'yaml' : 'details')
   useEffect(() => onTab?.(tab), [onTab, tab])
@@ -205,8 +208,9 @@ export function ResourceDrawer({ client, hub, target, subject, initialTab, onTab
   const moved = !!editing?.doc.version && !!revision && revision !== editing.doc.version
 
   return (
-    <aside role="dialog" aria-label={`${current.kind} ${title}`} data-area="details" tabIndex={-1} className="absolute inset-y-0 right-0 z-10 flex w-[min(720px,55%)] flex-col border-l border-line bg-app shadow-2xl outline-none">
+    <aside ref={panelRef} style={{ width: detailsWidth ?? 'min(720px,55%)', maxWidth: 'calc(100% - 100px)' }} role="dialog" aria-label={`${current.kind} ${title}`} data-area="details" tabIndex={-1} className="absolute inset-y-0 right-0 z-10 flex flex-col border-l border-line bg-app shadow-2xl outline-none">
       {/* Name first, whole; the object's tools on a line of their own. */}
+      <PanelResize label={t('panels.details')} reverse value={detailsWidth ?? 720} min={280} max={() => Math.max(100, (panelRef.current?.parentElement?.clientWidth ?? window.innerWidth) - 100)} onDone={(details) => usePanelWidths.setState({ details })} />
       <header className="border-b border-line px-4 py-2">
         {stack.length > 1 && (
           // Where the relations led: each step is a way back.

@@ -1,4 +1,5 @@
-import { lazy, Suspense, useRef } from 'react'
+import { PanelResize } from '../components/PanelResize'
+import { lazy, Suspense } from 'react'
 import type { Client } from '../api/client'
 import type { TargetRef } from '../api/types'
 import { t } from '../i18n'
@@ -29,34 +30,10 @@ const sameTarget = (a: TargetRef, b: TargetRef | null) => !!b && a.provider === 
 export function Dock({ client, current, mode, onHeightDone }: Props) {
   const { tabs, active, height } = useDock()
   const targets = useStore((s) => s.view)
-  const drag = useRef<{ y: number; h: number } | null>(null)
   if (!tabs.length) return null
   return (
     <section aria-label={t('dock.label')} data-area="dock" className="flex shrink-0 flex-col border-t border-line bg-app" style={{ height }}>
-      <div
-        role="separator"
-        aria-orientation="horizontal"
-        aria-label={t('logs.resize')}
-        className="h-1 shrink-0 cursor-row-resize bg-line/60 hover:bg-accent/60"
-        onMouseDown={(e) => {
-          e.preventDefault()
-          drag.current = { y: e.clientY, h: height }
-          const clamp = (h: number) => Math.max(MIN_DOCK, Math.min(window.innerHeight * 0.85, h))
-          const move = (ev: MouseEvent) => drag.current && dock.setHeight(clamp(drag.current.h + drag.current.y - ev.clientY))
-          const up = (ev: MouseEvent) => {
-            if (drag.current) {
-              const h = clamp(drag.current.h + drag.current.y - ev.clientY)
-              dock.setHeight(h)
-              onHeightDone(h)
-            }
-            drag.current = null
-            window.removeEventListener('mousemove', move)
-            window.removeEventListener('mouseup', up)
-          }
-          window.addEventListener('mousemove', move)
-          window.addEventListener('mouseup', up)
-        }}
-      />
+      <PanelResize label={t('logs.resize')} axis="height" reverse value={height} min={MIN_DOCK} max={() => window.innerHeight * 0.85} onDone={(h) => { dock.setHeight(h); onHeightDone(h) }} />
       <div role="tablist" className="flex shrink-0 items-end gap-0.5 overflow-x-auto border-b border-line bg-sidebar/60 px-2 pt-1">
         {tabs.map((tb) => (
           <TabHandle

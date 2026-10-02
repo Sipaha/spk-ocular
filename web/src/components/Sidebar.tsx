@@ -1,3 +1,4 @@
+import { PanelResize, usePanelWidths } from './PanelResize'
 import { useEffect, useRef, useState } from 'react'
 import type { Target, TargetGroup } from '../api/types'
 import { providerText, t } from '../i18n'
@@ -8,6 +9,7 @@ import { agents, pendingOf, useAgents } from '../agents/store'
 import { Menu, type MenuItem } from '../actions/Menu'
 
 export function Sidebar({ act }: { act: Actions }) {
+  const width = usePanelWidths((s) => s.targets)
   const view = useStore((s) => s.view)
   const filter = useStore((s) => s.filter)
   const listRef = useRef<HTMLDivElement>(null)
@@ -44,7 +46,8 @@ export function Sidebar({ act }: { act: Actions }) {
   }
 
   return (
-    <aside data-area="targets" className="flex h-full w-60 shrink-0 flex-col border-r border-line bg-sidebar">
+    <aside data-area="targets" style={{ width, maxWidth: '30vw' }} className="relative flex h-full shrink-0 flex-col border-r border-line bg-sidebar">
+      <PanelResize label={t('panels.targets')} value={width} min={160} max={() => Math.min(420, window.innerWidth * 0.3)} onDone={(targets) => usePanelWidths.setState({ targets })} />
       <div className="flex items-center gap-2 px-4 pt-4 pb-3">
         <EyeIcon className="h-5 w-5 text-accent" />
         <span className="text-[16px] font-semibold tracking-tight">SPK Ocular</span>

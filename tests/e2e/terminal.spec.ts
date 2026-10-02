@@ -35,7 +35,7 @@ test('changing the dock height resizes the terminal', async ({ page }) => {
   const before = (await sizes(page)).at(-1)!
   // the dock height is remembered: grow a short dock, shrink a tall one
   const dy = before.rows < 20 ? -150 : 150
-  const sep = page.getByRole('separator', { name: /resize/i })
+  const sep = page.getByRole('separator', { name: 'Resize the bottom panel' })
   const box = (await sep.boundingBox())!
   await page.mouse.move(box.x + box.width / 2, box.y + 1)
   await page.mouse.down()

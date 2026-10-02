@@ -21,6 +21,8 @@ interface Props {
   hideScope: boolean
   filter: string
   selected: string | null
+  /** One-shot reveal from navigation (a fresh object can reveal the same row again). */
+  reveal?: { id: string } | null
   onSelect: (row: Row) => void
   onOpen?: (row: Row) => void
   /** L on a row: its logs (kinds that have them). */
@@ -120,7 +122,7 @@ export function matchesRow(r: Row, f: string): boolean {
   return r.cells.some((c) => (c.text ?? '').toLowerCase().includes(needle)) || (r.health.reason ?? '').toLowerCase().includes(needle)
 }
 
-export function ResourceTable({ columns, rows, hideScope, filter, selected, onSelect, onOpen, onLogs, onTerminal, metrics, onVisibleRows, rowMenu, onDelete, defaultSort, initialSort, onSort, areaFocus, marked, onMarked }: Props) {
+export function ResourceTable({ columns, rows, hideScope, filter, selected, reveal, onSelect, onOpen, onLogs, onTerminal, metrics, onVisibleRows, rowMenu, onDelete, defaultSort, initialSort, onSort, areaFocus, marked, onMarked }: Props) {
   const now = useNow(10_000)
   const [menu, setMenu] = useState<{ items: MenuItem[]; label: string; at: { x: number; y: number } } | null>(null)
   const openMenu = (r: Row, at: { x: number; y: number }) => {
@@ -208,6 +210,15 @@ export function ResourceTable({ columns, rows, hideScope, filter, selected, onSe
     // layout) render a screenful rather than nothing.
     initialRect: { width: 1000, height: 800 },
   })
+
+  const revealed = useRef<typeof reveal>(null)
+  useEffect(() => {
+    if (!reveal || revealed.current === reveal) return
+    const index = sorted.findIndex((r) => r.id === reveal.id)
+    if (index < 0) return
+    virt.scrollToIndex(index, { align: 'auto' })
+    revealed.current = reveal
+  }, [reveal, sorted, virt])
 
   const items = virt.getVirtualItems()
   // The rows in view, without the overscan (what metrics are asked for).

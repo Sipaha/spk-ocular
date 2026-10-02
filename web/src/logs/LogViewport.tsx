@@ -2,7 +2,7 @@
 // selection/follow machinery is kept as is. Adapted: rows show a time and
 // source prefix and ANSI spans, and every copy uses rowText (what the row
 // shows).
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import type { RefObject } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { t } from '../i18n'
@@ -98,6 +98,10 @@ export function LogViewport({
     // buffer / hidden tab with zero size) — retry until a row measures > 0.
   }, [probedRowHeight, parentRef, entries.length])
 
+  // A new key function invalidates TanStack's measurements for every row.
+  // Keep it stable during resize/scroll; new log data still updates the keys.
+  const getItemKey = useCallback((i: number) => entries[i]?.id ?? i, [entries])
+
   // eslint-disable-next-line react-hooks/incompatible-library -- useVirtualizer returns are consumed locally, no stale UI risk
   const virtualizer = useVirtualizer({
     count: entries.length,
@@ -108,7 +112,7 @@ export function LogViewport({
     // sliding window trims old lines off the front, indices shift but ids
     // don't — React nodes and the measurement cache follow the LINE, so the
     // content under the viewport doesn't jump and text selection survives.
-    getItemKey: (i) => entries[i]?.id ?? i,
+    getItemKey,
   })
   // When a row above the viewport is (re)measured to a different size while
   // the user is reading (not following), compensate the scroll offset so the

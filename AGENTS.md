@@ -205,6 +205,32 @@ P19 — снимок страницы цели переживает переза
   `ctx`); недавние объекты — `recent_objects` (миграция 0002, API `RecentObjects`/`TouchRecent`,
   запись деталями при успешном открытии). Запросы палитры странице (фильтр, открыть объект) —
   `PageReq{value, seq}`, применяются один раз при рендере.
+- Ожидание сохранённого состояния, каталога и первого снимка ресурсов показывает
+  явный spinner с текстом (role=status); таблица имеет aria-busy до готовности,
+  вместо ложного нулевого счётчика — «…». «Объектов нет» только после ready.
+  — Workspace «shows loading through…», e2e «a slow resource list…».
+- Открытие объекта через палитру выделяет соответствующую строку и прокручивает её в вид.
+  Сопоставление — provider/target/kind/scope/name и UID, если он задан; используются ID
+  строки (у Problems они составные). Загрузка строк может запоздать; одноимённая замена
+  не выделяется. Скрывающий найденную строку фильтр сбрасывается, отметки не добавляются.
+  Объект другого вида по-прежнему открывается в деталях без переключения текущей таблицы.
+- Размеры панелей: `PanelResize` — вертикальные границы целей/навигации/деталей и
+  горизонтальная граница dock. Pointer capture, один DOM-resize на кадр, запись React
+  state только при отпускании; отмена возвращает размер. Стрелки и Home/End работают
+  на разделителе. Ширины остаются при навигации в рамках запуска (`usePanelWidths`),
+  высота dock сохраняется прежним `logsHeight`. Ограничения оставляют место таблице.
+  `LogViewport.getItemKey` стабилен между изменениями данных: ресайз не инвалидирует
+  измерения всего буфера. — e2e «panels resize independently…», terminal resize.
+- Иконка приложения: `internal/appfiles/icons/icon.svg` — исходник; `icon.png` — 256×256
+  RGBA 8 bit для Wails/GTK. Пересборка: `convert -background none
+  internal/appfiles/icons/icon.svg -depth 8 internal/appfiles/icons/icon.png`.
+  Контрастный белый глаз на синем фоне вместо тонкого синего контура на тёмном.
+  Не увеличивать PNG до 512×512: GTK/X11 молча исключает большую иконку из
+  `_NET_WM_ICON`, хотя `WM_HINTS` pixmap существует. Панель Cinnamon остаётся пустой.
+  Проверять именно `_NET_WM_ICON` запущенного окна, не только декодирование PNG или
+  pixmap. — `TestWindowIconFitsGTKX11`, проверка desktop через xprop.
+  Причина в [gdk_x11_window_set_icon_list](https://github.com/GNOME/gtk/blob/gtk-3-24/gdk/x11/gdkwindow-x11.c)
+  (предел `GDK_SELECTION_MAX_SIZE`, ветка silently ignore overlarge icons).
 - Клавиатура: `web/src/shortcuts.ts` — реестр `KEYS` (его показывает справка `?`,
   `HelpDialog.tsx`) и `globalShortcut` (один слушатель в `App`); области `F6` — атрибуты
   `data-area`/`data-area-focus`; возврат фокуса — `focusMark`/`restoreFocus`.
@@ -465,6 +491,10 @@ P19 — снимок страницы цели переживает переза
   только явным грантом (предупреждение `agents.warn.forceDelete`). — `forcedelete_test.go`,
   `TestKindActionForceDeleteOfAPodStuckTerminating`, `TestKindActionForceDeleteIsHeldByAFinalizer`, `TestADeletionOfAnObjectAlreadyGoneIsDone`,
   e2e synth «force delete…».
+- Меню действий: мышь и клавиатура используют один фокус и одну подсветку; движение
+  указателя переводит фокус на пункт, стрелки продолжают с него. Неподвижный указатель
+  не подсвечивает второй пункт при навигации стрелками; обновление родителя не сбрасывает
+  фокус на первый пункт. — e2e «menu highlight follows pointer and keyboard…».
 - В диалоге действия прокручивается только середина (план, итог): заголовок, «где» и кнопки
   видны всегда, появившийся итог прокручивается в вид — иначе длинный план drain уводил цель
   действия из вида (фокус на «Отмена»), а итог оставался под планом. — e2e synth «a plan with

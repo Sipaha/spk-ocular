@@ -31,6 +31,33 @@ test.afterEach(async ({ page }) => {
   await post(page, '/api/_test/synthetic/reset')
 })
 
+test('menu highlight follows pointer and keyboard without a second highlighted item', async ({ page }) => {
+  const grid = await openWorkloads(page)
+  await row(grid, 'web').click()
+  const opener = page.getByRole('dialog', { name: 'workloads web' }).getByRole('button', { name: /Actions/ })
+  await opener.click()
+  const menu = page.getByRole('menu', { name: 'Actions' })
+  const restart = menu.getByRole('menuitem', { name: 'Restart', exact: true })
+  const rollback = menu.getByRole('menuitem', { name: 'Roll back…' })
+  const scale = menu.getByRole('menuitem', { name: 'Scale…' })
+  await expect(restart).toBeFocused()
+  const activeColor = await restart.evaluate((el) => getComputedStyle(el).backgroundColor)
+  await rollback.hover()
+  await expect(rollback).toBeFocused()
+  await expect(rollback).toHaveCSS('background-color', activeColor)
+  await expect(restart).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)')
+  if (process.env.E2E_MENU_SCREENSHOT) await page.screenshot({ path: process.env.E2E_MENU_SCREENSHOT })
+  // The mouse stays over Roll back while arrows move the one active item.
+  await page.keyboard.press('ArrowUp')
+  await expect(scale).toBeFocused()
+  await expect(scale).toHaveCSS('background-color', activeColor)
+  await expect(rollback).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)')
+  await page.keyboard.press('Enter')
+  await expect(page.getByRole('dialog', { name: 'Scale web' })).toBeVisible()
+  await page.keyboard.press('Escape')
+  await expect(opener).toBeFocused()
+})
+
 test('restart from the details: where, what, rights; the row and the status bar follow', async ({ page }) => {
   const grid = await openWorkloads(page)
   await row(grid, 'web').click()

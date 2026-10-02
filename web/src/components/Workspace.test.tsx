@@ -19,6 +19,29 @@ async function openProd(f: ReturnType<typeof fakeClient>) {
 }
 
 describe('Workspace', () => {
+  it('shows loading through target state, opening the view and its initial snapshot', async () => {
+    const f = fakeClient([k8s('prod')])
+    f.state.view.selected = { provider: 'kubernetes', id: 'prod' }
+    let stateReady!: (value: Record<string, string>) => void
+    const state = new Promise<Record<string, string>>((resolve) => { stateReady = resolve })
+    f.client.getTargetState = vi.fn(() => state)
+    let viewReady!: (value: { viewId: string; kind: typeof podsKind }) => void
+    f.client.openView = vi.fn(() => new Promise<{ viewId: string; kind: typeof podsKind }>((resolve) => { viewReady = resolve }))
+    f.client.getRows = vi.fn(async () => ({ viewId: 'delayed', version: 1, reset: true, upserts: [], deleted: [], status: { state: 'loading' as const } }))
+    render(<App client={f.client} />)
+    await screen.findByRole('navigation', { name: 'resources' })
+    expect(screen.getByRole('status', { name: 'Loading…' })).toBeVisible()
+    await act(async () => stateReady({}))
+    expect(screen.getByRole('status', { name: 'Loading…' })).toBeVisible()
+    await act(async () => viewReady({ viewId: 'delayed', kind: podsKind }))
+    expect(screen.getByRole('status', { name: 'Loading…' })).toBeVisible()
+    expect(screen.queryByText('No objects')).toBeNull()
+    f.client.getRows = vi.fn(async () => ({ viewId: 'delayed', version: 2, reset: true, upserts: [], deleted: [], status: { state: 'ready' as const } }))
+    await act(async () => f.emit({ type: 'view_changed', payload: { viewId: 'delayed', version: 2 } }))
+    await screen.findByText('No objects')
+    expect(screen.queryByRole('status', { name: 'Loading…' })).toBeNull()
+  })
+
   it('shows live rows of the default namespace with health', async () => {
     const f = fakeClient([k8s('prod', { defaultScope: 'web' })])
     f.state.rows = [podRow('api-1', 'web'), podRow('api-2', 'web', 'CrashLoopBackOff', { state: 'error', reason: 'CrashLoopBackOff' })]

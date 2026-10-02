@@ -1,3 +1,4 @@
+import { PanelResize, usePanelWidths } from './PanelResize'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { Client } from '../api/client'
 import type { ActionDescriptor, KindDescriptor, KindsView, MetricsView, Ref, Row, ScopeSel, ScopesView, SourceCoverage, Target } from '../api/types'
@@ -71,6 +72,7 @@ function parseState(st: Record<string, string>, fallback: UIState): UIState {
 
 /** The selected target: kind navigation + the current table. */
 export function Workspace({ client, hub, target }: { client: Client; hub: ViewHub; target: Target }) {
+  const navigationWidth = usePanelWidths((s) => s.navigation)
   const catalog = useKinds(client, hub, target.provider, target.id)
   const kinds = catalog.view?.kinds ?? null
   const kindsError = catalog.error
@@ -287,7 +289,8 @@ export function Workspace({ client, hub, target }: { client: Client; hub: ViewHu
 
   return (
     <div className="flex min-h-0 flex-1">
-      <nav aria-label="resources" data-area="nav" onKeyDown={onNavKey} className="w-48 shrink-0 overflow-y-auto border-r border-line bg-sidebar/60 px-2 py-3">
+      <div className="relative shrink-0" style={{ width: navigationWidth, maxWidth: '25vw' }}>
+      <nav aria-label="resources" data-area="nav" onKeyDown={onNavKey} className="h-full overflow-y-auto border-r border-line bg-sidebar/60 px-2 py-3">
         <NavItem active={kind === OVERVIEW} onClick={() => setKind(OVERVIEW)} label={t('nav.overview')} />
         {groups.map((g) => {
           // A group of subgroups (API groups: the rare and the custom) folds
@@ -355,10 +358,12 @@ export function Workspace({ client, hub, target }: { client: Client; hub: ViewHu
           {t('nav.refresh')} <span className="opacity-70">F5</span>
         </button>
       </nav>
+      <PanelResize label={t('panels.navigation')} value={navigationWidth} min={140} max={() => Math.min(360, window.innerWidth * 0.25)} onDone={(navigation) => usePanelWidths.setState({ navigation })} />
+      </div>
       <main className="flex min-w-0 flex-1 flex-col">
         <div className="flex min-h-0 flex-1 flex-col">
-        {!ui || waiting ? (
-          waiting ? <p className="px-4 py-6 text-center text-fg-subtle">{t('app.loading')}</p> : null
+        {!ui || waiting || (!kinds && !kindsError) ? (
+          <LoadingState />
         ) : (kind === OVERVIEW && !keep) || !page ? (
           <div className="min-h-0 flex-1 overflow-y-auto">
             <TargetDetails />
@@ -603,7 +608,9 @@ function ResourcePage(props: {
   const memoKey = pageMemoKey(kind.id, query.scope)
   const [left] = useState(() => ((p) => (p?.key === memoKey ? p : undefined))(memoOf(tkey).page))
   const [filter, setFilter] = useState(filterReq?.value ?? left?.filter ?? '')
-  const [selected, setSelected] = useState<string | null>(left?.selected ?? null)
+  const [selected, setSelected] = useState<string | null>(openReq ? null : left?.selected ?? null)
+  const [pendingOpen, setPendingOpen] = useState<Ref | null>(openReq?.value ?? null)
+  const [reveal, setReveal] = useState<{ id: string } | null>(null)
   const [open, setOpenNow] = useState<Ref | null>(openReq?.value ?? left?.open ?? null)
   const [drawerTab, setDrawerTab] = useState(left?.tab)
   useEffect(() => {
@@ -617,8 +624,26 @@ function ResourcePage(props: {
   if ((filterReq && filterReq.seq !== applied.filter) || (openReq && openReq.seq !== applied.open)) {
     if (filterReq && filterReq.seq !== applied.filter) setFilter(filterReq.value)
     // Asked for already (the palette's openObject): applied as is.
-    if (openReq && openReq.seq !== applied.open) setOpenNow(openReq.value)
+    if (openReq && openReq.seq !== applied.open) {
+      setOpenNow(openReq.value)
+      setPendingOpen(openReq.value)
+      setSelected(null)
+    }
     setApplied({ filter: filterReq?.seq ?? applied.filter, open: openReq?.seq ?? applied.open })
+  }
+  // Details can open before the table loads. Match the full identity and
+  // use the row's id (Problems rows do not use the object's UID as id).
+  if (pendingOpen && openReq?.seq === applied.open) {
+    const row = view.rows.find(({ ref }) =>
+      ref.provider === pendingOpen.provider && ref.target === pendingOpen.target &&
+      ref.kind === pendingOpen.kind && (ref.scope ?? '') === (pendingOpen.scope ?? '') &&
+      ref.name === pendingOpen.name && (!pendingOpen.uid || ref.uid === pendingOpen.uid))
+    if (row) {
+      setSelected(row.id)
+      setReveal({ id: row.id })
+      setPendingOpen(null)
+      if (filter.trim() && !matchesRow(row, filter.trim())) setFilter('')
+    }
   }
   // The palette offers this table's rows.
   useEffect(() => lend('rows', view.rows), [view.rows])
@@ -680,7 +705,7 @@ function ResourcePage(props: {
       <header className="flex shrink-0 items-center gap-3 border-b border-line px-4 py-2">
         <h1 className="text-[16px] font-semibold">{kind.title}</h1>
         <span className="text-xs text-fg-subtle" aria-label="count">
-          {view.rows.length}
+          {view.status.state === 'loading' && !view.rows.length ? '…' : view.rows.length}
         </span>
         {marked.size > 0 && (
           <div role="toolbar" aria-label={t('bulk.bar')} className="flex shrink-0 items-center gap-2 whitespace-nowrap rounded-md bg-marked px-2 py-0.5 text-xs">
@@ -731,11 +756,11 @@ function ResourcePage(props: {
           />
         </label>
       </header>
-      <StatusBanner state={view.status.state} cls={view.status.class} message={view.status.message} empty={view.rows.length === 0} coverage={view.status.coverage} />
+      <StatusBanner title={kind.title} state={view.status.state} cls={view.status.class} message={view.status.message} empty={view.rows.length === 0} coverage={view.status.coverage} />
       {view.status.coverage && <CoverageNote coverage={view.status.coverage} notCovered={view.kind?.notCovered ?? kind.notCovered} />}
       {metrics && <MetricsNote metrics={metrics} />}
       <div className="relative flex min-h-0 flex-1 flex-col">
-        <div data-area="table" className="flex min-h-0 flex-1 flex-col">
+        <div data-area="table" aria-busy={view.status.state === 'loading'} className="flex min-h-0 flex-1 flex-col">
         <ResourceTable
           areaFocus
           columns={columns}
@@ -743,7 +768,8 @@ function ResourcePage(props: {
           hideScope={scope.mode === 'one'}
           filter={filter}
           selected={selected}
-          onSelect={(r: Row) => setSelected(r.id)}
+          reveal={reveal}
+          onSelect={(r: Row) => { setPendingOpen(null); setSelected(r.id) }}
           onOpen={(r: Row) => setOpen(r.ref)}
           onLogs={(r: Row) => hasLogs(r.ref.kind) && onLogs(r.ref)}
           onTerminal={(r: Row, dialog: boolean) => hasExec(r.ref.kind) && onTerminal(r.ref, dialog)}
@@ -777,7 +803,7 @@ function ResourcePage(props: {
             subject={open}
             initialTab={drawerTab}
             onTab={setDrawerTab}
-            onClose={() => setOpenNow(null)}
+            onClose={() => { setPendingOpen(null); setOpenNow(null) }}
             hasLogs={hasLogs}
             onLogs={onLogs}
             hasExec={hasExec}
@@ -883,14 +909,21 @@ function ScopePicker({ scope, scopes, onScope }: { scope: ScopeSel; scopes: Scop
   return <ScopeSelect value={value} names={names} label={words.singular} allLabel={words.all} onChange={choose} />
 }
 
-function StatusBanner({ state, cls, message, empty, coverage }: { state: string; cls?: string; message?: string; empty: boolean; coverage?: SourceCoverage[] }) {
+function LoadingState({ title, compact = false }: { title?: string; compact?: boolean }) {
+  return <div role="status" aria-label={t('app.loading')} className={`flex items-center justify-center gap-3 px-4 py-8 text-fg-muted ${compact ? '' : 'min-h-0 flex-1'}`}>
+    <span aria-hidden="true" className="h-5 w-5 shrink-0 animate-spin rounded-full border-2 border-line border-t-accent motion-reduce:animate-none" />
+    <span>{title ? t('table.loading', { kind: title }) : t('app.loading')}</span>
+  </div>
+}
+
+function StatusBanner({ title, state, cls, message, empty, coverage }: { title: string; state: string; cls?: string; message?: string; empty: boolean; coverage?: SourceCoverage[] }) {
   if (state === 'ready') {
     if (!empty) return null
     // A view of several sources: nothing found is only "nothing" where it could look.
     const text = !coverage ? t('table.empty') : coverage.every((c) => c.state === 'ready') ? t('coverage.noneFound') : t('coverage.noneInObserved')
     return <p className="px-4 py-6 text-center text-fg-subtle">{text}</p>
   }
-  if (state === 'loading') return empty ? <p className="px-4 py-6 text-center text-fg-subtle">{t('app.loading')}</p> : null
+  if (state === 'loading') return <LoadingState title={title} compact />
   const isErr = state === 'error'
   return (
     <div role="alert" className={['mx-4 mt-3 flex items-start gap-2 rounded-md px-3 py-2 text-xs', isErr ? 'bg-danger/10 text-danger' : 'bg-warning/10 text-warning'].join(' ')}>

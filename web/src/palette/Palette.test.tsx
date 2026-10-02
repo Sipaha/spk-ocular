@@ -63,7 +63,23 @@ describe('Palette', () => {
     expect(within(dlg).getAllByRole('option')[0]).toHaveTextContent('db-0')
     await userEvent.keyboard('{Enter}')
     expect(await screen.findByRole('dialog', { name: 'pods db-0' })).toBeInTheDocument()
+    expect(screen.getByRole('row', { selected: true })).toHaveAttribute('data-row-id', 'uid-web-db-0')
     await waitFor(() => expect(f.client.touchRecent).toHaveBeenCalledWith(expect.objectContaining({ kind: 'pods', name: 'db-0', uid: 'uid-web-db-0', provider: 'kubernetes', target: 'prod' }), 'db-0'))
+  })
+
+  it('waits for the exact object and selects its row id, not a same-name replacement', async () => {
+    const f = setup()
+    const wanted = podRow('late', 'web')
+    wanted.id = 'problems#late-row'
+    const replacement = { ...wanted, id: 'replacement', ref: { ...wanted.ref, uid: 'another-uid' } }
+    f.state.rows = [podRow('api-1', 'web'), replacement]
+    await openApp(f)
+    act(() => usePalette.getState().host!.openObject(wanted.ref))
+    await screen.findByRole('dialog', { name: 'pods late' })
+    expect(screen.queryByRole('row', { selected: true })).toBeNull()
+    f.state.rows = [wanted]
+    await act(async () => f.emit({ type: 'view_changed', payload: { viewId: 'v-pods', version: 99 } }))
+    await waitFor(() => expect(screen.getByRole('row', { selected: true })).toHaveAttribute('data-row-id', wanted.id))
   })
 
   it(':deploy web opens Deployments filtered by "web"', async () => {
