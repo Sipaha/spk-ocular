@@ -138,4 +138,8 @@ resources and the macOS app bundle from the existing application icon. Signing
 occurs after bundle assembly and before DMG creation. The native CI jobs exercise
 platform transport/permissions, inspect artifacts, and start an isolated native
 app with synthetic data, saving screenshots. They never use a developer profile.
+The Windows smoke driver uses PowerShell 7 (`pwsh.exe`) for window capture and
+shutdown. Capture checks the window's process owner and renders that HWND directly,
+so another desktop window cannot replace the application in the screenshot. The
+capture has a 30-second limit and reports its stages in the CI log.
 Windows desktop diagnostics go to `SPK_OCULAR_HOME/desktop.log` (replaced on launch).

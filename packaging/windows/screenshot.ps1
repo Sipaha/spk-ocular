@@ -1,5 +1,8 @@
+#requires -Version 7.0
 param([int]$ProcessId, [string]$OutputPath)
 $ErrorActionPreference = 'Stop'
+$elapsed = [Diagnostics.Stopwatch]::StartNew()
+Write-Host "Starting native window capture with PowerShell $($PSVersionTable.PSVersion) ($([Runtime.InteropServices.RuntimeInformation]::ProcessArchitecture))"
 Add-Type -AssemblyName System.Drawing
 Add-Type @'
 using System;
@@ -12,13 +15,16 @@ public static class NativeWindow {
   [DllImport("dwmapi.dll")] public static extern int DwmFlush();
 }
 '@
+Write-Host "Capture types loaded at $($elapsed.ElapsedMilliseconds) ms"
 $process = Get-Process -Id $ProcessId
 $window = $process.MainWindowHandle
 if ($window -eq [IntPtr]::Zero) { throw 'The owned application has no native window' }
 $owner = [uint32]0
 [void][NativeWindow]::GetWindowThreadProcessId($window, [ref]$owner)
 if ($owner -ne $ProcessId) { throw 'The native window does not belong to the owned application' }
+Write-Host "Owned window found at $($elapsed.ElapsedMilliseconds) ms"
 [void][NativeWindow]::DwmFlush()
+Write-Host "Desktop composition flushed at $($elapsed.ElapsedMilliseconds) ms"
 $rect = New-Object NativeWindow+Rect
 if (![NativeWindow]::GetWindowRect($window, [ref]$rect)) { throw 'Cannot read native window bounds' }
 $bitmap = New-Object Drawing.Bitmap ($rect.Right-$rect.Left),($rect.Bottom-$rect.Top),([Drawing.Imaging.PixelFormat]::Format32bppRgb)
@@ -31,5 +37,7 @@ try {
   try {
     if (![NativeWindow]::PrintWindow($window, $dc, 2)) { throw 'Cannot render the owned native window' }
   } finally { $graphics.ReleaseHdc($dc) }
+  Write-Host "Owned window rendered at $($elapsed.ElapsedMilliseconds) ms"
   $bitmap.Save($OutputPath,[Drawing.Imaging.ImageFormat]::Png)
+  Write-Host "Native screenshot saved at $($elapsed.ElapsedMilliseconds) ms"
 } finally { $graphics.Dispose(); $bitmap.Dispose() }

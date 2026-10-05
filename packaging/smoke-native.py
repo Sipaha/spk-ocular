@@ -16,7 +16,7 @@ from release import ROOT
 
 def capture(platform, pid, png):
     if platform == 'windows':
-        subprocess.run(['powershell.exe', '-NoProfile', '-File', str(ROOT / 'packaging/windows/screenshot.ps1'), '-ProcessId', str(pid), '-OutputPath', str(png)], check=True, timeout=30)
+        subprocess.run(['pwsh.exe', '-NoLogo', '-NoProfile', '-NonInteractive', '-File', str(ROOT / 'packaging/windows/screenshot.ps1'), '-ProcessId', str(pid), '-OutputPath', str(png)], check=True, timeout=30)
     elif platform == 'linux':
         tree = subprocess.check_output(['xwininfo', '-root', '-tree'], text=True)
         owned = None
@@ -97,7 +97,7 @@ def smoke(platform, arch):
         finally:
             if child.poll() is None:
                 if platform == 'windows':
-                    subprocess.run(['powershell.exe', '-NoProfile', '-Command', f'(Get-Process -Id {child.pid}).CloseMainWindow()'], check=True)
+                    subprocess.run(['pwsh.exe', '-NoLogo', '-NoProfile', '-NonInteractive', '-Command', f'(Get-Process -Id {child.pid}).CloseMainWindow()'], check=True, timeout=15)
                 else:
                     child.terminate()
             try:
