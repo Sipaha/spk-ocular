@@ -60,6 +60,9 @@ The synthetic provider supplies live logs, echo terminals, and local HTTP tunnel
 it requires `--test-api --test-synthetic`. Tests import `test` from `fixtures.ts`
 so each starts with a clean persisted page snapshot. Lifecycle-owning restart
 tests use Playwright directly and own their application's shutdown.
+Staged loading fixtures keep every rows response in the current phase until
+the test explicitly advances it. Exercise an event-driven resync while checking
+partial loading; a single modified response can be replaced by a background pull.
 
 `OCULAR_SCRATCH_DIR` selects e2e scratch/output directories; its default is the
 parent solution's `.agents/tmp`. `E2E_BIN`, `E2E_PORT` and `E2E_SYNTH_PORT` select

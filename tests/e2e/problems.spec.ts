@@ -26,6 +26,20 @@ test('the worst first; evidence quieter; what could not be observed is said', as
 })
 
 test('first opening shows one loading state before the table and coverage', async ({ page }, testInfo) => {
+  await page.addInitScript(() => {
+    const NativeEventSource = window.EventSource
+    window.EventSource = class extends NativeEventSource {
+      constructor(url: string | URL, init?: EventSourceInit) {
+        super(url, init)
+        const fixture = window as unknown as { testEvents: EventSource }
+        fixture.testEvents = this
+      }
+    }
+  })
+  const resync = () => page.evaluate(() => {
+    const events = (window as unknown as { testEvents: EventSource }).testEvents
+    events.dispatchEvent(new MessageEvent('message', { data: JSON.stringify({ type: 'resync' }) }))
+  })
   await page.goto('/')
   await page.request.post('/api/_test/synthetic/reset', { headers: { Authorization: `Bearer ${await token(page)}` } })
   await page.getByRole('option', { name: /^demo\b/ }).click()
@@ -34,7 +48,8 @@ test('first opening shows one loading state before the table and coverage', asyn
   await expect(page.getByRole('grid', { name: 'resources' })).toBeVisible()
 
   let problemsView = ''
-  let partialSent = false
+  let problemsReads = 0
+  let ready = false
   let release!: () => void
   const snapshot = new Promise<void>((resolve) => { release = resolve })
   await page.route('**/api/OpenView', async (route) => {
@@ -43,11 +58,13 @@ test('first opening shows one loading state before the table and coverage', asyn
     await route.fulfill({ response })
   })
   await page.route('**/api/GetRows', async (route) => {
-    if (problemsView && route.request().postDataJSON().viewId === problemsView && !partialSent) {
+    if (problemsView && route.request().postDataJSON().viewId === problemsView) problemsReads++
+    // Every pull must stay in the current fixture phase: an SSE resync can
+    // otherwise replace a one-shot partial response before it is asserted.
+    if (problemsView && route.request().postDataJSON().viewId === problemsView && !ready) {
       await snapshot
       const response = await route.fetch()
       const body: ResourcePage = await response.json()
-      partialSent = true
       body.status = { ...body.status, state: 'loading', coverage: body.status.coverage?.map((source) => source.source === 'Nodes' ? { source: 'Nodes', state: 'loading' } : source) }
       await route.fulfill({ response, json: body })
       return
@@ -66,10 +83,14 @@ test('first opening shows one loading state before the table and coverage', asyn
     release()
   }
   await expect(page.getByRole('grid', { name: 'resources' }).getByRole('gridcell', { name: 'api', exact: true })).toBeVisible()
+  const readsBeforeResync = problemsReads
+  await resync()
+  await expect.poll(() => problemsReads).toBeGreaterThan(readsBeforeResync)
   await expect(page.locator('.resource-toolbar').getByRole('status', { name: 'Loading…', exact: true })).toBeVisible()
   await expect(page.getByRole('note', { name: 'Not observed' })).toHaveCount(0)
   await page.screenshot({ path: testInfo.outputPath('problems-partial-loading.png') })
-  await page.getByRole('button', { name: /Read again/ }).click()
+  ready = true
+  await resync()
   await expect(page.getByRole('status', { name: 'Loading…', exact: true })).toHaveCount(0)
   await expect(page.getByRole('note', { name: 'Not observed' })).toHaveText('Not observed: Nodes (access denied)')
   await page.screenshot({ path: testInfo.outputPath('problems-ready.png') })
