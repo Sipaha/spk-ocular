@@ -56,7 +56,7 @@ if (host) {
           const info = document.createElement('div'); info.className = 'package-info';
           const title = document.createElement('strong');
           title.textContent = `${({linux:'Linux',windows:'Windows',darwin:'macOS'} as Record<string,string>)[file.os]} · ${file.arch === 'amd64' ? 'x86-64' : 'ARM64'}`;
-          const detail = document.createElement('small'); detail.textContent = `${file.browser ? 'Browser' : 'Desktop'} / ${file.format.toUpperCase()}${file.size ? ' / ' + (file.size / 1048576).toFixed(1) + ' MB' : ''}`;
+          const detail = document.createElement('small'); detail.textContent = `${file.browser ? labels.browserMode : labels.desktopMode} / ${file.format.toUpperCase()}${file.size ? ' / ' + (file.size / 1048576).toFixed(1) + ' MB' : ''}`;
           info.append(title, detail);
           const link = document.createElement('a'); link.href = file.url; link.textContent = labels.download; link.setAttribute('aria-label', `${labels.download} ${file.name}`);
           item.append(info, link);

@@ -33,10 +33,23 @@ try{
   await page.addScriptTag({content:axe});
   const accessibility=await page.evaluate(async()=>await window.axe.run(document,{runOnly:{type:'tag',values:['wcag2a','wcag2aa','wcag21aa']}}));
   if(accessibility.violations.length)failures.push({lang,theme,width,violations:accessibility.violations.map(v=>({id:v.id,nodes:v.nodes.map(n=>({html:n.html,summary:n.failureSummary}))}))});
+  await expect(page.locator('#free')).toContainText(lang==='ru'?'Без ограничений по обороту':'No limits based on revenue');
+  await expect(page.locator('#support')).toContainText(lang==='ru'?'добровольными':'voluntary');
+  await expect(page.locator('#helm')).toContainText('Helm');
+  await expect(page.locator('.header-actions a[href="#downloads"]')).toBeVisible();
+  const navigation=page.locator(width<=960?'.mobile-nav':'.desktop-nav');
+  await expect(navigation).toBeVisible();
+  await navigation.locator('a[href="#free"]').click();
+  await expect(page).toHaveURL(/#free$/);
+  await expect(page.locator('#free h2')).toBeInViewport();
+  await page.locator('.header-actions a[href="#downloads"]').click();
+  await expect(page.locator('#downloads h2')).toBeInViewport();
+  expect(await page.locator('a[href^="#"]').evaluateAll(links=>links.filter(link=>!document.getElementById(link.hash.slice(1))).map(link=>link.hash))).toEqual([]);
   expect(errors).toEqual([]);
   for (const image of await page.locator('main img:visible').all()) { await image.scrollIntoViewIfNeeded(); await image.evaluate(el=>el.decode()); }
   await page.evaluate(()=>window.scrollTo(0,0));
   await page.screenshot({path:path.join(out,`${lang}-${theme}-${width}.png`),fullPage:true});
+  if(width===375)await page.screenshot({path:path.join(out,`${lang}-${theme}-mobile.png`)});
   if(width===1440)await page.screenshot({path:path.join(out,`${lang}-${theme}-hero.png`)});
   const tabs=page.getByRole('tab');await tabs.nth(0).focus();await page.keyboard.press('ArrowRight');
   await expect(tabs.nth(1)).toHaveAttribute('aria-selected','true');await expect(page.locator('#shot-1')).toBeVisible();await expect(page.locator('#shot-0')).toBeHidden();
@@ -50,7 +63,12 @@ try{
   await page.route(API,r=>r.abort());
   await page.goto(root,{waitUntil:'networkidle'});
   await expect(page.locator(`a[href="${RELEASES}"]`)).toBeVisible();
-  if(!javaScriptEnabled)for(const id of [0,1,2])await expect(page.locator('#shot-'+id)).toBeVisible();
+  if(!javaScriptEnabled){
+   for(const id of [0,1,2])await expect(page.locator('#shot-'+id)).toBeVisible();
+   await expect(page.locator('#free')).toContainText('Бесплатно');
+   await page.locator('.header-actions a[href="#downloads"]').click();
+   await expect(page.locator('#downloads h2')).toBeInViewport();
+  }
   else await expect(page.locator('[data-release-status]')).toContainText('Не удалось');
   await page.close();console.log(`PASS no-JS / API-offline ${javaScriptEnabled}`);
  }
@@ -64,6 +82,7 @@ try{
  }
  const page=await browser.newPage();await page.route(API,r=>r.fulfill({json:{tag_name:'v0.1.0',assets}}));
  await page.goto(root+'en/',{waitUntil:'networkidle'});
+ await expect(page.locator('.package').first()).toContainText('Desktop app');
  await page.locator('select[name=os]').selectOption('');await expect(page.locator('.package')).toHaveCount(20);
  await page.locator('select[name=os]').selectOption('windows');await page.locator('select[name=arch]').selectOption('arm64');await expect(page.locator('.package')).toHaveCount(3);
  for(const href of await page.locator('.package a').evaluateAll(els=>els.map(el=>el.href)))expect(href).toContain('_windows_arm64.');
