@@ -1,6 +1,6 @@
 import { vi } from 'vitest'
 import { ApiError, type Client } from '../api/client'
-import type { AgentAccessStatus, AgentAuditEntry, AgentPending, AgentTarget, ApiEvent, KindDescriptor, KindsView, Query, RecentObject, Ref, Row, Target, TargetsView, TerminalRequest, ViewStatus } from '../api/types'
+import type { AgentAccessStatus, AgentAuditEntry, AgentPending, AgentTarget, ApiEvent, ConnectionStatus, KindDescriptor, KindsView, Query, RecentObject, Ref, Row, Target, TargetsView, TerminalRequest, ViewStatus } from '../api/types'
 
 export const k8s = (id: string, extra: Partial<Target> = {}): Target => ({
   provider: 'kubernetes',
@@ -24,9 +24,14 @@ export const k8sScopeNames = {
 /** A session's catalog of fixed kinds (ListKinds). */
 export const kindsView = (kinds: KindDescriptor[], over: Partial<KindsView> = {}): KindsView => ({ kinds, rev: 1, state: 'ready', session: 1, ...over })
 
+/** Resource component fixtures can opt into sessions that are already connected. */
+export const connectedClient = (targets: Target[]) => fakeClient(targets, true)
+
 /** An in-memory Client: tests mutate `view` and call `emit`. */
-export function fakeClient(targets: Target[]) {
+export function fakeClient(targets: Target[], connected = false) {
   let listener: ((e: ApiEvent) => void) | null = null
+  let connectionID = 0
+  const ready = (): ConnectionStatus => ({ id: ++connectionID, state: 'connected', phase: 'ready', attempt: 1, maxAttempts: 3, startedAt: Date.now(), attemptStarted: Date.now(), finishedAt: Date.now() })
   const state = {
     rows: [] as Row[],
     rowsByKind: {} as Record<string, Row[]>,
@@ -43,14 +48,37 @@ export function fakeClient(targets: Target[]) {
   }
   const client: Client = {
     appInfo: vi.fn(async () => ({ name: 'SPK Ocular', version: 'test', mode: 'browser' as const, language: 'en' as const })),
-    listTargets: vi.fn(async () => structuredClone(state.view)),
+    listTargets: vi.fn(async () => {
+      if (connected) for (const group of state.view.groups) for (const target of group.targets) {
+        if (!Object.hasOwn(target, 'connection')) { target.connection = ready(); target.open = true }
+      }
+      return structuredClone(state.view)
+    }),
     selectTarget: vi.fn(async (provider: string, id: string) => {
       const all = state.view.groups.flatMap((g) => g.targets)
       if (!all.some((x) => x.provider === provider && x.id === id)) throw new Error('not_found: no target')
       state.view.selected = { provider, id }
     }),
     closeTarget: vi.fn(async (provider: string, id: string) => {
-      for (const g of state.view.groups) for (const t of g.targets) if (t.provider === provider && t.id === id) t.open = false
+      for (const g of state.view.groups) for (const t of g.targets) if (t.provider === provider && t.id === id) {
+        t.open = false
+        t.connection = { ...(t.connection ?? ready()), state: 'disconnected', phase: 'closed' }
+      }
+    }),
+    connectTarget: vi.fn(async (provider: string, id: string) => {
+      const target = state.view.groups.flatMap((g) => g.targets).find((t) => t.provider === provider && t.id === id)!
+      target.connection = ready()
+      target.open = true
+      listener?.({ type: 'targets_changed' })
+      return target.connection
+    }),
+    cancelConnectTarget: vi.fn(async (provider: string, id: string, attempt: number) => {
+      const target = state.view.groups.flatMap((g) => g.targets).find((t) => t.provider === provider && t.id === id)!
+      if (target.connection?.id === attempt) {
+        target.connection = { ...target.connection, state: 'cancelled', phase: 'cancelled', finishedAt: Date.now() }
+        target.open = false
+        listener?.({ type: 'targets_changed' })
+      }
     }),
     listKinds: vi.fn(async () => kindsView([podsKind])),
     refreshKinds: vi.fn(async () => {}),

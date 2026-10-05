@@ -1,3 +1,4 @@
+import { connectSelected } from './fixtures'
 import { expect, type Page } from '@playwright/test'
 import { test } from './fixtures'
 import { token } from './synth'
@@ -31,6 +32,7 @@ async function forgetDemo(page: Page) {
 async function openDemo(page: Page, zone = 'blue') {
   await forgetDemo(page)
   await page.getByRole('option', { name: /^demo\b/ }).click()
+  await connectSelected(page)
   const grid = page.getByRole('grid', { name: 'resources' })
   await expect(page.getByRole('heading', { name: 'Crates', level: 1 })).toBeVisible()
   const input = page.getByRole('textbox', { name: 'Zone' })
@@ -44,6 +46,7 @@ async function openDemo(page: Page, zone = 'blue') {
 test('the default view and scope, the provider’s scope words, a typed scope', async ({ page }) => {
   await forgetDemo(page)
   await page.getByRole('option', { name: /^demo\b/ }).click()
+  await connectSelected(page)
   const grid = page.getByRole('grid', { name: 'resources' })
   const zone = page.getByRole('textbox', { name: 'Zone' })
   await expect(zone).toHaveValue('blue')
@@ -93,6 +96,7 @@ test('scope checkboxes keep the popup and exact set; text chooses one; the set s
   await page.route('**/api/ListScopes', (route) => route.fulfill({ json: { scopes: ['blue', 'green', 'empty'].map((name) => ({ name })) } }))
   await forgetDemo(page)
   await page.getByRole('option', { name: /^demo\b/ }).click()
+  await connectSelected(page)
   const grid = page.getByRole('grid', { name: 'resources' })
   const picker = page.getByRole('button', { name: 'Zone', exact: true })
   await expect(grid.getByRole('gridcell', { name: 'alpha', exact: true })).toBeVisible()
@@ -110,7 +114,9 @@ test('scope checkboxes keep the popup and exact set; text chooses one; the set s
   await page.getByRole('navigation', { name: 'resources' }).getByRole('button', { name: 'Parcels', exact: true }).click()
   await expect(picker).toHaveText('blue, green')
   await page.getByRole('option', { name: /^demo2\b/ }).click()
+  await connectSelected(page)
   await page.getByRole('option', { name: /^demo\b/ }).click()
+  await connectSelected(page)
   await expect(picker).toHaveText('blue, green')
   await page.getByRole('navigation', { name: 'resources' }).getByRole('button', { name: 'Crates', exact: true }).click()
   await picker.click()
@@ -156,6 +162,7 @@ test('global favorites can be added, opened and removed from any connection', as
     await favorites.getByRole('button', { name: 'Services', exact: true }).click()
     await expect(page.getByRole('heading', { name: 'Services', exact: true })).toBeVisible()
     await page.getByRole('option', { name: /^demo2\b/ }).click()
+    await connectSelected(page)
     await expect(favorites.getByRole('button', { name: 'Services', exact: true })).toBeVisible()
     await expect(nav.getByRole('button', { name: 'Services', exact: true })).toHaveCount(1)
     await favorites.getByRole('button', { name: 'Services', exact: true }).focus()
@@ -164,6 +171,7 @@ test('global favorites can be added, opened and removed from any connection', as
     await expect(favorites.getByRole('button', { name: 'Services', exact: true })).toHaveCount(0)
     await expect(nav.getByRole('region', { name: 'Synthetic', exact: true }).getByRole('button', { name: 'Services', exact: true })).toBeVisible()
     await page.getByRole('option', { name: /^demo\b/ }).click()
+    await connectSelected(page)
     await expect(favorites.getByRole('button', { name: 'Services', exact: true })).toHaveCount(0)
     await expect(page.getByRole('heading', { name: 'Services', exact: true })).toBeVisible()
   } finally {
@@ -269,6 +277,7 @@ test('favorites drag and drop changes the shared order without opening a resourc
     await expect(rows).toHaveText(['Parcels', 'Services', 'Crates'])
     await expect(page.getByRole('heading', { name: 'Crates', exact: true })).toBeVisible()
     await page.getByRole('option', { name: /^demo2\b/ }).click()
+    await connectSelected(page)
     await expect(rows).toHaveText(['Parcels', 'Services', 'Crates'])
     await fav.getByRole('button', { name: 'Parcels', exact: true }).dragTo(fav.getByRole('button', { name: 'Crates', exact: true }), { targetPosition: { x: 20, y: 28 } })
     await expect(rows).toHaveText(['Services', 'Crates', 'Parcels'])
@@ -278,4 +287,35 @@ test('favorites drag and drop changes the shared order without opening a resourc
       expect(res.ok()).toBeTruthy()
     }
   }
+})
+
+
+test('connection information preserves the resource page and old Overview selections migrate on reload', async ({ page }) => {
+  const grid = await openDemo(page)
+  await expect(grid.getByRole('gridcell', { name: 'alpha', exact: true })).toBeVisible()
+  await page.keyboard.press('/')
+  await expect(page.getByRole('textbox', { name: 'Filter rows' })).toBeFocused()
+  await page.getByRole('button', { name: 'Connection information' }).click()
+  const dialog = page.getByRole('dialog', { name: 'Connection information' })
+  await expect(dialog.getByRole('heading', { name: 'demo', exact: true })).toBeVisible()
+  await expect(grid.getByRole('gridcell', { name: 'alpha', exact: true })).toBeVisible()
+  await expect(dialog.getByRole('button', { name: 'Close', exact: true })).toBeFocused()
+  await page.keyboard.press('Tab')
+  await page.keyboard.press('Shift+Tab')
+  await expect(dialog.getByRole('button', { name: 'Close', exact: true })).toBeFocused()
+  await page.keyboard.press('Escape')
+  await expect(dialog).toHaveCount(0)
+  await expect(page.getByRole('button', { name: 'Connection information' })).toBeFocused()
+  const tok = await token(page)
+  const res = await page.request.post('/api/SetTargetState', {
+    headers: { Authorization: `Bearer ${tok}`, Origin: new URL(page.url()).origin },
+    data: { provider: 'synthetic', target: 'demo', key: 'kind', value: JSON.stringify('__overview') },
+  })
+  expect(res.ok()).toBeTruthy()
+  await page.reload()
+  await expect(page.getByRole('heading', { name: 'Crates', level: 1 })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Overview', exact: true })).toHaveCount(0)
+  await expect(dialog).toHaveCount(0)
+  await expect(page.getByRole('option', { name: /^demo\b/ })).toHaveAttribute('aria-selected', 'true')
+  await expect(grid.getByRole('gridcell', { name: 'alpha', exact: true })).toBeVisible()
 })

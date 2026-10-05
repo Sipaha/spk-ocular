@@ -54,6 +54,12 @@ func Wrap(cfg *rest.Config, shimPath string, timeout time.Duration) {
 // person, not interactive, within HoldTimeout — so a silent refresh works
 // and a login that needs a person fails instead of popping up.
 func WrapHeld(cfg *rest.Config, shimPath string, timeout time.Duration, hold string) {
+	WrapSession(cfg, shimPath, timeout, hold, "")
+}
+
+// WrapSession also binds plugins to a session lifetime file. Removing it
+// cancels running helpers and refuses late credential requests for that session.
+func WrapSession(cfg *rest.Config, shimPath string, timeout time.Duration, hold, lifetime string) {
 	if cfg == nil || cfg.ExecProvider == nil || shimPath == "" {
 		return
 	}
@@ -61,6 +67,9 @@ func WrapHeld(cfg *rest.Config, shimPath string, timeout time.Duration, hold str
 	args := []string{Subcommand, "--timeout", timeout.String()}
 	if hold != "" {
 		args = append(args, "--hold", hold)
+	}
+	if lifetime != "" {
+		args = append(args, "--lifetime", lifetime)
 	}
 	args = append(args, "--", ep.Command)
 	ep.Args = append(args, ep.Args...)
@@ -76,6 +85,7 @@ func Main(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	timeout := fs.Duration("timeout", DefaultTimeout, "kill the plugin after this long")
 	hold := fs.String("hold", "", "while this file exists, run the plugin headless")
 	holdTimeout := fs.Duration("hold-timeout", HoldTimeout, "the timeout of a headless run")
+	lifetime := fs.String("lifetime", "", "stop when this session lifetime file disappears")
 	if err := fs.Parse(args); err != nil {
 		return 2
 	}
@@ -85,6 +95,17 @@ func Main(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		return 2
 	}
 	dieWithParent()
+	sessionAlive := func() bool {
+		if *lifetime == "" {
+			return true
+		}
+		_, err := os.Stat(*lifetime)
+		return err == nil
+	}
+	if !sessionAlive() {
+		_, _ = fmt.Fprintln(stderr, "exec credential plugin: connection cancelled")
+		return 1
+	}
 
 	cmd := exec.Command(rest[0], rest[1:]...)
 	cmd.Env = os.Environ() // client-go set KUBERNETES_EXEC_INFO and the plugin's env on us
@@ -114,28 +135,45 @@ func Main(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	defer release()
 	done := make(chan error, 1)
 	go func() { done <- cmd.Wait() }()
-	select {
-	case err := <-done:
-		var ee *exec.ExitError
-		if errors.As(err, &ee) {
-			return ee.ExitCode()
-		}
-		if err != nil {
-			_, _ = fmt.Fprintf(stderr, "exec-credential-shim: %v\n", err)
-			return 1
-		}
-		return 0
-	case <-time.After(*timeout):
-		kill()
-		<-done
-		if held {
-			_, _ = fmt.Fprintf(stderr, "exec credential plugin %q did not answer within %s while its target is in the background (a login needs a person: select the target)\n",
+	deadline := time.NewTimer(*timeout)
+	defer deadline.Stop()
+	var check <-chan time.Time
+	if *lifetime != "" {
+		ticker := time.NewTicker(100 * time.Millisecond)
+		defer ticker.Stop()
+		check = ticker.C
+	}
+	for {
+		select {
+		case err := <-done:
+			var ee *exec.ExitError
+			if errors.As(err, &ee) {
+				return ee.ExitCode()
+			}
+			if err != nil {
+				_, _ = fmt.Fprintf(stderr, "exec-credential-shim: %v\n", err)
+				return 1
+			}
+			return 0
+		case <-check:
+			if !sessionAlive() {
+				kill()
+				<-done
+				_, _ = fmt.Fprintln(stderr, "exec credential plugin: connection cancelled")
+				return 1
+			}
+		case <-deadline.C:
+			kill()
+			<-done
+			if held {
+				_, _ = fmt.Fprintf(stderr, "exec credential plugin %q did not answer within %s while its target is in the background (a login needs a person: select the target and press Connect)\n",
+					strings.Join(rest, " "), *timeout)
+				return 1
+			}
+			_, _ = fmt.Fprintf(stderr, "exec credential plugin %q did not answer within %s (a login it waits for, or no network); run it in a terminal to see why\n",
 				strings.Join(rest, " "), *timeout)
 			return 1
 		}
-		_, _ = fmt.Fprintf(stderr, "exec credential plugin %q did not answer within %s (a login it waits for, or no network); run it in a terminal to see why\n",
-			strings.Join(rest, " "), *timeout)
-		return 1
 	}
 }
 

@@ -1,3 +1,4 @@
+import { connectSelected } from './fixtures'
 import { expect, type Page } from '@playwright/test'
 import { test } from './fixtures'
 import { createServer, type Server } from 'node:net'
@@ -107,6 +108,8 @@ test('a terminal and a tunnel opened before a reconfiguration say so; new ones d
   const addr = (await row.locator('[data-address]').textContent())!.split(/\s+/)[0]
   expect(await (await fetch(`http://${addr}/still`)).text()).toBe('hello from api:80 /still\n') // and works
 
+  await expect(page.getByRole('button', { name: 'Connect', exact: true })).toBeVisible()
+  await connectSelected(page)
   // a terminal opened now uses the new configuration
   await page.getByRole('grid', { name: 'resources' }).getByRole('gridcell', { name: 'api', exact: true }).click()
   await page.keyboard.press('s')

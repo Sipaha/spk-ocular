@@ -6,7 +6,7 @@ import { App } from '../App'
 import type { KindDescriptor, Query, Ref, Value } from '../api/types'
 import { editsHeld, resetGuard } from '../edit/guard'
 import { initialState, useStore } from '../store'
-import { kindsView, fakeClient, k8s, podRow, podsKind } from '../test/fakeClient'
+import { kindsView, connectedClient as fakeClient, k8s, podRow, podsKind } from '../test/fakeClient'
 import { ApiError } from '../api/client'
 import { resetCopies } from '../values/copy'
 

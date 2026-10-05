@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { Client } from './api/client'
 import { setLanguage, t } from './i18n'
-import { actions, selectedTarget, useStore } from './store'
+import { actions, selectedTarget, targetKey, useStore } from './store'
 import { ViewHub } from './views/viewSync'
 import { Workspace } from './components/Workspace'
+import { ConnectionWorkspace } from './components/ConnectionWorkspace'
 import { Sidebar } from './components/Sidebar'
 import { AppHeader } from './components/AppHeader'
 import { StatusBar } from './components/StatusBar'
@@ -16,6 +17,7 @@ import { Palette } from './palette/Palette'
 import { openPalette } from './palette/store'
 import { cycleArea, globalShortcut } from './shortcuts'
 import { HelpDialog } from './components/HelpDialog'
+import { editsHeld, mayLeave, useEditHolder } from './edit/guard'
 import { DiscardPrompt } from './edit/DiscardPrompt'
 import { AgentsPanel } from './agents/AgentsPanel'
 import { AgentConfirm } from './agents/ConfirmDialog'
@@ -30,6 +32,16 @@ export function App({ client }: { client: Client }) {
   const info = useStore((s) => s.info)
   const view = useStore((s) => s.view)
   const target = useStore((s) => selectedTarget(s.view))
+  const connectionAction = useStore((s) => target ? s.connectionActions[targetKey(target)] : undefined)
+  // An automatic disconnect must not unmount an editor holding unsaved work.
+  useEditHolder()
+  const connected = target?.connection?.state === 'connected' && connectionAction !== 'cancelling'
+  const [workspaceKey, setWorkspaceKey] = useState<string | null>(null)
+  const key = target ? targetKey(target) : null
+  const held = !connected && !!key && workspaceKey === key && editsHeld()
+  const showWorkspace = connected || held
+  const nextWorkspaceKey = showWorkspace ? key : null
+  if (workspaceKey !== nextWorkspaceKey) setWorkspaceKey(nextWorkspaceKey)
   const loadError = useStore((s) => s.loadError)
   const targetProvider = target?.provider
   const targetId = target?.id
@@ -126,8 +138,14 @@ export function App({ client }: { client: Client }) {
       <div className="flex min-h-0 flex-1">
         <Sidebar act={act} />
         <div className="flex min-w-0 flex-1 flex-col">
+          {held && target && <div role="status" className="border-b border-line px-3 py-2 text-sm text-fg-muted">
+            {t('connection.disconnected')}
+            <button className="ml-3 text-accent" onClick={() => mayLeave(() => { void act.connect(target) })}>{t('connection.connect')}</button>
+          </div>}
           {target ? (
-            <Workspace key={`${target.provider}/${target.id}`} client={client} hub={hub} target={target} onFavorite={act.setKindFavorite} onMoveFavorite={act.moveFavoriteKind} onNavSection={act.setNavSection} />
+            showWorkspace ?
+              <Workspace key={`${target.provider}/${target.id}`} client={client} hub={hub} target={target} onFavorite={act.setKindFavorite} onMoveFavorite={act.moveFavoriteKind} onNavSection={act.setNavSection} /> :
+              <ConnectionWorkspace key={targetKey(target)} target={target} pending={connectionAction} onConnect={() => void act.connect(target)} onCancel={() => void act.cancelConnect(target, target.connection?.id)} />
           ) : (
             <main className="min-h-0 min-w-0 flex-1 overflow-y-auto">
               <EmptyWorkspace />

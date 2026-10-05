@@ -6,7 +6,7 @@ import { App } from '../App'
 import type { EditPrepareRequest, KindDescriptor, Query, Ref } from '../api/types'
 import { resetGuard } from '../edit/guard'
 import { initialState, useStore } from '../store'
-import { kindsView, fakeClient, k8s, podRow, podsKind } from '../test/fakeClient'
+import { kindsView, connectedClient as fakeClient, k8s, podRow, podsKind } from '../test/fakeClient'
 
 beforeEach(() => {
   useStore.setState({ ...initialState })
@@ -75,6 +75,30 @@ describe('editing an object in the details', () => {
     expect(await editorView(drawer)).toBe(v)
     expect(v.state.doc.toString()).toContain('x: 2')
     expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
+  })
+
+  it('keeps unsaved YAML after disconnection and asks before an explicit reconnect', async () => {
+    const { f, drawer, v } = await openEditor()
+    type(v, 'x: 1', 'x: 2')
+    const target = f.state.view.groups[0].targets[0]
+    await act(async () => {
+      target.connection = { ...target.connection!, state: 'disconnected', phase: 'closed' }
+      target.open = false
+      f.emit({ type: 'targets_changed' })
+    })
+    const connect = await screen.findByRole('button', { name: 'Connect' })
+    expect(drawer).toBeInTheDocument()
+    expect(await editorView(drawer)).toBe(v)
+    expect(v.state.doc.toString()).toContain('x: 2')
+    expect(f.client.connectTarget).not.toHaveBeenCalled()
+    await userEvent.click(connect)
+    const prompt = await screen.findByRole('alertdialog')
+    await userEvent.click(within(prompt).getByRole('button', { name: 'Keep editing' }))
+    expect(v.state.doc.toString()).toContain('x: 2')
+    expect(f.client.connectTarget).not.toHaveBeenCalled()
+    await userEvent.click(connect)
+    await userEvent.click(within(await screen.findByRole('alertdialog')).getByRole('button', { name: 'Discard' }))
+    await waitFor(() => expect(f.client.connectTarget).toHaveBeenCalledWith('kubernetes', 'prod'))
   })
 
   it('offers Edit only for editable kinds', async () => {
@@ -219,6 +243,7 @@ describe('editing an object in the details', () => {
     await asks(() => userEvent.click(within(drawer).getByRole('tab', { name: 'Details' })))
     await asks(() => userEvent.click(within(grid).getByText('api-2')))
     expect(screen.getByRole('dialog', { name: 'pods api-1' })).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: /^Cluster \(/ }))
     await asks(() => userEvent.click(screen.getByRole('button', { name: 'Nodes' })))
     await asks(() => userEvent.click(screen.getByText('stage')))
     expect(f.client.selectTarget).not.toHaveBeenCalled()

@@ -161,7 +161,7 @@ function TargetRow({ target, act, onMenu }: { target: Target; act: Actions; onMe
         cursor && !selected ? 'ring-1 ring-line ring-inset' : '',
       ].join(' ')}
     >
-      <span className={['h-1.5 w-1.5 shrink-0 rounded-full', selected || target.open ? 'bg-accent' : 'bg-fg-subtle/60'].join(' ')} />
+      <span className={['h-1.5 w-1.5 shrink-0 rounded-full', target.open ? 'bg-accent' : 'bg-fg-subtle/60'].join(' ')} />
       <span className="min-w-0 flex-1">
         <span className="flex items-center gap-1.5">
           <span className="truncate">{target.title}</span>

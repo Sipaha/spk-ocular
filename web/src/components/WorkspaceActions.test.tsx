@@ -5,7 +5,7 @@ import { App } from '../App'
 import type { ActionDescriptor, ActionParams, KindDescriptor, Ref } from '../api/types'
 import { initialState, useStore } from '../store'
 import { useDock } from '../dock/store'
-import { kindsView, fakeClient, k8s, podRow, podsKind } from '../test/fakeClient'
+import { kindsView, connectedClient as fakeClient, k8s, podRow, podsKind } from '../test/fakeClient'
 
 beforeEach(() => useStore.setState({ ...initialState }))
 
@@ -258,6 +258,7 @@ describe('actions on marked rows', () => {
     f.state.rowsByKind.nodes = [node('n1'), node('n2')]
     f.client.listKinds = vi.fn(async () => kindsView([pods, { ...nodes, actions: [drain] }]))
     render(<App client={f.client} />)
+    await userEvent.click(await screen.findByRole('button', { name: /^Cluster \(/ }))
     await userEvent.click(await screen.findByRole('button', { name: /^Nodes/ }))
     const grid = await screen.findByRole('grid', { name: 'resources' })
     await within(grid).findByText('n2')
@@ -277,6 +278,7 @@ describe('actions on marked rows', () => {
     f.state.rowsByKind.nodes = [node('n1'), node('n2')]
     f.client.listKinds = vi.fn(async () => kindsView([pods, { ...nodes, actions: [drain] }]))
     render(<App client={f.client} />)
+    await userEvent.click(await screen.findByRole('button', { name: /^Cluster \(/ }))
     await userEvent.click(await screen.findByRole('button', { name: /^Nodes/ }))
     const grid = await screen.findByRole('grid', { name: 'resources' })
     await within(grid).findByText('n2')

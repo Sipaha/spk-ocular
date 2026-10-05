@@ -13,11 +13,26 @@ export interface Target {
   current?: boolean
   /** A live session (the target stays warm in the background). */
   open?: boolean
+  connection?: ConnectionStatus
   details?: Detail[]
   /** The scope a first visit shows (k8s: the context's namespace); absent: all. */
   defaultScope?: string
   /** opaque revision of the configuration: equal = the same */
   configRev?: string
+}
+
+export interface ConnectionStatus {
+  id: number
+  state: 'connecting' | 'connected' | 'failed' | 'cancelled' | 'disconnected'
+  phase: 'opening' | 'checking' | 'retry_wait' | 'ready' | 'failed' | 'cancelled' | 'closed'
+  attempt: number
+  maxAttempts: number
+  startedAt: number
+  attemptStarted: number
+  finishedAt?: number
+  retryAt?: number
+  errorClass?: string
+  error?: string
 }
 
 export interface Problem {

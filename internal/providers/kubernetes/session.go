@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"os"
 	"path/filepath"
 	"sort"
 	"sync"
@@ -22,6 +23,7 @@ import (
 
 	"github.com/spk/spk-ocular/internal/core"
 	"github.com/spk/spk-ocular/internal/execshim"
+	"github.com/spk/spk-ocular/internal/privatefs"
 	"github.com/spk/spk-ocular/internal/provider"
 )
 
@@ -83,12 +85,28 @@ func (p *Provider) Open(_ context.Context, target string) (provider.Session, err
 		return nil, &provider.Error{Class: provider.ClassInternal, Message: err.Error()}
 	}
 	hold := ""
+	lifetime := ""
 	if cfg.ExecProvider != nil && p.shimPath != "" && p.holdDir != "" {
 		hold = filepath.Join(p.holdDir, "bg-"+randomHex(8))
+		if err := privatefs.EnsureDir(p.holdDir); err != nil {
+			return nil, &provider.Error{Class: provider.ClassInternal, Message: err.Error()}
+		}
+		file, err := privatefs.CreateTemp(p.holdDir, "session-*")
+		if err != nil {
+			return nil, &provider.Error{Class: provider.ClassInternal, Message: err.Error()}
+		}
+		lifetime = file.Name()
+		if err := file.Close(); err != nil {
+			_ = os.Remove(lifetime)
+			return nil, &provider.Error{Class: provider.ClassInternal, Message: err.Error()}
+		}
 	}
-	execshim.WrapHeld(cfg, p.shimPath, execshim.DefaultTimeout, hold)
-	sess, err := sessionFor(cfg, target, kc.Name, kc.Hash)
+	execshim.WrapSession(cfg, p.shimPath, execshim.DefaultTimeout, hold, lifetime)
+	sess, err := sessionWithLifetime(cfg, target, kc.Name, kc.Hash, lifetime)
 	if err != nil {
+		if lifetime != "" {
+			_ = os.Remove(lifetime)
+		}
 		return nil, &provider.Error{Class: provider.ClassInternal, Message: err.Error()}
 	}
 	sess.hold = hold
@@ -99,11 +117,16 @@ func (p *Provider) Open(_ context.Context, target string) (provider.Session, err
 // sessionFor builds a session talking to cfg: its dynamic client, the
 // connection snapshot, the log fetcher and the action writer.
 func sessionFor(cfg *rest.Config, target, title, hash string) (*session, error) {
+	return sessionWithLifetime(cfg, target, title, hash, "")
+}
+
+func sessionWithLifetime(cfg *rest.Config, target, title, hash, lifetime string) (*session, error) {
 	dyn, err := dynamic.NewForConfig(cfg)
 	if err != nil {
 		return nil, err
 	}
 	sess := newSession(target, hash, dyn, true)
+	sess.lifetime = lifetime
 	sess.conn = newConn(cfg, dyn, target, title, hash)
 	if sess.tables, err = newTableClient(cfg); err != nil {
 		sess.Close()
@@ -199,8 +222,9 @@ type session struct {
 	spent       spentGrants
 	// hold: the shim's hold file while in the background ("" — no exec
 	// plugin shim); bg: the background state (P18).
-	hold string
-	bg   background
+	hold     string
+	lifetime string
+	bg       background
 }
 
 func newSession(target, hash string, dyn dynamic.Interface, watchList bool) *session {
@@ -269,6 +293,9 @@ func (s *session) ConfigHash() string           { return s.hash }
 func (s *session) ScopeKind() string            { return namespacesKind.desc.ID }
 func (s *session) Kinds() []core.KindDescriptor { return s.cat.snap().reg.descriptors() }
 func (s *session) Close() {
+	if s.lifetime != "" {
+		_ = os.Remove(s.lifetime)
+	}
 	s.setHold(false)
 	s.cancel()
 	s.cat.wait()
@@ -289,6 +316,17 @@ func (s *session) Scopes(ctx context.Context) ([]core.Scope, error) {
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
 	return out, nil
+}
+
+func (s *session) CheckConnection(ctx context.Context) error {
+	// A namespace permission denial still proves an authenticated connection;
+	// the API keeps the normal typed-scope fallback for that case.
+	_, err := s.dyn.Resource(namespacesGVR).List(ctx, metav1.ListOptions{Limit: 1})
+	if err == nil {
+		return nil
+	}
+	class, msg := classify(err)
+	return &provider.Error{Class: class, Message: msg}
 }
 
 func (s *session) Watch(q provider.Query, sink provider.Sink) (func(), error) {

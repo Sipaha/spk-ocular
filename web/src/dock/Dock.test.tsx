@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { App } from '../App'
 import { initialState, useStore } from '../store'
-import { kindsView, fakeClient, k8s, podRow, podsKind } from '../test/fakeClient'
+import { kindsView, connectedClient as fakeClient, k8s, podRow, podsKind } from '../test/fakeClient'
 
 // xterm needs a real layout: the tab body is a stand-in with the same
 // focus target (a textarea inside [data-terminal]).

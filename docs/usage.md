@@ -4,8 +4,17 @@
 
 The desktop application opens one window and exits when that window closes.
 It has no tray process. Choose a Kubernetes context or Docker connection in the
-left sidebar. Discovery reads local configuration without contacting servers;
-resource access begins when a connection is opened.
+left sidebar, then press **Connect** in the resource-list area. Selecting a target
+or restoring the previous selection never starts a connection. Discovery reads
+local configuration without contacting servers. Existing connections can stay
+open while switching targets; restarting the app requires Connect again.
+
+During connection, the page shows the actual phase, elapsed time, attempt number,
+last error, and time until a retry. Temporary availability failures get at most
+**three total attempts**. Authentication and configuration errors stop immediately.
+**Cancel** stops both an active attempt and the wait before a retry, including
+session-owned credential helpers. After cancellation or failure, Connect starts
+a new sequence. Configuration changes also require a new explicit connection.
 
 `spk-ocular --browser --port 5190` serves the same interface on loopback HTTP.
 Use the local URL printed at startup. The browser interface requires its
@@ -41,7 +50,9 @@ indicator. Sources still loading are not warned as unavailable during that read.
 
 All resource sections, including Favorites and API subgroups, can be collapsed.
 Click a heading or use Enter/Space and Left/Right. Their expansion state is
-shared globally and saved in the database. The current kind remains visible
+shared globally and saved in the database. With no saved choice, only Workloads
+is expanded; Favorites and all other sections start collapsed. Saved choices
+continue to take precedence. The current kind remains visible
 inside a collapsed section. Search temporarily expands matching sections and
 restores the saved state when cleared.
 

@@ -492,7 +492,7 @@ func TestMutualTLSWithFilesAndWithData(t *testing.T) {
 	other := newPKI(t)
 	c = newClient(t, engine.Config{Host: f.Host(), TLS: &engine.TLSConfig{CA: other.caPEM, Cert: p.clientCert, Key: p.clientKey}})
 	_, err = c.Info(context.Background())
-	assert.Equal(t, provider.ClassUnavailable, engineError(t, err).Class)
+	assert.Equal(t, provider.ClassInvalid, engineError(t, err).Class)
 	// … unless verification is skipped (the context's choice)
 	c = newClient(t, engine.Config{Host: f.Host(), TLS: &engine.TLSConfig{Cert: p.clientCert, Key: p.clientKey, SkipVerify: true}})
 	_, err = c.Info(context.Background())

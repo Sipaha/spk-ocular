@@ -1,5 +1,5 @@
 import { expect, type Page } from '@playwright/test'
-import { test } from './fixtures'
+import { test, connectSelected } from './fixtures'
 
 async function token(page: Page) {
   return (await page.locator('meta[name="spk-ocular-api-token"]').getAttribute('content'))!
@@ -27,6 +27,7 @@ test('two warm targets: A → B → A keeps everything; Close connection ends A'
   const tabAOnB = tabs.filter({ has: page.getByText('demo', { exact: true }) })
 
   await demo.click()
+  await connectSelected(page)
   await services().click()
 
   // A's page: a filter, a sort, open details and a log tab.
@@ -45,6 +46,7 @@ test('two warm targets: A → B → A keeps everything; Close connection ends A'
 
   // B: the other target; its own log tab streams its own feed.
   await demo2.click()
+  await connectSelected(page)
   await services().click()
   await grid().getByRole('gridcell', { name: 'api', exact: true }).click()
   await page.keyboard.press('l')
@@ -63,6 +65,7 @@ test('two warm targets: A → B → A keeps everything; Close connection ends A'
 
   // Back to A: the page comes back as it was left.
   await demo.click()
+  await connectSelected(page)
   await expect(page.locator('[data-primary-filter]')).toHaveValue('api')
   await expect(grid().getByRole('columnheader', { name: 'Sources' })).toHaveAttribute('aria-sort', 'descending')
   await expect(drawer.getByRole('heading', { name: 'api' })).toBeVisible()
@@ -72,6 +75,7 @@ test('two warm targets: A → B → A keeps everything; Close connection ends A'
 
   // «Close connection» is not offered on the selected target: from B it is.
   await demo2.click()
+  await connectSelected(page)
   await demo.click({ button: 'right' })
   await page.getByRole('menuitem', { name: 'Close connection' }).click()
   // The dot is gone (no tooltip), the tab ended with the reason.

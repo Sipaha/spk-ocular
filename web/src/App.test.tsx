@@ -8,7 +8,7 @@ import { fakeClient, k8s, podRow } from './test/fakeClient'
 beforeEach(() => useStore.setState({ ...initialState }))
 
 describe('App', () => {
-  it('lists contexts, marks current, and opens one on click', async () => {
+  it('selects a context without opening it until Connect is pressed', async () => {
     const f = fakeClient([k8s('prod', { current: true }), k8s('dev')])
     render(<App client={f.client} />)
     expect(await screen.findByRole('option', { name: /prod/ })).toBeInTheDocument()
@@ -16,6 +16,13 @@ describe('App', () => {
     expect(screen.getByText('Pick a context on the left')).toBeInTheDocument()
 
     await userEvent.click(screen.getByRole('option', { name: /dev/ }))
+    const connect = await screen.findByRole('button', { name: 'Connect' })
+    expect(f.client.connectTarget).not.toHaveBeenCalled()
+    expect(f.client.listKinds).not.toHaveBeenCalled()
+    expect(f.client.listScopes).not.toHaveBeenCalled()
+    expect(f.client.openView).not.toHaveBeenCalled()
+    await userEvent.click(connect)
+    expect(f.client.connectTarget).toHaveBeenCalledWith('kubernetes', 'dev')
     expect(await screen.findByRole('heading', { name: 'Pods' })).toBeInTheDocument()
     expect(screen.getByRole('option', { name: /dev/ })).toHaveAttribute('aria-selected', 'true')
     expect(screen.queryByRole('button', { name: 'Overview' })).not.toBeInTheDocument()
@@ -29,6 +36,7 @@ describe('App', () => {
     f.state.view.selected = { provider: 'kubernetes', id: 'prod' }
     f.state.rows = [podRow('api-1', 'web')]
     render(<App client={f.client} />)
+    await userEvent.click(await screen.findByRole('button', { name: 'Connect' }))
     const grid = await screen.findByRole('grid', { name: 'resources' })
     const filter = screen.getByRole('textbox', { name: 'Filter rows' })
     await userEvent.type(filter, 'api')
@@ -64,6 +72,7 @@ describe('App', () => {
     const f = fakeClient([target])
     f.state.view.selected = { provider: 'kubernetes', id: 'prod' }
     render(<App client={f.client} />)
+    await userEvent.click(await screen.findByRole('button', { name: 'Connect' }))
     await screen.findByRole('grid', { name: 'resources' })
     await userEvent.click(screen.getByRole('button', { name: 'Connection information' }))
     target.details = [{ key: 'server', value: 'https://new.example:6443' }]
@@ -88,6 +97,7 @@ describe('App', () => {
     await userEvent.keyboard('a')
     // alpha, beta, gamma all contain "a": cursor starts on the first one
     await userEvent.keyboard('{ArrowDown}{Enter}')
+    await userEvent.click(await screen.findByRole('button', { name: 'Connect' }))
     expect(await screen.findByRole('heading', { name: 'Pods' })).toBeInTheDocument()
     expect(f.client.selectTarget).toHaveBeenCalledWith('kubernetes', 'beta')
   })

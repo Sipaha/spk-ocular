@@ -62,6 +62,7 @@ def smoke(platform, arch):
             deadline = time.monotonic() + 90
             stats = {}
             selected_at = 0.0
+            connect_requested = False
             while time.monotonic() < deadline:
                 if child.poll() is not None:
                     raise RuntimeError(f'native app exited during startup: {child.returncode}')
@@ -75,6 +76,11 @@ def smoke(platform, arch):
                         with opener.open(request, timeout=5) as response:
                             response.read()
                         selected_at = time.monotonic()
+                    if not connect_requested:
+                        request = urllib.request.Request(info['url'] + '/api/_test/synthetic/connect', data=b'', headers={'Authorization': 'Bearer ' + info['token']})
+                        with opener.open(request, timeout=5) as response:
+                            response.read()
+                        connect_requested = True
                     request = urllib.request.Request(info['url'] + '/api/_test/stats', headers={'Authorization': 'Bearer ' + info['token']})
                     with opener.open(request, timeout=5) as response:
                         stats = json.load(response)

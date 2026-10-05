@@ -62,8 +62,11 @@ The browser endpoint is local only. In-app automatic updates are not implemented
 
 Kubernetes contexts come from `KUBECONFIG` (or `~/.kube/config`) and additional
 kubeconfig files directly under `~/.kube`. Docker Compose connections come from
-Docker contexts and the Docker environment variables. Connecting may execute
-credential helpers configured in kubeconfig.
+Docker contexts and the Docker environment variables. Select a target and press
+**Connect** in the resource-list area; selecting or restoring a target does not
+connect. Connection progress includes errors and at most three total automatic
+attempts, with **Cancel** available during attempts and retry waits. Connecting
+may execute credential helpers configured in kubeconfig.
 
 The application stores preferences, recent objects, and agent grants in
 `~/.spk/ocular/ocular.db` (`%USERPROFILE%\.spk\ocular\ocular.db` on Windows). Set `SPK_OCULAR_HOME` to use another data directory.

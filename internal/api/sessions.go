@@ -88,6 +88,18 @@ func (s *Service) session(ctx context.Context, providerID, target string) (provi
 	current := s.currentKey(ctx)
 	s.sessMu.Lock()
 	defer s.sessMu.Unlock()
+	if fromUI(ctx) {
+		a, e := s.connections[key], s.sessions[key]
+		if e != nil && e.hash != hash {
+			s.closeSessionLocked(key)
+			e = nil
+		}
+		if a == nil || a.status.State != "connected" || e == nil || a.owner != e.owner {
+			return nil, coded(CodeGone, errors.New("connection is not open; press Connect"))
+		}
+		e.lastUsed = s.now()
+		return e.sess, nil
+	}
 	if e := s.sessions[key]; e != nil {
 		if e.hash == hash {
 			e.lastUsed = s.now()
@@ -99,6 +111,11 @@ func (s *Service) session(ctx context.Context, providerID, target string) (provi
 	if err != nil {
 		return nil, fromProvider(err)
 	}
+	return s.registerSessionLocked(sess, providerID, target, current).sess, nil
+}
+
+func (s *Service) registerSessionLocked(sess provider.Session, providerID, target, current string) *sessionEntry {
+	key := ownerKey(providerID, target)
 	s.sessSeq++
 	seq := s.sessSeq
 	e := &sessionEntry{sess: sess, provider: providerID, target: target, hash: sess.ConfigHash(), lastUsed: s.now(), owner: fmt.Sprintf("%s#%d", key, seq), seq: seq}
@@ -116,7 +133,7 @@ func (s *Service) session(ctx context.Context, providerID, target string) (provi
 		})
 	}
 	s.armReaperLocked()
-	return sess, nil
+	return e
 }
 
 func (s *Service) targetHash(ctx context.Context, p provider.Provider, target string) (string, bool, error) {
@@ -144,6 +161,10 @@ func (s *Service) closeSessionWhyLocked(key string, why *core.Message) {
 		return
 	}
 	delete(s.sessions, key)
+	if a := s.connections[key]; a != nil && a.owner == e.owner && a.status.State == "connected" {
+		a.status.State, a.status.Phase = "disconnected", "closed"
+		a.status.FinishedAt = s.now().UnixMilli()
+	}
 	for c := range e.agentCalls {
 		c.cancel() // their work ends: gone
 	}
@@ -245,6 +266,20 @@ func (s *Service) revalidateSessions(ctx context.Context, providerID string) {
 			continue
 		}
 		s.closeSessionLocked(key)
+	}
+	for key, a := range s.connections {
+		if keyProvider(key) != providerID || a.status.State != "connecting" {
+			continue
+		}
+		if hash, found := hashes[key]; found && hash == a.hash {
+			continue
+		}
+		a.cancel()
+		a.status.State, a.status.Phase, a.status.RetryAt = "disconnected", "closed", 0
+		a.status.FinishedAt = s.now().UnixMilli()
+		if a.provisional != nil {
+			go a.provisional.Close()
+		}
 	}
 }
 

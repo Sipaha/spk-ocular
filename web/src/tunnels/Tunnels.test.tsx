@@ -6,7 +6,7 @@ import { ApiError } from '../api/client'
 import type { Tunnel } from '../api/types'
 import { App } from '../App'
 import { initialState, useStore } from '../store'
-import { kindsView, fakeClient, k8s, podRow, podsKind } from '../test/fakeClient'
+import { kindsView, connectedClient as fakeClient, k8s, podRow, podsKind } from '../test/fakeClient'
 import { useTunnels } from './store'
 
 beforeEach(() => {

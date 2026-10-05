@@ -36,11 +36,19 @@ type live struct {
 
 // LiveStats: running commands, open handles, upstreams and streams.
 func (p *Provider) LiveStats() map[string]int {
+	p.wl.mu.Lock()
+	connects := 0
+	for _, n := range p.wl.connectAttempts {
+		connects += n
+	}
+	p.wl.mu.Unlock()
 	return map[string]int{
-		"syn_execs":     int(p.live.execs.Load()),
-		"syn_handles":   int(p.live.handles.Load()),
-		"syn_upstreams": int(p.live.upstreams.Load()),
-		"syn_streams":   int(p.live.streams.Load()),
+		"syn_connects":   connects,
+		"syn_connecting": int(p.connecting.Load()),
+		"syn_execs":      int(p.live.execs.Load()),
+		"syn_handles":    int(p.live.handles.Load()),
+		"syn_upstreams":  int(p.live.upstreams.Load()),
+		"syn_streams":    int(p.live.streams.Load()),
 	}
 }
 

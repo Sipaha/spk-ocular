@@ -24,6 +24,9 @@ type API interface {
 	// SelectTarget remembers the user's choice across restarts; the two
 	// targets left last stay open, other idle sessions close (P18).
 	SelectTarget(ctx context.Context, provider, id string) error
+	// ConnectTarget starts an explicit, cancellable connection attempt.
+	ConnectTarget(ctx context.Context, provider, id string) (core.ConnectionStatus, error)
+	CancelConnectTarget(ctx context.Context, provider, id string, attempt uint64) error
 	// CloseTarget closes a target's connection (not the selected one's):
 	// its caches, watches and log streams (P18).
 	CloseTarget(ctx context.Context, provider, id string) error

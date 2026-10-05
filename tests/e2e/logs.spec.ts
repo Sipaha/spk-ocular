@@ -1,3 +1,4 @@
+import { connectSelected } from './fixtures'
 import { expect, type Page } from '@playwright/test'
 import { test } from './fixtures'
 
@@ -19,6 +20,7 @@ async function stats(page: Page) {
 async function openLogs(page: Page, object: string) {
   await page.goto('/')
   await page.getByRole('option', { name: /^demo\b/ }).click()
+  await connectSelected(page)
   await page.getByRole('navigation', { name: 'resources' }).getByRole('button', { name: 'Services', exact: true }).click()
   const grid = page.getByRole('grid', { name: 'resources' })
   await grid.getByRole('gridcell', { name: object, exact: true }).click()
@@ -179,6 +181,7 @@ test('panels resize independently while active logs keep streaming', async ({ pa
   if (process.env.E2E_PANELS_SCREENSHOT) await page.screenshot({ path: process.env.E2E_PANELS_SCREENSHOT })
   // Navigation keeps the user's widths; the table still has room.
   await page.getByRole('option', { name: /^demo2\b/ }).click()
+  await connectSelected(page)
   expect((await targets.boundingBox())!.width).toBeCloseTo(tw + 60, 0)
   expect((await navigation.boundingBox())!.width).toBeCloseTo(nw + 60, 0)
 })

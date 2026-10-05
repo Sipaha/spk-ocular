@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { beforeEach, expect, it, vi } from 'vitest'
 import { App } from '../App'
 import { actions, initialState, useStore } from '../store'
-import { fakeClient, k8s, kindsView, podsKind } from '../test/fakeClient'
+import { connectedClient as fakeClient, k8s, kindsView, podsKind } from '../test/fakeClient'
 
 beforeEach(() => useStore.setState({ ...initialState }))
 
@@ -95,6 +95,7 @@ it('filters kinds by name and alias, searches favorites too, and does not change
   await screen.findByRole('grid', { name: 'resources' })
   const filter = screen.getByRole('textbox', { name: 'Filter resources' })
   const nav = screen.getByRole('navigation', { name: 'resources' })
+  await userEvent.click(within(nav).getByRole('button', { name: /^Favorites \(/ }))
   await userEvent.type(filter, 'deploy')
   expect(within(nav).queryByRole('button', { name: 'Pods' })).toBeNull()
   expect(within(nav).getByRole('button', { name: 'Deployments' })).toBeInTheDocument()
@@ -121,6 +122,7 @@ it('uses the saved favorite order and lets the keyboard move an item without ope
   await screen.findByRole('grid', { name: 'resources' })
   const fav = screen.getByRole('region', { name: 'Favorites' })
   const order = () => [...fav.querySelectorAll('.nav-item')].map((e) => e.textContent)
+  await userEvent.click(within(fav).getByRole('button', { name: /^Favorites \(/ }))
   expect(order()).toEqual(['Services', 'Pods'])
   within(fav).getByRole('button', { name: 'Pods' }).focus()
   await userEvent.keyboard('{Shift>}{F10}{/Shift}')

@@ -6,7 +6,7 @@ import type { KindDescriptor } from '../api/types'
 import { useDock } from '../dock/store'
 import { usePalette } from '../palette/store'
 import { initialState, useStore } from '../store'
-import { kindsView, fakeClient, k8s, podRow, podsKind } from '../test/fakeClient'
+import { kindsView, connectedClient as fakeClient, k8s, podRow, podsKind } from '../test/fakeClient'
 
 beforeEach(() => {
   useStore.setState({ ...initialState })
@@ -55,7 +55,7 @@ describe('keyboard', () => {
     within(nav).getByRole('button', { name: 'Pods' }).focus()
     await userEvent.keyboard('{ArrowDown}')
     expect(within(nav).getByRole('button', { name: /^Cluster/ })).toHaveFocus()
-    await userEvent.keyboard('{ArrowDown}')
+    await userEvent.keyboard('{ArrowRight}{ArrowDown}')
     expect(within(nav).getByRole('button', { name: 'Nodes' })).toHaveFocus()
     await userEvent.keyboard('{Home}')
     expect(within(nav).getByRole('button', { name: /^Favorites/ })).toHaveFocus()

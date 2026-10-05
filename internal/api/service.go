@@ -47,11 +47,14 @@ type Service struct {
 	terms      termProtos
 	fwd        *forwards.Manager
 
-	sessMu   sync.Mutex
-	sessions map[string]*sessionEntry // by ownerKey
-	reaper   *time.Timer
-	sessSeq  uint64
-	now      func() time.Time
+	sessMu        sync.Mutex
+	sessions      map[string]*sessionEntry // by ownerKey
+	reaper        *time.Timer
+	sessSeq       uint64
+	now           func() time.Time
+	connections   map[string]*connectionAttempt
+	connectionSeq uint64
+	closed        bool
 	// current: the selected target's key ("" until the first selection
 	// in this run); left: when each recent target was left (at most
 	// recentTargets of them).
@@ -86,7 +89,7 @@ func NewService(reg *provider.Registry, st *store.Store, em *events.Emitter, o O
 	if _, err := rand.Read(key); err != nil {
 		panic(err) // crypto/rand does not fail on supported platforms
 	}
-	return &Service{reg: reg, store: st, em: em, opts: o, views: views.NewManager(em), streams: streams.NewRegistry(), fwd: newForwards(em), sessions: map[string]*sessionEntry{}, left: map[string]time.Time{}, now: time.Now, revKey: key, agentWatches: make(chan struct{}, maxAgentWatches)}
+	return &Service{reg: reg, store: st, em: em, opts: o, views: views.NewManager(em), streams: streams.NewRegistry(), fwd: newForwards(em), sessions: map[string]*sessionEntry{}, connections: map[string]*connectionAttempt{}, left: map[string]time.Time{}, now: time.Now, revKey: key, agentWatches: make(chan struct{}, maxAgentWatches)}
 }
 
 // configRev is the opaque revision of a configuration hash ("" for none).
@@ -130,6 +133,7 @@ func (s *Service) Start(ctx context.Context) {
 
 // Close stops the watchers, views and sessions.
 func (s *Service) Close() {
+	s.stopConnections()
 	if s.cancel != nil {
 		s.cancel()
 	}
@@ -183,6 +187,10 @@ func (s *Service) ListTargets(ctx context.Context) (TargetsView, error) {
 		for i := range g.Targets {
 			g.Targets[i].ConfigRev = s.configRev(g.Targets[i].ConfigHash)
 			g.Targets[i].Open = s.sessions[ownerKey(p.ID(), g.Targets[i].ID)] != nil
+			if a := s.connections[ownerKey(p.ID(), g.Targets[i].ID)]; a != nil {
+				status := a.status
+				g.Targets[i].Connection = &status
+			}
 		}
 		s.sessMu.Unlock()
 		for _, t := range g.Targets {

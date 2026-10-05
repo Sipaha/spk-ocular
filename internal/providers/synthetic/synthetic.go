@@ -54,7 +54,8 @@ type Provider struct {
 	subs    map[*sub]struct{}
 	clock   time.Time
 	// second: the test-only second target (demo2) is discovered too.
-	second bool
+	second     bool
+	connecting atomic.Int64
 }
 
 type sub struct {
@@ -141,6 +142,35 @@ func (p *Provider) Open(_ context.Context, id string) (provider.Session, error) 
 		}
 	}
 	return nil, &provider.Error{Class: provider.ClassNotFound, Message: id}
+}
+
+func (s *session) CheckConnection(ctx context.Context) error {
+	s.p.connecting.Add(1)
+	defer s.p.connecting.Add(-1)
+	w := &s.p.wl
+	w.mu.Lock()
+	if w.connectAttempts == nil {
+		w.connectAttempts = map[string]int{}
+	}
+	w.connectAttempts[s.target]++
+	attempt, controls := w.connectAttempts[s.target], w.controls
+	w.mu.Unlock()
+	if controls.ConnectDelayMS > 0 {
+		timer := time.NewTimer(time.Duration(controls.ConnectDelayMS) * time.Millisecond)
+		defer timer.Stop()
+		select {
+		case <-timer.C:
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	}
+	if ctx.Err() != nil {
+		return ctx.Err()
+	}
+	if attempt <= controls.ConnectFailures {
+		return &provider.Error{Class: provider.ClassUnavailable, Message: "synthetic connection unavailable"}
+	}
+	return nil
 }
 
 // Emit sends ev to the open streams of object's target; it returns how many

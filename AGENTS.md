@@ -140,6 +140,14 @@ unreturned partial export. Do not use the UI's tail/merge limits for archive rea
 
 ### Workspace and interaction
 
+Selecting or restoring a target never connects it. Connect belongs in the
+resource-list area; UI reads cannot create sessions. Cancel is attempt-scoped
+and stops checks, backoff and credential helpers. Report real phase/error/time
+and at most three total automatic attempts. Granted agent sessions remain
+independent. Preserve held edits when a connection becomes unavailable.
+
+Only Workloads defaults to expanded; saved global section choices take priority.
+
 Namespace row/text/Enter selects exactly one and closes. Checkbox and Space in
 the list toggle a set without closing; Space in search types normally. Picker
 query/cursor/scroll/focus survive keyed page remounts. Close popups before a

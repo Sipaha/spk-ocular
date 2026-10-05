@@ -17,15 +17,32 @@ export const scratchRoot = resolve(process.env.OCULAR_SCRATCH_DIR ?? join(import
 export const test = base.extend<{ cleanPageMemo: void }>({
   cleanPageMemo: [
     async ({ page }, use) => {
-      const html = await (await page.request.get('/')).text()
+      const root = await page.request.get('/')
+      const html = await root.text()
       const token = html.match(/spk-ocular-api-token" content="([^"]+)"/)?.[1]
       const res = await page.request.post('/api/_test/ui-state/reset', { headers: { Authorization: `Bearer ${token}` } })
       expect(res.ok()).toBeTruthy()
+      // Resource interaction suites start with their synthetic sections open.
+      // Default expansion and persistence have separate, fresh-profile coverage.
+      for (const key of ['group:Synthetic', 'group:Health', 'favorites']) {
+        const saved = await page.request.post('/api/SetNavSection', {
+          headers: { Authorization: 'Bearer ' + token, Origin: new URL(root.url()).origin }, data: { key, open: true },
+        })
+        expect(saved.ok()).toBeTruthy()
+      }
       await use()
     },
     { auto: true },
   ],
 })
+
+/** Connect explicitly unless this process already has that target connected. */
+export async function connectSelected(page: Page) {
+  const connect = page.getByRole('button', { name: 'Connect', exact: true })
+  const resources = page.getByRole('textbox', { name: 'Filter resources', exact: true })
+  await expect(connect.or(resources).first()).toBeVisible()
+  if (await connect.isVisible()) await connect.click()
+}
 
 /** Minimal kubeconfig; names are quoted (YAML 1.1: bare y/n/on/off are bools). */
 export function kubeconfig(current: string, ...names: string[]): string {

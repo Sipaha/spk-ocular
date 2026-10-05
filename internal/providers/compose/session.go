@@ -118,7 +118,16 @@ func newSession(target, hash string, cl *engine.Client) *session {
 	}
 }
 
-func (s *session) ConfigHash() string           { return s.hash }
+func (s *session) ConfigHash() string { return s.hash }
+
+func (s *session) CheckConnection(ctx context.Context) error {
+	_, err := s.cl.Ping(ctx)
+	if err != nil {
+		return providerError(err)
+	}
+	return nil
+}
+
 func (s *session) Kinds() []core.KindDescriptor { return kindDescriptors() }
 func (s *session) ScopeKind() string            { return KindProjects }
 

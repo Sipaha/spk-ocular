@@ -53,6 +53,15 @@ func testRoutes(c *appCore) http.Handler {
 			c.Emitter.Emit(events.Event{Type: api.EventTargetsChanged, Key: synthetic.ID, Payload: map[string]any{"provider": synthetic.ID}})
 			w.WriteHeader(http.StatusNoContent)
 		})
+		mux.HandleFunc("POST /api/_test/synthetic/connect", func(w http.ResponseWriter, r *http.Request) {
+			status, err := c.Service.ConnectTarget(r.Context(), synthetic.ID, synthetic.Target)
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(status)
+		})
 		// Push lines/states into the synthetic provider's open log streams.
 		mux.HandleFunc("POST /api/_test/logs/emit", func(w http.ResponseWriter, r *http.Request) {
 			var req struct {

@@ -167,7 +167,7 @@ body.log-select-drag { -webkit-user-select: none; user-select: none; }
   .resource-nav-row[data-favorite-drop]::after { content: ""; position: absolute; z-index: 30; left: 0; right: 0; height: 2px; background: var(--color-accent); pointer-events: none; }
   .resource-nav-row[data-favorite-drop="before"]::after { top: 0; }
   .resource-nav-row[data-favorite-drop="after"]::after { bottom: 0; }
-  .nav-group-heading { display: flex; padding: 0 8px 5px; font-size: 12px; font-weight: 500; color: var(--color-fg-subtle); }
+  .nav-group-heading { display: flex; padding: 0 8px 5px 0; font-size: 12px; font-weight: 500; color: var(--color-fg-subtle); }
   .nav-item { position: relative; min-height: 30px; }
   .nav-item[aria-current="page"] { background: var(--color-hover); box-shadow: inset 2px 0 var(--color-accent); }
   .resource-toolbar { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 10px; flex-shrink: 0; min-height: 40px; padding: 3px 16px; border-bottom: 1px solid var(--color-line); }

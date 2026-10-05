@@ -5,7 +5,7 @@ import { App } from '../App'
 import { ApiError } from '../api/client'
 import type { KindDescriptor, KindsView } from '../api/types'
 import { initialState, useStore } from '../store'
-import { fakeClient, k8s, podsKind } from '../test/fakeClient'
+import { connectedClient as fakeClient, k8s, podsKind } from '../test/fakeClient'
 
 beforeEach(() => useStore.setState({ ...initialState }))
 

@@ -5,7 +5,7 @@ import { App } from '../App'
 import { ApiError } from '../api/client'
 import type { KindDescriptor, Row, Target } from '../api/types'
 import { initialState, useStore } from '../store'
-import { kindsView, fakeClient } from '../test/fakeClient'
+import { kindsView, connectedClient as fakeClient } from '../test/fakeClient'
 
 // A provider that is not Kubernetes: no pods, no events, its own default
 // view and scope, its own scope words (or none). The generic UI must take

@@ -16,6 +16,12 @@ type Opener interface {
 	Open(ctx context.Context, target string) (Session, error)
 }
 
+// ConnectionChecker checks authentication and server reachability before a
+// provisional UI session is published. It must stop when ctx or the session ends.
+type ConnectionChecker interface {
+	CheckConnection(ctx context.Context) error
+}
+
 // Session is a connection to one target.
 type Session interface {
 	// ConfigHash of the target configuration this session was built from.

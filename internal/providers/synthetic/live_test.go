@@ -115,7 +115,7 @@ func TestEchoTerminal(t *testing.T) {
 	r := tm.wait(t)
 	require.NoError(t, r.err)
 	assert.Equal(t, provider.ExitStatus{Code: 3, Known: true}, r.st)
-	assert.Equal(t, map[string]int{"syn_execs": 0, "syn_handles": 0, "syn_upstreams": 0, "syn_streams": 0}, p.LiveStats())
+	assert.Equal(t, map[string]int{"syn_connects": 0, "syn_connecting": 0, "syn_execs": 0, "syn_handles": 0, "syn_upstreams": 0, "syn_streams": 0}, p.LiveStats())
 }
 
 func TestEchoTerminalFloodStopsAtCtrlC(t *testing.T) {
@@ -201,5 +201,5 @@ func TestForwardServesHTTPAndClosingTheUpstreamResetsItsStreams(t *testing.T) {
 	assert.Error(t, err)
 	h.Close()
 	h.Close()
-	assert.Equal(t, map[string]int{"syn_execs": 0, "syn_handles": 0, "syn_upstreams": 0, "syn_streams": 0}, p.LiveStats())
+	assert.Equal(t, map[string]int{"syn_connects": 0, "syn_connecting": 0, "syn_execs": 0, "syn_handles": 0, "syn_upstreams": 0, "syn_streams": 0}, p.LiveStats())
 }

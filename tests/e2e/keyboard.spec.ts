@@ -1,3 +1,4 @@
+import { connectSelected } from './fixtures'
 import { expect } from '@playwright/test'
 import { test } from './fixtures'
 
@@ -7,6 +8,7 @@ import { test } from './fixtures'
 test('F6 goes round the areas; views by arrows; ? shows the keys', async ({ page }) => {
   await page.goto('/')
   await page.getByRole('option', { name: /^demo\b/ }).click()
+  await connectSelected(page)
   const nav = page.getByRole('navigation', { name: 'resources' })
   await nav.getByRole('button', { name: 'Services', exact: true }).click()
   await expect(page.getByRole('grid', { name: 'resources' }).getByRole('gridcell', { name: 'api', exact: true })).toBeVisible()
@@ -37,6 +39,7 @@ test('F6 goes round the areas; views by arrows; ? shows the keys', async ({ page
 test('the app header opens the palette while a terminal keeps Ctrl+K', async ({ page }) => {
   await page.goto('/')
   await page.getByRole('option', { name: /^demo\b/ }).click()
+  await connectSelected(page)
   await page.getByRole('navigation', { name: 'resources' }).getByRole('button', { name: 'Services', exact: true }).click()
   const grid = page.getByRole('grid', { name: 'resources' })
   await grid.getByRole('gridcell', { name: 'api', exact: true }).click()
@@ -55,6 +58,7 @@ test('workspace header and grouped log controls stay reachable in a narrow windo
   await page.setViewportSize({ width: 960, height: 720 })
   await page.goto('/')
   await page.getByRole('option', { name: /^demo\b/ }).click()
+  await connectSelected(page)
   await expect(page.getByLabel('Current target', { exact: true })).toHaveText('demo')
 
   const go = page.getByRole('button', { name: 'Go to (Ctrl+K)' })

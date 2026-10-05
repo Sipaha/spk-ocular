@@ -62,7 +62,7 @@ func handle[Req any](fn func(ctx context.Context, req *Req) (any, error)) http.H
 				return
 			}
 		}
-		out, err := fn(r.Context(), &req)
+		out, err := fn(api.UIContext(r.Context()), &req)
 		if err != nil {
 			writeErr(w, err)
 			return
@@ -105,6 +105,15 @@ func (h *HTTP) routes() {
 	}))
 	h.mux.HandleFunc("POST /api/SelectTarget", handle(func(ctx context.Context, r *api.TargetRef) (any, error) {
 		return nil, h.api.SelectTarget(ctx, r.Provider, r.ID)
+	}))
+	h.mux.HandleFunc("POST /api/ConnectTarget", handle(func(ctx context.Context, r *api.TargetRef) (any, error) {
+		return h.api.ConnectTarget(ctx, r.Provider, r.ID)
+	}))
+	h.mux.HandleFunc("POST /api/CancelConnectTarget", handle(func(ctx context.Context, r *struct {
+		api.TargetRef
+		Attempt uint64 `json:"attempt"`
+	}) (any, error) {
+		return nil, h.api.CancelConnectTarget(ctx, r.Provider, r.ID, r.Attempt)
 	}))
 	type targetReq struct {
 		Provider string `json:"provider"`

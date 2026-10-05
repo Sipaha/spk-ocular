@@ -46,7 +46,7 @@ jobs:
           if [ "$TARGET_OS" = windows ]; then
             go vet -tags wails ./...
             go test -timeout 180s ./internal/agentapi
-            go test -timeout 180s ./internal/privatefs ./internal/paths ./internal/desktop ./internal/agentapi ./internal/execshim ./internal/providers/compose/engine -run 'TestWindows|TestResolve|TestEnsure'
+            go test -timeout 180s ./internal/privatefs ./internal/paths ./internal/desktop ./internal/agentapi ./internal/execshim ./internal/providers/compose/engine -run 'TestWindows|TestResolve|TestEnsure|TestShimLifetime'
           else
             go test -race -timeout 180s ./internal/agentapi ./internal/execshim ./internal/paths ./internal/privatefs ./internal/desktop ./internal/providers/compose/engine
           fi

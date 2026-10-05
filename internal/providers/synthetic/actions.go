@@ -122,7 +122,9 @@ type Controls struct {
 	// (sent, outcome not known).
 	Fail provider.ErrorClass `json:"fail,omitempty"`
 	// DelayMS: a run takes this long (a cancelled one changes nothing).
-	DelayMS int `json:"delay_ms,omitempty"`
+	DelayMS         int `json:"delay_ms,omitempty"`
+	ConnectDelayMS  int `json:"connect_delay_ms,omitempty"`
+	ConnectFailures int `json:"connect_failures,omitempty"`
 	// Items: the instances evacuate moves (0: 3); Refuse: the last this
 	// many are refused.
 	Items  int `json:"items,omitempty"`
@@ -161,11 +163,12 @@ type Mutation struct {
 // workloads is the provider's workload state; mu also orders the views'
 // deliveries (a change and its delivery are one step).
 type workloads struct {
-	mu       sync.Mutex
-	objs     []*workload
-	gen      int // for new UIDs
-	controls Controls
-	watchers map[*watcher]struct{}
+	mu              sync.Mutex
+	objs            []*workload
+	gen             int // for new UIDs
+	controls        Controls
+	connectAttempts map[string]int
+	watchers        map[*watcher]struct{}
 }
 
 type watcher struct {
@@ -244,6 +247,7 @@ func (p *Provider) SetControls(c Controls) {
 	p.wl.mu.Lock()
 	defer p.wl.mu.Unlock()
 	p.wl.controls = c
+	p.wl.connectAttempts = map[string]int{}
 }
 
 // Mutate changes a workload as another actor would.
@@ -277,6 +281,7 @@ func (p *Provider) ResetActions() {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	w.objs, w.controls = workloadsAtStart(), Controls{}
+	w.connectAttempts = map[string]int{}
 	w.resetViews()
 	p.parcels.reset()
 }

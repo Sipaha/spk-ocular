@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import type { Client } from './api/client'
 import { mayLeave } from './edit/guard'
-import type { AppInfo, FavoriteKind, Target, TargetRef, TargetsView } from './api/types'
+import type { AppInfo, ConnectionStatus, FavoriteKind, Target, TargetRef, TargetsView } from './api/types'
 import { t } from './i18n'
 
 export interface State {
@@ -19,6 +19,7 @@ export interface State {
   favoritesReady: boolean
   navSections: Record<string, boolean>
   navSectionsReady: boolean
+  connectionActions: Record<string, 'starting' | 'cancelling'>
 }
 
 export const initialState: State = {
@@ -34,6 +35,7 @@ export const initialState: State = {
   favoritesReady: false,
   navSections: {},
   navSectionsReady: false,
+  connectionActions: {},
 }
 
 export const useStore = create<State>(() => ({ ...initialState }))
@@ -91,8 +93,11 @@ const errText = (e: unknown) => (e instanceof Error ? e.message : String(e))
  * never overwrites a newer one, and at most one extra reload is queued.
  */
 export function actions(client: Client) {
+  const connectionOps = new Map<string, number>()
+  const startingConnections = new Map<string, Promise<ConnectionStatus>>()
   let inFlight = false
   let again = false
+  let reloaded: Promise<void> | null = null
   // Selection writes are serialized, collapsing to the latest choice: two
   // quick clicks must not persist A after B because A's request was slower.
   let selecting = false
@@ -125,9 +130,11 @@ export function actions(client: Client) {
   async function reload() {
     if (inFlight) {
       again = true
-      return
+      return reloaded
     }
     inFlight = true
+    let finish!: () => void
+    reloaded = new Promise<void>((resolve) => { finish = resolve })
     try {
       do {
         again = false
@@ -140,6 +147,8 @@ export function actions(client: Client) {
       } while (again)
     } finally {
       inFlight = false
+      finish()
+      reloaded = null
     }
   }
 
@@ -168,6 +177,23 @@ export function actions(client: Client) {
       selecting = false
     }
     await reload()
+  }
+
+  async function connectionAction(ref: TargetRef, state: 'starting' | 'cancelling', run: () => Promise<unknown>) {
+    const key = targetKey(ref)
+    const seq = (connectionOps.get(key) ?? 0) + 1
+    connectionOps.set(key, seq)
+    useStore.setState((s) => ({ actionError: null, connectionActions: { ...s.connectionActions, [key]: state } }))
+    try { await run() } catch (e) {
+      if (connectionOps.get(key) === seq) useStore.setState({ actionError: errText(e) })
+    } finally {
+      await reload()
+      if (connectionOps.get(key) === seq) useStore.setState((s) => {
+        const next = { ...s.connectionActions }
+        delete next[key]
+        return { connectionActions: next }
+      })
+    }
   }
 
   return {
@@ -229,6 +255,23 @@ export function actions(client: Client) {
       })
     },
     reload,
+    connect(ref: TargetRef) {
+      const key = targetKey(ref)
+      if (useStore.getState().connectionActions[key]) return Promise.resolve()
+      const started = client.connectTarget(ref.provider, ref.id)
+      startingConnections.set(key, started)
+      return connectionAction(ref, 'starting', () => started).finally(() => {
+        if (startingConnections.get(key) === started) startingConnections.delete(key)
+      })
+    },
+    cancelConnect(ref: TargetRef, attempt?: number) {
+      if (useStore.getState().connectionActions[targetKey(ref)] === 'cancelling') return Promise.resolve()
+      const started = startingConnections.get(targetKey(ref))
+      return connectionAction(ref, 'cancelling', async () => {
+        const id = started ? (await started).id : attempt
+        if (id !== undefined) await client.cancelConnectTarget(ref.provider, ref.id, id)
+      })
+    },
     // Another target drops the open editor's edits: asked first (edit/guard).
     select(ref: TargetRef): Promise<void> {
       const now = useStore.getState().view?.selected

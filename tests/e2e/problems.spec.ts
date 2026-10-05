@@ -1,3 +1,4 @@
+import { connectSelected } from './fixtures'
 import { expect } from '@playwright/test'
 import { test } from './fixtures'
 import { token } from './synth'
@@ -10,6 +11,7 @@ async function openProblems(page: import('@playwright/test').Page) {
   await page.goto('/')
   await page.request.post('/api/_test/synthetic/reset', { headers: { Authorization: `Bearer ${await token(page)}` } })
   await page.getByRole('option', { name: /^demo\b/ }).click()
+  await connectSelected(page)
   await page.getByRole('navigation', { name: 'resources' }).getByRole('button', { name: 'Problems', exact: true }).click()
   const grid = page.getByRole('grid', { name: 'resources' })
   await expect(grid.getByRole('gridcell', { name: 'api', exact: true })).toBeVisible()
@@ -43,6 +45,7 @@ test('first opening shows one loading state before the table and coverage', asyn
   await page.goto('/')
   await page.request.post('/api/_test/synthetic/reset', { headers: { Authorization: `Bearer ${await token(page)}` } })
   await page.getByRole('option', { name: /^demo\b/ }).click()
+  await connectSelected(page)
   const nav = page.getByRole('navigation', { name: 'resources' })
   await nav.getByRole('button', { name: 'Services', exact: true }).click()
   await expect(page.getByRole('grid', { name: 'resources' })).toBeVisible()

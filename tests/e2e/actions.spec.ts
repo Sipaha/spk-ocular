@@ -1,3 +1,4 @@
+import { connectSelected } from './fixtures'
 import { expect, type Locator, type Page } from '@playwright/test'
 import { test } from './fixtures'
 import { activePanel, expectScreen, reconfigure, token } from './synth'
@@ -17,6 +18,7 @@ async function openWorkloads(page: Page) {
   await page.goto('/')
   await post(page, '/api/_test/synthetic/reset')
   await page.getByRole('option', { name: /^demo\b/ }).click()
+  await connectSelected(page)
   await page.getByRole('navigation', { name: 'resources' }).getByRole('button', { name: 'Workloads', exact: true }).click()
   const grid = page.getByRole('grid', { name: 'resources' })
   await expect(grid.getByRole('row').filter({ hasText: 'web' })).toBeVisible()
@@ -284,11 +286,22 @@ test('the context configuration changes after the review: review again', async (
   await page.getByRole('menu').getByRole('menuitem', { name: 'Restart' }).click()
   const dialog = page.getByRole('dialog', { name: 'Restart web' })
   await expect(dialog.getByRole('button', { name: 'Restart' })).toBeEnabled()
-  await reconfigure(page)
-  await dialog.getByRole('button', { name: 'Restart' }).click()
-  await expect(dialog.getByRole('alert')).toHaveText('the configuration of demo changed since the action was reviewed; review it again')
-  expect(await cells(grid, 'web')).toEqual(['web', '2', '0'])
-  await dialog.getByRole('button', { name: 'Review again' }).click()
+  // Hold the target refresh to exercise an already-reviewed action racing
+  // the configuration change, before the UI returns to explicit Connect.
+  let release!: () => void
+  const refresh = new Promise<void>((resolve) => { release = resolve })
+  await page.route('**/api/ListTargets', async (route) => { await refresh; await route.continue() })
+  try {
+    await reconfigure(page)
+    await dialog.getByRole('button', { name: 'Restart' }).click()
+    await expect(dialog.getByRole('alert')).toHaveText('the configuration of demo changed since the action was reviewed; review it again')
+  } finally { release() }
+  await expect(page.getByRole('button', { name: 'Connect', exact: true })).toBeVisible()
+  await expect(dialog).toHaveCount(0)
+  await connectSelected(page)
+  await expect.poll(() => cells(grid, 'web')).toEqual(['web', '2', '0'])
+  await row(grid, 'web').click({ button: 'right' })
+  await page.getByRole('menu').getByRole('menuitem', { name: 'Restart' }).click()
   await dialog.getByRole('button', { name: 'Restart' }).click()
   await expect(dialog).toBeHidden()
   await expect.poll(() => cells(grid, 'web')).toEqual(['web', '2', '1'])

@@ -1,5 +1,5 @@
 import { Call, Events } from '@wailsio/runtime'
-import type { FavoriteKind } from './types'
+import type { ConnectionStatus, FavoriteKind } from './types'
 import type { ActionParams, ActionPlan, AgentAccessStatus, AgentAuditEntry, AgentAuditFilter, AgentGrant, AgentPending, AgentTarget, ActionResult, ApiEvent, AppInfo, EditDoc, EditPlan, EditPrepareRequest, EditResult, EditRunRequest, EventType, ExecInfo,
   KindsView, LogInfo, Message, LogQuery, LogStreamInfo, MetricsView, Page, Query, RecentObject, Ref, Resource, ScopesView, TargetsView, TerminalInfo, TerminalRequest, ViewInfo, ForwardInfo, StartForwardRequest, Tunnel, Value, ValueEditRequest, ValueList, ValuePlan, ValueResult, ValueRunRequest } from './types'
 
@@ -22,6 +22,8 @@ export interface Client {
   listTargets(): Promise<TargetsView>
   /** Remembers the choice across restarts; not_found if the target is gone. */
   selectTarget(provider: string, id: string): Promise<void>
+  connectTarget(provider: string, id: string): Promise<ConnectionStatus>
+  cancelConnectTarget(provider: string, id: string, attempt: number): Promise<void>
   /** Closes the target's session (its views and streams end); refused on the selected target. */
   closeTarget(provider: string, id: string): Promise<void>
   /** The session's kinds with the catalog's revision (a "kinds_changed" event tells of a new one). */
@@ -157,6 +159,8 @@ export const httpClient: Client = {
   appInfo: () => post('AppInfo', {}),
   listTargets: () => post('ListTargets', {}),
   selectTarget: (provider, id) => done(post('SelectTarget', { provider, id })),
+  connectTarget: (provider, id) => post('ConnectTarget', { provider, id }),
+  cancelConnectTarget: (provider, id, attempt) => done(post('CancelConnectTarget', { provider, id, attempt })),
   closeTarget: (provider, id) => done(post('CloseTarget', { provider, id })),
   listKinds: (provider, target) => post('ListKinds', { provider, target }),
   refreshKinds: (provider, target) => done(post('RefreshKinds', { provider, target })),
@@ -280,6 +284,8 @@ export const wailsClient: Client = {
   appInfo: () => wcall('AppInfo'),
   listTargets: () => wcall('ListTargets'),
   selectTarget: (provider, id) => wcall('SelectTarget', provider, id),
+  connectTarget: (provider, id) => wcall('ConnectTarget', provider, id),
+  cancelConnectTarget: (provider, id, attempt) => wcall('CancelConnectTarget', provider, id, attempt),
   closeTarget: (provider, id) => wcall('CloseTarget', provider, id),
   listKinds: (provider, target) => wcall('ListKinds', provider, target),
   refreshKinds: (provider, target) => wcall('RefreshKinds', provider, target),

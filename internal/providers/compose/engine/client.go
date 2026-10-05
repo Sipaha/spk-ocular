@@ -435,6 +435,9 @@ func (c *Client) newRequest(ctx context.Context, method, u string) (*http.Reques
 // made on a context derived from parent: parent ending is the caller's
 // decision; the derived one ending alone is the client's own deadline.
 func transportError(parent, derived context.Context, err error, limit time.Duration) error {
+	if provider.InvalidTLS(err) {
+		return &Error{Class: provider.ClassInvalid, Message: "invalid Docker TLS configuration: " + unwrapURLError(err).Error(), Err: err}
+	}
 	if errors.Is(err, errRedirect) {
 		return &Error{Class: provider.ClassUnsupported, Message: "the endpoint answered with a redirect; redirects are not followed (is it a Docker Engine?)", Err: err}
 	}

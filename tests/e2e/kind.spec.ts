@@ -1,7 +1,7 @@
 import { expect, type Page } from '@playwright/test'
 import { test } from './fixtures'
 import { execFileSync } from 'node:child_process'
-import { pickOption, pickScope, selects } from './fixtures'
+import { connectSelected, pickOption, pickScope, selects } from './fixtures'
 
 const kc = process.env.OCULAR_KIND_KUBECONFIG!
 const kubectl = (...args: string[]) => execFileSync('kubectl', ['--kubeconfig', kc, '--context', 'kind-ocular-dev', ...args], { encoding: 'utf8' })
@@ -9,7 +9,11 @@ const kubectl = (...args: string[]) => execFileSync('kubectl', ['--kubeconfig', 
 async function openTarget(page: Page, name: string) {
   await page.goto('/')
   await page.getByRole('option', { name: new RegExp(`^${name}\\b`) }).click()
-  await expect(page.getByRole('navigation', { name: 'resources' })).toBeVisible()
+  await connectSelected(page)
+  await expect(page.getByRole('textbox', { name: 'Filter resources', exact: true })).toBeVisible()
+  // These resource suites explicitly expand sections; fresh-profile defaults
+  // and persistence are covered by the navigation and restart suites.
+  for (const heading of await page.getByRole('navigation', { name: 'resources' }).locator('button[aria-expanded="false"]').all()) await heading.click()
 }
 
 async function kindPage(page: Page, kind: string, ns = 'ocular-demo') {

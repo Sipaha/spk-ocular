@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { App } from '../App'
 import { initialState, targetKey, useStore } from '../store'
 import { remember } from './pageMemo'
-import { kindsView, fakeClient, k8s, podRow, podsKind, scopeRow } from '../test/fakeClient'
+import { kindsView, connectedClient as fakeClient, k8s, podRow, podsKind, scopeRow } from '../test/fakeClient'
 
 beforeEach(() => useStore.setState({ ...initialState }))
 
@@ -392,6 +392,7 @@ describe('switching targets (P18)', () => {
     const sorted = nameHead(grid).getAttribute('aria-sort')
     await userEvent.keyboard('/')
     await userEvent.keyboard('db')
+    await userEvent.click(screen.getByRole('button', { name: /^Network \(/ }))
     await userEvent.click(screen.getByRole('button', { name: 'Services' }))
     await userEvent.click(screen.getByRole('button', { name: 'Pods' }))
     grid = await screen.findByRole('grid', { name: 'resources' })
@@ -404,6 +405,7 @@ describe('switching targets (P18)', () => {
     const f = fakeClient([k8s('prod'), k8s('stage')])
     f.client.listKinds = vi.fn(async () => kindsView([podsKind, { id: 'widgets', title: 'Widgets', group: 'Other', scoped: false, columns: [{ id: 'name', title: 'Name', type: 'text' as const }] }]))
     await openProd(f)
+    await userEvent.click(screen.getByRole('button', { name: /^Other \(/ }))
     await userEvent.click(await screen.findByRole('button', { name: 'Widgets' }))
     await screen.findByRole('heading', { name: 'Widgets' })
     await userEvent.click(screen.getByRole('option', { name: /stage/ }))

@@ -48,6 +48,9 @@ var (
 // AgentCall takes the target's session for a call bound to ctx; Done ends
 // it.
 func (s *Service) AgentCall(ctx context.Context, providerID, target string) (*AgentCall, error) {
+	// Explicit agent operations retain their grant-checked session path,
+	// including identity verification requested from the Agents dialog.
+	ctx = context.WithValue(ctx, uiContextKey{}, false)
 	t, err := s.targetOf(ctx, providerID, target)
 	if err != nil {
 		return nil, err

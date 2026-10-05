@@ -89,7 +89,7 @@ export function Workspace({ client, hub, target, onFavorite, onMoveFavorite, onN
   const tkey = targetKey({ provider: target.provider, id: target.id })
   const searching = !!resourceFilter.trim()
   const sectionOpen = (key: string, fallback: boolean) => searching || (navSections[key] ?? fallback)
-  const favoritesOpen = sectionOpen(favoritesKey, true)
+  const favoritesOpen = sectionOpen(favoritesKey, false)
   const defaultScope = target.defaultScope
   // Last kind and scope per target (SQLite target_state); null until loaded,
   // so the default view is not opened only to be replaced.
@@ -357,8 +357,7 @@ export function Workspace({ client, hub, target, onFavorite, onMoveFavorite, onN
         </section>
         {resourceFilter.trim() && !matchingKinds.length && <p role="status" className="px-2 py-2 text-fg-subtle">{t('nav.noMatches')}</p>}
         {groups.map((g) => {
-          // Built-in groups start open; API groups keep their collapsed default.
-          const open = sectionOpen(groupKey(g.group), !g.subgrouped)
+          const open = sectionOpen(groupKey(g.group), g.group === 'Workloads')
           const activeIn = g.items.flatMap((it) => ('kind' in it ? [it.kind] : it.kinds)).find((k) => k.id === kind)
           return (
             <section key={g.group} className="mt-3" aria-label={g.group}>
@@ -547,8 +546,8 @@ function NavSectionHeading({ label, open, count, disabled, onToggle }: {
         onToggle(!open)
       }
     }}
-    className="nav-group-heading w-full items-center gap-1 rounded-md text-left hover:text-fg">
-    <span aria-hidden className={['inline-block w-2.5 shrink-0 text-[9px] transition-transform', open ? 'rotate-90' : ''].join(' ')}>▶</span>
+    className="nav-group-heading w-full items-center gap-0.5 rounded-md text-left hover:text-fg">
+    <span aria-hidden className={['inline-block w-2 shrink-0 text-[9px] transition-transform', open ? 'rotate-90' : ''].join(' ')}>▶</span>
     <span className="min-w-0 flex-1 truncate">{label}</span>
     <span className="font-normal" title={t('nav.kinds', { count })}>{count}</span>
   </button>

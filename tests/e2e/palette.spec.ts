@@ -1,3 +1,4 @@
+import { connectSelected } from './fixtures'
 import { expect, type Page } from '@playwright/test'
 import { test } from './fixtures'
 
@@ -7,6 +8,7 @@ import { test } from './fixtures'
 async function openDemo(page: Page) {
   await page.goto('/')
   await page.getByRole('option', { name: /^demo\b/ }).click()
+  await connectSelected(page)
   await page.getByRole('navigation', { name: 'resources' }).getByRole('button', { name: 'Services', exact: true }).click()
   await expect(page.getByRole('grid', { name: 'resources' }).getByRole('gridcell', { name: 'workers', exact: true })).toBeVisible()
 }
@@ -90,6 +92,7 @@ test('opening a palette result selects and reveals its off-screen row', async ({
   })
   await page.goto('/')
   await page.getByRole('option', { name: /^demo\b/ }).click()
+  await connectSelected(page)
   await page.getByRole('navigation', { name: 'resources' }).getByRole('button', { name: 'Services', exact: true }).click()
   const grid = page.getByRole('grid', { name: 'resources' })
   await expect(grid.getByRole('gridcell', { name: 'filler-000', exact: true })).toBeVisible()
@@ -132,6 +135,7 @@ test('a slow resource list shows loading until its rows arrive', async ({ page }
 test('object search stays inside selected scopes across views and opens the matching kind', async ({ page }) => {
   await page.goto('/')
   await page.getByRole('option', { name: /^demo\b/ }).click()
+  await connectSelected(page)
   const nav = page.getByRole('navigation', { name: 'resources' })
   await nav.getByRole('button', { name: 'Crates', exact: true }).click()
   const grid = page.getByRole('grid', { name: 'resources' })

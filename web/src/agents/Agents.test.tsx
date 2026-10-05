@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { AgentAuditEntry, AgentPending, KindDescriptor } from '../api/types'
 import { App } from '../App'
 import { initialState, useStore } from '../store'
-import { fakeClient, k8s, kindsView, podsKind } from '../test/fakeClient'
+import { connectedClient as fakeClient, k8s, kindsView, podsKind } from '../test/fakeClient'
 import { initialAgents, useAgents } from './store'
 
 beforeEach(() => {

@@ -109,6 +109,15 @@ func (s *Service) RunAction(ctx context.Context, req ActionRunRequest) (core.Act
 // checkedSession is the target's current session if its configuration
 // is still the one with revision rev (the one the user confirmed on).
 func (s *Service) checkedSession(ctx context.Context, providerID, target, rev string) (provider.Session, error) {
+	// Report a stale review before requiring a new connection. The revision is
+	// local metadata; checking it must not implicitly reopen the target.
+	current, err := s.targetOf(ctx, providerID, target)
+	if err != nil {
+		return nil, err
+	}
+	if s.configRev(current.ConfigHash) != rev {
+		return nil, said(CodeConflict, "configChanged", "target", target)
+	}
 	if _, err := s.session(ctx, providerID, target); err != nil {
 		return nil, err
 	}

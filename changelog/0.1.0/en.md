@@ -10,3 +10,6 @@
   Every downloadable artifact has a SHA-256 checksum.
 - Agent log access covers time intervals, grep, bounded live reading and file
   export under the same scoped permission. API output has explicit budgets.
+- Connect explicitly from the resource list, inspect connection progress and errors,
+  and cancel active attempts or retry waits. Automatic connection attempts stop at three.
+- Resource sections start collapsed except Workloads; saved expansion choices are preserved.

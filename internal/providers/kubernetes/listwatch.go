@@ -197,6 +197,8 @@ func classify(err error) (provider.ErrorClass, string) {
 	switch {
 	case err == nil:
 		return "", ""
+	case provider.InvalidTLS(err):
+		return provider.ClassInvalid, err.Error()
 	case apierrors.IsForbidden(err):
 		return provider.ClassForbidden, statusMessage(err)
 	case apierrors.IsUnauthorized(err):

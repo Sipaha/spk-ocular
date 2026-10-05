@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -53,6 +54,15 @@ func synthServer(t *testing.T) func(path string, body any) (int, []byte) {
 // (errors are 400 with the class in "code").
 func TestSyntheticActionsThroughTheAPI(t *testing.T) {
 	post := synthServer(t)
+	startCode, startBody := post("/api/ConnectTarget", map[string]string{"provider": synthetic.ID, "id": synthetic.Target})
+	require.Equal(t, http.StatusOK, startCode, string(startBody))
+	require.Eventually(t, func() bool {
+		code, body := post("/api/ConnectTarget", map[string]string{"provider": synthetic.ID, "id": synthetic.Target})
+		require.Equal(t, http.StatusOK, code, string(body))
+		var status core.ConnectionStatus
+		require.NoError(t, json.Unmarshal(body, &status))
+		return status.State == "connected"
+	}, time.Second, 5*time.Millisecond)
 	ref := core.Ref{Provider: synthetic.ID, Target: synthetic.Target, Kind: synthetic.WorkloadKind, Name: "web"}
 	prepare := func(action string, p core.ActionParams) core.ActionPlan {
 		code, body := post("/api/PrepareAction", map[string]any{"ref": ref, "action": action, "params": p})
@@ -167,4 +177,9 @@ func TestNativeSmokeSelectsReadySyntheticServices(t *testing.T) {
 	var state map[string]string
 	require.NoError(t, json.Unmarshal(body, &state))
 	require.Equal(t, `"services"`, state["kind"])
+	code, body = post("/api/_test/synthetic/connect", nil)
+	require.Equal(t, http.StatusOK, code, string(body))
+	var connection core.ConnectionStatus
+	require.NoError(t, json.Unmarshal(body, &connection))
+	require.NotZero(t, connection.ID)
 }

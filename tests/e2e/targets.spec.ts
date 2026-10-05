@@ -33,7 +33,7 @@ test('lists Docker contexts beside the kube contexts, the current one marked, no
   await expect(docker.getByRole('option', { name: /^docker-edge\b/ })).toContainText('tcp://edge.example:2376')
   await docker.getByRole('option', { name: /^docker-edge\b/ }).click()
   await page.getByRole('button', { name: 'Connection information' }).click()
-  await expect(page.getByRole('heading', { name: 'docker-edge', exact: true })).toBeVisible()
+  await expect(page.getByRole('dialog', { name: 'Connection information' }).getByRole('heading', { name: 'docker-edge', exact: true })).toBeVisible()
   await expect(page.getByText('TLS, verified')).toBeVisible()
   const html = await page.content()
   expect(html).not.toContain('SECRET')
@@ -47,12 +47,12 @@ const connectionInfo = async (page: Page, name: string) => {
   return dialog
 }
 
-test('connection information is modal, preserves the resource page, and old Overview selections migrate on reload', async ({ page }) => {
+test('connection information is modal before connecting and restores focus', async ({ page }) => {
   await page.goto('/')
   await option(page, 'staging').click()
-  await expect(page.getByRole('heading', { name: 'Pods' })).toBeVisible()
-  // Unreachable fixture cluster: an explained error, never an empty table.
-  await expect(page.getByRole('alert').filter({ hasText: 'Cannot show' })).toBeVisible({ timeout: 15_000 })
+  await expect(page.getByRole('button', { name: 'Connect', exact: true })).toBeVisible()
+  // Selection and information must not contact the unreachable fixture cluster.
+  await expect(page.getByRole('grid', { name: 'resources' })).toHaveCount(0)
   await expect(page.getByRole('button', { name: 'Overview', exact: true })).toHaveCount(0)
   const dialog = await connectionInfo(page, 'staging')
   await expect(dialog.getByText('https://staging.example:6443', { exact: true })).toBeVisible()
@@ -64,32 +64,24 @@ test('connection information is modal, preserves the resource page, and old Over
   await page.keyboard.press('Escape')
   await expect(dialog).toHaveCount(0)
   await expect(page.getByRole('button', { name: 'Connection information' })).toBeFocused()
-  await expect(page.getByRole('heading', { name: 'Pods' })).toBeVisible()
-  const migrated = await page.evaluate(async () => {
-    const token = document.querySelector<HTMLMetaElement>('meta[name="spk-ocular-api-token"]')!.content
-    const res = await fetch('/api/SetTargetState', { method: 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ provider: 'kubernetes', target: 'kubeconfig:staging', key: 'kind', value: JSON.stringify('__overview') }) })
-    return res.ok
-  })
-  expect(migrated).toBeTruthy()
+  await expect(page.getByRole('button', { name: 'Connect', exact: true })).toBeVisible()
   await page.reload()
-  await expect(page.getByRole('heading', { name: 'Pods' })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Connect', exact: true })).toBeVisible()
   await expect(dialog).toHaveCount(0)
   await expect(option(page, 'staging')).toHaveAttribute('aria-selected', 'true')
 })
 
-test('keyboard: / filters the open table, target filter arrows and Enter select', async ({ page }) => {
+test('keyboard: target filter and Enter select without connecting', async ({ page }) => {
   await page.goto('/')
   await expect(option(page, 'prod')).toBeVisible()
   await option(page, 'prod').click()
-  await expect(page.getByRole('heading', { name: 'Pods' })).toBeVisible()
-  await page.keyboard.press('/')
-  await expect(page.getByRole('textbox', { name: 'Filter rows' })).toBeFocused()
+  await expect(page.getByRole('button', { name: 'Connect', exact: true })).toBeVisible()
+  await expect(page.getByRole('textbox', { name: 'Filter rows' })).toHaveCount(0)
   await page.getByRole('textbox', { name: 'Filter', exact: true }).focus()
   await page.keyboard.type('lab')
   await expect(page.getByRole('option')).toHaveCount(1)
   await page.keyboard.press('Enter')
-  await expect(page.getByRole('heading', { name: 'Pods' })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Connect', exact: true })).toBeVisible()
   await expect(option(page, 'lab')).toHaveAttribute('aria-selected', 'true')
   await page.keyboard.press('Escape')
   await expect(page.getByRole('option')).toHaveCount(7) // 4 kube contexts, 3 Docker contexts
@@ -119,11 +111,11 @@ test('a broken kubeconfig is a warning; other contexts stay', async ({ page }) =
 test('a selected context that disappears is deselected, and comes back', async ({ page }) => {
   await page.goto('/')
   await option(page, 'dev').click()
-  await expect(page.getByRole('heading', { name: 'Pods' })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Connect', exact: true })).toBeVisible()
   writeAtomic(e.two, kubeconfig('', 'other'))
   await expect(page.getByText('Pick a context on the left')).toBeVisible()
   writeAtomic(e.two, TWO)
-  await expect(page.getByRole('heading', { name: 'Pods' })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Connect', exact: true })).toBeVisible()
   await expect(option(page, 'dev')).toHaveAttribute('aria-selected', 'true')
 })
 

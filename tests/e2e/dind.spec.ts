@@ -1,7 +1,7 @@
 import { expect, type Page } from '@playwright/test'
 import { test } from './fixtures'
 import { execFileSync } from 'node:child_process'
-import { pickOption, pickScope, selects } from './fixtures'
+import { connectSelected, pickOption, pickScope, selects } from './fixtures'
 import { expectScreen, stats } from './synth'
 
 // The Compose provider against the isolated test daemon (scripts/dind-seed.sh:
@@ -17,7 +17,11 @@ const docker = (...args: string[]) => {
 async function openDind(page: Page, project = 'ocular-fixture') {
   await page.goto('/')
   await page.getByRole('option', { name: /^ocular-dind\b/ }).click()
-  await expect(page.getByRole('navigation', { name: 'resources' })).toBeVisible()
+  await connectSelected(page)
+  await expect(page.getByRole('textbox', { name: 'Filter resources', exact: true })).toBeVisible()
+  // These resource suites explicitly expand sections; fresh-profile defaults
+  // and persistence are covered by the navigation and restart suites.
+  for (const heading of await page.getByRole('navigation', { name: 'resources' }).locator('button[aria-expanded="false"]').all()) await heading.click()
   await pickScope(page, 'Project', project)
 }
 

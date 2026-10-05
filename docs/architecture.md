@@ -44,7 +44,22 @@ Kubeconfig merge is first-wins, with additional kubeconfig files directly under
 Credentials never enter DTOs, events, logs, or SQLite. Configuration revisions
 are process-keyed HMACs, not raw configuration hashes.
 
-The selected connection and the two most recently left connections stay warm.
+UI selection and connection are separate. UI transports use `UIContext`; resource
+reads require an admitted connection and never implicitly create a session.
+`ConnectTarget` checks a provisional provider session, then admits it only if its
+attempt ID and configuration revision are still current. `CancelConnectTarget`
+addresses that attempt ID and prevents late success from publishing a session.
+Granted agent calls keep their independent, permission-checked session path.
+
+Connection progress reports backend phases and timestamps. Availability failures
+have at most three total attempts, with 500 ms and 1 s backoff and a 90-second
+budget per attempt. Authentication/configuration failures stop immediately.
+A forbidden Kubernetes namespace probe permits connection with typed scopes.
+Cancellation interrupts the check and backoff; removing the private session
+lifetime marker terminates credential helpers and rejects late helper starts.
+
+Once explicitly connected, the selected connection and the two most recently
+left connections stay warm.
 Busy sessions remain alive while used by views, streams, or agents. Recent idle
 sessions expire after 10 minutes; other unused sessions expire after 60 seconds.
 Closing a non-selected connection ends its owned views and streams. Terminal
@@ -52,7 +67,7 @@ and tunnel handles own their original connection snapshots independently.
 
 Background Kubernetes exec plugins run headlessly through `execshim`, with a
 15-second limit. Authentication requiring a person closes the background session
-and asks the user to select that connection again. Foreground plugins are also
+and asks the user to select that connection and press Connect again. Foreground plugins are also
 bounded and terminate with their parent. Configuration changes invalidate the
 session incarnation; old responses cannot update the replacement session.
 

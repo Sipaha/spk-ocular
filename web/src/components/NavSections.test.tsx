@@ -3,9 +3,28 @@ import userEvent from '@testing-library/user-event'
 import { beforeEach, expect, it, vi } from 'vitest'
 import { App } from '../App'
 import { actions, initialState, useStore } from '../store'
-import { fakeClient, k8s, kindsView, podsKind } from '../test/fakeClient'
+import { connectedClient as fakeClient, k8s, kindsView, podsKind } from '../test/fakeClient'
 
 beforeEach(() => useStore.setState({ ...initialState }))
+
+it.each([false, true])('opens only Workloads by default and respects saved choices (saved=%s)', async (saved) => {
+  const f = fakeClient([k8s('a')])
+  f.state.view.selected = { provider: 'kubernetes', id: 'a' }
+  f.client.listKinds = vi.fn(async () => kindsView([podsKind,
+    { ...podsKind, id: 'services', title: 'Services', group: 'Network' },
+    { ...podsKind, id: 'problems', title: 'Problems', group: 'Health' },
+  ]))
+  if (saved) f.client.getNavSections = vi.fn(async () => ({ favorites: true, 'group:Workloads': false, 'group:Network': true }))
+  render(<App client={f.client} />)
+  await screen.findByRole('grid', { name: 'resources' })
+  const nav = within(screen.getByRole('navigation', { name: 'resources' }))
+  expect(nav.getByRole('button', { name: /^Workloads \(/ })).toHaveAttribute('aria-expanded', String(!saved))
+  expect(nav.getByRole('button', { name: /^Favorites \(/ })).toHaveAttribute('aria-expanded', String(saved))
+  expect(nav.getByRole('button', { name: /^Network \(/ })).toHaveAttribute('aria-expanded', String(saved))
+  expect(nav.getByRole('button', { name: /^Health \(/ })).toHaveAttribute('aria-expanded', 'false')
+  expect(nav.getByRole('button', { name: 'Pods' })).toHaveAttribute('aria-current', 'page')
+  expect(f.client.setNavSection).not.toHaveBeenCalled()
+})
 
 it('all sections fold globally across targets; search expands temporarily and Enter opens the matching kind', async () => {
   const f = fakeClient([k8s('a'), k8s('b')])
@@ -21,6 +40,7 @@ it('all sections fold globally across targets; search expands temporarily and En
   expect(section('Workloads').queryByRole('button', { name: 'Jobs' })).toBeNull()
   expect(section('Workloads').getByRole('button', { name: 'Pods' })).toHaveAttribute('aria-current', 'page')
   head('Favorites').focus()
+  await userEvent.keyboard('{ArrowRight}')
   await userEvent.keyboard('{ArrowLeft}')
   expect(section('Favorites').queryByRole('button', { name: 'Services' })).toBeNull()
   await userEvent.click(screen.getByRole('option', { name: 'bb-cluster' }))

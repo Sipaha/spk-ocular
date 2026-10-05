@@ -1,3 +1,4 @@
+import { connectSelected } from './fixtures'
 import { expect, type Page } from '@playwright/test'
 import { test } from './fixtures'
 import { request } from 'node:http'
@@ -49,6 +50,7 @@ test('granted in the UI, an agent reads its zone only; its delete waits for Yes;
   await page.goto('/')
   await post(page, '/api/_test/synthetic/reset')
   await page.getByRole('option', { name: /^demo\b/ }).click()
+  await connectSelected(page)
 
   // Nothing granted: the agent sees no target.
   expect((await agent('Access', {})).body.targets).toEqual([])
