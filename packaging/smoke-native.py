@@ -4,6 +4,7 @@ import argparse
 import json
 import os
 import re
+import shutil
 from pathlib import Path
 import subprocess
 import time
@@ -15,7 +16,7 @@ from release import ROOT
 
 def capture(platform, pid, png):
     if platform == 'windows':
-        subprocess.run(['powershell.exe', '-NoProfile', '-File', str(ROOT / 'packaging/windows/screenshot.ps1'), '-ProcessId', str(pid), '-OutputPath', str(png)], check=True)
+        subprocess.run(['powershell.exe', '-NoProfile', '-File', str(ROOT / 'packaging/windows/screenshot.ps1'), '-ProcessId', str(pid), '-OutputPath', str(png)], check=True, timeout=30)
     elif platform == 'linux':
         tree = subprocess.check_output(['xwininfo', '-root', '-tree'], text=True)
         owned = None
@@ -108,6 +109,10 @@ def smoke(platform, arch):
                     child.kill()
                 child.wait(timeout=5)
                 raise
+            finally:
+                desktop_log = profile / 'data/desktop.log'
+                if desktop_log.is_file():
+                    shutil.copy2(desktop_log, scratch / 'desktop.log')
 
 
 if __name__ == '__main__':
