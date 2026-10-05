@@ -18,20 +18,27 @@ spec.loader.exec_module(validate_tag)
 
 
 class TagGate(unittest.TestCase):
-    def test_tag_version_and_notes_must_agree(self):
+    def test_tag_is_the_release_version_without_metadata_files(self):
+        for value in ['1.2.3', '1.2.3-rc.1']:
+            self.assertEqual(validate_tag.validate('v' + value), value)
+        for bad in ['1.2.3', 'v1.2', 'v1.2.3-01', 'v../1.2.3']:
+            with self.subTest(tag=bad), self.assertRaises(ValueError):
+                validate_tag.validate(bad)
+
+
+class ChangelogSource(unittest.TestCase):
+    def test_exact_version_english_file_and_launcher_fallback(self):
         with tempfile.TemporaryDirectory() as scratch:
             root = Path(scratch)
             for value in ['1.2.3', '1.2.3-rc.1']:
-                (root / 'VERSION').write_text(value + '\n')
-                (root / 'RELEASE_NOTES.md').write_text(f'## SPK Ocular {value}\n\n- Current notes.\n')
-                self.assertEqual(validate_tag.validate('v' + value, root), value)
-                for bad in [value, 'v2.0.0', 'v1.2.3-01']:
-                    with self.subTest(tag=bad), self.assertRaises(ValueError):
-                        validate_tag.validate(bad, root)
-                for notes in ['', '## SPK Ocular 0.0.1\n- Old notes.', f'## SPK Ocular {value}']:
-                    (root / 'RELEASE_NOTES.md').write_text(notes)
-                    with self.subTest(notes=notes), self.assertRaises(ValueError):
-                        validate_tag.validate('v' + value, root)
+                path = root / 'changelog' / value / 'en.md'
+                path.parent.mkdir(parents=True)
+                path.write_text(f'# {value}\n\n- Changes for this version.\n')
+                (path.parent / 'ru.md').write_text('Localized release description')
+                self.assertEqual(publish.release_notes(root, value), path)
+            missing = publish.release_notes(root, '2.0.0')
+            self.assertTrue(missing.is_relative_to(root / '.agents/tmp'))
+            self.assertEqual(missing.read_text(), 'Release 2.0.0\n')
 
 
 class PublicationGate(unittest.TestCase):
@@ -53,6 +60,9 @@ class PublicationGate(unittest.TestCase):
         self.existing = {'isDraft': True, 'assets': []}
         self.uploaded = {'isDraft': True, 'assets': self.assets}
         self.fail_upload = False
+        self.notes = self.root / 'changelog' / self.version / 'en.md'
+        self.notes.parent.mkdir(parents=True)
+        self.notes.write_text('Notes for this exact version')
 
     def run_gh(self, command, **kwargs):
         self.commands.append(command)
@@ -106,6 +116,7 @@ class PublicationGate(unittest.TestCase):
             operations = [c[2] for c in self.commands]
             self.assertEqual(operations, ['view', 'create', 'upload', 'edit'] if existing is None else ['view', 'upload', 'edit'])
             self.assertIn('--draft=false', self.commands[-1])
+            self.assertEqual(self.commands[-1][-2:], ['--notes-file', str(self.notes)])
             self.assertIn('--prerelease=true', self.commands[-1])
             if existing is None:
                 self.assertIn('--draft', self.commands[1])

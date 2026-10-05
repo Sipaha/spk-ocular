@@ -10,7 +10,7 @@ import struct
 import subprocess
 import tarfile
 import tempfile
-from release import ROOT, elf_arch, version
+from release import ROOT, document_paths, elf_arch, version
 
 
 PLATFORMS = ('linux', 'darwin', 'windows')
@@ -127,9 +127,7 @@ def verify_native(directory, release_version, arch):
                 raise ValueError(f'{kind}: wrong contents or mode for {name}')
     for filename, member in [(base + '.tar.gz', 'spk-ocular'), (f'spk-ocular-browser_{release_version}_linux_{arch}.tar.gz', 'spk-ocular-browser')]:
         contents = tar_contents((directory / filename).read_bytes())
-        documents = [ROOT / name for name in ('LICENSE', 'README.md', 'AGENTS.md', 'RELEASE_NOTES.md')]
-        documents += [path for path in (ROOT / 'docs').rglob('*') if path.is_file()]
-        for path in documents:
+        for path in document_paths():
             if contents.get(str(path.relative_to(ROOT))) != (path.read_bytes(), 0o644):
                 raise ValueError(f'{filename}: missing or incorrect document {path.name}')
         for required in [member, 'BUILD-INFO']:

@@ -18,7 +18,7 @@ jobs:
         with:
           persist-credentials: false
       - id: version
-        name: Validate the release tag and notes
+        name: Validate the release tag
         env:
           RELEASE_TAG: ${{ github.ref_name }}
         run: python3 packaging/validate-tag.py

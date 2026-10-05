@@ -45,6 +45,12 @@ def archive(path, entries, epoch):
                 tar.addfile(info, io.BytesIO(data))
 
 
+def document_paths(root=ROOT):
+    paths = [root / name for name in ('LICENSE', 'README.md', 'AGENTS.md')]
+    paths += sorted(path for directory in ('docs', 'changelog') for path in (root / directory).rglob('*') if path.is_file())
+    return paths
+
+
 def package(release_version, arch):
     release_version = version(release_version)
     host = subprocess.check_output(['go', 'env', 'GOHOSTOS', 'GOHOSTARCH'], text=True).split()
@@ -67,8 +73,7 @@ def package(release_version, arch):
     commit = subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=ROOT, text=True).strip()
     info = f'version={release_version}\ncommit={commit}\nplatform=linux/{arch}\n'.encode()
     common = [('BUILD-INFO', info, 0o644)]
-    common += [(name, ROOT / name, 0o644) for name in ('LICENSE', 'README.md', 'AGENTS.md', 'RELEASE_NOTES.md')]
-    common += [(str(path.relative_to(ROOT)), path, 0o644) for path in sorted((ROOT / 'docs').rglob('*')) if path.is_file()]
+    common += [(path.relative_to(ROOT).as_posix(), path, 0o644) for path in document_paths()]
     desktop_archive = output / f'spk-ocular_{release_version}_linux_{arch}.tar.gz'
     archive(desktop_archive, common + [
         ('spk-ocular', desktop, 0o755),

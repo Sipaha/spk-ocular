@@ -53,10 +53,11 @@ VERSION file plus a development run identifier. These are workflow artifacts,
 not published releases. Failed tests cannot produce release packages.
 
 A pushed `vMAJOR.MINOR.PATCH` tag (optionally with a SemVer prerelease suffix)
-starts the release workflow. The tag must match the VERSION file and the current
-RELEASE_NOTES.md must start with `## SPK Ocular VERSION` and contain notes for
-that version. The same test gate runs before all six native
-package jobs. Architecture, contents, version and checksums are checked before
+starts the release workflow. The tag is the release version, as in the launcher;
+it does not need to match the development VERSION file. The description comes from
+`changelog/<version>/en.md`, with a `Release <version>` fallback if absent.
+Localized descriptions live alongside it, such as `ru.md`. The same test gate
+runs before all six native package jobs. Architecture, contents, version and checksums are checked before
 upload. Linux jobs install/remove DEB packages; Windows jobs install/remove MSI
 packages; macOS jobs mount and verify the DMG and its sealed app bundle. Windows
 and macOS jobs start the native webview with synthetic data and save a screenshot. The publish job verifies the complete expected
@@ -77,9 +78,10 @@ and [Wails Linux packaging](https://v3.wails.io/guides/build/linux/).
 
 ## Prepare a version
 
-1. Update VERSION and RELEASE_NOTES.md together. Notes describe the user-visible
+1. Add `changelog/<version>/en.md` and `ru.md`. Notes describe the user-visible
    result compared with the previous published version, not intermediate fixes
-   or the sequence of development commits. English and Russian are supported.
+   or the sequence of development commits. VERSION is the default development
+   base; tagged builds take their version directly from the tag.
 2. Run `make check` and `make package-linux RELEASE_VERSION=VERSION ARCH=ARCH`.
    Inspect artifacts with `packaging/verify.py` and open the packaged desktop
    binary in an isolated test profile. Never replace the user's running app.
@@ -92,6 +94,6 @@ To reproduce a failed draft build, rerun the failed workflow jobs. An existing
 draft can receive corrected uploads only for that same tagged source. If the
 source must change, prepare a new tag/version rather than moving a published tag.
 
-RELEASE_NOTES.md always describes the version in VERSION. Older release notes
-belong in the published GitHub Releases and Git history, not a growing archive
-of implementation reports in the working documentation.
+The versioned `changelog/<version>/<locale>.md` files are the release-note source,
+matching the launcher. Published notes remain in their version directory; current
+product behavior belongs in the main documentation.

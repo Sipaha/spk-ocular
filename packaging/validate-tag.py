@@ -1,18 +1,13 @@
 #!/usr/bin/env python3
-"""Reject mistyped tags and missing notes before starting expensive release jobs."""
+"""Validate the release version taken from the Git tag, as in the launcher."""
 import os
 from pathlib import Path
-from release import ROOT, version
+from release import version
 
-def validate(raw, root=ROOT):
+def validate(raw):
     release_version = version(raw)
     if raw != 'v' + release_version:
         raise ValueError('release tags must start with v')
-    if (root / 'VERSION').read_text().strip() != release_version:
-        raise ValueError('release tag must match VERSION')
-    notes = (root / 'RELEASE_NOTES.md').read_text().strip().splitlines()
-    if not notes or notes[0] != f'## SPK Ocular {release_version}' or not any(line.startswith('- ') for line in notes):
-        raise ValueError('RELEASE_NOTES.md must describe this version')
     return release_version
 
 

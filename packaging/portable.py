@@ -12,7 +12,7 @@ import tempfile
 import time
 import zipfile
 
-from release import ROOT, archive, version
+from release import ROOT, archive, document_paths, version
 
 
 def run(*args, **kwargs):
@@ -49,8 +49,7 @@ def zip_archive(path, entries, epoch):
 def documents(release_version, platform, arch):
     commit = subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=ROOT, text=True).strip()
     entries = [('BUILD-INFO', f'version={release_version}\ncommit={commit}\nplatform={platform}/{arch}\n'.encode(), 0o644)]
-    entries += [(name, ROOT / name, 0o644) for name in ('LICENSE', 'README.md', 'AGENTS.md', 'RELEASE_NOTES.md')]
-    entries += [(p.relative_to(ROOT).as_posix(), p, 0o644) for p in sorted((ROOT / 'docs').rglob('*')) if p.is_file()]
+    entries += [(path.relative_to(ROOT).as_posix(), path, 0o644) for path in document_paths()]
     return entries
 
 

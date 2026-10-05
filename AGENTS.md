@@ -27,8 +27,9 @@ scratch, outside product documentation. Git and GitHub Releases retain history.
 
 All documentation and code comments are English. Russian UI text belongs in
 localization data (`web/src/i18n.ts`); release descriptions may be bilingual.
-RELEASE_NOTES.md describes the current VERSION only. Verify documentation against
-source, commands and tests; do not claim a platform or workflow has run when it
+Release notes live in `changelog/<version>/<locale>.md`, as in the launcher;
+GitHub uses `en.md`. Keep published version notes as release metadata. Verify documentation
+against source, commands and tests; do not claim a platform or workflow has run when it
 has only been configured. Keep local links valid (`scripts/check-docs.py`).
 
 ## Work safely
@@ -107,7 +108,7 @@ D-Bus without portals; don't assume a timeout means the application is broken.
 - Logs/terminal/tunnels: `internal/streams`, `internal/forwards`;
   frontend `logs`, `term`, `tunnels` and `dock`.
 - Agent access: `internal/agentgrant`, `internal/agentapi`, `web/src/agents`.
-- Packaging: `packaging/`, `.github/workflows/`, VERSION, RELEASE_NOTES.md.
+- Packaging: `packaging/`, `.github/workflows/`, `VERSION` (development base), `changelog/<version>/<locale>.md`.
 
 ## Behavior invariants
 

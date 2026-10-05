@@ -6,11 +6,12 @@ import sys
 from urllib.parse import unquote, urlsplit
 
 root = Path(__file__).resolve().parent.parent
-files = [root / 'README.md', root / 'AGENTS.md', root / 'RELEASE_NOTES.md', *sorted((root / 'docs').rglob('*.md'))]
+files = [root / 'README.md', root / 'AGENTS.md', *sorted((root / 'docs').rglob('*.md')), *sorted((root / 'changelog').rglob('*.md'))]
 errors = []
 for path in files:
     text = path.read_text()
-    if path.name != 'RELEASE_NOTES.md' and re.search(r'[\u0400-\u04ff]', text):
+    localized_notes = path.is_relative_to(root / 'changelog') and path.name != 'en.md'
+    if not localized_notes and re.search(r'[\u0400-\u04ff]', text):
         errors.append(f'{path.relative_to(root)}: documentation must be English')
     for target in re.findall(r'\[[^\]]*\]\(([^)]+)\)', text):
         target = target.strip('<>')

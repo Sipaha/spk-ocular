@@ -1,0 +1,5 @@
+# Keep embedded assets and packaged documentation identical on native runners.
+* text=auto eol=lf
+*.png binary
+*.ico binary
+*.icns binary
