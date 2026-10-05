@@ -122,3 +122,20 @@ The verifier checks actual archive/DEB/RPM contents, binary version and machine
 architecture, permissions, dependencies, menu entry, icons, license and hashes.
 CI also installs and removes the DEB on its disposable runner. Local verification
 extracts packages into scratch and must not install over the user's application.
+
+
+Windows/macOS packages use matching native hosts:
+
+```sh
+python packaging/portable.py --version 0.1.0 --os windows --arch amd64
+python packaging/verify-portable.py --version 0.1.0 --os windows --arch amd64
+# On macOS use --os darwin; either platform also accepts --arch arm64.
+```
+
+Windows requires WebView2 and WiX 5.0.2 (`dotnet tool install wix --version 5.0.2`).
+macOS requires Xcode Command Line Tools. The builder creates Windows icon/manifest
+resources and the macOS app bundle from the existing application icon. Signing
+occurs after bundle assembly and before DMG creation. The native CI jobs exercise
+platform transport/permissions, inspect artifacts, and start an isolated native
+app with synthetic data, saving screenshots. They never use a developer profile.
+Windows desktop diagnostics go to `SPK_OCULAR_HOME/desktop.log` (replaced on launch).

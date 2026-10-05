@@ -7,6 +7,7 @@ import (
 	"io/fs"
 	"log/slog"
 	"os"
+	"path/filepath"
 	"runtime"
 	"sync/atomic"
 
@@ -22,6 +23,7 @@ type Options struct {
 	Service    api.API
 	Emitter    *events.Emitter
 	IconPNG    []byte
+	DataDir    string
 }
 
 // Run starts the Wails loop with one window. Closing the window quits the
@@ -43,6 +45,7 @@ func Run(ctx context.Context, o Options) error {
 		Name:        "spk-ocular",
 		Description: "Lightweight local infrastructure viewer",
 		Icon:        o.IconPNG,
+		Windows:     application.WindowsOptions{WebviewUserDataPath: filepath.Join(o.DataDir, "webview")},
 		Services:    []application.Service{application.NewService(transport.NewAPI(o.Service))},
 		Assets:      application.AssetOptions{Handler: application.AssetFileServerFS(o.FrontendFS)},
 		OnShutdown: func() { // on the GTK main thread

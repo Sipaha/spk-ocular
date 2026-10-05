@@ -4,6 +4,7 @@ package main
 
 import (
 	"context"
+	"log/slog"
 	"os"
 
 	"github.com/spk/spk-ocular/internal/api"
@@ -13,8 +14,18 @@ import (
 	"github.com/spk/spk-ocular/internal/streams"
 )
 
-func runDesktop(ctx context.Context, o browserOpts) error {
-	c, err := newCore(ctx, "desktop", false)
+func runDesktop(ctx context.Context, o browserOpts) (err error) {
+	closeLog, err := desktopLog()
+	if err != nil {
+		return err
+	}
+	defer func() {
+		if err != nil {
+			slog.Error("desktop stopped", "err", err)
+		}
+		closeLog()
+	}()
+	c, err := newCore(ctx, "desktop", o.TestSynthetic)
 	if err != nil {
 		return err
 	}
@@ -42,5 +53,6 @@ func runDesktop(ctx context.Context, o browserOpts) error {
 		Service:    c.Service,
 		Emitter:    c.Emitter,
 		IconPNG:    appfiles.IconPNG,
+		DataDir:    c.Paths.DataDir,
 	})
 }

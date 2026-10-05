@@ -4,6 +4,8 @@ package paths
 import (
 	"os"
 	"path/filepath"
+
+	"github.com/spk/spk-ocular/internal/privatefs"
 )
 
 // EnvHome overrides the data dir (tests, e2e, side-by-side dev instances).
@@ -35,15 +37,12 @@ func Resolve() (Paths, error) {
 		DBFile:  filepath.Join(dir, "ocular.db"),
 		TmpDir:  filepath.Join(dir, "tmp"),
 
-		AgentSocket: filepath.Join(dir, "agent.sock"),
+		AgentSocket: AgentEndpoint(dir),
 		AgentLock:   filepath.Join(dir, "agent.sock.lock"),
 	}, nil
 }
 
 // Ensure creates DataDir owner-only.
 func (p Paths) Ensure() error {
-	if err := os.MkdirAll(p.DataDir, 0o700); err != nil {
-		return err
-	}
-	return os.Chmod(p.DataDir, 0o700)
+	return privatefs.EnsureDir(p.DataDir)
 }

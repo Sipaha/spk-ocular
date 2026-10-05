@@ -43,11 +43,11 @@ class PublicationGate(unittest.TestCase):
         self.directory.mkdir(parents=True)
         self.version = '1.2.3-rc.1'
         for arch in ['amd64', 'arm64']:
-            for name in verify.assets(self.version, arch):
+            for name in [name for platform in verify.PLATFORMS for name in verify.assets(self.version, arch, platform)]:
                 data = name.encode()
                 (self.directory / name).write_bytes(data)
                 (self.directory / (name + '.sha256')).write_text(f'{hashlib.sha256(data).hexdigest()}  {name}\n')
-        (self.directory / 'SHA256SUMS').write_text(verify.verify_checksums(self.directory, self.version, ['amd64', 'arm64']))
+        (self.directory / 'SHA256SUMS').write_text(verify.verify_checksums(self.directory, self.version, ['amd64', 'arm64'], verify.PLATFORMS))
         self.assets = [{'name': p.name, 'size': p.stat().st_size} for p in self.directory.iterdir()]
         self.commands = []
         self.existing = {'isDraft': True, 'assets': []}

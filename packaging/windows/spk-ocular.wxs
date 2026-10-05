@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
+  <Package Name="SPK Ocular $(DisplayVersion)" Manufacturer="Pavel Simonov"
+           Version="$(Version)" UpgradeCode="4A30C260-FBB8-40F6-9665-058E5D978745"
+           Scope="perUser" Compressed="yes">
+    <MajorUpgrade AllowSameVersionUpgrades="yes" DowngradeErrorMessage="A newer version of SPK Ocular is already installed." />
+    <MediaTemplate EmbedCab="yes" />
+    <Icon Id="AppIcon" SourceFile="$(Stage)/app.ico" />
+    <Property Id="ARPPRODUCTICON" Value="AppIcon" />
+    <StandardDirectory Id="LocalAppDataFolder">
+      <Directory Id="ProgramsFolder" Name="Programs">
+        <Directory Id="INSTALLFOLDER" Name="SPK Ocular" />
+      </Directory>
+    </StandardDirectory>
+    <StandardDirectory Id="ProgramMenuFolder" />
+    <Component Id="MainExe" Directory="INSTALLFOLDER" Guid="*">
+      <File Id="OcularExe" Source="$(Stage)/spk-ocular.exe" KeyPath="yes" />
+    </Component>
+    <Component Id="License" Directory="INSTALLFOLDER" Guid="*">
+      <File Source="LICENSE" KeyPath="yes" />
+    </Component>
+    <Component Id="StartMenuShortcut" Directory="ProgramMenuFolder" Guid="*">
+      <Shortcut Id="AppShortcut" Name="SPK Ocular" Target="[INSTALLFOLDER]spk-ocular.exe" WorkingDirectory="INSTALLFOLDER" Icon="AppIcon" />
+      <RegistryValue Root="HKCU" Key="Software\SPK\Ocular" Name="installed" Type="integer" Value="1" KeyPath="yes" />
+    </Component>
+    <Feature Id="Main" Title="SPK Ocular" Level="1">
+      <ComponentRef Id="MainExe" /><ComponentRef Id="License" /><ComponentRef Id="StartMenuShortcut" />
+    </Feature>
+  </Package>
+</Wix>

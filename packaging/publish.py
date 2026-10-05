@@ -4,7 +4,7 @@ import json
 import os
 import subprocess
 from release import ROOT, version
-from verify import verify_checksums
+from verify import PLATFORMS, verify_checksums
 
 
 def publish(tag, root=ROOT):
@@ -12,7 +12,7 @@ def publish(tag, root=ROOT):
     if tag != 'v' + release_version:
         raise ValueError('release tags must start with v')
     directory = root / 'dist/release'
-    checksums = verify_checksums(directory, release_version, ['amd64', 'arm64'])
+    checksums = verify_checksums(directory, release_version, ['amd64', 'arm64'], PLATFORMS)
     if (directory / 'SHA256SUMS').read_text() != checksums:
         raise ValueError('SHA256SUMS does not match the verified assets')
     files = sorted(path for path in directory.iterdir() if path.is_file())

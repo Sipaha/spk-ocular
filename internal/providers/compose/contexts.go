@@ -26,7 +26,6 @@ import (
 
 const (
 	defaultContext = "default"
-	defaultHost    = "unix:///var/run/docker.sock"
 )
 
 // Env is what discovery reads from the environment.

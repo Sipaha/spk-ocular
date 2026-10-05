@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/spk/spk-ocular/internal/privatefs"
 	"io"
 	"io/fs"
 	"log/slog"
@@ -83,7 +84,7 @@ func writeUnique(dir, name string, data []byte) (string, error) {
 			n = fmt.Sprintf("%s (%d)%s", stem, i, ext)
 		}
 		p := filepath.Join(dir, n)
-		f, err := os.OpenFile(p, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
+		f, err := privatefs.CreateNew(p)
 		if errors.Is(err, fs.ErrExist) {
 			continue
 		}

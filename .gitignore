@@ -12,3 +12,5 @@ coverage.*
 /dist/
 /.agents/
 __pycache__/
+
+/cmd/spk-ocular/*_windows_*.syso

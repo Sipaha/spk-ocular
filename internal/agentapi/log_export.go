@@ -13,6 +13,7 @@ import (
 
 	"github.com/spk/spk-ocular/internal/api"
 	"github.com/spk/spk-ocular/internal/core"
+	"github.com/spk/spk-ocular/internal/privatefs"
 	"github.com/spk/spk-ocular/internal/provider"
 )
 
@@ -102,7 +103,7 @@ func (s *Server) exportLogs(ctx context.Context, c caller, req *ExportLogsReques
 	if format == "ndjson" {
 		ext = ".jsonl"
 	}
-	file, err := os.CreateTemp(dir, "spk-ocular-logs-"+time.Now().UTC().Format("20060102T150405Z")+"-*"+ext)
+	file, err := privatefs.CreateTemp(dir, "spk-ocular-logs-"+time.Now().UTC().Format("20060102T150405Z")+"-*"+ext)
 	if err != nil {
 		return nil, err
 	}

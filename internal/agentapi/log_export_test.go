@@ -53,7 +53,7 @@ func TestExportLogsWritesPrivateFilesAndReturnsOnlyMetadata(t *testing.T) {
 		previous = path
 		info, err := os.Stat(path)
 		require.NoError(t, err)
-		assert.Equal(t, os.FileMode(0o600), info.Mode().Perm())
+		assertPrivateExport(t, path)
 		assert.Equal(t, float64(info.Size()), out["bytes"])
 		assert.Equal(t, float64(6001), out["lines"])
 		assert.Equal(t, true, out["complete"])

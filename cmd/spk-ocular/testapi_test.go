@@ -157,3 +157,14 @@ func TestDesktopTestAPI(t *testing.T) {
 	_, err = http.Get(info.URL + "/api/_test/stats")
 	assert.Error(t, err, "the listener is closed")
 }
+
+func TestNativeSmokeSelectsReadySyntheticServices(t *testing.T) {
+	post := synthServer(t)
+	code, body := post("/api/_test/synthetic/select", nil)
+	require.Equal(t, http.StatusNoContent, code, string(body))
+	code, body = post("/api/GetTargetState", map[string]string{"provider": synthetic.ID, "target": synthetic.Target})
+	require.Equal(t, http.StatusOK, code, string(body))
+	var state map[string]string
+	require.NoError(t, json.Unmarshal(body, &state))
+	require.Equal(t, `"services"`, state["kind"])
+}

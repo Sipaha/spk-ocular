@@ -46,8 +46,8 @@ const (
 
 // Config says how to reach one Engine endpoint.
 type Config struct {
-	// Host: unix:///path or tcp://host[:port][/base]. Other schemes
-	// (ssh://, npipe://) are unsupported.
+	// Host: unix:///path, tcp://host[:port][/base], or a local npipe:// on Windows.
+	// SSH endpoints are unsupported.
 	Host string
 	// TLS: nil — plaintext (tcp) / a plain socket (unix).
 	TLS *TLSConfig
@@ -209,7 +209,15 @@ func New(cfg Config) (*Client, error) {
 	case "ssh":
 		return nil, unsupported("ssh:// Docker endpoints are not supported yet (they need `docker system dial-stdio`)")
 	case "npipe":
-		return nil, unsupported("npipe:// Docker endpoints exist only on Windows")
+		dial, err := pipeDialer(u)
+		if err != nil {
+			return nil, err
+		}
+		if tlsCfg != nil {
+			return nil, &Error{Class: provider.ClassInvalid, Message: "TLS is not valid for a named pipe"}
+		}
+		tr.DialContext, tr.Proxy = dial, nil
+		c.host = unixHost
 	default:
 		return nil, unsupported("the %s:// Docker endpoint scheme is not supported", u.Scheme)
 	}

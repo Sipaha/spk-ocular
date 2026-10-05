@@ -4,6 +4,11 @@
 
 The application is Go + Wails v3 + React/Vite/TypeScript. Linux uses GTK 3 and
 WebKit2GTK 4.1 through the `wails gtk3` build tags. `production` disables DevTools.
+Windows uses WebView2 and macOS uses WKWebView. Desktop stream requests allow
+`http://wails.localhost` on Windows and `wails://localhost` on Linux/macOS.
+Credential plugins run in a separate process group on Unix and a kill-on-close
+job object on Windows; timeout cleanup includes their descendants. Windows
+children start without a console and are assigned to the job before they run.
 The Wails Go module and `@wailsio/runtime` versions must match.
 
 `cmd/spk-ocular` creates the shared core. Desktop uses Wails bindings; browser
@@ -86,7 +91,7 @@ retention. View lifecycles are keyed by immutable requests and session ownership
 
 Compose groups observed Engine resources by their labels. It does not read
 compose files to infer desired replicas or create missing services. Supported
-endpoints are Unix sockets and TCP/TLS; `ssh://` endpoints are visible but cannot
+endpoints are Unix sockets, TCP/TLS and local Windows named pipes (`npipe://`); `ssh://` endpoints are visible but cannot
 be opened. HTTP mutations are not automatically retried.
 
 Feeds are ordered by incarnation and source. Events supplement initial/repeated
@@ -104,7 +109,7 @@ UI logs and terminal traffic use a token-protected loopback server in both app
 modes. They never stream through the `wails://` asset transport. Stream IDs are
 one-shot and bound to session ownership. Guards run before consuming an ID.
 
-Agent log history and live streams use the agent Unix socket directly, with the
+Agent log history and live streams use the local agent transport directly, with the
 same `logs` grant for channel discovery, snapshots, intervals and following.
 No UI stream IDs are exposed. Active reads register before checking grants, so
 a concurrent revocation cannot miss them. Grant changes cancel reads, including
@@ -113,7 +118,7 @@ frames have backpressure, write deadlines and an explicit completion frame.
 Time intervals require a matching-line limit. Streams also require a limit and
 have byte and time budgets; JSON snapshots count escaping and metadata in their
 byte budget. Grep is applied before output limits.
-Exports write incrementally into unique mode-0600 files in Downloads and return
+Exports write incrementally into unique owner-only files in Downloads (0600 on Unix, protected user DACL on Windows) and return
 only bounded metadata. Finite archival provider reads bypass UI tail and merge
 buffers, read sources sequentially, and keep no reconnect history.
 Historical time filtering happens before choosing a bounded tail. Unknown

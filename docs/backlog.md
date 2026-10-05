@@ -6,8 +6,8 @@ Implementation begins only when requested. Current behavior is documented in
 
 ## Distribution and platforms
 
-- macOS and Windows support, including platform-specific local agent transport,
-  credential-helper process handling, native installers, signing and notarization.
+- Developer ID signing and notarization for macOS, and publisher signing for
+  Windows (current macOS bundles are ad-hoc signed; Windows packages unsigned).
 - AppImage distribution and a deliberately designed in-app update mechanism.
 
 ## Providers and discovery

@@ -2,7 +2,8 @@
 
 SPK Ocular is a local infrastructure viewer for Kubernetes and Docker Compose.
 The shared Go API serves a Wails desktop window or a loopback browser UI.
-The release platform is Linux amd64/arm64, GTK 3 and WebKit2GTK 4.1.
+Release platforms are Linux, Windows and macOS, each on amd64 and arm64.
+Linux uses GTK 3/WebKit2GTK 4.1; Windows uses WebView2; macOS uses WKWebView.
 
 ## Read first
 
@@ -72,7 +73,9 @@ warning is not a failed build.
 `make package-linux RELEASE_VERSION=0.1.0 ARCH=amd64` produces native packages
 and archives. `packaging/verify.py` validates their real contents. Packaging
 requires a native host of the requested architecture; never relabel a binary.
-Published assets must include both architectures and every checksum. Release
+Windows/macOS use `packaging/portable.py` on native hosts and
+`packaging/verify-portable.py`; Windows adds real MSI install/remove checks.
+Published assets must include all six OS/architecture pairs and every checksum. Release
 metadata, package identity and artifact names use SPK Ocular exclusively.
 
 Tests use the synthetic provider and fake servers unless an explicit kind/DIND

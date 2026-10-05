@@ -12,7 +12,9 @@ import (
 	"runtime/debug"
 	"time"
 
+	"github.com/spk/spk-ocular/internal/api"
 	"github.com/spk/spk-ocular/internal/api/transport"
+	"github.com/spk/spk-ocular/internal/events"
 	"github.com/spk/spk-ocular/internal/providers/synthetic"
 )
 
@@ -35,6 +37,22 @@ func testRoutes(c *appCore) http.Handler {
 		_ = json.NewEncoder(w).Encode(st)
 	})
 	if c.Synthetic != nil {
+		// Native platform smoke selects only its synthetic fixture, after the
+		// isolated app starts; this never accepts a real target from a caller.
+		mux.HandleFunc("POST /api/_test/synthetic/select", func(w http.ResponseWriter, r *http.Request) {
+			if err := c.Service.SetTargetState(r.Context(), synthetic.ID, synthetic.Target, "kind", `"services"`); err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			if err := c.Service.SelectTarget(r.Context(), synthetic.ID, synthetic.Target); err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			// UI-initiated selection reloads its own target list. This fixture
+			// is selected outside the UI, so notify the page explicitly.
+			c.Emitter.Emit(events.Event{Type: api.EventTargetsChanged, Key: synthetic.ID, Payload: map[string]any{"provider": synthetic.ID}})
+			w.WriteHeader(http.StatusNoContent)
+		})
 		// Push lines/states into the synthetic provider's open log streams.
 		mux.HandleFunc("POST /api/_test/logs/emit", func(w http.ResponseWriter, r *http.Request) {
 			var req struct {

@@ -1,5 +1,5 @@
-// Package agentapi serves agent access over a unix socket (P14,
-// docs/agent-api.md): local agents (Claude,
+// Package agentapi serves agent access over a local Unix socket or Windows pipe.
+// See docs/agent-api.md: local agents (Claude,
 // Codex) learn what the user granted them and, within it, read targets'
 // objects, logs and metrics, and prepare and run actions and edits. The
 // rights are checked here, on every call, before the service is asked;
@@ -16,6 +16,7 @@ import (
 	"net"
 	"net/http"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"time"
@@ -27,7 +28,7 @@ import (
 type Options struct {
 	Service *api.Service
 	Store   *store.Store
-	// Socket and Lock are the paths of the socket and its lock file.
+	// Socket is a Unix socket path or Windows named pipe. Lock is Unix-only.
 	Socket, Lock string
 	Version      string
 	// Home shortens the socket's path in the instruction line ("~").
@@ -165,6 +166,9 @@ func (s *Server) Handler() http.Handler { return s.mux }
 // instruction is the line for an agent's instructions.
 func (s *Server) instruction() string {
 	p := s.o.Socket
+	if runtime.GOOS == "windows" {
+		return fmt.Sprintf("SPK Ocular (Kubernetes/Docker): HTTP/1.1 over the current user's named pipe %s; GET /v1 describes the methods. The user grants access to namespaces in Ocular.", p)
+	}
 	if s.o.Home != "" && strings.HasPrefix(p, s.o.Home+string(filepath.Separator)) {
 		p = "~" + strings.TrimPrefix(p, s.o.Home)
 	}

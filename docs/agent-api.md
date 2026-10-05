@@ -1,12 +1,33 @@
 # Local agent API
 
-The agent API is HTTP/JSON over the Unix socket
+On Linux and macOS, the agent API is HTTP/JSON over the Unix socket
 `$SPK_OCULAR_HOME/agent.sock`, defaulting to `~/.spk/ocular/agent.sock`.
 It is available while either desktop or browser mode is running.
 
 ```sh
 curl -s --unix-socket ~/.spk/ocular/agent.sock http://ocular/v1
 curl -s --unix-socket ~/.spk/ocular/agent.sock http://ocular/v1/methods
+```
+
+On Windows the same HTTP/1.1 protocol uses a local named pipe
+`\\.\pipe\spk-ocular-<profile-hash>`. Copy the exact endpoint from the Agents
+panel; it is derived from the absolute data directory. Use a named-pipe-capable
+HTTP client (for example Go `winio.DialPipeContext` as an HTTP transport), or send
+a normal HTTP request over a Windows named pipe. `curl --unix-socket` applies
+only to Linux/macOS. A minimal Python discovery request is:
+
+```python
+import http.client
+
+# Replace PIPE with the endpoint shown in the Agents panel.
+with open(PIPE, "r+b", buffering=0) as pipe:
+    pipe.write(b"GET /v1 HTTP/1.1\r\nHost: ocular\r\nConnection: close\r\n\r\n")
+    class Connection:
+        def makefile(self, *args):
+            return pipe
+    response = http.client.HTTPResponse(Connection())
+    response.begin()
+    print(response.read().decode())
 ```
 
 `GET /v1` explains the current protocol and `GET /v1/methods` provides the
@@ -28,10 +49,13 @@ on every call and again immediately before a pending mutation executes.
 The grant card shows connection identity details only when the target changes
 and requires confirmation; its ordinary heading is the target name.
 
-The socket is mode 0600 in a mode 0700 directory. Linux peer credentials must
+The socket is mode 0600 in a mode 0700 directory. Linux/macOS peer credentials must
 match the application UID. A process holds `agent.sock.lock` with flock; another
 instance cannot remove or take over a live owner's socket. A too-long Unix socket
 path disables agent access with a visible status while the main app remains usable.
+On Windows a protected pipe DACL grants only the current user access; remote
+clients are rejected and the first pipe instance reserves its name until close.
+The data directory also has a protected inheritable user DACL.
 
 This is an error-prevention and audit boundary, not a sandbox against another
 process running as the same OS user. Docker access and combinations of workload
@@ -143,7 +167,8 @@ matching lines; it can be set to at most 10,000,000. File size defaults to
 (`maxSeconds`, maximum 300). Limits and incomplete sources are explicit in the
 returned `complete`, `truncated`, `stopReason` and warnings.
 
-The file has a generated unique name and mode 0600. The agent cannot supply a
+The file has a generated unique name and owner-only access: mode 0600 on Unix,
+a protected current-user DACL set at creation on Windows. The agent cannot supply a
 path or overwrite a file. Downloads follows the application's XDG download
 configuration, otherwise `~/Downloads`. Text files preserve timestamps and source
 labels; NDJSON preserves structured line metadata. Records are written in source

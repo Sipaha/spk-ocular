@@ -16,3 +16,6 @@ jobs:
   packages:
     needs: test
     uses: ./.github/workflows/package-linux.yml
+  packages-native:
+    needs: test
+    uses: ./.github/workflows/package-native.yml

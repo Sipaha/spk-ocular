@@ -13,13 +13,20 @@ import tempfile
 from release import ROOT, elf_arch, version
 
 
-def assets(release_version, arch):
+PLATFORMS = ('linux', 'darwin', 'windows')
+
+
+def assets(release_version, arch, platform='linux'):
+    if platform != 'linux':
+        base = f'spk-ocular_{release_version}_{platform}_{arch}'
+        extension, installer = ('.zip', '.msi') if platform == 'windows' else ('.tar.gz', '.dmg')
+        return [base + extension, base + installer, f'spk-ocular-browser_{release_version}_{platform}_{arch}' + extension]
     base = f'spk-ocular_{release_version}_linux_{arch}'
     return [base + ext for ext in ('.tar.gz', '.deb', '.rpm')] + [f'spk-ocular-browser_{release_version}_linux_{arch}.tar.gz']
 
 
-def verify_checksums(directory, release_version, arches):
-    expected = sorted(name for arch in arches for name in assets(release_version, arch))
+def verify_checksums(directory, release_version, arches, platforms=("linux",)):
+    expected = sorted(name for platform in platforms for arch in arches for name in assets(release_version, arch, platform))
     actual = sorted(p.name for p in directory.iterdir() if p.is_file() and p.name != 'SHA256SUMS')
     if actual != sorted(expected + [name + '.sha256' for name in expected]):
         raise ValueError(f'incomplete or unexpected asset set: {actual}')
@@ -154,12 +161,13 @@ if __name__ == '__main__':
     choice = parser.add_mutually_exclusive_group(required=True)
     choice.add_argument('--arch', choices=['amd64', 'arm64'])
     choice.add_argument('--all-architectures', action='store_true')
+    choice.add_argument('--all-platforms', action='store_true')
     parser.add_argument('--directory', type=Path)
     args = parser.parse_args()
     release_version = version(args.version)
     directory = args.directory or ROOT / 'dist' / release_version / f'linux-{args.arch}'
-    checksums = verify_checksums(directory, release_version, ['amd64', 'arm64'] if args.all_architectures else [args.arch])
-    if args.all_architectures:
+    checksums = verify_checksums(directory, release_version, ['amd64', 'arm64'] if args.all_architectures or args.all_platforms else [args.arch], PLATFORMS if args.all_platforms else ('linux',))
+    if args.all_architectures or args.all_platforms:
         (directory / 'SHA256SUMS').write_text(checksums)
         print('Verified the complete release asset set and wrote SHA256SUMS')
     else:

@@ -30,8 +30,13 @@ jobs:
     uses: ./.github/workflows/package-linux.yml
     with:
       version: ${{ needs.validate.outputs.version }}
+  packages-native:
+    needs: [validate, test]
+    uses: ./.github/workflows/package-native.yml
+    with:
+      version: ${{ needs.validate.outputs.version }}
   publish:
-    needs: [validate, packages]
+    needs: [validate, packages, packages-native]
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:
@@ -42,13 +47,13 @@ jobs:
           persist-credentials: false
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
-          pattern: package-linux-*
+          pattern: package-*
           merge-multiple: true
           path: dist/release
       - name: Verify the complete asset set
         env:
           RELEASE_VERSION: ${{ needs.validate.outputs.version }}
-        run: python3 packaging/verify.py --version "$RELEASE_VERSION" --all-architectures --directory dist/release
+        run: python3 packaging/verify.py --version "$RELEASE_VERSION" --all-platforms --directory dist/release
       - name: Publish only after every upload succeeds
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

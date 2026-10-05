@@ -104,6 +104,14 @@ func Main(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		_, _ = fmt.Fprintf(stderr, "exec-credential-shim: %v\n", err)
 		return 1
 	}
+	kill, release, err := containChild(cmd)
+	if err != nil {
+		_ = cmd.Process.Kill()
+		_ = cmd.Wait()
+		_, _ = fmt.Fprintf(stderr, "exec-credential-shim: contain plugin: %v\n", err)
+		return 1
+	}
+	defer release()
 	done := make(chan error, 1)
 	go func() { done <- cmd.Wait() }()
 	select {
@@ -118,7 +126,7 @@ func Main(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		}
 		return 0
 	case <-time.After(*timeout):
-		killTree(cmd)
+		kill()
 		<-done
 		if held {
 			_, _ = fmt.Fprintf(stderr, "exec credential plugin %q did not answer within %s while its target is in the background (a login needs a person: select the target)\n",

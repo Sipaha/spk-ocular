@@ -3,6 +3,7 @@ package paths
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -17,7 +18,7 @@ func TestResolveHonorsEnvOverride(t *testing.T) {
 	assert.Equal(t, dir, p.DataDir)
 	assert.Equal(t, filepath.Join(dir, "ocular.db"), p.DBFile)
 	assert.Equal(t, filepath.Join(dir, "tmp"), p.TmpDir)
-	assert.Equal(t, filepath.Join(dir, "agent.sock"), p.AgentSocket)
+	assert.Equal(t, AgentEndpoint(dir), p.AgentSocket)
 	assert.Equal(t, filepath.Join(dir, "agent.sock.lock"), p.AgentLock)
 }
 
@@ -25,6 +26,7 @@ func TestResolveDefaultsToSpkOcular(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv(EnvHome, "")
 	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
 	p, err := Resolve()
 	require.NoError(t, err)
 	assert.Equal(t, filepath.Join(home, ".spk", "ocular"), p.DataDir)
@@ -36,5 +38,7 @@ func TestEnsureCreatesOwnerOnlyDir(t *testing.T) {
 	require.NoError(t, p.Ensure())
 	st, err := os.Stat(dir)
 	require.NoError(t, err)
-	assert.Equal(t, os.FileMode(0o700), st.Mode().Perm())
+	if runtime.GOOS != "windows" {
+		assert.Equal(t, os.FileMode(0o700), st.Mode().Perm())
+	}
 }

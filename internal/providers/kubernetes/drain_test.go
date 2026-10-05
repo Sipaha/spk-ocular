@@ -7,7 +7,6 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
-	"syscall"
 	"testing"
 	"time"
 
@@ -484,12 +483,6 @@ func (r latePDBRes) Namespace(string) dynamic.ResourceInterface { return r }
 func (r latePDBRes) List(ctx context.Context, _ metav1.ListOptions) (*unstructured.UnstructuredList, error) {
 	<-ctx.Done()
 	return nil, ctx.Err()
-}
-
-func cpuTime(t *testing.T) time.Duration {
-	var u syscall.Rusage
-	require.NoError(t, syscall.Getrusage(syscall.RUSAGE_SELF, &u))
-	return time.Duration(u.Utime.Nano() + u.Stime.Nano())
 }
 
 // Rights answered, budgets late: the plan waits for the budgets without

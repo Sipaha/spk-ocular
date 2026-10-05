@@ -64,6 +64,8 @@ lint: lint-go lint-web lint-workflows
 lint-go:
 	go vet ./...
 	go vet -tags "$(DESKTOP_TAGS)" ./...
+	GOOS=windows CGO_ENABLED=0 go vet -tags wails ./...
+	GOOS=darwin CGO_ENABLED=0 go vet ./...
 	golangci-lint run
 	golangci-lint run --build-tags "$(DESKTOP_TAGS)"
 
@@ -139,9 +141,15 @@ e2e-dind: build
 	bash scripts/dind-seed.sh >/dev/null
 	cd tests/e2e && OCULAR_DIND_HOST=$$(bash ../../scripts/dind-verify.sh) OCULAR_DIND_VERIFY=$(CURDIR)/scripts/dind-verify.sh pnpm exec playwright test -c playwright.dind.config.ts && rm -rf .run
 
-.PHONY: package-linux test-packaging lint-workflows
+.PHONY: package-linux package-windows package-macos test-packaging lint-workflows
 package-linux:
 	python3 packaging/release.py --version "$(RELEASE_VERSION)" --arch "$(ARCH)"
+
+package-windows:
+	python3 packaging/portable.py --version "$(RELEASE_VERSION)" --os windows --arch "$(ARCH)"
+
+package-macos:
+	python3 packaging/portable.py --version "$(RELEASE_VERSION)" --os darwin --arch "$(ARCH)"
 
 # These checks run without building packages or publishing a release.
 test-packaging:

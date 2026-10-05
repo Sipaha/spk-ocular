@@ -1,3 +1,5 @@
+//go:build !windows
+
 package desktop
 
 // PageOrigin is the Origin the desktop page's requests carry (checked by

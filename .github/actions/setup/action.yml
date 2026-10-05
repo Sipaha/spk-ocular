@@ -1,17 +1,25 @@
 name: Build environment
-description: Configure the Linux toolchain and isolated test scratch space
+description: Configure the native toolchain and isolated test scratch space
 runs:
   using: composite
   steps:
     - name: Prepare scratch directories
       shell: bash
       run: |
-        scratch="$GITHUB_WORKSPACE/.agents/tmp"
-        mkdir -p "$scratch/go" "$scratch/tools"
-        echo "OCULAR_SCRATCH_DIR=$scratch" >> "$GITHUB_ENV"
-        echo "TMPDIR=$scratch/go" >> "$GITHUB_ENV"
-        echo "GOBIN=$scratch/tools" >> "$GITHUB_ENV"
-        echo "$scratch/tools" >> "$GITHUB_PATH"
+        python - <<'PYENV'
+        import os
+        from pathlib import Path
+        scratch = Path(os.environ['GITHUB_WORKSPACE']) / '.agents/tmp'
+        for name in ('go', 'tools'):
+            (scratch / name).mkdir(parents=True, exist_ok=True)
+        env = {'OCULAR_SCRATCH_DIR': scratch, 'TMPDIR': scratch / 'go',
+               'TMP': scratch / 'go', 'TEMP': scratch / 'go', 'GOBIN': scratch / 'tools'}
+        with open(os.environ['GITHUB_ENV'], 'a', encoding='utf-8') as output:
+            for key, value in env.items():
+                output.write(f'{key}={value}\n')
+        with open(os.environ['GITHUB_PATH'], 'a', encoding='utf-8') as output:
+            output.write(str(scratch / 'tools') + '\n')
+        PYENV
     - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
       with:
         go-version-file: go.mod
@@ -27,6 +35,7 @@ runs:
           web/pnpm-lock.yaml
           tests/e2e/pnpm-lock.yaml
     - name: Install native build dependencies
+      if: runner.os == 'Linux'
       shell: bash
       run: |
         sudo apt-get update

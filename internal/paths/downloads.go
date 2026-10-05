@@ -23,6 +23,14 @@ func Downloads(getenv func(string) string) (string, error) {
 	if d := expandXDG(getenv("XDG_DOWNLOAD_DIR"), home); d != "" {
 		return d, nil
 	}
+	// An explicit XDG directory wins for isolated profiles on every platform.
+	if getenv("XDG_CONFIG_HOME") == "" && (getenv("HOME") == "" || getenv("HOME") == getenv("USERPROFILE")) {
+		if dir, err := nativeDownloads(); err != nil {
+			return "", err
+		} else if dir != "" {
+			return dir, nil
+		}
+	}
 	cfg := getenv("XDG_CONFIG_HOME")
 	if cfg == "" {
 		cfg = filepath.Join(home, ".config")
