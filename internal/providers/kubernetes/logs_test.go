@@ -90,6 +90,18 @@ func syncedBox(o podObs) *obsBox {
 
 var follow100 = provider.LogQuery{Follow: true, TailLines: 100}
 
+func TestArchiveReadsBeyondTheUITailWithoutKeepingAResumeCursor(t *testing.T) {
+	k := newFakeKubelet(t)
+	k.start("p", "app", "c1")
+	k.log("p", "app", recs(0, allTail+1, func(i int) time.Time { return at(float64(i)) })...)
+	r := startSource(t, k, nil, provider.LogQuery{Archive: true, TailLines: provider.TailAll})
+	require.NoError(t, r.finished(t))
+	require.Len(t, r.sink.texts(), allTail+1)
+	assert.Equal(t, "line 0", r.sink.texts()[0])
+	assert.Empty(t, k.requestLog()[0].Get("tailLines"))
+	assert.Nil(t, r.src.cur.ring, "finite archive reads do not accumulate restart history")
+}
+
 func TestLogTailThenFollow(t *testing.T) {
 	k := newFakeKubelet(t)
 	k.start("p", "app", "c1")

@@ -110,17 +110,45 @@ describe('Palette', () => {
     await waitFor(() => expect(f.client.selectTarget).toHaveBeenCalledWith('kubernetes', 'dev'))
   })
 
-  it('offers recent objects of the current target, and opens another kind without replacing the current table', async () => {
+  it('opens a recent object in its own kind, selecting the exact row and preserving the scope set', async () => {
     const f = setup()
     f.state.recents = [{ ref: { provider: 'kubernetes', target: 'prod', scope: 'web', kind: 'apps/deployments', name: 'old-web', uid: 'u-old' }, title: 'old-web', openedAt: 1 }]
+    f.client.getTargetState = vi.fn(async () => ({ scope: JSON.stringify({ mode: 'some', names: ['web', 'extra'] }) }))
+    f.state.rowsByKind['apps/deployments'][0] = { ...f.state.rowsByKind['apps/deployments'][0], ref: f.state.recents[0].ref, cells: [{ text: 'old-web' }] }
     await openApp(f)
     const dlg = await openPalette()
     const first = await within(dlg).findByRole('option', { name: /old-web/ })
     expect(first).toHaveTextContent('Recent')
     await userEvent.keyboard('{Enter}')
-    expect(await screen.findByRole('heading', { name: 'Pods' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'Deployments' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Deployments' })).toHaveAttribute('aria-current', 'page')
+    expect(screen.getByRole('row', { selected: true })).toHaveAttribute('data-row-id', 'd1')
+    expect(f.client.openView).toHaveBeenCalledWith('kubernetes', 'prod', { kind: 'apps/deployments', scope: { mode: 'some', names: ['extra', 'web'] } })
     expect(await screen.findByRole('dialog', { name: 'apps/deployments old-web' })).toBeInTheDocument()
     expect(f.client.getResource).toHaveBeenLastCalledWith(expect.objectContaining({ name: 'old-web', uid: 'u-old' }))
+  })
+
+  it('filters recent objects with the latest selected namespace even when the response arrives late and the table is unscoped', async () => {
+    const f = setup()
+    f.client.getTargetState = vi.fn(async () => ({ scope: JSON.stringify({ mode: 'one', name: 'web' }) }))
+    const nodes: KindDescriptor = { ...podsKind, id: 'nodes', title: 'Nodes', scoped: false }
+    f.client.listKinds = vi.fn(async () => kindsView([podsKind, deployKind, nodes]))
+    let answer!: (v: RecentObject[]) => void
+    f.client.recentObjects = vi.fn(() => new Promise<RecentObject[]>((r) => { answer = r }))
+    await openApp(f)
+    await userEvent.click(screen.getByRole('button', { name: 'Nodes' }))
+    const dlg = await openPalette()
+    act(() => usePalette.getState().host!.setScope({ mode: 'some', names: ['web', 'extra'] }))
+    await act(async () => answer(['web', 'extra', 'outside'].map((scope) => ({ ref: { provider: 'kubernetes', target: 'prod', scope, kind: 'pods', name: 'match', uid: scope }, title: 'match', openedAt: 1 }))))
+    await userEvent.keyboard('match')
+    expect(within(dlg).getAllByRole('option')).toHaveLength(2)
+    expect(within(dlg).getByRole('option', { name: /Pods · web/ })).toBeInTheDocument()
+    expect(within(dlg).getByRole('option', { name: /Pods · extra/ })).toBeInTheDocument()
+    expect(within(dlg).queryByRole('option', { name: /outside/ })).toBeNull()
+    act(() => usePalette.getState().host!.setScope({ mode: 'some', names: [] }))
+    expect(within(dlg).queryAllByRole('option')).toHaveLength(0)
+    act(() => usePalette.getState().host!.setScope({ mode: 'all' }))
+    expect(within(dlg).getAllByRole('option')).toHaveLength(3)
   })
 
   it('drops recent objects that arrive after the target changed', async () => {

@@ -17,9 +17,8 @@ const (
 	// producer instead of piling up in memory).
 	flushSize = 32 << 10
 	// nudgeDelay: WebKitGTK sometimes withholds the tail of a burst from
-	// the page until more bytes arrive (docs/spikes/2026-09-29-log-stream-
-	// desktop.md). A tiny frame this long after a flush that went quiet
-	// releases it.
+	// the page until more bytes arrive (docs/architecture.md). A tiny frame
+	// this long after a flush that went quiet releases it.
 	nudgeDelay = 100 * time.Millisecond
 	// heartbeat keeps a quiet stream observably alive (and detects a dead
 	// connection on our side).

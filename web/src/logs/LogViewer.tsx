@@ -31,7 +31,7 @@ interface Props {
 /**
  * LogViewer: one object's logs. Composes useLogStream (the stream and its
  * buffer), useLogFilter (levels, filter, search) and LogViewport (the
- * virtual list; ported from SPK-launcher).
+ * virtual list).
  */
 export default function LogViewer({ client, subject, active }: Props) {
   const [info, setInfo] = useState<LogInfo | null>(null)

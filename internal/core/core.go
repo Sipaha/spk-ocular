@@ -1,6 +1,6 @@
 // Package core holds the provider-agnostic model the UI works with. Nothing
 // here may know about pods, namespaces or containers: Kubernetes is one
-// provider, Docker Compose is the next (docs/specs, "Provider API").
+// provider alongside Docker Compose (docs/architecture.md).
 package core
 
 // Target is one thing a provider can connect to: a kube context, a Docker

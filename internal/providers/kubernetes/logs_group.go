@@ -98,6 +98,20 @@ func (g *logGroup) run(ctx context.Context) (err error) {
 	if err != nil {
 		return err
 	}
+	if g.q.Archive {
+		for _, x := range initial {
+			if obs, synced, _, _ := x.pod.box.get(); synced && (!obs.exists || obs.uid != x.pod.uid) {
+				if err := x.src.requestFailedState(errMemberGone); err != nil {
+					return err
+				}
+				continue
+			}
+			if err := x.src.run(ctx); err != nil {
+				return err
+			}
+		}
+		return g.sink.Ready()
+	}
 	if err := g.backlog(ctx, initial); err != nil {
 		return err
 	}
@@ -195,6 +209,10 @@ func (g *logGroup) awaitMembers(ctx context.Context) error {
 // slots are refilled. late sources read new instances from their start.
 // It returns the change channel of the snapshot it decided from.
 func (g *logGroup) admit(late bool) ([]*groupSrc, <-chan struct{}, error) {
+	limit := maxGroupStreams
+	if g.q.Archive {
+		limit = 1000
+	}
 	members, _, blind, changed := g.tr.snapshot()
 	// A finished source stays finished only while its pod does: the key of
 	// a pod that left the inventory is forgotten (no growth over rollouts).
@@ -216,7 +234,7 @@ func (g *logGroup) admit(late bool) ([]*groupSrc, <-chan struct{}, error) {
 				continue
 			}
 			total++
-			if g.active[key] != nil || len(g.active) >= maxGroupStreams {
+			if g.active[key] != nil || len(g.active) >= limit {
 				continue
 			}
 			g.nextID++
@@ -232,7 +250,7 @@ func (g *logGroup) admit(late bool) ([]*groupSrc, <-chan struct{}, error) {
 	}
 	var notes []string
 	if total > len(g.active) {
-		notes = append(notes, fmt.Sprintf("showing %d of %d container streams (at most %d at once)", len(g.active), total, maxGroupStreams))
+		notes = append(notes, fmt.Sprintf("showing %d of %d container streams (at most %d at once)", len(g.active), total, limit))
 	}
 	if blind != "" {
 		notes = append(notes, "the pod list is not being watched ("+blind+"): new or replaced pods will not appear")

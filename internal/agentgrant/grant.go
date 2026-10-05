@@ -1,5 +1,5 @@
 // Package agentgrant is the model of what the user grants local agents
-// (P14, docs/specs/2026-09-30-agent-access-design.md): rows of (scope,
+// (docs/agent-api.md): rows of (scope,
 // verb, kinds, no confirmation) per target, and the pure decisions over
 // them. No I/O: the store keeps the rows, agentapi asks the decisions.
 package agentgrant

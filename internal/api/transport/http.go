@@ -146,6 +146,12 @@ func (h *HTTP) routes() {
 	h.mux.HandleFunc("POST /api/GetTargetState", handle(func(ctx context.Context, r *targetReq) (any, error) {
 		return h.api.GetTargetState(ctx, r.Provider, r.Target)
 	}))
+	h.mux.HandleFunc("POST /api/GetNavSections", handle(func(ctx context.Context, _ *struct{}) (any, error) {
+		return h.api.GetNavSections(ctx)
+	}))
+	h.mux.HandleFunc("POST /api/SetNavSection", handle(func(ctx context.Context, r *api.NavSectionRequest) (any, error) {
+		return nil, h.api.SetNavSection(ctx, *r)
+	}))
 	h.mux.HandleFunc("POST /api/GetFavoriteKinds", handle(func(ctx context.Context, _ *struct{}) (any, error) {
 		return h.api.GetFavoriteKinds(ctx)
 	}))

@@ -1,7 +1,10 @@
 import { expect, test as base, type Locator, type Page } from '@playwright/test'
 import { createHash } from 'node:crypto'
 import { mkdirSync, renameSync, writeFileSync } from 'node:fs'
-import { dirname, join } from 'node:path'
+import { dirname, join, resolve } from 'node:path'
+
+/** Shared scratch root: CI can keep it inside the checkout. */
+export const scratchRoot = resolve(process.env.OCULAR_SCRATCH_DIR ?? join(import.meta.dirname, '../../../.agents/tmp'))
 
 /**
  * The e2e suites share one app instance and its data dir; since P19 the

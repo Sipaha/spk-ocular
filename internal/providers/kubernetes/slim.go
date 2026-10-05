@@ -8,7 +8,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 )
 
-// slimObject is how list caches hold objects (measured, docs/specs): the
+// slimObject is how list caches hold objects (docs/architecture.md): the
 // identity metadata the informer needs (keys, deletions, ownership) as a
 // typed ObjectMeta, and the whitelisted rest as compact JSON. A trimmed
 // unstructured pod costs ~6 KB in map overhead; this costs ~1 KB. Rows are

@@ -229,6 +229,9 @@ func (s *podSource) run(ctx context.Context) error {
 }
 
 func tailOf(q provider.LogQuery) int64 {
+	if q.Archive {
+		return 0
+	}
 	if q.TailLines == provider.TailAll || q.TailLines > allTail {
 		return allTail
 	}
@@ -547,7 +550,7 @@ func (s *podSource) pump(ctx context.Context, rc io.Reader, sk *skipper) (n int,
 				}
 			}
 			if !dropped {
-				if line.TS != "" {
+				if line.TS != "" && !s.q.Archive {
 					s.cur.add(line.TS)
 				}
 				batch = append(batch, line)

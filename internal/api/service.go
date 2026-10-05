@@ -34,11 +34,12 @@ type Options struct {
 
 // Service implements API.
 type Service struct {
-	reg         *provider.Registry
-	store       *store.Store
-	em          *events.Emitter
-	opts        Options
-	favoritesMu sync.Mutex
+	reg           *provider.Registry
+	store         *store.Store
+	em            *events.Emitter
+	opts          Options
+	favoritesMu   sync.Mutex
+	navSectionsMu sync.Mutex
 
 	views      *views.Manager
 	streams    *streams.Registry

@@ -140,6 +140,9 @@ func defaultChannel(annotations map[string]string, chs []core.LogChannel) string
 // StreamLogs streams ref's logs into sink. A stream of a background session
 // that needs a login (P18) ends it: lost.
 func (s *session) StreamLogs(ctx context.Context, ref core.Ref, q provider.LogQuery, sink provider.LogSink) error {
+	if q.Archive && q.Follow {
+		return &provider.Error{Class: provider.ClassInvalid, Message: "archive log reads cannot follow"}
+	}
 	err := s.streamLogs(ctx, ref, q, sink)
 	if err != nil {
 		var pe *provider.Error

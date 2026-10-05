@@ -200,6 +200,21 @@ func (e *logEnv) containerRef() core.Ref {
 
 func follow() provider.LogQuery { return provider.LogQuery{Follow: true, TailLines: 100} }
 
+func TestArchiveReadsBeyondTheUITailAndBacklogBudget(t *testing.T) {
+	e := newLogEnv(t)
+	for i := range allTail + 1 {
+		e.fe.Journal(e.c.ID, 1, e.at(i), fmt.Sprintf("line-%d %s", i, strings.Repeat("x", 160)))
+	}
+	sk := newLogSink()
+	if err := e.s.StreamLogs(t.Context(), e.containerRef(), provider.LogQuery{Archive: true, TailLines: provider.TailAll}, sk); err != nil {
+		t.Fatal(err)
+	}
+	lines := sk.texts("p-web-1")
+	if len(lines) != allTail+1 || !strings.HasPrefix(lines[0], "line-0 ") {
+		t.Fatalf("archive returned %d lines, expected retained history from line-0", len(lines))
+	}
+}
+
 func TestLogsContainerBacklogThenLive(t *testing.T) {
 	e := newLogEnv(t)
 	e.fe.Journal(e.c.ID, 1, e.at(1), "out 1")

@@ -7,10 +7,12 @@ export interface PaletteHost {
   kinds: KindDescriptor[]
   /** The one-shot scope list; null: scopes cannot be listed. */
   scopes: string[] | null
+  /** The target's selected scopes, even on an unscoped table; null until loaded. */
+  selectedScope: ScopeSel | null
   /** Opens a view; filter replaces the table filter ('' clears it). */
   openKind(kind: string, filter: string): void
   setScope(scope: ScopeSel): void
-  /** Opens an object's details (opening a table if none is available yet). */
+  /** Opens the object's kind and details, preserving the selected scopes. */
   openObject(ref: Ref): void
 }
 

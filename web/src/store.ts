@@ -17,6 +17,8 @@ export interface State {
   cursor: string | null
   favoriteKinds: FavoriteKind[]
   favoritesReady: boolean
+  navSections: Record<string, boolean>
+  navSectionsReady: boolean
 }
 
 export const initialState: State = {
@@ -30,6 +32,8 @@ export const initialState: State = {
   cursor: null,
   favoriteKinds: [],
   favoritesReady: false,
+  navSections: {},
+  navSectionsReady: false,
 }
 
 export const useStore = create<State>(() => ({ ...initialState }))
@@ -113,6 +117,10 @@ export function actions(client: Client) {
     return favoritesQueue
   }
   let favoritesLoad: Promise<void> | null = null
+  let navSectionsLoad: Promise<void> | null = null
+  let navQueue = Promise.resolve()
+  let confirmedSections: Record<string, boolean> | null = null
+  const navPending: { key: string; open: boolean }[] = []
 
   async function reload() {
     if (inFlight) {
@@ -176,7 +184,29 @@ export function actions(client: Client) {
         ).finally(() => { favoritesLoad = null })
         await favoritesLoad
       }
+      if (!useStore.getState().navSectionsReady) {
+        navSectionsLoad ??= client.getNavSections().then(
+          (navSections) => { useStore.setState({ navSections, navSectionsReady: true }) },
+          () => { showNotice(t('nav.sectionsLoadFailed')) },
+        ).finally(() => { navSectionsLoad = null })
+        await navSectionsLoad
+      }
       await reload()
+    },
+    setNavSection(key: string, open: boolean) {
+      if (!useStore.getState().navSectionsReady) return
+      confirmedSections ??= { ...useStore.getState().navSections }
+      navPending.push({ key, open })
+      useStore.setState((s) => ({ navSections: { ...s.navSections, [key]: open } }))
+      navQueue = navQueue.then(async () => {
+        try {
+          await client.setNavSection(key, open)
+          confirmedSections = { ...confirmedSections, [key]: open }
+        } catch { showNotice(t('nav.sectionsSaveFailed')) }
+        navPending.shift()
+        useStore.setState({ navSections: navPending.reduce((sections, op) => ({ ...sections, [op.key]: op.open }), confirmedSections!) })
+      })
+      return navQueue
     },
     setKindFavorite(provider: string, kind: string, favorite: boolean) {
       const matches = (f: FavoriteKind) => f.provider === provider && f.kind === kind

@@ -5,7 +5,7 @@
 // plugin/pkg/client/auth/exec): a plugin that hangs — waiting for a login,
 // a dead network — blocks every request of that cluster regardless of
 // request timeouts, and outlives the app as an orphan
-// (docs/spikes/2026-09-29-exec-plugin-hang.md). Wrap rewrites a rest.Config
+// (docs/architecture.md). Wrap rewrites a rest.Config
 // so client-go runs our own binary as the plugin; the shim runs the real
 // plugin with the same argv, env, stdin and stdout (the ExecCredential
 // protocol passes through untouched), kills it after a timeout, and dies

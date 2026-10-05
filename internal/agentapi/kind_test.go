@@ -52,7 +52,8 @@ func serveAgent(t *testing.T, p provider.Provider) *liveAgent {
 	svc.Start(ctx)
 	t.Cleanup(func() { cancel(); svc.Close() })
 	d := sockDir(t)
-	srv := New(Options{Service: svc, Store: st, Socket: filepath.Join(d, "agent.sock"), Lock: filepath.Join(d, "agent.sock.lock"), Version: "test"})
+	downloads := filepath.Join(t.TempDir(), "Downloads")
+	srv := New(Options{Service: svc, Store: st, Socket: filepath.Join(d, "agent.sock"), Lock: filepath.Join(d, "agent.sock.lock"), Version: "test", Downloads: func() (string, error) { return downloads, nil }})
 	require.NoError(t, srv.Start())
 	t.Cleanup(srv.Close)
 	svc.SetAgentControl(srv)
@@ -223,6 +224,7 @@ func TestKindAgentAccessOverTheSocket(t *testing.T) {
 		return len(tail.Lines) > 0
 	}, 30*time.Second, time.Second)
 	assert.Contains(t, tail.Lines[len(tail.Lines)-1].Text, "hello-agent")
+	a.checkLogInterval(pods.Rows[0].Ref, tail)
 
 	// Metrics of a long-running pod of the seed (metrics-server needs a while for new ones).
 	demo, code := a.objects(ListObjectsRequest{TargetRef: target, Kind: "pods", Scope: "ocular-demo", Name: "web-"})
@@ -283,4 +285,74 @@ func TestKindAgentAccessOverTheSocket(t *testing.T) {
 	for _, r := range problems.Rows {
 		assert.Empty(t, r.Ref.Scope, "%s", r.Ref)
 	}
+}
+
+// checkLogInterval exercises timestamp precision and NDJSON on the real Unix
+// socket, shared by the Kubernetes and Docker fixture checks.
+func (a *liveAgent) checkLogInterval(ref core.Ref, tail api.Tail) {
+	t := a.t
+	t.Helper()
+	var info core.LogInfo
+	require.Equal(t, http.StatusOK, a.call("GetLogInfo", GetLogInfoRequest{Ref: ref}, &info))
+	require.NotEmpty(t, info.Channels)
+	start, err := time.Parse(time.RFC3339Nano, tail.Lines[0].TS)
+	require.NoError(t, err)
+	last := tail.Lines[len(tail.Lines)-1]
+	end, err := time.Parse(time.RFC3339Nano, last.TS)
+	require.NoError(t, err)
+	end = end.Add(time.Nanosecond)
+	query := GetLogsRequest{Ref: ref, SinceTime: start, UntilTime: end, Limit: 50}
+	var bounded api.Tail
+	require.Equal(t, http.StatusOK, a.call("GetLogs", query, &bounded))
+	require.NotEmpty(t, bounded.Lines)
+	found := false
+	for _, line := range bounded.Lines {
+		ts, err := time.Parse(time.RFC3339Nano, line.TS)
+		require.NoError(t, err)
+		assert.False(t, ts.Before(start))
+		assert.True(t, ts.Before(end))
+		found = found || line.TS == last.TS && line.Text == last.Text
+	}
+	assert.True(t, found, "the requested historical line survives the interval filter")
+	body, err := json.Marshal(StreamLogsRequest{GetLogsRequest: query})
+	require.NoError(t, err)
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, "http://ocular/v1/StreamLogs", bytes.NewReader(body))
+	require.NoError(t, err)
+	response, err := a.client.Do(req)
+	require.NoError(t, err)
+	defer func() { _ = response.Body.Close() }()
+	require.Equal(t, http.StatusOK, response.StatusCode)
+	decoder := json.NewDecoder(response.Body)
+	count, ended := 0, false
+	for {
+		var frame LogFrame
+		err := decoder.Decode(&frame)
+		if err == io.EOF {
+			break
+		}
+		require.NoError(t, err)
+		require.Nil(t, frame.Error)
+		for _, line := range frame.Lines {
+			ts, err := time.Parse(time.RFC3339Nano, line.TS)
+			require.NoError(t, err)
+			assert.False(t, ts.Before(start))
+			assert.True(t, ts.Before(end))
+		}
+		count += len(frame.Lines)
+		if frame.Type == "end" {
+			ended = true
+			assert.True(t, frame.Complete)
+			assert.False(t, frame.Truncated)
+		}
+	}
+	assert.True(t, ended)
+	assert.Equal(t, len(bounded.Lines), count)
+	var exported ExportLogsView
+	require.Equal(t, http.StatusOK, a.call("ExportLogs", ExportLogsRequest{Ref: ref, SinceTime: start, UntilTime: end, Limit: 50, Format: "ndjson"}, &exported))
+	assert.True(t, exported.Complete, "%+v", exported)
+	assert.Equal(t, len(bounded.Lines), exported.Lines)
+	contents, err := os.ReadFile(exported.Path)
+	require.NoError(t, err)
+	assert.Equal(t, int64(len(contents)), exported.Bytes)
+	assert.Contains(t, string(contents), last.Text)
 }

@@ -167,7 +167,6 @@ export function GrantEditor({ client, provider, target, title, saved, exists }: 
       <header className="flex flex-wrap items-baseline gap-2">
         <h3 className="text-sm font-semibold">{title}</h3>
         {!exists && <span className="rounded bg-warning/15 px-1 text-warning">{t('agents.missing')}</span>}
-        {saved?.identity && <span className="min-w-0 truncate font-mono text-fg-subtle" title={saved.identity}>{t('agents.identity', { identity: saved.identity })}</span>}
       </header>
 
       {saved?.observed && (

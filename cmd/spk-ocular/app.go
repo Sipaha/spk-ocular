@@ -69,7 +69,7 @@ func newCore(ctx context.Context, mode string, withSynthetic bool) (*appCore, er
 	em := events.NewEmitter()
 	svc := api.NewService(reg, st, em, api.Options{Version: version, Mode: mode, Getenv: os.Getenv})
 	home, _ := os.UserHomeDir()
-	agent := agentapi.New(agentapi.Options{Service: svc, Store: st, Socket: p.AgentSocket, Lock: p.AgentLock, Version: version, Home: home})
+	agent := agentapi.New(agentapi.Options{Service: svc, Store: st, Socket: p.AgentSocket, Lock: p.AgentLock, Version: version, Home: home, Downloads: func() (string, error) { return paths.Downloads(os.Getenv) }})
 	svc.SetAgentControl(agent)
 	svc.Start(ctx)
 	// A socket that cannot be served is not fatal: the UI shows why

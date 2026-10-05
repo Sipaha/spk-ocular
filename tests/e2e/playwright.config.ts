@@ -1,7 +1,7 @@
 import { defineConfig } from '@playwright/test'
 import { mkdirSync, mkdtempSync } from 'node:fs'
 import { join } from 'node:path'
-import { EXTRA, ONE, TWO, env, writeAtomic, noDockerEnv, dockerContexts } from './fixtures'
+import { scratchRoot, EXTRA, ONE, TWO, env, writeAtomic, noDockerEnv, dockerContexts } from './fixtures'
 
 const port = Number(process.env.E2E_PORT ?? 5191)
 // The config is evaluated by the runner AND again in every worker: create the
@@ -10,8 +10,8 @@ const port = Number(process.env.E2E_PORT ?? 5191)
 // reads. Scratch state stays inside the solution’s .agents/tmp.
 let root = process.env.E2E_ROOT
 if (!root) {
-  mkdirSync(join(import.meta.dirname, '../../../.agents/tmp'), { recursive: true })
-  root = mkdtempSync(join(import.meta.dirname, '../../../.agents/tmp', 'e2e-'))
+  mkdirSync(scratchRoot, { recursive: true })
+  root = mkdtempSync(join(scratchRoot, 'e2e-'))
   const e = env(root)
   writeAtomic(e.one, ONE)
   writeAtomic(e.two, TWO)
@@ -26,7 +26,7 @@ const bin = process.env.E2E_BIN ?? '../../build/bin/spk-ocular'
 
 export default defineConfig({
   testDir: '.',
-  outputDir: join(import.meta.dirname, '../../../.agents/tmp/playwright-e2e'),
+  outputDir: join(scratchRoot, 'playwright-e2e'),
   testMatch: 'targets.spec.ts',
   workers: 1, // one app instance, shared state — specs restore what they change
   use: { baseURL: `http://127.0.0.1:${port}`, locale: 'en-US', screenshot: 'only-on-failure' },

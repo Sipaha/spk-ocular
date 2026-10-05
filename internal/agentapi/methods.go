@@ -19,11 +19,12 @@ type method struct {
 	Doc  string
 	// Verb: the grant the method needs ("read", "logs", "edit",
 	// "action:<id>" — the request's action), or "none".
-	Verb   string
-	Writes bool
-	req    reflect.Type
-	resp   reflect.Type
-	handle func(ctx context.Context, c caller, body []byte) (any, error)
+	Verb      string
+	Writes    bool
+	Streaming bool
+	req       reflect.Type
+	resp      reflect.Type
+	handle    func(ctx context.Context, c caller, body []byte) (any, error)
 }
 
 // register adds a POST /v1/<name> method.
@@ -87,10 +88,11 @@ func (s *Server) intro() Intro {
 			"POST /v1/<Method> with a JSON body; GET /v1/methods lists the methods with their JSON schemas.",
 			"Start with Access: the targets, namespaces, verbs and kinds granted to agents.",
 			"Send your name in the " + agentHeader + " header: the user sees it (it is not verified).",
-			"Changes are two steps: Prepare* returns the plan and a planId, Run* runs that plan.",
+			"Cluster changes are two steps: Prepare* returns the plan and a planId, Run* runs that plan.",
 			"A destructive plan waits for the user's confirmation in the SPK Ocular window unless its grant says otherwise: " +
 				"Run* then answers state awaiting_confirmation with a runId; ask GetRun (it waits up to 25 s) and tell your user to confirm in Ocular.",
 			"Errors are {code, detail}: forbidden says what is not granted.",
+			"GetLogInfo and log reads use the same logs grant. GetLogInfo lists channels; GetLogs returns a bounded snapshot; StreamLogs returns bounded NDJSON frames, including a final end frame. ExportLogs writes retained logs to a private file in Downloads and returns only metadata. Time intervals and streams require an explicit limit. The catalog marks streaming methods and describes each frame's schema.",
 			"A call that needs a cluster login answers unauthorized (a login is done by a person: the user selects the target in Ocular); " +
 				"tell your user and retry after they select it.",
 		},
@@ -100,13 +102,14 @@ func (s *Server) intro() Intro {
 
 // MethodDoc is one method of GET /v1/methods.
 type MethodDoc struct {
-	Name     string             `json:"name"`
-	Path     string             `json:"path"`
-	Doc      string             `json:"description"`
-	Verb     string             `json:"verb"`
-	Writes   bool               `json:"writes"`
-	Request  *jsonschema.Schema `json:"request"`
-	Response *jsonschema.Schema `json:"response"`
+	Name      string             `json:"name"`
+	Path      string             `json:"path"`
+	Doc       string             `json:"description"`
+	Verb      string             `json:"verb"`
+	Writes    bool               `json:"writes"`
+	Streaming bool               `json:"streaming,omitempty"`
+	Request   *jsonschema.Schema `json:"request"`
+	Response  *jsonschema.Schema `json:"response"`
 }
 
 type Catalog struct {
@@ -117,9 +120,16 @@ func (s *Server) catalog() Catalog {
 	r := &jsonschema.Reflector{ExpandedStruct: true, DoNotReference: true, AllowAdditionalProperties: false}
 	out := Catalog{Methods: make([]MethodDoc, 0, len(s.methods))}
 	for _, m := range s.methods {
+		request := r.ReflectFromType(m.req)
+		if m.Name == "GetLogs" || m.Name == "StreamLogs" || m.Name == "ExportLogs" {
+			request.DependentRequired = map[string][]string{"sinceTime": {"limit"}, "untilTime": {"limit"}}
+		}
+		if m.Name == "StreamLogs" {
+			request.Required = append(request.Required, "limit")
+		}
 		out.Methods = append(out.Methods, MethodDoc{
-			Name: m.Name, Path: "/v1/" + m.Name, Doc: m.Doc, Verb: m.Verb, Writes: m.Writes,
-			Request: r.ReflectFromType(m.req), Response: r.ReflectFromType(m.resp),
+			Name: m.Name, Path: "/v1/" + m.Name, Doc: m.Doc, Verb: m.Verb, Writes: m.Writes, Streaming: m.Streaming,
+			Request: request, Response: r.ReflectFromType(m.resp),
 		})
 	}
 	return out

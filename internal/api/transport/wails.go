@@ -72,6 +72,13 @@ func (w *API) GetTargetState(provider, target string) (map[string]string, error)
 	return w.a.GetTargetState(context.Background(), provider, target)
 }
 
+func (w *API) GetNavSections() (map[string]bool, error) {
+	return w.a.GetNavSections(context.Background())
+}
+func (w *API) SetNavSection(req api.NavSectionRequest) error {
+	return w.a.SetNavSection(context.Background(), req)
+}
+
 func (w *API) GetFavoriteKinds() ([]api.FavoriteKind, error) {
 	return w.a.GetFavoriteKinds(context.Background())
 }

@@ -1,4 +1,4 @@
-// Post-build guard (docs/specs "Лёгкость"): the entry chunk stays small and
+// Post-build guard (docs/architecture.md): the entry chunk stays small and
 // heavy libraries only ever load lazily.
 import { readFileSync, readdirSync } from 'node:fs'
 import { gzipSync } from 'node:zlib'

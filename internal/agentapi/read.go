@@ -60,7 +60,10 @@ func (s *Server) readMethods() {
 	register(s, "GetObject", agentgrant.VerbRead, false, "One object's details: facts, YAML (Secret values are never shown), relations (those to objects not granted are hidden and counted).", s.getObject)
 	register(s, "Problems", agentgrant.VerbRead, false, "What is wrong in the namespaces granted (and outside namespaces with a cluster grant): failing pods, unavailable workloads, recent warning events.", s.problems)
 	register(s, "GetMetrics", agentgrant.VerbRead, false, "CPU and memory usage of objects (pods, nodes, containers) by their refs (≤ 100).", s.getMetrics)
-	register(s, "GetLogs", agentgrant.VerbLogs, false, "The last lines of an object's logs (never followed): tailLines (default 200, ≤ 5000), since a time, or the previous container's.", s.getLogs)
+	register(s, "GetLogInfo", agentgrant.VerbLogs, false, "Available log channels, default channel, aggregation and previous-container support. Requires the same logs grant as reading logs.", s.getLogInfo)
+	register(s, "GetLogs", agentgrant.VerbLogs, false, "A bounded log snapshot: tailLines, channel (* for all), previous, sinceTime inclusive and untilTime exclusive. Without time bounds the default tail is 200; with bounds it is all retained lines (-1). Time bounds require limit (1..5000); otherwise it defaults to 200. maxBytes bounds encoded output (default 65536, maximum 1048576). Grep filters before counting matching lines. Truncation and its reason are explicit.", s.getLogs)
+	register(s, "ExportLogs", agentgrant.VerbLogs, true, "Export retained logs to a new owner-only file in Downloads. Returns only path, counts and completeness, never log contents. Same logs grant and filters; no arbitrary destination path, no follow. Time intervals require limit. Limits bound file size and duration; source gaps and limits are reported.", s.exportLogs)
+	s.registerLogStream()
 }
 
 func (s *Server) access(ctx context.Context, _ caller, _ *AccessRequest) (*AccessView, error) {
@@ -688,38 +691,24 @@ func (s *Server) getMetrics(ctx context.Context, c caller, req *GetMetricsReques
 }
 
 type GetLogsRequest struct {
-	Ref       core.Ref  `json:"ref" jsonschema:"required" jsonschema_description:"A pod, workload or container (its kind has logs in ListKinds)."`
-	Channel   string    `json:"channel,omitempty" jsonschema_description:"A container of a pod; empty: the default one."`
-	Previous  bool      `json:"previous,omitempty" jsonschema_description:"The previous (crashed) container's logs."`
-	TailLines int       `json:"tailLines,omitempty" jsonschema_description:"Lines per source (default 200, ≤ 5000)."`
-	SinceTime time.Time `json:"sinceTime,omitzero" jsonschema_description:"Only lines since this time (RFC 3339)."`
+	Ref       core.Ref     `json:"ref" jsonschema:"required" jsonschema_description:"A pod, workload or container (its kind has logs in ListKinds)."`
+	Channel   string       `json:"channel,omitempty" jsonschema_description:"GetLogInfo lists channels. Empty: default; *: all containers/channels; Docker also supports stdout or stderr."`
+	Previous  bool         `json:"previous,omitempty" jsonschema_description:"The previous (crashed) container's logs."`
+	TailLines int          `json:"tailLines,omitempty" jsonschema_description:"Last lines per source: 1..5000 or -1 for retained history. Default: 200 without time bounds; -1 with either bound."`
+	SinceTime time.Time    `json:"sinceTime,omitzero" jsonschema_description:"Inclusive start time (RFC 3339), including previous-container history."`
+	UntilTime time.Time    `json:"untilTime,omitzero" jsonschema_description:"Exclusive end time (RFC 3339), later than sinceTime. Untimestamped lines in a time interval are omitted with a gap state."`
+	Limit     int          `json:"limit,omitempty" jsonschema_description:"Maximum returned matching lines: 1..5000. Required with either time bound and for StreamLogs; otherwise defaults to 200."`
+	MaxBytes  int          `json:"maxBytes,omitempty" jsonschema_description:"Maximum encoded response bytes: 4096..1048576, default 65536, including metadata. StreamLogs reserves room for completion metadata."`
+	Grep      *api.LogGrep `json:"grep,omitempty" jsonschema_description:"Filter log text before counting matching lines against limit."`
 }
 
-func (s *Server) getLogs(ctx context.Context, c caller, req *GetLogsRequest) (*api.Tail, error) {
-	ref := req.Ref
-	x, err := s.open(ctx, c, "GetLogs", ref.Provider, ref.Target)
-	if err != nil {
-		return nil, err
-	}
-	defer x.done()
-	k, err := x.kind(ref.Kind)
-	if err != nil {
-		return nil, err
-	}
-	if !k.Logs {
-		return nil, &api.CodedError{Code: api.CodeUnsupported, Detail: fmt.Sprintf("%s have no logs", k.ID)}
-	}
-	if _, err := s.check(c, x, "GetLogs", k, ref, agentgrant.VerbLogs, false); err != nil {
-		return nil, err
-	}
+func (req GetLogsRequest) query() api.TailRequest {
 	n := req.TailLines
 	if n == 0 {
 		n = defaultLimit
+		if !req.SinceTime.IsZero() || !req.UntilTime.IsZero() || req.Grep != nil {
+			n = provider.TailAll
+		}
 	}
-	t, err := x.call.TailLogs(api.TailRequest{Ref: ref, Channel: req.Channel, Previous: req.Previous, TailLines: n, SinceTime: req.SinceTime})
-	if err != nil {
-		return nil, err
-	}
-	s.read(c, "GetLogs", ref.Provider, ref.Target, ref.Scope, objectOf(ref))
-	return &t, nil
+	return api.TailRequest{Ref: req.Ref, Channel: req.Channel, Previous: req.Previous, TailLines: n, SinceTime: req.SinceTime, UntilTime: req.UntilTime, Limit: req.Limit, MaxBytes: req.MaxBytes, Grep: req.Grep}
 }

@@ -180,6 +180,9 @@ func membersOf(objs map[string]any, project, service string) []*engine.Container
 // StreamLogs streams a container's logs, or a service's containers' as
 // one (members come and go with the containers feed).
 func (s *session) StreamLogs(ctx context.Context, ref core.Ref, q provider.LogQuery, sink provider.LogSink) error {
+	if q.Archive && q.Follow {
+		return &provider.Error{Class: provider.ClassInvalid, Message: "archive log reads cannot follow"}
+	}
 	if q.Previous {
 		return &provider.Error{Class: provider.ClassUnsupported, Message: "a Docker container keeps one log across its restarts; there is no separate previous log"}
 	}
@@ -292,6 +295,14 @@ func (g *logGroup) run(ctx context.Context) (err error) {
 	if err != nil {
 		return err
 	}
+	if g.q.Archive {
+		for _, m := range initial {
+			if err := m.readArchive(ctx); err != nil {
+				return err
+			}
+		}
+		return g.sink.Ready()
+	}
 	if err := g.backlog(ctx, initial); err != nil {
 		return err
 	}
@@ -358,6 +369,10 @@ func (g *logGroup) run(ctx context.Context) (err error) {
 // admit starts members up to the cap; late ones read their logs from
 // their start. It returns the change channel of the snapshot it used.
 func (g *logGroup) admit(late bool) ([]*member, <-chan struct{}, error) {
+	limit := maxGroupMembers
+	if g.q.Archive {
+		limit = 1000
+	}
 	objs, _, st, changed := g.f.observe()
 	var cs []*engine.ContainerInspect
 	if g.one != "" {
@@ -383,7 +398,7 @@ func (g *logGroup) admit(late bool) ([]*member, <-chan struct{}, error) {
 			continue
 		}
 		total++
-		if g.active[c.ID] != nil || len(g.active) >= maxGroupMembers {
+		if g.active[c.ID] != nil || len(g.active) >= limit {
 			continue
 		}
 		m, err := g.newMember(c, late)
@@ -398,7 +413,7 @@ func (g *logGroup) admit(late bool) ([]*member, <-chan struct{}, error) {
 	}
 	var notes []string
 	if total > len(g.active) {
-		notes = append(notes, fmt.Sprintf("showing %d of %d containers (at most %d at once)", len(g.active), total, maxGroupMembers))
+		notes = append(notes, fmt.Sprintf("showing %d of %d containers (at most %d at once)", len(g.active), total, limit))
 	}
 	if st.State == provider.StatusStale || st.State == provider.StatusError {
 		notes = append(notes, "the containers are not being watched ("+st.Message+"): new, restarted or removed containers may not be noticed")
@@ -955,6 +970,56 @@ func (m *member) readBacklog(ctx context.Context, per int64) {
 		if size >= per {
 			m.backlogCut = true
 			return
+		}
+	}
+}
+
+// readArchive sends retained records directly to the bounded export/agent
+// sink instead of keeping and merging the UI's backlog in memory.
+func (m *member) readArchive(ctx context.Context) error {
+	o := m.options(false)
+	o.Since = m.g.q.SinceTime
+	lr, closeFn, err := m.open(ctx, o)
+	if err != nil {
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+		return m.state(provider.LogError, engine.ClassOf(err), errText(err))
+	}
+	defer closeFn()
+	for {
+		record, err := lr.Next()
+		if err != nil {
+			if ctx.Err() != nil {
+				return ctx.Err()
+			}
+			if errors.Is(err, io.EOF) {
+				return m.state(provider.LogEnded, "", "")
+			}
+			return m.state(provider.LogError, engine.ClassOf(err), errText(err))
+		}
+		if record.Gap != "" {
+			if err := m.gap(record.Gap); err != nil {
+				return err
+			}
+			continue
+		}
+		if record.Partial && !lr.EndedCleanly() {
+			if err := m.gap("an incomplete log record was omitted"); err != nil {
+				return err
+			}
+			continue
+		}
+		out, errs := m.split([]logLine{toLine(record)})
+		if len(out) > 0 {
+			if err := m.g.sink.Lines(m.outID, out); err != nil {
+				return err
+			}
+		}
+		if len(errs) > 0 {
+			if err := m.g.sink.Lines(m.errID, errs); err != nil {
+				return err
+			}
 		}
 	}
 }

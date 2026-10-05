@@ -263,7 +263,7 @@ test('favorites drag and drop changes the shared order without opening a resourc
       await nav.getByRole('button', { name: `Add ${title} to favorites`, exact: true }).click()
     }
     const fav = page.getByRole('region', { name: 'Favorites', exact: true })
-    const rows = fav.locator('[data-nav-item]')
+    const rows = fav.locator('.nav-item')
     await expect(rows).toHaveText(['Services', 'Crates', 'Parcels'])
     await fav.getByRole('button', { name: 'Parcels', exact: true }).dragTo(fav.getByRole('button', { name: 'Services', exact: true }), { targetPosition: { x: 20, y: 2 } })
     await expect(rows).toHaveText(['Parcels', 'Services', 'Crates'])

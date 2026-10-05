@@ -1,7 +1,5 @@
-// Ported from SPK-launcher (web/src/components/LogViewport.tsx); the
-// selection/follow machinery is kept as is. Adapted: rows show a time and
-// source prefix and ANSI spans, and every copy uses rowText (what the row
-// shows).
+// Virtualized log rows share stable selection and follow state. Rows show
+// time/source prefixes and ANSI spans; copying uses the same visible rowText.
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { RefObject } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'

@@ -40,7 +40,9 @@ test('a view by its alias, a row of the table, then the same object as recent fr
   await expect(recent).toContainText('Recent')
   await recent.click()
   await expect(page.getByRole('dialog', { name: 'services workers' })).toBeVisible()
-  await expect(page.getByRole('heading', { name: 'Workloads' })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Services', exact: true })).toBeVisible()
+  await expect(page.getByRole('navigation', { name: 'resources' }).getByRole('button', { name: 'Services', exact: true })).toHaveAttribute('aria-current', 'page')
+  await expect(page.getByRole('grid', { name: 'resources' }).getByRole('row', { selected: true })).toContainText('workers')
 })
 
 test(':wl <text> opens the view filtered; Esc closes and gives focus back', async ({ page }) => {
@@ -125,4 +127,61 @@ test('a slow resource list shows loading until its rows arrive', async ({ page }
     await expect(loading).toHaveCount(0)
     await expect(page.locator('[data-area="table"]')).toHaveAttribute('aria-busy', 'false')
   } finally { release() }
+})
+
+test('object search stays inside selected scopes across views and opens the matching kind', async ({ page }) => {
+  await page.goto('/')
+  await page.getByRole('option', { name: /^demo\b/ }).click()
+  const nav = page.getByRole('navigation', { name: 'resources' })
+  await nav.getByRole('button', { name: 'Crates', exact: true }).click()
+  const grid = page.getByRole('grid', { name: 'resources' })
+  const zone = page.getByRole('textbox', { name: 'Zone', exact: true })
+  const setZone = async (value: string) => {
+    await zone.fill(value)
+    await zone.press('Enter')
+  }
+  const remember = async (name: string) => {
+    const saved = page.waitForResponse((r) => r.url().endsWith('/api/TouchRecent') && r.ok())
+    await grid.getByRole('gridcell', { name, exact: true }).click()
+    await saved
+    await page.getByRole('dialog', { name: `crates ${name}` }).getByRole('button', { name: 'Close', exact: true }).click()
+  }
+  await setZone('green')
+  await remember('gamma')
+  await setZone('blue')
+  await remember('alpha')
+  // An unscoped table must not widen the remembered namespace selection.
+  await nav.getByRole('button', { name: 'Services', exact: true }).click()
+  let dlg = await palette(page)
+  const search = dlg.getByRole('combobox', { name: 'Go to' })
+  await search.fill('gamma')
+  await expect(dlg.getByRole('status')).toHaveText('Nothing found')
+  await expect(dlg.getByRole('option')).toHaveCount(0)
+  if (process.env.E2E_PALETTE_SCOPE_SCREENSHOT) await page.screenshot({ path: process.env.E2E_PALETTE_SCOPE_SCREENSHOT })
+  await search.fill('alpha')
+  const recent = dlg.getByRole('option').filter({ hasText: 'alpha' })
+  await expect(recent).toContainText('Recent')
+  await recent.click()
+  await expect(page.getByRole('heading', { name: 'Crates', exact: true })).toBeVisible()
+  await expect(nav.getByRole('button', { name: 'Crates', exact: true })).toHaveAttribute('aria-current', 'page')
+  await expect(zone).toHaveValue('blue')
+  await expect(grid.getByRole('row', { selected: true })).toContainText('alpha')
+  await page.getByRole('dialog', { name: 'crates alpha' }).getByRole('button', { name: 'Close', exact: true }).click()
+  await setZone('blue, green')
+  dlg = await palette(page)
+  await dlg.getByRole('combobox', { name: 'Go to' }).fill('gamma')
+  await expect(dlg.getByRole('option')).toHaveCount(1)
+  await expect(dlg.getByRole('option')).toContainText('Object')
+  await page.keyboard.press('Escape')
+  await setZone('') // explicit All
+  await nav.getByRole('button', { name: 'Services', exact: true }).click()
+  dlg = await palette(page)
+  await dlg.getByRole('combobox', { name: 'Go to' }).fill('gamma')
+  await expect(dlg.getByRole('option')).toHaveCount(1)
+  await expect(dlg.getByRole('option')).toContainText('Recent')
+  await page.keyboard.press('Enter')
+  await expect(nav.getByRole('button', { name: 'Crates', exact: true })).toHaveAttribute('aria-current', 'page')
+  await expect(zone).toHaveValue('')
+  await expect(grid.getByRole('row', { selected: true })).toContainText('gamma')
+  if (process.env.E2E_PALETTE_KIND_SCREENSHOT) await page.screenshot({ path: process.env.E2E_PALETTE_KIND_SCREENSHOT })
 })

@@ -42,7 +42,8 @@ func newEnv(t *testing.T) *env {
 	em := events.NewEmitter()
 	svc := api.NewService(reg, st, em, api.Options{Version: "test", Mode: "browser", Getenv: func(string) string { return "" }})
 	t.Cleanup(svc.Close)
-	srv := New(Options{Service: svc, Store: st, Socket: "/nowhere/agent.sock", Lock: "/nowhere/agent.sock.lock", Version: "test"})
+	downloads := filepath.Join(t.TempDir(), "Downloads")
+	srv := New(Options{Downloads: func() (string, error) { return downloads, nil }, Service: svc, Store: st, Socket: "/nowhere/agent.sock", Lock: "/nowhere/agent.sock.lock", Version: "test"})
 	t.Cleanup(srv.Close)
 	svc.SetAgentControl(srv)
 	return &env{t: t, f: f, svc: svc, st: st, srv: srv, em: em}
@@ -677,7 +678,7 @@ func TestTheCatalogIsTheMethods(t *testing.T) {
 		_, pattern := e.srv.mux.Handler(httptest.NewRequest("POST", m.Path, nil))
 		assert.Equal(t, "POST "+m.Path, pattern)
 	}
-	assert.ElementsMatch(t, []string{"Access", "ListKinds", "ListObjects", "GetObject", "Problems", "GetMetrics", "GetLogs",
+	assert.ElementsMatch(t, []string{"Access", "ListKinds", "ListObjects", "GetObject", "Problems", "GetMetrics", "GetLogInfo", "GetLogs", "StreamLogs", "ExportLogs",
 		"PrepareAction", "RunAction", "GetEditSource", "PrepareEdit", "RunEdit", "GetRun"}, listed)
 	lo := cat.Methods[2]
 	assert.Equal(t, "ListObjects", lo.Name)

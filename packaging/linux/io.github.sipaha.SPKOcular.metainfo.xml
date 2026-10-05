@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>io.github.sipaha.SPKOcular</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>Apache-2.0</project_license>
+  <name>SPK Ocular</name>
+  <summary>Explore Kubernetes and Docker Compose resources</summary>
+  <description>
+    <p>SPK Ocular is a local infrastructure viewer with live resource tables,
+    logs, terminals, port forwarding, and reviewed resource changes.</p>
+    <p>It uses your existing Kubernetes and Docker configuration and stores
+    interface preferences locally. No account or hosted service is required.</p>
+  </description>
+  <launchable type="desktop-id">spk-ocular.desktop</launchable>
+  <provides><binary>spk-ocular</binary></provides>
+  <developer id="io.github.sipaha"><name>Pavel Simonov</name></developer>
+  <url type="homepage">https://github.com/Sipaha/spk-ocular</url>
+  <url type="bugtracker">https://github.com/Sipaha/spk-ocular/issues</url>
+  <content_rating type="oars-1.1"/>
+</component>

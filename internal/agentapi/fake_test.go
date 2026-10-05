@@ -32,6 +32,7 @@ type fakeProv struct {
 	// runGate, when set, holds RunAction until it is closed or ctx ends.
 	runGate chan struct{}
 	opened  int
+	logs    func(context.Context, core.Ref, provider.LogQuery, provider.LogSink) error
 }
 
 func newFake() *fakeProv { return &fakeProv{identity: "https://a | ca:1 | user:u", hash: "h1"} }
@@ -244,9 +245,15 @@ func (s *fakeSess) RunEdit(_ context.Context, run provider.EditRun) (core.EditRe
 }
 
 func (s *fakeSess) LogInfo(context.Context, core.Ref) (core.LogInfo, error) {
-	return core.LogInfo{}, nil
+	return core.LogInfo{Channels: []core.LogChannel{{ID: "main", Title: "Main"}}, DefaultChannel: "main", Previous: true}, nil
 }
-func (s *fakeSess) StreamLogs(_ context.Context, r core.Ref, _ provider.LogQuery, sink provider.LogSink) error {
+func (s *fakeSess) StreamLogs(ctx context.Context, r core.Ref, q provider.LogQuery, sink provider.LogSink) error {
+	s.f.mu.Lock()
+	logs := s.f.logs
+	s.f.mu.Unlock()
+	if logs != nil {
+		return logs(ctx, r, q, sink)
+	}
 	_ = sink.Source(1, "k1", r.Name, "main")
 	_ = sink.Lines(1, []provider.LogLine{{TS: "t1", Text: "hello from " + r.Name}})
 	return sink.Ready()

@@ -1,989 +1,220 @@
-# spk-ocular — гид для агентов
+# SPK Ocular: contributor and agent guide
 
-Лёгкий локальный просмотрщик инфраструктуры: «Lens-like visibility + kubectl-like простота,
-без тяжеловесности Lens». Provider-ы — Kubernetes и Docker Compose.
-Go + Wails v3 + React. Спецификация: `docs/specs/2026-09-29-spk-ocular-design.md`.
-Планы: `docs/plans/`. Бэклог: `docs/backlog.md`.
+SPK Ocular is a local infrastructure viewer for Kubernetes and Docker Compose.
+The shared Go API serves a Wails desktop window or a loopback browser UI.
+The release platform is Linux amd64/arm64, GTK 3 and WebKit2GTK 4.1.
 
-Статус: P0 (каркас), P1 (ресурсы, детали, метрики), P2 (логи), P3 (терминалы, туннели) и P4
-(действия restart/scale/delete) готовы — `docs/plans/`. P5 (Problems, палитра `Ctrl+K`,
-клавиатура, полировка) готов (`docs/plans/2026-09-30-p5-problems-palette.md`; soak памяти принят на
-сборке P7 по критерию пользователя 2026-09-30). Docker Compose provider
-готов: P6 — просмотр и логи (`docs/plans/2026-09-30-p6-docker-compose.md`), P7 — терминал,
-статистика и действия (`docs/plans/2026-09-30-p7-compose-exec-stats-actions.md`). P8 — все
-ресурсы API (discovery + server-side Table: CRD, Jobs, PVC…) — `docs/plans/2026-09-30-p8-generic-resources.md`.
-P9 — правка YAML объекта Kubernetes с просмотром и одной записью — `docs/plans/2026-09-30-p9-edit-yaml.md`.
-P10 — значения Secret: показать, скопировать, изменить/добавить/удалить ключ — `docs/plans/2026-09-30-p10-secret-values.md`.
-P11 — узлы: cordon, uncordon, drain — `docs/plans/2026-09-30-p11-node-operations.md`.
-P12 — CronJob: приостановить, возобновить, запустить сейчас — `docs/plans/2026-09-30-p12-cronjob-actions.md`.
-P13 — итоги и отказы действий на языке интерфейса — `docs/plans/2026-09-30-p13-action-outcomes-i18n.md`.
-P14 — доступ агентов (Claude/Codex) через unix-сокет `$SPK_OCULAR_HOME/agent.sock` —
-`docs/plans/2026-09-30-p14-agent-access.md` (спецификация `docs/specs/2026-09-30-agent-access-design.md`).
-P15 — Deployment: откат к выбранной ревизии, пауза и возобновление выкатки — `docs/plans/2026-10-01-p15-rollout.md`.
-P16 — отладочный (ephemeral) контейнер в pod-е с attach-терминалом (`kubectl debug -it`) —
-`docs/plans/2026-10-01-p16-debug-container.md`.
-P17 — действия над несколькими отмеченными строками и принудительное удаление pod-а —
-`docs/plans/2026-10-01-p17-bulk-actions.md`.
-P18 — переключение между целями без потерь: недавние цели остаются открытыми —
-`docs/plans/2026-10-01-p18-warm-targets.md`.
-P19 — снимок страницы цели переживает перезапуск приложения (pageMemo в target_state) —
-`docs/plans/2026-10-02-p19-page-memo-persist.md`.
-Редизайн интерфейса и уточнения пользователя завершены и проверены 2026-10-02:
-`docs/plans/2026-10-02-interface-redesign.md` (итоговые проверки и снимки). Готовы несколько
-scope, общее избранное с сохранением порядка D&D, поиск видов и сохраняемые ширины колонок.
-Плотность сбалансированная с небольшим уклоном к большей: текст 14 px, масштаб rem 17 px,
-строки таблицы 32 px. Следующий этап не запрошен.
+## Read first
 
-## Сборка и тесты
+- [README](README.md): installation, commands, supported platforms.
+- [Usage](docs/usage.md): current user-visible behavior.
+- [Architecture](docs/architecture.md): module boundaries and invariants.
+- [Agent API](docs/agent-api.md): local automation permissions and transport.
+- [Development](docs/development.md): toolchain, checks and isolated fixtures.
+- [Releases](docs/releases.md): packages, workflows, versioning and publication.
+- [Backlog](docs/backlog.md): future work; it is not permission to start a task.
 
-- `make build` — web + бинарь browser-режима `build/bin/spk-ocular` (CGO off).
-- `make build-desktop` — desktop `build/bin/spk-ocular-desktop` (теги `wails gtk3`, CGO); собирается
-  во временный файл и атомарно переносится (`mv`). `make release` — то же с тегом `production`
-  (без DevTools).
-- `make run` — `build-desktop` + запуск. `make run-browser` — UI на http://127.0.0.1:5190 (`PORT=`)
-  с настоящим kubeconfig и `~/.spk/ocular`.
-- `make test` = `test-go` (`go test -race`) + `test-web` (vitest) + `test-e2e` (Playwright против
-  browser-режима с фикстурным `KUBECONFIG`/`HOME`/`SPK_OCULAR_HOME` в `.agents/tmp` solution: три
-  конфига — `playwright.config.ts`, `playwright.synth.config.ts` (запускает
-  `--test-api --test-synthetic`: синтетический провайдер с логами (`POST /api/_test/logs/emit`),
-  эхо-терминалом (`flood N`, `exit N`, `size CxR` при resize) и портами на встроенных
-  HTTP-серверах; `GET /api/_test/stats` добавляет его счётчики `syn_*`) и
-  `playwright.memo.config.ts` (P19: рестарт приложения на одном data dir — спека сама
-  поднимает и гасит бинарь). Спеки импортируют `test` из `fixtures.ts`: авто-фикстура перед
-  каждой спекой стирает персистентный снимок страницы (`POST /api/_test/ui-state/reset`),
-  иначе состояние одной спеки восстановилось бы в следующей (общий инстанс приложения).
-- `make lint` — go vet и golangci-lint (с тегами desktop и без) + eslint + tsc.
-- **`make check`** — гейт перед каждым коммитом: lint, все тесты, обе сборки.
-- `make pss PID=<pid>` — Private_Dirty/PSS процесса и его WebKit-детей (бюджет ~150 МБ Private_Dirty).
-- Реальный кластер (kind в Docker; `KIND=<путь>`, если kind не в PATH): `make kind-up` (по
-  `scripts/kind-config.yaml`: control-plane без taint-а + worker `ocular-dev-worker` с taint-ом
-  и меткой `ocular.dev/drain=only` — только для drain-фикстур P11; kubeconfig —
-  `build/kind-ocular-dev.kubeconfig`, никогда не в `~/.kube`; `kind-down` — с тем же
-  `--kubeconfig`), `make test-kind` (Go-тесты `*Kind*`),
-  `make e2e-kind` (Playwright), `make kind-down`. Обе цели **падают**, если кластера нет, и сами
-  сидируют фикстуры (`scripts/kind-seed.sh`, `kind-rbac.sh`, `kind-metrics.sh`). Нагрузка —
-  `scripts/kind-load.sh <kubeconfig> [up|down]`, замер — `node tests/e2e/measure-kind.mjs <bin>
-  <kind kubeconfig> <viewer kubeconfig> <scratch>` (печатает тайминги, счётчики `/api/_test/stats`
-  и Private_Dirty). Синтетика памяти кэша: `OCULAR_SYNTH=1 go test -run Synthetic -v ./internal/providers/kubernetes/`.
-- Тестовый Docker Engine (аналог kind для Compose): `make dind-up` (контейнер `ocular-dind`,
-  `docker:29-dind` с label-ом `ocular.test=dind` в docker пользователя, API `tcp://127.0.0.1:23750`
-  без TLS; id записан в `build/ocular-dind.id`; сид — `scripts/dind-seed.sh`: busybox через
-  `docker save | load`, внешние `ocular-ext-net`/`ocular-ext-vol`, проекты `ocular-fixture`
-  (healthy, unhealthy, crash-loop, exited 0/3, две реплики с логами, one-off) и `ocular-other`),
-  `make test-dind` (Go-тесты `*Dind*`, `OCULAR_DIND_HOST`/`OCULAR_DIND_VERIFY`; **падает** без
-  демона), `make e2e-dind` (Playwright `dind.spec.ts`: фикстурный `~/.docker` с context-ом
-  `ocular-dind`), `make dind-down`. `/run` контейнера — tmpfs (переживает `docker stop/start`). Перед любой мутацией — `scripts/dind-verify.sh`: записанный
-  контейнер наш (имя, label), запущен, публикует ровно `127.0.0.1:23750`, и `/info` на порту
-  отвечает его hostname-ом; иначе отказ. Контейнер `ocular-dind` без label-а — не наш, скрипты
-  его не трогают. Демон пользователя (его compose-проекты) — никогда.
-- Soak: `scripts/kind-churn.sh <kind kubeconfig> up|run|pause|break|down` (namespace `ocular-churn`,
-  ограниченный набор постоянно меняющихся объектов; отказывается работать не с kind-ocular-dev),
-  desktop с `--test-api` (test-маршруты на отдельном loopback-порту, адрес и токен — в
-  `<data>/test-api.json`, 0600, удаляется при выходе) и `scripts/soak-sample.sh <pid> <data> <csv>`
-  (раз в `INTERVAL` с: MemAvailable, Private_Dirty/PSS/swap дерева, PID-ы, счётчики stats, фаза из
-  `PHASE_FILE`; при MemAvailable < 8 ГБ отказывается — вытесненные страницы уходят из Private_Dirty).
-  Вердикт — `scripts/soak-verdict.py <csv>` по критерию пользователя 2026-09-30 (спецификация,
-  «Память»): по фазам ≤ +100 МБ от уровня после прогрева, после нагрузки ≥ 10 мин ровно.
-- `SPK_OCULAR_KLOG=1` — вернуть логи client-go (klog) в stderr для отладки.
-- `E2E_BIN=<путь> E2E_PORT=<порт>` — e2e против другой browser-сборки.
-- Проверка desktop без экрана пользователя: `xvfb-run -a -s "-screen 0 1400x900x24" <скрипт>`
-  (или `Xvfb :77 &` + `DISPLAY=:77`), окно ищется `xwininfo -root -tree | grep '"SPK Ocular"'`,
-  снимок — `import -window root`, ввод — `scripts/xinput.py click X Y key l ctrl+s type TEXT`
-  (XTest через ctypes; xdotool в окружении нет; ещё `drag`, `scroll`, `resize <окно> W H`,
-  `close <окно>` — WM_DELETE_WINDOW как у кнопки закрытия, `group 1` — вторая раскладка после
-  `setxkbmap -layout us,ru`). Окно без WM стоит в (60,40). «Открыть» туннеля в desktop зовёт
-  `xdg-open` — подменяется скриптом первым в `PATH`; буфер обмена — `xclip -selection clipboard`.
+## Documentation policy
 
-## Устройство (коротко)
+Documentation describes **what exists now or explicitly planned work**. Do not
+turn it into a historical archive. Update the authoritative section when behavior
+changes; delete obsolete claims, completed implementation plans, old review
+reports, superseded alternatives, session transcripts and dated test summaries.
+Retain a decision's current constraint and rationale, not the story of how it
+was reached. Put transient logs, screenshots, benchmarks and handoff notes in
+scratch, outside product documentation. Git and GitHub Releases retain history.
 
-- `internal/api` — интерфейс `API` + DTO; `transport/http.go` (browser: `POST /api/<Method>`, SSE
-  `/api/events`, bearer из `<meta name="spk-ocular-api-token">`), `transport/wails.go` (бинды,
-  FQN `github.com/spk/spk-ocular/internal/api/transport.API.<Method>`). Новый метод API = метод в
-  интерфейсе + `Service` + маршрут в `http.go` + метод в `wails.go` + `web/src/api/client.ts`.
-  Ошибки HTTP-транспорта — статус 400 с классом в `code` (`forbidden`, `conflict`, `unknown`, …).
-- Недавние сессии и фон (P18): `internal/api/sessions.go` — `Service.current/left`,
-  `selectSession` (две последние покинутые остаются; занятые потоками и агентами не закрываются),
-  жнец (`recentIdle` 10 мин / `sessionIdle` 60 с), `CloseTarget`; `provider.Backgrounder`
-  (`internal/provider`) зовётся для каждой не выбранной сессии, включая открытые агентами
-  (`kubernetes/background.go` — флаг фона для `execshim`, `cacheManager.setBackground`,
-  `lost` по `unauthorized`); `TargetsView.open` + событие `targets_changed` при открытии/
-  закрытии сессии. Клиент: точка «Подключение открыто» и «Закрыть подключение» в сайдбаре
-  (`web/src/components/Sidebar.tsx` — title подсказки на строке опции, не на точке: title
-  листового элемента попадает в accessible name опции), снимок страницы — `pageMemo.ts`,
-  вкладки логов любых целей живут — `web/src/dock/`. Снимок страницы и сортировки переживают
-  перезапуск приложения (P19): клиент пишет их дебаунсом в `target_state` под ключом
-  `pageMemo` (`pageMemoPersist.ts`, лимит 4096 байт у сервера — большее живёт в памяти;
-  flush при уходе с цели; один запрос в полёте на цель, ожидающий снимок замещается
-  последним, ошибка не считается сохранением) и сеет обратно из того же ответа `GetTargetState` при первом
-  посещении цели в запуске.
-- `internal/events` — `Emitter` (почтовый ящик «последнее событие на (type, key)» у каждого
-  подписчика, переполнение → `resync`) + `Coalescer`.
-- `internal/views` — provider-агностичный hot-layer видов: `View` (строки, версии, надгробия,
-  `Since(cursor)`), `Manager` (непереиспользуемые id, `view_changed` через Coalescer, аренды 60 с,
-  `gone` при закрытии). Клиентская половина протокола — `web/src/views/viewSync.ts`.
-- `internal/core` — provider-агностичные типы; `internal/provider` — `Provider`, опциональные
-  интерфейсы (`TargetWatcher`), `Registry`.
-- `internal/providers/kubernetes` — contexts из kubeconfig (`kubeconfig.go`), inotify-watch
-  (`watch.go`), сессия (`session.go`), кэши informers (`cache.go`, `slim.go`, `listwatch.go`),
-  вид поверх кэша (`view_watch.go`), kinds (`kinds.go`, `kind_*.go`), детали и связи
-  (`resource.go`), метрики (`metrics.go`).
-- Все ресурсы API (P8): каталог видов сессии (`catalog.go`: описанные `allKinds` + обнаруженные,
-  ревизия, состояние, неподтверждённые группы; `provider.Cataloger`, API `ListKinds` →
-  `KindsView`, `RefreshKinds`, событие `kinds_changed`), discovery v2/v1 (`discovery.go`),
-  триггер — watch CRD (`crdwatch.go`), Table list/watch под Reflector-ом (`tablelw.go`), схема —
-  эпоха на GVR (`schema.go`, `schema_store.go`: проба `limit=1` через `provider.ViewDescriber`,
-  `Query.Schema`, поколение против устаревших проб, закреплённый обычный формат, перепроверка
-  по отпечатку CRD и `F5`). Клиент — `web/src/views/useKinds.ts` (перечитывание каталога),
-  `navGroups`/`NavSubgroup`/`CatalogNote` в `Workspace.tsx`. Известные встроенные ресурсы без
-  своей проекции (Jobs, PVC, RBAC, HPA…) каталог кладёт в разделы навигации, как Lens
-  (`placedKinds`/`navOrder` в `catalog.go`; решение пользователя 2026-09-30), в «API groups»
-  остаются CRD и редкое; группа из подгрупп сворачивается целиком и свёрнута по умолчанию
-  (`group:<имя>` в `navOpen`), `schema_changed`/`removed` в
-  `viewSync.ts`.
-- `internal/streams` — потоки для UI (логи): реестр одноразовых id с owner-ом сессии, NDJSON-
-  писатель (коалесцирование, «толчок», heartbeat, дедлайн записи), обработчик с guard-ами
-  (токен в пути, Host, Origin), loopback-сервер desktop, сохранение файлов (`save`).
-  Клиентская половина — `web/src/logs/` (`useLogStream`, `ndjson`, `ansi`, `buffer`,
-  `useLogFilter` + `search.worker`, `LogViewport`/`logSelection` из SPK-launcher; вкладки — `web/src/dock/`).
-- Логи Kubernetes: `logs.go` (LogInfo, StreamLogs, наблюдение pod-а), `logs_fetch.go` (`pods/log`
-  своим HTTP через транспорт client-go), `logs_reader.go` (ограниченный построчный читатель),
-  `logs_source.go` (источник: курсор, инкарнации, решения на EOF), `logs_members.go` (живой набор
-  pods группы), `logs_group.go` (агрегация, backlog-merge, лимиты); тесты — на фейковом kubelet-е
-  `logs_fake_test.go`.
-- Терминалы: `internal/streams/term.go` (мост WebSocket ↔ `ExecHandle.Run`: кредиты вывода
-  `ack`, подтверждения ввода `iack`, resize «последнее значение», «вешание трубки» `^C ^D` при
-  закрытии), `internal/api/exec.go` (открытие, прототипы для «Подключиться заново»),
-  `internal/providers/kubernetes/exec.go` (снимок соединения `conn`, fallback WS → SPDY,
-  `upgrade.go` — отменяемое рукопожатие), `attach.go` (attach к отладчику: ожидание запуска
-  watch-ем pod-а, `\n` после подключения, код выхода из статуса). Клиент — `web/src/term/` (`protocol.ts`,
-  `TerminalView.tsx` — ленивый xterm, `TerminalDialog.tsx`, `argv.ts`), вкладки — `web/src/dock/`.
-- Туннели: `internal/forwards` (provider-агностичный менеджер: loopback-listener-ы, лимиты,
-  поколения upstream-а, счётчики, `forwards_changed`), `internal/api/forwards.go`,
-  `internal/providers/kubernetes/forward.go` (порты, выбор pod-а, закрепление UID) и
-  `forward_dial.go` (WS-туннель / SPDY, потоки error+data, сторож живости, уход с мёртвого pod-а).
-  Клиент — `web/src/tunnels/` (индикатор «⇄ N», панель, секция «Ports», диалог).
-- Действия: `internal/api/actions.go` (`PrepareAction` из одной записи сессии, `RunAction`:
-  строгая проверка запроса, сверка `ConfigRev`, выполнение на захваченной сессии),
-  `internal/providers/kubernetes/actions.go` (матрица kind × действие, `Expect`, запись с
-  предусловиями, повторы, классификация) и `actions_effects.go` (последствия по стратегии,
-  политика PVC, контроллер pod-а, HPA, SSAR); узлы (P11): cordon/uncordon — в `actions.go`,
-  drain — `drain.go` (классы pod-ов, отпечатки в `Expect`, прогноз PDB, права записей, прогон
-  с частями; выселение — `actionWriter.evict`); CronJob (P12, обнаруженный вид): `cronjob.go`
-  (`discoveredActions` — действия по точному GR и глаголам, suspend/resume), `cronjob_run.go`
-  (Run now: имя, подписанный грант, `spentGrants`, Job как у kubectl, `actionWriter.create`);
-  отладчик pod-а (P16) — `debug.go` (цели, грант имени, strategic merge patch
-  `pods/ephemeralcontainers`); принудительное удаление pod-а (P17) — `forcedelete.go`. Клиент —
-  `web/src/actions/` (`Menu`, `ActionDialog`, `PlanDetails` — разметка плана, общая с массовым
-  просмотром, `BulkActionDialog` и `bulk.ts` — массовые действия и очередь `pool`,
-  `outcome.ts` — итоги, `ActionLists` — списки плана `ActionPlan.Lists` и части результата порциями по
-  50, без усечения; итог частей — `core.PartsOutcome`: unknown > refused > skipped > done),
-  меню строки и `Delete` — `ResourceTable` (`rowMenu`, `onDelete`), «Действия ▾»
-  — `ResourceDrawer`, уведомление — `showNotice` в `store.ts`.
-- Правка YAML (P9): `provider.Editor` (`EditSource`, `PrepareEdit`, `RunEdit`),
-  `KindDescriptor.Editable`; `internal/api/edit.go` (база и грант — HMAC-конверты с
-  `configRev`); Kubernetes — `edit_doc.go` (строгий разбор YAML 1.2 в `json.Number`, merge
-  patch), `edit_patch.go` (патч от показанного текста к изменённому, скрытые пути, Secret —
-  только `metadata`, столкновения, `editView` с точными десятичными), `edit_dryrun.go`
-  (доказательство dry-run на маршрут), `edit.go` (просмотр: dry-run или локальное наложение,
-  последствия, права; запись — один PATCH с uid+resourceVersion просмотра), `edit_errors.go`
-  (`secretSafe`). Клиент — `web/src/edit/` (`diff.ts`, `EditDiff`, `EditDialog`, `guard.ts` +
-  `DiscardPrompt`), редактор — `YamlView` (`editable`), кнопка/`E`/полоса — `ResourceDrawer`.
-- Значения Secret (P10): `provider.ValueHolder` (`Values`, `RevealValue`, `PrepareValueEdit`,
-  `RunValueEdit`), `KindDescriptor.Values`; `internal/api/values.go` (база `vbase` и грант
-  `vgrant` — HMAC-конверты P9 своих видов; строгое декодирование значения `text`|`base64`,
-  пределы 1 МиБ байт / 1,5 МиБ ввода до провайдера; `Cache-Control: no-store` у `RevealValue`);
-  Kubernetes — `values.go` (HMAC-отпечатки ключей ключом процесса, дайджест итоговой записи,
-  dry-run, потребители по spec pod-ов, сверка ответа записи с ожидаемым набором). Клиент —
-  `web/src/values/` (`ValuesSection` в деталях, `ValueDialog` с просмотром, `copy.ts` — очередь
-  записей в буфер, `bytes.ts` — текст/base64 как в Go).
-- Problems: `internal/providers/kubernetes/problems.go` — вид `problems` как набор обычных
-  `viewWatch` (pods, workloads, services, ingresses, nodes, Warning events) через фильтрующие
-  адаптеры `problemsFeed` в один sink (Reset источника → явные удаления), ID строки
-  `<kindID>#<uid>`, `Ref` — сам объект (у события — Event); покрытие — `ViewStatus.Coverage`
-  по источникам. Клиент — пункт навигации и заметка покрытия в `Workspace.tsx`; возможности
-  строки (логи, exec, действия, `Delete`) — по `Ref.Kind` строки, не по виду таблицы.
-- Палитра `Ctrl+K`: `web/src/palette/` (`score.ts` — свой fuzzy-скорер, `items.ts` — источники и
-  грамматика `:`-команд, `store.ts`, `Palette.tsx`); алиасы видов — `KindDescriptor.Aliases`,
-  scope/target — `TargetGroup.aliases` из опционального `provider.CommandAliaser` (k8s: `ns`,
-  `ctx`); недавние объекты — `recent_objects` (миграция 0002, API `RecentObjects`/`TouchRecent`,
-  запись деталями при успешном открытии). Запросы палитры странице (фильтр, открыть объект) —
-  `PageReq{value, seq}`, применяются один раз при рендере.
-- Ожидание сохранённого состояния, каталога и первого снимка ресурсов показывает
-  явный spinner с текстом (role=status); таблица имеет aria-busy до готовности,
-  вместо ложного нулевого счётчика — «…». «Объектов нет» только после ready.
-  — Workspace «shows loading through…», e2e «a slow resource list…».
-- Открытие объекта через палитру выделяет соответствующую строку и прокручивает её в вид.
-  Сопоставление — provider/target/kind/scope/name и UID, если он задан; используются ID
-  строки (у Problems они составные). Загрузка строк может запоздать; одноимённая замена
-  не выделяется. Скрывающий найденную строку фильтр сбрасывается, отметки не добавляются.
-  Объект другого вида по-прежнему открывается в деталях без переключения текущей таблицы.
-- Размеры панелей: `PanelResize` — вертикальные границы целей/навигации/деталей и
-  горизонтальная граница dock. Pointer capture, один DOM-resize на кадр, запись React
-  state только при отпускании; отмена возвращает размер. Стрелки и Home/End работают
-  на разделителе. Ширины остаются при навигации в рамках запуска (`usePanelWidths`),
-  высота dock сохраняется прежним `logsHeight`. Ограничения оставляют место таблице.
-  `LogViewport.getItemKey` стабилен между изменениями данных: ресайз не инвалидирует
-  измерения всего буфера. — e2e «panels resize independently…», terminal resize.
-- Favorites («Избранное») общие для всех подключений, по явному решению пользователя:
-  ui_prefs.favorite_kinds, ID = provider + kind. GetFavoriteKinds / SetKindFavorite
-  не открывают цель, меняют членство атомарно; временно недоступные виды не стираются.
-  Звезда, контекстное меню, Shift+F10; переход в вид сохраняет mayLeave.
-  Избранный вид показывается только в Favorites, исключается из исходной группы
-  и подгруппы, в том числе при поиске; после удаления возвращается на прежнее место.
-  Опустевшие группы скрываются, счётчики учитывают только оставшиеся виды.
-  D&D внутри Favorites показывает линию вставки и сохраняет общий порядок
-  (MoveFavoriteKind); меню «Выше/Ниже» даёт клавиатурный путь. Один активный
-  nav-item и вход F6. — api/favorites_test.go, Favorites.test.tsx, generic/memo e2e.
-  У списка ресурсов отдельный правый отступ 24 px: overlay-scrollbar WebKitGTK
-  перехватывает клики дальше видимого ползунка, без отступа звезда попадает под него.
-  Проверены центр и правый край кнопки в desktop, добавление и удаление при прокрутке.
-- Информация о подключении — модальное окно по кнопке ⓘ рядом с именем цели в AppHeader.
-  Пункта Overview в навигации нет; сохранённый `__overview` открывает вид по умолчанию
-  с прежним scope. Окно не размонтирует таблицу/редактор, не сбрасывает фильтр и правки;
-  Esc, крестик и фон закрывают его с возвратом фокуса, Tab остаётся внутри.
-  Сведения обновляются вместе с целью; смена/исчезновение цели закрывает окно.
-  — App/Workspace/WorkspaceEdit tests, targets e2e, native WebKitGTK.
-- Заголовки Connections и Resources удалены. Одинаковые поля над списками; фильтр
-  ресурсов ищет виды по названию/ID/алиасам/группам, в том числе избранное, и временно
-  раскрывает совпавшие подгруппы. Фильтр таблицы независим. — Favorites.test.tsx, generic e2e.
-- Колонки ResourceTable: ColumnResize изменяет общую CSS-переменную header+rows,
-  один DOM update/rAF, сохранение только pointerup; отмена возвращает ширину. Стрелки,
-  Home/End, двойной щелчок сброса. Ширины основной таблицы по target/kind/column ID:
-  target_state `columnWidths.<kind>`, снимок в pageMemo в памяти, отдельные записи
-  через общую очередь persistTargetEntries. Вложенные таблицы — только на время
-  монтирования. — ResourceTable/columnWidths tests, generic/memo e2e.
-- Визуальная система: семантические цвета и классы в `web/src/index.css` (Tailwind v4);
-  фон старта в `web/index.html` и `internal/desktop/run.go` совпадает с `--color-app`.
-  Шапка `AppHeader` показывает
-  текущую цель, открывает палитру и справку. Навигация, таблица, детали и dock имеют
-  разные поверхности; контрастный акцент показывает выбор и клавиатурный фокус.
-  Инструменты логов переносятся группами; шрифты системные, без сетевых загрузок.
-  — e2e «workspace header and grouped log controls…» проверяет окно 960×720.
-  `@theme static` обязателен: ANSI-токены логов и xterm читаются во время работы,
-  обычный `@theme` удаляет не найденные статическим сканером цвета. Терминал читает
-  палитру из CSS при монтировании. — e2e «typing, output and the size…» проверяет
-  все 16 цветов и фактический фон xterm.
-- Иконка приложения: `internal/appfiles/icons/icon.svg` — исходник; `icon.png` — 256×256
-  RGBA 8 bit для Wails/GTK. Пересборка: `convert -background none
-  internal/appfiles/icons/icon.svg -depth 8 internal/appfiles/icons/icon.png`.
-  Плоский белый контур глаза и центральная точка на приглушённом синем фоне;
-  без блика и объёмной радужки (уточнение пользователя при редизайне).
-  Не увеличивать PNG до 512×512: GTK/X11 молча исключает большую иконку из
-  `_NET_WM_ICON`, хотя `WM_HINTS` pixmap существует. Панель Cinnamon остаётся пустой.
-  Проверять именно `_NET_WM_ICON` запущенного окна, не только декодирование PNG или
-  pixmap. — `TestWindowIconFitsGTKX11`, проверка desktop через xprop.
-  Причина в [gdk_x11_window_set_icon_list](https://github.com/GNOME/gtk/blob/gtk-3-24/gdk/x11/gdkwindow-x11.c)
-  (предел `GDK_SELECTION_MAX_SIZE`, ветка silently ignore overlarge icons).
-- Клавиатура: `web/src/shortcuts.ts` — реестр `KEYS` (его показывает справка `?`,
-  `HelpDialog.tsx`) и `globalShortcut` (один слушатель в `App`); области `F6` — атрибуты
-  `data-area`/`data-area-focus`; возврат фокуса — `focusMark`/`restoreFocus`.
-- Тексты провайдера — `core.Message{key, params, text}`: английский источник в
-  `kubernetes/messages.go`, русский по ключу — `providerTexts` в `web/src/i18n.ts`
-  (`messageText`, неизвестный ключ — английский текст).
-- `internal/providers/compose` — Docker Compose: target-ы — Docker contexts (`contexts.go`, как
-  docker CLI 29; inotify — `watch.go`), клиент Engine (`engine/`: транспорт unix/tcp/TLS, версия
-  1.41–1.54 лениво, лимиты, классы ошибок, events, logs/stdcopy; ни одного повтора), фейковый
-  Engine для тестов (`enginefake/`: модель объектов, events с историей 256, журнал логов с
-  since/tail, hooks). Наблюдение: `feed.go` — лента на тип объекта (containers, networks,
-  volumes, images) с эпохами (info → events since −1 с → list → inspect в пуле 8 → сверка
-  грязных id; одна горутина на ленту), аренды и grace 60 с — `session.go` (`Open`, Scopes,
-  Get со свежим inspect, Resync, Stats); вид — `view.go` (пересчёт строк из `World` по
-  склеенному сигналу, разница с прошлым, статус — худший по лентам). Проекции — чистые функции
-  над `World` (`world.go`): `kinds.go`, `rows.go` (идентичность, scope, Rev без лога проверок),
-  `health.go` (таблица решения 6, сервис по приоритету), `resource.go` (факты, YAML inspect,
-  связи uses/used-by/owns). Логи — `logs.go` (каналы stdout/stderr, члены сервиса из ленты,
-  backlog-merge, продолжение по памяти прочитанных записей и якорю (`seenLog`/`replay`) —
-  `since` Docker позиционный, ожидание старта остановленного, повтор с backoff после ошибки
-  чтения при любом состоянии контейнера).
-- `internal/providers/synthetic` — тестовый провайдер (`--test-api --test-synthetic`): логи,
-  эхо-терминал и порты (`live.go`), переконфигурация (`POST /api/_test/synthetic/reconfigure`),
-  вид Workloads с действиями (`actions.go`; `evacuate` — списки плана и части результата
-  для общего UI; `POST /api/_test/synthetic/controls` — права, отказ, `unknown`, задержка,
-  `items`/`refuse` у evacuate; `mutate` — чужое изменение/замена; `reset`). Вторая цель
-  `demo2` со своими потоками — по `SPK_OCULAR_TEST_SYNTH_SECOND=1` у тест-сервера (e2e
-  переключает две тёплые цели, P18); `/api/_test/logs/emit` принимает `target` (по умолчанию
-  `demo`).
-- `internal/execshim` — shim для exec-плагинов kubeconfig (таймаут, смерть вместе с приложением).
-- `internal/store` — SQLite, миграции `migrations/NNNN_*.sql`, `ui_prefs`, `target_state`,
-  `recent_objects` (≤ 50 на target, ≤ 500 всего); доступ агентов (`agent.go`): `agent_targets`
-  (опознание выданной цели и увиденное другое), `agent_grants`, `agent_audit` (чтения —
-  одной записью в минуту, ротация 20000).
-- Доступ агентов (P14): `internal/agentgrant` — модель прав и чистые решения (`Allows`,
-  `ReadableScopes`, `Validate`); `internal/api/agent.go` — `AgentCall` (вызов агента держит
-  сессию цели; снимок вида, хвост логов, метрики, опознание) и UI-методы прав/ожиданий/журнала;
-  `internal/agentapi` — сокет (`socket.go`: `flock`, 0600, `SO_PEERCRED`), каталог методов
-  (`methods.go`, схемы `invopop/jsonschema`), проверка прав (`access.go`), чтения (`read.go`),
-  записи и планы (`write.go`), ожидания подтверждения (`pending.go`), `AgentControl` для UI
-  (`control.go`). Поднимается в `newCore` для всех режимов. UI — `web/src/agents`;
-  desktop — заголовок и уведомление D-Bus (`internal/desktop/pending.go`). Проверить руками:
-  `curl -s --unix-socket $SPK_OCULAR_HOME/agent.sock http://ocular/v1`.
-- `internal/desktop` — Wails-окно, D-Bus probe, GPU policy. `cmd/spk-ocular` — cobra, режимы.
-- `web/` — React/Vite/Tailwind/zustand; `tests/e2e/` — Playwright.
+All documentation and code comments are English. Russian UI text belongs in
+localization data (`web/src/i18n.ts`); release descriptions may be bilingual.
+RELEASE_NOTES.md describes the current VERSION only. Verify documentation against
+source, commands and tests; do not claim a platform or workflow has run when it
+has only been configured. Keep local links valid (`scripts/check-docs.py`).
 
-## Правила (правило — причина — тест)
+## Work safely
 
-- Kubernetes — provider, а не модель приложения: в `internal/core` и общем UI нет pod/namespace/
-  container. — Абстракцию проверяет Docker Compose (см. спецификацию).
-- Никаких фоновых процессов и постоянных опросов; изменения kubeconfig — только inotify. Закрытие
-  окна завершает приложение (трея нет). — `TestWatchSeesAtomicRenameWriteOnce`.
-- Credentials не покидают kubeconfig/Go: нет в БД, DTO, логах, событиях. —
-  `TestTargetsNeverCarryCredentials`, e2e «lists contexts…» (`SECRET` не на странице).
-- `Discover` читает только локальные файлы, без сети: он на пути старта. — старт окна ~0,2 с.
-- Источники kubeconfig: `KUBECONFIG` (иначе `~/.kube/config`) с merge first-wins как у kubectl,
-  плюс остальные kubeconfig-файлы прямо в `~/.kube` (не-kubeconfig молча пропускаются). Битый
-  основной файл — `Problem`, остальные contexts видны. — `internal/providers/kubernetes/kubeconfig_test.go`.
-- Id target-а стабилен и не зависит от остальной конфигурации: `kubeconfig:<имя>` для contexts
-  kubectl, `file:<путь>:<имя>` для доп. файлов; показывается `Title` (имя), у доп. файлов в
-  подзаголовке — имя файла. Иначе запомненный выбор молча «переезжал» бы на другой кластер. —
-  `TestExtraContextIDIsStableWhenPrimaryGainsSameName`.
-- Запомненный выбор target не стирается, пока target временно пропал из kubeconfig: вернётся —
-  выбор тоже. — `TestSelectionIsRememberedAndHiddenWhileTargetIsAbsent`, e2e.
-- Строка вида — ID = UID объекта: одноимённая замена = удаление + добавление; поздний delete
-  старого UID не трогает новую строку. — `TestReplacementWithSameNameAndLateDelete`,
-  `TestReplacementUnderSameNameDropsOldRow`.
-- Ready вида — только после `HasSynced` регистрации обработчика (все начальные объекты дошли до
-  вида), пустой список тоже; транспорт (list/watch) — отдельно: stale/error с классом. Запрет
-  никогда не выглядит пустой таблицей. — `TestWatchDeliversSnapshotThenReadyThenChanges`,
-  `TestEmptyListStillBecomesReady`, `TestForbiddenIsAnErrorNotAnEmptyTable`, kind-тесты RBAC.
-- Всё, что проецирует объект и применяет его к виду (обработчики informer-а и перерасчёт
-  health по таймеру), идёт под одним затвором вида `viewWatch.order` и читает store под ним;
-  дедлайн принадлежит инкарнации (UID); таймер несёт поколение. —
-  `TestDeadlineCannotResurrectADeletedObject`, `TestDeadlineSkipsAReplacementAndLateDeleteKeepsItsDeadline`.
-- Виды принадлежат инкарнации сессии (уникальный owner); `Open`, начатый до `CloseOwner`,
-  отклоняется (`revoked` по owner). — `TestOpenRacingCloseOwnerIsGone`,
-  `TestViewsBelongToOneSessionIncarnation`.
-- Транспорт: у LIST клиентский дедлайн, у watch — только на получение заголовков (здоровый
-  поток не обрывать); поток, не восстановленный за 5 с, делает вид stale. —
-  `TestWatchWithoutHeadersGoesStale`, `TestDroppedStreamThatStaysDownGoesStale`, `TestRenewedStreamStaysReady`.
-- Строка несёт `Rev` (resourceVersion); открытые детали следят за своим объектом отдельным
-  видом `Query.Name` и перечитываются по смене ревизии. — e2e «open details follow changes…».
-- Метрики — только по UID объекта из кэша, существовавшего на момент сэмпла. —
-  `TestMetricsSampleOlderThanTheObjectIsNotAttributed`.
-- Поиск связей идёт по страницам (continue) до лимита после фильтра и сообщает усечение. —
-  `TestRelationsFollowPagination`, `TestRelationsAreCappedAndSayIt`.
-- Значения Secret/ConfigMap не попадают в списочные кэши (только имена ключей); в YAML
-  деталей значения Secret — `<N bytes>`. — `TestConfigMapsAndSecretsKeepOnlyKeyNames`,
-  `TestGetMasksSecretValues`, e2e «secrets never show their values».
-- Все вызовы к кластеру — с контекстом и таймаутом; `rest.Config.Timeout` не ставить (рвёт watch);
-  exec-плагины — только через `execshim.Wrap`. — `TestClientGoRequestWithHangingPluginFails`.
-- Связи: владение — по UID контроллера (не только labels); Service без selector не «выбирает»
-  все pods; ошибка поиска связей не роняет ресурс. — `TestDeploymentRelationsFollowControllerUID`,
-  `TestSelectorlessServiceSelectsNothing`, `TestRelationErrorsDoNotFailTheResource`.
-- Новый описанный kind: `kindDef` (колонки, `keep`-whitelist, `project` c health), регистрация в
-  `allKinds`, строка таблицы-теста в `kinds_test.go`, строка в `kindOf` (resource.go);
-  kind-тест `TestKindEveryKindBecomesReady` проверит его на кластере. Остальные ресурсы API
-  показываются сами (P8) — описанный вид нужен только ради своей проекции и действий.
-- Discovery — не доказательство исчезновения: ресурс удаляется из каталога только успешным
-  ответом без него; неответившие группы сохраняют виды («не подтверждено»); вытесненный ответ
-  только добавляет. Вид исчезнувшего ресурса кончается `removed` (окончательно, UI не
-  переоткрывает); `gone` — по-прежнему «переоткрыть». Страница, чей вид сдался
-  (`ViewState.halted`: `removed`, ошибка OpenView, исчерпаны повторы), получает новый вид —
-  один раз на каждый листинг каталога, где её вид обслуживается, и при явной навигации к нему
-  (клик, палитра); сессия каталога в ключ страницы не входит (хэш конфига включает AuthInfo —
-  обновление токена сбрасывало бы фильтр). — `catalog_test.go`, `viewSync.test.ts`,
-  `Catalog.test.tsx`.
-- Никакого I/O в `Open`/`Kinds()`: discovery — фоновая single-flight задача сессии; обновление —
-  по watch CRD (дебаунс 1 с, не позже 5 с), `F5` в навигации, resync. Периодических опросов нет.
-- Колонки обнаруженного вида — только из ответа сервера (Table) и держатся эпохой: любой ответ
-  с другими колонками кончает эпоху (`schema_changed`, UI переоткрывает, ограниченно); ответ
-  пробы, начатой до инвалидации, не публикуется; признак «Table не обслуживается» (406,
-  обычный список, ERROR 406 в потоке) закрепляет обычный формат до конца сессии. —
-  `schema_session_test.go`, `tablelw_test.go`.
-- Живой возраст у колонки Table — только при известном происхождении (точный встроенный
-  GroupResource с «Age»; колонка CRD по позиции с путём `.metadata.creationTimestamp`);
-  `description` — не доказательство. — `TestAgeProvenance*`.
-- Действие над обнаруженным видом держит маршрут (GVR + scope) в `Expect` и на весь прогон
-  (чтения, повторы после 409); финализаторы — в последствиях и в `Expect`. — `route_test.go`.
-- Browser-режим отвечает только на loopback-`Host` (защита от DNS rebinding: `/` отдаёт токен). —
-  `TestNonLoopbackHostIsRejected`.
-- `/api/_test/*` — только с `--test-api` и токеном. — `TestTestAPIOnlyWithFlagAndToken`.
-- Потоки к UI — только через `internal/streams` (loopback с токеном), никогда через `wails://`;
-  поток регистрируется под блокировкой сессий и завершается с ней (`gone` терминален, без
-  автопереоткрытия); reaper считает потоки использованием. — `TestLogStreamOfAClosedIncarnationIsGone`,
-  `TestSessionClosingEndsItsLogStreamsGone`, `TestSessionWithOnlyALogTabIsNotReaped`.
-- Origin/токен/метод проверяются до потребления id или записи файла; `save` требует Origin. —
-  `TestRejectionsDoNotConsumeTheStream`, `TestSaveNeedsAnAllowedOriginAndWritesUnique`.
-- Писатель потока после сброса, за которым тишина, шлёт `ping` через 100 мс (WebKitGTK иначе
-  придерживает хвост пачки). — `TestQuietStreamIsNudgedThenHeartbeats`, спайк.
-- Все слои логов ограничены по байтам и строкам (строка ≤ 256 КиБ, backlog вкладки 16 МиБ,
-  UI ≤ 50k строк и 16 М символов на вкладку, ×1,2 пока пользователь читает; кадр ≤ 8 М), срабатывание
-  лимита видно пользователю (счётчик вытеснения, маркер обрезанной строки, липкие gap/truncated). —
-  `TestLineReaderBounds`, `buffer.test.ts`.
-- Источник логов решает на EOF по **последнему** наблюдению pod-а (не ждёт «следующего события»),
-  продолжение той же инкарнации — `sinceTime` (секунды) + пропуск повтора по счёту строк с
-  проверкой меток; расхождение — `gap` (повтор лучше потери); новая инкарнация — с начала файла.
-  — `TestLogResumeSkipsTheReplayExactly`, `TestLogRestartSeenBeforeEOFOpensAtOnce`,
-  `TestLogFirstRequestBeforeTheCacheSynced`, kind `TestKindLogsFollowARestartingContainer`.
-- Терминалы и туннели принадлежат приложению, а не сессии: переживают выбор другого target-а,
-  reaper и пересоздание сессии из-за kubeconfig; хэндл несёт свой снимок соединения, «Подключиться
-  заново» — тот же снимок и тот же pod. — `TestTerminalsOutliveTheirSession`,
-  `TestTunnelsOutliveTheirSessionAndEndWithTheApp`, e2e «a terminal survives selecting another target».
-- Хеш конфигурации target-а покрывает учётные данные — в UI уходит только `configRev` (HMAC с
-  ключом процесса); по нему вкладка терминала и туннель помечаются «config changed». —
-  `TestTerminalsOutliveTheirSession` (JSON без хеша), e2e «…opened before a reconfiguration say so».
-- Закрытие терминала «вешает трубку» in-band (`^C`, через 100 мс `^D`), отмена — только если
-  команда не кончилась за 2 с: containerd не убивает процессы exec при разрыве. —
-  `TestTermClosingThePageHangsUpInBand`, kind `TestKindTerminalClosingTheTabEndsTheShellAndItsChild`.
-- Вывод терминала — только по кредиту страницы (окно 1 МиБ, `ack`), ввод — окно 256 КиБ (`iack`);
-  читатель WS не блокируется никогда. — `TestTermOutputStopsAtTheWindowUntilAcked`,
-  `TestTermCommandNotReadingStdinKeepsControlAlive`.
-- У stdin терминала один писатель (`stdinLoop`): очередь ввода, `^C` по `intr`, при закрытии —
-  сброс очереди, затем `^C`/`^D`. Ctrl+C страницы — управляющее `intr` вне окна ввода: сервер
-  сбрасывает свою очередь (засчитывая в `iack`) и пишет `^C` первым; неверный `iack` — нарушение
-  протокола. — `TestTermClosingDropsQueuedInputAndHangsUpAfterIt`,
-  `TestTermInterruptDropsQueuedInputAndGoesFirst`, `protocol.test.ts`.
-- Запуски терминала принадлежат ему в реестре потоков (owner `term:<id>`): `ForgetTerminal`
-  завершает подключённый и отзывает неподключённый; «Подключиться заново» и «забыть» атомарны;
-  у вкладки один запуск — «Подключиться заново» сначала кончает прежний (подключённый или
-  ожидающий) под тем же замком (два attach к отладчику делили бы его stdin). —
-  `TestForgettingATerminalEndsItsRuns`, `TestAReopenRacingForgetLeavesNoRun`,
-  `TestReopeningATerminalReplacesItsRun`.
-- Кадр `end` потока (логи, терминал) несёт `why` — фразу провайдера по ключу (`Classifier`
-  возвращает её из `CodedError.Why`), UI говорит её на своём языке (`messageText`), иначе
-  `message`. — `TestStreamErrorEndsWithItsReasonByKey`, `TestTermRunErrorEndsWithItsReasonByKey`,
-  `protocol.test.ts`, `TerminalView.test.tsx`, `LogViewer.test.tsx`.
-- `Close` провайдерских хэндлов — никогда под блокировками API: под своим мьютексом регистрировать
-  через `Registry.Register`/`RegisterTerm` и вызывать `release` после разблокировки. Сброс ввода
-  по `intr` вычитает только снятое с очереди (пишущийся кусок остаётся в окне). —
-  `TestARefusedRunIsClosedOutsideThePrototypesLock`, `TestRegisteringLeavesClosingToRelease`,
-  `TestTermInterruptKeepsTheChunkBeingWrittenCounted`.
-- Вставка из буфера (асинхронная) идёт только в соединение, в котором был жест; иначе видимый
-  отказ. Живость в `TerminalView` — локальная для монтирования (StrictMode монтирует дважды). —
-  `TerminalView.test.tsx`.
-- Exec: явный `Instance` workload-а сверяется с цепочкой контроллеров (UID); годный pod — не
-  удаляется и Running|Pending, канал — по своему состоянию; полный листинг сверх 20 000 —
-  ошибка, не обрезка. — `TestAnExplicitInstanceMustBelongToTheWorkload`,
-  `TestARunningInitContainerOfAPendingPodCanBeOpened`.
-- Отказ апгрейда (SPDY) читается под отменой и дедлайном 5 с, соединение не переиспользуется. —
-  `TestARefusalWithAStalledBodyEndsByCancelOrDeadline`.
-- Ошибка одного соединения туннеля не закрывает общий upstream; после ошибки upstream сверяет
-  свой pod (одна проверка на все одновременные сбои, живёт не дольше upstream-а — Stop её не ждёт)
-  и уходит, если pod исчез; молчащий error stream через 5 с — ошибка. —
-  `TestPortErrorFailsOneConnectionAndTheNeighbourLives`, `TestAServiceTunnelMovesOnWhenItsPodIsDeleted`,
-  `TestClosingTheUpstreamCancelsTheFailureCheck`, `TestASilentErrorStreamIsATimeout`.
-- Номер порта может быть объявлен для TCP и UDP (DNS 53): туннель берёт TCP-запись. —
-  `TestATCPPortSharingItsNumberWithUDPIsAccepted`.
-- Туннель слушает только loopback, показывает фактические адреса (не `localhost`); явный занятый
-  порт — `conflict`, авто — удалённый при ≥ 1024 и свободном, иначе любой. —
-  `TestExplicitPortInUseIsAConflict`, `TestAutoPortTakesTheRemoteOneOrAnyFree`, e2e.
-- Первый `Connect` туннеля синхронный: неудача откатывает туннель и видна в диалоге. —
-  `TestFailedFirstConnectRollsBack`.
-- Вывод терминала — недоверенные данные: без OSC 52, без открытия ссылок, без смены заголовков.
-- Regex-поиск в UI — только в Worker с бюджетом времени; plain и фильтр `*` — линейные. —
-  `match.test.ts` (`(a|aa)+$` убивает воркер).
-- Действие выполняется над подтверждённым объектом и планом: `RunAction` требует UID,
-  `ConfigRev` и `Expect`, читает строго по UID (заменённый одноимённый — `gone`), несовпавший
-  `Expect` — `conflict` без записи; запись — с предусловиями UID + `resourceVersion`. —
-  `internal/api/actions_test.go`, `TestKindActionOnAnObjectReplacedBetweenReadAndWrite`,
-  `TestKindActionReplicasChangedAfterThePlanIsAConflict`.
-- Повтор записи — только при отказе предусловия (409 — не 422: провал JSON Patch `test` не
-  отличим от отказа валидации, поэтому scale — merge patch `/scale` с uid+RV, а откат — JSON Patch
-  с версией через `replace /metadata/resourceVersion`, проверено на kind) и только
-  когда перечитывание доказало, что записи не было (тот же UID и `Expect`, другая версия), ≤ 3.
-  Запись действия — ровно один HTTP-запрос: `restWriter` (`actions_writer.go`) с
-  `MaxRetries(0)`, не dynamic client (client-go сам переотправляет ответы 5xx/429 с
-  `Retry-After`, и применённый restart ушёл бы дважды). Неоднозначные ответы (5xx, таймауты,
-  шлюз) и ответ без HTTP-статуса — `unknown`, без повторов; в UI транспортный сбой `RunAction`
-  (обрыв, некодированный HTTP-ответ, ошибка рантайма Wails) — тоже «результат неизвестен». —
-  `TestKindActionStatusChurnIsRetried`, `actions_run_test.go`, `actions_wire_test.go`,
-  `ActionDialog.test.tsx`, `client.test.ts`.
-- `Expect` связывает всё, что читают последствия плана (у scale StatefulSet — число
-  `volumeClaimTemplates`, `whenScaled`, `whenDeleted`, `ordinals.start`): изменившийся после плана
-  вход — `conflict`, а не выполнение под устаревшим обещанием. — `actions_prepare_test.go`.
-- Последствия — только известное, «запрошено»/«может», по стратегии; судьба данных PVC — по
-  reclaim policy тома; pod-ы удаляемого workload-а считаются по цепочке контроллеров (у
-  Deployment — через его ReplicaSet-ы), не по селектору, без уже удаляемых; права «не удалось
-  проверить» (ошибка SSAR или `evaluationError` без `denied`) ≠ «разрешено»; опоздавшие к дедлайну
-  проверки не ждутся (права — «неизвестно», HPA — предупреждение, счёт pod-ов опускается). —
-  `actions_prepare_test.go`, `TestKindActionDeleteOfADeploymentCountsThePodsItOwns`,
-  `TestKindActionStatefulSetClaimsFollowTheRetentionPolicy`, `ActionDialog.test.tsx`.
-- Подтверждение (все contexts RW — это только UX): видны context, сервер, namespace, вид, имя;
-  опасный план — красная кнопка и фокус на «Отмена»; удержанный Enter не подтверждает; Enter в
-  поле числа — просмотр, не выполнение; один `RunAction` на подтверждение (синхронный замок);
-  Esc не закрывает во время выполнения; цель меню — строка под курсором / текущий объект деталей;
-  `Delete` — только в теле таблицы. — `ActionDialog.test.tsx`, `WorkspaceActions.test.tsx`,
-  `tests/e2e/actions.spec.ts`.
-- Отметка ≠ курсор (P17): курсор (`aria-selected`) — детали, L, S, Enter; отметки
-  (`data-marked` строки, `aria-checked` флажка, `bg-marked`) — набор для массового действия.
-  Флажки, Ctrl(⌘)+щелчок (детали не открывает), Shift+щелчок (диапазон от якоря в порядке
-  сортировки), Space, Shift+↑/↓ (строка ухода и прихода), Ctrl+A (прошедшие фильтр), Esc (меню →
-  отметки → детали) — клавиши только в фокусе таблицы. Отмеченные ⊆ показанные: ушедшая или
-  скрытая фильтром строка выпадает навсегда; смена вида/scope/цели — сброс. Delete при отметках
-  — на отмеченные (одна — одиночный диалог этой строки). — `ResourceTable.test.tsx`,
-  `WorkspaceActions.test.tsx` (и Delete на неудаляемых отметках — уведомление), e2e synth «marked rows…».
-- Массовое действие = N одиночных планов (P17): у каждого объекта свой `PrepareAction` (≤ 6
-  одновременно) и свой `RunAction` с его `Expect` и `configRev` (≤ 4 одновременно, 60 с на
-  запуск), серверного batch нет — гарантии P4 действуют для каждого. Меню — пересечение
-  действий видов по `id` без `text`/`choice`/`noAgents`/`single` (`ActionDescriptor.Single` —
-  только поштучно: drain); count общий, диапазон — принимаемый всеми; N = 1 — одиночный диалог.
-  Недоступные и без прав пропускаются; устаревший план — строка «конфликт», без тихой
-  пересборки; смена count пересобирает все планы, запуск выключен до их возврата; «Остановить»
-  не начинает новые; повторного запуска нет; сделанные строки снимаются с отметки. —
-  `bulk.test.ts`, `BulkActionDialog.test.tsx`, e2e synth «bulk scale…», e2e-kind «bulk: …».
-- Принудительное удаление pod-а (P17, `forceDelete`, как `kubectl delete --force
-  --grace-period=0`): один DELETE с grace 0, precondition только UID (версия удаляемого pod-а
-  меняется), propagation background. Доступно и у удаляемого pod-а (главный случай), у mirror —
-  недоступно. `Expect` — uid, deleting, отсортированные финализаторы, узел, контроллер;
-  готовность узла — совет («контейнеры могут продолжать работать»), **не** в `Expect`
-  (мигающий узел не делает конфликтов). С финализаторами — эффект `forceDelete.held` и
-  предупреждение: pod останется до их снятия. У `delete` и `forceDelete` «имени больше нет»
-  (чтение, DELETE или перечтение после 409 — 404) — `done.goneAlready`, не ошибка; другой UID
-  под тем же именем — `error.replaced`. У удаляемого pod-а ReplicaSet-а — «замена уже
-  создаётся» (`pod.ownerReplacing`). Предупреждения: StatefulSet (две копии одной
-  идентичности), pod не удаляется (обычное удаление мягче). Права — `delete pods`; агентам —
-  только явным грантом (предупреждение `agents.warn.forceDelete`). — `forcedelete_test.go`,
-  `TestKindActionForceDeleteOfAPodStuckTerminating`, `TestKindActionForceDeleteIsHeldByAFinalizer`, `TestADeletionOfAnObjectAlreadyGoneIsDone`,
-  e2e synth «force delete…».
-- Меню действий: мышь и клавиатура используют один фокус и одну подсветку; движение
-  указателя переводит фокус на пункт, стрелки продолжают с него. Неподвижный указатель
-  не подсвечивает второй пункт при навигации стрелками; обновление родителя не сбрасывает
-  фокус на первый пункт. — e2e «menu highlight follows pointer and keyboard…».
-- В диалоге действия прокручивается только середина (план, итог): заголовок, «где» и кнопки
-  видны всегда, появившийся итог прокручивается в вид — иначе длинный план drain уводил цель
-  действия из вида (фокус на «Отмена»), а итог оставался под планом. — e2e synth «a plan with
-  long lists…» (`toBeInViewport`).
-- CronJob (P12): действия — только у `batch/v1` `cronjobs` (suspend/resume — с глаголом
-  `patch`, run — с `get`); suspend/resume — merge patch `spec.suspend` с uid + rv. Run now
-  создаёт Job как `kubectl create job --from=cronjob` (метки шаблона; `instantiate: manual`,
-  аннотации шаблона поверх; ownerReference controller; spec шаблона как есть) с именем
-  `<≤50, без хвостовых .->-manual-<5>`, выбранным в просмотре. `Expect` run — подписанный грант
-  (HMAC ключом процесса со своим доменным тегом: действие, маршрут, объект, хэш состояния —
-  шаблон, `suspend`, `concurrencyPolicy`, пределы истории, имя Job, срок 10 мин, инкарнация
-  сессии, nonce); подмена — `invalid`; срок, другая сессия, изменённое состояние — `conflict`.
-  Грант расходуется до POST одним решением под мьютексом (срок текущим временем, чистка
-  истёкших, повтор, предел 1000) и не возвращается — ни при `unknown`, ни после удаления Job:
-  один просмотр — не больше одной Job. Один POST (`MaxRetries(0)`), без повторов; 409
-  AlreadyExists — `conflict`, 5xx/обрыв — `unknown` с именем Job. `status.active` — наблюдение
-  на момент просмотра, не в `Expect`. — `cronjob_test.go`, `cronjob_run_test.go`,
-  `TestACreateIsOneRequestOnTheWire`, `TestKindActionCronJob*`, e2e-kind «a CronJob…».
-- Параметр «выбор» (P15, `core.ParamChoice`): варианты — в самом плане (`ActionPlan.Choices`,
-  живые, значение сверяет провайдер), выбранное — `ActionParams.Choice`; у действия без параметра
-  выбор — отказ, у «выбора» — число запрещено, прогон без выбора — отказ. UI: выбор сразу
-  просматривается заново, стрелки продолжают выбирать (фокус остаётся), группа — одна остановка Tab,
-  «Выполнить» — только с планом этого выбора; поздний план прежнего выбора не выполняется.
-  Заголовок выбора — словами провайдера (`ActionParam.Title`: «Контейнер-цель», «Ревизия»), без
-  него — общее «Выберите»; у каждого выбора Kubernetes он есть (`TestEveryChoiceHasItsTitle`).
-  `ActionPlan.Changes` — строки изменений самого объекта, не объекты: у агентов их не судят гранты
-  (`listsOutside` отказывает элементу `Lists` без `Ref`). — `core/action_test.go`,
-  `ActionDialog.test.tsx` «a choice…», `agentapi` `TestAChoiceAndItsChangesReachAgents`.
-- Откат Deployment (P15, как `kubectl rollout undo --to-revision`): ревизии — ReplicaSet-ы под его
-  controller UID с `deployment.kubernetes.io/revision` (и сведённые в 0), новейшие ≤ 50; значение —
-  имя RS (номер переезжает при откате); текущая — шаблон равен шаблону Deployment без
-  `pod-template-hash` в метках шаблона. Свой путь `runUndo`: каждая попытка перечитывает Deployment
-  по UID и его RS; `Expect` — uid/deleting/paused/шаблон/replicas/strategy Deployment-а, uid/номер/
-  шаблон выбранного RS и новейший номер, без версий (статус крутится — повтор, не отказ);
-  `failedWrite` пересчитывает `Expect` тем же путём. Запись — один JSON Patch: `test /metadata/uid`,
-  `replace /metadata/resourceVersion`, `replace /spec/template` (шаблон RS без хэша), change-cause —
-  как у ревизии (прочие аннотации не трогаются); тело — из прочитанного в этой попытке. На паузе —
-  недоступен («сначала возобновите»). Права — patch deployments и list replicasets; нечитаемые при
-  прогоне ревизии сохраняют класс причины (403 — `forbidden`, не `unavailable`). Разница
-  шаблонов — пути, именованные списки (containers, env, volumes) по имени и поштучно, `env` с
-  `valueFrom` — ссылкой (`secretKeyRef x/key`), не значением. Pause/resume — merge patch
-  `spec.paused` с uid + rv, `Expect` — paused и generation; id `resume` общий с CronJob, ветвление
-  по виду. — `rollout_test.go`, `TestKindActionUndoToARevision` (и во время выкатки),
-  `TestKindActionPauseAndResume`, e2e synth «roll back…», «pause and resume…», e2e-kind «roll a
-  deployment back…».
-- Текстовое значение действия (P16, `ActionDescriptor.Text`/`ActionParams.Text`): одно поле рядом
-  с `Param`; `CheckParams` — у действия без `Text` отказ, пустое/длиннее `Max` байт — отказ, при
-  прогоне обязательно. Провайдер заполняет умолчания в `plan.Params` (образ, цель): диалог берёт
-  их как выбранные — план просмотрен сразу, Enter выполняет; изменённый текст — сначала просмотр
-  (Enter в поле, «Просмотреть»), выбор цели пересобирает план с тем же текстом; текст успешного
-  прогона запоминается на target (`target_state` `actionText.<id>`, JSON-строка) и идёт в первый
-  просмотр. `ActionResult.Terminal` — UI открывает вкладку терминала (`TermOpen.attach`,
-  заголовок «контейнер · pod»); у вкладки attach нет «Открыть новый терминал» (отладчик не
-  перезапустить). — `ActionDialog.test.tsx` «a text value…», `WorkspaceActions.test.tsx`,
-  `TerminalView.test.tsx`, e2e synth «debug…».
-- Отладчик pod-а (P16, как `kubectl debug -it --image --target`): действие только для
-  пользователей (`ActionDescriptor.NoAgents`: агенты его не видят в `ListKinds`, `PrepareAction`
-  агента — отказ, редактор грантов пропускает). Цели — обычные контейнеры и sidecar-ы из spec в
-  любом состоянии (падающий sidecar — обычная причина отладки; состояние — только в деталях;
-  по умолчанию — контейнер по умолчанию), «без цели» — при `shareProcessNamespace`. Имя `debugger-<5>` — в
-  подписанном гранте (свой доменный тег), грант расходуется до записи; запись — один strategic
-  merge PATCH `pods/<имя>/ephemeralcontainers` с uid+resourceVersion (`stdin`, `tty`,
-  `IfNotPresent`, **без** `stdinOnce`); 409 — перечтение по UID: сначала имя (наш — тот же образ,
-  цель, `stdin`+`tty` — `done`; чужой — `conflict`), затем состояние гранта и повтор (≤ 3).
-  Недоступен — только по фазе/удалению/mirror; предупреждение — только при `enforce:
-  restricted` (нечитаемый namespace — без него). Права — `patch pods/ephemeralcontainers`,
-  `create pods/attach` и `watch pods` (ожидание запуска смотрит pod); худший итог — итог. Терминал — attach (`ExecRequest.Attach`, канал обязан быть ephemeral в
-  spec, запускаться ещё не обязан): Run ждёт запуска watch-ем pod-а (120 с, `Notice` с причиной
-  ожидания; `ErrImagePull`/`ImagePullBackOff`/`InvalidImageName`/`ErrImageNeverPull`,
-  завершившийся отладчик, завершающийся pod — ошибка по ключу), после подключения шлёт один `\n`
-  (приглашение выведено до attach), код выхода — из `ephemeralContainerStatuses` (≤ 10 с, иначе
-  «неизвестен»). Закрытая вкладка завершает отладчик hang-up-ом моста (^C, ^D), обрыв связи с
-  кластером — нет («Подключиться заново» снова attach). В деталях pod-а — init-, sidecar- и
-  debug-контейнеры с образами. — `debug_test.go`, `attach_test.go`, `kind_debug_test.go`
-  (`TestKindDebugClosedTabEndsTheDebugger` — через настоящий мост), e2e-kind «debug a pod…».
-- Drain (P11) — как `kubectl drain` без `--force` и без ожидания: pod-ы узла — list по
-  `spec.nodeName` с пределом 500; не узнать всех (ошибка, > 500, `continue`) — `Unavailable` и в
-  плане, и в прогоне (ноль записей). Без контроллера — остаются и названы (части `skipped`),
-  `emptyDir` — опасный план, DaemonSet/mirror/завершённые/удаляемые — не затрагиваются.
-  `Expect` — маршрут, uid и `unschedulable` узла и отпечатки выселяемых и оставляемых pod-ов
-  (класс, контроллер, `emptyDir`), без статуса и состояния PDB. Прогон: cordon первым (его
-  отказ или «неизвестно» — остальные `skipped`), выселения независимы, по одному POST
-  `pods/eviction` с uid + версией свежего списка; 429 — по cause (`DisruptionBudget` — PDB,
-  иначе «перегружен»), без повтора; 404/409 — одно чтение: ушёл/заменён — `skipped`; только
-  409 с тем же отпечатком и новой версией — повтор (≤ 3 попыток всего); 404 при живом pod-е с
-  тем же UID — `refused` при любой версии; иначе `refused`; 5xx/транспорт — `unknown`; DELETE —
-  никогда. Сроки: прогон 45 с, запись 10 с. После отправленного cordon — всегда результат с
-  частями (и когда узел исчез, повторная проверка плана не сошлась или время вышло: часть cordon
-  `refused`, pod-ы последней проверки — `skipped`). Права — только записей плана (patch узла —
-  только с частью cordon; выселение — SSAR по имени pod-а, ≤ 8 одновременно); известный отказ
-  не теряется из-за опоздавшей соседней проверки (сводка по мере ответов, отказ старше
-  «неизвестно»). — `drain_test.go`, `drain_run_test.go`,
-  `actions_wire_test.go`, `TestKindActionDrain`, e2e-kind «drain a node…».
-- Правка YAML пишет только просмотренное: `RunEdit` заново выводит патч из original+edited,
-  сверяет хэш с грантом и пишет один раз с uid+resourceVersion просмотра (без перечитывания и
-  повторов); `PATCH` с `dryRun` — только по доказанному маршруту (точный GVR описанного вида,
-  локальный APIService, `dryRun` в OpenAPI PATCH), иначе локальное наложение без единого
-  изменяющего запроса, план опасный; просмотр ограничен сроком и кончается с сессией. —
-  `edit_session_test.go`, `edit_dryrun_test.go`, `TestKindEdit*`.
-- Правка Secret — только `metadata`; строки сервера об объекте Secret (message, reason,
-  cause) не показываются никогда — только известные значения перечислений своими словами
-  (`secretSafe` для записи, `secretReadSafe` для чтения: детали, источник правки). —
-  `TestSecretRefusalsNeverPrintServerStrings`, `TestASecretsReadRefusalsAreHidden`,
-  `TestASecretsDetailsRefusalsAreHidden`.
-- Значение Secret покидает Go только в ответе `RevealValue` (один ключ, свежий GET, сверка
-  UID): не в списках, деталях, базе, гранте, плане, результате, ошибках (`secretSafe`/
-  `secretReadSafe` — для чтения Secret при любой ошибке, не только `APIStatus`; «кто читает» и
-  права в плане значения — только своими словами), логах, SSE, SQLite; чтения значений кончаются
-  с сессией; в UI — только в состоянии секции (не в `title`/
-  `aria-label`/хранилищах), скрывается при уходе, смене вкладки и ревизии, при удалении
-  объекта или замене его другим UID (открытый черновик при этом остаётся); поздний ответ
-  показа/копирования отбрасывается по поколению, живости, концу объекта, UID и версии; копирования — одно
-  поколение на приложение, записи в буфер по очереди, «скопировано» — только после успеха
-  записи. Правка ключа пишет только просмотренное: грант — HMAC итоговой записи (маршрут,
-  объект, версия, ключ, операция, присутствие, байты), нетронутое поле ≠ пустое значение,
-  удаление ключа всегда опасно, «кто читает» неизвестно ≠ «никто». — `internal/api/values_test.go`,
-  `values_test.go`, `TestKindValues*`, `ValuesSection.test.tsx`, `WorkspaceValues.test.tsx`, `copy.test.ts`, e2e-kind
-  «Secret values…».
-- Несохранённые правки не теряются молча: всё, что уводит от редактора (закрытие деталей, Esc,
-  связи, вкладка, другой объект, вид, scope, target, палитра), идёт через `mayLeave`
-  (`web/src/edit/guard.ts`) — «Отбросить правки?» с фокусом на «Продолжить правку» (вопрос держит
-  фокус, пока задан). Автоматические обновления страницы (вид сдался, вид вернулся в каталог)
-  ждут, пока правки держатся (`useEditHolder`). Просмотр — снимок текста в момент `Ctrl+Enter`.
-  Держателей — стек (YAML-редактор и диалог значения P10 открыты одновременно): закрытие одного
-  не снимает защиту другого, «Отбросить» сбрасывает все. — `WorkspaceEdit.test.tsx`,
-  `WorkspaceValues.test.tsx`, `guard.test.ts`, e2e-kind «edit a ConfigMap».
-- Версии `github.com/wailsapp/wails/v3` и `@wailsio/runtime` совпадают (сейчас `3.0.0-beta.26`).
-- `go build ./...` без тега `wails` обязан проходить: desktop-код за тегом.
-- Стартовый JS-чанк < 300 КБ gz (сейчас вход 86 КБ + общие ~18 КБ), xterm (~87 КБ gz)/CodeMirror — только ленивые чанки. — `web/scripts/check-bundle.mjs`
-  (часть `pnpm build`).
-- Wails `LogLevel` — Warn: Info логирует каждый asset-запрос, Debug — результаты биндингов.
-- Горячие клавиши — по `KeyboardEvent.code` (`web/src/keyboard.ts`), иначе не работают в русской
-  раскладке; все глобальные — в реестре `web/src/shortcuts.ts` (справка `?` показывает его же).
-  Терминал получает все клавиши (и `Ctrl+K`, Esc, `F6`); в полях ввода работают только `Ctrl+K`,
-  Esc и `F6` (F-клавиши не печатают — иначе из фильтра не уйти); `?` и `/` — по физической
-  клавише или по символу. — `shortcuts.test.ts`, `Keyboard.test.tsx`, `tests/e2e/keyboard.spec.ts`.
-- Problems — «проблемы в наблюдаемой области»: состояние (не подтверждённое свидетельством) не
-  показывается как сбой; недавний рестарт — по `lastState.terminated.finishedAt` (10 мин),
-  Warning event — одна строка на UID с окном 15 мин по последнему наблюдению, истекают
-  дедлайнами; «0 проблем» при неполном покрытии перечисляет непокрытое. —
-  `problems_test.go`, `TestKindProblems*`, `Problems.test.tsx`, `tests/e2e/problems.spec.ts`.
-- Палитра не делает LIST ради поиска: объекты — только текущая таблица и недавние. Команда
-  выбирается (курсор) только при одном точном совпадении; частичное/неоднозначное — список без
-  курсора, Enter ничего не делает; тихого «первого fuzzy-кандидата» у команд нет. Недавние —
-  с UID в идентичности: заменённый одноимённый открывается как «объекта больше нет». —
-  `items.test.ts`, `Palette.test.tsx`, `internal/store` тесты, `tests/e2e/palette.spec.ts`.
-- Выбор scope: клик по строке/тексту или Enter выбирает ровно один; checkbox добавляет/
-  убирает имя, оставляя список, поиск, прокрутку и фокус. Space в списке переключает
-  checkbox, в поиске печатает пробел. `ScopeSome{Names}` — явный набор; пустой набор
-  показывает пустую таблицу, все области — только явный пункт «Все». Имена сортируются
-  и дедуплицируются; singleton хранится прежним `one`. Список недоступен — ввод имён
-  через запятую, пустой ввод явно выбирает все. Запись kind/scope последовательна;
-  ошибка сохранения (в том числе лимит 4096 байт) видна уведомлением.
-  `SelectMemory` принадлежит Workspace и переживает scope-keyed ResourcePage; перед
-  вопросом `mayLeave` popup закрывается. — `ScopeSelect.test.tsx`, generic/restart e2e.
-- Несколько scopes: `provider.WatchScopes` объединяет отдельные `ScopeOne` watches.
-  Kubernetes не читает все namespaces ради фильтра; схема Table пробуется только в
-  выбранных, отказ первого не скрывает доступные. Метрики также по namespace, с
-  сохранением кэша/UID и указанием частичных отказов. Union сохраняет shared rows до
-  удаления последним источником, Reset локален источнику; Coverage называет scopes,
-  в Problems — ещё и вложенные источники. Unscoped вид открывается один раз.
-  Гранты agentapi не расширены. — `scope_union_test.go`, `multiscope_test.go`,
-  `TestKindMultipleNamespacesWithOnlyPerNamespaceRBACAndMetrics`; `kind-rbac.sh`
-  создаёт отдельного multiviewer для ocular-demo + kube-system без cluster-wide прав.
-- `ListScopes` никогда не возвращает `null` (пустой срез), UI терпит и `null`. — e2e palette.
-- Фразы провайдера (последствия, предупреждения, причины) — ключ + параметры, не готовый текст;
-  новый ключ = английский в `messages.go` + русский в `providerTexts`. —
-  `TestTheUIsTranslationsCoverEveryMessage` (разбирает `i18n.ts`).
-- Итог действия — `core.Message` (`ActionResult.Message`), у частей — только `Why` (у
-  `refused`/`unknown` всегда). Наша фраза отказа — `provider.Said(class, msg(...))`: `Message`
-  = английский текст (детали, логи), `Why` — фраза по ключу; `CodedError.Why` несёт её к UI (HTTP
-  — поле `why`, Wails — `error.cause.why`, форма проверяется `asMessage`). Текст сервера (apiserver,
-  Docker Engine, сеть) — без `Why` или параметром `{detail}`. Свои фразы слоя API — `api.*`
-  (`internal/api/messages.go`). Подстановка параметров — один проход по плейсхолдерам шаблона
-  (`core.Format`, `messageText`, `t()`): значение — данные, не пересканируется. UI показывает
-  ошибку через один `errorDetail` (причина, иначе `detail`, иначе код; класс добавляет
-  вызывающий); конфликт с нашей причиной — одна эта фраза, без общей рамки. — страж
-  `TestActionErrorsAreSaidByKey` (kubernetes, compose), `TestTheAPIsOwnRefusalsAreSaid`,
-  `TestAProvidersWhyTravelsWithTheCodedError`, `TestFormatFillsTheTemplatesPlaceholdersOnce`,
-  `errors.test.ts`, `ActionDialog.test.tsx` «in the UI's language».
-- Поздний ответ `RunAction` (после клиентского таймаута) меняет только «неизвестно» своего
-  прогона (номер прогона отдельно от поколения диалога) или становится уведомлением с target-ом;
-  ничего не отправляет заново и не трогает более новый диалог. — `ActionDialog.test.tsx`.
-- Наблюдение Docker — best effort, не watch Kubernetes: событие — только подсказка, объект
-  меняет лишь inspect (404 = удалён), старое `destroy` не удаляет новую инкарнацию; ответы
-  старой эпохи не попадают в новую (одна горутина на ленту, конец потока событий обрывает
-  эпоху сразу); Ready — после сверки и при живом потоке; запрет events — error, не пустой
-  Ready; зависший inspect — stale с объяснением; пропущенную демоном доставку чинит только
-  «Перечитать» (`Resyncer`, строки не исчезают до успешного снимка). Никаких периодических
-  relist-ов. — `feed_test.go` (`TestFeed*`), dind `TestDindDaemonStopStaleRecovery`.
-- Идентичность Compose: контейнер — полный id (имя — `Ref.Title`), сервис — `project/service`,
-  том — `name@CreatedAt` (пересоздание в ту же секунду не различимо — сказано в деталях), образ
-  — id; `Rev` без `Health.Log`/`FailingStreak`. — `rows_test.go`, `resource_test.go`.
-- Логи Docker: журнал один на все перезапуски — «Предыдущий» не предлагается; продолжение —
-  позиционный `since` + сверка с прочитанными записями до якоря (см. Things that bite), незнакомая
-  запись до якоря — `gap` (повтор лучше потери); ошибка чтения остаётся видимой и повторяется
-  с backoff, «ended» её не затирает; остановленный контейнер
-  ждёт старта в ленте, не опросом. — `logs_test.go` (`TestLogs*`), dind
-  `TestDindServiceLogsThroughRestart`.
-- Каталог данных — `~/.spk/ocular` (`SPK_OCULAR_HOME`); временные файлы агентов — в
-  `.agents/tmp` solution, не в `/tmp`.
-- Права агента проверяются в `agentapi` до вызова сервиса, по каталогу сессии (namespaced или
-  нет — `KindDescriptor.Scoped`); вниз для namespaced вида идёт только `ScopeOne` по выданным
-  именам (`ScopeAll` — только у выдачи «все namespace-ы»); строки и связи ещё раз фильтруются
-  по scope. — `TestMethodsNeedTheirGrant`, `TestScopedKindsNeedTheirScope`,
-  `TestFanOutOverTheNamespacesGranted`, `TestRelationsAndProblemsAreFiltered`.
-- Ссылка со scope называет только объект этого scope: провайдер, нашедший объект с тем же
-  ключом в другом scope, отвечает not_found (права агента судятся по scope ссылки; Compose
-  искал по имени — агент с правом на проект A читал проект B). `GetObject` ещё раз сверяет
-  scope найденного. — compose `TestAnotherProjectsObjectIsNotFound`, `TestLogsRefusals`,
-  agentapi `TestAnObjectOutsideTheScopeAskedIsRefused`, dind `TestDindAgentAccessOverTheSocket`.
-- Агенту не выдаются id UI (`viewId`, `terminalId`, …) и внутренности плана (`Expect`, база и
-  токен правки): только `planId`/`sourceId`/`runId` из реестров `agentapi`. Права и опознание
-  цели проверяются снова в момент записи. — `TestGrantsAreCheckedAgainAtEveryStep`,
-  `TestATargetPointedElsewhereSuspendsItsGrants`.
-- Разрушающий план агента — только по виду, выданному поимённо, и ждёт «Да» в UI, если у выдачи
-  нет «без подтверждения»; записи объектов вне namespace-ов агенту недоступны; списки плана
-  вне выданных scope-ов — отказ. — `TestADestructivePlanWaitsForTheUser`,
-  `TestAPlanNamingObjectsOutsideTheGrantIsRefused`, `agentgrant` `TestAllows`.
-- Ручные запуски приложения (проверки, скриншоты) — только с изолированными `HOME`,
-  `DOCKER_CONFIG`, `SPK_OCULAR_HOME` и `KUBECONFIG` тестового кластера; цель выбирать по точному
-  имени, не «первую». — однажды запуск с настоящим HOME открыл чужой (рабочий) кластер.
-- Недавние цели остаются открытыми (P18): выбор цели не закрывает сессии двух последних
-  покинутых (`recentTargets = 2`); занятые (потоки логов, вызовы агентов) выбором не закрываются
-  никогда; недавняя без views и потоков — через `recentIdle = 10 мин` от ухода, текущая и прочие
-  — через `sessionIdle = 60 с`. — переключение prod↔stage↔dev не должно холодить возврат. —
-  `sessions_test.go`, kind `TestKindWarmReturnMakesNoLists`.
-- Фон провайдера (P18, `provider.Backgrounder`): сессия каждой не выбранной цели — в фоне
-  (включая открытые агентами); простаивающие кэши в фоне не вытесняются по `cacheGrace`, только
-  сверх `maxIdleCaches` (самые старые); при возврате `cacheGrace` считается с возврата. Тёплый
-  возврат не делает новых запросов: ни LIST, ни initial-sync watch (WatchList). — тёплый путь
-  доказан отсутствием запросов, не только временем. — `cache_test.go`, kind
-  `TestKindWarmReturnMakesNoLists`.
-- Exec-плагин в фоне — без головы (P18): `execshim` видит флаг фона сессии
-  (`$SPK_OCULAR_HOME/run/bg-*`); при нём плагин запускается со stdin `/dev/null`, без
-  `DISPLAY`/`WAYLAND_DISPLAY`/`DBUS_SESSION_BUS_ADDRESS`/`BROWSER`/`GPG_TTY`/`SSH_ASKPASS`,
-  `KUBERNETES_EXEC_INFO.interactive=false`, таймаут 15 с. Провал в фоне — `unauthorized`, сессия
-  зовёт `lost()` один раз и закрывается: точка «открыто» гаснет, вкладки логов кончаются «для
-  продолжения нужен вход — выберите цель»; агентам тот же ответ — «вход в кластер выполняет
-  человек: выберите цель в Ocular» (и в тексте `GET /v1`). — фон не должен открывать окно входа
-  или блокировать учётку фоновыми неудачами. — `execshim_test.go`, kind
-  `TestKindBackgroundSurvivesAPluginRenewal`, `TestKindBackgroundAPluginNeedingAPersonIsLost`.
-- Снимок страницы цели (P18+P19): вид, scope, фильтр, сортировка по видам (`kindId → {col, dir}`),
-  строка курсора, открытые детали и их вкладка — в памяти (`web/src/components/pageMemo.ts`),
-  пишется при уходе и смене вида; при возврате главнее `target_state`; снимок не удаляется
-  никогда, вида нет в каталоге — вид по умолчанию; отметки (P17) не сохраняются. Между
-  запусками приложения переживают фильтр/сортировки/курсор/детали+вкладка: клиент пишет
-  `{v,sorts,page}` дебаунсом в `target_state` под ключом `pageMemo` и сеет при первом
-  посещении цели (память запуска всё равно главнее). — возврат через час и после перезапуска
-  приложения — тот же вид и фильтр. — `Workspace.test.tsx`, `pageMemoPersist.test.ts`,
-  e2e `memo.spec.ts`.
-- Вкладки логов чужих целей остаются (P18): `dock.keepLogsOf` нет; вкладка помечена чужой
-  (бейдж цели) и продолжает получать строки, пока жива сессия; конец сессии — вкладка кончается
-  с `why` (`api.closedByUser`, `api.loginNeeded`, `api.loginByPerson` — на языке UI через
-  `messageText`, кнопка «Открыть заново»). — потоки не теряются молча при переключении. —
-  `Dock.test.tsx`, `LogViewer.test.tsx`, e2e synth `warm.spec.ts`.
-- «Закрыть подключение» (P18, `CloseTarget`): закрывает сессию не выбранной цели (views, потоки,
-  кэши; точка «открыто» гаснет), выбранной — отказ; вызов агента в полёте не обрывается —
-  сессия закрывается с последним вызовом; следующий вызов агента откроет цель снова (сказано в
-  подсказке пункта меню). — пользователь должен видеть и уметь прекратить фоновые watch-и к
-  prod-кластеру. — `sessions_test.go` `TestCloseTarget*`, e2e synth `warm.spec.ts`.
+- Preserve existing work and stay within the user's agreed task. Do not start
+  backlog items or delegate to subagents without explicit authorization.
+- Work inside the current solution. Build/test/git commands run from a member
+  repository. Other clones and user/system configuration are read-only unless
+  the user authorizes the exact path and change.
+- Scratch files, logs, profiles, screenshots and test tool installations belong
+  in the solution's `.agents/tmp`. Set a canonical TMPDIR there. No `/tmp` scratch.
+- Never restart or kill the user's application. Test launches isolate HOME,
+  DOCKER_CONFIG, SPK_OCULAR_HOME and KUBECONFIG. Discover current PID/window
+  ownership; stale helper files are not evidence. Leave shared X displays running.
+- Only disposable kind-ocular-dev and ocular-dind are infrastructure mutation
+  destinations. Verify the fixture's identity; never use the user's containers
+  or real clusters. `scripts/dind-verify.sh` is mandatory before DIND mutations.
+- Every new commit's author **and** committer must be
+  `Pavel Simonov <sipahabk@gmail.com>`. Do not change global Git identity.
+  Do not commit, push or publish outside the user's authorization.
+- Published history is rewritten only on an explicit request. Before rewriting,
+  save a bundle and preserve the working tree inside solution scratch; compare
+  tree contents afterward. A requested remote replacement uses an exact
+  force-with-lease expectation, never an unconditional force push.
+- Quality is more important than speed. Run real checks, inspect actual UI
+  screenshots for visible changes, and report concrete evidence and limits.
+  Do not relax assertions, budgets or timeouts to make a check pass.
 
-## Things that bite
+## Build and verify
 
-- **kubeconfig — YAML 1.1**: голые `y`/`n`/`on`/`off`/`yes`/`no` — булевы, context с таким именем
-  без кавычек роняет разбор всего файла (`cannot unmarshal bool into … name of type string`). В
-  фикстурах имена всегда в кавычках.
-- **Playwright выполняет `playwright.config.ts` в раннере И в каждом воркере**: `mkdtemp` в конфиге
-  без защиты даёт воркерам другой каталог, чем у webServer. Каталог создаётся один раз и передаётся
-  через `process.env.E2E_ROOT` (воркеры наследуют env).
-- **client-go v0.37: WatchList включён по умолчанию** — начальное состояние приходит watch-потоком
-  (`sendInitialEvents`), а не List; поэтому «успешный List» не может быть признаком ready, а обёртка
-  `ListerWatcher` обязана сохранять `ListOptions` и сообщать `IsWatchListSemanticsUnSupported`
-  (fake-клиенты в тестах — `watchList=false`). Сервер без WatchList отвечает на
-  `sendInitialEvents` 422 («…forbidden for watch unless the WatchList feature gate is enabled»),
-  reflector сам уходит на LIST — это не сбой транспорта (иначе вид на миг показывал «Cannot
-  show»); сессия запоминает отказ и больше не спрашивает (`cacheManager.noWatchList`). —
-  `TestAServerWithoutWatchListIsNoErrorAndAskedOnce`. Нашёл пользователь на своём кластере.
-- **Exec-плагин kubeconfig без контекста** (client-go `exec.go`): зависший `yc`/`kubelogin` вешает
-  все запросы кластера и остаётся сиротой — только через shim (`docs/spikes/2026-09-29-exec-plugin-hang.md`).
-- **`metav1.Time` — точность до секунды**: время, прошедшее через ObjectMeta (slim-кэш), теряет доли
-  секунды; тесты на пороги времени держат запас > 1 с.
-- **Trimmed Unstructured дорог по памяти** из-за накладных расходов `map[string]any` (~6 КБ/pod
-  после фильтра) — в кэше `slimObject` (~1,3 КБ); интернирование строк почти не помогает.
-- **WebKitGTK не показывает `:focus-visible` для фокуса, поставленного скриптом** (начальный фокус
-  диалога, ловушка Tab) — у кнопок диалога действий явное кольцо по `:focus`, иначе не видно,
-  что нажмёт Enter.
-- **Выпадающий список `<select>` в WebKitGTK — системный GTK-попап**: пункты рисуются шрифтом
-  и размером GTK, CSS на них не действует. В приложении нет нативных `<select>`: общий
-  `Select` (`web/src/components/Select.tsx`: кнопка + свой список, стрелки/Home/End/буква/
-  Enter/Esc, поиск для длинных списков; выбор scope — `ScopeSelect` с поиском). В e2e —
-  `pickScope`, `pickOption`, `selects` из `fixtures.ts`. Нашёл пользователь.
-- **Элемент с `visibility: hidden` не принимает фокус**: список `Select`, скрытый до
-  позиционирования, не получал фокус — Esc уходил панели деталей (закрывал её), клик
-  после этого терялся. Прятать через `opacity: 0`. Закрывать список прокруткой — только
-  прокруткой того, что содержит кнопку (живые логи рядом прокручиваются постоянно). —
-  e2e `logs.spec.ts` «the app select of the toolbar…»; jsdom этого не ловит.
-- **CodeMirror рисует только видимые строки**: `toContainText` по `.cm-editor` не видит текст
-  ниже окна — e2e прокручивает `.cm-scroller` (dind «inspect YAML» после увеличения шрифтов).
-- **Неявная отправка формы**: Enter в поле не отправляет форму, если её кнопка по умолчанию
-  `disabled` — поэтому «Просмотреть» не отключается на время подготовки.
-- **Фейковый dynamic client**: reactor-ы вызываются под его блокировкой — менять объекты только
-  через `c.Tracker()`, вызов клиента из reactor-а — дедлок; «зависший» reactor блокирует и все
-  остальные вызовы, поэтому зависание моделируется обёрткой `dynamic.Interface` вне fake
-  (`stallingDyn` в `actions_prepare_test.go`).
-- **client-go переотправляет запрос**, получивший 5xx/429 с `Retry-After` (`rest.Request`,
-  по умолчанию до 10 раз) — для неидемпотентной записи это второе применение; запись действий —
-  через REST-клиент с `MaxRetries(0)`.
-- **После `kubectl rollout status` pod-ы старого ReplicaSet ещё Terminating** — всё, что считает
-  pod-ы «сейчас», пропускает объекты с `deletionTimestamp`.
-- **PVC, оставленные StatefulSet-ом при scale down** (`whenScaled=Retain`), сохраняют
-  ownerReference на него и удаляются вместе с ним при `whenDeleted=Delete` (проверено на kind).
-- **kubelet отвечает 200 с текстом «unable to retrieve container logs for containerd://…»**, если
-  предыдущий контейнер crashloop-а подменили во время чтения `previous` — e2e перечитывает.
-- **client-go считает watch короче секунды без событий ошибкой** («very short watch») и уходит в
-  backoff — тестовые серверы должны держать поток > 1 с.
-- **dynamic fake фильтрует по label selector и ответы reactor-а** — объекты в reactor-ах должны
-  нести нужные labels.
-- **ClientGo `ListAction`** не отдаёт `ListOptions` — в reactor-е приводить к `ListActionImpl`.
-- **Scale-down в e2e**: pod показывается Terminating до окончания grace-периода, строка исчезает
-  позже — считать «живые» строки и ждать удаления с запасом.
-- **dynamic fake**: не соблюдает field selectors и не сопоставляет PodMetrics с ресурсом `pods`
-  группы metrics.k8s.io — такие вещи проверять на kind или отдавать через reactor.
-- **klog client-go** пишет каждую неудачную попытку watch в stderr — заглушен (`SPK_OCULAR_KLOG=1`).
-- **HTTPS_PROXY в окружении** уводит запросы к фикстурным (несуществующим) кластерам в прокси —
-  e2e сбрасывает прокси-переменные в env webServer.
-- **Порты dev-серверов заняты чужими процессами** (другие сессии/worktree): перед запуском проверять
-  `ss -ltn "sport = :PORT"` и брать свободный, а не убивать чужой процесс.
-- **jsdom без раскладки**: `getBoundingClientRect` = 0 → виртуальная таблица пустая; в
-  `web/vitest.setup.ts` элементам задан размер экрана.
-- **Язык UI**: gettext-порядок `LANGUAGE` > `LC_ALL` > `LC_MESSAGES` > `LANG`; у пользователя
-  `LANGUAGE=en_US`, поэтому `LANG=ru_RU…` один не даёт русский UI. `LC_ALL=C` — английский.
-- **jsdom** не знает `scrollIntoView` — заглушка в `web/vitest.setup.ts`; `@wailsio/runtime` там же
-  замокан (побочные эффекты при импорте).
-- **Мёртвая/зависшая D-Bus**: GLib подключается без таймаута и окно не появляется. Probe 2 с и
-  подмена `DBUS_SESSION_BUS_ADDRESS` (`internal/desktop/busprobe_linux.go`); проверено: окно за
-  0,2 с при недоступной шине.
-- **WebKitGTK придерживает хвост пачки** стрима (20–60 КБ), пока не придут новые байты — и на
-  loopback HTTP, недетерминированно (~1 из 4). Лечится маленьким кадром через 100 мс.
-- **Origin desktop-страницы — `wails://localhost`** (не `wails://wails`); fetch к loopback без
-  точного `Access-Control-Allow-Origin` — `TypeError: Load failed`.
-- **`pods/log`**: `sinceTime` с долями секунды обрезается до секунды; `limitBytes` режет посреди
-  строки и считается от начала окна tail (не гарантирует свежие строки); `tailLines=0` — «ничего»;
-  метка — одна на логическую строку (продолжения частичных CRI-записей без неё).
-- **Числа в slim-кэше — `float64`** (JSON): `unstructured.NestedInt64` вернёт 0 — читать через `i64`.
-- **LIST разрешён, WATCH нет**: informer «синхронизируется» списком, но изменений не будет — судить
-  о здоровье кэша по транспорту, а не только по `HasSynced`.
-- **Логи группы**: тесты на kind меняют число реплик `chatter` — выбирать самый старый pod
-  (scale down удаляет новые).
-- **PodGC сразу принудительно удаляет pod-ы несуществующего узла** (kind, найдено в P17): «pod,
-  зависший на ушедшем узле» так не воспроизвести. Нужен объект Node без kubelet-а (создать
-  Node вручную, NotReady): удалённые pod-ы на нём висят в Terminating; после теста — удалить
-  pod-ы принудительно и сам Node.
-- **Hook окружения блокирует `pkill -f`/`pgrep -f` с шаблоном из той же команды** — останавливать
-  фоновые процессы по PID-файлу или через TaskStop.
-- **containerd не завершает процессы exec при разрыве соединения** (kind, измерено): отмена exec
-  оставляет shell и его foreground-процесс; закрытие stdin до TTY как EOF не доходит — отсюда
-  «вешание трубки» мостом. Убитое `SIGKILL`-ом приложение (или `kubectl exec`) оставляет shell-ы
-  в pod-е; Playwright по умолчанию гасит webServer именно так — в конфигах `gracefulShutdown: SIGTERM`.
-- **`TMPDIR` с `..` в пути** роняет `TestSaveNeedsAnAllowedOriginAndWritesUnique` (сравнение
-  путей): задавать канонический абсолютный путь.
-- **`stdinOnce` ephemeral-контейнера с `tty: true` ничего не завершает** (kind, containerd,
-  измерено в P16): ни обрыв attach, ни чистый EOF stdin не доходят до shell, контейнер остаётся
-  `running`, а второй attach принимает ввод. Завершает shell только ^C, пауза, ^D (одной записью
-  ^D теряется, пока shell обрабатывает прерывание) — это и делает hang-up моста. Тест, зовущий
-  `Run` напрямую, hang-up-а не видит: проверять закрытие вкладки через `streams` (httptest +
-  websocket).
-- **Предикат фолбэка exec на SPDY**: client-go v0.37 возвращает `UpgradeFailureError` из
-  `k8s.io/streaming/pkg/httpstream`; одноимённый предикат устаревшего `apimachinery/pkg/util/httpstream`
-  его не узнаёт (фолбэк не сработал бы никогда).
-- **kubelet держит port-forward соединение удалённого pod-а**: соединение живо, каждый поток
-  получает ошибку («failed to find sandbox») — без проверки pod-а туннель к Service не переехал бы.
-- **Пинги spdystream без таймаута** (неудача только в лог): полуоткрытое соединение выглядело бы
-  живым — свой сторож чтения 3 × 10 с.
-- **Рукопожатия WS (gorilla) и SPDY client-go не отменяются контекстом** — свой `upgrade.go`.
-- **busybox ash глотает ввод сразу после приглашения** (гонка с его запросом позиции курсора
-  `ESC[6n`; `kubectl exec -it` теряет так же): e2e на kind сначала «успокаивает» shell пустыми
-  строками.
-- **xterm.js строит Ctrl+буква из `keyCode`, а WebKitGTK у кириллической клавиши его не даёт**:
-  в русской раскладке Ctrl+C не прерывал, Ctrl+K/Ctrl+[ не доходили. Терминал берёт
-  управляющий символ по физической клавише (`code`), когда `key` не ASCII
-  (`TerminalView.tsx`, `layoutControl`); латиница — как у xterm. Нашла desktop-проверка P5.
-- **Xvfb сбрасывает раскладку, когда отключается последний клиент** — `setxkbmap` делать, когда
-  окно приложения уже открыто.
-- **Chromium не засчитывает переполнение grid-треков абсолютных строк целиком** в прокрутку
-  контейнера: у строк/заголовка таблицы явный `min-width` (сумма минимальных ширин колонок).
-- **React compiler lint запрещает `setState` в эффектах** — «применить запрос один раз» делается
-  при рендере по смене `seq` (`PageReq`), а обычная навигация его сбрасывает, иначе он повторится
-  при повторном монтировании.
-- **user-event: `{?}`/`{/}` дают `code: Unknown`** — клавиши по символу проверять и по `key`
-  (поэтому `?` и `/` сопоставляются по коду или по символу).
-- **`pnpm exec tsc -b` переписывает отслеживаемый `web/tsconfig.tsbuildinfo`** — перед коммитом
-  `git checkout web/tsconfig.tsbuildinfo`.
-- **`rest.Result.Raw()` не разбирает `Status`**: ошибка из `Raw()` — голая «the server
-  rejected our request…» без message и causes; разбор делает только `Result.Error()` —
-  брать ошибку из него, тело — из `Raw()`. Нашёл kind-тест P9.
-- **`sigs.k8s.io/yaml.Marshal` читает числа обратно через float64** (JSON → YAML):
-  `json.Number("9007199254740993.0")` выходит как `9.007199254740992e+15`. Точный вывод —
-  `exactDecimals` в `edit_patch.go`. kube-apiserver сам хранит нецелый JSON-литерал как float64
-  (dry-run на kind: …992), целые — точно.
-- **Две сетки `resources`**: список событий в деталях — тоже `ResourceTable`; в e2e брать `.first()`.
-- **Фильтры `/events` Moby складываются по И между ключами**: `type=[container,network]` с
-  `label=com.docker.compose.project` отбросил бы события сети (`connect` называет контейнер
-  только в атрибутах). Лента контейнеров фильтрует compose-label на месте. `event=health_status`
-  совпадает с `health_status: healthy` (Action режется по `:`); у контейнерных событий labels —
-  в `Actor.Attributes`.
-- **`since` логов Docker позиционный** (Docker 29, измерено на dind): находит первую строку
-  журнала с меткой ≥ since и отдаёт всё после неё — в том числе строки другого потока с меткой
-  чуть раньше (stdout и stderr штампуются раздельно, в журнале метки идут не монотонно).
-  Первая строка ответа может стоять в журнале раньше доставленной (другой поток, строка до
-  окна tail), поэтому ни метка, ни счёт не доказывают, где повтор: продолжение помнит последние прочитанные записи (≤ 512: метка, поток, длина и хэш текста) и якорь — последняя
-  прочитанная строка с меткой; продолжение — `since=<метка якоря>` (позиционный `since` точно
-  вернёт якорь) или раньше — с начала строки, чтение которой оборвалось; известные записи до
-  якоря отбрасываются, незнакомая — доставляется с `gap` (старая строка вне окна tail, ротация);
-  строка, продолжившая доставленную без `\n` (контейнер остановился посреди строки), — только
-  новой частью.
-  Нашёл dind `TestDindServiceLogsThroughRestart`, углубило ревью Codex (фейк моделирует
-  позиционный `since`, частичные записи, частичную ротацию).
-- **dind после `docker stop/start` не поднимается**, если pid-файлы dockerd/containerd пережили
-  перезапуск (pid переиспользован: «process with PID 40 is still running») — у `ocular-dind`
-  `/run` на tmpfs (`dind-up.sh` пересоздаёт старый контейнер без него).
-- **Table-ответ сервера**: заголовки колонок — только в первом событии watch-потока (любого
-  типа, BOOKMARK тоже); `date`-ячейка CRD — уже текст длительности («40s»), метку не
-  восстановить; объект строки — полный объект ресурса (служебные ячейки — отдельно, не в нём).
-- **Имена printer columns CRD не уникальны** — сопоставлять по позиции (сервер: Name, затем
-  колонки по порядку; без колонок — Age).
-- **`t.Context()` уже отменён в `t.Cleanup`** — ожидания в cleanup-ах — с `context.Background()`.
-- Кандидат из соседей, ещё не встреченный здесь: fetch с `Blob`/`FormData`-телом через `wails://`
-  роняет WebKitGTK (сохранение логов в desktop — строковым телом на loopback).
-- **Поток логов одного pod-а шлёт `Ready` до строк** («его backlog — начало потока»), группы и
-  Compose — после backlog-а. Кто собирает хвост без `Follow`, не должен кончать на `Ready`:
-  поток без `Follow` кончается сам (`api.tailSink`; нашёл kind-тест агента).
-- **Путь unix-сокета ≤ 108 байт** (`sun_path`): `t.TempDir()` с длинным `TMPDIR` не годится —
-  в тестах `sockDir`/`shortHome`.
-- **Desktop в `dbus-run-session` показывает окно через ~25 с** (частная шина без portal-а:
-  ожидание активации), в обычной сессии — сразу; не регрессия — так же у сборки до P14.
-- **`EditDiff` «a change past the first page» (vitest, 5 с) падает по таймауту под нагрузкой**
-  (load ~10: диф 2 × 3000 строк в jsdom) — отдельно проходит; не регрессия, повторить `make check`.
-- **`title`/`aria-label` на листовом элементе строки** (без собственного текста) попадают в
-  accessible name всей опции: при name-from-content имя листа = его `title`, и
-  `getByRole('option', { name: /^demo\b/ })` перестаёт совпадать. Подсказку вешать на саму
-  строку (её имя даёт содержимое, own `title` — только fallback при пустом содержимом).
-  Нашла проверка P18 (точка «открыто» в сайдбаре); симптом чудесный: DOM полный, сервер
-  отвечает полным списком, а getByRole не видит опцию.
-- **E2E-сюиты делят один инстанс приложения и его data dir**: с P19 персистентный снимок
-  страницы (`target_state` `pageMemo`) восстанавливался бы в следующей спеке (чужой drawer
-  перехватил клик — упал warm.spec). Все спеки импортируют `test` из `fixtures.ts`, где
-  авто-фикстура зовёт `POST /api/_test/ui-state/reset`; спека, сама поднимающая приложение
-  (memo.spec), берёт `test` из @playwright/test. Нашёл P19.
+`make build` builds web + browser binary; `make build-desktop` builds the native
+window; `make release` adds production mode. The desktop development executable
+is replaced atomically. A web/browser build does not update an already running
+native process or its embedded assets.
+
+`make check` is required before a commit/release: Go vet and golangci with/without
+`wails gtk3`, ESLint/TypeScript, actionlint, Go race, Vitest, Playwright, packaging
+contract checks, documentation validation, and both builds. Use
+VITEST_MAX_WORKERS=2 on this workspace. The existing TanStack React Compiler
+warning is not a failed build.
+
+`make package-linux RELEASE_VERSION=0.1.0 ARCH=amd64` produces native packages
+and archives. `packaging/verify.py` validates their real contents. Packaging
+requires a native host of the requested architecture; never relabel a binary.
+Published assets must include both architectures and every checksum. Release
+metadata, package identity and artifact names use SPK Ocular exclusively.
+
+Tests use the synthetic provider and fake servers unless an explicit kind/DIND
+integration target is requested. Fixture ports must be free; choose another port
+instead of killing another task's process. `OCULAR_SCRATCH_DIR` selects e2e output.
+Tests importing `fixtures.ts` reset the persisted page snapshot between specs.
+Lifecycle tests own their app's shutdown and wait for it to exit.
+
+For GTK screenshots use a dedicated/shared test display without disturbing its
+owner, `xwininfo` to find the actual window, `scripts/xinput.py` for input and
+`import` for captures. Inspect the image. Use LANGUAGE=ru to check localization;
+LANG alone can be overridden. A window can take time to appear on a private
+D-Bus without portals; don't assume a timeout means the application is broken.
+
+## Implementation map
+
+- API: `internal/api/api.go`, service files, `transport/http.go`,
+  `transport/wails.go`, `web/src/api/client.ts`. New methods need all layers.
+- Core/provider types: `internal/core`, `internal/provider`; keep generic UI
+  independent of Kubernetes pod/namespace/container assumptions.
+- Live data: `internal/events`, `internal/views`, Kubernetes cache/discovery/schema,
+  Compose feeds, `web/src/views/viewSync.ts` and hooks.
+- Workspace/navigation: `web/src/components/Workspace.tsx`, `Sidebar.tsx`,
+  `ResourceDrawer.tsx`, `ResourceTable.tsx`, `ScopeSelect.tsx`, `Select.tsx`.
+- Persistence: SQLite `internal/store`; `pageMemo*`, `navigationPersist.ts`,
+  `columnWidths.ts`, global preferences in `web/src/store.ts`.
+- Mutations: `internal/api` and provider action/edit/value modules;
+  frontend `actions`, `edit`, `values` and `mayLeave` guards.
+- Logs/terminal/tunnels: `internal/streams`, `internal/forwards`;
+  frontend `logs`, `term`, `tunnels` and `dock`.
+- Agent access: `internal/agentgrant`, `internal/agentapi`, `web/src/agents`.
+- Packaging: `packaging/`, `.github/workflows/`, VERSION, RELEASE_NOTES.md.
+
+## Behavior invariants
+
+### Data, ownership and permissions
+
+Target identity is stable across unrelated configuration changes. Credentials
+stay out of DTOs/logs/events/SQLite. Configuration revisions are HMACs. Views
+belong to one session incarnation; responses, timers and late deliveries cannot
+mutate a replacement. UID distinguishes same-name resource replacements.
+
+Initial readiness follows delivered data, not merely an established watch.
+Permission failures and partial coverage are visible, never empty success.
+Discovered kinds disappear only after a successful catalog response proves it;
+unconfirmed sources retain their last known kinds. No network I/O in provider
+Open/Kinds; discovery is asynchronous and single-flight.
+
+Explicit namespace sets use per-namespace reads/watches/schema probes/metrics.
+Empty sets remain empty; All is explicit. Source Reset is local to that source,
+and shared rows remain while any owner has them. Unscoped reads run once.
+Agent grants remain independent and are checked again at the moment of writing.
+
+One agent `logs` grant covers history, time ranges, grep, bounded live reads and
+file export within its scope. Time ranges require an explicit matching-line
+limit; streams always require one. Bound complete encoded API output and stream
+duration, not just text lengths. Apply filters before output limits and report
+every truncation. Large analysis belongs in a private Downloads export whose API
+response contains metadata only. Revocation stops active reads and removes an
+unreturned partial export. Do not use the UI's tail/merge limits for archive reads.
+
+### Workspace and interaction
+
+Namespace row/text/Enter selects exactly one and closes. Checkbox and Space in
+the list toggle a set without closing; Space in search types normally. Picker
+query/cursor/scroll/focus survive keyed page remounts. Close popups before a
+mayLeave question. Selection is per target; Favorites and section expansion are
+global. Neither unavailable catalog entries nor target switches erase them.
+
+A favorite exists in only one navigation section, including search. Removing it
+returns the original position. D&D changes order without navigation and has a
+keyboard equivalent. Empty original sections disappear and counts reflect their
+remaining kinds. Keep one active nav row and F6 entry point.
+
+Collapsed groups retain their current kind. Search expands matches temporarily
+without persisting that expansion. Palette object results use the selected
+scope even on unscoped tables; opening a result changes the kind and reveals the
+exact Ref+UID row once. Scope selection and unsaved-editor protection survive it.
+
+Target writes share a serialized queue across remounts and await failures as well
+as successes. Global optimistic changes replay pending operations after a failed
+write. Persistence errors are visible. Respect the 4096-byte target-state limit.
+Column widths are keyed by ID, outside the page snapshot's size budget.
+
+Resize pointer capture/cancel/lost-capture must be cleaned up; Escape restores the
+old size. Use CSS variables and one DOM write per animation frame; commit React
+state on release. Resize cannot sort or select a row. Virtualizer keys are stable.
+
+Text is 14 px, root rem 17 px, rows 32 px, app/resource headers 40 px, radii 2/4 px.
+Keep the embedded PNG at 256 px and verify `_NET_WM_ICON` on GTK. Keep the 24 px
+resource-list right inset: invisible GTK overlay scrollbar hit regions cover star
+buttons without it. `@theme static` retains runtime ANSI/xterm colors. Modal
+connection information preserves the table/editor, traps focus and restores it
+on close, Escape and backdrop. No Overview page.
+
+### Mutations and secrets
+
+Use Prepare/Run with exact UID, configuration revision, route and version/Expect.
+Disable HTTP mutation retries; an ambiguous result is unknown. Retry a failed
+precondition only after proving no write occurred. A new preview is not implicit
+permission to write. Destructive dialogs display the actual object and start on
+Cancel. Bulk writes preserve independent outcomes and support stopping new work.
+
+Secret YAML changes only metadata. Never write masked values or expose Secret
+server-error details. Actual value reads/writes use the dedicated per-key path
+and version guards. Values stay out of caches, history, grants and journals.
+Late reveal/copy responses cannot display data after target/object/version changes.
+Clipboard writes are serialized and reported successful only after completion.
+
+Every navigation that discards edits uses mayLeave; automatic page replacement
+waits for held edits. A cancelled transition preserves the prior kind, scope,
+selection and editor. YAML and Secret value editors can hold guards simultaneously.
+
+### Streams and processes
+
+Stream IDs are one-shot and session-owned. Transport guards run before consuming
+IDs. Logs are bounded by lines/bytes/frame size and explicitly report gaps.
+Terminal input/output use credits; interrupt preempts queued input. Closing tabs
+hangs up the in-container command before disconnecting. Protocol errors are fatal.
+
+Never send streamed data through wails asset URLs. Keep quiet-stream nudges for
+WebKitGTK. Tunnels bind loopback, recheck failed Service backends and have bounded
+handshakes. Existing terminal/tunnel connections keep their original configuration.
+Regex search remains in a time-limited Worker. Untrusted terminal output cannot
+write the clipboard or open links.
+
+## Test pitfalls
+
+- kubeconfig is YAML 1.1: quote names such as `yes`, `on`, `n` in fixtures.
+- Fake dynamic clients do not reproduce all field selectors, PodMetrics, server
+  status bodies or watch-list behavior; use kind when those properties matter.
+- Client-go WatchList readiness requires all initial deliveries, not a List call.
+- Fake client reactors run under its lock: mutate the tracker, not the client.
+- CodeMirror renders visible lines only. E2E must scroll before checking distant
+  text. jsdom needs layout/scroll stubs and cannot establish GTK hit-test correctness.
+- Native select menus are avoided. Custom popups must be focusable while positioning;
+  use opacity rather than visibility:hidden. Only relevant ancestor scroll closes them.
+- Option descendants' title/aria-label can alter accessible names; put tooltips on
+  the row rather than decorative children. Focus and pointer menu highlight agree.
+- Resource detail events are another resource grid; target the primary grid explicitly.
+- CPU/RAM metrics require the cached object's current UID and sample incarnation.
+- Docker log timestamps are not a total order; preserve anchor-based replay logic.
+- `t.Context()` is already cancelled in cleanup. Use a fresh bounded context where needed.
+- Long TMPDIR paths can exceed Unix socket limits; use the existing short-socket helpers.
+- Xvfb keyboard layout resets when its last client exits; configure it with a live window.

@@ -23,8 +23,7 @@ export interface ViewState {
 type Timers = { setTimeout: typeof setTimeout; clearTimeout: typeof clearTimeout }
 
 /**
- * One live table, client side of the cursor protocol (docs/specs "Живые
- * таблицы"): one pull in flight; the cursor advances only after a page is
+ * One live table, client side of the cursor protocol (docs/architecture.md): one pull in flight; the cursor advances only after a page is
  * applied; pull again while the applied version is below the announced one;
  * bounded retries on failure; a "gone" view is reopened; responses of an
  * older open (generation) or after dispose are ignored, and a late OpenView

@@ -3,11 +3,10 @@ import { spawn, type ChildProcess } from 'node:child_process'
 import { mkdirSync, mkdtempSync } from 'node:fs'
 import { createServer } from 'node:net'
 import { join } from 'node:path'
-import { ONE, env, noDockerEnv, writeAtomic } from './fixtures'
+import { scratchRoot as scratch, ONE, env, noDockerEnv, writeAtomic } from './fixtures'
 
 // This spec owns the app lifecycle and restarts it on the same data dir.
 // It deliberately bypasses fixtures' reset of persisted page snapshots.
-const scratch = join(import.meta.dirname, '../../../.agents/tmp')
 const bin = process.env.E2E_BIN ?? '../../build/bin/spk-ocular'
 
 const freePort = (): Promise<number> =>
@@ -140,7 +139,7 @@ test('scope set, global favorites and column widths survive an app restart', asy
     await page.getByRole('navigation', { name: 'resources' }).getByRole('button', { name: 'Parcels', exact: true }).hover()
     await page.getByRole('button', { name: 'Add Parcels to favorites', exact: true }).click()
     await favorites.getByRole('button', { name: 'Parcels', exact: true }).dragTo(favorites.getByRole('button', { name: 'Crates', exact: true }), { targetPosition: { x: 20, y: 2 } })
-    await expect(favorites.locator('[data-nav-item]')).toHaveText(['Parcels', 'Crates'])
+    await expect(favorites.locator('.nav-item')).toHaveText(['Parcels', 'Crates'])
     await page.getByRole('option', { name: /^demo2\b/ }).click()
     await expect(favorites.getByRole('button', { name: 'Crates', exact: true })).toBeVisible()
     await page.getByRole('option', { name: /^demo\b/ }).click()
@@ -168,10 +167,89 @@ test('scope set, global favorites and column widths survive an app restart', asy
     await expect(input).toHaveValue('blue, green')
     await expect(favorites.getByRole('button', { name: 'Crates', exact: true })).toBeVisible()
     await expect(nameWidth).toHaveAttribute('aria-valuenow', '98')
-    await expect(favorites.locator('[data-nav-item]')).toHaveText(['Parcels', 'Crates'])
+    await expect(favorites.locator('.nav-item')).toHaveText(['Parcels', 'Crates'])
     const grid = page.getByRole('grid', { name: 'resources' })
     await expect(grid.getByRole('gridcell', { name: 'alpha', exact: true })).toBeVisible()
     await expect(grid.getByRole('gridcell', { name: 'gamma', exact: true })).toBeVisible()
+  } finally {
+    await page.close()
+    if (app) await stop(app)
+  }
+})
+
+test('resource sections fold globally and keep their state after restart, while details show name before kind', async ({ browser }) => {
+  mkdirSync(scratch, { recursive: true })
+  const root = mkdtempSync(join(scratch, 'sections-restart-'))
+  const e = env(root)
+  writeAtomic(e.one, ONE)
+  const port = await freePort()
+  let app: ChildProcess | undefined
+  const page = await browser.newPage({ viewport: { width: 1280, height: 820 } })
+  const url = `http://127.0.0.1:${port}/`
+  try {
+    app = await start(port, e)
+    await page.goto(url)
+    await page.getByRole('option', { name: /^demo\b/ }).click()
+    const nav = page.getByRole('navigation', { name: 'resources' })
+    const synthetic = nav.getByRole('button', { name: /^Synthetic/ })
+    const favorites = nav.getByRole('button', { name: /^Favorites/ })
+    const health = nav.getByRole('button', { name: /^Health/ })
+    await nav.getByRole('button', { name: 'Services', exact: true }).hover()
+    await nav.getByRole('button', { name: 'Add Services to favorites', exact: true }).click()
+    await synthetic.click()
+    await favorites.focus()
+    await page.keyboard.press('ArrowLeft')
+    await health.click()
+    for (const header of [synthetic, favorites, health]) await expect(header).toHaveAttribute('aria-expanded', 'false')
+    await expect(nav.getByRole('button', { name: 'Parcels', exact: true })).toHaveCount(0)
+    await expect(nav.getByRole('button', { name: 'Services', exact: true })).toHaveCount(0)
+    await expect(nav.getByRole('button', { name: 'Crates', exact: true })).toHaveAttribute('aria-current', 'page')
+    await page.getByRole('option', { name: /^demo2\b/ }).click()
+    for (const header of [synthetic, favorites, health]) await expect(header).toHaveAttribute('aria-expanded', 'false')
+    const filter = page.getByRole('textbox', { name: 'Filter resources', exact: true })
+    await filter.fill('Services')
+    await expect(favorites).toHaveAttribute('aria-expanded', 'true')
+    await filter.press('Enter')
+    await expect(page.getByRole('heading', { name: 'Services', exact: true, level: 1 })).toBeVisible()
+    await filter.fill('')
+    await expect(favorites).toHaveAttribute('aria-expanded', 'false')
+    await page.getByRole('option', { name: /^demo\b/ }).click()
+    await page.getByRole('grid', { name: 'resources' }).getByRole('gridcell', { name: 'alpha', exact: true }).click()
+    const drawer = page.getByRole('dialog', { name: 'crates alpha' })
+    const name = drawer.getByRole('heading', { name: 'alpha', exact: true })
+    const kind = drawer.locator('.drawer-kind')
+    await expect(name).toBeVisible()
+    const verifyTitleOrder = async () => {
+      const n = await name.boundingBox()
+      const k = await kind.boundingBox()
+      expect(n).toBeTruthy()
+      expect(k).toBeTruthy()
+      expect(n!.x + n!.width).toBeLessThanOrEqual(k!.x)
+      expect(Math.abs(n!.y - k!.y)).toBeLessThan(10)
+    }
+    await verifyTitleOrder()
+    const tok = await page.locator('meta[name="spk-ocular-api-token"]').getAttribute('content')
+    await expect.poll(async () => {
+      const res = await page.request.post(`${url}api/GetNavSections`, { headers: { Authorization: `Bearer ${tok}`, Origin: new URL(url).origin } })
+      expect(res.ok()).toBe(true)
+      return res.json()
+    }).toEqual({ 'group:Synthetic': false, 'group:Health': false, favorites: false })
+    await page.screenshot({ path: join(root, 'sections-details.png'), fullPage: true })
+    await stop(app)
+    app = await start(port, e)
+    await page.goto(url)
+    for (const header of [synthetic, favorites, health]) await expect(header).toHaveAttribute('aria-expanded', 'false')
+    await expect(nav.getByRole('button', { name: 'Parcels', exact: true })).toHaveCount(0)
+    await expect(nav.getByRole('button', { name: 'Services', exact: true })).toHaveCount(0)
+    await page.getByRole('grid', { name: 'resources' }).getByRole('gridcell', { name: 'alpha', exact: true }).click()
+    await expect(name).toBeVisible()
+    await page.setViewportSize({ width: 960, height: 720 })
+    await verifyTitleOrder()
+    await page.screenshot({ path: join(root, 'sections-details-narrow.png'), fullPage: true })
+    await drawer.getByRole('button', { name: 'Close', exact: true }).click()
+    await synthetic.focus()
+    await page.keyboard.press('ArrowRight')
+    await expect(nav.getByRole('button', { name: 'Parcels', exact: true })).toBeVisible()
   } finally {
     await page.close()
     if (app) await stop(app)

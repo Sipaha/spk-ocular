@@ -1,6 +1,5 @@
 import { describe, it, expect } from 'vitest'
 import { buildDragSelectionText, absOffsetInRow, resolveRowEndpoint, pickRowIndexAtY } from './logSelection'
-// Ported from SPK-launcher (web/src/lib/logSelection.test.ts).
 
 interface E { id: number; text: string }
 const E = (id: number, text: string): E => ({ id, text })

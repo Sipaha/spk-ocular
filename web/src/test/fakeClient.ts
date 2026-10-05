@@ -76,6 +76,8 @@ export function fakeClient(targets: Target[]) {
     getMetrics: vi.fn(async () => ({ status: 'unsupported', values: {} })),
     getTargetState: vi.fn(async () => ({})),
     setTargetState: vi.fn(async () => {}),
+    getNavSections: vi.fn(async () => ({})),
+    setNavSection: vi.fn(async () => {}),
     getFavoriteKinds: vi.fn(async () => []),
     setKindFavorite: vi.fn(async () => {}),
     moveFavoriteKind: vi.fn(async () => {}),

@@ -147,6 +147,7 @@ services:
 		return a.call("GetLogs", GetLogsRequest{Ref: ctr, TailLines: 5}, &tail) == http.StatusOK && len(tail.Lines) > 0
 	}, 30*time.Second, time.Second)
 	assert.Contains(t, tail.Lines[len(tail.Lines)-1].Text, "hello-agent")
+	a.checkLogInterval(ctr, tail)
 
 	// Restart by the grant (a new start time); stop is not granted.
 	cid := a.docker("compose", "-f", file, "ps", "-q", "web")

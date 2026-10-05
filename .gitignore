@@ -8,3 +8,7 @@
 !/cmd/spk-ocular/dist/.gitkeep
 coverage.*
 *.pid
+
+/dist/
+/.agents/
+__pycache__/

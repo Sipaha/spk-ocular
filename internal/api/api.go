@@ -61,6 +61,9 @@ type API interface {
 	GetFavoriteKinds(ctx context.Context) ([]FavoriteKind, error)
 	SetKindFavorite(ctx context.Context, req KindFavoriteRequest) error
 	MoveFavoriteKind(ctx context.Context, req MoveFavoriteKindRequest) error
+	// Navigation section expansion is global, independent of any target.
+	GetNavSections(ctx context.Context) (map[string]bool, error)
+	SetNavSection(ctx context.Context, req NavSectionRequest) error
 	// RecentObjects: the target's objects whose details were opened, newest
 	// first (at most 50 per target).
 	RecentObjects(ctx context.Context, provider, target string) ([]RecentObject, error)
@@ -145,6 +148,11 @@ type API interface {
 	ListAgentPending(ctx context.Context) ([]AgentPending, error)
 	DecideAgentPending(ctx context.Context, req DecideAgentPendingRequest) error
 	ListAgentAudit(ctx context.Context, f store.AuditFilter) ([]store.AuditEntry, error)
+}
+
+type NavSectionRequest struct {
+	Key  string `json:"key"`
+	Open bool   `json:"open"`
 }
 
 type FavoriteKind struct {

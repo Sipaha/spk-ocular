@@ -127,7 +127,7 @@ export function App({ client }: { client: Client }) {
         <Sidebar act={act} />
         <div className="flex min-w-0 flex-1 flex-col">
           {target ? (
-            <Workspace key={`${target.provider}/${target.id}`} client={client} hub={hub} target={target} onFavorite={act.setKindFavorite} onMoveFavorite={act.moveFavoriteKind} />
+            <Workspace key={`${target.provider}/${target.id}`} client={client} hub={hub} target={target} onFavorite={act.setKindFavorite} onMoveFavorite={act.moveFavoriteKind} onNavSection={act.setNavSection} />
           ) : (
             <main className="min-h-0 min-w-0 flex-1 overflow-y-auto">
               <EmptyWorkspace />

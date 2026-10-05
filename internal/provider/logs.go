@@ -24,6 +24,10 @@ const ChannelAll = "*"
 const TailAll = -1
 
 type LogQuery struct {
+	// Archive reads retained history incrementally without the UI's tail or
+	// merge-buffer ceilings. Internal only; the caller must bound output and
+	// duration. It is finite, never followed, and sources are read in turn.
+	Archive bool `json:"-"`
 	// Channel: "" = the default one, ChannelAll = all.
 	Channel  string `json:"channel,omitempty"`
 	Previous bool   `json:"previous,omitempty"`

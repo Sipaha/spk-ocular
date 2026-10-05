@@ -4,11 +4,10 @@ import { forgetPages, memoOf, onMemoChange, remember, rememberSort, seedPersiste
 beforeEach(() => forgetPages())
 
 describe('pageMemo change subscription (P19)', () => {
-  it('notifies when the page changes, not for ui/navOpen', () => {
+  it('notifies when the page changes, not for ui', () => {
     const cb = vi.fn()
     onMemoChange('kubernetes/prod', cb)
     remember('kubernetes/prod', { ui: { kind: 'pods', scope: { mode: 'all' } } })
-    remember('kubernetes/prod', { navOpen: ['group:Workloads'] })
     expect(cb).not.toHaveBeenCalled()
     remember('kubernetes/prod', { page: { key: 'pods/{"mode":"all"}', filter: 'api', selected: null, open: null } })
     expect(cb).toHaveBeenCalledTimes(1)

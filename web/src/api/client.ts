@@ -44,6 +44,8 @@ export interface Client {
   getMetrics(viewId: string, rowIds: string[], signal?: AbortSignal): Promise<MetricsView>
   getTargetState(provider: string, target: string): Promise<Record<string, string>>
   setTargetState(provider: string, target: string, key: string, value: string): Promise<void>
+  getNavSections(): Promise<Record<string, boolean>>
+  setNavSection(key: string, open: boolean): Promise<void>
   getFavoriteKinds(): Promise<FavoriteKind[]>
   setKindFavorite(provider: string, kind: string, favorite: boolean): Promise<void>
   moveFavoriteKind(provider: string, kind: string, before: string): Promise<void>
@@ -168,6 +170,8 @@ export const httpClient: Client = {
   getMetrics: (viewId, rowIds, signal) => post('GetMetrics', { viewId, rowIds, seq: nextMetricsSeq() }, signal),
   getTargetState: (provider, target) => post('GetTargetState', { provider, target }),
   setTargetState: (provider, target, key, value) => done(post('SetTargetState', { provider, target, key, value })),
+  getNavSections: () => post('GetNavSections', {}),
+  setNavSection: (key, open) => done(post('SetNavSection', { key, open })),
   getFavoriteKinds: () => post('GetFavoriteKinds', {}),
   setKindFavorite: (provider, kind, favorite) => done(post('SetKindFavorite', { provider, kind, favorite })),
   moveFavoriteKind: (provider, kind, before) => done(post('MoveFavoriteKind', { provider, kind, before })),
@@ -295,6 +299,8 @@ export const wailsClient: Client = {
   },
   getTargetState: (provider, target) => wcall('GetTargetState', provider, target),
   setTargetState: (provider, target, key, value) => wcall('SetTargetState', provider, target, key, value),
+  getNavSections: () => wcall('GetNavSections'),
+  setNavSection: (key, open) => wcall('SetNavSection', { key, open }),
   getFavoriteKinds: () => wcall('GetFavoriteKinds'),
   setKindFavorite: (provider, kind, favorite) => wcall('SetKindFavorite', { provider, kind, favorite }),
   moveFavoriteKind: (provider, kind, before) => wcall('MoveFavoriteKind', { provider, kind, before }),

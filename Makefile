@@ -7,6 +7,8 @@ DESKTOP_TAGS := wails gtk3
 VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
 LDFLAGS := -w -s -X main.version=$(VERSION)
 PORT ?= 5190
+RELEASE_VERSION ?= $(shell cat VERSION)
+ARCH ?= $(shell go env GOARCH)
 
 # The SPA is embedded from cmd/spk-ocular/dist: copied in for the build and
 # reset afterwards, so a web build never dirties git.
@@ -36,7 +38,8 @@ build-desktop: build-web
 # Desktop without DevTools.
 release: build-web
 	mkdir -p $(BIN_DIR)
-	$(call with_dist,CGO_ENABLED=1 go build -tags "$(DESKTOP_TAGS) production" -trimpath -ldflags="$(LDFLAGS)" -o $(BIN_DIR)/spk-ocular-release ./cmd/spk-ocular)
+	$(call with_dist,CGO_ENABLED=1 go build -tags "$(DESKTOP_TAGS) production" -trimpath -ldflags="$(LDFLAGS)" -o $(BIN_DIR)/spk-ocular-release.tmp ./cmd/spk-ocular)
+	mv -f $(BIN_DIR)/spk-ocular-release.tmp $(BIN_DIR)/spk-ocular-release
 
 run: build-desktop
 	$(BIN_DIR)/spk-ocular-desktop
@@ -45,7 +48,7 @@ run: build-desktop
 run-browser: build
 	$(BIN) --browser --port=$(PORT)
 
-test: test-go test-web test-e2e
+test: test-go test-web test-e2e test-packaging
 
 test-go:
 	go test -race -timeout 180s ./...
@@ -56,7 +59,7 @@ test-web:
 test-e2e: build
 	cd tests/e2e && pnpm install --frozen-lockfile --silent && pnpm exec playwright install chromium && pnpm exec playwright test && pnpm exec playwright test -c playwright.synth.config.ts && pnpm exec playwright test -c playwright.memo.config.ts && rm -rf .run
 
-lint: lint-go lint-web
+lint: lint-go lint-web lint-workflows
 
 lint-go:
 	go vet ./...
@@ -135,3 +138,17 @@ e2e-dind: build
 	@bash scripts/dind-verify.sh >/dev/null || { echo "the test daemon is not up: run make dind-up"; exit 1; }
 	bash scripts/dind-seed.sh >/dev/null
 	cd tests/e2e && OCULAR_DIND_HOST=$$(bash ../../scripts/dind-verify.sh) OCULAR_DIND_VERIFY=$(CURDIR)/scripts/dind-verify.sh pnpm exec playwright test -c playwright.dind.config.ts && rm -rf .run
+
+.PHONY: package-linux test-packaging lint-workflows
+package-linux:
+	python3 packaging/release.py --version "$(RELEASE_VERSION)" --arch "$(ARCH)"
+
+# These checks run without building packages or publishing a release.
+test-packaging:
+	python3 -m unittest discover -s packaging/tests -v
+	python3 scripts/check-docs.py
+	desktop-file-validate packaging/linux/spk-ocular.desktop
+
+lint-workflows:
+	actionlint -shellcheck=
+	sh -n packaging/linux/update-caches.sh

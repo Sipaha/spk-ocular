@@ -16,8 +16,7 @@ import (
 	"github.com/spk/spk-ocular/internal/provider"
 )
 
-// Terminal protocol over one WebSocket (docs/plans/2026-09-29-p3-exec-
-// portforward.md). Binary messages are terminal bytes: page→server input,
+// Terminal protocol over one WebSocket (docs/architecture.md). Binary messages are terminal bytes: page→server input,
 // server→page output. Text messages are JSON control:
 //
 //	page→server  {"k":"resize","cols":N,"rows":N}  {"k":"ack","n":N}  {"k":"intr"}
@@ -72,7 +71,7 @@ var defaultTermTimings = termTimings{
 // ends the shell. Closing the connection alone does not: container
 // runtimes (containerd on kind, measured) keep an exec'd process and its
 // children running after the client is gone, and closing stdin does not
-// reach a TTY as EOF (docs/plans/2026-09-29-p3-exec-portforward.md).
+// reach a TTY as EOF (docs/architecture.md).
 var hangupKeys = [][]byte{{0x03}, {0x04}}
 
 const hangupKeyGap = 100 * time.Millisecond

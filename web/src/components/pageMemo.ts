@@ -10,7 +10,6 @@ import type { Ref, ScopeSel } from '../api/types'
 export interface TargetMemo {
   /** The kind and scope shown. */
   ui?: { kind: string; scope: ScopeSel }
-  navOpen?: string[]
   columnWidths?: Record<string, Record<string, number>>
   /** Per kind: the column it was sorted by. */
   sorts: Record<string, { col: string; desc: boolean }>
@@ -63,7 +62,7 @@ export function memoOf(target: string): TargetMemo {
 /** Remembers what of target's workspace changed (merged into its memo). */
 export function remember(target: string, patch: Partial<Omit<TargetMemo, 'sorts'>>) {
   Object.assign(memoOf(target), patch)
-  // ui and navOpen persist by their own target_state keys; only the page
+  // ui persists by its own target_state keys; only the page
   // needs this module's listeners.
   if ('page' in patch) notify(target)
 }

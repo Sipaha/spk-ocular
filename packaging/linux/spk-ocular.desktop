@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=SPK Ocular
+Comment=Explore Kubernetes and Docker Compose resources
+Exec=spk-ocular
+Icon=spk-ocular
+Terminal=false
+Categories=Development;
+Keywords=Kubernetes;Docker;Compose;containers;infrastructure;
+StartupNotify=true
+StartupWMClass=spk-ocular

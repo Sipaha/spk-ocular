@@ -1,88 +1,69 @@
-# Бэклог (после MVP)
+# Planned work
 
-- **Docker Compose — после P6/P7** (`docs/plans/2026-09-30-p6-docker-compose.md`): чтение
-  compose-файлов (желаемое число реплик, сервисы без контейнеров, scale/create/up/down);
-  endpoint-ы `ssh://` (нужен `docker system dial-stdio`; сейчас target виден, сессия отвечает
-  `unsupported`); Problems для Compose; контейнеры вне compose (Docker provider), Swarm, podman,
-  build, push/pull образов, события Docker как вид. После P7: pause/unpause (сейчас start
-  приостановленного — «снимите паузу», не предлагается), kill с выбором сигнала, удаление
-  контейнера с томами/`force`; CPU/память у Windows-демонов (другие поля stats — сейчас
-  `unsupported`); замеры сервисов > 20 реплик целиком (сейчас сумма первых 20 — «≥»).
-- SSH provider (`~/.ssh/config`), кастомные provider-ы.
-- **Недавние цели — после P18** (`docs/plans/2026-10-01-p18-warm-targets.md`): число недавних
-  целей (`recentTargets = 2`) и `recentIdle` — настройки, не константы; exec-плагины с
-  кэшем токена в связке ключей рабочего стола (kubelogin `--token-cache-storage=keyring`,
-  помощники на libsecret): в фоне без `DBUS_SESSION_BUS_ADDRESS` кэш не прочитать — сессия
-  закроется на истечении токена (безопасно, но холоднее нужного; вариант — оставлять D-Bus и
-  убирать только GUI-переменные запуска).
-- Несколько активных кластеров одновременно / несколько окон.
-- **Ресурсы API — после P8** (`docs/plans/2026-09-30-p8-generic-resources.md`): scale через
-  `subresources.scale`; restart/другие действия у обнаруженных видов (сейчас только delete);
-  связи вниз для CR (чем владеет); обогащение колонок по JSONPath CRD (живые даты кроме
-  возраста — сейчас текст сервера на момент изменения строки); Problems по обнаруженным видам
-  (сейчас они в «не покрыто»); поиск по всем видам в палитре без открытия (сейчас — вид по
-  имени/алиасу).
-- macOS и Windows сборки и упаковка (nfpm deb/rpm, AppImage).
-- **Правка YAML — после P9** (`docs/plans/2026-09-30-p9-edit-yaml.md`): создание объектов и
-  apply многодокументного YAML; правка в Compose; трёхстороннее слияние при изменившемся
-  объекте (сейчас правка накладывается на текущую версию, а столкновения перечислены и делают
-  план опасным). Значения Secret в YAML-редакторе по-прежнему не правятся (только `metadata`) —
-  для них секция «Значения» (P10).
-- **Значения — после P10** (`docs/plans/2026-09-30-p10-secret-values.md`): значения ConfigMap
-  (сейчас видны в YAML) и `binaryData`; загрузка значения из файла и сохранение в файл;
-  сертификат `kubernetes.io/tls` в разобранном виде; секреты Compose (там это файлы).
-- Память WebProcess при больших таблицах (95 МБ с 3k строк) — только если найдётся способ без
-  ущерба для UX (мгновенный фильтр/сортировка по всем строкам важнее).
-- Отзыв RBAC при открытой таблице: существующий watch живёт до таймаута apiserver — показать
-  «права могли измениться» по первому 403 при переподключении (проверить на kind).
-- Переиспользование более широкого уже открытого кэша (all namespaces → один namespace) —
-  отложено до замеров, где это даст выигрыш.
-- Порядок колонок в `target_state` (ширины уже сохраняются при ресайзе, 2026-10-02).
-- Логи: поведение скрытого/свёрнутого окна WebKitGTK (чтение потока, память) не проверено —
-  страхует дедлайн записи 60 с; проверить, когда будет инструмент сворачивания окна.
-- Логи: в выборе контейнера workload-а — и контейнеры старых pods rollout-а (сейчас — шаблон).
-- Логи: вкладки не переживают перезапуск приложения (восстанавливать из `target_state`?).
-- Логи: подсветка совпадения перекрывает ANSI-цвет внутри `<mark>`.
-- Терминалы/туннели: не восстанавливаются после перезапуска приложения; запись сессии терминала
-  в файл (из P3).
-- Отладка (из P16): копия pod-а (`kubectl debug --copy-to`), отладка узла (`kubectl debug
-  node/…`), профили securityContext (`--profile`, в том числе для `enforce: restricted`), своя
-  команда и переменные отладчика; attach к обычному контейнеру со `stdin` (не отладчику);
-  «Подключиться заново» к отладчику из диалога терминала pod-а (сейчас — из его вкладки, пока она
-  открыта); уведомление, если отладчик пережил закрытие вкладки (вложенный shell, программа без
-  реакции на ^C/^D, вкладка закрыта во время запуска); состояние цели словами интерфейса (сейчас `running`/`waiting: …` по-английски).
-- Терминал: пик памяти WebProcess при десятках МБ вывода (109 → 314 МБ на 50 МБ, после — 147 МБ,
-  мусор JS) — смотреть, только если без ущерба для отзывчивости.
-- Терминал: страница, ушедшая без закрытия вкладок (перезагрузка), оставляет прототипы
-  «Подключиться заново» до вытеснения (≤ 64, без соединений) — можно забывать их с уходом страницы.
-- Туннели: UDP (Kubernetes не умеет) и проброс не на loopback — сознательно не делаем.
-- Действия (из P4): удаление namespace с вводом имени, журнал действий в SQLite.
-- Массовые действия (из P17): действия с текстом или выбором (debug, undo) над несколькими
-  объектами; отметки, переживающие смену фильтра (сейчас скрытая строка выпадает навсегда).
-- Принудительное удаление (из P17): снятие финализаторов у pod-а, зависшего в Terminating
-  (сейчас план честно говорит «останется, пока контроллеры не снимут»; правка опаснее — отдельно).
-- Откат (из P15): undo StatefulSet/DaemonSet (история — ControllerRevision); история ревизий
-  отдельным разделом деталей Deployment (сейчас — только в диалоге отката); разница шаблонов
-  «было/стало» по строкам YAML (сейчас — плоские пути); подпись «Возобновить выкатку» у Deployment
-  (id `resume` общий с CronJob, подпись одна).
-- Drain (из P11): свой grace period и таймаут, drain нескольких узлов, ожидание ухода pod-ов с
-  прогрессом (сейчас — «выселение запрошено», уход виден в таблице), `--force` для pod-ов без
-  контроллера.
-- CronJob (из P12): перейти к созданной «Запустить сейчас» Job из уведомления; suspend/resume
-  самих Job; изменить шаблон перед запуском.
-- Английские тексты в русском UI, не вошедшие в P13 (итоги действий): причина состояния прав
-  в диалоге (`Rights.Reason`, например «access to the Docker socket allows everything…»);
-  уведомления об успехе и отказы правки YAML (P9) и значений Secret (P10) («configmap cfg:
-  changes written»); сообщения движка Docker о неизвестном итоге («… the Docker Engine may have
-  done it») — текст транспорта, UI обрамляет его «итог неизвестен».
-- **Доступ агентов — после P14** (`docs/plans/2026-09-30-p14-agent-access.md`): права по агенту/
-  проекту и срок действия; запрос доступа агентом из сокета (сейчас выдаёт только человек);
-  записи кластерных объектов (drain, cordon, удаление namespace/CRD/PV); значения Secret, exec,
-  проброс портов, потоки логов и событий; фильтр `ListObjects` по метке и курсоры; CLI-обёртка;
-  вариант B подтверждения (выдача = согласие), если его выберет пользователь.
-- **Скорость рестартов** («≥ N рестартов за 10 мин» по истории наблюдений `restartCount`) —
-  отложено и в P5 (спецификация, решение 5: сокращение объёма, пользователь может вернуть).
-  Условия из ревью Codex: одна авторитетная лента
-  наблюдений на pod (не по обработчику каждого вида), эпохи покрытия (первое значение после
-  старта/разрыва/relist — база, дельта через разрыв без времени), отбрасывание устаревших
-  доставок другого кэша, ограничения и очистка по всей сессии, тесты пересекающихся видов.
+This is the remaining product backlog, not authorization to start a task.
+Implementation begins only when requested. Current behavior is documented in
+[usage](usage.md) and [architecture](architecture.md).
+
+## Distribution and platforms
+
+- Activate the configured GitHub workflows after the reviewed changes and
+  cleaned history are authorized for pushing. Hosted CI and native arm64
+  packaging still need verification before release availability is announced.
+- macOS and Windows support, including platform-specific local agent transport,
+  credential-helper process handling, native installers, signing and notarization.
+- AppImage distribution and a deliberately designed in-app update mechanism.
+
+## Providers and discovery
+
+- Read compose files for desired replicas, services without containers and
+  scale/create/up/down operations.
+- Docker SSH endpoints, non-Compose containers, Compose Problems, pause/unpause,
+  selectable kill signals and image operations.
+- CPU/memory metrics for Windows Docker daemons; full aggregation above 20 replicas.
+- SSH/custom providers and simultaneous workspaces or multiple windows.
+- Discovered-kind scale subresources, additional actions and child relationships;
+  richer CRD column provenance and Problems coverage for custom resources.
+- Search objects of unopened kinds without unbounded background listing.
+- Configurable recent-session retention and background credential-helper support
+  for desktop keyring-backed caches.
+
+## Editing and actions
+
+- Object creation, multi-document apply, Compose editing and three-way YAML merge.
+- ConfigMap/binaryData value tools, file import/export and decoded certificate views.
+- Namespace deletion with a typed name and a persistent action journal.
+- Bulk actions with text/choice parameters; reviewed finalizer removal.
+- StatefulSet/DaemonSet rollback, revision browsing and richer YAML comparisons.
+- Configurable drain timing, multiple-node drain and progress until pods leave.
+- Navigation to newly created CronJob Jobs and reviewed template changes.
+- Pod copies, node debugging, debugger profiles/custom commands and attachment to
+  suitable existing containers.
+
+## Workspace and streams
+
+- Persisted column order and restored log/terminal tabs across application restarts.
+- Additional rollout-container log sources and selection/highlighting refinements.
+- Hidden/minimized WebKit stream behavior and high-volume terminal memory analysis.
+- Session recording and cleanup of abandoned reconnect prototypes.
+- Earlier visibility of revoked RBAC and measured reuse of broader informer caches.
+- Complete localization of remaining provider/transport diagnostics.
+
+## Agent access
+
+- Proposed permission-editor UX: capability groups (viewing, changes, execution),
+  expandable action details, and a contextual entry from the namespace header
+  into the same editor used by the global Agents window. Multiple selected
+  namespaces and All must be explicit; opening the editor grants nothing.
+- Optional per-agent/project grants and expiry, agent-initiated access requests,
+  paginated/label-filtered snapshots and a CLI wrapper.
+- Separately reviewed support for cluster mutations, values, terminals, tunnels,
+  and streaming events. No expansion of grants is implicit in UI feature work.
+
+## Detection and performance
+
+- Restart-rate detection from a single authoritative per-pod observation stream,
+  with coverage epochs, no delta across observation gaps, stale-delivery rejection,
+  bounded session-wide retention and tests across overlapping views.
+- Memory reductions that preserve immediate filtering/sorting and responsiveness.
+
+UDP and non-loopback forwarding are intentionally outside the product scope.

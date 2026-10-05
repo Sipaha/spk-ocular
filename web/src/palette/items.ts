@@ -8,6 +8,7 @@ import { t } from '../i18n'
 import { refTitle } from '../refs'
 import { scopeWords, type ScopeWords } from '../scopeNames'
 import { fuzzyScore } from './score'
+import { selectedScopes } from '../scopes'
 
 export type PaletteAction =
   | { type: 'kind'; kind: string; filter?: string }
@@ -33,6 +34,8 @@ export interface Sources {
   targets: { target: Target; groupTitle: string }[]
   /** Scope names; null: they cannot be listed (a typed one is taken as is). */
   scopes: string[] | null
+  /** Object results stay inside this selection; null until target state is loaded. */
+  selectedScope: ScopeSel | null
   scopeAliases: string[]
   /** What the current target's provider calls its scopes (absent: generic words). */
   scopeWords?: ScopeWords
@@ -98,9 +101,14 @@ const objectItem = (kinds: KindDescriptor[], ref: Ref, label: string, section: '
 
 /** The live rows, then recent entries of other objects (one item per object). */
 function objects(src: Sources): { rows: PaletteItem[]; recents: PaletteItem[] } {
+  const names = new Set(src.selectedScope ? selectedScopes(src.selectedScope) : [])
+  // A scope-less Ref is a global object. Keep the target's selection when
+  // its current table is unscoped, and use Ref.scope even for absent kinds.
+  const allowed = (ref: Ref) => !ref.scope || src.selectedScope?.mode === 'all' || names.has(ref.scope)
   const seen = new Set<string>()
   const rows: PaletteItem[] = []
   for (const r of src.rows) {
+    if (!allowed(r.ref)) continue
     const k = refKey(r.ref)
     if (seen.has(k)) continue
     seen.add(k)
@@ -108,6 +116,7 @@ function objects(src: Sources): { rows: PaletteItem[]; recents: PaletteItem[] } 
   }
   const recents: PaletteItem[] = []
   for (const r of src.recents) {
+    if (!allowed(r.ref)) continue
     const k = refKey(r.ref)
     if (seen.has(k)) continue
     seen.add(k)

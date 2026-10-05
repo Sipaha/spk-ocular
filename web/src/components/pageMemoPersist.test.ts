@@ -15,13 +15,13 @@ describe('serializeMemo / parseMemo', () => {
   it('round-trips the persisted part of a memo (sorts and page)', () => {
     remember('kubernetes/prod', { page: { key: 'pods/{"mode":"all"}', filter: 'api', selected: 'uid-web-api-1', open: null, tab: 'yaml' } })
     rememberSort('kubernetes/prod', 'pods', { col: 'name', desc: true })
-    remember('kubernetes/prod', { ui: { kind: 'pods', scope: { mode: 'all' } }, navOpen: ['group:x'] })
+    remember('kubernetes/prod', { ui: { kind: 'pods', scope: { mode: 'all' } } })
     const json = serializeMemo(memoOf('kubernetes/prod'))!
     const back = parseMemo(json)!
     expect(back.page?.filter).toBe('api')
     expect(back.page?.tab).toBe('yaml')
     expect(back.sorts.pods).toEqual({ col: 'name', desc: true })
-    expect(json).not.toContain('navOpen') // ui/navOpen persist by their own keys
+    expect(JSON.parse(json)).not.toHaveProperty('ui') // ui persists by its own keys
   })
 
   it('is null when the memo does not fit the server cap', () => {

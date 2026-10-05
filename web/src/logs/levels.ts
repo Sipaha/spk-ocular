@@ -1,4 +1,4 @@
-// Log levels detected from the text (ported from SPK-launcher's viewer).
+// Log levels detected from the text.
 
 export type LogLevel = 'ERROR' | 'WARN' | 'INFO' | 'DEBUG' | 'TRACE' | 'UNKNOWN'
 

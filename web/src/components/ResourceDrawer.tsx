@@ -243,10 +243,11 @@ export function ResourceDrawer({ client, hub, target, subject, initialTab, onTab
               ←
             </button>
           )}
-          <span className="drawer-kind shrink-0">{current.kind}</span>
-          <h2 className="drawer-title min-w-0 flex-1 truncate" title={title}>
+          <h2 className="drawer-title min-w-0 truncate" title={title}>
             {title}
           </h2>
+          <span className="drawer-kind min-w-0 max-w-[40%] truncate" title={current.kind}>{current.kind}</span>
+          <span className="flex-1" />
           <button className="rounded px-2 text-lg leading-none text-fg-muted hover:bg-hover hover:text-fg" onClick={close} aria-label={t('drawer.close')}>
             ×
           </button>

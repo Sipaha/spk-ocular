@@ -1,0 +1,60 @@
+name: spk-ocular
+arch: ${ARCH}
+platform: linux
+version: ${RELEASE_VERSION}
+version_schema: semver
+section: utils
+priority: optional
+maintainer: Pavel Simonov <sipahabk@gmail.com>
+vendor: SPK
+homepage: https://github.com/Sipaha/spk-ocular
+license: Apache-2.0
+description: |
+  SPK Ocular is a local Kubernetes and Docker Compose viewer.
+  Live resource tables, logs, terminals, port forwarding and reviewed changes
+  in a native desktop window. Uses your existing local configuration.
+contents:
+  - src: build/bin/spk-ocular-release
+    dst: /usr/bin/spk-ocular
+    file_info:
+      mode: 0755
+  - src: packaging/linux/spk-ocular.desktop
+    dst: /usr/share/applications/spk-ocular.desktop
+    file_info:
+      mode: 0644
+  - src: internal/appfiles/icons/icon.png
+    dst: /usr/share/icons/hicolor/256x256/apps/spk-ocular.png
+    file_info:
+      mode: 0644
+  - src: internal/appfiles/icons/icon.svg
+    dst: /usr/share/icons/hicolor/scalable/apps/spk-ocular.svg
+    file_info:
+      mode: 0644
+  - src: internal/appfiles/icons/icon.png
+    dst: /usr/share/pixmaps/spk-ocular.png
+    file_info:
+      mode: 0644
+  - src: packaging/linux/io.github.sipaha.SPKOcular.metainfo.xml
+    dst: /usr/share/metainfo/io.github.sipaha.SPKOcular.metainfo.xml
+    file_info:
+      mode: 0644
+  - src: LICENSE
+    dst: /usr/share/doc/spk-ocular/LICENSE
+    file_info:
+      mode: 0644
+scripts:
+  postinstall: packaging/linux/update-caches.sh
+  postremove: packaging/linux/update-caches.sh
+rpm:
+  compression: gzip
+overrides:
+  deb:
+    depends:
+      - libc6 (>= 2.39)
+      - libgtk-3-0t64 | libgtk-3-0
+      - libwebkit2gtk-4.1-0
+  rpm:
+    depends:
+      - glibc >= 2.39
+      - gtk3
+      - webkit2gtk4.1

@@ -1,0 +1,65 @@
+name: Linux packages
+on:
+  workflow_call:
+    inputs:
+      version:
+        type: string
+        required: false
+        default: ''
+permissions:
+  contents: read
+jobs:
+  package:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-24.04
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup
+      - name: Install package builder
+        run: go install github.com/goreleaser/nfpm/v2/cmd/nfpm@v2.41.0
+      - name: Build production application and packages
+        env:
+          REQUESTED_VERSION: ${{ inputs.version }}
+          ARCH: ${{ matrix.arch }}
+        run: |
+          version="$REQUESTED_VERSION"
+          if [ -z "$version" ]; then
+            base="$(cat VERSION)"
+            if [[ "$base" == *-* ]]; then
+              version="$base.dev.$GITHUB_RUN_NUMBER"
+            else
+              version="$base-dev.$GITHUB_RUN_NUMBER"
+            fi
+          fi
+          version="${version#v}"
+          make package-linux RELEASE_VERSION="$version" ARCH="$ARCH"
+          echo "RELEASE_VERSION=$version" >> "$GITHUB_ENV"
+      - name: Verify package contents, architecture, version and checksums
+        env:
+          ARCH: ${{ matrix.arch }}
+        run: python3 packaging/verify.py --version "$RELEASE_VERSION" --arch "$ARCH"
+      - name: Install and remove the DEB on the disposable runner
+        env:
+          ARCH: ${{ matrix.arch }}
+        run: |
+          sudo apt-get install -y "$PWD/dist/$RELEASE_VERSION/linux-$ARCH/spk-ocular_${RELEASE_VERSION}_linux_${ARCH}.deb"
+          test "$(spk-ocular version)" = "spk-ocular $RELEASE_VERSION"
+          desktop-file-validate /usr/share/applications/spk-ocular.desktop
+          test -s /usr/share/icons/hicolor/256x256/apps/spk-ocular.png
+          sudo apt-get remove -y spk-ocular
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: package-linux-${{ matrix.arch }}
+          path: dist/${{ env.RELEASE_VERSION }}/linux-${{ matrix.arch }}/*
+          if-no-files-found: error
+          retention-days: 7

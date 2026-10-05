@@ -1,6 +1,5 @@
-// Ported from SPK-launcher (web/src/lib/logSelection.ts). Adapted: the
-// row text is what the row shows (time and source prefixes included), given
-// by rowText, since that is what a DOM offset inside the row counts.
+// Selection offsets use the visible rowText, including time and source
+// prefixes, so copied text matches the DOM selection.
 
 /** What the logical selection needs of an entry: its id. */
 export interface Identified {

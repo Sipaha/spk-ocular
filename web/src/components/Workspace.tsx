@@ -41,19 +41,10 @@ interface UIState {
   scope: ScopeSel
 }
 
-/** A navigation subgroup's key in target_state "navOpen". */
+/** Stable global keys, independent of target and interface language. */
 const subKey = (group: string, sub: string) => `${group}/${sub}`
-/** A foldable group's key in "navOpen" (a subgroup's always has a "/"). */
 const groupKey = (group: string) => `group:${group}`
-
-function parseOpen(st: Record<string, string>): string[] {
-  try {
-    const v = JSON.parse(st.navOpen ?? '[]')
-    return Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : []
-  } catch {
-    return []
-  }
-}
+const favoritesKey = 'favorites'
 
 function parseState(st: Record<string, string>, fallback: UIState): UIState {
   const parse = (v: string | undefined) => {
@@ -72,14 +63,17 @@ function parseState(st: Record<string, string>, fallback: UIState): UIState {
 }
 
 /** The selected target: kind navigation + the current table. */
-export function Workspace({ client, hub, target, onFavorite, onMoveFavorite }: {
+export function Workspace({ client, hub, target, onFavorite, onMoveFavorite, onNavSection }: {
   client: Client; hub: ViewHub; target: Target
   onFavorite: (provider: string, kind: string, favorite: boolean) => void
   onMoveFavorite: (provider: string, kind: string, before: string) => void
+  onNavSection: (key: string, open: boolean) => void
 }) {
   const navigationWidth = usePanelWidths((s) => s.navigation)
   const favoriteKinds = useStore((s) => s.favoriteKinds)
   const favoritesReady = useStore((s) => s.favoritesReady)
+  const navSections = useStore((s) => s.navSections)
+  const navSectionsReady = useStore((s) => s.navSectionsReady)
   const resourceFilter = useStore((s) => s.resourceFilter)
   const [dragFavorite, setDragFavorite] = useState<string | null>(null)
   const [favoriteDrop, setFavoriteDrop] = useState<{ id: string; edge: 'before' | 'after' } | null>(null)
@@ -93,14 +87,9 @@ export function Workspace({ client, hub, target, onFavorite, onMoveFavorite }: {
   // The target as it was left in this run (P18): shown at once, before
   // target_state answers.
   const tkey = targetKey({ provider: target.provider, id: target.id })
-  // Expanded navigation subgroups (collapsed by default; target_state).
-  const [navOpen, setNavOpen] = useState<string[]>(() => memoOf(tkey).navOpen ?? [])
-  const toggleSub = (key: string, open: boolean) => {
-    const next = open ? [...new Set([...navOpen, key])] : navOpen.filter((k) => k !== key)
-    setNavOpen(next)
-    rememberPage(tkey, { navOpen: next })
-    void client.setTargetState(target.provider, target.id, 'navOpen', JSON.stringify(next)).catch(() => {})
-  }
+  const searching = !!resourceFilter.trim()
+  const sectionOpen = (key: string, fallback: boolean) => searching || (navSections[key] ?? fallback)
+  const favoritesOpen = sectionOpen(favoritesKey, true)
   const defaultScope = target.defaultScope
   // Last kind and scope per target (SQLite target_state); null until loaded,
   // so the default view is not opened only to be replaced.
@@ -123,7 +112,8 @@ export function Workspace({ client, hub, target, onFavorite, onMoveFavorite }: {
   const defaultKind = kinds?.find((k) => k.default && !k.hidden)?.id ?? kinds?.find((k) => !k.hidden)?.id ?? ''
   // Old installs may have left the removed Overview page selected.
   const kind = ui?.kind && ui.kind !== '__overview' ? ui.kind : defaultKind
-  const scope: ScopeSel = ui?.scope ?? { mode: 'all' }
+  const selectedScope = ui?.scope ?? null
+  const scope: ScopeSel = selectedScope ?? { mode: 'all' }
   // P19: the page snapshot (filter/sort/details) is written back to
   // target_state debounced, and survives an app restart.
   useMemoPersist(client, target.provider, target.id, tkey)
@@ -226,12 +216,10 @@ export function Workspace({ client, hub, target, onFavorite, onMoveFavorite }: {
         (st) => {
           if (!live) return
           const ui = parseState(st, fallback)
-          const nav = parseOpen(st)
           const persisted = parseMemo(st.pageMemo)
           if (persisted) seedPersisted(tkey, persisted)
           setUI(ui)
-          setNavOpen(nav)
-          rememberPage(tkey, { ui, navOpen: nav, columnWidths: parseColumnWidths(st) })
+          rememberPage(tkey, { ui, columnWidths: parseColumnWidths(st) })
         },
         () => live && setUI(fallback),
       )
@@ -283,12 +271,12 @@ export function Workspace({ client, hub, target, onFavorite, onMoveFavorite }: {
       setScope,
       openObject: (ref) =>
         mayLeave(() => {
-          // With no table yet, open the object's kind to host its details.
-          if (!current) {
-            const k = kinds?.some((d) => d.id === ref.kind) ? ref.kind : (kinds?.find((d) => !d.hidden)?.id ?? kind)
-            again(k)
-            remember({ kind: k, scope })
-          }
+          // Open the object's own table and keep the target's scope selection.
+          // A vanished kind can still show its recent object's details in the
+          // current table; without one, use the first available host.
+          const k = kinds?.some((d) => d.id === ref.kind) ? ref.kind : current ? kind : (kinds?.find((d) => !d.hidden)?.id ?? kind)
+          again(k)
+          if (k !== kind || !current) remember({ kind: k, scope })
           setOpenReq({ value: ref, seq: ++reqSeq.current })
         }),
     }
@@ -301,11 +289,12 @@ export function Workspace({ client, hub, target, onFavorite, onMoveFavorite }: {
         target: targetRef,
         kinds: kinds ?? [],
         scopes: scopeNames,
+        selectedScope,
         openKind: (k, f) => paletteActs.current?.openKind(k, f),
         setScope: (s) => paletteActs.current?.setScope(s),
         openObject: (r) => paletteActs.current?.openObject(r),
       }),
-    [targetRef, kinds, scopeNames],
+    [targetRef, kinds, scopeNames, selectedScope],
   )
 
   return (
@@ -322,7 +311,7 @@ export function Workspace({ client, hub, target, onFavorite, onMoveFavorite }: {
               if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); useStore.setState({ resourceFilter: '' }) }
               else if (e.key === 'ArrowDown' || e.key === 'Enter') {
                 e.preventDefault(); e.stopPropagation()
-                const item = e.currentTarget.closest('nav')?.querySelector<HTMLButtonElement>('[data-nav-item]')
+                const item = e.currentTarget.closest('nav')?.querySelector<HTMLButtonElement>('[data-nav-item]:not([aria-expanded])')
                 item?.focus()
                 if (e.key === 'Enter' && matchingKinds.length === 1) item?.click()
               }
@@ -330,8 +319,9 @@ export function Workspace({ client, hub, target, onFavorite, onMoveFavorite }: {
         </label>
         <div className="resource-nav-list min-h-0 flex-1 overflow-y-auto pb-3" data-resource-nav-list>
         <section className="mt-3" aria-label={t('nav.favorites')}>
-          <h3 className="nav-group-heading">{t('nav.favorites')}</h3>
-          {visibleFavorites.map((k, i) => (
+          <NavSectionHeading label={t('nav.favorites')} open={favoritesOpen} count={visibleFavorites.length}
+            disabled={!navSectionsReady || searching} onToggle={(o) => onNavSection(favoritesKey, o)} />
+          {visibleFavorites.map((k, i) => (favoritesOpen || kind === k.id) && (
             <NavItem key={k.id} active={kind === k.id} onClick={() => setKind(k.id)} label={k.title} hint={k.subgroup}
               favorite onFavorite={() => toggleFavorite(k.id)} favoriteDisabled={!favoritesReady}
               moveUp={i > 0 ? () => onMoveFavorite(target.provider, k.id, visibleFavorites[i - 1].id) : undefined}
@@ -363,43 +353,17 @@ export function Workspace({ client, hub, target, onFavorite, onMoveFavorite }: {
                 },
               }} />
           ))}
-          {!resourceFilter.trim() && !matchingKinds.some((k) => favorites.has(k.id)) && <p className="px-2 text-[12px] text-fg-subtle">{t(favoritesReady ? 'nav.favoritesHint' : 'nav.favoritesUnavailable')}</p>}
+          {favoritesOpen && !resourceFilter.trim() && !matchingKinds.some((k) => favorites.has(k.id)) && <p className="px-2 text-[12px] text-fg-subtle">{t(favoritesReady ? 'nav.favoritesHint' : 'nav.favoritesUnavailable')}</p>}
         </section>
         {resourceFilter.trim() && !matchingKinds.length && <p role="status" className="px-2 py-2 text-fg-subtle">{t('nav.noMatches')}</p>}
         {groups.map((g) => {
-          // A group of subgroups (API groups: the rare and the custom) folds
-          // whole, folded by default; folded, it still shows the kind open.
-          const open = !!resourceFilter.trim() || !g.subgrouped || navOpen.includes(groupKey(g.group))
+          // Built-in groups start open; API groups keep their collapsed default.
+          const open = sectionOpen(groupKey(g.group), !g.subgrouped)
           const activeIn = g.items.flatMap((it) => ('kind' in it ? [it.kind] : it.kinds)).find((k) => k.id === kind)
           return (
             <section key={g.group} className="mt-3" aria-label={g.group}>
-              {g.subgrouped ? (
-                <button
-                  data-nav-item
-                  tabIndex={-1}
-                  aria-expanded={open}
-                  onClick={() => toggleSub(groupKey(g.group), !open)}
-                  onKeyDown={(e) => {
-                    if ((e.key === 'ArrowRight' && !open) || (e.key === 'ArrowLeft' && open)) {
-                      e.preventDefault()
-                      toggleSub(groupKey(g.group), !open)
-                    }
-                  }}
-                  className="nav-group-heading w-full items-center gap-1 rounded-md text-left hover:text-fg"
-                >
-                  <span aria-hidden className={['inline-block w-2.5 shrink-0 text-[9px] transition-transform', open ? 'rotate-90' : ''].join(' ')}>
-                    ▶
-                  </span>
-                  <span className="min-w-0 flex-1 truncate">{g.group}</span>
-                  <span className="font-normal" title={t('nav.kinds', { count: g.count })}>
-                    {g.count}
-                  </span>
-                </button>
-              ) : (
-                <h3 className="nav-group-heading">
-                  <span className="min-w-0 flex-1 truncate">{g.group}</span>
-                </h3>
-              )}
+              <NavSectionHeading label={g.group} open={open} count={g.count}
+                disabled={!navSectionsReady || searching} onToggle={(o) => onNavSection(groupKey(g.group), o)} />
               {!open && activeIn && !favorites.has(activeIn.id) && <NavItem active onClick={() => setKind(activeIn.id)} label={activeIn.title} hint={activeIn.subgroup}
                 favorite={false} onFavorite={() => toggleFavorite(activeIn.id)} favoriteDisabled={!favoritesReady} />}
               {open &&
@@ -412,8 +376,9 @@ export function Workspace({ client, hub, target, onFavorite, onMoveFavorite }: {
                       key={it.sub}
                       label={it.sub}
                       kinds={it.kinds}
-                      open={!!resourceFilter.trim() || navOpen.includes(subKey(g.group, it.sub))}
-                      onToggle={(o) => toggleSub(subKey(g.group, it.sub), o)}
+                      open={sectionOpen(subKey(g.group, it.sub), false)}
+                      disabled={!navSectionsReady || searching}
+                      onToggle={(o) => onNavSection(subKey(g.group, it.sub), o)}
                       active={kind}
                       onPick={setKind}
                       favorites={favorites}
@@ -570,6 +535,25 @@ export function navGroups(kinds: KindDescriptor[]): NavGroup[] {
   return out
 }
 
+/** Every section, including Favorites, has the same keyboard/mouse control. */
+function NavSectionHeading({ label, open, count, disabled, onToggle }: {
+  label: string; open: boolean; count: number; disabled: boolean; onToggle: (open: boolean) => void
+}) {
+  return <button type="button" data-nav-item tabIndex={-1} aria-label={`${label} (${count})`} aria-expanded={open} aria-disabled={disabled}
+    onClick={() => { if (!disabled) onToggle(!open) }}
+    onKeyDown={(e) => {
+      if (!disabled && ((e.key === 'ArrowRight' && !open) || (e.key === 'ArrowLeft' && open))) {
+        e.preventDefault()
+        onToggle(!open)
+      }
+    }}
+    className="nav-group-heading w-full items-center gap-1 rounded-md text-left hover:text-fg">
+    <span aria-hidden className={['inline-block w-2.5 shrink-0 text-[9px] transition-transform', open ? 'rotate-90' : ''].join(' ')}>▶</span>
+    <span className="min-w-0 flex-1 truncate">{label}</span>
+    <span className="font-normal" title={t('nav.kinds', { count })}>{count}</span>
+  </button>
+}
+
 function NavItem({ active, onClick, label, hint, nested, favorite, onFavorite, favoriteDisabled, moveUp, moveDown, drag }: {
   active: boolean; onClick: () => void; label: string; hint?: string; nested?: boolean
   favorite?: boolean; onFavorite?: () => void; favoriteDisabled?: boolean
@@ -633,6 +617,7 @@ function NavSubgroup(props: {
   label: string
   kinds: KindDescriptor[]
   open: boolean
+  disabled: boolean
   onToggle: (open: boolean) => void
   active: string
   onPick: (kind: string) => void
@@ -640,7 +625,7 @@ function NavSubgroup(props: {
   onFavorite: (kind: string) => void
   favoritesReady: boolean
 }) {
-  const { label, kinds, open, onToggle, active, onPick, favorites, onFavorite, favoritesReady } = props
+  const { label, kinds, open, disabled, onToggle, active, onPick, favorites, onFavorite, favoritesReady } = props
   const shown = open ? kinds : kinds.filter((k) => k.id === active)
   return (
     <div role="group" aria-label={label}>
@@ -648,10 +633,11 @@ function NavSubgroup(props: {
         data-nav-item
         tabIndex={-1}
         aria-expanded={open}
+        aria-disabled={disabled}
         title={label}
-        onClick={() => onToggle(!open)}
+        onClick={() => { if (!disabled) onToggle(!open) }}
         onKeyDown={(e) => {
-          if ((e.key === 'ArrowRight' && !open) || (e.key === 'ArrowLeft' && open)) {
+          if (!disabled && ((e.key === 'ArrowRight' && !open) || (e.key === 'ArrowLeft' && open))) {
             e.preventDefault()
             onToggle(!open)
           }

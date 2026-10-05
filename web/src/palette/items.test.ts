@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import type { KindDescriptor, RecentObject, Row, Target } from '../api/types'
+import type { KindDescriptor, RecentObject, Row, ScopeSel, Target } from '../api/types'
 import { buildItems, type Sources } from './items'
 
 const kind = (id: string, title: string, aliases: string[] = [], extra: Partial<KindDescriptor> = {}): KindDescriptor => ({ id, title, group: 'G', scoped: true, columns: [], aliases, ...extra })
@@ -25,6 +25,7 @@ const sources = (over: Partial<Sources> = {}): Sources => ({
     { target: target('kubeconfig:dev', 'dev'), groupTitle: 'Kubernetes' },
   ],
   scopes: ['default', 'demo', 'demo-2', 'all'],
+  selectedScope: { mode: 'all' },
   scopeAliases: ['ns', 'namespace'],
   targetAliases: ['ctx', 'context'],
   rows: [row('web-1'), row('db-0')],
@@ -196,5 +197,30 @@ describe('buildItems — the provider names its scopes', () => {
   it('an object is listed by its title', () => {
     const r = buildItems('', sources({ rows: [{ ...row('3f2a9c'), ref: { ...row('3f2a9c').ref, title: 'web-1' } }], recents: [] }))
     expect(labels(r)).toContain('object:web-1')
+  })
+})
+
+describe('buildItems — object scope selection', () => {
+  const scenarios: { scope: ScopeSel | null; visible: string[] }[] = [
+    { scope: { mode: 'one', name: 'demo' }, visible: ['demo'] },
+    { scope: { mode: 'some', names: ['demo', 'other'] }, visible: ['demo', 'other'] },
+    { scope: { mode: 'some', names: [] }, visible: [] },
+    { scope: { mode: 'all' }, visible: ['demo', 'other', 'outside'] },
+    { scope: { mode: 'none' }, visible: [] },
+    { scope: null, visible: [] },
+  ]
+  it.each(scenarios)('filters both live and recent objects for $scope, preserving global objects', ({ scope, visible }) => {
+    const rows = ['demo', 'other', 'outside', ''].map((ns) => row(`match-live-${ns || 'global'}`, ns, ns ? 'pods' : 'nodes'))
+    const recents = ['demo', 'other', 'outside', ''].map((ns) => ({ ...recent(`match-recent-${ns || 'global'}`), ref: row(`match-recent-${ns || 'global'}`, ns, ns ? 'unknown.io/things' : 'nodes').ref }))
+    for (const query of ['', 'match']) {
+      const items = buildItems(query, sources({ rows, recents, selectedScope: scope, scopes: null })).items.filter((i) => i.action.type === 'object')
+      expect(items.map((i) => i.label).sort()).toEqual([...visible, 'global'].flatMap((ns) => [`match-live-${ns}`, `match-recent-${ns}`]).sort())
+    }
+  })
+
+  it('keeps scope-switching commands and suggestions usable outside the selection', () => {
+    const src = sources({ selectedScope: { mode: 'one', name: 'demo' } })
+    expect(cursorItem(buildItems(':ns default', src))?.action).toEqual({ type: 'scope', scope: { mode: 'one', name: 'default' } })
+    expect(labels(buildItems('default', src))).toContain('scope:default')
   })
 })

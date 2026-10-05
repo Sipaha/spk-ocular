@@ -105,6 +105,26 @@ func webRef() core.Ref {
 	return core.Ref{Provider: ProviderID, Target: "ctx", Scope: "ns", Kind: "apps/deployments", Name: "web", UID: "d1"}
 }
 
+func TestArchiveReadsEveryGroupSourceBeyondTheUIStreamCap(t *testing.T) {
+	k := newFakeKubelet(t)
+	objects := []runtime.Object{deployment("web", "d1", "app"), replicaSet("web-rs", "rs1", "d1")}
+	for i := range maxGroupStreams + 1 {
+		name := fmt.Sprintf("web-%d", i)
+		objects = append(objects, memberOf(name, "uid-"+name, "rs1", i, "app"))
+		k.start(name, "app", "cid-"+name+"-app")
+		k.log(name, "app", fakeRec{ts: at(float64(i)), text: name})
+	}
+	g := startGroup(t, groupClient(objects...), k, webRef(), provider.LogQuery{Archive: true, TailLines: provider.TailAll})
+	select {
+	case err := <-g.done:
+		g.done <- err
+		require.NoError(t, err)
+	case <-time.After(5 * time.Second):
+		t.Fatal("archive did not complete")
+	}
+	assert.Len(t, g.sink.texts(), maxGroupStreams+1)
+}
+
 func (g *groupRun) create(t *testing.T, gvr schema.GroupVersionResource, u *unstructured.Unstructured) {
 	t.Helper()
 	_, err := g.client.Resource(gvr).Namespace("ns").Create(context.Background(), u, metav1.CreateOptions{})

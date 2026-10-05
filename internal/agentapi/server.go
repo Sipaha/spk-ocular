@@ -1,5 +1,5 @@
 // Package agentapi serves agent access over a unix socket (P14,
-// docs/specs/2026-09-30-agent-access-design.md): local agents (Claude,
+// docs/agent-api.md): local agents (Claude,
 // Codex) learn what the user granted them and, within it, read targets'
 // objects, logs and metrics, and prepare and run actions and edits. The
 // rights are checked here, on every call, before the service is asked;
@@ -32,6 +32,8 @@ type Options struct {
 	Version      string
 	// Home shortens the socket's path in the instruction line ("~").
 	Home string
+	// Downloads resolves the application's local export destination.
+	Downloads func() (string, error)
 }
 
 // Server is the agent socket and what the UI manages of it
@@ -63,15 +65,17 @@ type Server struct {
 	reqCtx    context.Context
 	reqCancel context.CancelFunc
 	// closing: Close waits for runs; no more are counted (track).
-	runMu   sync.Mutex
-	closing bool
+	runMu    sync.Mutex
+	closing  bool
+	logMu    sync.Mutex
+	logReads map[*activeLogRead]struct{}
 }
 
 var _ api.AgentControl = (*Server)(nil)
 
 // New builds the server (Start serves it).
 func New(o Options) *Server {
-	s := &Server{o: o, mux: http.NewServeMux(), now: time.Now, state: api.AgentFailed, errMsg: "not started"}
+	s := &Server{o: o, mux: http.NewServeMux(), now: time.Now, state: api.AgentFailed, errMsg: "not started", logReads: map[*activeLogRead]struct{}{}}
 	s.runCtx, s.runCancel = context.WithCancel(context.Background())
 	s.reqCtx, s.reqCancel = context.WithCancel(context.Background())
 	s.plans = newRegistry[*plan](planTTL, maxPlans)

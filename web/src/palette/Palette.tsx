@@ -61,6 +61,7 @@ function PaletteDialog({ client, act }: { client: Client; act: Actions }) {
       kinds: host?.kinds ?? [],
       targets: (view?.groups ?? []).flatMap((g) => g.targets.map((target) => ({ target, groupTitle: g.title }))),
       scopes: host ? (liveScopes ?? host.scopes) : [],
+      selectedScope: host?.selectedScope ?? null,
       scopeAliases: host ? (group?.aliases?.scope ?? []) : [],
       scopeWords: scopeWords(group?.scopeNames),
       targetAliases: [...new Set((view?.groups ?? []).flatMap((g) => g.aliases?.target ?? []))],

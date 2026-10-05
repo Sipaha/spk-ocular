@@ -158,6 +158,31 @@ describe('editing an object in the details', () => {
     expect(f.client.openView).not.toHaveBeenCalledWith('kubernetes', 'prod', expect.objectContaining({ kind: 'nodes' }))
   })
 
+  it('opening another kind from recent objects changes the selected section only after discarding edits', async () => {
+    const { f, drawer, v } = await openEditor()
+    type(v, 'x: 1', 'x: 9')
+    const ref: Ref = { provider: 'kubernetes', target: 'prod', kind: 'nodes', name: 'node-palette', uid: 'node-uid' }
+    f.state.recents = [{ ref, title: 'node-palette', openedAt: 1 }]
+    f.state.rowsByKind.nodes = [{ id: 'node-row', ref, cells: [{ text: 'node-palette' }], health: { state: 'ok' } }]
+    const choose = async () => {
+      v.focus()
+      await userEvent.keyboard('{Control>}k{/Control}')
+      const palette = await screen.findByRole('dialog', { name: 'Go to' })
+      await userEvent.click(await within(palette).findByRole('option', { name: /node-palette/ }))
+      return screen.findByRole('alertdialog', { name: 'Discard edits?' })
+    }
+    await choose()
+    await userEvent.keyboard('{Escape}')
+    expect(screen.getByRole('button', { name: 'Pods' })).toHaveAttribute('aria-current', 'page')
+    expect((await editorView(drawer)).state.doc.toString()).toContain('x: 9')
+    const prompt = await choose()
+    await userEvent.click(within(prompt).getByRole('button', { name: 'Discard' }))
+    expect(await screen.findByRole('heading', { name: 'Nodes' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Nodes' })).toHaveAttribute('aria-current', 'page')
+    expect(await screen.findByRole('dialog', { name: 'nodes node-palette' })).toBeInTheDocument()
+    expect(await screen.findByRole('row', { selected: true })).toHaveAttribute('data-row-id', 'node-row')
+  })
+
   it('Back to the text keeps the edits', async () => {
     const { drawer, v } = await openEditor()
     type(v, 'x: 1', 'x: 3')

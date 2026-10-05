@@ -14,7 +14,7 @@ import (
 	"github.com/spk/spk-ocular/internal/providers/compose/engine"
 )
 
-// Observation tuning (docs/plans/2026-09-30-p6-docker-compose.md, decision 2).
+// Observation tuning (docs/architecture.md).
 const (
 	// feedGrace: a feed no consumer leases is kept this long (switching
 	// back is instant), like the Kubernetes caches. (The session's fields

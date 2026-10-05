@@ -1,6 +1,6 @@
 // Package views is the provider-agnostic hot layer between a provider's
 // watch and the UI: current rows of an open table plus enough change history
-// to answer "what changed since version N" (docs/specs, "Живые таблицы").
+// to answer "what changed since version N" (docs/architecture.md).
 package views
 
 import (

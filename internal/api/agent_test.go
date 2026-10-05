@@ -457,9 +457,9 @@ func TestTailLogs(t *testing.T) {
 			if err := sink.Ready(); err != nil {
 				return err
 			}
-			_ = sink.Lines(1, []provider.LogLine{{TS: "t1", Text: "one"}, {TS: "t2", Text: strings.Repeat("x", 100), Flags: provider.LineCut}})
+			_ = sink.Lines(1, []provider.LogLine{{TS: "1970-01-01T00:01:40Z", Text: "one"}, {TS: "1970-01-01T00:01:41Z", Text: strings.Repeat("x", 100), Flags: provider.LineCut}})
 			_ = sink.State(2, provider.LogState{State: provider.LogWaiting, Message: "not started"})
-			_ = sink.Lines(2, []provider.LogLine{{TS: "t3", Text: "two"}})
+			_ = sink.Lines(2, []provider.LogLine{{TS: "1970-01-01T00:01:42Z", Text: "two"}})
 			return nil
 		}
 		return loggingSession{a}
@@ -467,14 +467,14 @@ func TestTailLogs(t *testing.T) {
 	s, _ := newService(t, p)
 	c := call(t, s, "a")
 	since := time.Unix(100, 0)
-	tl, err := c.TailLogs(TailRequest{Ref: row("a", "web-1").Ref, Channel: "main", TailLines: 50, SinceTime: since})
+	tl, err := c.TailLogs(TailRequest{Ref: row("a", "web-1").Ref, Channel: "main", TailLines: 50, SinceTime: since, Limit: 50})
 	require.NoError(t, err)
 	assert.Equal(t, provider.LogQuery{Channel: "main", TailLines: 50, SinceTime: since}, asked, "never followed")
 	require.Len(t, tl.Sources, 2)
 	assert.Equal(t, "web-2", tl.Sources[1].Label)
 	assert.Equal(t, provider.LogWaiting, tl.Sources[1].State.State)
 	require.Len(t, tl.Lines, 3)
-	assert.Equal(t, TailLine{Source: 1, TS: "t2", Text: strings.Repeat("x", 100), Cut: true}, tl.Lines[1])
+	assert.Equal(t, TailLine{Source: 1, TS: "1970-01-01T00:01:41Z", Text: strings.Repeat("x", 100), Cut: true}, tl.Lines[1])
 	assert.False(t, tl.Truncated)
 
 	old := maxTailBytes
@@ -486,7 +486,7 @@ func TestTailLogs(t *testing.T) {
 	require.Len(t, tl.Lines, 1)
 	assert.Equal(t, "two", tl.Lines[0].Text, "the newest lines are kept")
 
-	for _, n := range []int{0, -1, maxTailLines + 1} {
+	for _, n := range []int{0, -2, maxTailLines + 1} {
 		_, err = c.TailLogs(TailRequest{Ref: row("a", "web-1").Ref, TailLines: n})
 		assert.True(t, IsCoded(err, CodeBadRequest), "%d", n)
 	}

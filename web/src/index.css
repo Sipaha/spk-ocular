@@ -108,7 +108,7 @@ select option { background-color: var(--color-panel); color: var(--color-fg); }
 .target-list:focus-visible { outline: 1px solid var(--color-accent); outline-offset: -3px; border-radius: var(--radius-md); }
 
 /* logs: search matches, and no selection outside the viewer while a
-   drag-selection runs inside it (SPK-launcher) */
+   drag-selection runs inside it */
 mark.log-match { background: #ffeb3b; color: #000; border-radius: 2px; }
 mark.log-match-current { background: #ff9800; color: #000; border-radius: 2px; }
 body.log-select-drag { -webkit-user-select: none; user-select: none; }

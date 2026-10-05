@@ -17,7 +17,7 @@ import (
 // A discovered kind's columns are the server's (Table) and hold for a
 // schema epoch: an immutable snapshot a view, its cache and its rows share.
 // An answer with other columns starts the next epoch; views of the old one
-// end "schema changed" and are opened again (docs/plans P8, decision 2).
+// end "schema changed" and are opened again (docs/architecture.md).
 
 // tableSchema is one epoch of a discovered resource's columns.
 type tableSchema struct {

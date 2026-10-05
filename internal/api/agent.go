@@ -357,13 +357,17 @@ func (c *AgentCall) Metrics(snap Snapshot, rowIDs []string) (MetricsView, error)
 	return out, nil
 }
 
-// TailRequest: the last lines of an object's logs, never followed.
+// TailRequest is a bounded log snapshot, optionally restricted to a time interval.
 type TailRequest struct {
 	Ref       core.Ref
 	Channel   string
 	Previous  bool
 	TailLines int
 	SinceTime time.Time
+	UntilTime time.Time
+	Limit     int
+	MaxBytes  int
+	Grep      *LogGrep
 }
 
 // TailSource is one source of a tail (a pod's container), with its last
@@ -387,21 +391,20 @@ type TailLine struct {
 // tail keeps), no end within tailWait, or not every source shown; State —
 // the whole stream's last state (a group's, e.g. limited).
 type Tail struct {
-	Sources   []TailSource       `json:"sources"`
-	Lines     []TailLine         `json:"lines"`
-	State     *provider.LogState `json:"state,omitempty" jsonschema_description:"The whole stream's last state: for a workload, e.g. limited (only some of its pods' streams are read; the message says how many)."`
-	Truncated bool               `json:"truncated,omitempty" jsonschema_description:"Older lines were left out (a tail keeps the newest 5000 lines and 1 MiB), not every source answered in time, or not every source is read (see state)."`
+	TotalSources int                `json:"totalSources,omitempty"`
+	Sources      []TailSource       `json:"sources"`
+	Lines        []TailLine         `json:"lines"`
+	State        *provider.LogState `json:"state,omitempty" jsonschema_description:"The whole stream's last state: for a workload, e.g. limited (only some of its pods' streams are read; the message says how many)."`
+	Truncated    bool               `json:"truncated,omitempty" jsonschema_description:"Older lines were left out (a tail keeps the newest 5000 lines and 1 MiB), not every source answered in time, or not every source is read (see state)."`
+	LimitReason  string             `json:"limitReason,omitempty" jsonschema_description:"line_limit, byte_limit, time_limit, tail_lines or source_limit explains a bounded or incomplete result."`
 }
 
 // TailLogs reads the backlog of an object's logs, never followed (the
 // stream ends after it), and keeps its newest maxTailLines lines and
 // maxTailBytes of text: Truncated says older ones were left out.
 func (c *AgentCall) TailLogs(req TailRequest) (Tail, error) {
-	if req.TailLines < 1 || req.TailLines > maxTailLines {
-		return Tail{}, coded(CodeBadRequest, fmt.Errorf("tailLines must be 1..%d", maxTailLines))
-	}
-	if req.Previous && !req.SinceTime.IsZero() {
-		return Tail{}, coded(CodeBadRequest, errors.New("previous logs take no since time"))
+	if err := ValidateAgentLogs(req); err != nil {
+		return Tail{}, err
 	}
 	src, ok := c.e.sess.(provider.LogSource)
 	if !ok {
@@ -409,9 +412,10 @@ func (c *AgentCall) TailLogs(req TailRequest) (Tail, error) {
 	}
 	ctx, cancel := context.WithTimeout(c.ctx, tailWait)
 	defer cancel()
-	sink := &tailSink{}
-	q := provider.LogQuery{Channel: req.Channel, Previous: req.Previous, TailLines: req.TailLines, SinceTime: req.SinceTime}
-	err := src.StreamLogs(ctx, req.Ref, q, sink)
+	limit, bytes := AgentLogLimits(req)
+	sink := &tailSink{limit: limit, byteLimit: bytes, perSource: req.TailLines}
+	q := agentLogQuery(req, false)
+	err := src.StreamLogs(ctx, req.Ref, q, newAgentTimeFilter(sink, req))
 	if c.ctx.Err() != nil {
 		// The session closed (or the agent left): not a complete answer,
 		// though a backlog without follow ends with what it read.
@@ -419,6 +423,7 @@ func (c *AgentCall) TailLogs(req TailRequest) (Tail, error) {
 	}
 	if ctx.Err() != nil { // out of time: what came
 		sink.out.Truncated, err = true, nil
+		sink.out.LimitReason = "time_limit"
 	}
 	if err != nil {
 		return Tail{}, c.fail(err)
@@ -435,8 +440,12 @@ func (c *AgentCall) TailLogs(req TailRequest) (Tail, error) {
 // dropped from the front. Ready is no end: a pod's own stream sends it
 // before its lines, and a stream without Follow ends by itself.
 type tailSink struct {
-	bytes int
-	out   Tail
+	bytes     int
+	out       Tail
+	limit     int
+	perSource int
+	counts    map[int]int
+	byteLimit int
 }
 
 func (t *tailSink) Source(id int, _, label, channel string) error {
@@ -445,11 +454,40 @@ func (t *tailSink) Source(id int, _, label, channel string) error {
 }
 
 func (t *tailSink) Lines(id int, lines []provider.LogLine) error {
+	if t.counts == nil {
+		t.counts = map[int]int{}
+	}
 	for _, l := range lines {
 		t.bytes += len(l.Text)
 		t.out.Lines = append(t.out.Lines, TailLine{Source: id, TS: l.TS, Text: l.Text, Cut: l.Flags&provider.LineCut != 0})
-		for len(t.out.Lines) > maxTailLines || t.bytes > maxTailBytes {
+		t.counts[id]++
+		if t.perSource > 0 && t.counts[id] > t.perSource {
+			for i, line := range t.out.Lines {
+				if line.Source == id {
+					t.bytes -= len(line.Text)
+					t.counts[id]--
+					t.out.Lines = append(t.out.Lines[:i], t.out.Lines[i+1:]...)
+					t.out.Truncated = true
+					t.out.LimitReason = "tail_lines"
+					break
+				}
+			}
+		}
+		limit := t.limit
+		if limit == 0 {
+			limit = maxTailLines
+		}
+		byteLimit := t.byteLimit
+		if byteLimit == 0 {
+			byteLimit = maxTailBytes
+		}
+		for len(t.out.Lines) > limit || t.bytes > byteLimit {
+			t.out.LimitReason = "line_limit"
+			if t.bytes > byteLimit {
+				t.out.LimitReason = "byte_limit"
+			}
 			t.bytes -= len(t.out.Lines[0].Text)
+			t.counts[t.out.Lines[0].Source]--
 			t.out.Lines = t.out.Lines[1:]
 			t.out.Truncated = true
 		}
@@ -458,10 +496,15 @@ func (t *tailSink) Lines(id int, lines []provider.LogLine) error {
 }
 
 func (t *tailSink) State(id int, st provider.LogState) error {
+	if st.State == provider.LogLimited || st.State == provider.LogTruncated || st.State == provider.LogGap || st.State == provider.LogError {
+		t.out.Truncated = true
+		if t.out.LimitReason == "" {
+			t.out.LimitReason = "source_limit"
+		}
+	}
 	if id == 0 { // the whole stream
 		s := st
 		t.out.State = &s
-		t.out.Truncated = t.out.Truncated || st.State == provider.LogLimited
 		return nil
 	}
 	for i := range t.out.Sources {

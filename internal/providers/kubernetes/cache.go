@@ -15,7 +15,7 @@ import (
 	"github.com/spk/spk-ocular/internal/provider"
 )
 
-// Cache retention (docs/specs "Ленивые informers с бюджетом"): a cache no
+// Cache retention (docs/architecture.md): a cache no
 // view uses is kept for cacheGrace (switching back is instant), but at most
 // maxIdleCaches such caches exist; the oldest idle one goes first.
 const (
