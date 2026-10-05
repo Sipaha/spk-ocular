@@ -55,15 +55,14 @@ recapture screenshots from an isolated app profile, never from a user's cluster.
 
 ## Publish
 
-The intended GitHub Pages URL is `https://sipaha.github.io/spk-ocular/`.
-The repository currently needs Pages enabled with **GitHub Actions** as its source
-under **Settings → Pages**. This requires authenticated repository administration;
-SSH source pushes alone cannot change that setting.
+The GitHub Pages URL is `https://sipaha.github.io/spk-ocular/`.
+The repository is configured with **GitHub Actions** as its Pages source under
+**Settings → Pages**. Custom domain configuration is not required for this URL.
 
-The website workflow validates and uploads the site on pushes to `pages`.
-Deployment runs only when the repository already has GitHub Actions configured
-as its Pages source. Until then it is skipped, while checks and artifacts remain
-available. After configuring Pages, the next push to `pages` publishes the site.
+The website workflow validates, uploads and deploys the site on pushes to `pages`.
+Deployment runs only when the repository has GitHub Actions configured as its
+Pages source; if that configuration is removed, deployment is skipped while
+checks and artifacts remain available.
 The optional dispatch trigger also supports deployment when the workflow is
 available on the default branch. No application tag or release is created.
 Changing the public address requires updating `astro.config.mjs` and canonical,
