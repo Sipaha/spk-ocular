@@ -1,0 +1,86 @@
+name: Website
+on:
+  push:
+    branches: [pages]
+  workflow_dispatch:
+    inputs:
+      deploy:
+        description: Publish to GitHub Pages after enabling Pages in repository settings
+        type: boolean
+        default: false
+permissions:
+  contents: read
+concurrency:
+  group: ocular-website
+  cancel-in-progress: false
+jobs:
+  check:
+    permissions:
+      contents: read
+      pages: read
+    outputs:
+      pages-enabled: ${{ steps.pages.outputs.enabled }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: '22'
+      - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+        with:
+          version: 10.33.0
+      - name: Workspace scratch
+        run: |
+          mkdir -p "$GITHUB_WORKSPACE/.agents/tmp/site/tmp"
+          echo "OCULAR_SITE_SCRATCH=$GITHUB_WORKSPACE/.agents/tmp/site" >> "$GITHUB_ENV"
+          echo "TMPDIR=$GITHUB_WORKSPACE/.agents/tmp/site/tmp" >> "$GITHUB_ENV"
+          echo "PLAYWRIGHT_BROWSERS_PATH=$GITHUB_WORKSPACE/.agents/tmp/site/browsers" >> "$GITHUB_ENV"
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec playwright install --with-deps chromium
+      - run: make check
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+      - name: Detect configured Pages site
+        id: pages
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python3 - <<'PYTHON'
+          import json, os, urllib.error, urllib.request
+          url = 'https://api.github.com/repos/' + os.environ['GITHUB_REPOSITORY'] + '/pages'
+          request = urllib.request.Request(url, headers={'Authorization': 'Bearer ' + os.environ['GH_TOKEN'], 'Accept': 'application/vnd.github+json'})
+          enabled = False
+          try:
+              with urllib.request.urlopen(request, timeout=20) as response:
+                  enabled = json.load(response).get('build_type') == 'workflow'
+          except urllib.error.HTTPError as error:
+              if error.code != 404:
+                  raise
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
+              output.write('enabled=' + str(enabled).lower() + '\n')
+          print('GitHub Pages configured:', enabled)
+          PYTHON
+      - name: Verification screenshots
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: website-verification
+          path: |
+            .agents/tmp/site/*.png
+            .agents/tmp/site/*.json
+          retention-days: 7
+  deploy:
+    if: needs.check.outputs.pages-enabled == 'true' && (github.event_name == 'push' || inputs.deploy)
+    needs: check
+    runs-on: ubuntu-24.04
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/deploy-pages@v4
+        id: deploy

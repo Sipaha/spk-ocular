@@ -1,0 +1,42 @@
+---
+import '../styles/global.css';
+interface Props { lang: 'ru' | 'en'; title: string; description: string; }
+const { lang, title, description } = Astro.props;
+const base = '/spk-ocular/';
+const origin = 'https://sipaha.github.io';
+const canonical = origin + base + (lang === 'en' ? 'en/' : '');
+---
+<!doctype html>
+<html lang={lang}>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{title}</title>
+    <meta name="description" content={description} />
+    <link rel="canonical" href={canonical} />
+    <link rel="alternate" hreflang="ru" href={origin + base} />
+    <link rel="alternate" hreflang="en" href={origin + base + 'en/'} />
+    <link rel="alternate" hreflang="x-default" href={origin + base} />
+    <link rel="icon" type="image/svg+xml" href={base + 'icon.svg'} />
+    <meta name="theme-color" content="#101827" />
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content={title} />
+    <meta property="og:description" content={description} />
+    <meta property="og:url" content={canonical} />
+    <meta property="og:image" content={origin + base + `media/og-${lang}.png`} />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <script is:inline>
+      (() => {
+        let theme;
+        try { theme = localStorage.getItem('ocular-theme'); } catch {}
+        document.documentElement.dataset.theme = theme === 'light' || theme === 'dark' ? theme : (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+      })();
+    </script>
+  </head>
+  <body>
+    <slot />
+    <script src="../scripts/site.ts"></script>
+  </body>
+</html>
