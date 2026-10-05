@@ -59,6 +59,7 @@ export function ActionDialog({ client, req, onClose, onTerminal, runTimeoutMs = 
   const [text, setText] = useState<string | null>(null)
   const textTouched = useRef(false)
   const chosenTouched = useRef(false)
+  const countTouched = useRef(false)
   const [textError, setTextError] = useState<string | null>(null)
   const [count, setCount] = useState('')
   // The value chosen (a choice parameter).
@@ -102,7 +103,7 @@ export function ActionDialog({ client, req, onClose, onTerminal, runTimeoutMs = 
         if (!live.current || g !== gen.current) return // a later review (or none) owns the dialog
         setPlan(pl)
         setBusy(null)
-        if (counted && p.count === undefined && pl.current !== undefined) setCount(String(pl.current))
+        if (counted && !countTouched.current && p.count === undefined && pl.current !== undefined) setCount(String(pl.current))
         // The provider's defaults (the image, the target) are this plan's:
         // taken as if chosen, so the plan is reviewed at once.
         if (textDesc && !textTouched.current && pl.params.text !== undefined) setText(pl.params.text)
@@ -175,8 +176,10 @@ export function ActionDialog({ client, req, onClose, onTerminal, runTimeoutMs = 
     } else if (choosing && !reviewed) {
       return // a choice's review is on its way
     } else if (counted && !reviewed) {
-      countRef.current?.focus()
-      countRef.current?.select()
+      if (!countTouched.current) {
+        countRef.current?.focus()
+        countRef.current?.select()
+      }
     } else if (plan && canRun && !destructive) confirmRef.current?.focus()
     else if (plan && destructive) cancelRef.current?.focus() // also from the count: a destructive plan starts at Cancel
     else if (!box.current?.contains(document.activeElement) || document.activeElement === box.current) cancelRef.current?.focus()
@@ -413,6 +416,7 @@ export function ActionDialog({ client, req, onClose, onTerminal, runTimeoutMs = 
                 value={count}
                 disabled={busy === 'run' || sent}
                 onChange={(e) => {
+                  countTouched.current = true
                   setCount(e.target.value)
                   setCountError(null)
                 }}

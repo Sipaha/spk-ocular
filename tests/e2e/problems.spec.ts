@@ -1,6 +1,7 @@
 import { expect } from '@playwright/test'
 import { test } from './fixtures'
 import { token } from './synth'
+import type { Page as ResourcePage } from '../../web/src/api/types'
 
 // The synthetic Problems view: rows point at Services and Workloads, one is
 // evidence, one source could not be observed.
@@ -33,6 +34,7 @@ test('first opening shows one loading state before the table and coverage', asyn
   await expect(page.getByRole('grid', { name: 'resources' })).toBeVisible()
 
   let problemsView = ''
+  let partialSent = false
   let release!: () => void
   const snapshot = new Promise<void>((resolve) => { release = resolve })
   await page.route('**/api/OpenView', async (route) => {
@@ -41,7 +43,15 @@ test('first opening shows one loading state before the table and coverage', asyn
     await route.fulfill({ response })
   })
   await page.route('**/api/GetRows', async (route) => {
-    if (problemsView && route.request().postDataJSON().viewId === problemsView) await snapshot
+    if (problemsView && route.request().postDataJSON().viewId === problemsView && !partialSent) {
+      await snapshot
+      const response = await route.fetch()
+      const body: ResourcePage = await response.json()
+      partialSent = true
+      body.status = { ...body.status, state: 'loading', coverage: body.status.coverage?.map((source) => source.source === 'Nodes' ? { source: 'Nodes', state: 'loading' } : source) }
+      await route.fulfill({ response, json: body })
+      return
+    }
     await route.continue()
   })
   try {
@@ -56,6 +66,10 @@ test('first opening shows one loading state before the table and coverage', asyn
     release()
   }
   await expect(page.getByRole('grid', { name: 'resources' }).getByRole('gridcell', { name: 'api', exact: true })).toBeVisible()
+  await expect(page.locator('.resource-toolbar').getByRole('status', { name: 'Loading…', exact: true })).toBeVisible()
+  await expect(page.getByRole('note', { name: 'Not observed' })).toHaveCount(0)
+  await page.screenshot({ path: testInfo.outputPath('problems-partial-loading.png') })
+  await page.getByRole('button', { name: /Read again/ }).click()
   await expect(page.getByRole('status', { name: 'Loading…', exact: true })).toHaveCount(0)
   await expect(page.getByRole('note', { name: 'Not observed' })).toHaveText('Not observed: Nodes (access denied)')
   await page.screenshot({ path: testInfo.outputPath('problems-ready.png') })

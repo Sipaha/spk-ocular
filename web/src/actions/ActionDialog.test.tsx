@@ -148,6 +148,22 @@ describe('ActionDialog', () => {
     expect(f.client.runAction).not.toHaveBeenCalled()
   })
 
+  it('keeps a count being typed, including its caret, when the initial plan arrives', async () => {
+    const initial = deferred<ActionPlan>()
+    const { f, dialog } = setup(scale, (p) => p.count === undefined ? initial.promise : planOf(scale, p, { current: 2 }))
+    const input = within(dialog).getByRole('textbox')
+    await userEvent.type(input, '1')
+    await act(async () => initial.resolve(planOf(scale, { count: 2 }, { current: 2 })))
+    expect(input).toHaveValue('1')
+    expect(within(dialog).queryByRole('button', { name: 'Scale' })).not.toBeInTheDocument()
+    await userEvent.type(input, '0{Enter}')
+    expect(input).toHaveValue('10')
+    expect(f.client.prepareAction).toHaveBeenLastCalledWith(ref, 'scale', { count: 10 })
+    expect(f.client.runAction).not.toHaveBeenCalled()
+    await userEvent.click(await within(dialog).findByRole('button', { name: 'Scale' }))
+    expect(vi.mocked(f.client.runAction).mock.calls[0][0].params).toEqual({ count: 10 })
+  })
+
   it('scale: an out-of-range count is explained, not sent', async () => {
     const { f, dialog } = setup(scale, (p) => planOf(scale, p, { current: 2 }))
     const input = await within(dialog).findByRole('textbox')

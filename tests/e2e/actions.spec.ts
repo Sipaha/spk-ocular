@@ -241,14 +241,31 @@ test('an unknown outcome: check before repeating; the object did change', async 
   await expect(row(grid, 'web')).toHaveCount(0)
 })
 
-test('another actor changes the object after the review: review again', async ({ page }) => {
+test('another actor changes the object after the review: review again', async ({ page }, testInfo) => {
   const grid = await openWorkloads(page)
+  let release!: () => void
+  const initial = new Promise<void>((resolve) => { release = resolve })
+  await page.route('**/api/PrepareAction', async (route) => {
+    const request = route.request().postDataJSON()
+    if (request.action === 'scale' && request.params.count === undefined) {
+      const response = await route.fetch()
+      await initial
+      await route.fulfill({ response })
+    } else await route.continue()
+  })
   await row(grid, 'web').click({ button: 'right' })
   await page.getByRole('menu').getByRole('menuitem', { name: 'Scale…' }).click()
   const dialog = page.getByRole('dialog', { name: 'Scale web' })
-  await dialog.getByRole('textbox').fill('3')
+  try {
+    await dialog.getByRole('textbox').fill('3')
+  } finally {
+    release()
+  }
+  await expect(dialog).toHaveAttribute('aria-busy', 'false')
+  await expect(dialog.getByRole('textbox')).toHaveValue('3')
   await dialog.getByRole('textbox').press('Enter')
   await expect(dialog).toContainText('2 → 3')
+  await page.screenshot({ path: testInfo.outputPath('scale-reviewed-input.png') })
   await mutate(page, { object: 'web', replicas: 7 })
   await expect.poll(() => cells(grid, 'web')).toEqual(['web', '7', '0'])
   await dialog.getByRole('button', { name: 'Scale' }).click()

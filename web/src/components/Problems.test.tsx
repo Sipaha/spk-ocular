@@ -100,7 +100,9 @@ describe('Problems', () => {
     })
     expect(await within(grid).findByText('crash')).toBeVisible()
     expect(screen.getByRole('note', { name: 'Not observed' })).toHaveTextContent('Nodes (access denied)')
+    expect(screen.getByRole('note', { name: 'Not observed' })).not.toHaveTextContent('Warning events')
     expect(screen.getByRole('status', { name: 'Loading…' })).toBeVisible()
+    expect(screen.getByRole('status', { name: 'Loading…' }).closest('header')).not.toBeNull()
   })
 
   it('is in the navigation; the worst first, then the most recent', async () => {

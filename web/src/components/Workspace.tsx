@@ -820,6 +820,7 @@ function ResourcePage(props: {
         <span className="resource-count" aria-label="count">
           {view.status.state === 'loading' && !view.rows.length ? '…' : view.rows.length}
         </span>
+        {!initialLoading && view.status.state === 'loading' && <LoadingState title={kind.title} inline />}
         {marked.size > 0 && (
           <div role="toolbar" aria-label={t('bulk.bar')} className="flex shrink-0 items-center gap-2 whitespace-nowrap rounded-md bg-marked px-2 py-0.5 text-xs">
             <span>{t('bulk.marked', { n: marked.size, total: shownRows.length })}</span>
@@ -869,8 +870,8 @@ function ResourcePage(props: {
           />
         </label>
       </header>
-      {!initialLoading && <StatusBanner title={kind.title} state={view.status.state} cls={view.status.class} message={view.status.message} empty={view.rows.length === 0} coverage={view.status.coverage} />}
-      {!initialLoading && view.status.coverage && <CoverageNote coverage={view.status.coverage} notCovered={view.kind?.notCovered ?? kind.notCovered} compact={scope.mode === 'some'} />}
+      {!initialLoading && <StatusBanner state={view.status.state} cls={view.status.class} message={view.status.message} empty={view.rows.length === 0} coverage={view.status.coverage} />}
+      {!initialLoading && view.status.coverage && <CoverageNote coverage={view.status.coverage} notCovered={view.kind?.notCovered ?? kind.notCovered} compact={scope.mode === 'some'} loading={view.status.state === 'loading'} />}
       {!initialLoading && metrics && <MetricsNote metrics={metrics} />}
       <div className="relative flex min-h-0 flex-1 flex-col">
         <div data-area="table" aria-busy={view.status.state === 'loading'} className="flex min-h-0 flex-1 flex-col">
@@ -1025,21 +1026,22 @@ function ScopePicker({ scope, scopes, onScope, scopeMenu }: { scope: ScopeSel; s
   return <ScopeSelect value={scope} names={names} label={words.singular} allLabel={words.all} onChange={choose} memory={scopeMenu} />
 }
 
-function LoadingState({ title, compact = false }: { title?: string; compact?: boolean }) {
-  return <div role="status" aria-label={t('app.loading')} className={`flex items-center justify-center gap-3 px-4 py-8 text-fg-muted ${compact ? '' : 'min-h-0 flex-1'}`}>
-    <span aria-hidden="true" className="h-5 w-5 shrink-0 animate-spin rounded-full border-2 border-line border-t-accent motion-reduce:animate-none" />
-    <span>{title ? t('table.loading', { kind: title }) : t('app.loading')}</span>
+function LoadingState({ title, inline = false }: { title?: string; inline?: boolean }) {
+  const label = title ? t('table.loading', { kind: title }) : t('app.loading')
+  return <div role="status" aria-label={t('app.loading')} title={inline ? label : undefined} className={inline ? 'flex shrink-0 items-center text-fg-muted' : 'flex min-h-0 flex-1 items-center justify-center gap-3 px-4 py-8 text-fg-muted'}>
+    <span aria-hidden="true" className={`${inline ? 'h-3.5 w-3.5' : 'h-5 w-5'} shrink-0 animate-spin rounded-full border-2 border-line border-t-accent motion-reduce:animate-none`} />
+    <span className={inline ? 'sr-only' : undefined}>{label}</span>
   </div>
 }
 
-function StatusBanner({ title, state, cls, message, empty, coverage }: { title: string; state: string; cls?: string; message?: string; empty: boolean; coverage?: SourceCoverage[] }) {
+function StatusBanner({ state, cls, message, empty, coverage }: { state: string; cls?: string; message?: string; empty: boolean; coverage?: SourceCoverage[] }) {
   if (state === 'ready') {
     if (!empty) return null
     // A view of several sources: nothing found is only "nothing" where it could look.
     const text = !coverage ? t('table.empty') : coverage.every((c) => c.state === 'ready') ? t('coverage.noneFound') : t('coverage.noneInObserved')
     return <p className="px-4 py-6 text-center text-fg-subtle">{text}</p>
   }
-  if (state === 'loading') return <LoadingState title={title} compact />
+  if (state === 'loading') return null
   const isErr = state === 'error'
   return (
     <div role="alert" className={['mx-4 mt-3 flex items-start gap-2 rounded-md px-3 py-2 text-xs', isErr ? 'bg-danger/10 text-danger' : 'bg-warning/10 text-warning'].join(' ')}>
@@ -1070,8 +1072,8 @@ function MetricsNote({ metrics }: { metrics: MetricsView }) {
   )
 }
 
-function CoverageNote({ coverage, notCovered, compact = false }: { coverage: SourceCoverage[]; notCovered?: string[]; compact?: boolean }) {
-  const missing = coverage.filter((c) => c.state !== 'ready')
+function CoverageNote({ coverage, notCovered, compact = false, loading = false }: { coverage: SourceCoverage[]; notCovered?: string[]; compact?: boolean; loading?: boolean }) {
+  const missing = coverage.filter((c) => c.state !== 'ready' && (!loading || c.state !== 'loading'))
   if (compact && !missing.length && !notCovered?.length) return null
   const why = (c: SourceCoverage) =>
     c.state === 'denied' ? classLabel(c.class ?? 'forbidden') : c.state === 'error' ? classLabel(c.class ?? 'internal') : t(c.state === 'stale' ? 'coverage.stale' : 'coverage.loading')

@@ -36,7 +36,8 @@ one source are visible while accessible sources remain usable.
 While the initial resource results are loading, the content area shows one
 loading state beneath the toolbar. The table and coverage summary appear with data
 or a settled result. Already displayed rows and source failures remain visible
-while other sources load or the view refreshes.
+while other sources load or the view refreshes; progress moves to a small toolbar
+indicator. Sources still loading are not warned as unavailable during that read.
 
 All resource sections, including Favorites and API subgroups, can be collapsed.
 Click a heading or use Enter/Space and Left/Right. Their expansion state is
@@ -96,6 +97,8 @@ Changes use a preview and a version/identity guard. A conflict requires a new
 preview. An unknown result means the server may have performed the operation;
 check the resource before trying again. Navigation that would discard unsaved
 YAML or value edits asks first; cancellation preserves the editor.
+Values typed while the initial action preview loads are preserved, including
+the caret position in the replica-count field.
 
 Secret YAML uses `<N bytes>` placeholders. Its editor permits metadata changes
 only; placeholders cannot be written into Secret data. Real values are read or
