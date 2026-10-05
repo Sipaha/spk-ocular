@@ -236,9 +236,14 @@ func (h *execHandle) Run(ctx context.Context, t provider.Terminal) (st provider.
 		}()
 	}
 	if len(h.argv) > 0 {
-		code, exited, err := sh.exec(ctx, strings.Join(h.argv, " "))
+		code, exited, interrupted, err := sh.exec(ctx, strings.Join(h.argv, " "))
 		if err != nil {
 			return provider.ExitStatus{}, err
+		}
+		if interrupted {
+			if _, err := io.WriteString(out, "^C\r\n"); err != nil {
+				return provider.ExitStatus{}, err
+			}
 		}
 		if !exited {
 			code = 0
@@ -277,7 +282,7 @@ func (h *execHandle) Run(ctx context.Context, t provider.Terminal) (st provider.
 			if _, err := io.WriteString(out, "\r\n"); err != nil {
 				return provider.ExitStatus{}, err
 			}
-			code, exited, err := sh.exec(ctx, string(line))
+			code, exited, interrupted, err := sh.exec(ctx, string(line))
 			if err != nil {
 				return provider.ExitStatus{}, err
 			}
@@ -285,6 +290,11 @@ func (h *execHandle) Run(ctx context.Context, t provider.Terminal) (st provider.
 				return provider.ExitStatus{Code: code, Known: true}, nil
 			}
 			line, echo = line[:0], "$ "
+			if interrupted {
+				// One locked write, as for ^C on an idle line: a concurrent
+				// resize notification cannot split the acknowledgement and prompt.
+				echo = "^C\r\n" + echo
+			}
 		default:
 			if c >= 0x20 || c == '\t' {
 				line = append(line, c)
@@ -304,44 +314,44 @@ type echoShell struct {
 	input <-chan byte
 }
 
-// exec runs one line; exited reports an "exit".
-func (sh *echoShell) exec(ctx context.Context, line string) (code int, exited bool, err error) {
+// exec runs one line; the caller writes an interrupt acknowledgement with its prompt.
+func (sh *echoShell) exec(ctx context.Context, line string) (code int, exited, interrupted bool, err error) {
 	f := strings.Fields(line)
 	switch {
 	case len(f) == 0:
-		return 0, false, nil
+		return 0, false, false, nil
 	case f[0] == "exit":
 		if len(f) > 1 {
 			code, _ = strconv.Atoi(f[1])
 		}
-		return code, true, nil
+		return code, true, false, nil
 	case f[0] == "flood" && len(f) > 1:
 		n, _ := strconv.Atoi(f[1])
-		return 0, false, sh.flood(ctx, n)
+		interrupted, err = sh.flood(ctx, n)
+		return 0, false, interrupted, err
 	default:
 		_, err = io.WriteString(sh.out, "you said: "+line+"\r\n")
-		return 0, false, err
+		return 0, false, false, err
 	}
 }
 
 // flood prints n lines in batches, stopping at ^C (other input typed
 // meanwhile is dropped, like a busy shell's would be for this test).
-func (sh *echoShell) flood(ctx context.Context, n int) error {
+func (sh *echoShell) flood(ctx context.Context, n int) (interrupted bool, err error) {
 	var b strings.Builder
 	for i := 1; i <= n; {
 		for {
 			select {
 			case c, ok := <-sh.input:
 				if !ok {
-					return errors.New("the terminal's input ended")
+					return false, errors.New("the terminal's input ended")
 				}
 				if c == 0x03 {
-					_, err := io.WriteString(sh.out, "^C\r\n")
-					return err
+					return true, nil
 				}
 				continue
 			case <-ctx.Done():
-				return ctx.Err()
+				return false, ctx.Err()
 			default:
 			}
 			break
@@ -351,12 +361,18 @@ func (sh *echoShell) flood(ctx context.Context, n int) error {
 			fmt.Fprintf(&b, "flood line %d of %d\r\n", i, n)
 			i++
 		}
+		if i > n {
+			// A resize must not split the final batch from its completion marker.
+			b.WriteString("flood done\r\n")
+		}
 		if _, err := io.WriteString(sh.out, b.String()); err != nil {
-			return err
+			return false, err
 		}
 	}
-	_, err := io.WriteString(sh.out, "flood done\r\n")
-	return err
+	if n <= 0 {
+		_, err = io.WriteString(sh.out, "flood done\r\n")
+	}
+	return false, err
 }
 
 type lockedWriter struct {

@@ -37,6 +37,7 @@ type term struct {
 	mu    sync.Mutex
 	out   strings.Builder
 	res   chan result
+	intr  string // the complete stdout write carrying the interrupt acknowledgement
 }
 
 type result struct {
@@ -47,6 +48,9 @@ type result struct {
 func (t *term) Write(p []byte) (int, error) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
+	if strings.Contains(string(p), "^C") {
+		t.intr = string(p)
+	}
 	return t.out.Write(p)
 }
 
@@ -119,8 +123,14 @@ func TestEchoTerminalFloodStopsAtCtrlC(t *testing.T) {
 	tm.waitFor(t, "$ ")
 	_, _ = tm.in.Write([]byte("flood 100000000\r"))
 	tm.waitFor(t, "flood line 1000 of")
+	tm.sizes.ch <- provider.TermSize{Cols: 100, Rows: 30}
 	_, _ = tm.in.Write([]byte{0x03})
 	tm.waitFor(t, "^C\r\n$ ")
+	tm.waitFor(t, "size 100x30")
+	tm.mu.Lock()
+	intr := tm.intr
+	tm.mu.Unlock()
+	assert.Equal(t, "^C\r\n$ ", intr, "resize output must not be able to split the acknowledgement and prompt")
 	assert.NotContains(t, tm.text(), "flood done")
 	// ^D on an empty line: exit 0, like a shell
 	_, _ = tm.in.Write([]byte{0x04})
@@ -137,6 +147,18 @@ func TestEchoTerminalRunsACommandOnce(t *testing.T) {
 	assert.Contains(t, tm.text(), "flood line 3 of 3\r\nflood done\r\n")
 	_, tm = start(t, "exit", "4")
 	assert.Equal(t, 4, tm.wait(t).st.Code)
+}
+
+func TestEchoTerminalCommandInterruptHasNoPrompt(t *testing.T) {
+	_, tm := start(t, "flood", "100000000")
+	tm.waitFor(t, "flood line 1000 of")
+	_, _ = tm.in.Write([]byte{0x03})
+	r := tm.wait(t)
+	require.NoError(t, r.err)
+	assert.Equal(t, provider.ExitStatus{Code: 0, Known: true}, r.st)
+	assert.Contains(t, tm.text(), "^C\r\n")
+	assert.NotContains(t, tm.text(), "$ ")
+	assert.NotContains(t, tm.text(), "flood done")
 }
 
 func TestForwardServesHTTPAndClosingTheUpstreamResetsItsStreams(t *testing.T) {
