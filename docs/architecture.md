@@ -202,7 +202,8 @@ later after an unrelated manual selection.
 ## Visual and performance constraints
 
 Use graphite surfaces, system fonts, 14 px text, a 17 px root rem, 32 px table
-rows, 40 px headers/toolbars, and mostly 2/4 px radii. The SVG app icon embeds as
+rows, 40 px headers/toolbars, 14 px semibold resource-page titles, and mostly
+2/4 px radii. The SVG app icon embeds as
 256×256 PNG. The resource list reserves 24 px for GTK overlay-scrollbar hit areas.
 Connection details remain a header-button modal; the old Overview page is absent.
 

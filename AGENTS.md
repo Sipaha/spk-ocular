@@ -165,7 +165,8 @@ Resize pointer capture/cancel/lost-capture must be cleaned up; Escape restores t
 old size. Use CSS variables and one DOM write per animation frame; commit React
 state on release. Resize cannot sort or select a row. Virtualizer keys are stable.
 
-Text is 14 px, root rem 17 px, rows 32 px, app/resource headers 40 px, radii 2/4 px.
+Text and resource-page titles are 14 px (titles semibold), root rem 17 px,
+rows 32 px, app/resource headers 40 px, radii 2/4 px.
 Keep the embedded PNG at 256 px and verify `_NET_WM_ICON` on GTK. Keep the 24 px
 resource-list right inset: invisible GTK overlay scrollbar hit regions cover star
 buttons without it. `@theme static` retains runtime ANSI/xterm colors. Modal
