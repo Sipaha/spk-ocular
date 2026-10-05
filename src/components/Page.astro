@@ -1,5 +1,6 @@
 ---
 import Base from '../layouts/Base.astro';
+import ThemeIcon from '../assets/theme.svg';
 import { copy } from '../i18n/copy';
 import { REPO, RELEASES } from '../lib/releases.mjs';
 interface Props { lang: 'ru' | 'en'; }
@@ -23,7 +24,7 @@ const shots = ['resources', 'problems', 'connect'];
       </nav>
       <div class="header-actions">
         <a class="language" href={base + (lang === 'ru' ? 'en/' : '')} lang={lang === 'ru' ? 'en' : 'ru'} aria-label={lang === 'ru' ? 'English' : 'Русский'}>{lang === 'ru' ? 'EN' : 'RU'}</a>
-        <button type="button" class="theme-toggle" aria-label={d.theme} title={d.theme} hidden><span aria-hidden="true">◐</span></button>
+        <button type="button" class="theme-toggle" aria-label={d.theme} title={d.theme} hidden><ThemeIcon width="20" height="20" aria-hidden="true" /></button>
         <a class="button compact" href="#downloads">{d.download}</a>
       </div>
     </div>

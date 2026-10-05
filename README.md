@@ -6,6 +6,9 @@ lives on `master`; this worktree does not change its builds or release history.
 Astro generates Russian (`/spk-ocular/`) and English (`/spk-ocular/en/`) pages.
 The site uses the application's existing logo, Inter, a blue accent, light/dark
 semantic colors, and real screenshots from an isolated demonstration profile.
+The theme control uses a fixed-size Phosphor SVG, centered independently of font
+metrics. Its MIT license is in `public/licenses/phosphor-icons.txt`; asset source
+is `phosphor-icons/core` at commit `2b75f3ad12b420c9504ef05df8d2564a28f8500e`.
 The hero names Kubernetes and Docker directly; copy describes concrete product
 capabilities instead of echoing the launcher’s one-click slogan.
 Motion is limited to initial hierarchy and interaction feedback; reduced motion
@@ -58,6 +61,11 @@ recapture screenshots from an isolated app profile, never from a user's cluster.
 The GitHub Pages URL is `https://sipaha.github.io/spk-ocular/`.
 The repository is configured with **GitHub Actions** as its Pages source under
 **Settings → Pages**. Custom domain configuration is not required for this URL.
+The `github-pages` environment must also allow the `pages` branch under
+**Settings → Environments → github-pages → Deployment branches and tags**.
+An exact `pages` branch rule is configured alongside the existing `master` rule.
+Preserve this rule and the other environment protections when changing deployment
+settings. Upload and deployment actions are pinned to Node.js 24-compatible versions.
 
 The website workflow validates, uploads and deploys the site on pushes to `pages`.
 Deployment runs only when the repository has GitHub Actions configured as its
