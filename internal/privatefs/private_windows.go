@@ -21,7 +21,10 @@ func OwnerDescriptor(inherit bool) (string, error) {
 	if inherit {
 		flags = "OICI"
 	}
-	return "D:P(A;" + flags + ";GA;;;" + user.User.Sid.String() + ")", nil
+	// File-specific full control stays one ACE when inherited by directories.
+	// A generic GA ACE is split by Windows into effective/inherit-only ACEs.
+	// Named pipes use the same file access mask.
+	return "D:P(A;" + flags + ";FA;;;" + user.User.Sid.String() + ")", nil
 }
 
 func EnsureDir(path string) error {
