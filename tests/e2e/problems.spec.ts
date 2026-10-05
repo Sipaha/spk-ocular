@@ -24,6 +24,43 @@ test('the worst first; evidence quieter; what could not be observed is said', as
   await expect(page.getByRole('note', { name: 'Coverage' })).toHaveText('Checked: Services, Workloads, Nodes')
 })
 
+test('first opening shows one loading state before the table and coverage', async ({ page }, testInfo) => {
+  await page.goto('/')
+  await page.request.post('/api/_test/synthetic/reset', { headers: { Authorization: `Bearer ${await token(page)}` } })
+  await page.getByRole('option', { name: /^demo\b/ }).click()
+  const nav = page.getByRole('navigation', { name: 'resources' })
+  await nav.getByRole('button', { name: 'Services', exact: true }).click()
+  await expect(page.getByRole('grid', { name: 'resources' })).toBeVisible()
+
+  let problemsView = ''
+  let release!: () => void
+  const snapshot = new Promise<void>((resolve) => { release = resolve })
+  await page.route('**/api/OpenView', async (route) => {
+    const response = await route.fetch()
+    if (route.request().postDataJSON().query.kind === 'problems') problemsView = (await response.json()).viewId
+    await route.fulfill({ response })
+  })
+  await page.route('**/api/GetRows', async (route) => {
+    if (problemsView && route.request().postDataJSON().viewId === problemsView) await snapshot
+    await route.continue()
+  })
+  try {
+    await nav.getByRole('button', { name: 'Problems', exact: true }).click()
+    await expect(page.getByRole('heading', { name: 'Problems', exact: true })).toBeVisible()
+    await expect(page.getByRole('status', { name: 'Loading…', exact: true })).toHaveText('Loading Problems…')
+    await expect(page.getByRole('grid', { name: 'resources' })).toHaveCount(0)
+    await expect(page.getByRole('note', { name: 'Not observed' })).toHaveCount(0)
+    await expect(page.getByRole('note', { name: 'Coverage', exact: true })).toHaveCount(0)
+    await page.screenshot({ path: testInfo.outputPath('problems-initial-loading.png') })
+  } finally {
+    release()
+  }
+  await expect(page.getByRole('grid', { name: 'resources' }).getByRole('gridcell', { name: 'api', exact: true })).toBeVisible()
+  await expect(page.getByRole('status', { name: 'Loading…', exact: true })).toHaveCount(0)
+  await expect(page.getByRole('note', { name: 'Not observed' })).toHaveText('Not observed: Nodes (access denied)')
+  await page.screenshot({ path: testInfo.outputPath('problems-ready.png') })
+})
+
 test("a row's menu is its object's kind's: a workload offers its actions", async ({ page }) => {
   const grid = await openProblems(page)
   await grid.getByRole('gridcell', { name: 'db', exact: true }).click({ button: 'right' })

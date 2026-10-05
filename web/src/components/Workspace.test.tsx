@@ -66,6 +66,27 @@ describe('Workspace', () => {
     expect(screen.getByRole('button', { name: 'Namespace' })).toHaveTextContent('web')
   })
 
+  it('keeps table sorting when a later refresh is loading without rows', async () => {
+    const f = fakeClient([k8s('prod')])
+    f.state.rows = [podRow('api-1', 'web'), podRow('db-0', 'web')]
+    await openProd(f)
+    const name = screen.getByRole('columnheader', { name: /^Name\b/ })
+    fireEvent.click(name)
+    expect(name).toHaveAttribute('aria-sort', 'descending')
+
+    f.state.rows = []
+    f.state.statusByKind.pods = { state: 'loading' }
+    await act(async () => f.emit({ type: 'view_changed', payload: { viewId: 'v-pods', version: f.state.version + 1 } }))
+    expect(screen.getByRole('grid', { name: 'resources' })).toBeVisible()
+    expect(screen.getByRole('columnheader', { name: /^Name\b/ })).toHaveAttribute('aria-sort', 'descending')
+
+    f.state.rows = [podRow('api-1', 'web'), podRow('db-0', 'web')]
+    f.state.statusByKind.pods = { state: 'ready' }
+    await act(async () => f.emit({ type: 'view_changed', payload: { viewId: 'v-pods', version: f.state.version + 1 } }))
+    expect(screen.getByRole('columnheader', { name: /^Name\b/ })).toHaveAttribute('aria-sort', 'descending')
+    expect(screen.queryByRole('status', { name: 'Loading…' })).not.toBeInTheDocument()
+  })
+
   it('switching to all namespaces reopens the view and shows the namespace column', async () => {
     const f = fakeClient([k8s('prod', { defaultScope: 'web' })])
     await openProd(f)

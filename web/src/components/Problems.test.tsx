@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, within } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { App } from '../App'
 import type { ActionDescriptor, KindDescriptor, Row } from '../api/types'
@@ -48,7 +48,7 @@ function problem(id: string, kind: string, name: string, severity: string, rank:
   }
 }
 
-async function openProblems(rows: Row[], status: object = { state: 'ready' }) {
+function problemsClient(rows: Row[], status: object = { state: 'ready' }) {
   const f = fakeClient([k8s('prod')])
   f.state.view.selected = { provider: 'kubernetes', id: 'prod' }
   f.state.kinds = { problems }
@@ -56,6 +56,11 @@ async function openProblems(rows: Row[], status: object = { state: 'ready' }) {
   f.state.statusByKind = { problems: status as never }
   f.client.listKinds = vi.fn(async () => kindsView([problems, pods, events]))
   f.client.getTargetState = vi.fn(async () => ({ kind: '"problems"' }))
+  return f
+}
+
+async function openProblems(rows: Row[], status: object = { state: 'ready' }) {
+  const f = problemsClient(rows, status)
   render(<App client={f.client} />)
   const grid = await screen.findByRole('grid', { name: 'resources' })
   return { f, grid }
@@ -65,6 +70,39 @@ async function openProblems(rows: Row[], status: object = { state: 'ready' }) {
 const names = (grid: HTMLElement) => within(grid).queryAllByRole('row').slice(1).map((r) => within(r).getAllByRole('gridcell')[4]?.textContent)
 
 describe('Problems', () => {
+  it('shows only loading before initial rows, then exposes the observed coverage', async () => {
+    const f = problemsClient([], {
+      state: 'loading',
+      coverage: [{ source: 'Pods', state: 'ready' }, { source: 'Warning events', state: 'loading' }],
+    })
+    render(<App client={f.client} />)
+    await waitFor(() => expect(f.client.getRows).toHaveBeenCalledWith('v-problems', 0))
+    expect(screen.getByRole('heading', { name: 'Problems' })).toBeVisible()
+    expect(screen.getByRole('status', { name: 'Loading…' })).toHaveTextContent('Loading Problems…')
+    expect(screen.queryByRole('grid', { name: 'resources' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('note', { name: 'Not observed' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('note', { name: 'Coverage' })).not.toBeInTheDocument()
+    expect(screen.queryByText(/No objects/)).not.toBeInTheDocument()
+
+    f.state.statusByKind.problems = { state: 'ready', coverage: [{ source: 'Pods', state: 'ready' }, { source: 'Warning events', state: 'denied', class: 'forbidden' }] }
+    await act(async () => f.emit({ type: 'view_changed', payload: { viewId: 'v-problems', version: f.state.version + 1 } }))
+    expect(await screen.findByRole('grid', { name: 'resources' })).toBeVisible()
+    expect(screen.queryByRole('status', { name: 'Loading…' })).not.toBeInTheDocument()
+    expect(screen.getByRole('note', { name: 'Not observed' })).toHaveTextContent('Warning events (access denied)')
+    expect(screen.getByRole('note', { name: 'Coverage' })).toBeVisible()
+    expect(screen.getByText('No objects in what could be observed.')).toBeVisible()
+  })
+
+  it('keeps delivered rows and source failures visible while other sources are loading', async () => {
+    const { grid } = await openProblems([problem('pods#crash', 'pods', 'crash', 'error', 4, 5)], {
+      state: 'loading',
+      coverage: [{ source: 'Pods', state: 'ready' }, { source: 'Nodes', state: 'denied', class: 'forbidden' }, { source: 'Warning events', state: 'loading' }],
+    })
+    expect(await within(grid).findByText('crash')).toBeVisible()
+    expect(screen.getByRole('note', { name: 'Not observed' })).toHaveTextContent('Nodes (access denied)')
+    expect(screen.getByRole('status', { name: 'Loading…' })).toBeVisible()
+  })
+
   it('is in the navigation; the worst first, then the most recent', async () => {
     const { grid } = await openProblems([
       problem('events#e1', 'events', 'pod/a', 'recent', 1, 1),

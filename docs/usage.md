@@ -33,6 +33,11 @@ to each connection and survive switching connections and restarting the app.
 Resource reads for an explicit set stay within those namespaces; failures in
 one source are visible while accessible sources remain usable.
 
+While the initial resource results are loading, the content area shows one
+loading state beneath the toolbar. The table and coverage summary appear with data
+or a settled result. Already displayed rows and source failures remain visible
+while other sources load or the view refreshes.
+
 All resource sections, including Favorites and API subgroups, can be collapsed.
 Click a heading or use Enter/Space and Left/Right. Their expansion state is
 shared globally and saved in the database. The current kind remains visible

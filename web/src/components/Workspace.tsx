@@ -708,6 +708,10 @@ function ResourcePage(props: {
   const scopeKey = JSON.stringify(scope)
   const query = useMemo(() => ({ kind: kind.id, scope: JSON.parse(scopeKey) as ScopeSel }), [kind.id, scopeKey])
   const view = useView(hub, target.provider, target.id, query)
+  const [contentShown, setContentShown] = useState(false)
+  const initialLoading = !contentShown && view.status.state === 'loading' && view.rows.length === 0
+  // Keep the mounted table's sort, widths and focus on subsequent refreshes.
+  if (!contentShown && !initialLoading) setContentShown(true)
   useEffect(() => {
     onHalted(pageKey, view.halted)
     return () => onHalted(pageKey, false)
@@ -865,12 +869,12 @@ function ResourcePage(props: {
           />
         </label>
       </header>
-      <StatusBanner title={kind.title} state={view.status.state} cls={view.status.class} message={view.status.message} empty={view.rows.length === 0} coverage={view.status.coverage} />
-      {view.status.coverage && <CoverageNote coverage={view.status.coverage} notCovered={view.kind?.notCovered ?? kind.notCovered} compact={scope.mode === 'some'} />}
-      {metrics && <MetricsNote metrics={metrics} />}
+      {!initialLoading && <StatusBanner title={kind.title} state={view.status.state} cls={view.status.class} message={view.status.message} empty={view.rows.length === 0} coverage={view.status.coverage} />}
+      {!initialLoading && view.status.coverage && <CoverageNote coverage={view.status.coverage} notCovered={view.kind?.notCovered ?? kind.notCovered} compact={scope.mode === 'some'} />}
+      {!initialLoading && metrics && <MetricsNote metrics={metrics} />}
       <div className="relative flex min-h-0 flex-1 flex-col">
         <div data-area="table" aria-busy={view.status.state === 'loading'} className="flex min-h-0 flex-1 flex-col">
-        <ResourceTable
+        {initialLoading ? <LoadingState title={kind.title} /> : <ResourceTable
           areaFocus
           columns={columns}
           rows={view.rows}
@@ -906,7 +910,7 @@ function ResourcePage(props: {
             rememberPage(tkey, { columnWidths: { ...memoOf(tkey).columnWidths, [kind.id]: widths } })
             void persistTargetEntries(client, target.provider, target.id, { [columnWidthsKey(kind.id)]: JSON.stringify(widths) }).catch(() => showNotice(t('table.widthsNotSaved')))
           }}
-        />
+        />}
         </div>
         {open && (
           <ResourceDrawer
