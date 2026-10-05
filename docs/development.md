@@ -28,6 +28,10 @@ make check
 Unset HTTP_PROXY, HTTPS_PROXY, ALL_PROXY and their lowercase variants when they
 would intercept loopback or unreachable test-cluster addresses. Playwright's
 isolated application environment also clears connection-related variables.
+Its parent runner still inherits proxy settings: when keeping a proxy, include
+literal `localhost,127.0.0.1,::1` entries in both `NO_PROXY` and `no_proxy`.
+Playwright's server-readiness probe does not interpret CIDR entries such as
+`127.0.0.0/8` as a loopback exemption.
 
 ## Commands
 

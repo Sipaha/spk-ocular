@@ -6,9 +6,6 @@ Implementation begins only when requested. Current behavior is documented in
 
 ## Distribution and platforms
 
-- Activate the configured GitHub workflows after the reviewed changes and
-  cleaned history are authorized for pushing. Hosted CI and native arm64
-  packaging still need verification before release availability is announced.
 - macOS and Windows support, including platform-specific local agent transport,
   credential-helper process handling, native installers, signing and notarization.
 - AppImage distribution and a deliberately designed in-app update mechanism.
