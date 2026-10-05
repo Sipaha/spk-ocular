@@ -6,6 +6,8 @@ lives on `master`; this worktree does not change its builds or release history.
 Astro generates Russian (`/spk-ocular/`) and English (`/spk-ocular/en/`) pages.
 The site uses the application's existing logo, Inter, a blue accent, light/dark
 semantic colors, and real screenshots from an isolated demonstration profile.
+The hero names Kubernetes and Docker directly; copy describes concrete product
+capabilities instead of echoing the launcher’s one-click slogan.
 Motion is limited to initial hierarchy and interaction feedback; reduced motion
 is respected. Native disclosure elements and all content work without JavaScript.
 

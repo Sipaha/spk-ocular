@@ -1,8 +1,8 @@
 export const en = {
-  title: 'SPK Ocular | Kubernetes and Docker, in one view',
+  title: 'SPK Ocular | Kubernetes and Docker under control',
   description: 'A local desktop app for Kubernetes and Docker Compose. Explore resources, follow logs, open terminals and review changes on Linux, Windows and macOS.',
   nav: ['Features', 'A closer look', 'Downloads'], docs: 'Documentation', download: 'Download', theme: 'Switch theme', menu: 'Menu', skip: 'Skip to content',
-  hero: ['Your infrastructure.', 'In one view.'], lead: 'Resources, logs, terminals and tunnels for Kubernetes and Docker Compose, together in a local desktop app.', explore: 'Explore the app',
+  hero: ['Kubernetes & Docker', 'under control.'], lead: 'Resources, logs, terminals and tunnels for Kubernetes and Docker Compose, together in a local desktop app.', explore: 'Explore the app',
   facts: [['Kubernetes + Docker', 'Your existing contexts'], ['Linux, Windows, macOS', 'x86-64 and ARM64'], ['Open source', 'Apache 2.0']],
   overview: 'From a signal to the details.', overviewText: 'See what needs attention. Open the resource, follow its logs and inspect its configuration without losing your place.',
   demo: 'Actual application, demonstration data.', shot: 'SPK Ocular showing resources and a live log panel in a demonstration profile',
@@ -35,10 +35,10 @@ export const en = {
 };
 export type Copy = typeof en;
 export const ru: Copy = {
-  title: 'SPK Ocular | Kubernetes и Docker в одном окне',
+  title: 'SPK Ocular | Kubernetes и Docker под контролем',
   description: 'Локальное приложение для Kubernetes и Docker Compose. Ресурсы, логи, терминалы и изменения с предварительным просмотром для Linux, Windows и macOS.',
   nav: ['Возможности', 'Интерфейс', 'Загрузки'], docs: 'Документация', download: 'Скачать', theme: 'Сменить тему', menu: 'Меню', skip: 'К содержимому',
-  hero: ['Всё окружение.', 'Одним взглядом.'], lead: 'Ресурсы, логи, терминалы и туннели Kubernetes и Docker Compose в одном локальном приложении.', explore: 'Посмотреть интерфейс',
+  hero: ['Kubernetes и Docker', 'под контролем.'], lead: 'Ресурсы, логи, терминалы и туннели Kubernetes и Docker Compose в одном локальном приложении.', explore: 'Посмотреть интерфейс',
   facts: [['Kubernetes + Docker', 'Ваши привычные контексты'], ['Linux, Windows, macOS', 'x86-64 и ARM64'], ['Открытый код', 'Apache 2.0']],
   overview: 'От сигнала к подробностям.', overviewText: 'Узнайте, что требует внимания. Откройте ресурс, посмотрите его логи и конфигурацию, сохранив рабочий контекст.',
   demo: 'Настоящее приложение, демонстрационные данные.', shot: 'Ресурсы и панель живых логов SPK Ocular в демонстрационном профиле',
