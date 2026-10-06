@@ -32,3 +32,10 @@ test('detects desktop OS without guessing architecture or treating an iPad as a 
  assert.equal(detectOS('Linux Android Mobile'),'');
  assert.equal(detectOS('X11; CrOS x86_64'),'');
 });
+
+test('desktop installers precede archives and browser builds regardless of upload order', () => {
+ const names=['spk-ocular-browser_0.1.0_linux_amd64.tar.gz','spk-ocular_0.1.0_linux_amd64.tar.gz','spk-ocular_0.1.0_linux_amd64.rpm','spk-ocular_0.1.0_linux_amd64.deb'];
+ for(const input of [names,[...names].reverse()]) {
+  assert.deepEqual(parseRelease(release(input.map(name=>asset(name)))).files.map(file=>file.name),[names[3],names[2],names[1],names[0]]);
+ }
+});

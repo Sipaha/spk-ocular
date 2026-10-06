@@ -24,6 +24,9 @@ export function parseRelease(value) {
     const checksum = assets.find(a => a.name === asset.name + '.sha256');
     files.push({ name: asset.name, url: asset.browser_download_url, os, arch, format, browser, checksum: checksum?.browser_download_url, size: Number.isFinite(asset.size) && asset.size > 0 ? asset.size : 0 });
   }
+  // GitHub asset order is not a product recommendation: installers come first.
+  const rank = file => file.browser ? 2 : ['deb', 'rpm', 'msi', 'dmg'].includes(file.format) ? 0 : 1;
+  files.sort((a, b) => rank(a) - rank(b) || a.name.localeCompare(b.name));
   return { version, files };
 }
 /** OS hints never silently choose a processor architecture. */

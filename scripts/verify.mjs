@@ -84,7 +84,7 @@ try{
    for(const suffix of ['', '.sha256']) assets.push({name:name+suffix,browser_download_url:`${REPO}/releases/download/v0.1.0/${name}${suffix}`,size:1048576});
   }
  }
- const page=await browser.newPage();await page.route(API,r=>r.fulfill({json:{tag_name:'v0.1.0',assets}}));
+ const page=await browser.newPage();await page.route(API,r=>r.fulfill({json:{tag_name:'v0.1.0',assets:[...assets].reverse()}}));
  await page.goto(root+'en/',{waitUntil:'networkidle'});
  await expect(page.locator('.package').first()).toContainText('Desktop app');
  await page.locator('select[name=os]').selectOption('');await expect(page.locator('.package')).toHaveCount(20);

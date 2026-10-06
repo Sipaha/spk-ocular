@@ -82,7 +82,9 @@ stable release or an available API, visible GitHub release and development-build
 links remain. Three installation steps explain the installer formats, checksum
 verification and existing Kubernetes/Docker configuration. Public release packages
 do not require a GitHub account; CI development artifacts remain a separate path.
-No unmeasured memory or comparative size claims are published. The site neither uploads user data nor starts any app connection.
+Desktop installers appear before portable archives and browser-mode packages,
+regardless of GitHub upload order. No unmeasured memory or comparative size claims
+are published. The site neither uploads user data nor starts any app connection.
 
 `workloads-{ru,en}.webp`, `logs-{ru,en}.webp` and `health-{ru,en}.webp`
 show read-only inspection of the disposable `kind-ocular-dev` / `ocular-demo`
