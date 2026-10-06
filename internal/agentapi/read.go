@@ -47,10 +47,11 @@ type AccessTarget struct {
 	Provider string `json:"provider"`
 	Target   string `json:"target"`
 	Title    string `json:"title"`
-	// State: active, or suspended (the target points elsewhere than when
+	// State: active, paused (no enabled permissions), or suspended (the target points elsewhere than when
 	// granted: the user must confirm it again in Ocular).
-	State  string             `json:"state"`
-	Grants []agentgrant.Grant `json:"grants" jsonschema_description:"Each grant: a verb (read, logs, edit, action:<id>) in a scope (one namespace, all namespaces, or cluster = objects outside namespaces, read only) for kinds (null: all kinds; editing Secrets, ServiceAccounts and RBAC and anything destructive need the kind named). noConfirm: destructive plans run without the user's confirmation."`
+	State          string             `json:"state"`
+	DisabledScopes []agentgrant.Scope `json:"disabledScopes,omitempty" jsonschema_description:"Master switches that pause access even when a grant covers all namespaces."`
+	Grants         []agentgrant.Grant `json:"grants" jsonschema_description:"Each grant: a verb (read, logs, edit, action:<id>) in a scope (one namespace, all namespaces, or cluster = objects outside namespaces, read only) for kinds (null: all kinds; editing Secrets, ServiceAccounts and RBAC and anything destructive need the kind named). noConfirm: destructive plans run without the user's confirmation."`
 }
 
 func (s *Server) readMethods() {
@@ -74,10 +75,13 @@ func (s *Server) access(ctx context.Context, _ caller, _ *AccessRequest) (*Acces
 	out := &AccessView{Targets: []AccessTarget{}, Confirmation: "A destructive plan (delete, scale to 0, a destructive edit) waits for the user's confirmation in the SPK Ocular window unless its grant has noConfirm; ask GetRun for the outcome and tell your user to confirm."}
 	for _, t := range all {
 		st := "active"
+		if len(t.EffectiveGrants()) == 0 {
+			st = "paused"
+		}
 		if t.Suspended() {
 			st = "suspended"
 		}
-		out.Targets = append(out.Targets, AccessTarget{Provider: t.Provider, Target: t.Target, Title: t.Title, State: st, Grants: t.Grants})
+		out.Targets = append(out.Targets, AccessTarget{Provider: t.Provider, Target: t.Target, Title: t.Title, State: st, Grants: t.EffectiveGrants(), DisabledScopes: t.DisabledScopes})
 	}
 	return out, nil
 }
@@ -527,7 +531,7 @@ func (s *Server) problems(ctx context.Context, c caller, req *ProblemsRequest) (
 	case !k.Scoped:
 		sels = []core.ScopeSel{{Mode: core.ScopeNone}}
 	case req.Scope != "":
-		if names, all := anyReadScopes(x.grants.Grants); !all && !slices.Contains(names, req.Scope) {
+		if names, all := anyReadScopes(x.grants.Grants); x.grants.ScopeDisabled(req.Scope, true) || !all && !slices.Contains(names, req.Scope) {
 			err := forbidden("reading in %s is not granted", req.Scope)
 			s.refused(c, "Problems", req.Provider, req.Target, req.Scope, "", err)
 			return nil, err

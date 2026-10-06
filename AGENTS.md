@@ -1,6 +1,6 @@
 # SPK Ocular: contributor and agent guide
 
-SPK Ocular is a local infrastructure viewer for Kubernetes and Docker Compose.
+SPK Ocular is a local infrastructure viewer for Kubernetes and Docker.
 The shared Go API serves a Wails desktop window or a loopback browser UI.
 Release platforms are Linux, Windows and macOS, each on amd64 and arm64.
 Linux uses GTK 3/WebKit2GTK 4.1; Windows uses WebView2; macOS uses WKWebView.
@@ -98,7 +98,7 @@ D-Bus without portals; don't assume a timeout means the application is broken.
 - Core/provider types: `internal/core`, `internal/provider`; keep generic UI
   independent of Kubernetes pod/namespace/container assumptions.
 - Live data: `internal/events`, `internal/views`, Kubernetes cache/discovery/schema,
-  Compose feeds, `web/src/views/viewSync.ts` and hooks.
+  Docker/Compose feeds, `web/src/views/viewSync.ts` and hooks.
 - Workspace/navigation: `web/src/components/Workspace.tsx`, `Sidebar.tsx`,
   `ResourceDrawer.tsx`, `ResourceTable.tsx`, `ScopeSelect.tsx`, `Select.tsx`.
 - Persistence: SQLite `internal/store`; `pageMemo*`, `navigationPersist.ts`,
@@ -108,6 +108,9 @@ D-Bus without portals; don't assume a timeout means the application is broken.
 - Logs/terminal/tunnels: `internal/streams`, `internal/forwards`;
   frontend `logs`, `term`, `tunnels` and `dock`.
 - Agent access: `internal/agentgrant`, `internal/agentapi`, `web/src/agents`.
+- Helm: `internal/helm`, provider configuration adapters, `internal/api/helm.go`,
+  `web/src/helm`. UI-only workspaces never become agent-grant resource kinds.
+  SQL storage adapts Helm's schema/codec with cancellable queries and pool cleanup.
 - Packaging: `packaging/`, `.github/workflows/`, `VERSION` (development base), `changelog/<version>/<locale>.md`.
 
 ## Behavior invariants
@@ -129,6 +132,12 @@ Explicit namespace sets use per-namespace reads/watches/schema probes/metrics.
 Empty sets remain empty; All is explicit. Source Reset is local to that source,
 and shared rows remain while any owner has them. Unscoped reads run once.
 Agent grants remain independent and are checked again at the moment of writing.
+Named access groups are additive; preserve kind/no-confirm boundaries between
+overlapping grants. Namespace master switches override inherited All grants;
+disabled groups and scopes retain their configuration in SQLite. Standalone
+Docker containers have no project scope: existing all-project or cluster grants
+must not acquire access to them. Retain the stable `compose` provider ID so saved
+connections, selections and permissions are not renamed implicitly.
 
 One agent `logs` grant covers history, time ranges, grep, bounded live reads and
 file export within its scope. Time ranges require an explicit matching-line

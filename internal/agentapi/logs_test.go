@@ -158,7 +158,7 @@ func TestStreamLogsProgressiveHistoryAndDeniedScope(t *testing.T) {
 }
 
 func TestQuietLogStreamStopsOnGrantChangeAndReleasesItsSlot(t *testing.T) {
-	for _, operation := range []string{"revoke target", "revoke all", "client disconnect", "shutdown"} {
+	for _, operation := range []string{"revoke target", "revoke all", "pause scope", "pause group", "client disconnect", "shutdown"} {
 		t.Run(operation, func(t *testing.T) {
 			e := newEnv(t)
 			e.grant(one("a", agentgrant.VerbLogs))
@@ -184,6 +184,15 @@ func TestQuietLogStreamStopsOnGrantChangeAndReleasesItsSlot(t *testing.T) {
 				e.grant()
 			case "revoke all":
 				require.NoError(t, e.srv.RevokeAll(t.Context()))
+			case "pause scope", "pause group":
+				scope := agentgrant.Scope{Mode: agentgrant.ScopeOne, Name: "a"}
+				req := api.SaveAgentGrantsRequest{Provider: "k", Target: "t", Groups: []agentgrant.Group{{ID: "logs", Name: "Logs", Scope: scope, Grants: []agentgrant.Grant{one("a", agentgrant.VerbLogs)}}}}
+				if operation == "pause scope" {
+					req.DisabledScopes = []agentgrant.Scope{scope}
+				} else {
+					req.Groups[0].Disabled = true
+				}
+				require.NoError(t, e.svc.SaveAgentGrants(t.Context(), req))
 			case "client disconnect":
 				require.NoError(t, response.Body.Close())
 			case "shutdown":
@@ -194,7 +203,7 @@ func TestQuietLogStreamStopsOnGrantChangeAndReleasesItsSlot(t *testing.T) {
 			case <-time.After(time.Second):
 				t.Fatal("quiet stream survived its access/lifecycle change")
 			}
-			if operation == "revoke target" || operation == "revoke all" {
+			if operation == "revoke target" || operation == "revoke all" || operation == "pause scope" || operation == "pause group" {
 				body, err := io.ReadAll(response.Body)
 				require.NoError(t, err)
 				assert.Contains(t, string(body), `"code":"forbidden"`)

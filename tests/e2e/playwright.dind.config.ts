@@ -2,7 +2,7 @@ import { defineConfig } from '@playwright/test'
 import { createHash } from 'node:crypto'
 import { existsSync, mkdirSync, mkdtempSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { noDockerEnv, writeAtomic } from './fixtures'
+import { noDockerEnv, writeAtomic, scratchRoot } from './fixtures'
 
 // Real-daemon e2e (make e2e-dind) on the isolated test daemon. Fails —
 // never skips — without it: the endpoint comes from scripts/dind-verify.sh.
@@ -13,8 +13,8 @@ if (!host || !process.env.OCULAR_DIND_VERIFY || !existsSync(process.env.OCULAR_D
 const port = Number(process.env.E2E_PORT ?? 5251)
 let root = process.env.E2E_DIND_ROOT
 if (!root) {
-  mkdirSync(join(import.meta.dirname, '.run'), { recursive: true })
-  root = mkdtempSync(join(import.meta.dirname, '.run', 'dind-'))
+  mkdirSync(scratchRoot, { recursive: true })
+  root = mkdtempSync(join(scratchRoot, 'dind-'))
   const home = join(root, 'home')
   mkdirSync(home, { recursive: true })
   writeFileSync(join(root, 'README'), 'scratch dir of the dind e2e run\n')
@@ -28,6 +28,7 @@ const bin = process.env.E2E_BIN ?? '../../build/bin/spk-ocular'
 
 export default defineConfig({
   testDir: '.',
+  outputDir: join(scratchRoot, 'playwright-dind'),
   testMatch: 'dind.spec.ts',
   workers: 1,
   timeout: 60_000,
@@ -40,6 +41,7 @@ export default defineConfig({
       SPK_OCULAR_HOME: join(root, 'data'),
       HOME: join(root, 'home'),
       ...noDockerEnv,
+      DOCKER_CONFIG: join(root, 'home', '.docker'),
       KUBECONFIG: join(root, 'no-kubeconfig'),
       HTTPS_PROXY: '', HTTP_PROXY: '', https_proxy: '', http_proxy: '',
       LANG: 'en_US.UTF-8', LANGUAGE: '', LC_ALL: '', LC_MESSAGES: '',

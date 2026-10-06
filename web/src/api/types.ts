@@ -171,6 +171,7 @@ export interface Column {
 }
 
 export interface KindDescriptor {
+  workspace?: string
   id: string
   title: string
   group: string
@@ -778,8 +779,21 @@ export interface AgentGrant {
   noConfirm?: boolean
 }
 
+export interface AgentGrantGroup {
+  id: string
+  name: string
+  scope: AgentScope
+  disabled?: boolean
+  grants: AgentGrant[]
+}
+
+export interface AgentGrantSettings {
+  groups?: AgentGrantGroup[]
+  disabledScopes?: AgentScope[]
+}
+
 /** A target's grants and the identity they were given for. */
-export interface AgentTarget {
+export interface AgentTarget extends AgentGrantSettings {
   provider: string
   target: string
   /** the target's title when granted */

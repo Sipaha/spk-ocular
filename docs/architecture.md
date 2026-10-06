@@ -18,7 +18,7 @@ interface, service, both transports, and TypeScript client. The UI transport's
 Host, Origin, and token guards run before side effects.
 
 The core types (`Ref`, `Row`, `KindDescriptor`, `ScopeSel`, capabilities) are
-provider-independent. Kubernetes and Docker Compose implement that boundary;
+provider-independent. Kubernetes and Docker implement that boundary;
 the synthetic provider exists only for testing. No frontend generic component
 should infer Kubernetes behavior from a kind name.
 
@@ -28,7 +28,7 @@ should infer Kubernetes behavior from a kind name.
 | Invalidation and delta views | `internal/events`, `internal/views`, `web/src/views` |
 | Provider contracts and scope union | `internal/core`, `internal/provider` |
 | Kubernetes | `internal/providers/kubernetes` |
-| Docker Compose and Engine client | `internal/providers/compose` |
+| Docker/Compose provider and Engine client | `internal/providers/compose` |
 | Logs and terminal streams | `internal/streams`, `web/src/logs`, `web/src/term` |
 | Port forwarding | `internal/forwards`, `web/src/tunnels` |
 | Guarded mutations | `web/src/actions`, `web/src/edit`, `web/src/values` |
@@ -102,7 +102,21 @@ The cache stores reduced objects, omits Secret/ConfigMap values from list caches
 and attributes metrics only to matching live UIDs. Background caches use bounded
 retention. View lifecycles are keyed by immutable requests and session ownership.
 
-## Docker Compose
+## Docker and Compose
+
+The Docker provider retains the stable internal ID `compose` for persisted
+connections, selections and grants. Its container feed lists and observes all
+containers, including those without Compose labels. The default Containers view
+is in the Engine group; Compose Projects and Services remain separate.
+
+All resources includes standalone containers and unused networks/volumes/images.
+Explicit project selections include only project members and their related
+networks/volumes; an empty selection stays empty. Images remain an unscoped Engine
+inventory. Standalone containers keep an empty project in their Refs and never
+form a synthetic Compose project or service. This preserves agent boundaries:
+all-project and cluster read grants do not authorize these scoped-kind objects
+with an empty project. Container details/logs/exec/actions recheck supplied
+project and UID constraints. Metrics do not sample IDs outside selected scopes.
 
 Compose groups observed Engine resources by their labels. It does not read
 compose files to infer desired replicas or create missing services. Supported
@@ -231,3 +245,37 @@ Memory verification measures the application and its webview children. After
 warm-up, workload phases must stay within +100 MiB and settle for at least ten
 minutes after load. Avoid measurements when system memory pressure would evict
 pages and make Private_Dirty look artificially small.
+
+## Helm boundary
+
+`internal/helm` wraps the embedded Helm 4 SDK. A Kubernetes session supplies its
+already admitted REST configuration, including proxy/authentication/exec shim;
+no second kubeconfig resolution can redirect a Helm operation. Transport and readiness-wait contexts
+bind legacy SDK requests to the UI operation and session lifetime. Mutation
+Retry-After responses do not trigger client-go retries.
+
+The UI-only `Helm` API is served through HTTP and Wails; it is absent from the
+agent method registry and additionally requires the UI context marker. UI kind
+metadata selects the specialized workspace without adding virtual resources to
+provider or agent catalogues. Full values/manifests never enter generic views.
+Prepared plans bind session incarnation and storage configuration, pin chart
+content/values and fingerprint release contents. Expiration actively drops the
+plan; Run consumes it before checking/writing. SDK rendering receives a fresh
+chart tree so preview dependency/value processing cannot mutate the execution
+input. Per-release operations are serialized within Ocular. Other Helm clients
+remain external concurrency actors, not participants in an atomic distributed lock.
+
+HTTP chart/index responses and expanded root archives are bounded to 32 MiB;
+SDK nested-archive limits also apply. Repository authentication is scoped to its
+origin, and redirects strip credentials across hosts. OCI uses an explicit
+Ocular-owned credential provider instead of Docker credential-helper fallback.
+Private configuration uses protected application-owned files.
+
+`internal/helm/sqlstore` is an Apache-2.0 adaptation of Helm 4.3.0's PostgreSQL
+driver and release codec. The upstream driver has no connection-close API and
+uses non-context queries, which is unsuitable for repeated desktop calls. The
+adapter preserves Helm's tables, migration names and release encoding, adds
+operation contexts and pool closure, propagates transaction commit failures and
+does not turn arbitrary read failures into missing releases. It must be compared
+against the upstream SQL schema/codec when upgrading Helm. SQL permissions and
+row-level policies remain the database administrator's responsibility.

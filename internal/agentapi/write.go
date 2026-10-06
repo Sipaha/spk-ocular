@@ -152,10 +152,11 @@ func actionView(p core.ActionPlan) PlanView {
 
 // listsOutside names the first item of lists outside the scopes verb is
 // granted in (an item without a ref counts as outside).
-func listsOutside(gs []agentgrant.Grant, verb string, lists []core.ActionList) string {
+func listsOutside(gs []agentgrant.Grant, verb string, lists []core.ActionList, disabled ...agentgrant.Scope) string {
+	target := agentgrant.Target{DisabledScopes: disabled}
 	for _, l := range lists {
 		for _, it := range l.Items {
-			if it.Ref == nil || it.Ref.Scope == "" {
+			if it.Ref == nil || it.Ref.Scope == "" || target.ScopeDisabled(it.Ref.Scope, true) {
 				return it.Name
 			}
 			ok := false
@@ -185,7 +186,7 @@ func (s *Server) judge(c caller, x *session, method string, p *plan) (bool, erro
 	if err != nil {
 		return false, err
 	}
-	if name := listsOutside(x.grants.Grants, p.verb, p.lists); name != "" {
+	if name := listsOutside(x.grants.Grants, p.verb, p.lists, x.grants.DisabledScopes...); name != "" {
 		err := forbidden("the plan concerns %s, outside the namespaces %s is granted in", name, p.verb)
 		s.refused(c, method, p.provider, p.target, p.ref.Scope, objectOf(p.ref), err)
 		return false, err

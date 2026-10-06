@@ -211,7 +211,7 @@ func TestNetworkDetails(t *testing.T) {
 	assert.Equal(t, core.Ref{Provider: ProviderID, Scope: "p", Kind: KindNetworks, Name: "n-p", UID: "n-p", Title: "p_default"}, res.Ref)
 	assert.Equal(t, []rel{
 		{"used-by", KindContainers, "c1", "c1", "p-web-1", false},
-		{"used-by", KindContainers, "x1", "x1", "plain", true},
+		{"used-by", KindContainers, "x1", "x1", "plain", false},
 		{"used-by", KindContainers, "foreign", "foreign", "someone-else", true},
 	}, rels(res))
 	assert.Equal(t, "Id: n-p\nName: p_default\n", res.YAML)
@@ -226,7 +226,7 @@ func TestVolumeDetailsAndIdentity(t *testing.T) {
 	assert.Equal(t, core.Ref{Provider: ProviderID, Scope: "p", Kind: KindVolumes, Name: "p_data", UID: "p_data@2026-09-30T10:00:00Z"}, res.Ref)
 	assert.Equal(t, []rel{
 		{"used-by", KindContainers, "c1", "c1", "p-web-1", false},
-		{"used-by", KindContainers, "x1", "x1", "plain", true},
+		{"used-by", KindContainers, "x1", "x1", "plain", false},
 	}, rels(res))
 	v, _ := fact(res, "Identity")
 	assert.Equal(t, messageTexts["volume.identity"], v, "the details say the limitation")
@@ -253,7 +253,7 @@ func TestImageDetails(t *testing.T) {
 		{"used-by", KindContainers, "c1", "c1", "p-web-1", false},
 		{"used-by", KindContainers, "c2", "c2", "p-web-2", false},
 		{"used-by", KindContainers, "c3", "c3", "p-web-run-1", false},
-		{"used-by", KindContainers, "x1", "x1", "plain", true},
+		{"used-by", KindContainers, "x1", "x1", "plain", false},
 	}, rels(res))
 	v, _ := fact(res, "Tags")
 	assert.Equal(t, "web:latest\nweb:1", v)
@@ -268,7 +268,7 @@ func TestNotFoundAndGone(t *testing.T) {
 		want provider.ErrorClass
 	}{
 		{core.Ref{Kind: KindContainers, Name: "nope"}, provider.ClassNotFound},
-		{core.Ref{Kind: KindContainers, Name: "x1"}, provider.ClassNotFound}, // not a Compose container
+		{core.Ref{Kind: KindContainers, Name: "x1", Scope: "p"}, provider.ClassNotFound}, // standalone cannot be read through a project scope
 		{core.Ref{Kind: KindContainers, Name: "c1", UID: "other"}, provider.ClassGone},
 		{core.Ref{Kind: KindServices, Name: "p/db"}, provider.ClassNotFound},
 		{core.Ref{Kind: KindServices, Name: "p/web", UID: "q/web"}, provider.ClassGone},

@@ -47,6 +47,7 @@ export function fakeClient(targets: Target[], connected = false) {
     audit: [] as AgentAuditEntry[],
   }
   const client: Client = {
+    helm: vi.fn(async () => ({})),
     appInfo: vi.fn(async () => ({ name: 'SPK Ocular', version: 'test', mode: 'browser' as const, language: 'en' as const })),
     listTargets: vi.fn(async () => {
       if (connected) for (const group of state.view.groups) for (const target of group.targets) {
@@ -155,9 +156,9 @@ export function fakeClient(targets: Target[], connected = false) {
     streamBase: vi.fn(async () => '/streams/tok'),
     agentAccessStatus: vi.fn(async () => structuredClone(state.agentStatus)),
     listAgentGrants: vi.fn(async () => structuredClone(state.agentTargets)),
-    saveAgentGrants: vi.fn(async (provider: string, target: string, grants: AgentTarget['grants']) => {
+    saveAgentGrants: vi.fn(async (provider: string, target: string, grants: AgentTarget['grants'], settings: Pick<AgentTarget, 'groups' | 'disabledScopes'> = {}) => {
       state.agentTargets = state.agentTargets.filter((x) => !(x.provider === provider && x.target === target))
-      if (grants.length) state.agentTargets.push({ provider, target, title: target, identity: `https://${target}.example:6443`, grants: structuredClone(grants) })
+      if (grants.length || settings.groups?.length || settings.disabledScopes?.length) state.agentTargets.push({ provider, target, title: target, identity: `https://${target}.example:6443`, grants: structuredClone(grants), ...structuredClone(settings) })
       listener?.({ type: 'agent_grants_changed' })
     }),
     revokeAllAgentGrants: vi.fn(async () => {

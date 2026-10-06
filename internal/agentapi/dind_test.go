@@ -163,3 +163,30 @@ services:
 	assert.Equal(t, http.StatusForbidden, a.call("PrepareAction", PrepareActionRequest{Ref: ctr, Action: "stop"}, nil))
 	assert.Equal(t, "true", a.docker("inspect", "-f", "{{.State.Running}}", cid))
 }
+
+func TestDindStandaloneDoesNotInheritProjectGrants(t *testing.T) {
+	a := newDindAgent(t)
+	name := fmt.Sprintf("ocular-agent-standalone-%d", time.Now().UnixNano())
+	containerID := a.docker("run", "-d", "--name", name, "--label", "ocular.test=agent-standalone", "busybox:latest", "sleep", "3600")
+	t.Cleanup(func() { a.docker("rm", "-f", containerID) })
+	target := TargetRef{Provider: "compose", Target: "context:default"}
+	all := agentgrant.Scope{Mode: agentgrant.ScopeAll}
+	require.NoError(t, a.svc.SaveAgentGrants(t.Context(), api.SaveAgentGrantsRequest{Provider: target.Provider, Target: target.Target, Grants: []agentgrant.Grant{
+		{Scope: all, Verb: agentgrant.VerbRead},
+		{Scope: all, Verb: agentgrant.VerbLogs},
+		{Scope: all, Verb: agentgrant.ActionVerb("restart"), Kinds: []string{compose.KindContainers}},
+		{Scope: agentgrant.Scope{Mode: agentgrant.ScopeCluster}, Verb: agentgrant.VerbRead},
+	}}))
+	objects, code := a.objects(ListObjectsRequest{TargetRef: target, Kind: compose.KindContainers})
+	require.Equal(t, http.StatusOK, code)
+	for _, row := range objects.Rows {
+		require.NotEqual(t, containerID, row.Ref.Name)
+		require.NotEmpty(t, row.Ref.Scope)
+	}
+	ref := core.Ref{Provider: "compose", Target: target.Target, Kind: compose.KindContainers, Name: containerID, UID: containerID}
+	require.Equal(t, http.StatusForbidden, a.call("GetObject", GetObjectRequest{Ref: ref}, nil))
+	require.Equal(t, http.StatusForbidden, a.call("GetLogs", GetLogsRequest{Ref: ref, TailLines: 1}, nil))
+	ref.Scope = "ocular-fixture"
+	require.NotEqual(t, http.StatusOK, a.call("GetObject", GetObjectRequest{Ref: ref}, nil))
+	require.NotEqual(t, http.StatusOK, a.call("GetLogs", GetLogsRequest{Ref: ref, TailLines: 1}, nil))
+}

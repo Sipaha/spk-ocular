@@ -4,6 +4,11 @@ This is the remaining product backlog, not authorization to start a task.
 Implementation begins only when requested. Current behavior is documented in
 [usage](usage.md) and [architecture](architecture.md).
 
+[Product and website direction](product-plan.md) compares competitors, paid
+capabilities and proposed validation priorities. It does not authorize additional
+implementation or publication. [Website direction](site-plan.md) tracks remaining
+site and download-journey work separately from application features.
+
 ## Distribution and platforms
 
 - Developer ID signing and notarization for macOS, and publisher signing for
@@ -14,7 +19,7 @@ Implementation begins only when requested. Current behavior is documented in
 
 - Read compose files for desired replicas, services without containers and
   scale/create/up/down operations.
-- Docker SSH endpoints, non-Compose containers, Compose Problems, pause/unpause,
+- Docker SSH endpoints, Compose Problems, pause/unpause,
   selectable kill signals and image operations.
 - CPU/memory metrics for Windows Docker daemons; full aggregation above 20 replicas.
 - SSH/custom providers and simultaneous workspaces or multiple windows.
@@ -47,10 +52,9 @@ Implementation begins only when requested. Current behavior is documented in
 
 ## Agent access
 
-- Proposed permission-editor UX: capability groups (viewing, changes, execution),
-  expandable action details, and a contextual entry from the namespace header
-  into the same editor used by the global Agents window. Multiple selected
-  namespaces and All must be explicit; opening the editor grants nothing.
+- An explicit access model for standalone Docker containers without widening
+  existing project grants.
+
 - Optional per-agent/project grants and expiry, agent-initiated access requests,
   paginated/label-filtered snapshots and a CLI wrapper.
 - Separately reviewed support for cluster mutations, values, terminals, tunnels,

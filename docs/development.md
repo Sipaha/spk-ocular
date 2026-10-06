@@ -83,6 +83,13 @@ for `make check`. Explicit integration targets fail if their fixture is absent:
 Never run fixture mutations against the user's clusters or normal Docker Engine.
 The DIND container's `/run` is tmpfs so stale daemon pid files do not survive stops.
 
+`TestDindStandaloneLifecycle` covers an owned container without Compose labels:
+watch events, project isolation, details, logs, exec, metrics, stale reviews and
+reviewed start/stop/restart/delete. `TestDindStandaloneDoesNotInheritProjectGrants`
+checks the real agent socket without expanding existing project grants. The
+browser DIND suite also exercises standalone rows and scope transitions. These
+tests use the same verified `ocular-dind` endpoint and clean up their own IDs.
+
 ## Actual desktop verification
 
 Use a dedicated X display and an isolated profile. Preserve displays/processes
@@ -146,3 +153,58 @@ shutdown. Capture checks the window's process owner and renders that HWND direct
 so another desktop window cannot replace the application in the screenshot. The
 capture has a 30-second limit and reports its stages in the CI log.
 Windows desktop diagnostics go to `SPK_OCULAR_HOME/desktop.log` (replaced on launch).
+
+## Helm verification
+
+`internal/helm` tests execute the embedded SDK lifecycle against fake Kubernetes
+storage/client boundaries, HTTP chart repositories and a private TLS OCI registry.
+They cover exact-version/digest binding, cancellation, no credential forwarding
+across repository redirects, stale/one-shot plans and secret-free settings reads.
+`internal/helm/sqlstore` tests exercise cancellation, pool cleanup, denied reads
+and failed commits with a SQL protocol mock. Real database and Kubernetes
+coverage is provided by the explicit integration target below.
+The synthetic provider exposes a disposable in-memory Helm release and SDK
+operations for browser/native verification. It cannot mutate an external cluster.
+`tests/e2e/helm.spec.ts` builds a local chart repository in solution scratch and
+exercises catalogue → install → values upgrade → rollback, plus reviewed removal,
+private settings and compact layout. No normal user configuration is used.
+
+### Real Helm and PostgreSQL integration
+
+```sh
+OCULAR_KIND_KUBECONFIG=/absolute/path/to/disposable-kind.kubeconfig make test-helm-live
+```
+
+The runner (`scripts/helm-live.py`) requires a single `kind-ocular-dev` context,
+a loopback API endpoint and nodes whose provider IDs identify `ocular-dev`.
+It creates a private profile under `OCULAR_SCRATCH_DIR` (solution `.agents/tmp`
+by default), copies the kubeconfig there and isolates HOME, DOCKER_CONFIG,
+SPK_OCULAR_HOME, temporary files and caches. No user application is launched or
+restarted. Kubectl, Go, a running disposable kind cluster and access to the
+fixture images are required; no external Helm CLI or existing database is needed.
+
+PostgreSQL 17.6 Alpine runs in an owned temporary namespace with ephemeral
+storage and a generated password. An owned loopback port-forward supplies a
+private connection file to the tests; the database carries a disposable-fixture
+marker. Cleanup removes that namespace, this run's labeled CRDs, the forward and
+the connection file even after test failure. Do not interrupt cleanup with SIGKILL.
+
+The target runs race-enabled tests through the production Kubernetes session
+adapter and embedded Helm SDK, using local HTTP chart archives. It covers Secret,
+ConfigMap and SQL storage; preview without writes; actual readiness and hooks;
+upgrade, stale review rejection, failed-hook diagnosis, rollback and uninstall
+with retained history; CRD creation; RBAC denial; timeout, user cancellation and
+session-close cancellation. A transport fault drops the response after a real
+API write to check uncertain outcome reporting and absence of mutation replay.
+It does not disconnect or modify the cluster network.
+
+Database tests cover upstream Helm schema/codec interoperability, migration reuse,
+namespace isolation, custom-label persistence, RLS/permission errors, blocked-query
+cancellation, pool closure, real deferred commit failure and termination of an
+owned backend connection. These fixtures establish integration behavior for this
+setup, not compatibility with every cluster admission policy, database deployment
+or chart. Keep run output in scratch, not in maintained documentation.
+
+Ordinary unit/race runs must unset `OCULAR_KIND_KUBECONFIG`,
+`OCULAR_KIND_RBAC_DIR`, `OCULAR_DIND_HOST` and `OCULAR_HELM_LIVE`; these variables
+opt into integration suites and must not leak from a fixture shell.

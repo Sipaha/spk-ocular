@@ -160,3 +160,9 @@ test-packaging:
 lint-workflows:
 	actionlint -shellcheck=
 	sh -n packaging/linux/update-caches.sh
+
+# Real Helm SDK lifecycle + PostgreSQL in an owned namespace of verified kind.
+# Set OCULAR_KIND_KUBECONFIG explicitly to the disposable cluster's kubeconfig.
+.PHONY: test-helm-live
+test-helm-live:
+	python3 scripts/helm-live.py

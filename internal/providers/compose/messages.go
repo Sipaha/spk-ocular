@@ -10,8 +10,7 @@ import (
 var messageTexts = map[string]string{
 	"scope.singular":                  "Project",
 	"scope.plural":                    "projects",
-	"scope.all":                       "All projects",
-	"notCovered.unlabelled":           "containers without Compose labels",
+	"scope.all":                       "All resources",
 	"container.exited":                "exit code {code}",
 	"container.exitedOOM":             "exit code {code}, killed for running out of memory",
 	"container.restarting":            "restarting after exit code {code}",
@@ -52,7 +51,6 @@ var messageTexts = map[string]string{
 	"act.noPrecondition":              "A change since this review is detected: the run reads the containers again before its first write. The Docker Engine takes no preconditions, so a change after that check (while a service's containers are acted on one by one) is not.",
 	"act.newMembers":                  "Only the containers listed here are acted on, one after another: a change of the set before the run refuses it; containers the service gets while it runs are not touched.",
 	"error.containerRemoved":          "the container was removed",
-	"error.notCompose":                "the container is not part of a Compose project",
 	"error.containerReplaced":         "the container was removed and another took its name",
 	"act.noAction":                    "{kind} cannot be {action}",
 	"act.notServiceKey":               "{key} is not a service key (project/service)",

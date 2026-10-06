@@ -18,6 +18,7 @@ import (
 )
 
 type API interface {
+	Helm(ctx context.Context, req HelmRequest) (HelmResponse, error)
 	AppInfo(ctx context.Context) (AppInfo, error)
 	// ListTargets re-reads local configuration (kubeconfig, ...): no network.
 	ListTargets(ctx context.Context) (TargetsView, error)

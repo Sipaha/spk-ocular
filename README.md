@@ -1,14 +1,27 @@
 # SPK Ocular
 
-SPK Ocular is a local desktop application for Kubernetes and Docker Compose.
+SPK Ocular is a local desktop application for Kubernetes and Docker.
 It uses a native system webview and your existing connection configuration.
-No account, hosted service, bundled cluster tools, or telemetry is required.
+No Ocular account or hosted management service is required. The application does
+not collect telemetry. Helm is embedded; a separate Helm CLI is not required.
 
 - Live resource tables, discovery of Kubernetes API resources, details, and metrics.
 - Multiple namespaces, global favorites, resource search, and saved table layouts.
-- Logs, interactive terminals, and local port forwarding.
+- Standalone Docker containers and Compose project/service grouping.
+- Logs, interactive terminals, and local Kubernetes port forwarding.
 - Reviewed Kubernetes changes, Secret value editing, and bulk actions.
-- Explicit, locally managed access for automation agents.
+- Helm chart browsing, repositories, release history, install, upgrade, rollback
+  and uninstall with review before execution.
+- Explicit local agent access with named permission groups and scope/group switches.
+
+All features are free for individuals and companies of any size, revenue or
+funding. Development is supported only through voluntary cryptocurrency donations;
+donations do not unlock features.
+
+[Product website](https://sipaha.github.io/spk-ocular/) ·
+[English website](https://sipaha.github.io/spk-ocular/en/).
+This README describes the current source; consult release notes for the features
+included in a downloaded version.
 
 ## Install
 
@@ -61,7 +74,7 @@ The browser endpoint is local only. In-app automatic updates are not implemented
 ## Connections and data
 
 Kubernetes contexts come from `KUBECONFIG` (or `~/.kube/config`) and additional
-kubeconfig files directly under `~/.kube`. Docker Compose connections come from
+kubeconfig files directly under `~/.kube`. Docker connections come from
 Docker contexts and the Docker environment variables. Select a target and press
 **Connect** in the resource-list area; selecting or restoring a target does not
 connect. Connection progress includes errors and at most three total automatic
@@ -70,8 +83,10 @@ may execute credential helpers configured in kubeconfig.
 
 The application stores preferences, recent objects, and agent grants in
 `~/.spk/ocular/ocular.db` (`%USERPROFILE%\.spk\ocular\ocular.db` on Windows). Set `SPK_OCULAR_HOME` to use another data directory.
-Credentials stay in the connection configuration; Secret values are not stored
-in the application database.
+Connection credentials remain in their source configuration. Helm repository
+credentials and SQL connection settings are stored in a private application-owned
+`helm/settings.json` under the data directory. Secret values and Helm credentials
+are not stored in the application database; see [Helm](docs/usage.md#helm).
 
 ## Documentation
 

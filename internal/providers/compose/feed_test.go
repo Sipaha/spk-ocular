@@ -232,7 +232,7 @@ func TestFeedSnapshotThenEvents(t *testing.T) {
 	e.fe.PutContainer(foreign)
 
 	sk := e.watch(KindContainers)
-	sk.waitFor(t, "the snapshot", hasRows(a.ID))
+	sk.waitFor(t, "the snapshot", hasRows(a.ID, foreign.ID))
 	sk.mu.Lock()
 	first := sk.deltas
 	sk.mu.Unlock()
@@ -244,7 +244,7 @@ func TestFeedSnapshotThenEvents(t *testing.T) {
 	b := composeContainer(id(2), "p", "db", "created")
 	e.fe.PutContainer(b)
 	e.fe.Emit(containerEvent("create", b))
-	sk.waitFor(t, "the created container", hasRows(a.ID, b.ID))
+	sk.waitFor(t, "the created container", hasRows(a.ID, b.ID, foreign.ID))
 
 	b.State.Status, b.State.Running = "running", true
 	e.fe.PutContainer(b)
@@ -254,13 +254,14 @@ func TestFeedSnapshotThenEvents(t *testing.T) {
 	})
 
 	before := e.fe.Count("/containers/" + foreign.ID + "/json")
-	e.fe.Emit(containerEvent("start", foreign)) // no Compose labels: not read
+	e.fe.Emit(containerEvent("start", foreign)) // standalone events are observed too
 	e.fe.RemoveContainer(a.ID)
 	e.fe.Emit(containerEvent("destroy", a))
-	sk.waitFor(t, "the destroyed container gone", hasRows(b.ID))
-	if n := e.fe.Count("/containers/" + foreign.ID + "/json"); n != before {
-		t.Fatalf("a container without Compose labels was inspected %d times", n-before)
-	}
+	sk.waitFor(t, "the destroyed container gone", hasRows(b.ID, foreign.ID))
+	sk.waitFor(t, "standalone event inspected", func(_ map[string]core.Row, _ provider.ViewStatus) bool {
+		return e.fe.Count("/containers/"+foreign.ID+"/json") > before
+	})
+
 }
 
 // Events are hints: a destroy of an object that exists again (a late or

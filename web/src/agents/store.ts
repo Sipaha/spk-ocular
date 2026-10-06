@@ -1,6 +1,7 @@
 import { create } from 'zustand'
+import { selectedScopes } from '../scopes'
 import type { Client } from '../api/client'
-import type { AgentAccessStatus, AgentPending, AgentTarget } from '../api/types'
+import type { AgentAccessStatus, AgentPending, AgentTarget, AgentScope, ScopeSel } from '../api/types'
 
 // Agent access as the UI keeps it: the socket's state, the targets'
 // grants, the plans waiting for the user. Reloaded on the agent_* events
@@ -16,6 +17,7 @@ export interface AgentsState {
   panel: AgentsTab | null
   /** the target the grants tab edits ("provider/target") */
   chosen: string | null
+  contextScopes: AgentScope[] | null
   /** the confirmation dialog is put aside until another plan comes */
   asideIds: string[]
   error: string | null
@@ -23,7 +25,7 @@ export interface AgentsState {
   auditTick: number
 }
 
-export const initialAgents: AgentsState = { status: null, targets: [], pending: [], panel: null, chosen: null, asideIds: [], error: null, auditTick: 0 }
+export const initialAgents: AgentsState = { status: null, targets: [], pending: [], panel: null, chosen: null, contextScopes: null, asideIds: [], error: null, auditTick: 0 }
 
 export const useAgents = create<AgentsState>(() => ({ ...initialAgents }))
 
@@ -73,10 +75,17 @@ export function agentLoaders(client: Client) {
 
 export const agents = {
   showPanel(tab: AgentsTab | null) {
-    useAgents.setState({ panel: tab })
+    useAgents.setState(tab === null ? { panel: tab, contextScopes: null } : { panel: tab })
   },
   choose(key: string | null) {
-    useAgents.setState({ chosen: key })
+    useAgents.setState({ chosen: key, contextScopes: null })
+  },
+  openScopes(provider: string, target: string, scope: ScopeSel) {
+    const contextScopes: AgentScope[] = scope.mode === 'all'
+      ? [{ mode: 'all' }]
+      : selectedScopes(scope).map((name) => ({ mode: 'one', name }))
+    if (!contextScopes.length) return
+    useAgents.setState({ panel: 'grants', chosen: agentTargetKey(provider, target), contextScopes })
   },
   /** Puts the waiting plans aside (the dialog comes back with a new one). */
   putAside() {

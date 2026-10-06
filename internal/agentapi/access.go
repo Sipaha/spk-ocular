@@ -53,6 +53,11 @@ func (s *Server) open(ctx context.Context, c caller, method, provider, target st
 		s.refused(c, method, provider, target, "", "", err)
 		return nil, err
 	}
+	if len(g.EffectiveGrants()) == 0 {
+		err := forbidden("access to this target is paused or no permissions are enabled")
+		s.refused(c, method, provider, target, "", "", err)
+		return nil, err
+	}
 	call, err := s.o.Service.AgentCall(ctx, provider, target)
 	if err != nil {
 		return nil, err
@@ -78,6 +83,8 @@ func (s *Server) open(ctx context.Context, c caller, method, provider, target st
 	for _, k := range call.Kinds() {
 		kinds[k.ID] = k
 	}
+	g.Grants = g.EffectiveGrants()
+	g.Groups = nil
 	return &session{call: call, grants: g, kinds: kinds}, nil
 }
 
@@ -91,6 +98,9 @@ func (x *session) kind(id string) (core.KindDescriptor, error) {
 
 // allows decides a verb on ref's object of kind k.
 func (x *session) allows(k core.KindDescriptor, scope, verb string, destructive bool) agentgrant.Decision {
+	if x.grants.ScopeDisabled(scope, k.Scoped) {
+		return agentgrant.Decision{Reason: "access to this scope is disabled by the user"}
+	}
 	return agentgrant.Allows(x.grants.Grants, agentgrant.Request{Scope: scope, Scoped: k.Scoped, Kind: k.ID, Sensitive: k.Sensitive, Verb: verb, Destructive: destructive})
 }
 

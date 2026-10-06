@@ -19,6 +19,11 @@ func (s *Server) Grants(ctx context.Context) ([]agentgrant.Target, error) {
 		if out[i].Grants == nil {
 			out[i].Grants = []agentgrant.Grant{}
 		}
+		for j := range out[i].Groups {
+			if out[i].Groups[j].Grants == nil {
+				out[i].Groups[j].Grants = []agentgrant.Grant{}
+			}
+		}
 	}
 	return out, nil
 }
@@ -28,12 +33,10 @@ func (s *Server) Grants(ctx context.Context) ([]agentgrant.Target, error) {
 // granted already keeps its own, so nothing is asked of it (a daemon that
 // is down does not stop narrowing its grants).
 func (s *Server) SaveGrants(ctx context.Context, req api.SaveAgentGrantsRequest) error {
-	for _, g := range req.Grants {
-		if err := g.Validate(); err != nil {
-			return badRequest("%v", err)
-		}
+	t := agentgrant.Target{Provider: req.Provider, Target: req.Target, Grants: req.Grants, Groups: req.Groups, DisabledScopes: req.DisabledScopes}
+	if err := t.Validate(); err != nil {
+		return badRequest("%v", err)
 	}
-	t := agentgrant.Target{Provider: req.Provider, Target: req.Target, Grants: req.Grants}
 	all, err := s.o.Store.AgentTargets(ctx)
 	if err != nil {
 		return &api.CodedError{Code: api.CodeInternal, Detail: err.Error()}
@@ -44,9 +47,9 @@ func (s *Server) SaveGrants(ctx context.Context, req api.SaveAgentGrantsRequest)
 			had = x
 		}
 	}
-	if len(req.Grants) > 0 && had.Identity != "" {
+	if t.HasConfiguration() && had.Identity != "" {
 		t.Identity, t.Title = had.Identity, had.Title
-	} else if len(req.Grants) > 0 {
+	} else if t.HasConfiguration() {
 		call, err := s.o.Service.AgentCall(ctx, req.Provider, req.Target)
 		if err != nil {
 			return err

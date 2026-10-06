@@ -44,11 +44,13 @@ type AgentAccessStatus struct {
 	Pending int `json:"pending"`
 }
 
-// SaveAgentGrantsRequest sets a target's grants whole (none: revoked).
+// SaveAgentGrantsRequest replaces a target's grants, groups and master switches (all empty: revoked).
 type SaveAgentGrantsRequest struct {
-	Provider string             `json:"provider"`
-	Target   string             `json:"target"`
-	Grants   []agentgrant.Grant `json:"grants"`
+	Provider       string             `json:"provider"`
+	Target         string             `json:"target"`
+	Grants         []agentgrant.Grant `json:"grants"`
+	Groups         []agentgrant.Group `json:"groups,omitempty"`
+	DisabledScopes []agentgrant.Scope `json:"disabledScopes,omitempty"`
 }
 
 // ReconfirmAgentTargetRequest grants a suspended target's grants for the

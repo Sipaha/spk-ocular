@@ -68,13 +68,13 @@ func (s *session) Metrics(ctx context.Context, q provider.Query, rowIDs []string
 		switch q.Kind {
 		case KindContainers:
 			if o, ok := objs[row]; ok {
-				if c := o.(*engine.ContainerInspect); c.State.Running {
+				if c := o.(*engine.ContainerInspect); c.State.Running && q.Scope.Contains(projectOf(c)) {
 					add(row, c)
 				}
 			}
 		case KindServices:
 			project, service, ok := strings.Cut(row, "/")
-			if !ok {
+			if !ok || !q.Scope.Contains(project) {
 				continue
 			}
 			n := 0

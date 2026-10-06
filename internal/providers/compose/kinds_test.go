@@ -21,7 +21,7 @@ func kindByID(t *testing.T, id string) core.KindDescriptor {
 }
 
 // The kinds, their navigation and capabilities (decision 5): projects are
-// the scopes, services open first, containers and services have logs,
+// the scopes, containers open first, containers and services have logs,
 // images have no scope; Compose has no events view in P6.
 func TestKindDescriptors(t *testing.T) {
 	cases := []struct {
@@ -31,8 +31,8 @@ func TestKindDescriptors(t *testing.T) {
 		scopeCol            string
 	}{
 		{KindProjects, "Compose", "Project", false, false, false, []string{"name", "services", "containers", "running", "workingDir", "configFiles"}, ""},
-		{KindServices, "Compose", "Service", true, true, true, []string{"name", "project", "running", "status", "images", "cpu", "memory"}, "project"},
-		{KindContainers, "Compose", "Container", true, false, true, []string{"name", "project", "service", "number", "status", "health", "restarts", "image", "ports", "age", "cpu", "memory"}, "project"},
+		{KindServices, "Compose", "Service", true, false, true, []string{"name", "project", "running", "status", "images", "cpu", "memory"}, "project"},
+		{KindContainers, "Engine", "Container", true, true, true, []string{"name", "project", "service", "number", "status", "health", "restarts", "image", "ports", "age", "cpu", "memory"}, "project"},
 		{KindNetworks, "Engine", "Network", true, false, false, []string{"name", "project", "driver", "netScope", "containers", "age"}, "project"},
 		{KindVolumes, "Engine", "Volume", true, false, false, []string{"name", "project", "driver", "usedBy", "age"}, "project"},
 		{KindImages, "Engine", "Image", false, false, false, []string{"tags", "id", "size", "usedBy", "age"}, ""},
@@ -97,8 +97,7 @@ func TestKindAliasesAreUniqueAndDoNotShadowCommands(t *testing.T) {
 	assert.Equal(t, []string{"ct", "container"}, kindByID(t, KindContainers).Aliases)
 }
 
-// Containers without Compose labels are not shown by design (a future
-// Docker provider): the kind says so.
+// Standalone containers are covered alongside Compose containers.
 func TestContainersNameWhatTheyDoNotCover(t *testing.T) {
-	assert.Equal(t, []string{"containers without Compose labels"}, kindByID(t, KindContainers).NotCovered)
+	assert.Empty(t, kindByID(t, KindContainers).NotCovered)
 }

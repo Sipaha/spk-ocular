@@ -62,8 +62,10 @@ type Target struct {
 	Identity string `json:"identity"`
 	// Observed: another identity a call saw; the grants are suspended
 	// until the user confirms them for it.
-	Observed string  `json:"observed,omitempty"`
-	Grants   []Grant `json:"grants"`
+	Observed       string  `json:"observed,omitempty"`
+	Grants         []Grant `json:"grants"`
+	Groups         []Group `json:"groups,omitempty"`
+	DisabledScopes []Scope `json:"disabledScopes,omitempty"`
 }
 
 // Suspended: the target now points elsewhere than when granted.

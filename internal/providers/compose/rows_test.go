@@ -71,10 +71,13 @@ func TestContainerIdentity(t *testing.T) {
 	assert.Equal(t, "fedcba", reused.Ref.Name)
 }
 
-// Containers without Compose labels are not shown (NotCovered).
-func TestContainersWithoutComposeLabelsAreNotRows(t *testing.T) {
+// All resources includes standalone containers; named project scopes do not.
+func TestStandaloneContainersKeepProjectIsolation(t *testing.T) {
 	w := world(ctr("a", "plain", "", ""), ctr("b", "p-web-1", "p", "web"))
-	assert.Equal(t, []string{"b"}, ids(rowsOf(w, q(KindContainers, ""))))
+	assert.Equal(t, []string{"a", "b"}, ids(rowsOf(w, q(KindContainers, ""))))
+	assert.Equal(t, []string{"b"}, ids(rowsOf(w, q(KindContainers, "p"))))
+	assert.Empty(t, rowsOf(w, q(KindContainers, "missing")))
+	assert.Empty(t, rowsOf(w, q(KindContainers, ""))[0].Ref.Scope)
 	assert.Equal(t, []string{"p/web"}, ids(rowsOf(w, q(KindServices, ""))))
 	assert.Equal(t, []core.Scope{{Name: "p"}}, scopesOf(w))
 }
@@ -187,12 +190,12 @@ func TestScopeOneAndAll(t *testing.T) {
 		img("sha256:plain", "alpine:latest"),
 	)
 	assert.Equal(t, []string{"a1"}, ids(rowsOf(w, q(KindContainers, "a"))))
-	assert.Equal(t, []string{"a1", "b1"}, ids(rowsOf(w, q(KindContainers, ""))))
+	assert.Equal(t, []string{"a1", "b1", "x"}, ids(rowsOf(w, q(KindContainers, ""))))
 	assert.Equal(t, []string{"a/web"}, ids(rowsOf(w, q(KindServices, "a"))))
 
 	assert.Equal(t, []string{"n-a", "n-ext"}, ids(rowsOf(w, q(KindNetworks, "a"))))
 	assert.Equal(t, []string{"n-b", "n-ext"}, ids(rowsOf(w, q(KindNetworks, "b"))))
-	assert.Equal(t, []string{"n-a", "n-b", "n-ext"}, ids(rowsOf(w, q(KindNetworks, ""))))
+	assert.Equal(t, []string{"n-a", "n-b", "n-ext", "n-other"}, ids(rowsOf(w, q(KindNetworks, ""))))
 	ext := rowsOf(w, q(KindNetworks, "a"))[1]
 	assert.Equal(t, core.Ref{Provider: ProviderID, Kind: KindNetworks, Name: "n-ext", UID: "n-ext", Title: "ext"}, ext.Ref, "not the project's: no scope")
 	assert.Equal(t, "2", cell(t, KindNetworks, ext, "containers").Text)
@@ -201,13 +204,15 @@ func TestScopeOneAndAll(t *testing.T) {
 
 	assert.Equal(t, []string{"ext-vol@2026-09-30T10:00:00Z"}, ids(rowsOf(w, q(KindVolumes, "a"))))
 	assert.Equal(t, []string{"b_data@2026-09-30T10:00:00Z", "ext-vol@2026-09-30T10:00:00Z"}, ids(rowsOf(w, q(KindVolumes, "b"))))
-	assert.Equal(t, []string{"b_data@2026-09-30T10:00:00Z", "ext-vol@2026-09-30T10:00:00Z"}, ids(rowsOf(w, q(KindVolumes, ""))))
+	assert.Equal(t, []string{"b_data@2026-09-30T10:00:00Z", "ext-vol@2026-09-30T10:00:00Z", "lonely@"}, ids(rowsOf(w, q(KindVolumes, ""))))
 	assert.Equal(t, "2", cell(t, KindVolumes, rowsOf(w, q(KindVolumes, "a"))[0], "usedBy").Text)
 
-	// Images have no scope: those Compose containers use.
+	// Images have no scope and include standalone-container images.
 	none := provider.Query{Kind: KindImages, Scope: core.ScopeSel{Mode: core.ScopeNone}}
-	im := onlyRow(t, w, none)
-	assert.Equal(t, "sha256:shared", im.ID)
+	images := rowsOf(w, none)
+	require.Equal(t, []string{"sha256:plain", "sha256:shared"}, ids(images))
+	im := images[1]
+	assert.Equal(t, "1", cell(t, KindImages, images[0], "usedBy").Text)
 	assert.Equal(t, "2", cell(t, KindImages, im, "usedBy").Text)
 }
 

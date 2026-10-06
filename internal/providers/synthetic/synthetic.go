@@ -199,6 +199,7 @@ func (p *Provider) ts() string {
 }
 
 type session struct {
+	helm    helmFixture
 	p       *Provider
 	target  string // the target it serves (demo or demo2)
 	objects map[string][]string

@@ -1,6 +1,8 @@
-// Package compose is the Docker Compose provider: targets are Docker
+// Package compose is the Docker provider (the stable provider ID is retained):
+// targets are Docker
 // contexts (Engine endpoints, resolved as the docker CLI 29 does), scopes are
-// Compose projects (the com.docker.compose.project label).
+// Compose projects (the com.docker.compose.project label). Standalone containers
+// have no project scope and appear in the all-resources UI view.
 package compose
 
 import (
@@ -42,7 +44,7 @@ func NewWith(getenv func(string) string, home string) *Provider {
 }
 
 func (p *Provider) ID() string    { return ProviderID }
-func (p *Provider) Title() string { return "Docker Compose" }
+func (p *Provider) Title() string { return "Docker" }
 
 func (p *Provider) env() Env { return ResolveEnv(p.getenv, p.home) }
 

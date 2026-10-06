@@ -45,7 +45,7 @@ func resourceOf(w *World, ref core.Ref, now time.Time) (*core.Resource, error) {
 	var res *core.Resource
 	switch ref.Kind {
 	case KindContainers:
-		if c := w.Containers[ref.Name]; c != nil && projectOf(c) != "" {
+		if c := w.Containers[ref.Name]; c != nil {
 			res = x.containerResource(c, now)
 		}
 	case KindServices:
@@ -163,7 +163,7 @@ func (x *index) containerResource(c *engine.ContainerInspect, now time.Time) *co
 	f.labels(c.Config.Labels)
 
 	r := &core.Resource{Ref: containerRef(c), Health: h, Facts: f.list, YAML: inspectYAML(c.Raw, c)}
-	if s := c.Config.Labels[LabelService]; s != "" && !isOneoff(c) {
+	if s := c.Config.Labels[LabelService]; projectOf(c) != "" && s != "" && !isOneoff(c) {
 		r.Relations = append(r.Relations, core.Relation{Type: "owner", Ref: serviceRef(projectOf(c), s)})
 	}
 	for _, l := range x.links[c.ID] {
@@ -225,13 +225,13 @@ func (x *index) imageRelation(c *engine.ContainerInspect) core.Relation {
 	return core.Relation{Type: relUses, Ref: ref, Inert: true}
 }
 
-// usedBy: the containers of the World that pass use — Compose ones
-// openable, others (a kind the provider does not show) named only.
+// usedBy: observed containers that pass use are openable, whether standalone
+// or Compose members. Unobserved network endpoints remain inert.
 func (x *index) usedByRelations(use func(c *engine.ContainerInspect) bool) []core.Relation {
 	var out []core.Relation
 	for _, c := range x.w.Containers {
 		if use(c) {
-			out = append(out, core.Relation{Type: relUsedBy, Ref: containerRef(c), Inert: projectOf(c) == ""})
+			out = append(out, core.Relation{Type: relUsedBy, Ref: containerRef(c)})
 		}
 	}
 	return out
@@ -382,7 +382,7 @@ func (x *index) networkResource(n *engine.Network) *core.Resource {
 		if _, listed := n.Containers[c.ID]; listed {
 			return true
 		}
-		for _, l := range x.networkLinks(c) { // not a Compose container
+		for _, l := range x.networkLinks(c) { // fallback to the container's observed links
 			if l.id == n.ID {
 				return true
 			}

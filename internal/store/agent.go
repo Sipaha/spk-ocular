@@ -11,18 +11,31 @@ import (
 	"github.com/spk/spk-ocular/internal/agentgrant"
 )
 
-// AgentTargets lists the targets with grants, by provider and target.
+// AgentTargets lists configured targets, including paused access, by provider and target.
 func (s *Store) AgentTargets(ctx context.Context) ([]agentgrant.Target, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT provider, target, title, identity, observed FROM agent_targets ORDER BY provider, target`)
+	rows, err := s.db.QueryContext(ctx, `SELECT provider, target, title, identity, observed, groups_json, disabled_scopes_json FROM agent_targets ORDER BY provider, target`)
 	if err != nil {
 		return nil, err
 	}
 	var out []agentgrant.Target
 	for rows.Next() {
 		var t agentgrant.Target
-		if err := rows.Scan(&t.Provider, &t.Target, &t.Title, &t.Identity, &t.Observed); err != nil {
+		var groups, disabled sql.NullString
+		if err := rows.Scan(&t.Provider, &t.Target, &t.Title, &t.Identity, &t.Observed, &groups, &disabled); err != nil {
 			_ = rows.Close()
 			return nil, err
+		}
+		if groups.Valid {
+			if err := json.Unmarshal([]byte(groups.String), &t.Groups); err != nil {
+				_ = rows.Close()
+				return nil, fmt.Errorf("agent groups: %w", err)
+			}
+		}
+		if disabled.Valid {
+			if err := json.Unmarshal([]byte(disabled.String), &t.DisabledScopes); err != nil {
+				_ = rows.Close()
+				return nil, fmt.Errorf("disabled scopes: %w", err)
+			}
 		}
 		out = append(out, t)
 	}
@@ -61,27 +74,34 @@ func (s *Store) AgentTargets(ctx context.Context) ([]agentgrant.Target, error) {
 	return out, grants.Err()
 }
 
-// ReplaceAgentGrants sets t's grants whole (none: the target goes). A new
+// ReplaceAgentGrants replaces the complete access configuration (empty: the target goes). A new
 // target is recorded with t.Identity; an existing one keeps the identity it
 // was granted for (ReconfirmAgentTarget moves it) and takes t.Title.
 func (s *Store) ReplaceAgentGrants(ctx context.Context, t agentgrant.Target) error {
-	for _, g := range t.Grants {
-		if err := g.Validate(); err != nil {
-			return err
-		}
+	if err := t.Validate(); err != nil {
+		return err
 	}
-	if len(t.Grants) > 0 && t.Identity == "" {
+	if t.HasConfiguration() && t.Identity == "" {
 		return errors.New("a target's grants need its identity")
 	}
+	var groups, disabled any
+	if len(t.Groups) > 0 {
+		b, _ := json.Marshal(t.Groups)
+		groups = string(b)
+	}
+	if len(t.DisabledScopes) > 0 {
+		b, _ := json.Marshal(t.DisabledScopes)
+		disabled = string(b)
+	}
 	return s.WithTx(ctx, func(tx *sql.Tx) error {
-		if len(t.Grants) == 0 {
+		if !t.HasConfiguration() {
 			_, err := tx.ExecContext(ctx, `DELETE FROM agent_targets WHERE provider = ? AND target = ?`, t.Provider, t.Target)
 			return err
 		}
 		if _, err := tx.ExecContext(ctx,
-			`INSERT INTO agent_targets(provider, target, title, identity, updated_at) VALUES (?, ?, ?, ?, ?)
-			 ON CONFLICT(provider, target) DO UPDATE SET title = excluded.title, updated_at = excluded.updated_at`,
-			t.Provider, t.Target, t.Title, t.Identity, time.Now().UnixMilli()); err != nil {
+			`INSERT INTO agent_targets(provider, target, title, identity, updated_at, groups_json, disabled_scopes_json) VALUES (?, ?, ?, ?, ?, ?, ?)
+			 ON CONFLICT(provider, target) DO UPDATE SET title = excluded.title, updated_at = excluded.updated_at, groups_json = excluded.groups_json, disabled_scopes_json = excluded.disabled_scopes_json`,
+			t.Provider, t.Target, t.Title, t.Identity, time.Now().UnixMilli(), groups, disabled); err != nil {
 			return err
 		}
 		if _, err := tx.ExecContext(ctx, `DELETE FROM agent_grants WHERE provider = ? AND target = ?`, t.Provider, t.Target); err != nil {

@@ -18,6 +18,7 @@ import (
 	"github.com/spk/spk-ocular/internal/core"
 	"github.com/spk/spk-ocular/internal/events"
 	"github.com/spk/spk-ocular/internal/forwards"
+	"github.com/spk/spk-ocular/internal/helm"
 	"github.com/spk/spk-ocular/internal/provider"
 	"github.com/spk/spk-ocular/internal/store"
 	"github.com/spk/spk-ocular/internal/streams"
@@ -28,12 +29,15 @@ const prefSelectedTarget = "selected_target"
 
 type Options struct {
 	Version string
+	DataDir string
 	Mode    string // "desktop" | "browser"
 	Getenv  func(string) string
 }
 
 // Service implements API.
 type Service struct {
+	helmRepos     *helm.Repositories
+	helmPlans     *helm.Plans
 	reg           *provider.Registry
 	store         *store.Store
 	em            *events.Emitter
@@ -89,7 +93,7 @@ func NewService(reg *provider.Registry, st *store.Store, em *events.Emitter, o O
 	if _, err := rand.Read(key); err != nil {
 		panic(err) // crypto/rand does not fail on supported platforms
 	}
-	return &Service{reg: reg, store: st, em: em, opts: o, views: views.NewManager(em), streams: streams.NewRegistry(), fwd: newForwards(em), sessions: map[string]*sessionEntry{}, connections: map[string]*connectionAttempt{}, left: map[string]time.Time{}, now: time.Now, revKey: key, agentWatches: make(chan struct{}, maxAgentWatches)}
+	return &Service{helmRepos: helm.NewRepositories(helm.SettingsDirectory(o.DataDir)), helmPlans: helm.NewPlans(), reg: reg, store: st, em: em, opts: o, views: views.NewManager(em), streams: streams.NewRegistry(), fwd: newForwards(em), sessions: map[string]*sessionEntry{}, connections: map[string]*connectionAttempt{}, left: map[string]time.Time{}, now: time.Now, revKey: key, agentWatches: make(chan struct{}, maxAgentWatches)}
 }
 
 // configRev is the opaque revision of a configuration hash ("" for none).
@@ -133,6 +137,7 @@ func (s *Service) Start(ctx context.Context) {
 
 // Close stops the watchers, views and sessions.
 func (s *Service) Close() {
+	s.helmPlans.Close()
 	s.stopConnections()
 	if s.cancel != nil {
 		s.cancel()

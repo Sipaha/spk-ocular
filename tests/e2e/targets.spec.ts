@@ -4,7 +4,7 @@ import { EXTRA, ONE, TWO, env, kubeconfig, writeAtomic } from './fixtures'
 
 const e = env(process.env.E2E_ROOT!)
 const option = (page: Page, name: string) => page.getByRole('option', { name: new RegExp(`^${name}\\b`) })
-/** The kube contexts (the Docker Compose group has its own). */
+/** The kube contexts (the Docker group has its own). */
 const kube = (page: Page) => page.getByRole('region', { name: 'Kubernetes' }).getByRole('option')
 
 test.afterEach(() => {
@@ -26,7 +26,7 @@ test('lists contexts from KUBECONFIG and ~/.kube, marking current-context', asyn
 
 test('lists Docker contexts beside the kube contexts, the current one marked, no TLS material or credentials', async ({ page }) => {
   await page.goto('/')
-  const docker = page.getByRole('listbox', { name: 'targets' }).getByRole('region', { name: 'Docker Compose' })
+  const docker = page.getByRole('listbox', { name: 'targets' }).getByRole('region', { name: 'Docker' })
   await expect(docker.getByRole('option')).toHaveCount(3)
   await expect(docker.getByRole('option', { name: /^default\b/ })).toContainText('unix:///var/run/docker.sock')
   await expect(docker.getByRole('option', { name: /^sock\b/ })).toContainText('current')

@@ -1,3 +1,5 @@
+import { HelmWorkspace } from '../helm/HelmWorkspace'
+import { agents } from '../agents/store'
 import { PanelResize, usePanelWidths } from './PanelResize'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { Client } from '../api/client'
@@ -412,6 +414,8 @@ export function Workspace({ client, hub, target, onFavorite, onMoveFavorite, onN
           <div role={kindsError ? 'alert' : 'status'} className="p-4 text-fg-muted">
             {kindsError || t('nav.noKinds')}
           </div>
+        ) : page.kind.workspace?.startsWith('helm-') ? (
+          <HelmWorkspace key={page.key} client={client} target={target} scope={scope} onResource={ref => paletteActs.current?.openObject(ref)} onSection={tab => setKind(`ocular.helm.${tab}`)} initialTab={page.kind.workspace === 'helm-charts' ? 'charts' : 'releases'} scopePicker={<ScopePicker scope={scope} scopes={scopes} scopeMenu={scopeMenu} onScope={setScope} />} />
         ) : (
           <ResourcePage
             key={page.key}
@@ -845,6 +849,18 @@ function ResourcePage(props: {
         ) : (
           <ScopePicker scope={scope} scopes={scopes} scopeMenu={scopeMenu} onScope={onScope} />
         ))}
+        {kind.scoped && (
+          <button
+            type="button"
+            aria-label={t('agents.scopeAccess')}
+            title={t('agents.scopeAccess')}
+            disabled={scope.mode !== 'all' && selectedScopes(scope).length === 0}
+            className="shrink-0 rounded border border-line px-2 py-1 text-xs text-fg-muted hover:bg-hover disabled:opacity-50"
+            onClick={() => agents.openScopes(target.provider, target.id, scope)}
+          >
+            {t('agents.scopeAccess')}
+          </button>
+        )}
         {view.resync && <ResyncButton client={client} viewId={view.viewId} />}
         <label className="resource-filter field-shell">
           <SearchIcon className="h-3.5 w-3.5 text-fg-subtle" />

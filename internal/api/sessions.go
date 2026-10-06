@@ -333,7 +333,13 @@ func (s *Service) ListKinds(ctx context.Context, providerID, target string) (Kin
 	if err != nil {
 		return KindsView{}, err
 	}
-	return KindsView{KindCatalog: catalogOf(e.sess), Session: e.seq}, nil
+	catalog := catalogOf(e.sess)
+	if fromUI(ctx) {
+		if _, ok := e.sess.(helmSession); ok {
+			catalog.Kinds = append(append([]core.KindDescriptor(nil), catalog.Kinds...), helmKinds()...)
+		}
+	}
+	return KindsView{KindCatalog: catalog, Session: e.seq}, nil
 }
 
 // catalogOf: a session without a catalog has one revision of fixed kinds.

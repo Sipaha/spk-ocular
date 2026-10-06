@@ -1,5 +1,6 @@
 import { expect, type Page } from '@playwright/test'
-import { test } from './fixtures'
+import { test, scratchRoot } from './fixtures'
+import { join } from 'node:path'
 import { execFileSync } from 'node:child_process'
 import { connectSelected, pickOption, pickScope, selects } from './fixtures'
 import { expectScreen, stats } from './synth'
@@ -21,8 +22,10 @@ async function openDind(page: Page, project = 'ocular-fixture') {
   await expect(page.getByRole('textbox', { name: 'Filter resources', exact: true })).toBeVisible()
   // These resource suites explicitly expand sections; fresh-profile defaults
   // and persistence are covered by the navigation and restart suites.
-  for (const heading of await page.getByRole('navigation', { name: 'resources' }).locator('button[aria-expanded="false"]').all()) await heading.click()
+  const collapsed = page.getByRole('navigation', { name: 'resources' }).locator('button[aria-expanded="false"]')
+  while (await collapsed.count()) await collapsed.first().click()
   await pickScope(page, 'Project', project)
+  await page.getByRole('navigation', { name: 'resources' }).getByRole('button', { name: 'Services', exact: true }).click()
 }
 
 async function kindPage(page: Page, kind: string) {
@@ -32,9 +35,47 @@ async function kindPage(page: Page, kind: string) {
 
 const row = (grid: ReturnType<Page['getByRole']>, name: string | RegExp) => grid.getByRole('row').filter({ has: grid.page().getByRole('gridcell', { name, exact: typeof name === 'string' }) })
 
+test('standalone Docker containers have details and logs and stay outside project selections', async ({ page }) => {
+  const name = `ocular-ui-standalone-${Date.now()}`
+  const id = docker('run', '-d', '--name', name, '--label', 'ocular.test=standalone-ui', 'busybox:latest', 'sh', '-c', 'echo standalone-ui-log; exec sleep 3600').trim()
+  try {
+    await page.goto('/')
+    await expect(page.getByRole('region', { name: 'Docker', exact: true })).toBeVisible()
+    await page.getByRole('option', { name: /^ocular-dind\b/ }).click()
+    await connectSelected(page)
+    const nav = page.getByRole('navigation', { name: 'resources' })
+    const engine = nav.getByRole('button', { name: /^Engine/ })
+    if (await engine.getAttribute('aria-expanded') === 'false') await engine.click()
+    await expect(nav.getByRole('button', { name: 'Containers', exact: true })).toHaveAttribute('aria-current', /.+/)
+    await expect(page.getByRole('button', { name: 'Project', exact: true })).toHaveText('All resources')
+    const grid = page.getByRole('grid', { name: 'resources' })
+    await expect(row(grid, name)).toBeVisible()
+    await row(grid, name).click()
+    const drawer = page.getByRole('dialog', { name: new RegExp(name) })
+    await expect(drawer.getByRole('button', { name: /^Actions\b/ })).toBeVisible()
+    await page.keyboard.press('l')
+    const logs = page.locator('[role=tabpanel]:not([hidden])')
+    await expect(logs.getByLabel('stream state')).toHaveText('Live')
+    await expect(logs).toContainText('standalone-ui-log')
+    await page.screenshot({ path: join(scratchRoot, 'docker-standalone-browser.png') })
+    await page.keyboard.press('Escape')
+    await pickScope(page, 'Project', 'ocular-fixture')
+    await expect(row(grid, name)).toHaveCount(0)
+    await expect(row(grid, 'ocular-fixture-web-1')).toBeVisible()
+    await page.getByRole('button', { name: 'Project', exact: true }).click()
+    await page.getByRole('listbox', { name: 'Project', exact: true }).getByRole('checkbox', { name: 'ocular-fixture', exact: true }).uncheck()
+    await page.keyboard.press('Escape')
+    await expect(row(grid, name)).toHaveCount(0)
+    await expect(row(grid, 'ocular-fixture-web-1')).toHaveCount(0)
+    await page.getByRole('button', { name: 'Project', exact: true }).click()
+    await page.getByRole('listbox', { name: 'Project', exact: true }).getByRole('option', { name: 'All resources', exact: true }).click()
+    await expect(row(grid, name)).toBeVisible()
+  } finally { docker('rm', '-f', id) }
+})
+
 test('services of a project with their health', async ({ page }) => {
   await openDind(page)
-  const grid = page.getByRole('grid', { name: 'resources' }) // services is the first view
+  const grid = page.getByRole('grid', { name: 'resources' }) // explicitly selected Compose services
   await expect(page.getByRole('navigation', { name: 'resources' }).getByRole('button', { name: 'Services', exact: true })).toHaveAttribute('aria-current', /.+/)
   await expect(row(grid, 'web')).toContainText('1/1')
   await expect(row(grid, 'sick')).toContainText('Unhealthy', { timeout: 30_000 })

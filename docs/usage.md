@@ -32,7 +32,8 @@ Enter opens the only matching kind. This search is independent of the row filter
 
 Click a namespace row or its text, or press Enter, to select exactly one
 namespace and close the picker. Use checkboxes to add or remove names from a
-set. Space toggles a checkbox when the list has focus; it types a space in the
+set. Picker checkboxes use the same dark outline and selected mark as resource
+rows. Space toggles a checkbox when the list has focus; it types a space in the
 search field. Removing the last checkbox selects an empty set, not all namespaces.
 Choose **All** explicitly to view all namespaces.
 
@@ -140,6 +141,111 @@ UDP and non-loopback forwarding are not supported.
 ## Agents
 
 The Agents dialog manages local API grants, pending confirmations, and an audit
-journal. No access is granted by default. Destructive plans require confirmation
+journal. **Agent permissions** beside the namespace/project selector opens this
+editor for the current selection. Multiple names have separate cards; All
+explicitly includes future namespaces/projects. Opening a card grants nothing:
+select permissions and press **Save**. Existing rights in other scopes remain
+visible.
+
+The switch beside a namespace/project pauses all agent access to it, including
+permissions inherited from All. **Add group** creates another independent set
+of permissions: give it a name and configure its permissions. Each group has a
+separate switch. Enabled groups add their rights together; one group cannot
+restrict rights granted by another. A disabled group keeps its name and settings.
+The All master pauses every namespace/project; the cluster switch is independent.
+Press **Save** to persist names, switches and permissions in the database.
+Re-enabling a namespace restores its enabled groups without enabling groups
+that were individually switched off.
+
+Each access group contains Viewing, Changes and expandable Execution categories,
+with resource-kind restrictions and confirmation settings per permission.
+The connection instruction is under **Connect an agent**; the API status remains
+visible when it is collapsed. The editor scrolls independently from its Save
+and Discard controls. Permission and group hints are available on hover.
+No access is granted by default. Destructive plans require confirmation
 unless the particular grant explicitly allows execution without it. See
 [the agent API](agent-api.md) for the transport and permission model.
+
+## Docker containers and Compose projects
+
+Docker connections use your existing Docker contexts and Engine configuration.
+Containers is the default view for a new workspace and includes both standalone
+containers and Compose containers. Saved workspace selections are preserved.
+Select **All resources** to include containers without a project; choosing one or
+more Compose projects excludes them. Deselecting every project yields an empty
+selection. Standalone containers have no Project/Service value and are not shown
+as a fabricated Compose project. Containers with only a service label also do not
+create a service without a project label.
+
+Containers support live state, details/inspect YAML, logs, terminals, Linux
+CPU/memory metrics and reviewed start, stop, restart and removal. Identity and
+stale-review checks also apply to standalone containers. Compose Projects and
+Services retain grouping and service-wide operations. Compose files are not read
+to infer desired state or create missing services.
+
+The all-resources Networks and Volumes views include unused Engine objects;
+project selections show the project's objects and those used by its containers.
+Images is an unscoped inventory, including unused images. These inventories do
+not add image/network/volume mutation operations. Ocular connects to an existing
+Docker Engine; it does not provide a container runtime or virtual machine.
+
+Standalone-container access is currently available through the UI. Existing
+agent project grants do not cover it; see [agent access](agent-api.md).
+
+## Helm
+
+Connected Kubernetes targets offer Helm Releases and Charts. Ocular embeds Helm
+4.3.0; no system `helm` executable is required. Releases respect the existing
+namespace selection, including an explicitly empty set. Successful namespace
+reads remain visible when another namespace fails; the failed scope is reported.
+Refresh is explicit.
+The table includes namespace, chart/app versions, revision, status and update time.
+Details show user/computed values, declared resources, manifests, hooks, notes and
+revision history. Declared resources are not a live health assertion. Resources
+recognized by the current Kubernetes catalogue open their standard Ocular
+details, where a fresh read establishes existence and the current object UID.
+
+Charts are searchable across configured repositories or within one repository.
+The catalogue shows the latest matching version per chart; details let you choose
+an exact version before installation. HTTP(S) repositories support username/token,
+custom CA and client certificate/key paths. OCI entries use a full chart path,
+such as `oci://registry.example/team/chart`; versions come from registry tags.
+OCI does not define a universal chart catalogue/search endpoint. TLS verification
+is enabled unless explicitly disabled for that repository.
+
+Repositories and the release storage driver are configured in Helm settings.
+Secret storage is the default; ConfigMap and PostgreSQL SQL storage are available.
+These settings apply across connections. Passwords and SQL connection strings
+are kept in an owner-only `helm/settings.json` under Ocular's data directory, not
+SQLite; reads return only presence flags. An unchanged saved password is retained
+only for the same repository name, URL and username. Explicitly editing the
+password field replaces or clears it. Ocular does not edit the user's Helm or
+Docker credential configuration.
+
+Install, upgrade, rollback and uninstall first prepare a review. The review binds
+the selected connection/configuration, storage, namespace, release content and
+chart/values. Execution rechecks the current release; rollback also rechecks the
+selected historical revision. Plans are one-shot, expire after ten minutes and
+are held only in memory. No automatic mutation retry is performed. A cancelled
+or unsuccessful operation can have already changed the cluster: inspect release
+history and resources before preparing a new operation.
+
+Installation previews for charts that introduce CRDs render locally with observed
+cluster API versions plus the chart's declared types. This mode is explicitly
+labeled; server validation is deferred until execution, and lookup results may
+differ. CRDs are included in that preview. Other server-validation failures are
+not silently downgraded to a local preview.
+
+The editor accepts YAML values, timeout and readiness waiting, hook suppression,
+namespace creation for install and history retention for uninstall. Upgrade uses
+the explicitly edited values; opening Upgrade starts with the displayed release's
+user values. Historical details can therefore be used intentionally as a starting
+point. Helm templates with lookup, time or randomness may render differently at
+execution even though the chart and values are pinned. Hook/CRD side effects are
+not fully represented by the preview. External Helm clients are not locked out
+atomically; avoid concurrent operations on the same release.
+
+Values, manifests, chart defaults and hooks may contain secrets. They remain in
+the UI/short-lived operation state and are not written into resource caches,
+recent-object history, agent grants or the agent journal. Helm API calls are
+UI-only: existing wildcard agent permissions do not expose Helm data or actions.

@@ -82,7 +82,7 @@ function Panel({ client, tab }: { client: Client; tab: AgentsTab }) {
   }, [mark])
   const tabs: AgentsTab[] = ['grants', 'journal']
   return (
-    <div className="fixed inset-0 z-30 flex items-start justify-center bg-black/40 pt-[6vh]" onMouseDown={(e) => e.target === e.currentTarget && agents.showPanel(null)}>
+    <div className="fixed inset-0 z-30 flex items-center justify-center bg-black/40 p-4" onMouseDown={(e) => e.target === e.currentTarget && agents.showPanel(null)}>
       <section
         ref={box}
         role="dialog"
@@ -93,26 +93,40 @@ function Panel({ client, tab }: { client: Client; tab: AgentsTab }) {
           if (e.key === 'Escape' && !e.defaultPrevented) {
             e.preventDefault()
             agents.showPanel(null)
+          } else if (e.key === 'Tab' && !e.defaultPrevented) {
+            const controls = [...e.currentTarget.querySelectorAll<HTMLElement>('button:not(:disabled), input:not(:disabled), summary, [tabindex="0"]')]
+              .filter((el) => el.getClientRects().length > 0)
+            const first = controls[0]
+            const last = controls[controls.length - 1]
+            if (!first) {
+              e.preventDefault()
+            } else if (e.shiftKey && (document.activeElement === first || document.activeElement === e.currentTarget)) {
+              e.preventDefault()
+              last.focus()
+            } else if (!e.shiftKey && document.activeElement === last) {
+              e.preventDefault()
+              first.focus()
+            }
           }
         }}
-        className="flex h-[82vh] w-[min(1100px,95vw)] flex-col rounded-lg border border-line bg-panel shadow-2xl outline-none"
+        className="agents-dialog"
       >
-        <header className="flex items-center gap-3 border-b border-line px-3 py-1.5">
-          <h2 className="text-sm font-semibold">{t('agents.panel')}</h2>
-          <div role="tablist" className="flex gap-1">
+        <header className="agents-heading">
+          <h2 className="resource-title">{t('agents.panel')}</h2>
+          <div role="tablist" aria-label={t('agents.panel')} className="agents-tabs">
             {tabs.map((x) => (
               <button
                 key={x}
                 role="tab"
                 aria-selected={tab === x}
-                className={['rounded-md px-2 py-0.5 text-xs', tab === x ? 'bg-active text-fg' : 'text-fg-muted hover:bg-hover'].join(' ')}
+                className="agents-tab"
                 onClick={() => agents.showPanel(x)}
               >
                 {t(`agents.tab.${x}` as MessageKey)}
               </button>
             ))}
           </div>
-          <button className="ml-auto rounded px-2 text-fg-muted hover:bg-hover hover:text-fg" onClick={() => agents.showPanel(null)} aria-label={t('drawer.close')}>
+          <button className="context-info-trigger ml-auto" onClick={() => agents.showPanel(null)} aria-label={t('drawer.close')}>
             ×
           </button>
         </header>
@@ -130,42 +144,49 @@ function SocketStatus() {
   const [copied, setCopied] = useState(false)
   const dot = status?.state === 'serving' ? 'bg-success' : status?.state === 'other_instance' ? 'bg-warning' : 'bg-danger'
   return (
-    <div className="flex flex-col gap-1.5 border-b border-line px-3 py-2 text-xs">
-      <p className="text-fg-muted">{t('agents.about')}</p>
-      <p role="status" className="flex items-center gap-2">
-        <span className={`h-2 w-2 shrink-0 rounded-full ${status ? dot : 'bg-fg-subtle'}`} />
-        {!status ? t('agents.state.loading') : t(`agents.state.${status.state}` as MessageKey, { socket: status.socket, error: status.error ?? '' })}
-      </p>
-      {error && <p role="alert" className="text-danger">{error}</p>}
-      {status && (
-        <div className="flex items-center gap-2">
-          <span className="shrink-0 text-fg-subtle">{t('agents.instruction')}</span>
-          <code className="min-w-0 flex-1 truncate rounded bg-app px-2 py-0.5 font-mono" title={status.instruction} data-instruction>
-            {status.instruction}
-          </code>
-          <button
-            type="button"
-            className="shrink-0 rounded-md border border-line px-2 py-0.5 hover:bg-hover"
-            onClick={() => {
-              void copyText(status.instruction, mode)
-              setCopied(true)
-              setTimeout(() => setCopied(false), 1500)
-            }}
-          >
-            {copied ? t('agents.copied') : t('agents.copy')}
-          </button>
-        </div>
-      )}
-    </div>
+    <details className="agents-connection" open={!!error || status?.state === 'failed'}>
+      <summary>
+        <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${status ? dot : 'bg-fg-subtle'}`} />
+        <span className="min-w-0 flex-1" role="status">
+          {status?.state === 'serving' ? t('agents.connected') : !status ? t('agents.state.loading') : t(`agents.state.${status.state}` as MessageKey, { socket: status.socket, error: status.error ?? '' })}
+        </span>
+        <span className="agents-connection-label">{t('agents.connectionHelp')}</span>
+        <span aria-hidden className="agents-chevron">›</span>
+      </summary>
+      <div className="agents-connection-body">
+        <p className="text-fg-muted">{t('agents.about')}</p>
+        {status?.state === 'serving' && <p className="break-all text-fg-subtle">{t('agents.state.serving', { socket: status.socket })}</p>}
+        {status && (
+          <div className="flex min-w-0 items-center gap-2">
+            <code className="min-w-0 flex-1 select-all overflow-x-auto whitespace-nowrap rounded-md border border-line bg-app px-2 py-1.5 font-mono text-xs" title={status.instruction} data-instruction>
+              {status.instruction}
+            </code>
+            <button
+              type="button"
+              className="agents-button"
+              onClick={() => {
+                void copyText(status.instruction, mode)
+                setCopied(true)
+                setTimeout(() => setCopied(false), 1500)
+              }}
+            >
+              {copied ? t('agents.copied') : t('agents.copy')}
+            </button>
+          </div>
+        )}
+      </div>
+      {error && <p role="alert" className="px-4 pb-2 text-danger">{error}</p>}
+    </details>
   )
 }
 
 function GrantsTab({ client }: { client: Client }) {
   const rows = useRows()
+  const contextScopes = useAgents((s) => s.contextScopes)
   const chosenKey = useAgents((s) => s.chosen)
   const selected = useStore((s) => s.view?.selected)
   const pending = useAgents((s) => s.pending)
-  const anyGranted = useAgents((s) => s.targets.some((x) => x.grants.length > 0))
+  const anyGranted = useAgents((s) => s.targets.some((x) => (x.grants.length || x.groups?.length || x.disabledScopes?.length)))
   const [asking, setAsking] = useState(false)
   const key = chosenKey && rows.some((r) => r.key === chosenKey) ? chosenKey : selected ? agentTargetKey(selected.provider, selected.id) : (rows[0]?.key ?? null)
   const row = rows.find((r) => r.key === key) ?? null
@@ -182,16 +203,16 @@ function GrantsTab({ client }: { client: Client }) {
 
   return (
     <div className="flex min-h-0 flex-1">
-      <nav aria-label={t('agents.targets')} className="flex w-64 shrink-0 flex-col border-r border-line">
-        <ul className="min-h-0 flex-1 overflow-y-auto py-1 text-xs">
+      <nav aria-label={t('agents.targets')} className="agents-targets">
+        <ul className="min-h-0 flex-1 overflow-y-auto px-2 py-2">
           {rows.map((r, i) => {
             const head = i === 0 || rows[i - 1].groupTitle !== r.groupTitle
-            const n = r.saved?.grants.length ?? 0
+            const n = (r.saved?.grants.length ?? 0) + (r.saved?.groups ?? []).reduce((sum, g) => sum + g.grants.length, 0)
             const waiting = pendingOf(pending, r.provider, r.target)
             return (
               <li key={r.key}>
                 {head && (
-                  <h3 className="flex items-center gap-1.5 px-3 pb-0.5 pt-2 text-[11px] font-semibold uppercase tracking-wider text-fg-subtle">
+                  <h3 className="sidebar-group-heading">
                     <ProviderIcon provider={r.provider} className="h-3 w-3" />
                     {r.groupTitle}
                   </h3>
@@ -200,10 +221,10 @@ function GrantsTab({ client }: { client: Client }) {
                   type="button"
                   aria-current={r.key === key}
                   onClick={() => agents.choose(r.key)}
-                  className={['flex w-full flex-col items-start px-3 py-1 text-left', r.key === key ? 'bg-active text-fg' : 'text-fg-muted hover:bg-hover'].join(' ')}
+                  className="agents-target"
                 >
                   <span className="w-full truncate">{r.title}</span>
-                  <span className="flex flex-wrap gap-1 text-[11px]">
+                  <span className="flex flex-wrap gap-1 text-xs">
                     {n > 0 && <span className="text-accent">{t('agents.granted', { n })}</span>}
                     {r.saved?.observed && <span className="text-warning">{t('agents.suspendedBadge')}</span>}
                     {!r.exists && <span className="text-warning">{t('agents.missing')}</span>}
@@ -228,14 +249,14 @@ function GrantsTab({ client }: { client: Client }) {
               </span>
             </div>
           ) : (
-            <button type="button" disabled={!anyGranted} className="w-full rounded-md border border-line px-2 py-1 text-danger hover:bg-danger/10 disabled:opacity-50" onClick={() => setAsking(true)}>
+            <button type="button" disabled={!anyGranted} className="agents-button w-full text-fg-muted hover:text-danger" onClick={() => setAsking(true)}>
               {t('agents.revokeAll')}
             </button>
           )}
         </div>
       </nav>
       {row ? (
-        <GrantEditor key={row.key} client={client} provider={row.provider} target={row.target} title={row.title} saved={row.saved} exists={row.exists} />
+        <GrantEditor contextScopes={contextScopes} key={row.key} client={client} provider={row.provider} target={row.target} title={row.title} saved={row.saved} exists={row.exists} />
       ) : (
         <p className="p-4 text-xs text-fg-subtle">{t('agents.pickTarget')}</p>
       )}

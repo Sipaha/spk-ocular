@@ -194,3 +194,7 @@ func (w *API) DecideAgentPending(req api.DecideAgentPendingRequest) error {
 func (w *API) ListAgentAudit(f store.AuditFilter) ([]store.AuditEntry, error) {
 	return w.a.ListAgentAudit(api.UIContext(context.Background()), f)
 }
+
+func (w *API) Helm(ctx context.Context, req api.HelmRequest) (api.HelmResponse, error) {
+	return w.a.Helm(api.UIContext(ctx), req)
+}

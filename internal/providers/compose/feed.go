@@ -55,7 +55,7 @@ type feedOps struct {
 	list func(ctx context.Context, cl *engine.Client) ([]string, error)
 	// inspect reads one object by key (or a name the Engine resolves) and
 	// returns its canonical key; keep=false: not an object of this feed
-	// (a container without Compose labels).
+	// (for example an object removed before inspect).
 	inspect func(ctx context.Context, cl *engine.Client, key string) (canonical string, obj any, keep bool, err error)
 	// dirty says which keys an event makes dirty; weak ones are inspected
 	// only when already known (a network connect names any container).
@@ -68,10 +68,10 @@ var feedOpsOf = [feedCount]feedOps{
 	FeedContainers: {
 		// No label filter: it would drop the network events (a connect
 		// names the container only in its attributes). Container events
-		// carry the container's labels; others are dropped here.
+		// include both standalone and Compose containers.
 		events: engine.Filters{"type": {"container", "network"}, "event": containerActions},
 		list: func(ctx context.Context, cl *engine.Client) ([]string, error) {
-			l, err := cl.ListContainers(ctx, engine.Filters{"label": {LabelProject}})
+			l, err := cl.ListContainers(ctx, nil)
 			keys := make([]string, 0, len(l))
 			for _, c := range l {
 				keys = append(keys, c.ID)
@@ -83,16 +83,12 @@ var feedOpsOf = [feedCount]feedOps{
 			if err != nil {
 				return "", nil, false, err
 			}
-			_, compose := c.Config.Labels[LabelProject]
-			return c.ID, &c, compose, nil
+			return c.ID, &c, true, nil
 		},
 		dirty: func(ev engine.Event) (strong, weak []string) {
 			switch ev.Type {
 			case "container":
-				if _, ok := ev.Actor.Attributes[LabelProject]; ok {
-					return []string{ev.Actor.ID}, nil
-				}
-				return nil, []string{ev.Actor.ID} // known ones only
+				return []string{ev.Actor.ID}, nil
 			case "network":
 				if c := ev.Actor.Attributes["container"]; c != "" && (ev.Action == "connect" || ev.Action == "disconnect") {
 					return nil, []string{c}

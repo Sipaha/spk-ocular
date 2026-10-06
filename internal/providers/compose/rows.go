@@ -55,7 +55,7 @@ func kindFeeds(kind string) []Feed {
 // the earliest future moment some row's health must be recomputed
 // without a new observation (zero: none). Scope one: the project's own
 // objects and the networks/volumes its containers use; all/none: every
-// object related to some project; images ignore the scope (unscoped).
+// Engine object, including standalone/unused ones; images are unscoped.
 // q.Name narrows to the object with that key (Ref.Name).
 func projectRows(w *World, q provider.Query, now time.Time) (rows []core.Row, next time.Time) {
 	x := newIndex(w)
@@ -101,9 +101,7 @@ func projectRows(w *World, q provider.Query, now time.Time) (rows []core.Row, ne
 		}
 	case KindImages:
 		for _, im := range w.Images {
-			if len(x.imageUsers[im.ID]) > 0 {
-				add(x.imageRow(im), time.Time{})
-			}
+			add(x.imageRow(im), time.Time{})
 		}
 	}
 	sort.Slice(rows, func(i, j int) bool { return rows[i].ID < rows[j].ID })
@@ -129,18 +127,18 @@ func withTarget(target string, rows []core.Row) []core.Row {
 	return rows
 }
 
-// index is what one projection derives from a World once: Compose
+// index is what one projection derives from a World once: Docker
 // containers, services, and who uses which network, volume, image.
 type index struct {
 	w          *World
-	containers []*engine.ContainerInspect // with a project label, by id
+	containers []*engine.ContainerInspect // all containers, by id
 	services   []*service                 // by key
 	byService  map[string]*service
-	// links of each Compose container to networks, by container id.
+	// links of each container to networks, by container id.
 	links       map[string][]netLink
-	netUsers    map[string][]*engine.ContainerInspect // network id → Compose containers
-	volumeUsers map[string][]*engine.ContainerInspect // volume name → Compose containers
-	imageUsers  map[string][]*engine.ContainerInspect // image id → Compose containers
+	netUsers    map[string][]*engine.ContainerInspect // network id → containers
+	volumeUsers map[string][]*engine.ContainerInspect // volume name → containers
+	imageUsers  map[string][]*engine.ContainerInspect // image id → containers
 }
 
 type service struct {
@@ -160,14 +158,12 @@ func newIndex(w *World) *index {
 		netUsers: map[string][]*engine.ContainerInspect{}, volumeUsers: map[string][]*engine.ContainerInspect{},
 		imageUsers: map[string][]*engine.ContainerInspect{}}
 	for _, c := range w.Containers {
-		if projectOf(c) != "" {
-			x.containers = append(x.containers, c)
-		}
+		x.containers = append(x.containers, c)
 	}
 	sort.Slice(x.containers, func(i, j int) bool { return x.containers[i].ID < x.containers[j].ID })
 	for _, c := range x.containers {
 		p, s := projectOf(c), c.Config.Labels[LabelService]
-		if s != "" && !isOneoff(c) {
+		if p != "" && s != "" && !isOneoff(c) {
 			key := serviceKey(p, s)
 			sv := x.byService[key]
 			if sv == nil {
@@ -254,7 +250,9 @@ func (x *index) networkByName(name string) string {
 func (x *index) projectNames() []string {
 	set := map[string]bool{}
 	for _, c := range x.containers {
-		set[projectOf(c)] = true
+		if project := projectOf(c); project != "" {
+			set[project] = true
+		}
 	}
 	for _, n := range x.w.Networks {
 		if p := n.Labels[LabelProject]; p != "" {
@@ -288,15 +286,15 @@ func usedBy(cs []*engine.ContainerInspect, project string) bool {
 }
 
 // networkIn: labelled with the project or used by its containers
-// (project "": related to any project).
+// (project "": all Engine networks).
 func (x *index) networkIn(n *engine.Network, project string) bool {
 	p := n.Labels[LabelProject]
-	return (p != "" && (project == "" || p == project)) || usedBy(x.netUsers[n.ID], project)
+	return project == "" || p == project || usedBy(x.netUsers[n.ID], project)
 }
 
 func (x *index) volumeIn(v *engine.Volume, project string) bool {
 	p := v.Labels[LabelProject]
-	return (p != "" && (project == "" || p == project)) || usedBy(x.volumeUsers[v.Name], project)
+	return project == "" || p == project || usedBy(x.volumeUsers[v.Name], project)
 }
 
 func projectOf(c *engine.ContainerInspect) string { return c.Config.Labels[LabelProject] }

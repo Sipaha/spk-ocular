@@ -244,7 +244,7 @@ func TestAgentMigrationOnAnOlderDatabase(t *testing.T) {
 	s := open(t, path)
 	require.NoError(t, s.TouchRecent(ctx, rec("a", "web", "1", 1), 50, 500))
 	require.NoError(t, s.WithTx(ctx, func(tx *sql.Tx) error {
-		for _, q := range []string{`DROP TABLE agent_grants`, `DROP TABLE agent_targets`, `DROP TABLE agent_audit`, `DELETE FROM schema_migrations WHERE version = 3`} {
+		for _, q := range []string{`DROP TABLE agent_grants`, `DROP TABLE agent_targets`, `DROP TABLE agent_audit`, `DELETE FROM schema_migrations WHERE version >= 3`} {
 			if _, err := tx.ExecContext(ctx, q); err != nil {
 				return err
 			}
@@ -259,4 +259,66 @@ func TestAgentMigrationOnAnOlderDatabase(t *testing.T) {
 	targets, err := s.AgentTargets(ctx)
 	require.NoError(t, err)
 	assert.Empty(t, targets)
+}
+
+func TestGroupNamesAndSwitchesSurviveReopen(t *testing.T) {
+	ctx := context.Background()
+	path := filepath.Join(t.TempDir(), "db")
+	s, err := Open(ctx, path)
+	require.NoError(t, err)
+	scope := agentgrant.Scope{Mode: agentgrant.ScopeOne, Name: "a"}
+	target := agentgrant.Target{Provider: "k", Target: "t", Identity: "i", Title: "Target",
+		DisabledScopes: []agentgrant.Scope{scope},
+		Groups: []agentgrant.Group{
+			{ID: "g1", Name: "Диагностика", Scope: scope, Grants: []agentgrant.Grant{grantOne("a", "read")}},
+			{ID: "g2", Name: "Maintenance", Scope: scope, Disabled: true, Grants: []agentgrant.Grant{grantOne("a", "edit", "configmaps")}},
+			{ID: "empty", Name: "Draft", Scope: scope},
+		}}
+	require.NoError(t, s.ReplaceAgentGrants(ctx, target))
+	require.NoError(t, s.Close())
+	s, err = Open(ctx, path)
+	require.NoError(t, err)
+	defer func() { require.NoError(t, s.Close()) }()
+	got, err := s.AgentTargets(ctx)
+	require.NoError(t, err)
+	require.Equal(t, []agentgrant.Target{target}, got)
+	assert.Empty(t, got[0].EffectiveGrants())
+	target.DisabledScopes = nil
+	target.Groups[1].Disabled = false
+	require.NoError(t, s.ReplaceAgentGrants(ctx, target))
+	got, err = s.AgentTargets(ctx)
+	require.NoError(t, err)
+	assert.Len(t, got[0].EffectiveGrants(), 2)
+	// A scope with no groups can still be paused, including inherited All rights.
+	target.Groups = nil
+	target.DisabledScopes = []agentgrant.Scope{scope}
+	require.NoError(t, s.ReplaceAgentGrants(ctx, target))
+	got, err = s.AgentTargets(ctx)
+	require.NoError(t, err)
+	require.Len(t, got, 1)
+	assert.Equal(t, target.DisabledScopes, got[0].DisabledScopes)
+}
+
+func TestGroupMigrationPreservesLegacyGrants(t *testing.T) {
+	ctx := context.Background()
+	path := filepath.Join(t.TempDir(), "db")
+	s, err := Open(ctx, path)
+	require.NoError(t, err)
+	original := agentgrant.Target{Provider: "k", Target: "t", Identity: "i", Grants: []agentgrant.Grant{grantOne("a", "read"), grantOne("a", "read", "pods")}}
+	require.NoError(t, s.ReplaceAgentGrants(ctx, original))
+	require.NoError(t, s.WithTx(ctx, func(tx *sql.Tx) error {
+		for _, q := range []string{"ALTER TABLE agent_targets DROP COLUMN groups_json", "ALTER TABLE agent_targets DROP COLUMN disabled_scopes_json", "DELETE FROM schema_migrations WHERE version=4"} {
+			if _, err := tx.ExecContext(ctx, q); err != nil {
+				return err
+			}
+		}
+		return nil
+	}))
+	require.NoError(t, s.Close())
+	s, err = Open(ctx, path)
+	require.NoError(t, err)
+	defer func() { require.NoError(t, s.Close()) }()
+	got, err := s.AgentTargets(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, []agentgrant.Target{original}, got)
 }

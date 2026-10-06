@@ -1,6 +1,7 @@
+import type { HelmRequest, HelmResponse } from '../helm/types'
 import { Call, Events } from '@wailsio/runtime'
 import type { ConnectionStatus, FavoriteKind } from './types'
-import type { ActionParams, ActionPlan, AgentAccessStatus, AgentAuditEntry, AgentAuditFilter, AgentGrant, AgentPending, AgentTarget, ActionResult, ApiEvent, AppInfo, EditDoc, EditPlan, EditPrepareRequest, EditResult, EditRunRequest, EventType, ExecInfo,
+import type { ActionParams, ActionPlan, AgentAccessStatus, AgentAuditEntry, AgentAuditFilter, AgentGrant, AgentGrantSettings, AgentPending, AgentTarget, ActionResult, ApiEvent, AppInfo, EditDoc, EditPlan, EditPrepareRequest, EditResult, EditRunRequest, EventType, ExecInfo,
   KindsView, LogInfo, Message, LogQuery, LogStreamInfo, MetricsView, Page, Query, RecentObject, Ref, Resource, ScopesView, TargetsView, TerminalInfo, TerminalRequest, ViewInfo, ForwardInfo, StartForwardRequest, Tunnel, Value, ValueEditRequest, ValueList, ValuePlan, ValueResult, ValueRunRequest } from './types'
 
 export class ApiError extends Error {
@@ -17,6 +18,7 @@ export class ApiError extends Error {
 }
 
 export interface Client {
+  helm(req: HelmRequest, signal?: AbortSignal): Promise<HelmResponse>
   appInfo(): Promise<AppInfo>
   /** Re-reads local configuration (kubeconfig, ...); no network. */
   listTargets(): Promise<TargetsView>
@@ -96,7 +98,7 @@ export interface Client {
   /** Every target with grants; reload on 'agent_grants_changed'. */
   listAgentGrants(): Promise<AgentTarget[]>
   /** Sets a target's grants whole (none: revoked); a target granted anew is bound to what it points at now. */
-  saveAgentGrants(provider: string, target: string, grants: AgentGrant[]): Promise<void>
+  saveAgentGrants(provider: string, target: string, grants: AgentGrant[], settings?: AgentGrantSettings): Promise<void>
   revokeAllAgentGrants(): Promise<void>
   /** A suspended target's grants hold for what it points at now. */
   /** Grants a suspended target for the identity the user was shown (conflict if it changed again). */
@@ -157,6 +159,7 @@ const done = async (p: Promise<unknown>) => {
 
 export const httpClient: Client = {
   appInfo: () => post('AppInfo', {}),
+  helm: (req, signal) => post('Helm', req, signal),
   listTargets: () => post('ListTargets', {}),
   selectTarget: (provider, id) => done(post('SelectTarget', { provider, id })),
   connectTarget: (provider, id) => post('ConnectTarget', { provider, id }),
@@ -203,7 +206,7 @@ export const httpClient: Client = {
   streamBase: () => post('StreamBase', {}),
   agentAccessStatus: () => post('AgentAccessStatus', {}),
   listAgentGrants: () => post('ListAgentGrants', {}),
-  saveAgentGrants: (provider, target, grants) => done(post('SaveAgentGrants', { provider, target, grants })),
+  saveAgentGrants: (provider, target, grants, settings) => done(post('SaveAgentGrants', { provider, target, grants, ...settings })),
   revokeAllAgentGrants: () => done(post('RevokeAllAgentGrants', {})),
   reconfirmAgentTarget: (provider, target, observed) => done(post('ReconfirmAgentTarget', { provider, target, observed })),
   listAgentPending: () => post('ListAgentPending', {}),
@@ -282,6 +285,7 @@ const EVENT_TYPES: EventType[] = ['targets_changed', 'resync', 'view_changed', '
 
 export const wailsClient: Client = {
   appInfo: () => wcall('AppInfo'),
+  helm: (req, signal) => wcallAbortable(signal, 'Helm', req),
   listTargets: () => wcall('ListTargets'),
   selectTarget: (provider, id) => wcall('SelectTarget', provider, id),
   connectTarget: (provider, id) => wcall('ConnectTarget', provider, id),
@@ -334,7 +338,7 @@ export const wailsClient: Client = {
   streamBase: () => wcall('StreamBase'),
   agentAccessStatus: () => wcall('AgentAccessStatus'),
   listAgentGrants: () => wcall('ListAgentGrants'),
-  saveAgentGrants: (provider, target, grants) => wcall('SaveAgentGrants', { provider, target, grants }),
+  saveAgentGrants: (provider, target, grants, settings) => wcall('SaveAgentGrants', { provider, target, grants, ...settings }),
   revokeAllAgentGrants: () => wcall('RevokeAllAgentGrants'),
   reconfirmAgentTarget: (provider, target, observed) => wcall('ReconfirmAgentTarget', { provider, target, observed }),
   listAgentPending: () => wcall('ListAgentPending'),

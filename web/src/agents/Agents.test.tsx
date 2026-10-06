@@ -1,11 +1,11 @@
 import { act, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import type { AgentAuditEntry, AgentPending, KindDescriptor } from '../api/types'
+import type { AgentAuditEntry, AgentPending, KindDescriptor, ScopeSel } from '../api/types'
 import { App } from '../App'
 import { initialState, useStore } from '../store'
 import { connectedClient as fakeClient, k8s, kindsView, podsKind } from '../test/fakeClient'
-import { initialAgents, useAgents } from './store'
+import { agents, initialAgents, useAgents } from './store'
 
 beforeEach(() => {
   useStore.setState({ ...initialState })
@@ -43,6 +43,13 @@ async function openPanel(user: ReturnType<typeof userEvent.setup>) {
   return screen.getByRole('dialog', { name: 'Agent access' })
 }
 
+
+function savedRows(f: Awaited<ReturnType<typeof setup>>['f']) {
+  const call = vi.mocked(f.client.saveAgentGrants).mock.calls.at(-1)!
+  expect(call.slice(0, 2)).toEqual(['kubernetes', 'prod'])
+  return [...call[2], ...(call[3]?.groups ?? []).flatMap((g) => g.grants)]
+}
+
 const editorOf = (panel: HTMLElement, title: string) => within(panel).getByRole('region', { name: title })
 
 async function addScope(user: ReturnType<typeof userEvent.setup>, editor: HTMLElement, label: string | RegExp) {
@@ -76,6 +83,38 @@ const pending = (id: string, extra: Partial<AgentPending> = {}): AgentPending =>
 }
 
 describe('agent access: grants', () => {
+  it.each([
+    [{ mode: 'one', name: 'web' } as ScopeSel, ['Namespace web']],
+    [{ mode: 'some', names: ['web', 'default'] } as ScopeSel, ['Namespace web', 'Namespace default']],
+    [{ mode: 'all' } as ScopeSel, ['All namespaces (later ones too)']],
+  ])('opens contextual scopes without granting anything: %j', async (scope, labels) => {
+    const { f, user } = await setup()
+    act(() => agents.openScopes('kubernetes', 'prod', scope))
+    const panel = await screen.findByRole('dialog', { name: 'Agent access' })
+    const editor = editorOf(panel, 'prod')
+    for (const label of labels) {
+      const card = within(editor).getByRole('region', { name: label })
+      expect(await within(card).findByRole('checkbox', { name: 'Read' })).not.toBeChecked()
+    }
+    expect(f.client.saveAgentGrants).not.toHaveBeenCalled()
+    expect(within(editor).getByRole('button', { name: 'Save' })).toBeDisabled()
+    await user.click(within(within(editor).getByRole('region', { name: labels[0] })).getByRole('checkbox', { name: 'Read' }))
+    await user.click(within(editor).getByRole('button', { name: 'Save' }))
+    expect(savedRows(f)).toEqual([
+      { scope: scope.mode === 'all' ? { mode: 'all' } : { mode: 'one', name: 'web' }, verb: 'read', kinds: null },
+    ])
+  })
+
+  it('opens the selected namespace from the resource header', async () => {
+    const { f, user } = await setup()
+    await user.click(await screen.findByRole('button', { name: 'Namespace' }))
+    await user.click(screen.getByRole('option', { name: 'web' }))
+    await user.click(screen.getByRole('button', { name: 'Agent permissions' }))
+    const panel = screen.getByRole('dialog', { name: 'Agent access' })
+    expect(within(panel).getByRole('region', { name: 'Namespace web' })).toBeInTheDocument()
+    expect(f.client.saveAgentGrants).not.toHaveBeenCalled()
+  })
+
   it('shows the socket and the instruction line; a target\'s grants are saved whole', async () => {
     const { f, user } = await setup()
     const panel = await openPanel(user)
@@ -89,9 +128,10 @@ describe('agent access: grants', () => {
     const web = within(editor).getByRole('region', { name: 'Namespace web' })
     expect(within(web).getByRole('checkbox', { name: 'Read' })).toBeChecked()
     await user.click(within(web).getByRole('checkbox', { name: 'Logs' }))
+    await user.click(within(web).getByText('Execution', { exact: true }))
     await user.click(within(web).getByRole('checkbox', { name: 'Restart' }))
     await user.click(within(editor).getByRole('button', { name: 'Save' }))
-    expect(f.client.saveAgentGrants).toHaveBeenCalledWith('kubernetes', 'prod', [
+    expect(savedRows(f)).toEqual([
       { scope: { mode: 'one', name: 'web' }, verb: 'read', kinds: null },
       { scope: { mode: 'one', name: 'web' }, verb: 'logs', kinds: null },
       { scope: { mode: 'one', name: 'web' }, verb: 'action:restart', kinds: null },
@@ -114,14 +154,15 @@ describe('agent access: grants', () => {
     const editor = editorOf(panel, 'prod')
     await addScope(user, editor, 'web')
     const web = within(editor).getByRole('region', { name: 'Namespace web' })
+    await user.click(within(web).getByText('Execution', { exact: true }))
     await user.click(within(web).getByRole('checkbox', { name: 'Delete (destructive)' }))
     // Its kinds are chosen first.
     const picker = within(web).getByRole('group', { name: 'Kinds' })
     const save = within(editor).getByRole('button', { name: 'Save' })
     expect(save).toBeDisabled()
-    expect(within(editor).getByRole('status')).toHaveTextContent('Cannot save: web · Delete: choose at least one kind')
+    expect(within(editor).getByRole('status')).toHaveTextContent('Cannot save: Group 1 · web · Delete: choose at least one kind')
     await user.click(within(picker).getByRole('checkbox', { name: 'All kinds' }))
-    expect(within(editor).getByRole('status')).toHaveTextContent('Cannot save: web · Delete: a destructive action is granted only for kinds named — choose them')
+    expect(within(editor).getByRole('status')).toHaveTextContent('Cannot save: Group 1 · web · Delete: a destructive action is granted only for kinds named — choose them')
     expect(save).toBeDisabled()
     // "Without confirmation" applies to kinds named only: not offered for all.
     expect(within(web).queryByRole('checkbox', { name: 'without confirmation' })).not.toBeInTheDocument()
@@ -131,7 +172,7 @@ describe('agent access: grants', () => {
     await user.click(within(web).getByRole('checkbox', { name: 'without confirmation' }))
     expect(within(editor).getByRole('list', { name: 'warnings' })).toHaveTextContent('Some destructive plans will run without your confirmation.')
     await user.click(save)
-    expect(f.client.saveAgentGrants).toHaveBeenCalledWith('kubernetes', 'prod', [
+    expect(savedRows(f)).toEqual([
       { scope: { mode: 'one', name: 'web' }, verb: 'read', kinds: null },
       { scope: { mode: 'one', name: 'web' }, verb: 'action:delete', kinds: ['apps/deployments'], noConfirm: true },
     ])
@@ -329,5 +370,46 @@ describe('agent access: journal', () => {
     await user.click(screen.getByRole('option', { name: 'codex' }))
     await waitFor(() => expect(f.client.listAgentAudit).toHaveBeenLastCalledWith({ agent: 'codex', provider: undefined, target: undefined, limit: 200 }))
     await waitFor(() => expect(within(table).getAllByRole('row').slice(1).every((r) => r.textContent?.includes('codex'))).toBe(true))
+  })
+})
+
+describe('named access groups and switches', () => {
+  it('keeps independent group names and permissions while a namespace is paused', async () => {
+    const { f, user } = await setup()
+    const panel = await openPanel(user)
+    const editor = editorOf(panel, 'prod')
+    await addScope(user, editor, 'web')
+    let web = within(editor).getByRole('region', { name: 'Namespace web' })
+    const firstName = within(web).getByRole('textbox', { name: 'Group name' })
+    await user.clear(firstName)
+    expect(within(editor).getByRole('button', { name: 'Save' })).toBeDisabled()
+    await user.type(firstName, 'Observability')
+    await user.click(within(web).getByRole('button', { name: 'Add group' }))
+    let extra = within(web).getByRole('region', { name: 'Group 2' })
+    await user.clear(within(extra).getByRole('textbox', { name: 'Group name' }))
+    await user.type(within(web).getAllByRole('textbox', { name: 'Group name' })[1], 'Logs')
+    extra = within(web).getByRole('region', { name: 'Logs' })
+    expect(within(extra).getByRole('checkbox', { name: 'Read' })).not.toBeChecked()
+    await user.click(within(extra).getByRole('checkbox', { name: 'Logs' }))
+    await user.click(within(extra).getByRole('switch', { name: 'Enable group Logs' }))
+    await user.click(within(web).getByRole('switch', { name: 'Access to Namespace web' }))
+    await user.click(within(editor).getByRole('button', { name: 'Save' }))
+    await waitFor(() => expect(within(editor).getByRole('button', { name: 'Save' })).toBeDisabled())
+    const saved = vi.mocked(f.client.saveAgentGrants).mock.calls.at(-1)![3]!
+    expect(saved.disabledScopes).toEqual([{ mode: 'one', name: 'web' }])
+    expect(saved.groups).toMatchObject([
+      { name: 'Observability', disabled: false, grants: [{ verb: 'read', kinds: null }] },
+      { name: 'Logs', disabled: true, grants: [{ verb: 'logs', kinds: null }] },
+    ])
+    await user.click(within(panel).getByRole('button', { name: 'Close' }))
+    const reopened = await openPanel(user)
+    web = within(editorOf(reopened, 'prod')).getByRole('region', { name: 'Namespace web' })
+    expect(within(web).getByRole('switch', { name: 'Access to Namespace web' })).not.toBeChecked()
+    expect(within(web).getByRole('switch', { name: 'Enable group Logs' })).not.toBeChecked()
+    expect(within(web).getByRole('switch', { name: 'Enable group Observability' })).toBeChecked()
+    await user.click(within(web).getByRole('switch', { name: 'Access to Namespace web' }))
+    await user.click(within(editorOf(reopened, 'prod')).getByRole('button', { name: 'Save' }))
+    expect(vi.mocked(f.client.saveAgentGrants).mock.calls.at(-1)![3]!.disabledScopes).toEqual([])
+    expect(vi.mocked(f.client.saveAgentGrants).mock.calls.at(-1)![3]!.groups![1].disabled).toBe(true)
   })
 })

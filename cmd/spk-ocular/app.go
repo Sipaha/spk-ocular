@@ -67,7 +67,7 @@ func newCore(ctx context.Context, mode string, withSynthetic bool) (*appCore, er
 		return nil, err
 	}
 	em := events.NewEmitter()
-	svc := api.NewService(reg, st, em, api.Options{Version: version, Mode: mode, Getenv: os.Getenv})
+	svc := api.NewService(reg, st, em, api.Options{DataDir: p.DataDir, Version: version, Mode: mode, Getenv: os.Getenv})
 	home, _ := os.UserHomeDir()
 	agent := agentapi.New(agentapi.Options{Service: svc, Store: st, Socket: p.AgentSocket, Lock: p.AgentLock, Version: version, Home: home, Downloads: func() (string, error) { return paths.Downloads(os.Getenv) }})
 	svc.SetAgentControl(agent)

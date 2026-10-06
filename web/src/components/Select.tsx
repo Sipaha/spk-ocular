@@ -333,9 +333,14 @@ function List({ value, options, label, search, anchor, onClose, onChange, memory
             ].join(' ')}
           >
             {multiple && !o.pinned ? (
-              <input type="checkbox" aria-label={o.label} checked={multiple.selected.includes(o.value)} tabIndex={-1}
-                onClick={(e) => e.stopPropagation()} onChange={() => toggle(o)}
-                className="h-4 w-4 shrink-0 cursor-pointer accent-accent" />
+              <span className="relative flex h-3.5 w-3.5 shrink-0 items-center justify-center">
+                <input type="checkbox" aria-label={o.label} checked={multiple.selected.includes(o.value)} disabled={o.disabled} tabIndex={-1}
+                  onClick={(e) => e.stopPropagation()} onChange={() => toggle(o)}
+                  className="scope-checkbox absolute inset-0 m-0 h-full w-full cursor-pointer appearance-none rounded-sm border border-fg-subtle bg-transparent hover:border-fg-muted checked:border-accent checked:bg-accent checked:hover:border-accent disabled:cursor-default" />
+                {multiple.selected.includes(o.value) && <svg aria-hidden="true" viewBox="0 0 10 10" className="pointer-events-none relative h-2.5 w-2.5 text-accent-fg" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M2 5.2 4.2 7.4 8 2.8" />
+                </svg>}
+              </span>
             ) : (
               <span aria-hidden="true" className="w-4 shrink-0 text-accent">{o.value === value ? '✓' : ''}</span>
             )}
