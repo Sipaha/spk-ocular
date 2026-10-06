@@ -8,7 +8,8 @@
   --fg: #152335; --muted: #526176; --line: #d6dfe9;
   --accent: #2c629c; --button: #285f9b; --button-fg: #fff;
   --shadow: rgba(25, 48, 78, .13);
-  scroll-behavior: smooth; scroll-padding-top: 110px;
+  --section-padding: 110px; --anchor-offset: 105px;
+  scroll-behavior: smooth; scroll-padding-top: var(--anchor-offset);
 }
 :root[data-theme=dark] {
   color-scheme: dark;
@@ -29,7 +30,9 @@ a, button { transition: color .18s, background-color .18s, border-color .18s; }
 a:hover { color: var(--accent); }
 a:focus-visible, button:focus-visible, select:focus-visible { outline: 3px solid var(--accent); outline-offset: 5px; }
 .container { width: min(1280px, calc(100% - 96px)); margin-inline: auto; }
-.section { padding-block: 110px; }
+.section { padding-block: var(--section-padding); }
+/* Anchor the section content below the sticky header, excluding its own padding. */
+.section[id] { scroll-margin-top: calc(0px - var(--section-padding)); }
 h1, h2, h3, h4, p, figure { margin: 0; }
 h1, h2, h3, h4 { line-height: 1.12; letter-spacing: -.04em; text-wrap: balance; }
 h1 { font-size: clamp(42px, 4.3vw, 64px); font-weight: 650; letter-spacing: -.055em; }
@@ -173,6 +176,7 @@ select { padding: 10px 36px 10px 12px; border: 1px solid var(--line); border-rad
   .agent-grid, .local-section, .free-grid { gap: 65px; }
 }
 @media (max-width: 960px) {
+  :root { --section-padding: 80px; --anchor-offset: 137px; }
   .desktop-nav { display: none; }
   .header-actions { margin-left: auto; }
   .mobile-nav { display: flex; gap: 28px; padding-bottom: 12px; font-size: 12px; color: var(--muted); }
@@ -181,7 +185,6 @@ select { padding: 10px 36px 10px 12px; border: 1px solid var(--line); border-rad
   .hero-side { display: grid; grid-template-columns: 1.4fr 1fr; gap: 24px; align-items: center; }
   .hero-actions { margin: 0; justify-content: end; gap: 16px; }
   .hero-meta { font-size: 11px; }
-  .section { padding-block: 80px; }
   .workflow, .workflow.reverse { grid-template-columns: 1fr; gap: 28px; }
   .workflow.reverse .workflow-copy { order: 0; }
   .workflow-copy { max-width: 630px; }
@@ -196,7 +199,7 @@ select { padding: 10px 36px 10px 12px; border: 1px solid var(--line); border-rad
   .packages { grid-template-columns: 1fr; }
 }
 @media (max-width: 600px) {
-  :root { scroll-padding-top: 125px; }
+  :root { --section-padding: 60px; --anchor-offset: 122px; }
   .container { width: calc(100% - 36px); }
   .header-inner { min-height: 65px; gap: 8px; }
   .brand { font-size: 18px; gap: 7px; }
@@ -225,7 +228,6 @@ select { padding: 10px 36px 10px 12px; border: 1px solid var(--line); border-rad
   .facts div { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; align-items: baseline; }
   .facts strong { font-size: 12px; }
   .facts span { font-size: 11px; }
-  .section { padding-block: 60px; }
   .section-head { margin-bottom: 40px; }
   .section-head p { font-size: 16px; margin-top: 18px; }
   h2 { font-size: 32px; }

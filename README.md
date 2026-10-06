@@ -21,6 +21,10 @@ The theme control uses a fixed-size Phosphor SVG; its MIT license is in
 visible. All content, full-size screenshots and download fallback links work
 without JavaScript. Gallery tabs enhance static figures; FAQ answers stay visible.
 Reduced motion, keyboard navigation and semantic light/dark colors are preserved.
+Section anchors subtract the section’s responsive top padding from the scroll
+offset, leaving 28px between the sticky header and the first section content.
+Desktop, tablet and mobile offsets include their respective header/navigation height.
+This works with native fragment links and JavaScript disabled.
 
 ## Product and funding message
 
@@ -59,7 +63,7 @@ node scripts/server.mjs
 browser verification of both languages/themes at mobile, tablet and desktop
 widths. It checks keyboard tabs, theme persistence, WCAG AA, layout and image
 loading, free-use and donation copy, mobile section/download navigation, valid
-anchor targets, API failure, JavaScript-disabled rendering, all 20 release files
+anchor targets and content aligned 28px below the sticky header, API failure, JavaScript-disabled rendering, all 20 release files
 and architecture filters. Review its screenshots. `scripts/server.mjs` prints an
 available loopback preview URL and stops on SIGTERM without orphan processes.
 

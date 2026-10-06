@@ -13,6 +13,16 @@ const port=server.address().port;
 const root=`http://127.0.0.1:${port}/spk-ocular/`;
 let browser;
 const failures=[];
+async function expectAnchorPosition(page, id) {
+ // Wait for native smooth scrolling to finish before measuring its final position.
+ await expect.poll(() => page.evaluate(id => {
+  const section=document.getElementById(id);
+  const contentTop=section.getBoundingClientRect().top+parseFloat(getComputedStyle(section).paddingTop);
+  const gap=contentTop-document.querySelector('.header').getBoundingClientRect().bottom;
+  return Math.abs(gap-28);
+ }, id), {message: `${id}: section content should settle 28px below the sticky header`}).toBeLessThanOrEqual(2);
+}
+
 try{
  await expect.poll(async()=>{try{return(await fetch(root)).ok}catch{return false}},{timeout:20000}).toBe(true);
  browser=await chromium.launch();
@@ -43,11 +53,16 @@ try{
   await expect(page.locator('.header-actions a[href="#downloads"]')).toBeVisible();
   const navigation=page.locator(width<=960?'.mobile-nav':'.desktop-nav');
   await expect(navigation).toBeVisible();
-  await navigation.locator('a[href="#free"]').click();
-  await expect(page).toHaveURL(/#free$/);
-  await expect(page.locator('#free h2')).toBeInViewport();
+  for (const id of ['features','interface','free']) {
+   await navigation.locator(`a[href="#${id}"]`).click();
+   await expect(page).toHaveURL(new RegExp(`#${id}$`));
+   await expectAnchorPosition(page,id);
+   await expect(page.locator(`#${id} h2`).first()).toBeInViewport();
+  }
   await page.locator('.header-actions a[href="#downloads"]').click();
   await expect(page.locator('#downloads h2')).toBeInViewport();
+  await expectAnchorPosition(page,'downloads');
+  await page.screenshot({path:path.join(out,`${lang}-${theme}-${width}-downloads-anchor.png`)});
   expect(await page.locator('a[href^="#"]').evaluateAll(links=>links.filter(link=>!document.getElementById(link.hash.slice(1))).map(link=>link.hash))).toEqual([]);
   expect(errors).toEqual([]);
   for (const image of await page.locator('main img:visible').all()) { await image.scrollIntoViewIfNeeded(); await image.evaluate(el=>el.decode()); }
@@ -62,6 +77,21 @@ try{
   await page.reload();await expect(page.locator('html')).toHaveAttribute('data-theme',theme==='dark'?'light':'dark');
   await context.close();console.log(`PASS ${lang} ${theme} ${width}: layout, images, theme, keyboard tabs, axe`);
  }
+ for (const width of [375,768,1440]) {
+  const page=await browser.newPage({viewport:{width,height:1000},reducedMotion:'no-preference'});
+  await page.route(API,r=>r.fulfill({status:404,json:{message:'Not Found'}}));
+  await page.goto(root,{waitUntil:'networkidle'});
+  const navigation=page.locator(width<=960?'.mobile-nav':'.desktop-nav');
+  for (const id of ['features','interface','free']) {
+   await navigation.locator(`a[href="#${id}"]`).click();
+   await expectAnchorPosition(page,id);
+  }
+  await page.locator('.header-actions a[href="#downloads"]').click();
+  await expectAnchorPosition(page,'downloads');
+  await page.goto(root+'#downloads',{waitUntil:'networkidle'});
+  await expectAnchorPosition(page,'downloads');
+  await page.close();console.log(`PASS ${width}: smooth navigation and direct fragment link`);
+ }
  for(const javaScriptEnabled of [false,true]){
   const page=await browser.newPage({javaScriptEnabled});
   await page.route(API,r=>r.abort());
@@ -72,6 +102,7 @@ try{
    await expect(page.locator('#free')).toContainText('Бесплатно');
    await page.locator('.header-actions a[href="#downloads"]').click();
    await expect(page.locator('#downloads h2')).toBeInViewport();
+   await expectAnchorPosition(page,'downloads');
   }
   else await expect(page.locator('[data-release-status]')).toContainText('Не удалось');
   await page.close();console.log(`PASS no-JS / API-offline ${javaScriptEnabled}`);
