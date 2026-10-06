@@ -29,16 +29,15 @@ if (tablist && tabs.length === panels.length) {
 const detectedOS = detectOS(navigator.userAgent, navigator.maxTouchPoints);
 const osNames: Record<string,string> = {linux:'Linux',windows:'Windows',darwin:'macOS'};
 const downloadButtons = [...document.querySelectorAll<HTMLAnchorElement>('[data-download-label]')];
-const updateDownloadButtons = (selectedOS: string, file?: {url: string; name: string} | null) => {
+const updateDownloadButtons = (selectedOS: string, file?: {url: string; name: string; format: string} | null) => {
   for (const button of downloadButtons) {
-    const labels = JSON.parse(button.dataset.downloadLabel!) as {download: string; downloadFor: string; choose: string; chooseCompact: string; chooseFor: string};
-    const action = file ? labels.download : labels.choose;
-    const prefix = file ? labels.downloadFor : labels.chooseFor;
-    const text = osNames[selectedOS] ? `${prefix} ${osNames[selectedOS]}` : action;
+    const labels = JSON.parse(button.dataset.downloadLabel!) as {download: string; downloadFormatFor: string; choose: string; chooseCompact: string; chooseFor: string};
+    const format = file?.format.toUpperCase();
+    const text = file ? labels.downloadFormatFor.replace('{format}', format!).replace('{os}', osNames[selectedOS]) : osNames[selectedOS] ? `${labels.chooseFor} ${osNames[selectedOS]}` : labels.choose;
     button.href = file?.url || '#downloads';
     button.querySelector<HTMLElement>('[data-download-text]')!.textContent = text;
     const compact = button.querySelector<HTMLElement>('.compact-download-text');
-    if (compact) compact.textContent = file ? labels.download : labels.chooseCompact;
+    if (compact) compact.textContent = file ? `${labels.download} ${format}` : labels.chooseCompact;
     button.setAttribute('aria-label', text);
     button.title = file ? `${text}: ${file.name}` : text;
   }

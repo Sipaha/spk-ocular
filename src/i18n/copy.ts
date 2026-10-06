@@ -1,7 +1,7 @@
 export const en = {
   title: 'SPK Ocular | Free Kubernetes & Docker desktop app',
   description: 'Inspect Kubernetes and Docker, follow logs and manage Helm releases in one desktop app. All features free for individuals and businesses of any size.',
-  nav: ['Features', 'Interface', 'Free for everyone'], docs: 'Docs', download: 'Download', downloadFor: 'Download for', chooseDownload: 'Choose a download', chooseCompact: 'Choose', chooseDownloadFor: 'Choose for', theme: 'Switch theme', menu: 'Menu', skip: 'Skip to content',
+  nav: ['Features', 'Interface', 'Free for everyone'], docs: 'Docs', download: 'Download', downloadFormatFor: 'Download {format} for {os}', chooseDownload: 'Choose a download', chooseCompact: 'Choose', chooseDownloadFor: 'Choose for', theme: 'Switch theme', menu: 'Menu', skip: 'Skip to content',
   eyebrow: 'THE DESKTOP WORKSPACE FOR YOUR INFRASTRUCTURE',
   hero: ['Kubernetes & Docker.', 'One clear workspace.'],
   lead: 'A desktop app for developers and DevOps. Investigate Kubernetes resources, follow Docker logs and manage Helm releases in one workspace.',
@@ -32,7 +32,7 @@ export const en = {
   supportTitle: 'Support development', supportText: 'Development is supported only through voluntary cryptocurrency donations. Donations are optional and never unlock product features.', freeNote: 'The same product, whether you donate or not.',
   downloads: 'Bring your environments together.', downloadsText: 'Choose your operating system and architecture, then download the desktop installer. All features included.',
   os: 'Operating system', arch: 'Architecture', allOS: 'All systems', allArch: 'Both architectures', checksum: 'Checksum', desktopMode: 'Desktop app',
-  releaseLink: 'Releases on GitHub', buildsLink: 'Development builds', fallback: 'You can also download packages and checksums directly from GitHub Releases, without an account. Development builds are available separately from successful CI runs; they may require a GitHub account and expire.', loading: 'Checking published packages…', unavailable: 'The release list is unavailable here. Open GitHub to choose a download.', empty: 'No stable release is published yet. Check successful CI runs for development artifacts.', noMatch: 'No package matches this selection. Choose another architecture or open the release page.', version: 'Release',
+  allReleases: 'All releases', releaseLink: 'Releases on GitHub', buildsLink: 'Development builds', fallback: 'You can also download packages and checksums directly from GitHub Releases, without an account. Development builds are available separately from successful CI runs; they may require a GitHub account and expire.', loading: 'Checking published packages…', unavailable: 'The release list is unavailable here. Open GitHub to choose a download.', empty: 'No stable release is published yet. Check successful CI runs for development artifacts.', noMatch: 'No package matches this selection. Choose another architecture or open the release page.', version: 'Release',
   requirements: 'Installation & compatibility', requirementsText: 'Linux: Ubuntu 24.04+ or compatible glibc 2.39+, GTK 3 and WebKit2GTK 4.1. Windows: Windows 10/11 with WebView2. macOS: version 12 or newer, Intel or Apple Silicon.',
   signing: 'Windows installers are unsigned; macOS builds are ad-hoc signed, not notarized. Check the download source and the package’s SHA-256 checksum before installation.', installDocs: 'Installation guide',
   faqTitle: 'Before you make yourself at home.', faqs: [
@@ -48,7 +48,7 @@ export type Copy = typeof en;
 export const ru: Copy = {
   title: 'SPK Ocular | Бесплатное приложение для Kubernetes и Docker',
   description: 'Kubernetes, Docker, логи и Helm в одном приложении. Все функции бесплатны для людей и компаний любого размера, оборота и финансирования.',
-  nav: ['Возможности', 'Интерфейс', 'Бесплатно для всех'], docs: 'Документация', download: 'Скачать', downloadFor: 'Скачать для', chooseDownload: 'Выбрать пакет', chooseCompact: 'Выбрать', chooseDownloadFor: 'Выбрать для', theme: 'Сменить тему', menu: 'Меню', skip: 'К содержимому',
+  nav: ['Возможности', 'Интерфейс', 'Бесплатно для всех'], docs: 'Документация', download: 'Скачать', downloadFormatFor: 'Скачать {format} для {os}', chooseDownload: 'Выбрать пакет', chooseCompact: 'Выбрать', chooseDownloadFor: 'Выбрать для', theme: 'Сменить тему', menu: 'Меню', skip: 'К содержимому',
   eyebrow: 'РАБОЧЕЕ МЕСТО ДЛЯ ВАШЕЙ ИНФРАСТРУКТУРЫ',
   hero: ['Kubernetes и Docker.', 'В одном окне.'],
   lead: 'Настольное приложение для разработчиков и DevOps. Находите проблемные ресурсы Kubernetes, смотрите логи Docker и управляйте Helm в одном окне.',
@@ -79,7 +79,7 @@ export const ru: Copy = {
   supportTitle: 'Поддержать разработку', supportText: 'Разработка поддерживается только добровольными пожертвованиями в криптовалюте. Донаты необязательны и не открывают дополнительные функции.', freeNote: 'Один и тот же продукт, с донатом или без.',
   downloads: 'Соберите окружения в одном окне.', downloadsText: 'Выберите систему и архитектуру, затем скачайте установщик приложения. Все функции уже включены.',
   os: 'Операционная система', arch: 'Архитектура', allOS: 'Все системы', allArch: 'Обе архитектуры', checksum: 'Контрольная сумма', desktopMode: 'Приложение',
-  releaseLink: 'Релизы на GitHub', buildsLink: 'Сборки разработки', fallback: 'Пакеты и контрольные суммы также доступны в GitHub Releases без аккаунта. Сборки разработки доступны отдельно в успешных запусках CI: для них может потребоваться аккаунт GitHub, а срок хранения ограничен.', loading: 'Проверяем опубликованные пакеты…', unavailable: 'Не удалось получить список релизов. Откройте GitHub, чтобы выбрать загрузку.', empty: 'Стабильный релиз ещё не опубликован. Проверьте артефакты успешных запусков CI.', noMatch: 'Для этого выбора нет пакета. Выберите другую архитектуру или откройте страницу релиза.', version: 'Релиз',
+  allReleases: 'Все релизы', releaseLink: 'Релизы на GitHub', buildsLink: 'Сборки разработки', fallback: 'Пакеты и контрольные суммы также доступны в GitHub Releases без аккаунта. Сборки разработки доступны отдельно в успешных запусках CI: для них может потребоваться аккаунт GitHub, а срок хранения ограничен.', loading: 'Проверяем опубликованные пакеты…', unavailable: 'Не удалось получить список релизов. Откройте GitHub, чтобы выбрать загрузку.', empty: 'Стабильный релиз ещё не опубликован. Проверьте артефакты успешных запусков CI.', noMatch: 'Для этого выбора нет пакета. Выберите другую архитектуру или откройте страницу релиза.', version: 'Релиз',
   requirements: 'Установка и совместимость', requirementsText: 'Linux: Ubuntu 24.04+ или совместимая система с glibc 2.39+, GTK 3 и WebKit2GTK 4.1. Windows: Windows 10/11 с WebView2. macOS: версия 12 и новее, Intel или Apple Silicon.',
   signing: 'Установщики Windows не подписаны; сборки macOS имеют ad-hoc-подпись без нотариализации. Перед установкой проверьте источник загрузки и контрольную сумму SHA-256.', installDocs: 'Руководство по установке',
   faqTitle: 'Перед началом работы.', faqs: [

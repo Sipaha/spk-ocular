@@ -49,6 +49,10 @@ try{
   await expect(page.locator('h1')).toContainText(lang==='ru'?'Kubernetes и Docker.':'Kubernetes & Docker.');
   await expect(page).toHaveTitle(/Kubernetes.*Docker/);
   await expect(page.locator('h1')).not.toContainText('Compose');
+  for (const section of ['.hero-side','#free']) {
+   await expect(page.locator(`${section} .all-releases`)).toHaveAttribute('href',RELEASES);
+   await expect(page.locator(`${section} .all-releases`)).toHaveText(lang==='ru'?'Все релизы↗':'All releases↗');
+  }
   await expect(page.locator('body')).toContainText(lang==='ru'?'Отдельные контейнеры':'standalone containers');
   await expect(page.locator('.header-actions a[href="#downloads"]')).toBeVisible();
   await expect(page.locator(width<=600?'.compact-download-text':'.header-actions [data-download-text]')).toBeVisible();
@@ -99,7 +103,7 @@ try{
   const page=await browser.newPage({javaScriptEnabled});
   await page.route(API,r=>r.abort());
   await page.goto(root,{waitUntil:'networkidle'});
-  await expect(page.locator(`a[href="${RELEASES}"]`)).toBeVisible();
+  await expect(page.locator(`.download-fallback a[href="${RELEASES}"]`)).toBeVisible();
   if(!javaScriptEnabled){
    for(const id of [0,1,2,3])await expect(page.locator('#shot-'+id)).toBeVisible();
    await expect(page.locator('#free')).toContainText('Бесплатно');
@@ -136,11 +140,11 @@ try{
   await expect(page.locator('.language')).toBeVisible();
   const buttons=page.locator('[data-download-label]');
   const direct=!!(expectedOS&&expectedArch);
-  const prefix=direct?(lang==='ru'?'Скачать для':'Download for'):(lang==='ru'?'Выбрать для':'Choose for');
-  for (const label of await page.locator('[data-download-text]').allTextContents()) expect(label).toBe(name?`${prefix} ${name}`:lang==='ru'?'Выбрать пакет':'Choose a download');
+  const extension={linux:'deb',windows:'msi',darwin:'dmg'}[expectedOS];
+  const text=direct?`${lang==='ru'?'Скачать':'Download'} ${extension.toUpperCase()} ${lang==='ru'?'для':'for'} ${name}`:name?`${lang==='ru'?'Выбрать для':'Choose for'} ${name}`:lang==='ru'?'Выбрать пакет':'Choose a download';
+  for (const label of await page.locator('[data-download-text]').allTextContents()) expect(label).toBe(text);
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
   if(direct) {
-   const extension={linux:'deb',windows:'msi',darwin:'dmg'}[expectedOS];
    const filename=`spk-ocular_0.1.0_${expectedOS}_${expectedArch}.${extension}`;
    for(const button of await buttons.all()) {
     await expect(button).toHaveAttribute('href',`${REPO}/releases/download/v0.1.0/${filename}`);

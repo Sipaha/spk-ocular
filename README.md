@@ -94,8 +94,10 @@ detection; alternative formats remain in the package list. Manual selectors
 update the buttons.
 When a compatible asset or reliable architecture is missing, buttons say Choose
 and navigate to package selection. Mobile/unknown devices keep the general choice.
-The narrow-screen header uses a short Download/Choose caption with a complete
-accessible label. Without JavaScript, Choose links navigate to the download section.
+Download buttons name the selected format (DEB, RPM, MSI, DMG, ZIP or TAR.GZ).
+Hero and free-use download buttons include an All releases link directly below.
+The narrow-screen header uses a short Download FORMAT/Choose caption with a
+complete accessible label. Without JavaScript, Choose links navigate to the download section.
 Without a stable release or an available API, visible GitHub release and development-build
 links remain. Three installation steps explain the installer formats, checksum
 verification and existing Kubernetes/Docker configuration. Public release packages
