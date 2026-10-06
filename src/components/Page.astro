@@ -24,15 +24,17 @@ const navIDs = ['features', 'interface', 'free'];
       <nav aria-label={d.menu} class="desktop-nav">
         {navIDs.map((id,i) => <a href={'#' + id}>{d.nav[i]}</a>)}
         <a href={docs}>{d.docs}</a>
+        <a href={REPO}>GitHub</a>
       </nav>
       <div class="header-actions">
         <a class="language" href={base + (lang === 'ru' ? 'en/' : '')} lang={lang === 'ru' ? 'en' : 'ru'} aria-label={lang === 'ru' ? 'English' : 'Русский'}>{lang === 'ru' ? 'EN' : 'RU'}</a>
         <button type="button" class="theme-toggle" aria-label={d.theme} title={d.theme} hidden><ThemeIcon width="20" height="20" aria-hidden="true" /></button>
-        <a class="button compact" href="#downloads">{d.download}<span aria-hidden="true">↓</span></a>
+        <a class="button compact" href="#downloads" data-download-label={JSON.stringify({download:d.download,downloadFor:d.downloadFor})}><span data-download-text>{d.download}</span><span class="compact-download-text" aria-hidden="true">{d.download}</span><span aria-hidden="true">↓</span></a>
       </div>
     </div>
     <nav class="mobile-nav container" aria-label={d.menu}>
       {navIDs.map((id,i) => <a href={'#' + id}>{d.nav[i]}</a>)}
+      <a href={REPO}>GitHub</a>
     </nav>
   </header>
   <main id="main">
@@ -40,7 +42,7 @@ const navIDs = ['features', 'interface', 'free'];
       <p class="eyebrow">{d.eyebrow}</p>
       <div class="hero-heading">
         <h1>{d.hero[0]}<span>{d.hero[1]}</span></h1>
-        <div class="hero-side"><p class="lead">{d.lead}</p><div class="hero-actions"><a class="button" href="#downloads">{d.download}<span aria-hidden="true">↓</span></a><a class="text-link" href="#interface">{d.explore}<span aria-hidden="true">↗</span></a></div><p class="local-short">{d.localShort}</p></div>
+        <div class="hero-side"><p class="lead">{d.lead}</p><div class="hero-actions"><a class="button" href="#downloads" data-download-label={JSON.stringify({download:d.download,downloadFor:d.downloadFor})}><span data-download-text>{d.download}</span><span aria-hidden="true">↓</span></a><a class="text-link" href="#interface">{d.explore}<span aria-hidden="true">↗</span></a></div><p class="local-short">{d.localShort}</p></div>
       </div>
       <div class="hero-meta"><a href="#free">{d.freeShort}<span aria-hidden="true">↗</span></a><span>{d.platforms}</span></div>
       <figure class="hero-visual">
@@ -77,7 +79,7 @@ const navIDs = ['features', 'interface', 'free'];
       <div class="local-points">{d.localPoints.map(([title,text])=><article><h3>{title}</h3><p>{text}</p></article>)}</div>
     </section>
     <section id="free" class="free-section section"><div class="container free-grid">
-      <div><p class="eyebrow">{d.freeLabel}</p><h2>{d.freeTitle}</h2><p class="free-text">{d.freeText}</p><a class="button" href="#downloads">{d.download}<span aria-hidden="true">↓</span></a></div>
+      <div><p class="eyebrow">{d.freeLabel}</p><h2>{d.freeTitle}</h2><p class="free-text">{d.freeText}</p><a class="button" href="#downloads" data-download-label={JSON.stringify({download:d.download,downloadFor:d.downloadFor})}><span data-download-text>{d.download}</span><span aria-hidden="true">↓</span></a></div>
       <aside id="support"><span class="free-mark" aria-hidden="true">0<span> / ∞</span></span><p class="free-note">{d.freeNote}</p><h3>{d.supportTitle}</h3><p>{d.supportText}</p></aside>
     </div></section>
     <section id="downloads" class="section download-section"><div class="container">

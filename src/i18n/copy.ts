@@ -1,7 +1,7 @@
 export const en = {
   title: 'SPK Ocular | Free Kubernetes & Docker desktop app',
   description: 'Inspect Kubernetes and Docker, follow logs and manage Helm releases in one desktop app. All features free for individuals and businesses of any size.',
-  nav: ['Features', 'Interface', 'Free for everyone'], docs: 'Docs', download: 'Download', theme: 'Switch theme', menu: 'Menu', skip: 'Skip to content',
+  nav: ['Features', 'Interface', 'Free for everyone'], docs: 'Docs', download: 'Download', downloadFor: 'Download for', theme: 'Switch theme', menu: 'Menu', skip: 'Skip to content',
   eyebrow: 'THE DESKTOP WORKSPACE FOR YOUR INFRASTRUCTURE',
   hero: ['Kubernetes & Docker.', 'One clear workspace.'],
   lead: 'A desktop app for developers and DevOps. Investigate Kubernetes resources, follow Docker logs and manage Helm releases in one workspace.',
@@ -48,7 +48,7 @@ export type Copy = typeof en;
 export const ru: Copy = {
   title: 'SPK Ocular | Бесплатное приложение для Kubernetes и Docker',
   description: 'Kubernetes, Docker, логи и Helm в одном приложении. Все функции бесплатны для людей и компаний любого размера, оборота и финансирования.',
-  nav: ['Возможности', 'Интерфейс', 'Бесплатно для всех'], docs: 'Документация', download: 'Скачать', theme: 'Сменить тему', menu: 'Меню', skip: 'К содержимому',
+  nav: ['Возможности', 'Интерфейс', 'Бесплатно для всех'], docs: 'Документация', download: 'Скачать', downloadFor: 'Скачать для', theme: 'Сменить тему', menu: 'Меню', skip: 'К содержимому',
   eyebrow: 'РАБОЧЕЕ МЕСТО ДЛЯ ВАШЕЙ ИНФРАСТРУКТУРЫ',
   hero: ['Kubernetes и Docker.', 'В одном окне.'],
   lead: 'Настольное приложение для разработчиков и DevOps. Находите проблемные ресурсы Kubernetes, смотрите логи Docker и управляйте Helm в одном окне.',

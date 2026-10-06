@@ -51,8 +51,11 @@ try{
   await expect(page.locator('h1')).not.toContainText('Compose');
   await expect(page.locator('body')).toContainText(lang==='ru'?'Отдельные контейнеры':'standalone containers');
   await expect(page.locator('.header-actions a[href="#downloads"]')).toBeVisible();
+  await expect(page.locator(width<=600?'.compact-download-text':'.header-actions [data-download-text]')).toBeVisible();
   const navigation=page.locator(width<=960?'.mobile-nav':'.desktop-nav');
   await expect(navigation).toBeVisible();
+  await expect(navigation.getByRole('link',{name:'GitHub',exact:true})).toBeVisible();
+  await expect(navigation.getByRole('link',{name:'GitHub',exact:true})).toHaveAttribute('href',REPO);
   for (const id of ['features','interface','free']) {
    await navigation.locator(`a[href="#${id}"]`).click();
    await expect(page).toHaveURL(new RegExp(`#${id}$`));
@@ -114,6 +117,31 @@ try{
    const name=`${prefix}_0.1.0_${os}_${arch}.${ext}`;
    for(const suffix of ['', '.sha256']) assets.push({name:name+suffix,browser_download_url:`${REPO}/releases/download/v0.1.0/${name}${suffix}`,size:1048576});
   }
+ }
+ for (const [ua,expectedOS,name] of [
+  ['Mozilla/5.0 (Windows NT 10.0; Win64; x64)','windows','Windows'],
+  ['Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)','darwin','macOS'],
+  ['Mozilla/5.0 (X11; Linux x86_64)','linux','Linux'],
+  ['Mozilla/5.0 (Linux; Android 14; Mobile)','',''],
+ ]) for (const lang of ['ru','en']) {
+  const page=await browser.newPage({userAgent:ua,viewport:{width:320,height:1000},reducedMotion:'reduce'});
+  await page.route(API,r=>r.fulfill({json:{tag_name:'v0.1.0',assets}}));
+  await page.goto(root+(lang==='en'?'en/':''),{waitUntil:'networkidle'});
+  await expect(page.locator('select[name=os]')).toHaveValue(expectedOS);
+  await expect(page.locator('.compact-download-text')).toBeVisible();
+  await expect(page.locator('.language')).toBeVisible();
+  await expect(page.locator('select[name=arch]')).toHaveValue('');
+  const buttons=page.locator('[data-download-text]');
+  for (const label of await buttons.allTextContents()) expect(label).toBe(name?`${lang==='ru'?'Скачать для':'Download for'} ${name}`:lang==='ru'?'Скачать':'Download');
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+  if (expectedOS) for(const href of await page.locator('.package a').evaluateAll(els=>els.map(el=>el.href)))expect(href).toContain(`_${expectedOS}_`);
+  else await expect(page.locator('.package')).toHaveCount(20);
+  await page.locator('select[name=os]').selectOption('darwin');
+  await expect(buttons.first()).toHaveText(lang==='ru'?'Скачать для macOS':'Download for macOS');
+  await page.locator('.header-actions a[href="#downloads"]').click();
+  await expect(page.locator('select[name=os]')).toHaveValue('darwin');
+  await expectAnchorPosition(page,'downloads');
+  await page.close();console.log(`PASS ${lang} ${name||'mobile'}: automatic OS, button label, manual override and 320px layout`);
  }
  const page=await browser.newPage();await page.route(API,r=>r.fulfill({json:{tag_name:'v0.1.0',assets:[...assets].reverse()}}));
  await page.goto(root+'en/',{waitUntil:'networkidle'});

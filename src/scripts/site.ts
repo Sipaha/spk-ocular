@@ -26,6 +26,19 @@ if (tablist && tabs.length === panels.length) {
   });
   select(0);
 }
+const detectedOS = detectOS(navigator.userAgent, navigator.maxTouchPoints);
+const osNames: Record<string,string> = {linux:'Linux',windows:'Windows',darwin:'macOS'};
+const downloadButtons = [...document.querySelectorAll<HTMLAnchorElement>('[data-download-label]')];
+const updateDownloadLabels = (selectedOS: string) => {
+  for (const button of downloadButtons) {
+    const labels = JSON.parse(button.dataset.downloadLabel!) as {download: string; downloadFor: string};
+    const text = osNames[selectedOS] ? `${labels.downloadFor} ${osNames[selectedOS]}` : labels.download;
+    button.querySelector<HTMLElement>('[data-download-text]')!.textContent = text;
+    button.setAttribute('aria-label', text);
+    button.title = text;
+  }
+};
+updateDownloadLabels(detectedOS);
 const host = document.querySelector<HTMLElement>('[data-downloads]');
 if (host) {
   const labels: Record<string, string> = JSON.parse(host.dataset.labels!);
@@ -36,7 +49,7 @@ if (host) {
   const arch = host.querySelector<HTMLSelectElement>('select[name=arch]')!;
   status.hidden = false;
   status.textContent = labels.loading;
-  os.value = detectOS(navigator.userAgent, navigator.maxTouchPoints);
+  os.value = detectedOS;
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 8000);
   void (async () => {
@@ -49,6 +62,7 @@ if (host) {
       controls.hidden = false;
       packages.hidden = false;
       const render = () => {
+        updateDownloadLabels(os.value);
         const files = release.files.filter(file => (!os.value || file.os === os.value) && (!arch.value || file.arch === arch.value));
         status.textContent = files.length ? `${labels.version} ${release.version}` : labels.noMatch;
         packages.replaceChildren(...files.map(file => {

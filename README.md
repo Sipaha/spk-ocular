@@ -18,7 +18,8 @@ application documentation, not the main marketing message.
 The theme control uses a fixed-size Phosphor SVG; its MIT license is in
 `public/licenses/phosphor-icons.txt` (upstream commit
 `2b75f3ad12b420c9504ef05df8d2564a28f8500e`). Mobile navigation and Download remain
-visible. All content, full-size screenshots and download fallback links work
+visible. Both desktop and mobile header navigation include a GitHub link to
+the SPK Ocular repository. All content, full-size screenshots and download fallback links work
 without JavaScript. Gallery tabs enhance static figures; FAQ answers stay visible.
 Reduced motion, keyboard navigation and semantic light/dark colors are preserved.
 Section anchors subtract the section’s responsive top padding from the scroll
@@ -83,7 +84,12 @@ before checks. In the SPK-Ocular solution the default test output is
 Download links come from the public GitHub latest-release API for
 `Sipaha/spk-ocular`. Files must match the release version, supported OS/architecture,
 package format and repository URL. Missing checksums are not fabricated. The OS
-may be suggested; architecture is always an explicit visitor choice. Without a
+is selected automatically on desktop and the main download buttons name that OS.
+Changing the OS selector updates those labels. The narrow-screen header keeps
+the short Download caption while its accessible label and tooltip name the OS;
+the other download buttons show the full caption. Mobile/unknown devices keep the
+generic Download label and show all operating systems. Architecture is always an
+explicit visitor choice. Without a
 stable release or an available API, visible GitHub release and development-build
 links remain. Three installation steps explain the installer formats, checksum
 verification and existing Kubernetes/Docker configuration. Public release packages
