@@ -38,7 +38,9 @@ Russian retains `/spk-ocular/`; other locales use `/spk-ocular/{code}/`.
 explicit preference wins, then the first supported browser language, then English.
 Explicit localized URLs always win. Crawlers and automated audits retain their
 requested page. URL query and fragment survive a JavaScript language change.
-Storage is optional. With JavaScript disabled, all localized pages and the native
+Storage is optional. If it is blocked, a manual Russian choice on the legacy
+root adds `?lang=ru` to override browser detection; other choices remove that
+marker and preserve unrelated query parameters. With JavaScript disabled, all localized pages and the native
 `details` link menu remain usable. No runtime translation API or external fonts.
 
 Every localized page has canonical and alternate links; `sitemap.xml` includes

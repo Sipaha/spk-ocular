@@ -39,3 +39,7 @@ test('explicit routes and crawlers do not lose their requested language',()=>{
  assert.equal(languageTarget({...input,userAgent:'Googlebot'}),null);
  assert.equal(languageTarget({...input,webdriver:true}),null);
 });
+
+test('explicit Russian query overrides browser detection when storage is unavailable',()=>{
+ assert.equal(languageTarget({...input,stored:null,languages:['zh-CN'],search:'?ref=test&lang=ru'}),null);
+});

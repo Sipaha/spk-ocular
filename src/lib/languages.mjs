@@ -22,6 +22,7 @@ export function languageTarget(input) {
   };
   const path = input.path.endsWith('/') ? input.path : input.path + '/';
   if (path !== input.base || input.webdriver || /bot|crawl|spider|lighthouse/i.test(input.userAgent)) return null;
+  if (new URLSearchParams(input.search).get("lang") === "ru") return null;
   const stored = supported.includes(input.stored) ? input.stored : null;
   const code = stored || input.languages.map(normalize).find(Boolean) || 'en';
   return code === 'ru' ? null : input.base + code + '/' + input.search + input.hash;

@@ -103,8 +103,12 @@ if (host) {
 
 for (const link of document.querySelectorAll<HTMLAnchorElement>('[data-language]')) {
   link.addEventListener('click', () => {
-    try { localStorage.setItem('ocular-language', link.dataset.language!); } catch {}
-    const url = new URL(link.href); url.search = location.search; url.hash = location.hash; link.href = url.href;
+    let saved = false;
+    try { localStorage.setItem('ocular-language', link.dataset.language!); saved = localStorage.getItem('ocular-language') === link.dataset.language; } catch {}
+    const url = new URL(link.href); url.search = location.search; url.hash = location.hash;
+    if (link.dataset.language === 'ru' && !saved) url.searchParams.set('lang', 'ru');
+    else if (url.searchParams.get('lang') === 'ru') url.searchParams.delete('lang');
+    link.href = url.href;
   });
 }
 for (const menu of document.querySelectorAll<HTMLDetailsElement>('.language-menu')) {

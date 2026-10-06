@@ -90,7 +90,10 @@ try {
   await page.goto(origin+base);await expect(page.locator('html')).toHaveAttribute('lang',javaScriptEnabled?'fr':'ru');
   await page.locator('.language').click();await page.locator('[data-language=pt]').click();
   await expect(page.locator('html')).toHaveAttribute('lang','pt');
-  await expect(page.locator('.download-fallback')).toBeVisible();await context.close();
+  await expect(page.locator('.download-fallback')).toBeVisible();
+  await page.locator('.language').click();await page.locator('[data-language=ru]').click();
+  await expect(page.locator('html')).toHaveAttribute('lang','ru');await page.reload();
+  await expect(page.locator('html')).toHaveAttribute('lang','ru');await context.close();
  }
  const context=await browser.newContext({locale:'fa-IR'});await context.addInitScript(()=>Object.defineProperty(navigator,'webdriver',{get:()=>false}));
  const page=await context.newPage();await page.route(API,r=>r.abort());await page.goto(origin+base);await expect(page.locator('html')).toHaveAttribute('lang','en');await context.close();
