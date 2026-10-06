@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -70,7 +71,7 @@ var _ provider.Opener = (*Provider)(nil)
 // Open builds a session for a context from the current kubeconfig. No
 // network I/O: connection problems surface as view statuses.
 func (p *Provider) Open(_ context.Context, target string) (provider.Session, error) {
-	l := load(p.sources())
+	l := p.loadConfigured()
 	var kc *kubeContext
 	for i := range l.Contexts {
 		if l.Contexts[i].ID == target {
@@ -153,9 +154,18 @@ func sessionWithLifetime(cfg *rest.Config, target, title, hash, lifetime string)
 // restConfig resolves a context exactly like kubectl --context would with
 // the same files (relative paths, exec plugins, proxy settings included).
 func restConfig(kc kubeContext) (*rest.Config, error) {
+	if kc.Locked {
+		return nil, errors.New("unlock configuration storage first")
+	}
 	rules := &clientcmd.ClientConfigLoadingRules{Precedence: kc.Files}
 	cc := clientcmd.NewNonInteractiveDeferredLoadingClientConfig(rules, &clientcmd.ConfigOverrides{CurrentContext: kc.Name})
-	cfg, err := cc.ClientConfig()
+	var cfg *rest.Config
+	var err error
+	if kc.Config != nil {
+		cfg, err = clientcmd.NewNonInteractiveClientConfig(*kc.Config, kc.Name, &clientcmd.ConfigOverrides{}, nil).ClientConfig()
+	} else {
+		cfg, err = cc.ClientConfig()
+	}
 	if err != nil {
 		return nil, err
 	}

@@ -1,10 +1,11 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, useRef } from 'react'
 import type { Client } from './api/client'
 import { setLanguage, t } from './i18n'
 import { actions, selectedTarget, targetKey, useStore } from './store'
 import { ViewHub } from './views/viewSync'
 import { Workspace } from './components/Workspace'
 import { ConnectionWorkspace } from './components/ConnectionWorkspace'
+import type { ConfigurationActions } from './configurations/Configurations'
 import { Sidebar } from './components/Sidebar'
 import { AppHeader } from './components/AppHeader'
 import { StatusBar } from './components/StatusBar'
@@ -25,6 +26,19 @@ import { agentLoaders, agents, useAgents } from './agents/store'
 
 export function App({ client }: { client: Client }) {
   const act = useMemo(() => actions(client), [client])
+  const configRef = useRef<ConfigurationActions>(null)
+  const connect = () => {
+    if (!target) return
+    if (target.locked) configRef.current?.unlockTarget(target, async () => {
+      const current = useStore.getState().view?.groups.flatMap(g=>g.targets) ?? []
+      const exact = current.find(t=>targetKey(t)===targetKey(target)&&!t.locked)
+      const candidates = current.filter(t=>t.provider===target.provider&&t.id.startsWith(target.id)&&!t.locked)
+      const resolved = exact ?? (candidates.length===1 ? candidates[0] : undefined)
+      if (resolved) { await act.select(resolved); await act.connect(resolved) }
+      else useStore.setState({actionError:t('configs.chooseAfterUnlock')})
+    })
+    else void act.connect(target)
+  }
   const hub = useMemo(() => new ViewHub(client), [client])
   const loadTunnels = useMemo(() => tunnelLoader(client), [client])
   const loadAgents = useMemo(() => agentLoaders(client), [client])
@@ -136,16 +150,16 @@ export function App({ client }: { client: Client }) {
     <div className="relative flex h-full flex-col">
       <AppHeader target={target} onHelp={() => setHelp(true)} />
       <div className="flex min-h-0 flex-1">
-        <Sidebar act={act} />
+        <Sidebar act={act} client={client} configRef={configRef} />
         <div className="flex min-w-0 flex-1 flex-col">
           {held && target && <div role="status" className="border-b border-line px-3 py-2 text-sm text-fg-muted">
             {t('connection.disconnected')}
-            <button className="ml-3 text-accent" onClick={() => mayLeave(() => { void act.connect(target) })}>{t('connection.connect')}</button>
+            <button className="ml-3 text-accent" onClick={() => mayLeave(() => { connect() })}>{t('connection.connect')}</button>
           </div>}
           {target ? (
             showWorkspace ?
               <Workspace key={`${target.provider}/${target.id}`} client={client} hub={hub} target={target} onFavorite={act.setKindFavorite} onMoveFavorite={act.moveFavoriteKind} onNavSection={act.setNavSection} /> :
-              <ConnectionWorkspace key={targetKey(target)} target={target} pending={connectionAction} onConnect={() => void act.connect(target)} onCancel={() => void act.cancelConnect(target, target.connection?.id)} />
+              <ConnectionWorkspace key={targetKey(target)} target={target} pending={connectionAction} onConnect={() => connect()} onCancel={() => void act.cancelConnect(target, target.connection?.id)} />
           ) : (
             <main className="min-h-0 min-w-0 flex-1 overflow-y-auto">
               <EmptyWorkspace />

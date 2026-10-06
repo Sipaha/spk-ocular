@@ -51,6 +51,13 @@ def smoke(platform, arch):
         env[key] = str(path)
     env.update(KUBECONFIG=str(profile / 'no-kubeconfig'), DOCKER_HOST='tcp://127.0.0.1:1', DOCKER_CONTEXT='', DOCKER_TLS_VERIFY='', DOCKER_CERT_PATH='',
                DBUS_SESSION_BUS_ADDRESS='unix:path=' + str(profile / 'nonexistent-bus'), LANG='en_US.UTF-8', LANGUAGE='en')
+    # This native smoke covers rendering the synthetic workspace; onboarding
+    # has its own fresh-profile UI tests. Seed only an empty dismissed registry.
+    configs = profile / 'data/configurations'
+    configs.mkdir(mode=0o700)
+    registry = configs / 'kubeconfigs.json'
+    registry.write_text(json.dumps({'Version': 1, 'Initialized': True}), encoding='utf-8')
+    registry.chmod(0o600)
     stage = ROOT / 'build' / f'package-{platform}-{arch}'
     binary = ROOT / 'build/bin/spk-ocular-release' if platform == 'linux' else stage / ('spk-ocular.exe' if platform == 'windows' else 'SPK Ocular.app/Contents/MacOS/spk-ocular')
     opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))

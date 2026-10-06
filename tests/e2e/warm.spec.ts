@@ -13,8 +13,8 @@ async function emit(page: Page, target: string, object: string, event: Record<st
 
 // P18: two warm synthetic targets (the test server runs with a second one).
 // A's page state and log tab survive A → B → A; the targets' log streams are
-// independent; «Close connection» ends A's session, its dot and its tab.
-test('two warm targets: A → B → A keeps everything; Close connection ends A', async ({ page }) => {
+// independent; «Disconnect» ends A's session, its dot and its tab.
+test('two warm targets: A → B → A keeps everything; Disconnect ends A', async ({ page }) => {
   await page.goto('/')
   const demo = page.getByRole('option', { name: /^demo\b/ })
   const demo2 = page.getByRole('option', { name: /^demo2\b/ })
@@ -73,11 +73,11 @@ test('two warm targets: A → B → A keeps everything; Close connection ends A'
   await expect(page.getByText('warm line one')).toBeVisible()
   await expect(page.getByText('warm line two')).toBeVisible()
 
-  // «Close connection» is not offered on the selected target: from B it is.
+  // Disconnect is available for a warm non-selected target too.
   await demo2.click()
   await connectSelected(page)
   await demo.click({ button: 'right' })
-  await page.getByRole('menuitem', { name: 'Close connection' }).click()
+  await page.getByRole('menuitem', { name: 'Disconnect' }).click()
   // The dot is gone (no tooltip), the tab ended with the reason.
   await expect(demo).not.toHaveAttribute('title', /Connection open/)
   await tabAOnB.click()

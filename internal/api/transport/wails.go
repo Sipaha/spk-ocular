@@ -9,6 +9,7 @@ import (
 	"github.com/spk/spk-ocular/internal/api"
 	"github.com/spk/spk-ocular/internal/core"
 	"github.com/spk/spk-ocular/internal/forwards"
+	"github.com/spk/spk-ocular/internal/providers/kubernetes"
 	"github.com/spk/spk-ocular/internal/store"
 	"github.com/spk/spk-ocular/internal/views"
 )
@@ -197,4 +198,8 @@ func (w *API) ListAgentAudit(f store.AuditFilter) ([]store.AuditEntry, error) {
 
 func (w *API) Helm(ctx context.Context, req api.HelmRequest) (api.HelmResponse, error) {
 	return w.a.Helm(api.UIContext(ctx), req)
+}
+
+func (w *API) Configurations(req kubernetes.ConfigRequest) (kubernetes.ConfigState, error) {
+	return w.a.Configurations(api.UIContext(context.Background()), req)
 }

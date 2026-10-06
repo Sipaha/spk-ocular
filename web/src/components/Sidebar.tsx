@@ -1,3 +1,5 @@
+import type { Client } from '../api/client'
+import { Configurations, type ConfigurationActions } from '../configurations/Configurations'
 import { PanelResize, usePanelWidths } from './PanelResize'
 import { useEffect, useRef, useState } from 'react'
 import type { Target, TargetGroup } from '../api/types'
@@ -7,15 +9,22 @@ import { ProviderIcon, SearchIcon, WarningIcon } from './icons'
 import { agents, pendingOf, useAgents } from '../agents/store'
 import { Menu, type MenuItem } from '../actions/Menu'
 
-export function Sidebar({ act }: { act: Actions }) {
+export function Sidebar({ act, client, configRef }: { act: Actions; client: Client; configRef: React.RefObject<ConfigurationActions | null> }) {
   const width = usePanelWidths((s) => s.targets)
   const view = useStore((s) => s.view)
   const filter = useStore((s) => s.filter)
   const listRef = useRef<HTMLDivElement>(null)
-  const [menu, setMenu] = useState<{ target: Target; at: { x: number; y: number } } | null>(null)
+  const [menu, setMenu] = useState<{ target: Target; at: { x: number; y: number }; configs: ConfigurationActions | null } | null>(null)
+
+  const menuTarget = menu ? view?.groups.flatMap(g=>g.targets).find(target=>targetKey(target)===targetKey(menu.target)) : null
+  const menuItems = menu&&menuTarget ? targetMenuItems(menuTarget,act,menu.configs) : []
 
   const onListKey = (e: React.KeyboardEvent) => {
-    if (e.key === 'ArrowDown') {
+    if (e.key === 'ContextMenu' || (e.shiftKey && e.key === 'F10')) {
+      const cursor = useStore.getState().cursor
+      const target = view?.groups.flatMap(g => g.targets).find(x => targetKey(x) === cursor) ?? view?.groups.flatMap(g=>g.targets).find(x=>view.selected && targetKey(x)===targetKey(view.selected))
+      if (target && (target.provider==='kubernetes'||target.open||target.connection?.state==='connecting'||target.connection?.state==='connected')) { e.preventDefault(); const r=listRef.current?.querySelector<HTMLElement>('[data-cursor=true]')?.getBoundingClientRect() ?? listRef.current!.getBoundingClientRect(); setMenu({target,at:{x:r.left,y:r.bottom},configs:configRef.current}) }
+    } else if (e.key === 'ArrowDown') {
       e.preventDefault()
       act.moveCursor(1)
     } else if (e.key === 'ArrowUp') {
@@ -69,11 +78,11 @@ export function Sidebar({ act }: { act: Actions }) {
         aria-label="targets"
         className="target-list min-h-0 flex-1 overflow-y-auto px-2 pb-3 outline-none"
       >
-        {view?.groups.map((g) => <Group key={g.provider} group={g} act={act} onMenu={(target, at) => setMenu({ target, at })} />)}
+        {view?.groups.map((g) => <Group key={g.provider} group={g} act={act} client={client} configRef={configRef} onMenu={(target, at) => setMenu({ target, at, configs:configRef.current })} />)}
       </div>
-      {menu && (
+      {menu && menuItems.length>0 && (
         <Menu
-          items={targetMenuItems(menu.target, act)}
+          items={menuItems}
           at={menu.at}
           label={t('target.menu')}
           onClose={() => setMenu(null)}
@@ -83,28 +92,32 @@ export function Sidebar({ act }: { act: Actions }) {
   )
 }
 
-/** The target's context menu: closing its connection is not offered on the selected target. */
-function targetMenuItems(target: Target, act: Actions): MenuItem[] {
-  return [
-    {
-      id: 'close',
-      label: t('target.close'),
-      hint: t('target.closeHint'),
-      onSelect: () => void act.closeTarget(target),
-    },
-  ]
+/** Source actions and connection controls reflect the target's actual state. */
+function targetMenuItems(target: Target, act: Actions, configs: ConfigurationActions | null): MenuItem[] {
+  const items: MenuItem[] = []
+  if(target.connection?.state==='connecting')items.push({id:'cancel',label:t('connection.cancel'),onSelect:()=>void act.cancelConnect(target,target.connection?.id)})
+  if(target.provider==='kubernetes'&&configs){
+    if(!target.locked)items.push({id:'inspect',label:t('configs.inspect'),onSelect:()=>configs.openTarget(target,'inspect')},
+      {id:'edit',label:t('configs.edit'),onSelect:()=>configs.openTarget(target,'edit')})
+    if(!target.id.startsWith('stored:'))items.push({id:'reveal',label:t('configs.reveal'),onSelect:()=>configs.openTarget(target,'reveal')})
+    items.push({id:'rename',label:t('configs.rename'),separator:true,onSelect:()=>configs.openTarget(target,'rename')},
+      {id:'remove',label:t('configs.remove'),danger:true,onSelect:()=>configs.openTarget(target,'remove')})
+  }
+  if(target.connection?.state!=='connecting'&&(target.open||target.connection?.state==='connected'))items.push({id:'close',label:t('target.close'),hint:t('target.closeHint'),separator:items.length>0,onSelect:()=>void act.closeTarget(target)})
+  return items
 }
 
-function Group({ group, act, onMenu }: { group: TargetGroup; act: Actions; onMenu: (target: Target, at: { x: number; y: number }) => void }) {
+function Group({ group, act, client, configRef, onMenu }: { group: TargetGroup; act: Actions; client: Client; configRef: React.RefObject<ConfigurationActions | null>; onMenu: (target: Target, at: { x: number; y: number }) => void }) {
   const filter = useStore((s) => s.filter)
   const visible = group.targets.filter((x) => matchesFilter(x, filter))
   return (
     <section className="mt-2" aria-label={group.title}>
       <h2 className="sidebar-group-heading">
-        <ProviderIcon provider={group.provider} className="h-3.5 w-3.5" />
+        <ProviderIcon provider={group.provider} className="h-4 w-4 text-fg-muted" />
         <span className="flex-1">{group.title}</span>
-        <span className="font-normal">{group.targets.length}</span>
+        <span className="text-xs font-normal text-fg-subtle">{group.targets.length}</span>
       </h2>
+      {group.provider === 'kubernetes' && <Configurations ref={configRef} client={client} onChanged={() => act.reload()} />}
       {group.error && <Notice text={t('sidebar.providerError', { error: group.error })} />}
       {group.problems.length > 0 && (
         <Notice text={t('sidebar.problems', { count: group.problems.length })}>
@@ -130,6 +143,8 @@ function TargetRow({ target, act, onMenu }: { target: Target; act: Actions; onMe
   const key = targetKey(target)
   const selected = useStore((s) => (s.view?.selected ? targetKey(s.view.selected) === key : false))
   const cursor = useStore((s) => s.cursor === key)
+  const connectionAction = useStore(s=>s.connectionActions[key])
+  const connecting = target.connection?.state==='connecting'||!!connectionAction
   const waiting = useAgents((s) => pendingOf(s.pending, target.provider, target.id))
   const ref = useRef<HTMLDivElement>(null)
   useEffect(() => {
@@ -143,7 +158,7 @@ function TargetRow({ target, act, onMenu }: { target: Target; act: Actions; onMe
       data-cursor={cursor || undefined}
       onClick={() => act.select(target)}
       onContextMenu={
-        selected
+        selected && target.provider !== 'kubernetes' && !target.open && target.connection?.state!=='connecting' && target.connection?.state!=='connected'
           ? undefined
           : (e) => {
               e.preventDefault()
@@ -161,15 +176,11 @@ function TargetRow({ target, act, onMenu }: { target: Target; act: Actions; onMe
         cursor && !selected ? 'ring-1 ring-line ring-inset' : '',
       ].join(' ')}
     >
-      <span className={['h-1.5 w-1.5 shrink-0 rounded-full', target.open ? 'bg-accent' : 'bg-fg-subtle/60'].join(' ')} />
+      <span aria-hidden data-connection-state={connecting?'connecting':target.open?'connected':'disconnected'} className={['h-1.5 w-1.5 shrink-0 rounded-full', connecting ? 'bg-warning' : target.open ? 'bg-success' : 'bg-fg-subtle/60'].join(' ')} />
       <span className="min-w-0 flex-1">
         <span className="flex items-center gap-1.5">
           <span className="truncate">{target.title}</span>
-          {target.current && (
-            <span title={providerText('target.currentHint', target.provider)} className="shrink-0 rounded bg-panel px-1 text-[11px] text-fg-muted">
-              {t('target.current')}
-            </span>
-          )}
+          {target.locked && <svg aria-hidden data-encrypted-lock className="h-3.5 w-3.5 shrink-0 text-fg-muted" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4"><rect x="3.5" y="7" width="9" height="7" rx="1.5"/><path d="M5.5 7V4.5a2.5 2.5 0 0 1 5 0V7"/><path d="M8 10v2"/></svg>}
           {waiting > 0 && (
             <button
               type="button"

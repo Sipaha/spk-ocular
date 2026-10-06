@@ -17,3 +17,22 @@ func TestWindowIconFitsGTKX11(t *testing.T) {
 		t.Fatalf("window icon must be square, 32..256 px for GTK/X11; got %dx%d", cfg.Width, cfg.Height)
 	}
 }
+
+func TestPanelIconFamilyFitsNativeSizesAndX11Payload(t *testing.T) {
+	total := 0
+	for _, icon := range WindowIcons {
+		cfg, err := png.DecodeConfig(bytes.NewReader(icon.PNG))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if cfg.Width != icon.Size || cfg.Height != icon.Size {
+			t.Fatalf("invalid %dpx icon dimensions", icon.Size)
+		}
+		total += 2 + cfg.Width*cfg.Height
+	}
+	// X11 encodes two dimensions and 32-bit ARGB pixels per representation.
+	// Leave headroom for the property request header.
+	if total*4 >= 250000 {
+		t.Fatalf("window icon family exceeds safe X11 request payload: %d bytes", total*4)
+	}
+}

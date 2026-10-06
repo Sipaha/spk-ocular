@@ -1,6 +1,6 @@
 import { useEffect, useId, useRef, useState } from 'react'
 import type { Target } from '../api/types'
-import { detailLabel, providerText, t } from '../i18n'
+import { detailLabel, t } from '../i18n'
 import { focusMark, restoreFocus } from '../shortcuts'
 import { CloseIcon, EyeIcon, InfoIcon, ProviderIcon } from './icons'
 
@@ -57,7 +57,6 @@ function TargetDetails({ target, onClose }: { target: Target; onClose: () => voi
           <div className="min-w-0 flex-1">
             <h2 id={titleId} className="mb-1 text-xs text-fg-subtle">{t('target.info')}</h2>
             <h3 className="text-lg font-semibold break-all">{target.title}</h3>
-            {target.current && <span title={providerText('target.currentHint', target.provider)} className="text-xs text-fg-muted">{t('target.current')}</span>}
           </div>
           <button ref={close} type="button" onClick={onClose} aria-label={t('drawer.close')}
             className="shrink-0 rounded p-1 text-fg-muted hover:bg-hover hover:text-fg">

@@ -8,7 +8,7 @@ import { scratchRoot } from './fixtures'
 export default defineConfig({
   testDir: '.',
   outputDir: join(scratchRoot, 'playwright-memo'),
-  testMatch: ['memo.spec.ts'],
+  testMatch: ['memo.spec.ts', 'configurations.spec.ts'],
   workers: 1,
   timeout: 90_000,
   use: { locale: 'en-US', screenshot: 'only-on-failure' },

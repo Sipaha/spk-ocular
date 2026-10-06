@@ -118,19 +118,23 @@ func samePrimary(p string, primary []string) bool {
 // client for it later (Files + Name), and display-safe facts. It never holds
 // credentials.
 type kubeContext struct {
-	ID        string   // stable opaque target id (see primaryID/extraID)
-	Name      string   // context name inside Files
-	Files     []string // loading precedence for this context
-	DefinedIn string   // the file that defines the context (first wins)
-	Extra     bool     // from a standalone file in ~/.kube, not kubectl's config
-	Hash      string   // configHash: what the context resolves to
-	Cluster   string
-	Server    string
-	User      string
-	Namespace string
-	Auth      string // auth method summary: "exec: yc", "token", ...
-	Identity  string // what the context points at (core.Target.Identity)
-	Current   bool
+	Encrypted   bool
+	Locked      bool
+	DisplayName string               // UI alias only; never changes the Kubernetes context or identity
+	Config      *clientcmdapi.Config // decrypted snapshot for app-owned configurations only
+	ID          string               // stable opaque target id (see primaryID/extraID)
+	Name        string               // context name inside Files
+	Files       []string             // loading precedence for this context
+	DefinedIn   string               // the file that defines the context (first wins)
+	Extra       bool                 // from a standalone file in ~/.kube, not kubectl's config
+	Hash        string               // configHash: what the context resolves to
+	Cluster     string
+	Server      string
+	User        string
+	Namespace   string
+	Auth        string // auth method summary: "exec: yc", "token", ...
+	Identity    string // what the context points at (core.Target.Identity)
+	Current     bool
 }
 
 type problem struct{ Source, Message string }

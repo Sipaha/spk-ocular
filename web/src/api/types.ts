@@ -6,6 +6,8 @@ export interface Detail {
 }
 
 export interface Target {
+  encrypted?: boolean
+  locked?: boolean
   provider: string
   id: string
   title: string

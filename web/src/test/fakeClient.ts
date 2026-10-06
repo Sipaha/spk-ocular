@@ -47,6 +47,7 @@ export function fakeClient(targets: Target[], connected = false) {
     audit: [] as AgentAuditEntry[],
   }
   const client: Client = {
+    configurations: vi.fn(async () => ({ initialized: true, encrypted: false, locked: false, candidates: [], entries: [] })),
     helm: vi.fn(async () => ({})),
     appInfo: vi.fn(async () => ({ name: 'SPK Ocular', version: 'test', mode: 'browser' as const, language: 'en' as const })),
     listTargets: vi.fn(async () => {

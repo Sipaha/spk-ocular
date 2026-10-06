@@ -1,5 +1,5 @@
-// Package kubernetes is the Kubernetes provider: targets are kubeconfig
-// contexts, reached exactly the way kubectl reaches them.
+// Package kubernetes exposes explicitly selected kubeconfig contexts. Linked
+// files retain kubectl resolution rules; app-owned configs resolve in memory.
 package kubernetes
 
 import (
@@ -15,12 +15,14 @@ import (
 
 const ProviderID = "kubernetes"
 
-// Provider discovers kube contexts. Sources are re-resolved on every
-// Discover, so a file added to ~/.kube later shows up.
+// Provider discovers registered contexts. Production uses WithConfigurations;
+// an injected unmanaged provider retains raw kubectl discovery for loader tests.
 type Provider struct {
-	getenv   func(string) string
-	home     string
-	shimPath string // this binary, run as a bounded exec credential plugin
+	configs       *configurations
+	configChanged chan struct{}
+	getenv        func(string) string
+	home          string
+	shimPath      string // this binary, run as a bounded exec credential plugin
 	// holdDir keeps the hold files of background sessions (the shim runs
 	// their plugins headless, P18); "" — no holds.
 	holdDir string
@@ -65,12 +67,31 @@ func (p *Provider) ScopeNames() core.ScopeNames {
 	return core.ScopeNames{Singular: msg("scope.singular"), Plural: msg("scope.plural"), All: msg("scope.all")}
 }
 
-func (p *Provider) sources() Sources { return ResolveSources(p.getenv, p.home) }
+func (p *Provider) sources() Sources {
+	if p.configs == nil {
+		return ResolveSources(p.getenv, p.home)
+	}
+	m := p.configs
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	s := Sources{}
+	for _, l := range m.disk.Links {
+		if l.Primary {
+			s.Primary = append(s.Primary, l.Path)
+		} else {
+			s.Extra = append(s.Extra, l.Path)
+		}
+	}
+	return s
+}
 
 func (p *Provider) Discover(context.Context) (provider.Discovery, error) {
-	l := load(p.sources())
+	l := p.loadConfigured()
 	p.mu.Lock()
 	p.last = l
+	for i := range p.last.Contexts {
+		p.last.Contexts[i].Config = nil
+	}
 	p.mu.Unlock()
 	var d provider.Discovery
 	for _, kc := range l.Contexts {
@@ -85,6 +106,8 @@ func (p *Provider) Discover(context.Context) (provider.Discovery, error) {
 func target(kc kubeContext) core.Target {
 	t := core.Target{
 		Provider:     ProviderID,
+		Encrypted:    kc.Encrypted,
+		Locked:       kc.Locked,
 		ID:           kc.ID,
 		Title:        kc.Name,
 		Subtitle:     kc.Cluster,
@@ -93,6 +116,9 @@ func target(kc kubeContext) core.Target {
 		Identity:     kc.Identity,
 		DefaultScope: kc.Namespace,
 	}
+	if kc.DisplayName != "" {
+		t.Title = kc.DisplayName
+	}
 	add := func(key, value string) {
 		if value != "" {
 			t.Details = append(t.Details, core.Detail{Key: key, Value: value})
@@ -100,7 +126,7 @@ func target(kc kubeContext) core.Target {
 	}
 	add("context", kc.Name)
 	add("cluster", kc.Cluster)
-	add("server", kc.Server)
+	add("server", withoutUserinfo(kc.Server))
 	add("user", kc.User)
 	add("auth", kc.Auth)
 	add("defaultNamespace", kc.Namespace)

@@ -84,3 +84,17 @@ test('three failed attempts stop and reload does not start another', async ({ pa
   await expect(page.getByText('Could not connect', { exact: true })).toBeVisible()
   expect((await stats(page)).syn_connects).toBe(3)
 })
+
+
+test('Disconnect is available on the selected connected target and disappears after closing',async({page})=>{
+ const row=page.getByRole('region',{name:'Synthetic (test)',exact:true}).getByRole('option',{name:/^demo\b/})
+ await page.getByRole('button',{name:'Connect',exact:true}).click()
+ await expect(page.getByRole('grid',{name:'resources'})).toBeVisible()
+ await row.click({button:'right'})
+ await page.getByRole('menuitem',{name:'Disconnect',exact:true}).click()
+ await expect(page.getByRole('button',{name:'Connect',exact:true})).toBeVisible()
+ await expect(row).toHaveAttribute('aria-selected','true')
+ await row.click({button:'right'})
+ await expect(page.getByRole('menuitem',{name:'Disconnect',exact:true})).toHaveCount(0)
+ await page.screenshot({path:process.env.OCULAR_SCRATCH_DIR+'/selected-disconnected.png'})
+})

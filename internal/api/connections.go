@@ -68,6 +68,7 @@ func (s *Service) ConnectTarget(ctx context.Context, providerID, id string) (cor
 	a.ctx, a.cancel = context.WithCancel(context.Background())
 	s.connections[key] = a
 	if e := s.sessions[key]; e != nil && e.hash == target.ConfigHash {
+		e.closing = false
 		a.owner = e.owner
 		a.status.State, a.status.Phase, a.status.FinishedAt = "connected", "ready", s.now().UnixMilli()
 		s.emitTargetsChanged(providerID)
@@ -235,6 +236,10 @@ func (s *Service) connect(a *connectionAttempt, opener provider.Opener) {
 func (s *Service) CancelConnectTarget(_ context.Context, providerID, id string, attempt uint64) error {
 	s.sessMu.Lock()
 	key := ownerKey(providerID, id)
+	if s.closed {
+		s.sessMu.Unlock()
+		return nil
+	}
 	a := s.connections[key]
 	if a == nil || a.status.ID != attempt {
 		s.sessMu.Unlock()
@@ -252,10 +257,13 @@ func (s *Service) CancelConnectTarget(_ context.Context, providerID, id string, 
 		}
 	}
 	s.emitTargetsChanged(providerID)
-	s.sessMu.Unlock()
 	if provisional != nil {
-		provisional.Close()
+		// The status and attempt cancellation must not wait for provider cleanup
+		// (discovery or credential helpers may still be unwinding).
+		s.wg.Add(1)
+		go func() { defer s.wg.Done(); provisional.Close() }()
 	}
+	s.sessMu.Unlock()
 	return nil
 }
 

@@ -56,6 +56,9 @@ func (p *Provider) Watch(ctx context.Context, onChange func()) error {
 	defer timer.Stop()
 	for {
 		select {
+		case <-p.configChanged:
+			rewatch()
+			onChange()
 		case <-ctx.Done():
 			return nil
 		case ev, ok := <-w.Events:
@@ -144,6 +147,7 @@ func watchPlan(src Sources) watchSet {
 	}
 	addDir(src.KubeDir)
 	for _, f := range src.Extra {
+		addDir(filepath.Dir(f))
 		addLinkTarget(f)
 	}
 	// A narrow parent filter must not shadow a dir that is itself a source

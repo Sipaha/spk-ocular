@@ -13,9 +13,10 @@ import (
 
 type connectionProvider struct {
 	*openable
-	check   func(context.Context, int64) error
-	checks  atomic.Int64
-	resyncs atomic.Int64
+	check     func(context.Context, int64) error
+	checks    atomic.Int64
+	resyncs   atomic.Int64
+	closeHook func()
 }
 
 type checkedSession struct {
@@ -228,4 +229,65 @@ func TestCancelJustAdmittedSessionWaitsForItsAgentCall(t *testing.T) {
 	require.False(t, p.opened[0].isClosed())
 	agent.Done()
 	require.True(t, p.opened[0].isClosed())
+}
+
+func (s *checkedSession) Close() {
+	if s.p.closeHook != nil {
+		s.p.closeHook()
+	}
+	s.fakeSession.Close()
+}
+
+func TestCancelConnectionDoesNotWaitForProviderCleanup(t *testing.T) {
+	release := make(chan struct{})
+	defer close(release)
+	entered := make(chan struct{}, 1)
+	p := &connectionProvider{openable: newOpenable("a"),
+		check:     func(ctx context.Context, _ int64) error { <-ctx.Done(); return ctx.Err() },
+		closeHook: func() { entered <- struct{}{}; <-release },
+	}
+	s, _ := newService(t, p)
+	st, err := s.ConnectTarget(t.Context(), "k", "a")
+	require.NoError(t, err)
+	require.Eventually(t, func() bool { return connectionState(t, s).Phase == "checking" }, time.Second, time.Millisecond)
+	done := make(chan error, 1)
+	go func() { done <- s.CancelConnectTarget(t.Context(), "k", "a", st.ID) }()
+	select {
+	case err = <-done:
+		require.NoError(t, err)
+	case <-time.After(time.Second):
+		t.Fatal("cancel waited for slow provider cleanup")
+	}
+	require.Equal(t, "cancelled", connectionState(t, s).State)
+	select {
+	case <-entered:
+	case <-time.After(time.Second):
+		t.Fatal("cancel did not start provider cleanup")
+	}
+}
+
+func TestDisconnectSelectedUIKeepsAgentCallAndAllowsExplicitReconnect(t *testing.T) {
+	p := &connectionProvider{openable: newOpenable("a"), check: func(context.Context, int64) error { return nil }}
+	s, _ := newService(t, p)
+	require.NoError(t, s.SelectTarget(UIContext(t.Context()), "k", "a"))
+	_, err := s.ConnectTarget(UIContext(t.Context()), "k", "a")
+	require.NoError(t, err)
+	awaitConnection(t, s, "connected")
+	agent, err := s.AgentCall(t.Context(), "k", "a")
+	require.NoError(t, err)
+	defer agent.Done()
+	require.NoError(t, s.CloseTarget(UIContext(t.Context()), "k", "a"))
+	require.NoError(t, agent.Context().Err())
+	require.Equal(t, "disconnected", connectionState(t, s).State)
+	view, err := s.ListTargets(UIContext(t.Context()))
+	require.NoError(t, err)
+	require.False(t, view.Groups[0].Targets[0].Open)
+	require.Equal(t, &TargetRef{Provider: "k", ID: "a"}, view.Selected)
+	st, err := s.ConnectTarget(UIContext(t.Context()), "k", "a")
+	require.NoError(t, err)
+	require.Equal(t, "connected", st.State)
+	agent.Done()
+	view, err = s.ListTargets(UIContext(t.Context()))
+	require.NoError(t, err)
+	require.True(t, view.Groups[0].Targets[0].Open)
 }

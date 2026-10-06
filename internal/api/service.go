@@ -137,6 +137,13 @@ func (s *Service) Start(ctx context.Context) {
 
 // Close stops the watchers, views and sessions.
 func (s *Service) Close() {
+	defer func() {
+		for _, p := range s.reg.All() {
+			if c, ok := p.(interface{ CloseConfigurations() }); ok {
+				c.CloseConfigurations()
+			}
+		}
+	}()
 	s.helmPlans.Close()
 	s.stopConnections()
 	if s.cancel != nil {
@@ -191,7 +198,8 @@ func (s *Service) ListTargets(ctx context.Context) (TargetsView, error) {
 		s.sessMu.Lock()
 		for i := range g.Targets {
 			g.Targets[i].ConfigRev = s.configRev(g.Targets[i].ConfigHash)
-			g.Targets[i].Open = s.sessions[ownerKey(p.ID(), g.Targets[i].ID)] != nil
+			e := s.sessions[ownerKey(p.ID(), g.Targets[i].ID)]
+			g.Targets[i].Open = e != nil && !e.closing
 			if a := s.connections[ownerKey(p.ID(), g.Targets[i].ID)]; a != nil {
 				status := a.status
 				g.Targets[i].Connection = &status

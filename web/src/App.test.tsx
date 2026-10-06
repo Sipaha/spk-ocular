@@ -12,7 +12,7 @@ describe('App', () => {
     const f = fakeClient([k8s('prod', { current: true }), k8s('dev')])
     render(<App client={f.client} />)
     expect(await screen.findByRole('option', { name: /prod/ })).toBeInTheDocument()
-    expect(screen.getByText('current')).toBeInTheDocument()
+    expect(screen.queryByText('current')).not.toBeInTheDocument()
     expect(screen.getByText('Pick a context on the left')).toBeInTheDocument()
 
     await userEvent.click(screen.getByRole('option', { name: /dev/ }))
@@ -128,9 +128,9 @@ describe('App', () => {
     expect(screen.getByRole('alert')).toHaveTextContent('broken: yaml: line 3')
   })
 
-  it('explains where contexts come from when there are none', async () => {
+  it('offers explicit configuration import when there are no targets', async () => {
     const f = fakeClient([])
     render(<App client={f.client} />)
-    await waitFor(() => expect(screen.getByText(/Ocular reads KUBECONFIG/)).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByText(/No configurations added/)).toBeInTheDocument())
   })
 })

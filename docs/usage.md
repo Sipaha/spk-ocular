@@ -24,6 +24,98 @@ Connection information is available through the information button next to the
 connection name in the header. Closing that dialog returns focus without
 resetting the resource table, its filter, or an unsaved editor.
 
+## Kubernetes configurations
+
+First use of the configuration registry opens an import dialog, including after
+upgrading an older installation. Candidates come from the `KUBECONFIG` file list
+and regular kubeconfig files directly in `~/.kube`. `KUBECONFIG` is a list of
+file paths, separated with the OS path-list delimiter; it is not a directory
+setting. No candidate is selected automatically. Dialog actions share one footer: cancel/skip
+on the left and the primary action on the right; narrow windows stack actions. Skip dismisses onboarding
+persistently. Neither scanning nor importing contacts clusters or runs credential
+helpers. Docker discovery is unchanged.
+
+**Add kubeconfig** offers local file selection or a YAML editor. Local imports
+are links, not copies: external edits are observed, new unselected files remain
+excluded, and originals are never modified. Selected KUBECONFIG files retain
+first-wins merge order; standalone files stay independent. Context IDs preserve
+the existing primary/file identity domains so saved selections and grants remain
+associated with the same targets. The `current` badge is no longer displayed.
+
+Before creating a custom configuration, create a non-empty master password
+and confirm it. Its length and strength are your choice. Ocular encrypts the YAML with AES-256-GCM and a key
+derived using Argon2id. It does not store the password. After restarting, click
+**Connect** on a protected connection to enter the master password. Selecting
+a row never asks for it. One successful entry unlocks all encrypted configurations
+and continues that connection; linked files remain available without unlocking. The key is kept in memory until Ocular closes. There is no password
+recovery or OS-keychain integration. Cancel closes the password dialog without
+connecting or unlocking. **Reset master password** is available in that dialog
+and the Add menu; its separate review lists all encrypted configurations and
+warns that they will be permanently deleted. Cancel preserves them. Confirming
+removes the encrypted records and master key, closes their sessions, preserves
+linked external files, and allows creating a new master password. Keep an independent copy of your configs:
+losing the password makes the stored YAML inaccessible.
+
+Custom configs require a name and valid kubeconfig YAML with at least one context.
+Use inline certificate/key data or absolute external paths; relative file paths
+are rejected because pasted YAML has no source directory. Credential-helper
+commands must be on PATH or use absolute paths, and execute only on Connect.
+External files and helper-managed caches are outside Ocular's encryption.
+
+**Add kubeconfig** opens a two-item menu: **From system files** scans import
+candidates; **New configuration** opens master-password setup/unlock and then
+the YAML editor. There is no separate configuration-management list.
+
+Right-click a Kubernetes connection, including the selected one, to inspect or
+edit its source YAML, rename the configuration or remove it. With the targets
+list focused, Shift+F10 opens the keyboard cursor's menu. Linked files also offer
+**Open in file manager**: Linux opens the parent folder; macOS and Windows select
+the source file. This action runs on the computer hosting Ocular, including
+browser mode, and reports launcher failures beside the add action.
+
+Inspection is read-only with syntax highlighting and search. The inspector and
+source editor use nearly the full window; a compact header shows the source
+name, path and mode, leaving the remaining area to YAML. Editing starts
+from that same source; saving requires explicit confirmation naming the external
+file or encrypted configuration. Changes affect all contexts using the source.
+External file updates are atomic, preserve the file's permissions and symlink,
+and reject changed content. Encrypted updates keep the entry ID and use a fresh
+nonce. Stale source or registry revisions refuse the write. Credential helpers
+are not run by inspection or editing. YAML is held only in the open dialog's
+memory, never in preferences or SQLite. Cancelling an unchanged editor closes it;
+cancelling a changed draft asks before discarding it. A save review can be
+cancelled without losing the draft.
+
+Rename opens with the current name focused and selected. Password and creation
+dialogs focus their first input; the source inspector/editor focuses YAML.
+Rename changes the exact visible name of that connection, preserving context
+IDs, source file names, YAML context keys and grants. Other connections from the
+same source retain their names. Display names persist across app restarts. Remove requires confirmation; it unlinks
+an external file without deleting or editing it, or deletes the encrypted copy.
+Affected sessions close after source edits or removal, and resource edits must
+be saved or discarded before these operations. Encrypted connections remain visible in the sidebar with a lock until unlocked
+through **Connect**. Inspection/editing becomes available after unlocking.
+
+**Disconnect** is offered in a connected target’s menu, including the selected
+one; it is absent for disconnected targets. Disconnect keeps the selection and
+checks unsaved resource edits before closing. In-flight agent calls finish
+independently; their held session closes afterward.
+
+An active connection has a green dot; connecting/cancelling uses yellow and
+disconnected targets use gray. Cancel updates the attempt
+state without waiting for provider cleanup; cleanup remains tracked by the app
+and cannot admit a late connection or start another retry.
+
+The registry is an owner-only `configurations/kubeconfigs.json` file in the
+Ocular data directory. It contains linked paths and names, encrypted custom YAML,
+context names for locked rows, and versioned encryption metadata. Configuration
+and context names and linked paths are not secret. Older records initially show
+a source placeholder; their context names are populated on the first successful
+unlock. With multiple contexts, select the desired connection after that first unlock. Passwords and YAML are never stored in UI preferences or SQLite; the
+configuration-management API is UI-only. Encryption protects files at rest,
+not against another program running as the same OS user or reading unlocked
+process memory. Existing agent grants are not expanded by an import.
+
 ## Resources and namespaces
 
 The resource navigation groups built-in Kubernetes kinds and discovered API
@@ -56,6 +148,7 @@ is expanded; Favorites and all other sections start collapsed. Saved choices
 continue to take precedence. The current kind remains visible
 inside a collapsed section. Search temporarily expands matching sections and
 restores the saved state when cleared.
+Resource navigation rows use the standard arrow cursor, including draggable favorites.
 
 ## Favorites and saved layout
 

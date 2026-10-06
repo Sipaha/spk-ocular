@@ -1,5 +1,6 @@
 // Package store is spk-ocular's SQLite persistence (app state and UI
-// preferences; never credentials — those stay in kubeconfig).
+// preferences; never credentials — kubeconfig content stays in external files
+// or the separate encrypted configuration registry).
 package store
 
 import (

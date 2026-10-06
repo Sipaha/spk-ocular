@@ -1,3 +1,4 @@
+import type { ConfigRequest, ConfigState } from '../configurations/types'
 import type { HelmRequest, HelmResponse } from '../helm/types'
 import { Call, Events } from '@wailsio/runtime'
 import type { ConnectionStatus, FavoriteKind } from './types'
@@ -18,6 +19,7 @@ export class ApiError extends Error {
 }
 
 export interface Client {
+ configurations(req: ConfigRequest): Promise<ConfigState>
   helm(req: HelmRequest, signal?: AbortSignal): Promise<HelmResponse>
   appInfo(): Promise<AppInfo>
   /** Re-reads local configuration (kubeconfig, ...); no network. */
@@ -158,6 +160,7 @@ const done = async (p: Promise<unknown>) => {
 }
 
 export const httpClient: Client = {
+  configurations: (req) => post('Configurations', req),
   appInfo: () => post('AppInfo', {}),
   helm: (req, signal) => post('Helm', req, signal),
   listTargets: () => post('ListTargets', {}),
@@ -284,6 +287,7 @@ async function wcallAbortable<T>(signal: AbortSignal | undefined, method: string
 const EVENT_TYPES: EventType[] = ['targets_changed', 'resync', 'view_changed', 'forwards_changed', 'kinds_changed', 'agent_grants_changed', 'agent_pending_changed', 'agent_audit_changed']
 
 export const wailsClient: Client = {
+  configurations: (req) => wcall('Configurations', req),
   appInfo: () => wcall('AppInfo'),
   helm: (req, signal) => wcallAbortable(signal, 'Helm', req),
   listTargets: () => wcall('ListTargets'),

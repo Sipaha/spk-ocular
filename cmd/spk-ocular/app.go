@@ -50,7 +50,12 @@ func newCore(ctx context.Context, mode string, withSynthetic bool) (*appCore, er
 	self, _ := os.Executable() // runs kubeconfig exec plugins with a timeout (internal/execshim)
 	// Background sessions' plugins run headless while their hold file is
 	// in run/ (P18).
-	providers := []provider.Provider{kubernetes.New().WithExecShim(self, filepath.Join(p.DataDir, "run")), compose.New()}
+	kube, err := kubernetes.New().WithExecShim(self, filepath.Join(p.DataDir, "run")).WithConfigurations(filepath.Join(p.DataDir, "configurations"))
+	if err != nil {
+		_ = st.Close()
+		return nil, err
+	}
+	providers := []provider.Provider{kube, compose.New()}
 	var syn *synthetic.Provider
 	if withSynthetic {
 		syn = synthetic.New()

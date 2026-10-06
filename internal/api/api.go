@@ -6,6 +6,7 @@ package api
 import (
 	"context"
 	"errors"
+	"github.com/spk/spk-ocular/internal/providers/kubernetes"
 	"time"
 
 	"github.com/spk/spk-ocular/internal/agentgrant"
@@ -18,6 +19,7 @@ import (
 )
 
 type API interface {
+	Configurations(context.Context, kubernetes.ConfigRequest) (kubernetes.ConfigState, error)
 	Helm(ctx context.Context, req HelmRequest) (HelmResponse, error)
 	AppInfo(ctx context.Context) (AppInfo, error)
 	// ListTargets re-reads local configuration (kubeconfig, ...): no network.
@@ -28,7 +30,7 @@ type API interface {
 	// ConnectTarget starts an explicit, cancellable connection attempt.
 	ConnectTarget(ctx context.Context, provider, id string) (core.ConnectionStatus, error)
 	CancelConnectTarget(ctx context.Context, provider, id string, attempt uint64) error
-	// CloseTarget closes a target's connection (not the selected one's):
+	// CloseTarget closes a target's connection while retaining its selection:
 	// its caches, watches and log streams (P18).
 	CloseTarget(ctx context.Context, provider, id string) error
 

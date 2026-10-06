@@ -118,7 +118,10 @@ D-Bus without portals; don't assume a timeout means the application is broken.
 ### Data, ownership and permissions
 
 Target identity is stable across unrelated configuration changes. Credentials
-stay out of DTOs/logs/events/SQLite. Configuration revisions are HMACs. Views
+stay out of target DTOs/logs/events/SQLite. Explicit UI-only kubeconfig inspection
+may return bounded YAML with no-store headers; never retain it in metadata or preferences. Kubernetes sources are explicitly
+imported links or master-password-encrypted custom configurations; candidate
+scanning must not create targets. Decrypt custom YAML only in memory. Configuration revisions are HMACs. Views
 belong to one session incarnation; responses, timers and late deliveries cannot
 mutate a replacement. UID distinguishes same-name resource replacements.
 

@@ -14,6 +14,7 @@ import (
 	"github.com/spk/spk-ocular/internal/api"
 	"github.com/spk/spk-ocular/internal/core"
 	"github.com/spk/spk-ocular/internal/events"
+	"github.com/spk/spk-ocular/internal/providers/kubernetes"
 	"github.com/spk/spk-ocular/internal/store"
 )
 
@@ -94,6 +95,9 @@ func writeErr(w http.ResponseWriter, err error) {
 }
 
 func (h *HTTP) routes() {
+	h.mux.Handle("POST /api/Configurations", noStore(http.MaxBytesHandler(handle(func(ctx context.Context, r *kubernetes.ConfigRequest) (any, error) {
+		return h.api.Configurations(ctx, *r)
+	}), 2<<20)))
 	h.mux.Handle("POST /api/Helm", noStore(http.MaxBytesHandler(handle(func(ctx context.Context, req *api.HelmRequest) (any, error) { return h.api.Helm(ctx, *req) }), 6<<20)))
 	h.mux.HandleFunc("POST /api/AppInfo", handle(func(ctx context.Context, _ *struct{}) (any, error) {
 		return h.api.AppInfo(ctx)

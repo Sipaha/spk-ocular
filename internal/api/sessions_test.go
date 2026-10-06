@@ -782,8 +782,8 @@ func TestCloseTargetEndsALeftTargetsSession(t *testing.T) {
 	require.NoError(t, s.CloseTarget(ctx, "k", "a"))
 	assert.True(t, k.opened[0].isClosed())
 	assert.Equal(t, map[string]bool{"a": false, "b": true, "c": false}, openOf(t, s))
-	assert.True(t, IsCoded(s.CloseTarget(ctx, "k", "b"), CodeBadRequest), "the selected target")
-	assert.False(t, k.opened[1].isClosed())
+	require.NoError(t, s.CloseTarget(ctx, "k", "b"), "the selected target can disconnect")
+	assert.True(t, k.opened[1].isClosed())
 	require.NoError(t, s.CloseTarget(ctx, "k", "c"), "nothing open: nothing to do")
 	assert.True(t, IsCoded(s.CloseTarget(ctx, "k", "zz"), CodeNotFound))
 

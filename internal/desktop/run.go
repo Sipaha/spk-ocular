@@ -90,6 +90,8 @@ func Run(ctx context.Context, o Options) error {
 		Linux:            application.LinuxWindow{WebviewGpuPolicy: webviewGPUPolicy(os.Getenv("SPK_OCULAR_GPU"))},
 	})
 
+	configureWindowIcons(win)
+
 	go watchPending(ctx, o.Service, win, bus == busOK, pendingWake)
 
 	go func() {

@@ -48,6 +48,12 @@ Playwright's server-readiness probe does not interpret CIDR entries such as
 | `make test-packaging` | Release input/archive tests, documentation links/language, desktop entry |
 | `make pss PID=123` | Application and webview memory accounting |
 
+Regenerate native icon rasters with `node scripts/render-icons.mjs` after editing
+`internal/appfiles/icons/icon.svg`. The script needs the e2e Chromium installation
+and isolated `OCULAR_SCRATCH_DIR`/`TMPDIR`; it renders at 4x and uses Catmull-Rom
+for the final sizes. GTK supplies the 16/24/32/48/64/128 px family; the 256 px PNG
+remains the application and packaging fallback.
+
 `make run` and `make run-browser` use normal user configuration. Automated or
 manual verification must launch the built executable with isolated HOME,
 DOCKER_CONFIG, SPK_OCULAR_HOME and KUBECONFIG instead. Never restart a user's
@@ -209,3 +215,13 @@ or chart. Keep run output in scratch, not in maintained documentation.
 Ordinary unit/race runs must unset `OCULAR_KIND_KUBECONFIG`,
 `OCULAR_KIND_RBAC_DIR`, `OCULAR_DIND_HOST` and `OCULAR_HELM_LIVE`; these variables
 opt into integration suites and must not leak from a fixture shell.
+
+## Configuration import and encryption checks
+
+`configurations.spec.ts` uses its own disposable process and profile to exercise
+unchecked first-run imports, selective file registration, encrypted YAML creation,
+restart/locked state, incorrect-password refusal and unlock. The other browser
+resource suites explicitly import their fixture files through the UI API before
+running; they do not bypass the production registry. Provider tests verify
+persistent links, fresh nonces, record-bound ciphertext, absence of plaintext
+credentials/passwords and stale-writer refusal. No real kubeconfig is a test input.

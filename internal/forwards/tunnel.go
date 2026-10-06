@@ -345,9 +345,10 @@ func (t *tunnel) handle(c net.Conn) {
 // fail records a connection's error; the tunnel and its other
 // connections carry on.
 func (t *tunnel) fail(err error) {
-	t.failed.Add(1)
 	p := t.m.problem(err)
 	t.mu.Lock()
+	// Publish the count and its error as one snapshot for info().
+	t.failed.Add(1)
 	t.lastErr = p
 	t.mu.Unlock()
 	t.m.notify.changed(true)

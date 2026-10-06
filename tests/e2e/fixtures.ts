@@ -22,6 +22,16 @@ export const test = base.extend<{ cleanPageMemo: void }>({
       const token = html.match(/spk-ocular-api-token" content="([^"]+)"/)?.[1]
       const res = await page.request.post('/api/_test/ui-state/reset', { headers: { Authorization: `Bearer ${token}` } })
       expect(res.ok()).toBeTruthy()
+      // These suites exercise already imported connections. Onboarding has a
+      // separate fresh-profile browser suite and is never bypassed in production.
+      const configHeaders = { Authorization: `Bearer ${token}`, Origin: new URL(root.url()).origin }
+      const status = await page.request.post('/api/Configurations', { headers: configHeaders, data: { command: 'status' } })
+      expect(status.ok()).toBeTruthy()
+      const configState = await status.json()
+      if (!configState.initialized) {
+        const imported = await page.request.post('/api/Configurations', { headers: configHeaders, data: { command: 'import', paths: configState.candidates.filter((c: {problem?: string}) => !c.problem).map((c: {path: string}) => c.path) } })
+        expect(imported.ok()).toBeTruthy()
+      }
       // Resource interaction suites start with their synthetic sections open.
       // Default expansion and persistence have separate, fresh-profile coverage.
       for (const key of ['group:Synthetic', 'group:Health', 'favorites']) {

@@ -55,6 +55,13 @@ const start = async (port: number, e: ReturnType<typeof env>): Promise<ChildProc
         return (await fetch(`http://127.0.0.1:${port}/`, { signal: AbortSignal.timeout(1000) })).ok
       } catch { return false }
     }, { timeout: 20000, message: 'browser app starts' }).toBe(true)
+    // This suite covers workspace persistence; dismiss import explicitly before
+    // opening its synthetic workspace. Fresh onboarding is tested separately.
+    const base=`http://127.0.0.1:${port}`
+    const html=await (await fetch(base)).text()
+    const token=html.match(/spk-ocular-api-token" content="([^"]+)"/)?.[1]
+    const response=await fetch(base+'/api/Configurations',{method:'POST',headers:{Authorization:`Bearer ${token}`,Origin:base,'Content-Type':'application/json'},body:JSON.stringify({command:'dismiss'})})
+    expect(response.ok).toBe(true)
     return p
   } catch (error) {
     await stop(p)

@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { actions, initialState, reconfigured, useStore, visibleTargets } from './store'
 import type { TargetsView } from './api/types'
+import { holdEdits, keepEditing, discardEdits, resetGuard } from './edit/guard'
 import { fakeClient, k8s } from './test/fakeClient'
 
 beforeEach(() => useStore.setState({ ...initialState }))
@@ -99,4 +100,23 @@ describe('reconfigured', () => {
     expect(reconfigured(view, 'k', 'gone', 'r1')).toBe(false)
     expect(reconfigured(null, 'k', 'a', 'r1')).toBe(false)
   })
+})
+
+it('disconnects the selected target only after resolving its unsaved edits', async()=>{
+ const selected=k8s('a',{open:true}),other=k8s('b',{open:true})
+ const f=fakeClient([selected,other]);f.state.view.selected=selected
+ const ops=actions(f.client);await ops.init()
+ const release=holdEdits({dirty:()=>true,discard:vi.fn()})
+ try{
+  await ops.closeTarget(other)
+  expect(f.client.closeTarget).toHaveBeenCalledWith('kubernetes','b')
+  const cancelled=ops.closeTarget(selected)
+  expect(f.client.closeTarget).not.toHaveBeenCalledWith('kubernetes','a')
+  keepEditing();await cancelled
+  expect(f.client.closeTarget).not.toHaveBeenCalledWith('kubernetes','a')
+  const confirmed=ops.closeTarget(selected)
+  discardEdits();await confirmed
+  expect(f.client.closeTarget).toHaveBeenCalledWith('kubernetes','a')
+  expect(useStore.getState().view?.selected?.id).toBe('a')
+ }finally{release();resetGuard()}
 })

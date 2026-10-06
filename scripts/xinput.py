@@ -106,9 +106,13 @@ MODS = {"ctrl": "Control_L", "shift": "Shift_L", "alt": "Alt_L"}
 
 
 def keycode(name):
-    code = x11.XKeysymToKeycode(dpy, x11.XStringToKeysym(name.encode()))
-    if not code:
+    name = {"ArrowDown": "Down", "ArrowUp": "Up", "ArrowLeft": "Left", "ArrowRight": "Right"}.get(name, name)
+    symbol = x11.XStringToKeysym(name.encode())
+    if not symbol:
         sys.exit(f"unknown key {name}")
+    code = x11.XKeysymToKeycode(dpy, symbol)
+    if not code:
+        sys.exit(f"unmapped key {name}")
     return code
 
 

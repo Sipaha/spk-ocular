@@ -175,17 +175,14 @@ func (s *Service) closeSessionWhyLocked(key string, why *core.Message) {
 }
 
 // CloseTarget closes a target's session on the user's word (P18): its
-// views, its log streams (they say so), its caches. Not the selected
-// target's. An agent's call in flight is not cut: the session goes when
+// views, its log streams (they say so), its caches. Selection is retained.
+// An agent's call in flight is not cut: the session goes when
 // the last one ends. It is no longer a recent target.
 func (s *Service) CloseTarget(ctx context.Context, providerID, id string) error {
 	if _, err := s.targetOf(ctx, providerID, id); err != nil {
 		return err
 	}
 	key := ownerKey(providerID, id)
-	if key == s.currentKey(ctx) {
-		return coded(CodeBadRequest, errors.New("the selected target's connection stays open"))
-	}
 	s.sessMu.Lock()
 	defer s.sessMu.Unlock()
 	delete(s.left, key)
@@ -194,6 +191,11 @@ func (s *Service) CloseTarget(ctx context.Context, providerID, id string) error 
 	case e == nil:
 	case len(e.agentCalls) > 0:
 		e.closing = true
+		if a := s.connections[key]; a != nil && a.owner == e.owner {
+			a.status.State, a.status.Phase = "disconnected", "closed"
+			a.status.FinishedAt = s.now().UnixMilli()
+		}
+		s.emitTargetsChanged(providerID)
 	default:
 		m := apiMessage("closedByUser")
 		s.closeSessionWhyLocked(key, &m)

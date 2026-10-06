@@ -406,6 +406,7 @@ func TestPortErrorFailsOneConnectionAndTheNeighbourLives(t *testing.T) {
 	require.Error(t, err)
 	require.Eventually(t, func() bool { return m.List()[0].Failed == 1 }, 3*time.Second, 5*time.Millisecond)
 	l := m.List()[0]
+	require.NotNil(t, l.LastError)
 	assert.Equal(t, "connection refused on port", l.LastError.Message)
 	assert.Equal(t, StateReady, l.State)
 	require.NoError(t, roundTrip(first, "first again"))
@@ -613,4 +614,22 @@ func TestSlowErrorReportDoesNotHoldStop(t *testing.T) {
 	_, err := refused.Read(make([]byte, 1))
 	require.Error(t, err)
 	settled(t, before)
+}
+
+func TestFailureCountAndErrorArePublishedTogether(t *testing.T) {
+	entered, release := make(chan struct{}), make(chan struct{})
+	m := newManager(t, Options{Now: func() time.Time { close(entered); <-release; return time.Now() }})
+	tunnel := &tunnel{m: m, state: StateReady, conns: map[net.Conn]struct{}{}}
+	done := make(chan struct{})
+	go func() { tunnel.fail(errPortRefused); close(done) }()
+	<-entered
+	snapshot := tunnel.info()
+	close(release)
+	require.Zero(t, snapshot.Failed, "a failed count must never precede its error")
+	require.Nil(t, snapshot.LastError)
+	<-done
+	snapshot = tunnel.info()
+	require.EqualValues(t, 1, snapshot.Failed)
+	require.NotNil(t, snapshot.LastError)
+	require.Equal(t, "connection refused on port", snapshot.LastError.Message)
 }

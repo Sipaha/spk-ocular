@@ -6,9 +6,11 @@ package core
 // Target is one thing a provider can connect to: a kube context, a Docker
 // context, an SSH host. ID is stable and unique within the provider.
 type Target struct {
-	Provider string `json:"provider"`
-	ID       string `json:"id"`
-	Title    string `json:"title"`
+	Encrypted bool   `json:"encrypted,omitempty"`
+	Locked    bool   `json:"locked,omitempty"`
+	Provider  string `json:"provider"`
+	ID        string `json:"id"`
+	Title     string `json:"title"`
 	// Subtitle is a short secondary line (the cluster/host), may be empty.
 	Subtitle string `json:"subtitle,omitempty"`
 	// Current marks the provider's own default (kubeconfig current-context).

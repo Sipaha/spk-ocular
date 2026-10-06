@@ -72,8 +72,14 @@ The browser endpoint is local only. In-app automatic updates are not implemented
 
 ## Connections and data
 
-Kubernetes contexts come from `KUBECONFIG` (or `~/.kube/config`) and additional
-kubeconfig files directly under `~/.kube`. Docker connections come from
+On first use, Ocular offers kubeconfig files from `KUBECONFIG` and `~/.kube`
+for explicit selection. Only selected files become connections. **Add kubeconfig**
+lets you select more files or paste a custom kubeconfig. Selected external files
+remain linked and their updates are observed; Ocular never edits them. Custom
+configurations are encrypted using a master password and unlock for the current
+app process only. The password is not stored or recoverable; see
+[configuration storage](docs/usage.md#kubernetes-configurations).
+Docker connections come from
 Docker contexts and the Docker environment variables. Select a target and press
 **Connect** in the resource-list area; selecting or restoring a target does not
 connect. Connection progress includes errors and at most three total automatic

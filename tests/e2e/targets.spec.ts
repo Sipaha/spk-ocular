@@ -13,23 +13,23 @@ test.afterEach(() => {
   writeAtomic(e.extra, EXTRA)
 })
 
-test('lists contexts from KUBECONFIG and ~/.kube, marking current-context', async ({ page }) => {
+test('lists explicitly imported contexts without current-context badges', async ({ page }) => {
   await page.goto('/')
   const list = page.getByRole('listbox', { name: 'targets' })
   await expect(list.getByRole('region', { name: 'Kubernetes' }).getByRole('option')).toHaveCount(4)
-  await expect(option(page, 'prod')).toContainText('current')
+  await expect(option(page, 'prod')).not.toContainText('current')
   await expect(option(page, 'dev')).not.toContainText('current') // second file's current-context loses
   await expect(option(page, 'lab')).toBeVisible() // extra file in ~/.kube
   await expect(page.getByText('Pick a context on the left')).toBeVisible()
   await expect(page.getByText('SECRET')).toHaveCount(0)
 })
 
-test('lists Docker contexts beside the kube contexts, the current one marked, no TLS material or credentials', async ({ page }) => {
+test('lists Docker contexts beside the kube contexts, without current badges, no TLS material or credentials', async ({ page }) => {
   await page.goto('/')
   const docker = page.getByRole('listbox', { name: 'targets' }).getByRole('region', { name: 'Docker' })
   await expect(docker.getByRole('option')).toHaveCount(3)
   await expect(docker.getByRole('option', { name: /^default\b/ })).toContainText('unix:///var/run/docker.sock')
-  await expect(docker.getByRole('option', { name: /^sock\b/ })).toContainText('current')
+  await expect(docker.getByRole('option', { name: /^sock\b/ })).not.toContainText('current')
   await expect(docker.getByRole('option', { name: /^docker-edge\b/ })).toContainText('tcp://edge.example:2376')
   await docker.getByRole('option', { name: /^docker-edge\b/ }).click()
   await page.getByRole('button', { name: 'Connection information' }).click()

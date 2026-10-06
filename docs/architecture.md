@@ -38,10 +38,41 @@ should infer Kubernetes behavior from a kind name.
 
 ## Connections and sessions
 
-Discovery reads local kubeconfig/Docker context files without network I/O.
-Kubeconfig merge is first-wins, with additional kubeconfig files directly under
-`~/.kube`. Target IDs remain stable when other configuration files change.
-Credentials never enter DTOs, events, logs, or SQLite. Configuration revisions
+Production Kubernetes discovery reads only explicitly imported file links and
+encrypted configuration metadata (including locked rows), without network I/O. Candidate discovery
+scans KUBECONFIG and ~/.kube separately from target discovery. Selected primary
+files preserve first-wins order, and selected standalone files remain independent.
+Target IDs remain stable when other configuration files change. App-owned targets
+use a separate stored-config ID domain. Stored YAML resolves directly in memory,
+never through a plaintext temporary file. Locked rows contain only stored context
+names and display names; session creation rejects locked records. Connect alone
+opens the unlock prompt; a successful master entry unlocks every encrypted record
+for the process lifetime. Reset uses a reviewed registry revision, deletes only
+encrypted records and their aliases/key material, and revalidates sessions.
+
+The version-1 configuration envelope uses Argon2id (64 MiB, 3 passes, 4 lanes,
+16-byte random salt, 32-byte key) and AES-256-GCM with fresh nonces and
+record-bound authenticated data. Writes use owner-only temporary files, sync,
+atomic replacement and an OS file lock; stale process snapshots refuse to
+replace a newer registry. Keys clear when the service closes. The UI-only API
+supports status/scan/import/dismiss/setup/unlock/create/resolve/inspect/update/reveal/rename/rename-target/remove.
+Only explicit inspection returns plaintext YAML; other commands return metadata.
+Rename/remove requests bind to the exact entry revision; aliases do not alter
+context identity or credentials. Per-target display aliases bind to both target
+ID and registered source; rename-target checks its own metadata revision and
+never reseals credentials or renames YAML context keys. Removal synchronously revalidates sessions.
+The existing source-loader unit tests can inject unmanaged sources; production
+wiring always enables the explicit registry.
+Credentials never enter target DTOs, events, logs, or SQLite. The UI-only
+`Configurations` inspect command explicitly returns bounded YAML with no-store
+HTTP headers; the frontend keeps it outside configuration metadata and destroys
+the editor on close. Content revisions for source edits are process-keyed HMACs bound to the entry;
+update verifies both metadata and the inspected bytes. Stored updates reseal the
+same ID; external updates lock, check the source, and atomically replace its
+resolved path without replacing a symlink. Update revalidates live sessions.
+The reveal command resolves only a registered,
+revision-checked external file and launches a fixed platform file manager without
+a shell; encrypted records cannot be revealed as files. Configuration revisions
 are process-keyed HMACs, not raw configuration hashes.
 
 UI selection and connection are separate. UI transports use `UIContext`; resource
@@ -230,10 +261,19 @@ later after an unrelated manual selection.
 
 ## Visual and performance constraints
 
+Sidebar provider headings use 14 px semibold text, 16 px icons and a 10 px bottom
+inset before their rows; the subordinate
+Add kubeconfig action uses muted 12 px text.
 Use graphite surfaces, system fonts, 14 px text, a 17 px root rem, 32 px table
 rows, 40 px headers/toolbars, 14 px semibold resource-page titles, and mostly
 2/4 px radii. The SVG app icon embeds as
-256×256 PNG. The resource list reserves 24 px for GTK overlay-scrollbar hit areas.
+256×256 PNG. Desktop and installer icons derive from the website’s optical-eye design,
+with heavier aligned outlines and fewer details for small taskbar sizes. The
+SVG is rasterized at four-times each output size and downsampled with
+Catmull-Rom for smooth edges. GTK supplies exact
+16/24/32/48/64/128 px representations as one icon family so panels choose their
+own size. The combined ARGB property stays below the X11 request limit; simply
+embedding a 512 px PNG can leave the GTK window without a taskbar icon. The resource list reserves 24 px for GTK overlay-scrollbar hit areas.
 Connection details remain a header-button modal; the old Overview page is absent.
 
 `@theme static` preserves runtime ANSI/xterm colors. CodeMirror and xterm are
@@ -279,3 +319,6 @@ operation contexts and pool closure, propagates transaction commit failures and
 does not turn arbitrary read failures into missing releases. It must be compared
 against the upstream SQL schema/codec when upgrading Helm. SQL permissions and
 row-level policies remain the database administrator's responsibility.
+
+Tunnel failure counters and their last-error details are published under the same
+lock, so a snapshot cannot report a failure without its associated error.
