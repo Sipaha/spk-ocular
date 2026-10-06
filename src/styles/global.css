@@ -320,3 +320,6 @@ select { padding: 10px 36px 10px 12px; border: 1px solid var(--line); border-rad
 .download-action .button { max-width: 100%; white-space: normal; }
 .download-action [data-download-text] { min-width: 0; }
 .hero-actions { flex-wrap: wrap; }
+
+/* Keep Japanese download phrases together instead of leaving a syllable on its own line. */
+:lang(ja) [data-download-text] { word-break: keep-all; }

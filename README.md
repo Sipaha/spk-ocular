@@ -11,7 +11,8 @@ are never overridden. The native-name language menu also works without JavaScrip
 with JavaScript it remembers selection and preserves query/fragment. All routes
 have canonical/hreflang metadata and sitemap entries. See
 [localization quality and routing](docs/localization.md).
-The site keeps Ocular’s logo, variable Inter typography, blue accent and matching
+The site keeps Ocular’s logo, variable Inter for Latin/Cyrillic text, system fonts
+for Chinese/Japanese, a blue accent and matching
 light/dark colors. The SVG eye mark uses a blue optical lens, a restrained rim
 and highlight; it remains legible at favicon and navigation sizes. Its product-led layout leads with Kubernetes + Docker,
 a large real app screen and unrestricted free commercial use. The opening copy
