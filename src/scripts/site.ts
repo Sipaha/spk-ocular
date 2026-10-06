@@ -1,4 +1,4 @@
-import { API, detectOS, parseRelease } from '../lib/releases.mjs';
+import { API, detectOS, detectArchitecture, parseRelease, selectDownload } from '../lib/releases.mjs';
 const theme = document.querySelector<HTMLButtonElement>('.theme-toggle');
 if (theme) {
   theme.hidden = false;
@@ -29,16 +29,33 @@ if (tablist && tabs.length === panels.length) {
 const detectedOS = detectOS(navigator.userAgent, navigator.maxTouchPoints);
 const osNames: Record<string,string> = {linux:'Linux',windows:'Windows',darwin:'macOS'};
 const downloadButtons = [...document.querySelectorAll<HTMLAnchorElement>('[data-download-label]')];
-const updateDownloadLabels = (selectedOS: string) => {
+const updateDownloadButtons = (selectedOS: string, file?: {url: string; name: string} | null) => {
   for (const button of downloadButtons) {
-    const labels = JSON.parse(button.dataset.downloadLabel!) as {download: string; downloadFor: string};
-    const text = osNames[selectedOS] ? `${labels.downloadFor} ${osNames[selectedOS]}` : labels.download;
+    const labels = JSON.parse(button.dataset.downloadLabel!) as {download: string; downloadFor: string; choose: string; chooseCompact: string; chooseFor: string};
+    const action = file ? labels.download : labels.choose;
+    const prefix = file ? labels.downloadFor : labels.chooseFor;
+    const text = osNames[selectedOS] ? `${prefix} ${osNames[selectedOS]}` : action;
+    button.href = file?.url || '#downloads';
     button.querySelector<HTMLElement>('[data-download-text]')!.textContent = text;
+    const compact = button.querySelector<HTMLElement>('.compact-download-text');
+    if (compact) compact.textContent = file ? labels.download : labels.chooseCompact;
     button.setAttribute('aria-label', text);
-    button.title = text;
+    button.title = file ? `${text}: ${file.name}` : text;
   }
 };
-updateDownloadLabels(detectedOS);
+updateDownloadButtons(detectedOS);
+async function browserArchitecture(): Promise<string> {
+  const uaData = (navigator as Navigator & {userAgentData?: {getHighEntropyValues: (hints: string[]) => Promise<{architecture?: string; bitness?: string}>}}).userAgentData;
+  if (!uaData) return detectArchitecture(navigator.userAgent);
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    const hints = await Promise.race([
+      uaData.getHighEntropyValues(['architecture','bitness']).catch(() => undefined),
+      new Promise<undefined>(resolve => { timer = setTimeout(() => resolve(undefined), 300); }),
+    ]);
+    return detectArchitecture(navigator.userAgent, hints);
+  } finally { clearTimeout(timer); }
+}
 const host = document.querySelector<HTMLElement>('[data-downloads]');
 if (host) {
   const labels: Record<string, string> = JSON.parse(host.dataset.labels!);
@@ -54,7 +71,8 @@ if (host) {
   const timer = setTimeout(() => controller.abort(), 8000);
   void (async () => {
     try {
-      const response = await fetch(API, { signal: controller.signal, headers: { Accept: 'application/vnd.github+json' } });
+      const [response, architecture] = await Promise.all([fetch(API, { signal: controller.signal, headers: { Accept: 'application/vnd.github+json' } }), browserArchitecture()]);
+      arch.value = detectedOS ? architecture : '';
       if (response.status === 404) { status.textContent = labels.empty; return; }
       if (!response.ok) throw new Error('Release service unavailable');
       const release = parseRelease(await response.json());
@@ -62,7 +80,7 @@ if (host) {
       controls.hidden = false;
       packages.hidden = false;
       const render = () => {
-        updateDownloadLabels(os.value);
+        updateDownloadButtons(os.value, selectDownload(release, os.value, arch.value));
         const files = release.files.filter(file => (!os.value || file.os === os.value) && (!arch.value || file.arch === arch.value));
         status.textContent = files.length ? `${labels.version} ${release.version}` : labels.noMatch;
         packages.replaceChildren(...files.map(file => {

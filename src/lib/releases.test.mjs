@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { parseRelease, detectOS } from './releases.mjs';
+import { parseRelease, detectOS, detectArchitecture, selectDownload } from './releases.mjs';
 const asset = (name, url = 'https://github.com/Sipaha/spk-ocular/releases/download/v0.1.0/' + name) => ({name, browser_download_url:url, size:1024});
 const release = assets => ({tag_name:'v0.1.0',assets});
 test('all six platforms include desktop, browser and matching checksum assets', () => {
@@ -38,4 +38,22 @@ test('desktop installers precede archives and browser builds regardless of uploa
  for(const input of [names,[...names].reverse()]) {
   assert.deepEqual(parseRelease(release(input.map(name=>asset(name)))).files.map(file=>file.name),[names[3],names[2],names[1],names[0]]);
  }
+});
+
+test('architecture detection respects hints and never guesses Intel from a Mac user agent', () => {
+ assert.equal(detectArchitecture('Linux x86_64'),'amd64');
+ assert.equal(detectArchitecture('Windows NT; Win64; x64'),'amd64');
+ assert.equal(detectArchitecture('Linux aarch64'),'arm64');
+ assert.equal(detectArchitecture('Macintosh; Intel Mac OS X'),'');
+ assert.equal(detectArchitecture('Macintosh; Intel Mac OS X',{architecture:'arm',bitness:'64'}),'arm64');
+ assert.equal(detectArchitecture('Win64; x64',{architecture:'x86',bitness:'32'}),'');
+});
+test('primary download is a verified native package for the selected OS and architecture', () => {
+ const result=parseRelease(release([
+  'spk-ocular_0.1.0_linux_amd64.deb','spk-ocular_0.1.0_linux_amd64.tar.gz',
+  'spk-ocular-browser_0.1.0_linux_arm64.tar.gz','spk-ocular_0.1.0_windows_arm64.msi',
+ ].map(name=>asset(name))));
+ assert.equal(selectDownload(result,'linux','amd64').format,'tar.gz');
+ assert.equal(selectDownload(result,'windows','arm64').format,'msi');
+ for (const [os,arch] of [['linux','arm64'],['linux',''],['','amd64'],['darwin','amd64']])assert.equal(selectDownload(result,os,arch),null);
 });

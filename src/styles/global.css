@@ -50,6 +50,9 @@ p { color: var(--muted); text-wrap: pretty; }
 .brand strong { font-weight: 650; }
 .desktop-nav { display: flex; gap: 25px; margin-left: auto; font-size: 13px; font-weight: 550; color: var(--muted); white-space: nowrap; }
 .header-actions { display: flex; gap: 18px; align-items: center; }
+.github-link { display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.github-link svg { display: block; width: 20px; height: 20px; }
+.mobile-nav .github-link svg { width: 16px; height: 16px; }
 .language { font-size: 12px; font-weight: 650; }
 .theme-toggle { width: 32px; height: 32px; display: grid; place-items: center; border: 0; background: none; padding: 0; color: var(--muted); border-radius: 4px; }
 .theme-toggle:hover { background: var(--surface); color: var(--fg); }

@@ -37,3 +37,22 @@ export function detectOS(ua, touchPoints = 0) {
   if (/Linux|X11/.test(ua) && !/CrOS/.test(ua)) return 'linux';
   return '';
 }
+
+/** macOS can report Intel on Apple Silicon; use explicit browser architecture hints. */
+export function detectArchitecture(ua, hints) {
+ if (hints?.bitness === '64') {
+  if (hints.architecture === 'arm') return 'arm64';
+  if (hints.architecture === 'x86') return 'amd64';
+ }
+ if (hints?.bitness === '32') return '';
+ if (/aarch64|arm64/i.test(ua)) return 'arm64';
+ if (/Macintosh|Mac OS X/i.test(ua)) return '';
+ return /x86_64|amd64|Win64|x64/i.test(ua) ? 'amd64' : '';
+}
+/** Only native app assets qualify; Linux uses a distro-neutral portable archive. */
+export function selectDownload(release, os, arch) {
+ if (!os || !arch || !release) return null;
+ const files=release.files.filter(file=>!file.browser && file.os===os && file.arch===arch);
+ const format={linux:'tar.gz',windows:'msi',darwin:'dmg'}[os];
+ return files.find(file=>file.format===format) || null;
+}

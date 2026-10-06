@@ -118,35 +118,53 @@ try{
    for(const suffix of ['', '.sha256']) assets.push({name:name+suffix,browser_download_url:`${REPO}/releases/download/v0.1.0/${name}${suffix}`,size:1048576});
   }
  }
- for (const [ua,expectedOS,name] of [
-  ['Mozilla/5.0 (Windows NT 10.0; Win64; x64)','windows','Windows'],
-  ['Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)','darwin','macOS'],
-  ['Mozilla/5.0 (X11; Linux x86_64)','linux','Linux'],
-  ['Mozilla/5.0 (Linux; Android 14; Mobile)','',''],
+ for (const [ua,expectedOS,name,expectedArch,hints] of [
+  ['Mozilla/5.0 (Windows NT 10.0; Win64; x64)','windows','Windows','amd64'],
+  ['Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)','darwin','macOS','arm64',{architecture:'arm',bitness:'64'}],
+  ['Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)','darwin','macOS',''],
+  ['Mozilla/5.0 (X11; Linux x86_64)','linux','Linux','amd64'],
+  ['Mozilla/5.0 (Linux; Android 14; Mobile)','','',''],
  ]) for (const lang of ['ru','en']) {
   const page=await browser.newPage({userAgent:ua,viewport:{width:320,height:1000},reducedMotion:'reduce'});
+  await page.addInitScript(hints => Object.defineProperty(navigator,'userAgentData',{value:hints?{getHighEntropyValues:async()=>hints}:undefined,configurable:true}), hints);
   await page.route(API,r=>r.fulfill({json:{tag_name:'v0.1.0',assets}}));
+  await page.route(`${REPO}/releases/download/**`,r=>r.fulfill({headers:{'Content-Type':'application/octet-stream','Content-Disposition':`attachment; filename="${r.request().url().split('/').pop()}"`},body:'Synthetic test package'}));
   await page.goto(root+(lang==='en'?'en/':''),{waitUntil:'networkidle'});
   await expect(page.locator('select[name=os]')).toHaveValue(expectedOS);
+  await expect(page.locator('select[name=arch]')).toHaveValue(expectedArch);
   await expect(page.locator('.compact-download-text')).toBeVisible();
   await expect(page.locator('.language')).toBeVisible();
-  await expect(page.locator('select[name=arch]')).toHaveValue('');
-  const buttons=page.locator('[data-download-text]');
-  for (const label of await buttons.allTextContents()) expect(label).toBe(name?`${lang==='ru'?'Скачать для':'Download for'} ${name}`:lang==='ru'?'Скачать':'Download');
+  const buttons=page.locator('[data-download-label]');
+  const direct=!!(expectedOS&&expectedArch);
+  const prefix=direct?(lang==='ru'?'Скачать для':'Download for'):(lang==='ru'?'Выбрать для':'Choose for');
+  for (const label of await page.locator('[data-download-text]').allTextContents()) expect(label).toBe(name?`${prefix} ${name}`:lang==='ru'?'Выбрать пакет':'Choose a download');
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
-  if (expectedOS) for(const href of await page.locator('.package a').evaluateAll(els=>els.map(el=>el.href)))expect(href).toContain(`_${expectedOS}_`);
-  else await expect(page.locator('.package')).toHaveCount(20);
+  if(direct) {
+   const extension={linux:'tar.gz',windows:'msi',darwin:'dmg'}[expectedOS];
+   const filename=`spk-ocular_0.1.0_${expectedOS}_${expectedArch}.${extension}`;
+   for(const button of await buttons.all()) {
+    await expect(button).toHaveAttribute('href',`${REPO}/releases/download/v0.1.0/${filename}`);
+    const downloaded=page.waitForEvent('download');await button.click();const file=await downloaded;
+    expect(file.suggestedFilename()).toBe(filename);
+    await file.saveAs(path.join(out,`${lang}-${filename}`));
+    expect(readFileSync(path.join(out,`${lang}-${filename}`),'utf8')).toBe('Synthetic test package');
+    expect(new URL(page.url()).hash).toBe('');
+   }
+  } else {
+   await expect(buttons.first()).toHaveAttribute('href','#downloads');
+   await buttons.first().click();await expectAnchorPosition(page,'downloads');
+  }
   await page.locator('select[name=os]').selectOption('darwin');
-  await expect(buttons.first()).toHaveText(lang==='ru'?'Скачать для macOS':'Download for macOS');
-  await page.locator('.header-actions a[href="#downloads"]').click();
-  await expect(page.locator('select[name=os]')).toHaveValue('darwin');
-  await expectAnchorPosition(page,'downloads');
-  await page.close();console.log(`PASS ${lang} ${name||'mobile'}: automatic OS, button label, manual override and 320px layout`);
+  await page.locator('select[name=arch]').selectOption('arm64');
+  await expect(buttons.first()).toHaveAttribute('href',`${REPO}/releases/download/v0.1.0/spk-ocular_0.1.0_darwin_arm64.dmg`);
+  await page.locator('select[name=arch]').selectOption('');
+  await expect(buttons.first()).toHaveAttribute('href','#downloads');
+  await page.close();console.log(`PASS ${lang} ${name||'mobile'} ${expectedArch||'unknown architecture'}: real download, correct native asset, manual override and safe fallback`);
  }
  const page=await browser.newPage();await page.route(API,r=>r.fulfill({json:{tag_name:'v0.1.0',assets:[...assets].reverse()}}));
  await page.goto(root+'en/',{waitUntil:'networkidle'});
  await expect(page.locator('.package').first()).toContainText('Desktop app');
- await page.locator('select[name=os]').selectOption('');await expect(page.locator('.package')).toHaveCount(20);
+ await page.locator('select[name=os]').selectOption('');await page.locator('select[name=arch]').selectOption('');await expect(page.locator('.package')).toHaveCount(20);
  await page.locator('select[name=os]').selectOption('windows');await page.locator('select[name=arch]').selectOption('arm64');await expect(page.locator('.package')).toHaveCount(3);
  for(const href of await page.locator('.package a').evaluateAll(els=>els.map(el=>el.href)))expect(href).toContain('_windows_arm64.');
  await page.close();console.log('PASS all 20 assets, six platforms, architecture filters and checksums');

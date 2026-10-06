@@ -19,7 +19,8 @@ The theme control uses a fixed-size Phosphor SVG; its MIT license is in
 `public/licenses/phosphor-icons.txt` (upstream commit
 `2b75f3ad12b420c9504ef05df8d2564a28f8500e`). Mobile navigation and Download remain
 visible. Both desktop and mobile header navigation include a GitHub link to
-the SPK Ocular repository. All content, full-size screenshots and download fallback links work
+the SPK Ocular repository. The link uses GitHub’s mark from Primer Octicons,
+bundled locally; its MIT license is in `public/licenses/octicons.txt`. All content, full-size screenshots and download fallback links work
 without JavaScript. Gallery tabs enhance static figures; FAQ answers stay visible.
 Reduced motion, keyboard navigation and semantic light/dark colors are preserved.
 Section anchors subtract the section’s responsive top padding from the scroll
@@ -83,14 +84,17 @@ before checks. In the SPK-Ocular solution the default test output is
 
 Download links come from the public GitHub latest-release API for
 `Sipaha/spk-ocular`. Files must match the release version, supported OS/architecture,
-package format and repository URL. Missing checksums are not fabricated. The OS
-is selected automatically on desktop and the main download buttons name that OS.
-Changing the OS selector updates those labels. The narrow-screen header keeps
-the short Download caption while its accessible label and tooltip name the OS;
-the other download buttons show the full caption. Mobile/unknown devices keep the
-generic Download label and show all operating systems. Architecture is always an
-explicit visitor choice. Without a
-stable release or an available API, visible GitHub release and development-build
+package format and repository URL. Missing checksums are not fabricated.
+The OS and architecture are selected automatically when the browser provides
+reliable hints. macOS's Intel user-agent text alone is not architecture evidence.
+The primary buttons download the matching native Linux TAR.GZ, Windows MSI or
+macOS DMG directly. Linux uses a distro-neutral portable archive; DEB/RPM and
+other formats remain in the package list. Manual selectors update the buttons.
+When a compatible asset or reliable architecture is missing, buttons say Choose
+and navigate to package selection. Mobile/unknown devices keep the general choice.
+The narrow-screen header uses a short Download/Choose caption with a complete
+accessible label. Without JavaScript, Choose links navigate to the download section.
+Without a stable release or an available API, visible GitHub release and development-build
 links remain. Three installation steps explain the installer formats, checksum
 verification and existing Kubernetes/Docker configuration. Public release packages
 do not require a GitHub account; CI development artifacts remain a separate path.
