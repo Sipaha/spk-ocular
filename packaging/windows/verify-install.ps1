@@ -27,6 +27,7 @@ try {
   $installed = Join-Path $install 'spk-ocular.exe'
   if ((Get-FileHash $source).Hash -ne (Get-FileHash $installed).Hash) { throw 'MSI executable content mismatch' }
   if ((Get-FileHash (Join-Path $root 'LICENSE')).Hash -ne (Get-FileHash (Join-Path $install 'LICENSE')).Hash) { throw 'MSI license mismatch' }
+  if ((Get-FileHash (Join-Path $root 'THIRD-PARTY-NOTICES.txt')).Hash -ne (Get-FileHash (Join-Path $install 'THIRD-PARTY-NOTICES.txt')).Hash) { throw 'MSI third-party notices mismatch' }
   $shortcut = Join-Path ([Environment]::GetFolderPath('Programs')) 'SPK Ocular.lnk'
   if (!(Test-Path $shortcut)) { throw 'Start menu shortcut missing' }
 } finally {
@@ -34,4 +35,5 @@ try {
   if ($p.ExitCode -notin @(0,3010)) { throw "MSI removal failed: $($p.ExitCode)" }
 }
 if (Test-Path (Join-Path $install 'spk-ocular.exe')) { throw 'MSI executable was not removed' }
+if (Test-Path (Join-Path $install 'THIRD-PARTY-NOTICES.txt')) { throw 'MSI third-party notices were not removed' }
 Write-Host 'Verified MSI metadata, real install, payload, shortcut and removal'

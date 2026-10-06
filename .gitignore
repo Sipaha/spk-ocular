@@ -14,3 +14,5 @@ coverage.*
 __pycache__/
 
 /cmd/spk-ocular/*_windows_*.syso
+
+/web/license-inputs.json

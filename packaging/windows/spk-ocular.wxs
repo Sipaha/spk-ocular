@@ -19,12 +19,16 @@
     <Component Id="License" Directory="INSTALLFOLDER" Guid="*">
       <File Source="LICENSE" KeyPath="yes" />
     </Component>
+    <Component Id="ThirdPartyNotices" Directory="INSTALLFOLDER" Guid="*">
+      <File Source="THIRD-PARTY-NOTICES.txt" KeyPath="yes" />
+    </Component>
     <Component Id="StartMenuShortcut" Directory="ProgramMenuFolder" Guid="*">
       <Shortcut Id="AppShortcut" Name="SPK Ocular" Target="[INSTALLFOLDER]spk-ocular.exe" WorkingDirectory="INSTALLFOLDER" Icon="AppIcon" />
       <RegistryValue Root="HKCU" Key="Software\SPK\Ocular" Name="installed" Type="integer" Value="1" KeyPath="yes" />
     </Component>
     <Feature Id="Main" Title="SPK Ocular" Level="1">
       <ComponentRef Id="MainExe" /><ComponentRef Id="License" /><ComponentRef Id="StartMenuShortcut" />
+      <ComponentRef Id="ThirdPartyNotices" />
     </Feature>
   </Package>
 </Wix>

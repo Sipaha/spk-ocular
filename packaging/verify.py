@@ -120,6 +120,7 @@ def verify_native(directory, release_version, arch):
         'usr/share/pixmaps/spk-ocular.png': (ROOT / 'internal/appfiles/icons/icon.png', 0o644),
         'usr/share/metainfo/io.github.sipaha.SPKOcular.metainfo.xml': (ROOT / 'packaging/linux/io.github.sipaha.SPKOcular.metainfo.xml', 0o644),
         'usr/share/doc/spk-ocular/LICENSE': (ROOT / 'LICENSE', 0o644),
+        'usr/share/doc/spk-ocular/THIRD-PARTY-NOTICES.txt': (ROOT / 'THIRD-PARTY-NOTICES.txt', 0o644),
     }
     for name, (source, mode) in expected.items():
         for kind, files in [('DEB', deb_files), ('RPM', rpm_files)]:
@@ -150,6 +151,9 @@ def verify_native(directory, release_version, arch):
             actual = subprocess.check_output([str(binary), 'version'], env=env, text=True).strip()
             if actual != f'spk-ocular {release_version}':
                 raise ValueError('archive version mismatch')
+            notices = subprocess.check_output([str(binary), 'licenses'], env=env)
+            if notices != (ROOT / 'THIRD-PARTY-NOTICES.txt').read_bytes():
+                raise ValueError('embedded third-party notices differ from the packaged document')
     print(f'Validated DEB, RPM and both archives for linux/{arch} {release_version}')
 
 

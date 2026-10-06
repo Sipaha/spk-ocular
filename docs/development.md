@@ -39,6 +39,7 @@ Playwright's server-readiness probe does not interpret CIDR entries such as
 | --- | --- |
 | `make build` | Web bundle and static browser-mode binary in `build/bin/spk-ocular` |
 | `make build-desktop` | Native development window in `build/bin/spk-ocular-desktop` |
+| `make licenses` | Regenerate committed third-party notices from exact build inputs |
 | `make release VERSION=0.1.0` | Native production binary without DevTools |
 | `make package-linux` | Production DEB/RPM and desktop/browser archives |
 | `make lint` | Go vet and lint with both tag sets, ESLint/TypeScript, workflow/shell validation |

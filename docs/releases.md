@@ -76,6 +76,32 @@ The implementation uses documented [reusable workflows](https://docs.github.com/
 [native ARM runners](https://docs.github.com/en/actions/reference/runners/github-hosted-runners),
 and [Wails Linux packaging](https://v3.wails.io/guides/build/linux/).
 
+## Third-party licenses
+
+`make build-web` collects exact installed frontend production dependencies and
+Tailwind's generated CSS license and Vite/Rolldown's injected runtime helpers. `packaging/licenses.py` uses Go's selected
+production package graphs for browser and desktop builds on all six supported
+targets, including the Go runtime, upstream `NOTICE` files and legal texts in
+used package trees. Test-only dependencies are not selected. SQLite's inherited
+third-party notices are retained. Missing legal texts stop the build; new
+frontend licenses other than MIT require review. The Wails npm runtime omits its
+license text, so the collector verifies its version against the Go module and
+uses that module's upstream MIT license.
+
+The generated `THIRD-PARTY-NOTICES.txt` is committed with dependency changes and
+embedded in every binary. Run `make licenses` to regenerate it and
+`python3 packaging/licenses.py --check` to check freshness after collecting the
+frontend inputs. `spk-ocular licenses` prints the embedded document without
+opening a window or connecting to infrastructure.
+
+Every archive includes the document; DEB/RPM install it under
+`/usr/share/doc/spk-ocular`, MSI beside the executable, and macOS bundles under
+`Contents/Resources`. Artifact verification compares the external and embedded
+texts to the source document, and native MSI verification checks its installation
+and removal. The app's Apache-2.0 license does not replace component licenses.
+The adapted Helm SQL storage files preserve upstream headers and explicitly
+identify Ocular's modifications.
+
 ## Prepare a version
 
 1. Add `changelog/<version>/en.md` and `ru.md`. Notes describe the user-visible

@@ -5,6 +5,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"io/fs"
 	"os"
 	"os/signal"
 	"syscall"
@@ -54,6 +55,19 @@ func newRootCmd(run runners) *cobra.Command {
 	root.Flags().BoolVar(&o.TestAPI, "test-api", false, "Expose /api/_test/* automation routes (development/e2e only; desktop: on a loopback port written to test-api.json in the data directory)")
 	root.Flags().BoolVar(&o.TestSynthetic, "test-synthetic", false, "Add a synthetic test provider (e2e only; needs --test-api)")
 	_ = root.Flags().MarkHidden("test-synthetic")
+	root.AddCommand(&cobra.Command{
+		Use:   "licenses",
+		Short: "Print third-party licenses and notices embedded in this build",
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			data, err := fs.ReadFile(frontendFS(), "THIRD-PARTY-NOTICES.txt")
+			if err != nil {
+				return fmt.Errorf("third-party notices are not embedded; build with make build or make build-desktop: %w", err)
+			}
+			_, err = cmd.OutOrStdout().Write(data)
+			return err
+		},
+	})
 	root.AddCommand(&cobra.Command{
 		Use:   "version",
 		Short: "Print the version",

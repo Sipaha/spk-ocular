@@ -65,6 +65,8 @@ def verify(directory, release_version, platform, arch):
             actual = subprocess.check_output([str(source), 'version'], env=env, text=True).strip()
             if actual != f'spk-ocular {release_version}':
                 raise ValueError(f'wrong executable version: {actual}')
+            if subprocess.check_output([str(source), 'licenses'], env=env) != (ROOT / 'THIRD-PARTY-NOTICES.txt').read_bytes():
+                raise ValueError('embedded third-party notices differ from the packaged document')
     if platform == 'darwin':
         dmg = directory / f'spk-ocular_{release_version}_darwin_{arch}.dmg'
         with tempfile.TemporaryDirectory() as scratch:

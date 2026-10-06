@@ -46,7 +46,7 @@ def archive(path, entries, epoch):
 
 
 def document_paths(root=ROOT):
-    paths = [root / name for name in ('LICENSE', 'README.md', 'AGENTS.md')]
+    paths = [root / name for name in ('LICENSE', 'THIRD-PARTY-NOTICES.txt', 'README.md', 'AGENTS.md')]
     paths += sorted(path for directory in ('docs', 'changelog') for path in (root / directory).rglob('*') if path.is_file())
     return paths
 

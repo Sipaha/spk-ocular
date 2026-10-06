@@ -22,9 +22,13 @@ build: build-web build-go
 
 build-web:
 	cd web && pnpm install --frozen-lockfile --silent && pnpm build
+	python3 packaging/licenses.py
+
+.PHONY: licenses
+licenses: build-web
 
 # Browser-mode binary: pure Go (modernc SQLite), no cgo.
-build-go:
+build-go: build-web
 	mkdir -p $(BIN_DIR)
 	$(call with_dist,CGO_ENABLED=0 go build -trimpath -ldflags="$(LDFLAGS)" -o $(BIN) ./cmd/spk-ocular)
 

@@ -8,6 +8,7 @@ import plistlib
 import shutil
 import struct
 import subprocess
+import sys
 import tempfile
 import time
 import zipfile
@@ -79,6 +80,7 @@ def build(release_version, platform, arch, stage):
         env['CGO_LDFLAGS'] = env.get('CGO_LDFLAGS', '') + ' -mmacosx-version-min=12.0'
     run(shutil.which('pnpm') or 'pnpm', '--dir', 'web', 'install', '--frozen-lockfile')
     run(shutil.which('pnpm') or 'pnpm', '--dir', 'web', 'build')
+    run(sys.executable, 'packaging/licenses.py')
     dist = ROOT / 'cmd/spk-ocular/dist'
     resource = ROOT / f'cmd/spk-ocular/rsrc_windows_{arch}.syso'
     suffix = '.exe' if platform == 'windows' else ''

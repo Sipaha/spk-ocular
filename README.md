@@ -119,4 +119,6 @@ and publication.
 
 ## License
 
-[Apache License 2.0](LICENSE).
+[Apache License 2.0](LICENSE). Dependencies retain their own licenses; see
+[third-party notices](THIRD-PARTY-NOTICES.txt). Run `spk-ocular licenses` to read
+the notices embedded in a downloaded build.
