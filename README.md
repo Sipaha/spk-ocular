@@ -5,7 +5,7 @@ lives on `master`; this worktree does not change its builds or release history.
 
 Astro generates Russian (`/spk-ocular/`) and English (`/spk-ocular/en/`) pages.
 The site keeps Ocular’s logo, variable Inter typography, blue accent and matching
-light/dark colors. Its product-led layout leads with Kubernetes + Docker Compose,
+light/dark colors. Its product-led layout leads with Kubernetes + Docker,
 a large real app screen and unrestricted free commercial use. Investigation,
 logs/terminal/forwarding, Helm and scoped local agent access have dedicated
 sections. Connection retries and low-level persistence mechanics belong in the
@@ -28,9 +28,11 @@ code because the owner has not supplied verified wallet/network details.
 
 Local agent grants apply to processes running as the same OS user. Do not imply
 separate authenticated agent identities or a security sandbox. Kubernetes and
-Compose capabilities are distinct from providing a container runtime. The Helm
+Docker capabilities are distinct from providing a container runtime. The Helm
 section describes the implemented development build, not a separately verified
-published release. The gallery explicitly identifies development screenshots.
+published release. Docker includes standalone containers and Compose project/service
+grouping; it does not supply a runtime. Standalone containers remain UI-only and
+are not included in existing agent project grants. The gallery explicitly identifies development screenshots.
 
 Design references: [Aptakube](https://aptakube.com/) for task-led feature stories
 and large product screens, [Lens](https://lenshq.io/) for product hierarchy, and
@@ -80,7 +82,9 @@ links remain. The site neither uploads user data nor starts any app connection.
 `workloads-{ru,en}.webp`, `logs-{ru,en}.webp` and `health-{ru,en}.webp`
 show read-only inspection of the disposable `kind-ocular-dev` / `ocular-demo`
 fixture. `helm-{ru,en}.webp` shows the built-in synthetic Helm fixture, labeled
-separately. Captures use the current `fc39a6e-dirty` development build with isolated
+separately. `docker-{ru,en}.webp` shows a disposable standalone container
+alongside Compose containers on the verified `ocular-dind` engine. Its temporary
+container is removed after capture. Captures use the current `fc39a6e-dirty` development build with isolated
 HOME, Docker, Ocular and kubeconfig directories. They contain no user environment
 or credentials. WebP conversion preserves the real app image; the UI is not
 reconstructed or generated. Social cards are rendered by `scripts/social.mjs`

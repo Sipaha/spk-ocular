@@ -36,6 +36,10 @@ try{
   await expect(page.locator('#free')).toContainText(lang==='ru'?'Без ограничений по обороту':'No limits based on revenue');
   await expect(page.locator('#support')).toContainText(lang==='ru'?'добровольными':'voluntary');
   await expect(page.locator('#helm')).toContainText('Helm');
+  await expect(page.locator('h1')).toContainText(lang==='ru'?'Kubernetes и Docker.':'Kubernetes & Docker.');
+  await expect(page).toHaveTitle(/Kubernetes.*Docker/);
+  await expect(page.locator('h1')).not.toContainText('Compose');
+  await expect(page.locator('body')).toContainText(lang==='ru'?'Отдельные контейнеры':'standalone containers');
   await expect(page.locator('.header-actions a[href="#downloads"]')).toBeVisible();
   const navigation=page.locator(width<=960?'.mobile-nav':'.desktop-nav');
   await expect(navigation).toBeVisible();
@@ -53,7 +57,7 @@ try{
   if(width===1440)await page.screenshot({path:path.join(out,`${lang}-${theme}-hero.png`)});
   const tabs=page.getByRole('tab');await tabs.nth(0).focus();await page.keyboard.press('ArrowRight');
   await expect(tabs.nth(1)).toHaveAttribute('aria-selected','true');await expect(page.locator('#shot-1')).toBeVisible();await expect(page.locator('#shot-0')).toBeHidden();
-  await page.keyboard.press('End');await expect(tabs.nth(2)).toHaveAttribute('aria-selected','true');
+  await page.keyboard.press('End');await expect(tabs.nth(3)).toHaveAttribute('aria-selected','true');
   await page.locator('.theme-toggle').click();await expect(page.locator('html')).toHaveAttribute('data-theme',theme==='dark'?'light':'dark');
   await page.reload();await expect(page.locator('html')).toHaveAttribute('data-theme',theme==='dark'?'light':'dark');
   await context.close();console.log(`PASS ${lang} ${theme} ${width}: layout, images, theme, keyboard tabs, axe`);
@@ -64,7 +68,7 @@ try{
   await page.goto(root,{waitUntil:'networkidle'});
   await expect(page.locator(`a[href="${RELEASES}"]`)).toBeVisible();
   if(!javaScriptEnabled){
-   for(const id of [0,1,2])await expect(page.locator('#shot-'+id)).toBeVisible();
+   for(const id of [0,1,2,3])await expect(page.locator('#shot-'+id)).toBeVisible();
    await expect(page.locator('#free')).toContainText('Бесплатно');
    await page.locator('.header-actions a[href="#downloads"]').click();
    await expect(page.locator('#downloads h2')).toBeInViewport();
