@@ -5,10 +5,12 @@ lives on `master`; this worktree does not change its builds or release history.
 
 Astro generates Russian (`/spk-ocular/`) and English (`/spk-ocular/en/`) pages.
 The site keeps Ocular’s logo, variable Inter typography, blue accent and matching
-light/dark colors. Its product-led layout leads with Kubernetes + Docker,
+light/dark colors. The SVG eye mark uses a blue optical lens, a restrained rim
+and highlight; it remains legible at favicon and navigation sizes. Its product-led layout leads with Kubernetes + Docker,
 a large real app screen and unrestricted free commercial use. The opening copy
 identifies a desktop app for developers and DevOps, with local/no-account use
-next to Download. Task captions explain what each screenshot demonstrates. Investigation,
+next to Download. Desktop hero columns align at the top, with a small optical
+offset for the different heading/body font sizes. Task captions explain what each screenshot demonstrates. Investigation,
 logs/terminal/forwarding, Helm and scoped local agent access have dedicated
 sections. Connection retries and low-level persistence mechanics belong in the
 application documentation, not the main marketing message.
