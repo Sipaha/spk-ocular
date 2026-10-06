@@ -6,7 +6,9 @@ lives on `master`; this worktree does not change its builds or release history.
 Astro generates Russian (`/spk-ocular/`) and English (`/spk-ocular/en/`) pages.
 The site keeps Ocular’s logo, variable Inter typography, blue accent and matching
 light/dark colors. Its product-led layout leads with Kubernetes + Docker,
-a large real app screen and unrestricted free commercial use. Investigation,
+a large real app screen and unrestricted free commercial use. The opening copy
+identifies a desktop app for developers and DevOps, with local/no-account use
+next to Download. Task captions explain what each screenshot demonstrates. Investigation,
 logs/terminal/forwarding, Helm and scoped local agent access have dedicated
 sections. Connection retries and low-level persistence mechanics belong in the
 application documentation, not the main marketing message.
@@ -77,7 +79,10 @@ Download links come from the public GitHub latest-release API for
 package format and repository URL. Missing checksums are not fabricated. The OS
 may be suggested; architecture is always an explicit visitor choice. Without a
 stable release or an available API, visible GitHub release and development-build
-links remain. The site neither uploads user data nor starts any app connection.
+links remain. Three installation steps explain the installer formats, checksum
+verification and existing Kubernetes/Docker configuration. Public release packages
+do not require a GitHub account; CI development artifacts remain a separate path.
+No unmeasured memory or comparative size claims are published. The site neither uploads user data nor starts any app connection.
 
 `workloads-{ru,en}.webp`, `logs-{ru,en}.webp` and `health-{ru,en}.webp`
 show read-only inspection of the disposable `kind-ocular-dev` / `ocular-demo`

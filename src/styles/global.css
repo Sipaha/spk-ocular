@@ -263,3 +263,7 @@ select { padding: 10px 36px 10px 12px; border: 1px solid var(--line); border-rad
   :root { scroll-behavior: auto; }
   *, *:before, *:after { animation: none !important; transition: none !important; }
 }
+
+.local-short { font-size: 13px; color: var(--muted); margin-top: 16px; }
+.install-steps { padding-left: 22px; margin: 28px 0; color: var(--muted); max-width: 850px; }
+.install-steps li { padding-left: 6px; margin-block: 10px; }
