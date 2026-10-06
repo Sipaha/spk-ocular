@@ -26,8 +26,7 @@ included in a downloaded version.
 ## Install
 
 Download a package matching your architecture from
-[GitHub Releases](https://github.com/Sipaha/spk-ocular/releases).
-If no release is published yet, use the source-build instructions below.
+[GitHub Releases](https://github.com/Sipaha/spk-ocular/releases/latest).
 Desktop packages cover **Linux, Windows and macOS**, each for `amd64` (x86-64)
 and `arm64` (AArch64 / Apple Silicon). Windows requires Windows 10/11 and
 Microsoft Edge WebView2 Runtime; macOS requires 12 or newer.

@@ -17,7 +17,9 @@ by real product screens and daily tasks rather than connection-button mechanics.
 
 The page now presents:
 
-- A large localized app screenshot and a direct Download action.
+- An explicit desktop-app introduction for developers and DevOps, with local
+  operation and no-account access beside Download.
+- A large localized app screenshot with a concrete task caption.
 - Investigation through resource health, events, relationships and configuration.
 - Related logs, search, terminals and port forwarding, without promising complete
   observation or unrestricted log history.
@@ -29,17 +31,22 @@ The page now presents:
 - Open-source local operation, free commercial use and optional donation funding.
 - An accessible full-size image gallery, mobile section navigation, installation
   requirements, signature status and visible FAQ answers.
+- A three-step installation guide and separate release/development download paths.
 
 Screenshots show the current development build on an isolated local Kubernetes
 fixture and a verified disposable Docker engine, including standalone containers
 and Compose grouping; Helm uses a separately labeled synthetic fixture. Screenshots are real
 app captures, not reconstructed mockups. Product implementation is not proof that
-a corresponding stable release asset has been published.
+a corresponding stable release asset has been published. Stable packages are
+available through [GitHub Releases](https://github.com/Sipaha/spk-ocular/releases/latest);
+the site selects validated assets from the latest stable release.
 
 The release selector preserves repository/version/asset validation, explicit
 architecture selection, actual checksum links, an eight-second request timeout
 and no-JavaScript/offline fallback links. Development-build guidance explains
-that GitHub login may be needed and artifacts expire.
+that GitHub login may be needed and artifacts expire. Public release downloads
+do not require an account. No memory or comparative size claim is published
+without reproducible measurements for the stated platform and scenario.
 
 ## Confirmed funding model
 
@@ -64,11 +71,11 @@ not evidence of measured conversion uplift for Ocular.
 
 ## Remaining work before promotion
 
-- Verify the anonymous visitor's complete application download/install path,
-  including real package assets, checksums, CI login requirements and artifact
-  expiry. Public website availability alone does not establish this.
-- Verify native package installation and publisher/signature instructions against
-  each released platform. The website cannot certify untested release artifacts.
+- Keep validating the anonymous download path and checksums for each release.
+  Native CI checks DEB/MSI installation and removal, macOS DMG/bundle verification,
+  and native UI startup. These checks cover the configured runner environments,
+  not every supported OS version or user machine. Signing/notarization remains
+  a separate distribution improvement.
 - Add dedicated quickstart, trust and task guides as the documentation and release
   paths mature; extend sitemap/structured metadata to match actual routes.
 - Consider a real Compose workflow and agent grant/review demonstration in the

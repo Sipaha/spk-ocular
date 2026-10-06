@@ -121,7 +121,7 @@ The remaining work concerns the complete installation journey and deeper guides.
 
 | Priority | Remaining change | Verification |
 | --- | --- | --- |
-| P0 | Verify the anonymous visitor's download/install journey for published application releases | Real assets and checksums, CI login/retention limits and fresh native OS profiles; website deployment alone is insufficient |
+| P0 | Keep validating the download/install journey for each published release | Stable packages are available; preserve anonymous downloads, checksum verification and native runner installation checks |
 | P1 | Extend the existing FAQ and installation guidance into quickstart, trust and task pages | Explain actual credential/helper/Secret/network behavior and reproducible troubleshooting tasks |
 | P1 | Add a Compose workflow and agent grant/review demonstration | Actual app on disposable fixtures; version labels and accurate scope/revocation behavior |
 | Conditional | Add donation network/address/QR details when supplied and authorized by the owner | Verify all representations against the owner's source; retain optional support with no feature gates |
