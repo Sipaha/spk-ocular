@@ -3,10 +3,27 @@ import { actions, initialState, reconfigured, useStore, visibleTargets } from '.
 import type { TargetsView } from './api/types'
 import { holdEdits, keepEditing, discardEdits, resetGuard } from './edit/guard'
 import { fakeClient, k8s } from './test/fakeClient'
+import * as i18n from './i18n'
 
 beforeEach(() => useStore.setState({ ...initialState }))
 
 describe('store', () => {
+  it('keeps a catalogue startup failure visible and retries without opening a view early', async () => {
+    const f = fakeClient([k8s('a')])
+    const loader = vi.spyOn(i18n, 'loadLanguage').mockRejectedValueOnce(new Error('catalogue unavailable'))
+    try {
+      const act = actions(f.client)
+      await act.init()
+      expect(useStore.getState().loadError).toBe('catalogue unavailable')
+      expect(useStore.getState().view).toBeNull()
+      expect(f.client.listTargets).not.toHaveBeenCalled()
+      await act.init()
+      expect(useStore.getState().view?.groups[0].targets).toHaveLength(1)
+      expect(useStore.getState().loadError).toBeNull()
+    } finally {
+      loader.mockRestore()
+    }
+  })
   it('loads targets and remembers the selection', async () => {
     const f = fakeClient([k8s('a'), k8s('b')])
     const act = actions(f.client)

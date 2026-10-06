@@ -148,7 +148,7 @@ export function App({ client }: { client: Client }) {
 
   return (
     <div className="relative flex h-full flex-col">
-      <AppHeader target={target} onHelp={() => setHelp(true)} />
+      <AppHeader client={client} target={target} onHelp={() => setHelp(true)} />
       <div className="flex min-h-0 flex-1">
         <Sidebar act={act} client={client} configRef={configRef} />
         <div className="flex min-w-0 flex-1 flex-col">

@@ -2,7 +2,8 @@ import { create } from 'zustand'
 import type { Client } from './api/client'
 import { mayLeave } from './edit/guard'
 import type { AppInfo, ConnectionStatus, FavoriteKind, Target, TargetRef, TargetsView } from './api/types'
-import { t } from './i18n'
+import { loadLanguage, setLanguage, t } from './i18n'
+import { initialLanguage } from './languages'
 
 export interface State {
   info: AppInfo | null
@@ -199,9 +200,14 @@ export function actions(client: Client) {
   return {
     async init() {
       try {
-        useStore.setState({ info: await client.appInfo() })
+        const info = await client.appInfo()
+        const language = initialLanguage(info, navigator.languages)
+        await loadLanguage(language)
+        setLanguage(language)
+        useStore.setState({ info: { ...info, language } })
       } catch (e) {
         useStore.setState({ loadError: errText(e) })
+        return // Keep startup errors visible; Retry must reload the catalogue.
       }
       if (!useStore.getState().favoritesReady) {
         favoritesLoad ??= client.getFavoriteKinds().then(

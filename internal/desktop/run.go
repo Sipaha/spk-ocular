@@ -110,7 +110,6 @@ func Run(ctx context.Context, o Options) error {
 func watchPending(ctx context.Context, svc api.API, win *application.WebviewWindow, canNotify bool, wake <-chan struct{}) {
 	var p pendingNotice
 	var shown uint32 // the notification to replace
-	info, _ := svc.AppInfo(ctx)
 	for {
 		select {
 		case <-ctx.Done():
@@ -121,6 +120,7 @@ func watchPending(ctx context.Context, svc api.API, win *application.WebviewWind
 		if err != nil {
 			continue
 		}
+		info, _ := svc.AppInfo(ctx)
 		title, notify := p.update(st.Pending, info.Language)
 		win.SetTitle(title)
 		if notify && canNotify {

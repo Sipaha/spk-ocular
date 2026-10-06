@@ -49,6 +49,7 @@ export function fakeClient(targets: Target[], connected = false) {
   const client: Client = {
     configurations: vi.fn(async () => ({ initialized: true, encrypted: false, locked: false, candidates: [], entries: [] })),
     helm: vi.fn(async () => ({})),
+    setLanguage: vi.fn(async () => {}),
     appInfo: vi.fn(async () => ({ name: 'SPK Ocular', version: 'test', mode: 'browser' as const, language: 'en' as const })),
     listTargets: vi.fn(async () => {
       if (connected) for (const group of state.view.groups) for (const target of group.targets) {

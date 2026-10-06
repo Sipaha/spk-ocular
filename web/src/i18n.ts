@@ -1,7 +1,16 @@
-// UI strings, Russian and English. The language comes from the system
-// locale via AppInfo.language (Go reads the gettext environment).
+// Complete static UI catalogues. Additional languages load on demand.
+import type { Language } from './languages'
+export type { Language } from './languages'
+const loaders = {
+ zh: () => import('./locales/zh.json'), es: () => import('./locales/es.json'),
+ de: () => import('./locales/de.json'), fr: () => import('./locales/fr.json'),
+ pt: () => import('./locales/pt.json'), ja: () => import('./locales/ja.json'),
+}
 
 const en = {
+ 'language.title': 'Language',
+ 'language.automatic': 'Automatic',
+ 'language.failed': 'Could not change language. Try again.',
 "configs.rename": "Rename",
 "configs.remove": "Remove",
 "configs.removeConfirm": "Remove configuration",
@@ -785,6 +794,9 @@ const en = {
 export type MessageKey = keyof typeof en
 
 const ru: Record<MessageKey, string> = {
+ 'language.title': 'Язык',
+ 'language.automatic': 'Автоматически',
+ 'language.failed': 'Не удалось сменить язык. Попробуйте ещё раз.',
 "configs.rename": "Переименовать",
 "configs.remove": "Удалить",
 "configs.removeConfirm": "Удалить конфигурацию",
@@ -1565,14 +1577,31 @@ const ru: Record<MessageKey, string> = {
   'agents.confirm.rejected': '{agent}: отказано',
 }
 
-const dicts = { en, ru }
-export type Language = keyof typeof dicts
+const dicts: Partial<Record<Language, Record<MessageKey, string>>> & { en: typeof en; ru: typeof ru } = { en, ru }
 
 let current: Language = 'en'
+export const getLanguage = (): Language => current
 
 export function setLanguage(lang: Language) {
-  current = dicts[lang] ? lang : 'en'
+  current = Object.hasOwn(dicts, lang) ? lang : 'en'
   document.documentElement.lang = current
+}
+
+const loading = new Map<Language, Promise<void>>()
+export function loadLanguage(language: Language): Promise<void> {
+ if (dicts[language]) return Promise.resolve()
+ const existing = loading.get(language)
+ if (existing) return existing
+ const loader = loaders[language as keyof typeof loaders]
+ if (!loader) return Promise.resolve()
+ const promise = loader().then(module => {
+  const ui: Record<string, string> = module.default.ui
+  if (Object.keys(en).some(key => !Object.hasOwn(ui, key))) throw new Error('Incomplete language catalogue')
+  dicts[language as keyof typeof loaders] = ui as Record<MessageKey, string>
+  providerTexts[language] = module.default.provider
+ }).finally(() => { loading.delete(language) })
+ loading.set(language, promise)
+ return promise
 }
 
 /**
@@ -1901,7 +1930,7 @@ export function messageText(m: { key?: string; params?: Record<string, string>; 
 }
 
 export function t(key: MessageKey, vars?: Record<string, string | number>): string {
-  const s: string = dicts[current][key] ?? en[key]
+  const s: string = dicts[current]?.[key] ?? en[key]
   if (!vars) return s
   return s.replace(/\{(\w+)\}/g, (p, k: string) => (Object.hasOwn(vars, k) ? String(vars[k]) : p))
 }
@@ -1919,6 +1948,7 @@ export function detailLabel(key: string): string {
 }
 
 export const _dicts = dicts // tests
+export const _providerTexts = providerTexts // catalogue checks
 
 /** Whether key is one of the UI's texts (a key built at run time). */
 export const isMessageKey = (key: string): key is MessageKey => key in en

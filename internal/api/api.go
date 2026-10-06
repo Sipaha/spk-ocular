@@ -22,6 +22,7 @@ type API interface {
 	Configurations(context.Context, kubernetes.ConfigRequest) (kubernetes.ConfigState, error)
 	Helm(ctx context.Context, req HelmRequest) (HelmResponse, error)
 	AppInfo(ctx context.Context) (AppInfo, error)
+	SetLanguage(ctx context.Context, language string) error
 	// ListTargets re-reads local configuration (kubeconfig, ...): no network.
 	ListTargets(ctx context.Context) (TargetsView, error)
 	// SelectTarget remembers the user's choice across restarts; the two
@@ -228,8 +229,10 @@ type AppInfo struct {
 	Version string `json:"version"`
 	// Mode is "desktop" or "browser".
 	Mode string `json:"mode"`
-	// Language is the UI language from the system locale: "ru" or "en".
-	Language string `json:"language"`
+	// Language is the persisted choice or supported system language (English fallback).
+	Language           string `json:"language"`
+	LanguagePreference string `json:"languagePreference"`
+	SystemLanguage     string `json:"systemLanguage"`
 }
 
 type TargetGroup struct {

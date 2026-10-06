@@ -24,6 +24,16 @@ Connection information is available through the information button next to the
 connection name in the header. Closing that dialog returns focus without
 resetting the resource table, its filter, or an unsaved editor.
 
+## Language
+
+Use the header language menu to choose a native language name or **Automatic**.
+The saved choice works in desktop and browser mode, including when browser
+storage is blocked. Automatic desktop mode follows a supported system locale;
+browser mode follows the first supported browser preference. English is the
+fallback. Changing language preserves open workspaces, editors and connections.
+External data and errors may remain in their original language; see
+[localization coverage](localization.md).
+
 ## Kubernetes configurations
 
 First use of the configuration registry opens an import dialog, including after

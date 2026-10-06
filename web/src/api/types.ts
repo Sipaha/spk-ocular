@@ -88,7 +88,9 @@ export interface AppInfo {
   name: string
   version: string
   mode: 'desktop' | 'browser'
-  language: 'ru' | 'en'
+  language: import('../i18n').Language
+  languagePreference?: import('../i18n').Language | ''
+  systemLanguage?: import('../i18n').Language | ''
 }
 
 /**

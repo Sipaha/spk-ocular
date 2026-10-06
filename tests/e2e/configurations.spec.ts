@@ -183,7 +183,7 @@ test('connection menus manage linked and encrypted YAML without a separate confi
 
 test('Russian add, password and YAML workflows fit a narrow window',async({browser})=>{
  mkdirSync(scratch,{recursive:true});const root=mkdtempSync(join(scratch,'configs-targets-ru-'));const e=env(root)
- writeAtomic(e.one,ONE);const port=await freePort();const page=await browser.newPage({viewport:{width:600,height:800}});let app:ChildProcess|undefined
+ writeAtomic(e.one,ONE);const port=await freePort();const page=await browser.newPage({viewport:{width:600,height:800},locale:'ru-RU'});let app:ChildProcess|undefined
  try {
   app=await start(port,e,'ru');await page.goto(`http://127.0.0.1:${port}/`)
   await page.getByRole('button',{name:'Новый конфиг',exact:true}).click()

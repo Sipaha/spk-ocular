@@ -1,3 +1,5 @@
+import type { Client } from '../api/client'
+import { LanguageMenu } from './LanguageMenu'
 import type { Target } from '../api/types'
 import { t } from '../i18n'
 import { openPalette } from '../palette/store'
@@ -5,7 +7,7 @@ import { ProviderIcon, SearchIcon } from './icons'
 import { TargetInfoButton } from './TargetDetails'
 
 /** App-wide navigation stays visible while individual panels scroll. */
-export function AppHeader({ target, onHelp }: { target: Target | null; onHelp: () => void }) {
+export function AppHeader({ target, onHelp, client }: { target: Target | null; onHelp: () => void; client: Client }) {
   return (
     <header className="app-header">
       <div className="app-brand">SPK Ocular</div>
@@ -21,6 +23,7 @@ export function AppHeader({ target, onHelp }: { target: Target | null; onHelp: (
         <span className="truncate">{t('shell.search')}</span>
         <kbd>Ctrl K</kbd>
       </button>
+      <LanguageMenu client={client} />
       <button className="help-trigger" onClick={onHelp} aria-label={t('keys.title')} title={`${t('keys.title')} (?)`}>?</button>
     </header>
   )

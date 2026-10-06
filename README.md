@@ -23,6 +23,13 @@ donations do not unlock features.
 This README describes the current source; consult release notes for the features
 included in a downloaded version.
 
+## Languages
+
+The application offers Russian, English, Simplified Chinese, Spanish, German,
+French, Brazilian Portuguese and Japanese. Choose a language in the header or
+leave **Automatic** enabled. A manual choice is saved in the local profile and
+survives restarts. See [localization](docs/localization.md) for coverage and fallback rules.
+
 ## Install
 
 Download a package matching your architecture from

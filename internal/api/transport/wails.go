@@ -23,6 +23,9 @@ type API struct{ a api.API }
 
 func NewAPI(a api.API) *API { return &API{a: a} }
 
+func (w *API) SetLanguage(language string) error {
+	return w.a.SetLanguage(api.UIContext(context.Background()), language)
+}
 func (w *API) AppInfo() (api.AppInfo, error) { return w.a.AppInfo(api.UIContext(context.Background())) }
 func (w *API) ListTargets() (api.TargetsView, error) {
 	return w.a.ListTargets(api.UIContext(context.Background()))

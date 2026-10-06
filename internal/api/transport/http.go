@@ -99,6 +99,11 @@ func (h *HTTP) routes() {
 		return h.api.Configurations(ctx, *r)
 	}), 2<<20)))
 	h.mux.Handle("POST /api/Helm", noStore(http.MaxBytesHandler(handle(func(ctx context.Context, req *api.HelmRequest) (any, error) { return h.api.Helm(ctx, *req) }), 6<<20)))
+	h.mux.HandleFunc("POST /api/SetLanguage", handle(func(ctx context.Context, r *struct {
+		Language string `json:"language"`
+	}) (any, error) {
+		return nil, h.api.SetLanguage(ctx, r.Language)
+	}))
 	h.mux.HandleFunc("POST /api/AppInfo", handle(func(ctx context.Context, _ *struct{}) (any, error) {
 		return h.api.AppInfo(ctx)
 	}))

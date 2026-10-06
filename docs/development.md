@@ -225,3 +225,12 @@ resource suites explicitly import their fixture files through the UI API before
 running; they do not bypass the production registry. Provider tests verify
 persistent links, fresh nonces, record-bound ciphertext, absence of plaintext
 credentials/passwords and stale-writer refusal. No real kubeconfig is a test input.
+
+## Localization checks
+
+`web/src/i18n.test.ts` checks every locale against English UI keys and the Go
+provider message catalogues, including exact placeholder multiplicity. The
+browser language suite exercises all eight choices, native-name menus, live
+workspace preservation and denied storage. The lifecycle suite checks a saved
+language after restarting its isolated process. See [localization](localization.md)
+for system/browser precedence and translation limits.

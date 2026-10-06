@@ -22,6 +22,7 @@ export interface Client {
  configurations(req: ConfigRequest): Promise<ConfigState>
   helm(req: HelmRequest, signal?: AbortSignal): Promise<HelmResponse>
   appInfo(): Promise<AppInfo>
+  setLanguage(language: AppInfo['language'] | ''): Promise<void>
   /** Re-reads local configuration (kubeconfig, ...); no network. */
   listTargets(): Promise<TargetsView>
   /** Remembers the choice across restarts; not_found if the target is gone. */
@@ -162,6 +163,7 @@ const done = async (p: Promise<unknown>) => {
 export const httpClient: Client = {
   configurations: (req) => post('Configurations', req),
   appInfo: () => post('AppInfo', {}),
+  setLanguage: (language) => post('SetLanguage', { language }),
   helm: (req, signal) => post('Helm', req, signal),
   listTargets: () => post('ListTargets', {}),
   selectTarget: (provider, id) => done(post('SelectTarget', { provider, id })),
@@ -289,6 +291,7 @@ const EVENT_TYPES: EventType[] = ['targets_changed', 'resync', 'view_changed', '
 export const wailsClient: Client = {
   configurations: (req) => wcall('Configurations', req),
   appInfo: () => wcall('AppInfo'),
+  setLanguage: (language) => wcall('SetLanguage', language),
   helm: (req, signal) => wcallAbortable(signal, 'Helm', req),
   listTargets: () => wcall('ListTargets'),
   selectTarget: (provider, id) => wcall('SelectTarget', provider, id),

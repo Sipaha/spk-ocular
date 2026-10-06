@@ -25,8 +25,9 @@ Retain a decision's current constraint and rationale, not the story of how it
 was reached. Put transient logs, screenshots, benchmarks and handoff notes in
 scratch, outside product documentation. Git and GitHub Releases retain history.
 
-All documentation and code comments are English. Russian UI text belongs in
-localization data (`web/src/i18n.ts`); release descriptions may be bilingual.
+All documentation and code comments are English. UI translations belong in
+localization data (`web/src/i18n.ts`, `web/src/locales`, `web/src/presentation.ts`,
+and native notification data in `internal/desktop/pending.go`); release descriptions may be bilingual.
 Release notes live in `changelog/<version>/<locale>.md`, as in the launcher;
 GitHub uses `en.md`. Keep published version notes as release metadata. Verify documentation
 against source, commands and tests; do not claim a platform or workflow has run when it
@@ -243,3 +244,12 @@ write the clipboard or open links.
 - `t.Context()` is already cancelled in cleanup. Use a fresh bounded context where needed.
 - Long TMPDIR paths can exceed Unix socket limits; use the existing short-socket helpers.
 - Xvfb keyboard layout resets when its last client exits; configure it with a live window.
+
+## Localization invariants
+
+Application languages and fallback rules are documented in
+[Localization](docs/localization.md). Keep every UI/provider catalogue complete
+with exact placeholders and full warning semantics. Never translate resource
+identifiers, persistence keys, object names, raw logs or manifests. Language
+switching must preserve open editors and live connections. Additional languages
+load from static local catalogues; do not add runtime translation services.

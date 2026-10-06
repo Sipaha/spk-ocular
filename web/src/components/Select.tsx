@@ -5,6 +5,8 @@ import { SearchIcon } from './icons'
 export interface SelectOption {
   value: string
   label: string
+  /** Pronunciation of a foreign-language label, without changing its value. */
+  lang?: string
   disabled?: boolean
   /** Shown only while not searching, set apart ("All namespaces"). */
   pinned?: boolean
@@ -316,6 +318,7 @@ function List({ value, options, label, search, anchor, onClose, onChange, memory
         {items.map((o, i) => (
           <div
             key={`${o.pinned ? 'p' : 'o'}:${o.value}`}
+            lang={o.lang}
             id={optId(i)}
             data-index={i}
             role="option"

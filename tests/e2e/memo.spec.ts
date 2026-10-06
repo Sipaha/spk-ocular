@@ -289,3 +289,31 @@ test('resource sections fold globally and keep their state after restart, while 
     if (app) await stop(app)
   }
 })
+
+test('manual language survives a process restart and a different browser language', async ({ browser }) => {
+  mkdirSync(scratch, { recursive: true })
+  const root = mkdtempSync(join(scratch, 'language-restart-'))
+  const e = env(root)
+  writeAtomic(e.one, ONE)
+  const port = await freePort()
+  let app: ChildProcess | undefined
+  const context = await browser.newContext({ locale: 'fr-FR' })
+  const page = await context.newPage()
+  const url = `http://127.0.0.1:${port}/`
+  try {
+    app = await start(port, e)
+    await page.goto(url)
+    await expect(page.locator('html')).toHaveAttribute('lang', 'fr')
+    await page.locator('.language-menu button').click()
+    await page.getByRole('option', { name: '日本語', exact: true }).click()
+    await expect(page.locator('html')).toHaveAttribute('lang', 'ja')
+    await stop(app)
+    app = await start(port, e)
+    await page.goto(url)
+    await expect(page.locator('html')).toHaveAttribute('lang', 'ja')
+    await expect(page.locator('.language-menu button')).toHaveText('日本語')
+  } finally {
+    await context.close()
+    if (app) await stop(app)
+  }
+})

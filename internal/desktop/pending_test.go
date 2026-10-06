@@ -37,3 +37,26 @@ func TestPendingNoticeTitleAndWhenToNotify(t *testing.T) {
 	assert.Equal(t, "SPK Ocular: an agent waits for confirmation", summary)
 	assert.Equal(t, "Waiting: 1. Decide in the SPK Ocular window.", body)
 }
+
+func TestLocalizedNativeNotifications(t *testing.T) {
+	for _, tc := range []struct{ lang, title string }{
+		{"zh", "SPK Ocular — 等待确认 (2)"},
+		{"es", "SPK Ocular — pendiente de confirmación (2)"},
+		{"de", "SPK Ocular — wartet auf Bestätigung (2)"},
+		{"fr", "SPK Ocular — en attente de confirmation (2)"},
+		{"pt", "SPK Ocular — aguardando confirmação (2)"},
+		{"ja", "SPK Ocular — 確認待ち (2)"},
+	} {
+		var p pendingNotice
+		title, notify := p.update(2, tc.lang)
+		assert.Equal(t, tc.title, title)
+		assert.True(t, notify)
+		_, notify = p.update(2, tc.lang)
+		assert.False(t, notify)
+		summary, body := notification(2, tc.lang)
+		assert.Contains(t, summary, "SPK Ocular")
+		assert.Contains(t, body, "2")
+		assert.Contains(t, body, "SPK Ocular")
+		assert.NotContains(t, body, "%!")
+	}
+}

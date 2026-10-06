@@ -1,3 +1,4 @@
+import { columnLabel } from '../presentation'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
 import { ColumnResize } from './ColumnResize'
@@ -348,10 +349,10 @@ export function ResourceTable({ columns, rows, hideScope, filter, selected, reve
               onClick={() => setSort((s) => ({ col: i, desc: s.col === i ? !s.desc : false, clicks: s.clicks + 1 }))}
               className={['h-full w-full truncate px-3 py-1.5 text-left hover:text-fg', isNumeric(c) ? 'text-right' : ''].join(' ')}
             >
-              {c.title}
+              {columnLabel(c.title)}
               {sort.col === i && <span className="ml-1">{sort.desc ? '↓' : '↑'}</span>}
             </button>
-            <ColumnResize column={c.title} variable={`--column-${i}`} value={widths[c.id] ?? least(c)} onDone={(width) => resizeColumn(c.id, width)} />
+            <ColumnResize column={columnLabel(c.title)} variable={`--column-${i}`} value={widths[c.id] ?? least(c)} onDone={(width) => resizeColumn(c.id, width)} />
             </div>
           ))}
         </div>

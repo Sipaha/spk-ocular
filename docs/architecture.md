@@ -231,6 +231,7 @@ SQLite uses WAL and embedded migrations. The data directory is owner-only.
 
 | State | Storage and ownership |
 | --- | --- |
+| Interface language | `ui_prefs.language`, global; empty means automatic |
 | Selected connection | `ui_prefs.selected_target` |
 | Ordered favorites | `ui_prefs.favorite_kinds`, provider + kind, global |
 | Section expansion | `ui_prefs.nav_sections`, global stable keys |

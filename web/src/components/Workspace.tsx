@@ -1,3 +1,4 @@
+import { groupLabel, kindLabel } from '../presentation'
 import { HelmWorkspace } from '../helm/HelmWorkspace'
 import { agents } from '../agents/store'
 import { PanelResize, usePanelWidths } from './PanelResize'
@@ -5,7 +6,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { Client } from '../api/client'
 import type { ActionDescriptor, KindDescriptor, KindsView, MetricsView, Ref, Row, ScopeSel, ScopesView, SourceCoverage, Target } from '../api/types'
 import { ApiError } from '../api/client'
-import { actionLabel, classLabel, t } from '../i18n'
+import { actionLabel, classLabel, getLanguage, t } from '../i18n'
 import { showNotice, targetKey, useStore } from '../store'
 import { memoOf, pageMemoKey, remember as rememberPage, rememberSort, seedPersisted } from './pageMemo'
 import { parseMemo, useMemoPersist } from './pageMemoPersist'
@@ -119,10 +120,11 @@ export function Workspace({ client, hub, target, onFavorite, onMoveFavorite, onN
   // P19: the page snapshot (filter/sort/details) is written back to
   // target_state debounced, and survives an app restart.
   useMemoPersist(client, target.provider, target.id, tkey)
+  const language = getLanguage()
   const matchingKinds = useMemo(() => {
     const q = resourceFilter.trim().toLowerCase()
-    return (kinds ?? []).filter((k) => !k.hidden && (!q || [k.id, k.title, k.singular, k.group, k.subgroup, ...(k.aliases ?? [])].some((name) => name?.toLowerCase().includes(q))))
-  }, [kinds, resourceFilter])
+    return (kinds ?? []).filter((k) => !k.hidden && (!q || [k.id, k.title, kindLabel(target.provider, k), k.singular, k.group, groupLabel(target.provider, k.group, language), k.subgroup, ...(k.aliases ?? [])].some((name) => name?.toLowerCase().includes(q))))
+  }, [kinds, resourceFilter, target.provider, language])
   // A kind lives in exactly one place: Favorites or its original group.
   const groups = useMemo(() => navGroups(matchingKinds.filter((k) => !favorites.has(k.id))), [matchingKinds, favorites])
   const visibleFavorites = useMemo(() => favoriteKinds.filter((f) => f.provider === target.provider)
@@ -324,7 +326,7 @@ export function Workspace({ client, hub, target, onFavorite, onMoveFavorite, onN
           <NavSectionHeading label={t('nav.favorites')} open={favoritesOpen} count={visibleFavorites.length}
             disabled={!navSectionsReady || searching} onToggle={(o) => onNavSection(favoritesKey, o)} />
           {visibleFavorites.map((k, i) => (favoritesOpen || kind === k.id) && (
-            <NavItem key={k.id} active={kind === k.id} onClick={() => setKind(k.id)} label={k.title} hint={k.subgroup}
+            <NavItem key={k.id} active={kind === k.id} onClick={() => setKind(k.id)} label={kindLabel(target.provider, k)} hint={k.subgroup}
               favorite onFavorite={() => toggleFavorite(k.id)} favoriteDisabled={!favoritesReady}
               moveUp={i > 0 ? () => onMoveFavorite(target.provider, k.id, visibleFavorites[i - 1].id) : undefined}
               moveDown={i < visibleFavorites.length - 1 ? () => onMoveFavorite(target.provider, k.id, visibleFavorites[i + 2]?.id ?? '') : undefined}
@@ -362,15 +364,15 @@ export function Workspace({ client, hub, target, onFavorite, onMoveFavorite, onN
           const open = sectionOpen(groupKey(g.group), g.group === 'Workloads')
           const activeIn = g.items.flatMap((it) => ('kind' in it ? [it.kind] : it.kinds)).find((k) => k.id === kind)
           return (
-            <section key={g.group} className="mt-3" aria-label={g.group}>
-              <NavSectionHeading label={g.group} open={open} count={g.count}
+            <section key={g.group} className="mt-3" aria-label={groupLabel(target.provider, g.group)}>
+              <NavSectionHeading label={groupLabel(target.provider, g.group)} open={open} count={g.count}
                 disabled={!navSectionsReady || searching} onToggle={(o) => onNavSection(groupKey(g.group), o)} />
-              {!open && activeIn && !favorites.has(activeIn.id) && <NavItem active onClick={() => setKind(activeIn.id)} label={activeIn.title} hint={activeIn.subgroup}
+              {!open && activeIn && !favorites.has(activeIn.id) && <NavItem active onClick={() => setKind(activeIn.id)} label={kindLabel(target.provider, activeIn)} hint={activeIn.subgroup}
                 favorite={false} onFavorite={() => toggleFavorite(activeIn.id)} favoriteDisabled={!favoritesReady} />}
               {open &&
                 g.items.map((it) =>
                   'kind' in it ? (
-                    <NavItem key={it.kind.id} active={kind === it.kind.id && !favorites.has(it.kind.id)} onClick={() => setKind(it.kind.id)} label={it.kind.title} hint={it.kind.subgroup}
+                    <NavItem key={it.kind.id} active={kind === it.kind.id && !favorites.has(it.kind.id)} onClick={() => setKind(it.kind.id)} label={kindLabel(target.provider, it.kind)} hint={it.kind.subgroup}
                       favorite={favorites.has(it.kind.id)} onFavorite={() => toggleFavorite(it.kind.id)} favoriteDisabled={!favoritesReady} />
                   ) : (
                     <NavSubgroup
@@ -819,11 +821,11 @@ function ResourcePage(props: {
   return (
     <>
       <header className="resource-toolbar">
-        <h1 className="resource-title">{kind.title}</h1>
+        <h1 className="resource-title">{kindLabel(target.provider, kind)}</h1>
         <span className="resource-count" aria-label="count">
           {view.status.state === 'loading' && !view.rows.length ? '…' : view.rows.length}
         </span>
-        {!initialLoading && view.status.state === 'loading' && <LoadingState title={kind.title} inline />}
+        {!initialLoading && view.status.state === 'loading' && <LoadingState title={kindLabel(target.provider, kind)} inline />}
         {marked.size > 0 && (
           <div role="toolbar" aria-label={t('bulk.bar')} className="flex shrink-0 items-center gap-2 whitespace-nowrap rounded-md bg-marked px-2 py-0.5 text-xs">
             <span>{t('bulk.marked', { n: marked.size, total: shownRows.length })}</span>
@@ -890,7 +892,7 @@ function ResourcePage(props: {
       {!initialLoading && metrics && <MetricsNote metrics={metrics} />}
       <div className="relative flex min-h-0 flex-1 flex-col">
         <div data-area="table" aria-busy={view.status.state === 'loading'} className="flex min-h-0 flex-1 flex-col">
-        {initialLoading ? <LoadingState title={kind.title} /> : <ResourceTable
+        {initialLoading ? <LoadingState title={kindLabel(target.provider, kind)} /> : <ResourceTable
           areaFocus
           columns={columns}
           rows={view.rows}

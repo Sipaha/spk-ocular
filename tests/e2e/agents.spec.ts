@@ -176,7 +176,7 @@ test('permissions layout keeps actions visible, traps focus and fits Russian tex
   ] })
   await page.route('**/api/AppInfo', async (route) => {
     const response = await route.fetch()
-    await route.fulfill({ json: { ...await response.json(), language: 'ru' } })
+    await route.fulfill({ json: { ...await response.json(), language: 'ru', languagePreference: 'ru' } })
   })
   await page.reload()
   const trigger = page.getByRole('button', { name: 'Права агентов', exact: true })

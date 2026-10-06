@@ -11,7 +11,6 @@ import (
 	"fmt"
 	"log/slog"
 	"runtime"
-	"strings"
 	"sync"
 	"time"
 
@@ -164,12 +163,26 @@ func (s *Service) Close() {
 	s.sessMu.Unlock()
 }
 
-func (s *Service) AppInfo(context.Context) (AppInfo, error) {
+func (s *Service) AppInfo(ctx context.Context) (AppInfo, error) {
+	preference, err := s.store.GetUIPref(ctx, prefLanguage)
+	if err != nil {
+		return AppInfo{}, coded(CodeInternal, err)
+	}
+	if supportedLanguage(preference) != preference {
+		preference = ""
+	}
+	system := systemLanguage(s.opts.Getenv)
+	language := preference
+	if language == "" {
+		language = uiLanguage(s.opts.Getenv)
+	}
 	return AppInfo{
-		Name:     "SPK Ocular",
-		Version:  s.opts.Version,
-		Mode:     s.opts.Mode,
-		Language: uiLanguage(s.opts.Getenv),
+		Name:               "SPK Ocular",
+		Version:            s.opts.Version,
+		Mode:               s.opts.Mode,
+		Language:           language,
+		LanguagePreference: preference,
+		SystemLanguage:     system,
 	}, nil
 }
 
@@ -257,22 +270,10 @@ func (s *Service) selected(ctx context.Context) (*TargetRef, error) {
 	return &ref, nil
 }
 
-// uiLanguage follows the system's message language (gettext order:
-// LANGUAGE, LC_ALL, LC_MESSAGES, LANG). Russian or English.
+// uiLanguage returns the supported system language, or English.
 func uiLanguage(getenv func(string) string) string {
-	if getenv == nil {
-		return "en"
-	}
-	for _, k := range []string{"LANGUAGE", "LC_ALL", "LC_MESSAGES", "LANG"} {
-		v := getenv(k)
-		if v == "" {
-			continue
-		}
-		first, _, _ := strings.Cut(v, ":") // LANGUAGE is a list
-		if strings.HasPrefix(first, "ru") {
-			return "ru"
-		}
-		return "en" // C/POSIX included: gettext shows untranslated messages
+	if language := systemLanguage(getenv); language != "" {
+		return language
 	}
 	return "en"
 }
