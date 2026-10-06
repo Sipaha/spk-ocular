@@ -53,7 +53,9 @@ test('primary download is a verified native package for the selected OS and arch
   'spk-ocular_0.1.0_linux_amd64.deb','spk-ocular_0.1.0_linux_amd64.tar.gz',
   'spk-ocular-browser_0.1.0_linux_arm64.tar.gz','spk-ocular_0.1.0_windows_arm64.msi',
  ].map(name=>asset(name))));
- assert.equal(selectDownload(result,'linux','amd64').format,'tar.gz');
+ assert.equal(selectDownload(result,'linux','amd64').format,'deb');
  assert.equal(selectDownload(result,'windows','arm64').format,'msi');
+ assert.equal(selectDownload(parseRelease(release([asset('spk-ocular_0.1.0_linux_amd64.rpm')])),'linux','amd64').format,'rpm');
+ assert.equal(selectDownload(parseRelease(release([asset('spk-ocular_0.1.0_linux_amd64.tar.gz')])),'linux','amd64').format,'tar.gz');
  for (const [os,arch] of [['linux','arm64'],['linux',''],['','amd64'],['darwin','amd64']])assert.equal(selectDownload(result,os,arch),null);
 });

@@ -85,7 +85,7 @@ const navIDs = ['features', 'interface', 'free'];
     </div></section>
     <section id="downloads" class="section download-section"><div class="container">
       <div class="section-head"><h2>{d.downloads}</h2><p>{d.downloadsText}</p><p class="platform-note">{d.platforms}</p></div>
-      <div class="download-box" data-downloads data-labels={JSON.stringify({loading:d.loading,unavailable:d.unavailable,empty:d.empty,noMatch:d.noMatch,version:d.version,download:d.download,checksum:d.checksum,desktopMode:d.desktopMode,browserMode:d.browserMode})}>
+      <div class="download-box" data-downloads data-labels={JSON.stringify({loading:d.loading,unavailable:d.unavailable,empty:d.empty,noMatch:d.noMatch,version:d.version,download:d.download,checksum:d.checksum,desktopMode:d.desktopMode})}>
         <div class="download-fallback"><p>{d.fallback}</p><div class="download-links"><a class="button" href={RELEASES}>{d.releaseLink}<span aria-hidden="true">↗</span></a><a class="text-link" href={REPO+'/actions/workflows/ci.yml'}>{d.buildsLink}<span aria-hidden="true">↗</span></a></div></div>
         <p data-release-status role="status" hidden></p>
         <div data-download-controls class="download-controls" hidden>

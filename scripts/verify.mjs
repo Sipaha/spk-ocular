@@ -140,7 +140,7 @@ try{
   for (const label of await page.locator('[data-download-text]').allTextContents()) expect(label).toBe(name?`${prefix} ${name}`:lang==='ru'?'Выбрать пакет':'Choose a download');
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
   if(direct) {
-   const extension={linux:'tar.gz',windows:'msi',darwin:'dmg'}[expectedOS];
+   const extension={linux:'deb',windows:'msi',darwin:'dmg'}[expectedOS];
    const filename=`spk-ocular_0.1.0_${expectedOS}_${expectedArch}.${extension}`;
    for(const button of await buttons.all()) {
     await expect(button).toHaveAttribute('href',`${REPO}/releases/download/v0.1.0/${filename}`);
@@ -164,10 +164,11 @@ try{
  const page=await browser.newPage();await page.route(API,r=>r.fulfill({json:{tag_name:'v0.1.0',assets:[...assets].reverse()}}));
  await page.goto(root+'en/',{waitUntil:'networkidle'});
  await expect(page.locator('.package').first()).toContainText('Desktop app');
- await page.locator('select[name=os]').selectOption('');await page.locator('select[name=arch]').selectOption('');await expect(page.locator('.package')).toHaveCount(20);
- await page.locator('select[name=os]').selectOption('windows');await page.locator('select[name=arch]').selectOption('arm64');await expect(page.locator('.package')).toHaveCount(3);
+ await page.locator('select[name=os]').selectOption('');await page.locator('select[name=arch]').selectOption('');await expect(page.locator('.package')).toHaveCount(14);
+ expect(await page.locator('.package a').evaluateAll(links=>links.some(link=>link.href.includes('spk-ocular-browser_')))).toBe(false);
+ await page.locator('select[name=os]').selectOption('windows');await page.locator('select[name=arch]').selectOption('arm64');await expect(page.locator('.package')).toHaveCount(2);
  for(const href of await page.locator('.package a').evaluateAll(els=>els.map(el=>el.href)))expect(href).toContain('_windows_arm64.');
- await page.close();console.log('PASS all 20 assets, six platforms, architecture filters and checksums');
+ await page.close();console.log('PASS all 14 native assets, browser builds excluded, six platforms, architecture filters and checksums');
  writeFileSync(path.join(out,'accessibility.json'),JSON.stringify(failures,null,2));
  expect(failures).toEqual([]);
 }finally{

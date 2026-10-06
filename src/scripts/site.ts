@@ -76,19 +76,19 @@ if (host) {
       if (response.status === 404) { status.textContent = labels.empty; return; }
       if (!response.ok) throw new Error('Release service unavailable');
       const release = parseRelease(await response.json());
-      if (!release || !release.files.length) { status.textContent = labels.empty; return; }
+      if (!release || !release.files.some(file => !file.browser)) { status.textContent = labels.empty; return; }
       controls.hidden = false;
       packages.hidden = false;
       const render = () => {
         updateDownloadButtons(os.value, selectDownload(release, os.value, arch.value));
-        const files = release.files.filter(file => (!os.value || file.os === os.value) && (!arch.value || file.arch === arch.value));
+        const files = release.files.filter(file => !file.browser && (!os.value || file.os === os.value) && (!arch.value || file.arch === arch.value));
         status.textContent = files.length ? `${labels.version} ${release.version}` : labels.noMatch;
         packages.replaceChildren(...files.map(file => {
           const item = document.createElement('article'); item.className = 'package';
           const info = document.createElement('div'); info.className = 'package-info';
           const title = document.createElement('strong');
           title.textContent = `${({linux:'Linux',windows:'Windows',darwin:'macOS'} as Record<string,string>)[file.os]} · ${file.arch === 'amd64' ? 'x86-64' : 'ARM64'}`;
-          const detail = document.createElement('small'); detail.textContent = `${file.browser ? labels.browserMode : labels.desktopMode} / ${file.format.toUpperCase()}${file.size ? ' / ' + (file.size / 1048576).toFixed(1) + ' MB' : ''}`;
+          const detail = document.createElement('small'); detail.textContent = `${labels.desktopMode} / ${file.format.toUpperCase()}${file.size ? ' / ' + (file.size / 1048576).toFixed(1) + ' MB' : ''}`;
           info.append(title, detail);
           const link = document.createElement('a'); link.href = file.url; link.textContent = labels.download; link.setAttribute('aria-label', `${labels.download} ${file.name}`);
           item.append(info, link);

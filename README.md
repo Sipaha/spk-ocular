@@ -65,7 +65,7 @@ node scripts/server.mjs
 browser verification of both languages/themes at mobile, tablet and desktop
 widths. It checks keyboard tabs, theme persistence, WCAG AA, layout and image
 loading, free-use and donation copy, mobile section/download navigation, valid
-anchor targets and content aligned 28px below the sticky header, API failure, JavaScript-disabled rendering, all 20 release files
+anchor targets and content aligned 28px below the sticky header, API failure, JavaScript-disabled rendering, all 14 native release files, exclusion of browser-only builds
 and architecture filters. Review its screenshots. `scripts/server.mjs` prints an
 available loopback preview URL and stops on SIGTERM without orphan processes.
 
@@ -87,9 +87,11 @@ Download links come from the public GitHub latest-release API for
 package format and repository URL. Missing checksums are not fabricated.
 The OS and architecture are selected automatically when the browser provides
 reliable hints. macOS's Intel user-agent text alone is not architecture evidence.
-The primary buttons download the matching native Linux TAR.GZ, Windows MSI or
-macOS DMG directly. Linux uses a distro-neutral portable archive; DEB/RPM and
-other formats remain in the package list. Manual selectors update the buttons.
+The primary buttons download the matching native Linux DEB, Windows MSI or
+macOS DMG directly. Linux format priority matches the launcher website: DEB, then
+RPM, with TAR.GZ as a last fallback. This is a default format policy, not distro
+detection; alternative formats remain in the package list. Manual selectors
+update the buttons.
 When a compatible asset or reliable architecture is missing, buttons say Choose
 and navigate to package selection. Mobile/unknown devices keep the general choice.
 The narrow-screen header uses a short Download/Choose caption with a complete
@@ -98,7 +100,8 @@ Without a stable release or an available API, visible GitHub release and develop
 links remain. Three installation steps explain the installer formats, checksum
 verification and existing Kubernetes/Docker configuration. Public release packages
 do not require a GitHub account; CI development artifacts remain a separate path.
-Desktop installers appear before portable archives and browser-mode packages,
+The website lists only native desktop packages; local browser-only builds are
+not shown. Desktop installers appear before native portable archives,
 regardless of GitHub upload order. No unmeasured memory or comparative size claims
 are published. The site neither uploads user data nor starts any app connection.
 

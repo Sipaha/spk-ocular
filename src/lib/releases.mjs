@@ -49,10 +49,14 @@ export function detectArchitecture(ua, hints) {
  if (/Macintosh|Mac OS X/i.test(ua)) return '';
  return /x86_64|amd64|Win64|x64/i.test(ua) ? 'amd64' : '';
 }
-/** Only native app assets qualify; Linux uses a distro-neutral portable archive. */
+/** Only matching native app assets qualify; prefer Linux installers before archives. */
 export function selectDownload(release, os, arch) {
  if (!os || !arch || !release) return null;
  const files=release.files.filter(file=>!file.browser && file.os===os && file.arch===arch);
- const format={linux:'tar.gz',windows:'msi',darwin:'dmg'}[os];
- return files.find(file=>file.format===format) || null;
+ const formats={linux:['deb','rpm','tar.gz'],windows:['msi','zip'],darwin:['dmg','tar.gz']}[os] || [];
+ for (const format of formats) {
+  const file=files.find(file=>file.format===format);
+  if(file) return file;
+ }
+ return null;
 }
