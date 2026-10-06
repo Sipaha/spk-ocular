@@ -1,4 +1,11 @@
+import zh from './locales/zh.json';
+import es from './locales/es.json';
+import de from './locales/de.json';
+import fr from './locales/fr.json';
+import pt from './locales/pt.json';
+import ja from './locales/ja.json';
 export const en = {
+  downloadCompactFormat: 'Download {format}', localLabel: 'LOCAL / OPEN SOURCE', languageLabel: 'Choose language', projectLinks: 'Project links', screenshotNote: '',
   title: 'SPK Ocular | Free Kubernetes & Docker desktop app',
   description: 'Inspect Kubernetes and Docker, follow logs and manage Helm releases in one desktop app. All features free for individuals and businesses of any size.',
   nav: ['Features', 'Interface', 'Free for everyone'], docs: 'Docs', download: 'Download', downloadFormatFor: 'Download {format} for {os}', chooseDownload: 'Choose a download', chooseCompact: 'Choose', chooseDownloadFor: 'Choose for', theme: 'Switch theme', menu: 'Menu', skip: 'Skip to content',
@@ -46,6 +53,7 @@ export const en = {
 };
 export type Copy = typeof en;
 export const ru: Copy = {
+  downloadCompactFormat: 'Скачать {format}', localLabel: 'ЛОКАЛЬНО / ОТКРЫТЫЙ КОД', languageLabel: 'Выбрать язык', projectLinks: 'Ссылки проекта', screenshotNote: '',
   title: 'SPK Ocular | Бесплатное приложение для Kubernetes и Docker',
   description: 'Kubernetes, Docker, логи и Helm в одном приложении. Все функции бесплатны для людей и компаний любого размера, оборота и финансирования.',
   nav: ['Возможности', 'Интерфейс', 'Бесплатно для всех'], docs: 'Документация', download: 'Скачать', downloadFormatFor: 'Скачать {format} для {os}', chooseDownload: 'Выбрать пакет', chooseCompact: 'Выбрать', chooseDownloadFor: 'Выбрать для', theme: 'Сменить тему', menu: 'Меню', skip: 'К содержимому',
@@ -91,4 +99,6 @@ export const ru: Copy = {
   ],
   footer: 'Kubernetes и Docker. Ваше рабочее пространство.', source: 'Исходный код', issues: 'Сообщить об ошибке', license: 'Apache 2.0',
 };
-export const copy = (lang: 'ru' | 'en') => lang === 'ru' ? ru : en;
+export type Lang = 'ru' | 'en' | 'zh' | 'es' | 'de' | 'fr' | 'pt' | 'ja';
+const dictionaries: Record<Lang, Copy> = {ru, en, zh, es, de, fr, pt, ja};
+export const copy = (lang: Lang): Copy => dictionaries[lang];

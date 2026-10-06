@@ -31,13 +31,13 @@ const osNames: Record<string,string> = {linux:'Linux',windows:'Windows',darwin:'
 const downloadButtons = [...document.querySelectorAll<HTMLAnchorElement>('[data-download-label]')];
 const updateDownloadButtons = (selectedOS: string, file?: {url: string; name: string; format: string} | null) => {
   for (const button of downloadButtons) {
-    const labels = JSON.parse(button.dataset.downloadLabel!) as {download: string; downloadFormatFor: string; choose: string; chooseCompact: string; chooseFor: string};
+    const labels = JSON.parse(button.dataset.downloadLabel!) as {download: string; downloadCompactFormat: string; downloadFormatFor: string; choose: string; chooseCompact: string; chooseFor: string};
     const format = file?.format.toUpperCase();
     const text = file ? labels.downloadFormatFor.replace('{format}', format!).replace('{os}', osNames[selectedOS]) : osNames[selectedOS] ? `${labels.chooseFor} ${osNames[selectedOS]}` : labels.choose;
     button.href = file?.url || '#downloads';
     button.querySelector<HTMLElement>('[data-download-text]')!.textContent = text;
     const compact = button.querySelector<HTMLElement>('.compact-download-text');
-    if (compact) compact.textContent = file ? `${labels.download} ${format}` : labels.chooseCompact;
+    if (compact) compact.textContent = file ? labels.downloadCompactFormat.replace('{format}', format!) : labels.chooseCompact;
     button.setAttribute('aria-label', text);
     button.title = file ? `${text}: ${file.name}` : text;
   }
@@ -99,4 +99,17 @@ if (host) {
     } catch { status.textContent = labels.unavailable; }
     finally { clearTimeout(timer); }
   })();
+}
+
+for (const link of document.querySelectorAll<HTMLAnchorElement>('[data-language]')) {
+  link.addEventListener('click', () => {
+    try { localStorage.setItem('ocular-language', link.dataset.language!); } catch {}
+    const url = new URL(link.href); url.search = location.search; url.hash = location.hash; link.href = url.href;
+  });
+}
+for (const menu of document.querySelectorAll<HTMLDetailsElement>('.language-menu')) {
+  menu.addEventListener('keydown', event => {
+    if (event.key === 'Escape') { menu.open = false; menu.querySelector('summary')?.focus(); }
+  });
+  document.addEventListener('click', event => { if (!menu.contains(event.target as Node)) menu.open = false; });
 }

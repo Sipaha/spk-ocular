@@ -6,6 +6,7 @@ import { chromium, expect } from '@playwright/test';
 import { API, REPO, RELEASES } from '../src/lib/releases.mjs';
 const out=process.env.OCULAR_SITE_SCRATCH || '/home/spk/.spk/sawe/ss/SPK-Ocular/.agents/tmp/site';
 mkdirSync(out,{recursive:true});
+process.env.TMPDIR=path.join(out,'tmp');mkdirSync(process.env.TMPDIR,{recursive:true});
 const axe=readFileSync(createRequire(import.meta.url).resolve('axe-core/axe.min.js'),'utf8');
 const server=createSiteServer();
 await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));

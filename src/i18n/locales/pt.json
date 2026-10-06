@@ -1,0 +1,223 @@
+{
+  "languageLabel": "Escolher idioma",
+  "projectLinks": "Links do projeto",
+  "screenshotNote": "A interface nas capturas e a documentação dos links estão em inglês.",
+  "title": "SPK Ocular | Aplicativo gratuito para Kubernetes e Docker",
+  "description": "Inspecione Kubernetes e Docker, acompanhe logs e gerencie releases Helm em um único aplicativo desktop. Todos os recursos são gratuitos para pessoas e empresas de qualquer porte.",
+  "nav": [
+    "Recursos",
+    "Interface",
+    "Gratuito para todos"
+  ],
+  "docs": "Documentação",
+  "download": "Baixar",
+  "downloadFormatFor": "Baixar {format} para {os}",
+  "chooseDownload": "Escolher pacote",
+  "chooseCompact": "Escolher",
+  "chooseDownloadFor": "Escolher para",
+  "theme": "Alternar tema",
+  "menu": "Menu",
+  "skip": "Ir para o conteúdo",
+  "eyebrow": "UM ESPAÇO DE TRABALHO PARA SUA INFRAESTRUTURA",
+  "hero": [
+    "Kubernetes e Docker.",
+    "Um só espaço de trabalho."
+  ],
+  "lead": "Um aplicativo desktop para desenvolvedores e DevOps. Investigue recursos do Kubernetes, acompanhe logs do Docker e gerencie releases Helm no mesmo espaço de trabalho.",
+  "localShort": "No seu computador. Sem conta no Ocular.",
+  "galleryCaptions": [
+    "Encontre pods com falhas nos namespaces selecionados.",
+    "Inspecione um pod e acompanhe seus logs junto dos detalhes.",
+    "Revise os values do release e abra o histórico de revisões.",
+    "Contêineres independentes e serviços Compose na mesma lista."
+  ],
+  "installSteps": [
+    "Escolha DEB/RPM para Linux, MSI para Windows ou DMG para macOS. Também há arquivos portáteis.",
+    "Confira o checksum SHA-256, instale e abra o Ocular.",
+    "Use seu kubeconfig ou Docker context existente para inspecionar o ambiente."
+  ],
+  "explore": "Veja em ação",
+  "freeShort": "Todos os recursos gratuitos. Para você e sua empresa.",
+  "platforms": "Linux, Windows e macOS · x86-64 e ARM64",
+  "heroCaption": "Detalhes do pod e logs lado a lado.",
+  "demo": "Aplicativo real · cluster local de demonstração",
+  "syntheticDemo": "Aplicativo real · release Helm simulado",
+  "fullImage": "Abrir captura em tamanho original",
+  "facts": [
+    [
+      "Kubernetes + Docker",
+      "Operações diárias em um só lugar"
+    ],
+    [
+      "Sem conta",
+      "Acesso direto do seu computador"
+    ],
+    [
+      "Helm integrado",
+      "Sem instalar o Helm CLI separadamente"
+    ]
+  ],
+  "overview": "De “o que falhou?” a “o que fazer agora?”",
+  "overviewText": "Os detalhes para investigar e agir estão juntos, sem precisar montar o cenário a partir de uma dezena de janelas.",
+  "workflows": [
+    {
+      "label": "01 / INVESTIGAÇÃO",
+      "title": "Encontre o workload que precisa de atenção.",
+      "text": "Identifique recursos com problemas, abra objetos relacionados e inspecione a configuração. A interface mostra quando permissões ou erros de conexão impedem uma visão completa.",
+      "points": [
+        "Estado dos recursos, eventos e relações",
+        "Seleção de namespaces, busca e favoritos",
+        "YAML e detalhes atualizados dos recursos"
+      ],
+      "image": "health",
+      "alt": "Tela Problems do SPK Ocular em um cluster Kubernetes local de demonstração",
+      "link": "Conheça a inspeção de recursos"
+    },
+    {
+      "label": "02 / DIAGNÓSTICO",
+      "title": "Mantenha as evidências à vista.",
+      "text": "Acompanhe logs de workloads relacionados, filtre o ruído e busque a mensagem relevante. Abra um terminal ou encaminhe a porta de um serviço para investigar mais a fundo.",
+      "points": [
+        "Várias fontes de logs, busca e filtros por nível",
+        "Abas de terminal junto dos recursos",
+        "Encaminhamento de portas para acesso local a serviços"
+      ],
+      "image": "logs",
+      "alt": "Detalhes de um pod Kubernetes e logs da aplicação no SPK Ocular",
+      "link": "Conheça os logs e as ferramentas"
+    },
+    {
+      "label": "03 / RELEASES",
+      "title": "Helm, da instalação ao rollback.",
+      "text": "Escolha charts e versões, edite values e confira a atualização antes de executar. Consulte o histórico de releases e volte a uma revisão anterior na mesma janela.",
+      "points": [
+        "Repositórios de charts e registros OCI",
+        "Instalação, atualização, rollback e desinstalação",
+        "Helm integrado. Sem CLI separado."
+      ],
+      "image": "helm",
+      "alt": "Values e histórico de revisões de um release Helm no SPK Ocular",
+      "link": "Conheça o gerenciamento Helm"
+    }
+  ],
+  "toolsTitle": "As ferramentas do dia a dia já estão aqui.",
+  "tools": [
+    [
+      "Recursos do Kubernetes",
+      "Pods, deployments, services e recursos personalizados com detalhes e relações."
+    ],
+    [
+      "Docker",
+      "Contêineres independentes, projetos e serviços Compose. Veja logs, abra terminais e confira ações nos contêineres."
+    ],
+    [
+      "Revisão de mudanças",
+      "Confira as mudanças antes de aplicar. As permissões da infraestrutura continuam valendo."
+    ],
+    [
+      "Seu espaço de trabalho preservado",
+      "Namespaces selecionados, filtros, favoritos e larguras de colunas são salvos."
+    ]
+  ],
+  "gallery": "Veja como funciona.",
+  "galleryText": "Telas reais do build de desenvolvimento atual. Dados de demonstração, sem mockups do produto.",
+  "galleryTabs": [
+    "Workloads",
+    "Logs e detalhes",
+    "Releases Helm",
+    "Contêineres Docker"
+  ],
+  "galleryAlts": [
+    "Pods Kubernetes e seus estados no SPK Ocular em um cluster local de demonstração",
+    "Detalhes de recursos Kubernetes e logs da aplicação no SPK Ocular",
+    "Values de um release Helm simulado no SPK Ocular",
+    "Contêiner Docker independente e contêineres Compose em um ambiente local de demonstração no SPK Ocular"
+  ],
+  "agentLabel": "SEUS AGENTES. SUAS REGRAS.",
+  "agentTitle": "Dê contexto ao agente. Mantenha o controle das mudanças.",
+  "agentText": "Agentes de programação locais podem inspecionar o ambiente pelo Ocular. Escolha os namespaces, tipos de recursos e operações permitidos e revise as ações que exigem sua aprovação.",
+  "agentSteps": [
+    [
+      "Defina o escopo",
+      "Escolha ambiente, namespaces e operações."
+    ],
+    [
+      "Investiguem juntos",
+      "Dê ao agente contexto de recursos e logs para a investigação."
+    ],
+    [
+      "Revise a ação",
+      "Aprove mudanças protegidas ou pause o acesso ao terminar."
+    ]
+  ],
+  "agentBoundary": "Agentes locais executados com o mesmo usuário do sistema operacional compartilham essas permissões. Ocular não os isola dos outros programas no computador. Contêineres Docker independentes estão disponíveis apenas na interface; as permissões de projetos não os incluem.",
+  "agentDocs": "Como funciona o acesso dos agentes",
+  "localTitle": "Sua infraestrutura continua sendo sua.",
+  "localText": "Ocular usa seu kubeconfig e seus Docker contexts e se conecta diretamente do seu computador. Não exige conta no Ocular, servidor central de gerenciamento nem componente Ocular no cluster.",
+  "localPoints": [
+    [
+      "Seu acesso existente",
+      "Use as credenciais e permissões já configuradas para os ambientes."
+    ],
+    [
+      "Código aberto",
+      "Leia o código, relate problemas ou contribua sob a licença Apache 2.0."
+    ]
+  ],
+  "freeLabel": "SEM PLANO PAGO",
+  "freeTitle": "Todos os recursos. Para todos.",
+  "freeText": "Gratuito para pessoas, equipes e empresas de qualquer porte. Sem limites por faturamento ou investimento, licenças por usuário ou recursos bloqueados.",
+  "supportTitle": "Apoie o desenvolvimento",
+  "supportText": "O desenvolvimento é financiado apenas por doações voluntárias em criptomoedas. Doar é opcional e não libera recursos do produto.",
+  "freeNote": "O mesmo produto, com ou sem doação.",
+  "downloads": "Reúna seus ambientes.",
+  "downloadsText": "Escolha o sistema operacional e a arquitetura e baixe o instalador desktop. Todos os recursos incluídos.",
+  "os": "Sistema operacional",
+  "arch": "Arquitetura",
+  "allOS": "Todos os sistemas",
+  "allArch": "Ambas as arquiteturas",
+  "checksum": "Checksum",
+  "desktopMode": "Aplicativo desktop",
+  "allReleases": "Todos os releases",
+  "releaseLink": "Releases no GitHub",
+  "buildsLink": "Builds de desenvolvimento",
+  "fallback": "Pacotes e checksums também podem ser baixados diretamente do GitHub Releases, sem conta. Builds de desenvolvimento estão disponíveis separadamente em execuções bem-sucedidas do CI; podem exigir conta no GitHub e têm prazo de retenção.",
+  "loading": "Verificando pacotes publicados…",
+  "unavailable": "Não foi possível obter a lista de releases. Abra o GitHub para escolher um download.",
+  "empty": "Ainda não há release estável publicado. Confira os artefatos de desenvolvimento em execuções bem-sucedidas do CI.",
+  "noMatch": "Nenhum pacote corresponde à seleção. Escolha outra arquitetura ou abra a página do release.",
+  "version": "Release",
+  "requirements": "Instalação e compatibilidade",
+  "requirementsText": "Linux: Ubuntu 24.04+ ou sistema compatível com glibc 2.39+, GTK 3 e WebKit2GTK 4.1. Windows: Windows 10/11 com WebView2. macOS: versão 12 ou posterior, Intel ou Apple Silicon.",
+  "signing": "Os instaladores Windows não são assinados; os builds macOS usam assinatura ad-hoc, sem notarização. Confira a origem do download e o checksum SHA-256 do pacote antes de instalar.",
+  "installDocs": "Guia de instalação",
+  "faqTitle": "Antes de começar.",
+  "faqs": [
+    [
+      "É gratuito também para uso comercial?",
+      "Sim. Sem limites de faturamento ou investimento, assinatura ou prazo de teste. Todos os recursos estão incluídos; doar é opcional."
+    ],
+    [
+      "Preciso instalar algo no cluster?",
+      "Não é necessário servidor ou componente Ocular no cluster. O aplicativo usa seu acesso existente ao Kubernetes. Alguns recursos dependem de serviços do cluster, como o metrics-server para métricas de recursos."
+    ],
+    [
+      "Ocular substitui o Docker Desktop?",
+      "Não. Ocular trabalha com engines Docker existentes, contêineres independentes e projetos Compose. Não fornece uma engine de contêineres nem uma máquina virtual."
+    ],
+    [
+      "Preciso instalar Helm separadamente?",
+      "Não. Ocular inclui Helm para navegar por charts e gerenciar releases. Permissões no Kubernetes e acesso ao repositório de charts continuam necessários."
+    ],
+    [
+      "Posso usar com meu agente de programação?",
+      "Sim, pela API local de agentes. Você permite o acesso a ambientes, escopos e operações selecionados. Escritas protegidas exigem revisão. Agentes executados com o mesmo usuário do sistema compartilham essas permissões. Você pode pausar o acesso a qualquer momento."
+    ]
+  ],
+  "footer": "Kubernetes e Docker. Do seu jeito.",
+  "source": "Código-fonte",
+  "issues": "Relatar um problema",
+  "license": "Apache 2.0",
+  "localLabel": "LOCAL / CÓDIGO ABERTO",
+  "downloadCompactFormat": "Baixar {format}"
+}

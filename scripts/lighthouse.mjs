@@ -5,6 +5,7 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { createSiteServer } from './server.mjs';
 const out=process.env.OCULAR_SITE_SCRATCH || '/home/spk/.spk/sawe/ss/SPK-Ocular/.agents/tmp/site';
 mkdirSync(out,{recursive:true});
+process.env.TMPDIR=out+'/tmp';mkdirSync(process.env.TMPDIR,{recursive:true});
 const server=createSiteServer();await new Promise(r=>server.listen(0,'127.0.0.1',r));
 const port=await new Promise(r=>{const s=net.createServer().listen(0,'127.0.0.1',()=>{const p=s.address().port;s.close(()=>r(p));});});
 const browser=await chromium.launch({args:[`--remote-debugging-port=${port}`]});

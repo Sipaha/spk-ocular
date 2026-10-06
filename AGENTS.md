@@ -2,7 +2,8 @@
 
 This orphan `pages` branch contains the static product website, independently of
 the application on `master`. Keep both worktrees intact. The website uses Astro,
-plain TypeScript and CSS, Russian and English, and light/dark themes.
+plain TypeScript and CSS, eight website locales, and light/dark themes. Read docs/localization.md for
+translation quality, real screenshot language and routing constraints.
 
 Run `make check` before committing: pure logic tests, Astro checks/build, and real
 browser verification. Inspect desktop/mobile screenshots in both themes. Put all

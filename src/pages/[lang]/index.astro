@@ -1,0 +1,10 @@
+---
+import type { Lang } from '../../i18n/copy';
+import Page from '../../components/Page.astro';
+import { languages } from '../../lib/languages.mjs';
+export function getStaticPaths() {
+  return languages.filter(l => l.code !== 'ru' && l.code !== 'en').map(l => ({params: {lang: l.code}, props: {lang: l.code as Lang}}));
+}
+const {lang} = Astro.props;
+---
+<Page lang={lang} />

@@ -3,7 +3,14 @@
 The static product website on the independent `pages` branch. The application
 lives on `master`; this worktree does not change its builds or release history.
 
-Astro generates Russian (`/spk-ocular/`) and English (`/spk-ocular/en/`) pages.
+Astro generates eight complete website locales: Russian, English, simplified
+Chinese, Spanish, German, French, Brazilian Portuguese and Japanese. Russian stays
+at `/spk-ocular/`; the others use `/spk-ocular/{code}/`. The root chooses a saved
+language, then ordered browser preferences, then English. Explicit localized URLs
+are never overridden. The native-name language menu also works without JavaScript;
+with JavaScript it remembers selection and preserves query/fragment. All routes
+have canonical/hreflang metadata and sitemap entries. See
+[localization quality and routing](docs/localization.md).
 The site keeps Ocular’s logo, variable Inter typography, blue accent and matching
 light/dark colors. The SVG eye mark uses a blue optical lens, a restrained rim
 and highlight; it remains legible at favicon and navigation sizes. Its product-led layout leads with Kubernetes + Docker,
@@ -62,7 +69,7 @@ node scripts/server.mjs
 ```
 
 `make check` runs release/OS logic tests, Astro checks, a clean static build, and
-browser verification of both languages/themes at mobile, tablet and desktop
+browser verification of all eight languages/themes at mobile, tablet and desktop
 widths. It checks keyboard tabs, theme persistence, WCAG AA, layout and image
 loading, free-use and donation copy, mobile section/download navigation, valid
 anchor targets and content aligned 28px below the sticky header, API failure, JavaScript-disabled rendering, all 14 native release files, exclusion of browser-only builds
@@ -75,7 +82,9 @@ before checks. In the SPK-Ocular solution the default test output is
 
 ## Content and downloads
 
-- `src/i18n/copy.ts`: both dictionaries, with a shared type.
+- `src/i18n/copy.ts`: RU/EN source dictionaries and the typed registry.
+- `src/i18n/locales/*.json`: complete translations.
+- `src/lib/languages.mjs`: names, paths and language matching.
 - `src/components/Page.astro`: page sections and semantic no-JS HTML.
 - `src/styles/global.css`: shared tokens and responsive layout.
 - `src/scripts/site.ts`: theme, accessible gallery tabs and release enhancement.

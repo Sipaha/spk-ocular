@@ -1,10 +1,12 @@
 ---
 import '../styles/global.css';
-interface Props { lang: 'ru' | 'en'; title: string; description: string; }
+import { languages, pagePath, languageBootstrap } from '../lib/languages.mjs';
+import type { Lang } from '../i18n/copy';
+interface Props { lang: Lang; title: string; description: string; }
 const { lang, title, description } = Astro.props;
 const base = '/spk-ocular/';
 const origin = 'https://sipaha.github.io';
-const canonical = origin + base + (lang === 'en' ? 'en/' : '');
+const canonical = origin + pagePath(lang, base);
 ---
 <!doctype html>
 <html lang={lang}>
@@ -14,8 +16,7 @@ const canonical = origin + base + (lang === 'en' ? 'en/' : '');
     <title>{title}</title>
     <meta name="description" content={description} />
     <link rel="canonical" href={canonical} />
-    <link rel="alternate" hreflang="ru" href={origin + base} />
-    <link rel="alternate" hreflang="en" href={origin + base + 'en/'} />
+    {languages.map(l => <link rel="alternate" hreflang={l.code} href={origin + pagePath(l.code, base)} />)}
     <link rel="alternate" hreflang="x-default" href={origin + base} />
     <link rel="icon" type="image/svg+xml" href={base + 'icon.svg'} />
     <meta name="theme-color" content="#101827" />
@@ -23,10 +24,11 @@ const canonical = origin + base + (lang === 'en' ? 'en/' : '');
     <meta property="og:title" content={title} />
     <meta property="og:description" content={description} />
     <meta property="og:url" content={canonical} />
-    <meta property="og:image" content={origin + base + `media/og-${lang}.png`} />
+    <meta property="og:image" content={origin + base + `media/og-${lang === 'ru' ? 'ru' : 'en'}.png`} />
     <meta property="og:image:width" content="1200" />
     <meta property="og:image:height" content="630" />
     <meta name="twitter:card" content="summary_large_image" />
+    <script is:inline set:html={languageBootstrap({base, storageKey: 'ocular-language', codes: languages.map(l => l.code)})} />
     <script is:inline>
       (() => {
         let theme;
