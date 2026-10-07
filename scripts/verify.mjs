@@ -63,6 +63,8 @@ try{
   await expect(page.locator(width<=600?'.compact-download-text':'.header-actions [data-download-text]')).toBeVisible();
   const navigation=page.locator(width<=960?'.mobile-nav':'.desktop-nav');
   await expect(navigation).toBeVisible();
+  await expect(navigation.locator('.header-support')).toBeVisible();
+  await expect(navigation.locator('.header-support')).toHaveAttribute('href',about+'#support');
   await expect(navigation.getByRole('link',{name:'GitHub',exact:true})).toBeVisible();
   await expect(navigation.getByRole('link',{name:'GitHub',exact:true})).toHaveAttribute('href',REPO);
   for (const id of ['features','interface','free']) {
@@ -147,7 +149,11 @@ try{
   const direct=!!(expectedOS&&expectedArch);
   const extension={linux:'deb',windows:'msi',darwin:'dmg'}[expectedOS];
   const text=direct?`${lang==='ru'?'Скачать':'Download'} ${extension.toUpperCase()} ${lang==='ru'?'для':'for'} ${name}`:name?`${lang==='ru'?'Выбрать для':'Choose for'} ${name}`:lang==='ru'?'Выбрать пакет':'Choose a download';
-  for (const label of await page.locator('[data-download-text]').allTextContents()) expect(label).toBe(text);
+  for (const label of await page.locator('[data-download-text]').all()) {
+   const header=await label.evaluate(el=>!!el.closest('.header'));
+   const headerText=(lang==='ru'?'Скачать':'Download')+(name?' '+name:'');
+   await expect(label).toHaveText(header&&!direct?headerText:text);
+  }
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
   if(direct) {
    const filename=`spk-ocular_0.1.0_${expectedOS}_${expectedArch}.${extension}`;

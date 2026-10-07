@@ -25,18 +25,20 @@ const navIDs = ['features', 'interface', 'free'];
         <span>SPK <strong>Ocular</strong></span>
       </a>
       <nav aria-label={d.menu} class="desktop-nav">
-        {navIDs.map((id,i) => <a href={'#' + id}>{d.nav[i]}</a>)}
+        {navIDs.map((id,i) => <a href={'#' + id}>{id === 'free' ? d.freeNav : d.nav[i]}</a>)}
+        <a class="header-support" href={about+'#support'}>{d.supportNav}</a>
         <a href={docs}>{d.docs}</a>
         <a class="github-link" href={REPO} aria-label="GitHub" title="GitHub"><GitHubIcon width="20" height="20" aria-hidden="true" /></a>
       </nav>
       <div class="header-actions">
         <details class="language-menu"><summary class="language" aria-label={d.languageLabel} title={d.languageLabel}>{languages.find(l => l.code === lang)?.short}<span aria-hidden="true">⌄</span></summary><nav class="language-options" aria-label={d.languageLabel}>{languages.map(l => <a href={pagePath(l.code, base)} lang={l.code} hreflang={l.code} data-language={l.code} aria-current={l.code === lang ? 'page' : undefined}>{l.name}</a>)}</nav></details>
         <button type="button" class="theme-toggle" aria-label={d.theme} title={d.theme} hidden><ThemeIcon width="20" height="20" aria-hidden="true" /></button>
-        <a class="button compact" href="#downloads" aria-label={d.chooseDownload} data-download-label={JSON.stringify({download:d.download,downloadCompactFormat:d.downloadCompactFormat,downloadFormatFor:d.downloadFormatFor,choose:d.chooseDownload,chooseCompact:d.chooseCompact,chooseFor:d.chooseDownloadFor})}><span data-download-text>{d.chooseDownload}</span><span class="compact-download-text" aria-hidden="true">{d.chooseCompact}</span><span aria-hidden="true">↓</span></a>
+        <a class="button compact" href="#downloads" aria-label={d.headerDownload} data-download-label={JSON.stringify({download:d.download,downloadCompactFormat:d.downloadCompactFormat,downloadFormatFor:d.downloadFormatFor,choose:d.headerDownload,chooseCompact:d.headerDownload,chooseFor:d.headerDownload})}><span data-download-text>{d.headerDownload}</span><span class="compact-download-text" aria-hidden="true">{d.headerDownload}</span><span aria-hidden="true">↓</span></a>
       </div>
     </div>
     <nav class="mobile-nav container" aria-label={d.menu}>
-      {navIDs.map((id,i) => <a href={'#' + id}>{d.nav[i]}</a>)}
+      {navIDs.map((id,i) => <a href={'#' + id}>{id === 'free' ? d.freeNav : d.nav[i]}</a>)}
+      <a class="header-support" href={about+'#support'}>{d.supportNav}</a>
       <a class="github-link" href={REPO} aria-label="GitHub" title="GitHub"><GitHubIcon width="20" height="20" aria-hidden="true" /></a>
     </nav>
   </header>

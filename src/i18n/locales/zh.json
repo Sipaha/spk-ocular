@@ -220,5 +220,8 @@
   "license": "Apache 2.0",
   "localLabel": "本地运行 / 开源",
   "downloadCompactFormat": "下载 {format}",
-  "aboutAuthor": "关于作者"
+  "aboutAuthor": "关于作者",
+  "freeNav": "免费",
+  "supportNav": "支持",
+  "headerDownload": "下载"
 }

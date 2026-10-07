@@ -43,7 +43,8 @@ funding. There are no paid tiers or seat charges. Development is supported only
 through voluntary cryptocurrency donations. Donations never unlock features.
 The support section explains this policy and links to the owner’s personal
 about site at `#support`, where donation details are maintained. The footer has
-an About the author link. Both links target the matching about locale; Russian
+an About the author link. Desktop and mobile header navigation also include a
+short Support link directly to the donation section. Both links target the matching about locale; Russian
 uses an explicit `?lang=ru` choice. Wallet addresses and QR codes are not duplicated
 on the Ocular website.
 
@@ -105,11 +106,12 @@ macOS DMG directly. Linux format priority matches the launcher website: DEB, the
 RPM, with TAR.GZ as a last fallback. This is a default format policy, not distro
 detection; alternative formats remain in the package list. Manual selectors
 update the buttons.
-When a compatible asset or reliable architecture is missing, buttons say Choose
-and navigate to package selection. Mobile/unknown devices keep the general choice.
+When a compatible asset or reliable architecture is missing, main download
+buttons say Choose and navigate to package selection. The header keeps a clear
+Download caption and also opens package selection. Mobile/unknown devices keep the general choice.
 Download buttons name the selected format (DEB, RPM, MSI, DMG, ZIP or TAR.GZ).
 Hero and free-use download buttons include an All releases link directly below.
-The narrow-screen header uses a short Download FORMAT/Choose caption with a
+The narrow-screen header uses a short Download FORMAT/Download caption with a
 complete accessible label. Without JavaScript, Choose links navigate to the download section.
 Without a stable release or an available API, visible GitHub release and development-build
 links remain. Three installation steps explain the installer formats, checksum

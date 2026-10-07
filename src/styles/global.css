@@ -48,7 +48,7 @@ p { color: var(--muted); text-wrap: pretty; }
 .header-inner { min-height: 76px; display: flex; align-items: center; gap: 32px; }
 .brand { display: flex; align-items: center; gap: 10px; white-space: nowrap; font-size: 21px; letter-spacing: -.04em; }
 .brand strong { font-weight: 650; }
-.desktop-nav { display: flex; gap: 25px; margin-left: auto; font-size: 13px; font-weight: 550; color: var(--muted); white-space: nowrap; }
+.desktop-nav { display: flex; gap: 18px; margin-left: auto; font-size: 13px; font-weight: 550; color: var(--muted); white-space: nowrap; }
 .header-actions { display: flex; gap: 18px; align-items: center; }
 .github-link { display: inline-flex; align-items: center; justify-content: center; flex-shrink: 0; }
 .github-link svg { display: block; width: 20px; height: 20px; }
@@ -177,7 +177,7 @@ select { padding: 10px 36px 10px 12px; border: 1px solid var(--line); border-rad
 @media (max-width: 1150px) {
   .container { width: calc(100% - 64px); }
   .header-inner { gap: 20px; }
-  .desktop-nav { gap: 16px; font-size: 12px; }
+  .desktop-nav { gap: 12px; font-size: 12px; }
   .header-actions { gap: 12px; }
   .hero-heading { grid-template-columns: 1.65fr 1fr; gap: 28px; }
   .workflow { gap: 36px; }
@@ -217,7 +217,7 @@ select { padding: 10px 36px 10px 12px; border: 1px solid var(--line); border-rad
   .button.compact>[data-download-text], .button.compact>span[aria-hidden] { display: none; }
   .button.compact>span.compact-download-text { display: inline; }
   .theme-toggle { width: 28px; height: 32px; }
-  .mobile-nav { justify-content: space-between; gap: 10px; font-size: 11px; padding-bottom: 10px; }
+  .mobile-nav { justify-content: space-between; gap: 6px; font-size: 11px; padding-bottom: 10px; }
   .hero { padding-block: 40px 30px; }
   .eyebrow { font-size: 9px; letter-spacing: .06em; margin-bottom: 20px; }
   .hero h1 { font-size: 34px; }
@@ -275,7 +275,7 @@ select { padding: 10px 36px 10px 12px; border: 1px solid var(--line); border-rad
   @keyframes enter { from { opacity: .5; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
 }
 @media (max-width: 360px) {
-  .mobile-nav { font-size: 10px; line-height: 18.15px; gap: 8px; }
+  .mobile-nav { font-size: 10px; line-height: 18.15px; gap: 5px; }
   .header-inner { gap: 6px; }
   .brand { font-size: 16px; gap: 5px; }
   .brand img { width: 22px; }

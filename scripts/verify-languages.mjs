@@ -36,6 +36,8 @@ try {
   await expect(page.locator('[rel=canonical]')).toHaveAttribute('href','https://sipaha.github.io'+pagePath(lang,base));
   await expect(page.locator('link[hreflang]')).toHaveCount(9);
   const d=dictionaries[lang];
+  await expect(page.locator(`.${width<=960?'mobile-nav':'desktop-nav'} .header-support`)).toBeVisible();
+  await expect(page.locator(`.${width<=960?'mobile-nav':'desktop-nav'} .header-support`)).toHaveAttribute('href',about+'#support');
   await expect(page.locator('.hero h1')).toHaveText(d.hero.join(''));
   for(const button of await page.locator('[data-download-label]').all()) {
    await expect(button).toHaveAttribute('aria-label',d.downloadFormatFor.replace('{format}','DEB').replace('{os}','Linux'));

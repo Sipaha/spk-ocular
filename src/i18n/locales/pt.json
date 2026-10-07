@@ -220,5 +220,8 @@
   "license": "Apache 2.0",
   "localLabel": "LOCAL / CÓDIGO ABERTO",
   "downloadCompactFormat": "Baixar {format}",
-  "aboutAuthor": "Sobre o autor"
+  "aboutAuthor": "Sobre o autor",
+  "freeNav": "Grátis",
+  "supportNav": "Apoiar",
+  "headerDownload": "Baixar"
 }

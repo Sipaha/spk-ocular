@@ -220,5 +220,8 @@
   "license": "Apache 2.0",
   "localLabel": "ローカル / オープンソース",
   "downloadCompactFormat": "{format} を取得",
-  "aboutAuthor": "開発者について"
+  "aboutAuthor": "開発者について",
+  "freeNav": "無料",
+  "supportNav": "支援",
+  "headerDownload": "ダウンロード"
 }
