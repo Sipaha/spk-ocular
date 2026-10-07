@@ -17,6 +17,7 @@ import { tunnelLoader } from './tunnels/store'
 import { Palette } from './palette/Palette'
 import { openPalette } from './palette/store'
 import { cycleArea, globalShortcut } from './shortcuts'
+import { AboutDialog } from './components/AboutDialog'
 import { HelpDialog } from './components/HelpDialog'
 import { editsHeld, mayLeave, useEditHolder } from './edit/guard'
 import { DiscardPrompt } from './edit/DiscardPrompt'
@@ -52,8 +53,9 @@ export function App({ client }: { client: Client }) {
   const connected = target?.connection?.state === 'connected' && connectionAction !== 'cancelling'
   const [workspaceKey, setWorkspaceKey] = useState<string | null>(null)
   const key = target ? targetKey(target) : null
-  const held = !connected && !!key && workspaceKey === key && editsHeld()
-  const showWorkspace = connected || held
+  const reconnecting = !connected && !!key && workspaceKey === key && target?.connection?.state === 'connecting'
+  const held = !connected && !reconnecting && !!key && workspaceKey === key && editsHeld()
+  const showWorkspace = connected || reconnecting || held
   const nextWorkspaceKey = showWorkspace ? key : null
   if (workspaceKey !== nextWorkspaceKey) setWorkspaceKey(nextWorkspaceKey)
   const loadError = useStore((s) => s.loadError)
@@ -104,6 +106,7 @@ export function App({ client }: { client: Client }) {
 
   // The app-wide keys (shortcuts.ts): not a terminal's, not under a modal dialog.
   const [help, setHelp] = useState(false)
+  const [about, setAbout] = useState(false)
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const id = globalShortcut(e)
@@ -148,10 +151,11 @@ export function App({ client }: { client: Client }) {
 
   return (
     <div className="relative flex h-full flex-col">
-      <AppHeader client={client} target={target} onHelp={() => setHelp(true)} />
+      <AppHeader client={client} target={target} onHelp={() => setHelp(true)} onAbout={() => setAbout(true)} />
       <div className="flex min-h-0 flex-1">
         <Sidebar act={act} client={client} configRef={configRef} />
         <div className="flex min-w-0 flex-1 flex-col">
+          {reconnecting && <div role="status" className="border-b border-line px-3 py-2 text-sm text-fg-muted">{t('connection.connecting')}</div>}
           {held && target && <div role="status" className="border-b border-line px-3 py-2 text-sm text-fg-muted">
             {t('connection.disconnected')}
             <button className="ml-3 text-accent" onClick={() => mayLeave(() => { connect() })}>{t('connection.connect')}</button>
@@ -179,6 +183,7 @@ export function App({ client }: { client: Client }) {
       <AgentsPanel client={client} />
       <AgentConfirm client={client} reload={loadAgents.pending} />
       <Palette client={client} act={act} />
+      {about && <AboutDialog info={info} onClose={() => setAbout(false)} />}
       {help && <HelpDialog onClose={() => setHelp(false)} />}
       <DiscardPrompt />
       <StatusBar />

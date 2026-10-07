@@ -6,6 +6,7 @@ import { showNotice, useStore } from '../store'
 import { copyText } from '../term/clipboard'
 import { errorDetail } from '../errors'
 import { focusMark, restoreFocus } from '../shortcuts'
+import { PanelResize, usePanelWidths } from '../components/PanelResize'
 import { Select } from '../components/Select'
 import { ProviderIcon } from '../components/icons'
 import { GrantEditor } from './GrantEditor'
@@ -201,9 +202,13 @@ function GrantsTab({ client }: { client: Client }) {
     }
   }
 
+  const targetsWidth = usePanelWidths(s => s.agentsTargets)
+  const targetsPanel = useRef<HTMLElement | null>(null)
+
   return (
     <div className="flex min-h-0 flex-1">
-      <nav aria-label={t('agents.targets')} className="agents-targets">
+      <nav ref={targetsPanel} aria-label={t('agents.targets')} className="agents-targets relative" style={{ width: targetsWidth, maxWidth: '60%' }}>
+        <PanelResize label={t('panels.targets')} value={targetsWidth} min={160} max={() => Math.min(420, (targetsPanel.current?.parentElement?.clientWidth ?? window.innerWidth) * 0.6)} onDone={agentsTargets => usePanelWidths.setState({ agentsTargets })} />
         <ul className="min-h-0 flex-1 overflow-y-auto px-2 py-2">
           {rows.map((r, i) => {
             const head = i === 0 || rows[i - 1].groupTitle !== r.groupTitle

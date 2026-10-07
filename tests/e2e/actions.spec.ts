@@ -287,7 +287,7 @@ test('the context configuration changes after the review: review again', async (
   const dialog = page.getByRole('dialog', { name: 'Restart web' })
   await expect(dialog.getByRole('button', { name: 'Restart' })).toBeEnabled()
   // Hold the target refresh to exercise an already-reviewed action racing
-  // the configuration change, before the UI returns to explicit Connect.
+  // the configuration change. Recovery must not authorize the stale plan.
   let release!: () => void
   const refresh = new Promise<void>((resolve) => { release = resolve })
   await page.route('**/api/ListTargets', async (route) => { await refresh; await route.continue() })
@@ -296,9 +296,10 @@ test('the context configuration changes after the review: review again', async (
     await dialog.getByRole('button', { name: 'Restart' }).click()
     await expect(dialog.getByRole('alert')).toHaveText('the configuration of demo changed since the action was reviewed; review it again')
   } finally { release() }
-  await expect(page.getByRole('button', { name: 'Connect', exact: true })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Connect', exact: true })).toHaveCount(0)
+  await expect(dialog.getByRole('button', { name: 'Review again', exact: true })).toBeVisible()
+  await dialog.getByRole('button', { name: 'Close', exact: true }).click()
   await expect(dialog).toHaveCount(0)
-  await connectSelected(page)
   await expect.poll(() => cells(grid, 'web')).toEqual(['web', '2', '0'])
   await row(grid, 'web').click({ button: 'right' })
   await page.getByRole('menu').getByRole('menuitem', { name: 'Restart' }).click()

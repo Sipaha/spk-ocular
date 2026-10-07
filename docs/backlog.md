@@ -26,8 +26,7 @@ site and download-journey work separately from application features.
 - Discovered-kind scale subresources, additional actions and child relationships;
   richer CRD column provenance and Problems coverage for custom resources.
 - Search objects of unopened kinds without unbounded background listing.
-- Configurable recent-session retention and background credential-helper support
-  for desktop keyring-backed caches.
+- Background credential-helper support for desktop keyring-backed caches.
 
 ## Editing and actions
 

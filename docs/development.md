@@ -40,7 +40,7 @@ Playwright's server-readiness probe does not interpret CIDR entries such as
 | `make build` | Web bundle and static browser-mode binary in `build/bin/spk-ocular` |
 | `make build-desktop` | Native development window in `build/bin/spk-ocular-desktop` |
 | `make licenses` | Regenerate committed third-party notices from exact build inputs |
-| `make release VERSION=0.1.0` | Native production binary without DevTools |
+| `make release VERSION=1.0.0` | Native production binary without DevTools |
 | `make package-linux` | Production DEB/RPM and desktop/browser archives |
 | `make lint` | Go vet and lint with both tag sets, ESLint/TypeScript, workflow/shell validation |
 | `make test` | Go race, web, browser e2e and packaging/documentation contract tests |
@@ -48,11 +48,18 @@ Playwright's server-readiness probe does not interpret CIDR entries such as
 | `make test-packaging` | Release input/archive tests, documentation links/language, desktop entry |
 | `make pss PID=123` | Application and webview memory accounting |
 
-Regenerate native icon rasters with `node scripts/render-icons.mjs` after editing
-`internal/appfiles/icons/icon.svg`. The script needs the e2e Chromium installation
-and isolated `OCULAR_SCRATCH_DIR`/`TMPDIR`; it renders at 4x and uses Catmull-Rom
-for the final sizes. GTK supplies the 16/24/32/48/64/128 px family; the 256 px PNG
-remains the application and packaging fallback.
+`internal/appfiles/icons/icon.svg` is the canonical Ocular eye/lens mark, matching
+`public/icon.svg` in the independent website branch. Native PNG sizes and the
+browser favicon are generated from this SVG, without drawing separate variants.
+Run `scripts/render-icons.mjs` with `OCULAR_SCRATCH_DIR` and `TMPDIR` set to solution
+scratch. It supersamples each native size at 4x and downsamples it, then copies
+the SVG to `web/public/icon.svg`. The website copy must be kept byte-identical
+when the mark changes. Packaging derives Windows/macOS icon formats from the
+same native PNG. Published release assets change only with a new release.
+
+GTK supplies the 16/24/32/48/64/128 px family; the 256 px PNG remains the
+application and packaging fallback. The renderer needs e2e Chromium and uses
+Catmull-Rom for the final native sizes.
 
 `make run` and `make run-browser` use normal user configuration. Automated or
 manual verification must launch the built executable with isolated HOME,
@@ -127,12 +134,12 @@ and resize DOM updates limited to one per animation frame.
 
 ## Release artifacts
 
-`make package-linux RELEASE_VERSION=0.1.0 ARCH=amd64` builds and packages on the
+`make package-linux RELEASE_VERSION=1.0.0 ARCH=amd64` builds and packages on the
 matching native Linux host. It does not install, tag, push, or publish anything.
 Inspect the generated packages with:
 
 ```sh
-python3 packaging/verify.py --version 0.1.0 --arch amd64
+python3 packaging/verify.py --version 1.0.0 --arch amd64
 ```
 
 The verifier checks actual archive/DEB/RPM contents, binary version and machine
@@ -144,8 +151,8 @@ extracts packages into scratch and must not install over the user's application.
 Windows/macOS packages use matching native hosts:
 
 ```sh
-python packaging/portable.py --version 0.1.0 --os windows --arch amd64
-python packaging/verify-portable.py --version 0.1.0 --os windows --arch amd64
+python packaging/portable.py --version 1.0.0 --os windows --arch amd64
+python packaging/verify-portable.py --version 1.0.0 --os windows --arch amd64
 # On macOS use --os darwin; either platform also accepts --arch arm64.
 ```
 
@@ -234,3 +241,8 @@ browser language suite exercises all eight choices, native-name menus, live
 workspace preservation and denied storage. The lifecycle suite checks a saved
 language after restarting its isolated process. See [localization](localization.md)
 for system/browser precedence and translation limits.
+
+
+For local Playwright fixtures, clear HTTP/HTTPS proxy variables in the test
+command if the runner's inherited proxy intercepts loopback readiness checks;
+this is a per-command test setting, not a change to user/global proxy settings.

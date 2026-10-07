@@ -62,22 +62,29 @@ func (s *Service) ConnectTarget(ctx context.Context, providerID, id string) (cor
 	if old := s.connections[key]; old != nil {
 		old.cancel()
 	}
+	return s.startConnectionLocked(providerID, id, target.ConfigHash, opener), nil
+}
+
+// startConnectionLocked admits an explicit connection or restores one whose
+// configuration changed. Callers hold sessMu and have validated the target.
+func (s *Service) startConnectionLocked(providerID, id, hash string, opener provider.Opener) core.ConnectionStatus {
+	key := ownerKey(providerID, id)
 	s.connectionSeq++
-	a := &connectionAttempt{provider: providerID, target: id, hash: target.ConfigHash,
+	a := &connectionAttempt{provider: providerID, target: id, hash: hash,
 		status: core.ConnectionStatus{ID: s.connectionSeq, State: "connecting", Phase: "opening", MaxAttempts: connectionAttempts, StartedAt: s.now().UnixMilli()}}
 	a.ctx, a.cancel = context.WithCancel(context.Background())
 	s.connections[key] = a
-	if e := s.sessions[key]; e != nil && e.hash == target.ConfigHash {
+	if e := s.sessions[key]; e != nil && e.hash == hash {
 		e.closing = false
 		a.owner = e.owner
 		a.status.State, a.status.Phase, a.status.FinishedAt = "connected", "ready", s.now().UnixMilli()
 		s.emitTargetsChanged(providerID)
-		return a.status, nil
+		return a.status
 	}
 	s.wg.Add(1)
 	go s.connect(a, opener)
 	s.emitTargetsChanged(providerID)
-	return a.status, nil
+	return a.status
 }
 
 func (s *Service) connectionActiveLocked(a *connectionAttempt) bool {
@@ -109,6 +116,11 @@ func (s *Service) connect(a *connectionAttempt, opener provider.Opener) {
 		sess, err := opener.Open(ctx, a.target)
 		var provisional *connectingSession
 		if err == nil {
+			// Automatic restoration of an unselected target must not launch an
+			// interactive credential helper in the background.
+			if b, ok := sess.(provider.Backgrounder); ok && s.currentKey(a.ctx) != ownerKey(a.provider, a.target) {
+				b.SetBackground(true, nil)
+			}
 			provisional = &connectingSession{Session: sess}
 			s.sessMu.Lock()
 			active := s.connectionActiveLocked(a)

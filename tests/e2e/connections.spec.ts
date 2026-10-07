@@ -90,6 +90,8 @@ test('Disconnect is available on the selected connected target and disappears af
  const row=page.getByRole('region',{name:'Synthetic (test)',exact:true}).getByRole('option',{name:/^demo\b/})
  await page.getByRole('button',{name:'Connect',exact:true}).click()
  await expect(page.getByRole('grid',{name:'resources'})).toBeVisible()
+ await expect(row.locator('[data-connection-state=connected]')).toHaveCSS('background-color','rgb(126, 197, 156)')
+ await page.screenshot({path:process.env.OCULAR_SCRATCH_DIR+'/selected-connected-green.png'})
  await row.click({button:'right'})
  await page.getByRole('menuitem',{name:'Disconnect',exact:true}).click()
  await expect(page.getByRole('button',{name:'Connect',exact:true})).toBeVisible()

@@ -887,13 +887,14 @@ function ResourcePage(props: {
           />
         </label>
       </header>
-      {!initialLoading && <StatusBanner state={view.status.state} cls={view.status.class} message={view.status.message} empty={view.rows.length === 0} coverage={view.status.coverage} />}
+      {!initialLoading && view.status.state !== 'ready' && <StatusBanner state={view.status.state} cls={view.status.class} message={view.status.message} />}
       {!initialLoading && view.status.coverage && <CoverageNote coverage={view.status.coverage} notCovered={view.kind?.notCovered ?? kind.notCovered} compact={scope.mode === 'some'} loading={view.status.state === 'loading'} />}
       {!initialLoading && metrics && <MetricsNote metrics={metrics} />}
       <div className="relative flex min-h-0 flex-1 flex-col">
         <div data-area="table" aria-busy={view.status.state === 'loading'} className="flex min-h-0 flex-1 flex-col">
         {initialLoading ? <LoadingState title={kindLabel(target.provider, kind)} /> : <ResourceTable
           areaFocus
+          emptyMessage={view.status.state === 'ready' ? view.rows.length === 0 ? emptyTableText(view.status.coverage) : t('nav.noMatches') : null}
           columns={columns}
           rows={view.rows}
           hideScope={scope.mode === 'one'}
@@ -932,7 +933,6 @@ function ResourcePage(props: {
         </div>
         {open && (
           <ResourceDrawer
-            key={`${open.kind}/${open.scope}/${open.name}/${open.uid}`}
             client={client}
             hub={hub}
             target={{ provider: target.provider, id: target.id }}
@@ -1051,13 +1051,12 @@ function LoadingState({ title, inline = false }: { title?: string; inline?: bool
   </div>
 }
 
-function StatusBanner({ state, cls, message, empty, coverage }: { state: string; cls?: string; message?: string; empty: boolean; coverage?: SourceCoverage[] }) {
-  if (state === 'ready') {
-    if (!empty) return null
-    // A view of several sources: nothing found is only "nothing" where it could look.
-    const text = !coverage ? t('table.empty') : coverage.every((c) => c.state === 'ready') ? t('coverage.noneFound') : t('coverage.noneInObserved')
-    return <p className="px-4 py-6 text-center text-fg-subtle">{text}</p>
-  }
+function emptyTableText(coverage?: SourceCoverage[]) {
+  // Empty results refer only to the sources the view could actually observe.
+  return !coverage ? t('table.empty') : coverage.every(c => c.state === 'ready') ? t('coverage.noneFound') : t('coverage.noneInObserved')
+}
+
+function StatusBanner({ state, cls, message }: { state: string; cls?: string; message?: string }) {
   if (state === 'loading') return null
   const isErr = state === 'error'
   return (

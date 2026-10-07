@@ -303,10 +303,8 @@ body.log-select-drag { -webkit-user-select: none; user-select: none; }
 .helm-table td { height: 32px; max-width: 280px; overflow: hidden; text-overflow: ellipsis; padding: 0 12px; border-bottom: 1px solid var(--color-line); }
 .helm-table button { color: var(--color-accent); text-align: left; }
 .helm-table tr:hover { background: var(--color-hover); }
-.helm-detail { width: 46%; min-width: 320px; }
 .helm-code { overflow: auto; white-space: pre; padding: 12px; background: var(--color-app); border: 1px solid var(--color-line); font: 12px/1.6 var(--font-mono); tab-size: 2; }
 .helm-form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; }
-@media (max-width: 900px) { .helm-detail { width: 55%; min-width: 260px; } }
 
 /* Configuration dialogs share one action row; narrow windows use a deliberate stack. */
 @media (max-width: 640px) {
@@ -325,3 +323,6 @@ body.log-select-drag { -webkit-user-select: none; user-select: none; }
     .command-trigger { min-width: 100px; width: 160px; }
   }
 }
+
+/* Japanese prose wraps at phrase punctuation before splitting technical words. */
+:lang(ja) .about-dialog p { word-break: keep-all; overflow-wrap: anywhere; }

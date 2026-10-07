@@ -1,6 +1,6 @@
 import { columnLabel } from '../presentation'
 import { useVirtualizer } from '@tanstack/react-virtual'
-import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react'
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import { ColumnResize } from './ColumnResize'
 import type { Cell, Column, HealthState, MetricsView, Row, SortSpec } from '../api/types'
 import { formatAge, formatBytes, formatCPU } from '../format'
@@ -17,6 +17,7 @@ export interface Sort {
 }
 
 interface Props {
+  emptyMessage?: ReactNode
   columns: Column[]
   rows: Row[]
   /** Hide the scope (namespace) column: one scope is shown. */
@@ -126,7 +127,7 @@ export function matchesRow(r: Row, f: string): boolean {
   return r.cells.some((c) => (c.text ?? '').toLowerCase().includes(needle)) || (r.health.reason ?? '').toLowerCase().includes(needle)
 }
 
-export function ResourceTable({ columns, rows, hideScope, filter, selected, reveal, onSelect, onOpen, onLogs, onTerminal, metrics, onVisibleRows, rowMenu, onDelete, defaultSort, initialSort, onSort, initialWidths, onWidths, areaFocus, marked, onMarked }: Props) {
+export function ResourceTable({ emptyMessage, columns, rows, hideScope, filter, selected, reveal, onSelect, onOpen, onLogs, onTerminal, metrics, onVisibleRows, rowMenu, onDelete, defaultSort, initialSort, onSort, initialWidths, onWidths, areaFocus, marked, onMarked }: Props) {
   const now = useNow(10_000)
   const [widths, setWidths] = useState<Record<string, number>>(initialWidths ?? {})
   const resizeColumn = (id: string, width: number | null) => {
@@ -366,6 +367,7 @@ export function ResourceTable({ columns, rows, hideScope, filter, selected, reve
         className="min-h-0 flex-1 overflow-auto outline-none [scrollbar-gutter:stable]"
         data-table-scroll
       >
+        {sorted.length === 0 && emptyMessage && <div data-table-empty className="px-4 py-6 text-center text-fg-subtle" role="status">{emptyMessage}</div>}
         <div style={{ height: virt.getTotalSize(), minWidth, position: 'relative' }}>
           {items.map((vi) => {
             const r = sorted[vi.index]

@@ -1,4 +1,5 @@
-import { PanelResize, usePanelWidths } from './PanelResize'
+import { LoadingOverlay } from './LoadingOverlay'
+import { DetailsPanel } from './DetailsPanel'
 import { lazy, Suspense, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { ApiError, type Client } from '../api/client'
 import type { ActionDescriptor, EditDoc, Relation, Ref, Resource } from '../api/types'
@@ -60,9 +61,12 @@ const toolBtn = 'rounded-md border border-line px-2 py-0.5 text-xs text-fg-muted
 type Tab = 'details' | 'yaml'
 
 export function ResourceDrawer({ client, hub, target, subject, initialTab, onTab, onClose, hasLogs, onLogs, hasExec, onTerminal, hasForward, actionsOf, onAction, eventsKindOf, editableOf, valuesOf, kindTitleOf }: Props) {
-  const detailsWidth = usePanelWidths((s) => s.details)
   const panelRef = useRef<HTMLElement>(null)
-  const [stack, setStack] = useState<Ref[]>([subject])
+  const rootKey = `${target.provider}/${target.id}/${subject.kind}/${subject.scope ?? ''}/${subject.name}/${subject.uid ?? ''}`
+  const [navigation, setNavigation] = useState({ rootKey, stack: [subject] })
+  if (navigation.rootKey !== rootKey) setNavigation({ rootKey, stack: [subject] })
+  const stack = navigation.rootKey === rootKey ? navigation.stack : [subject]
+  const setStack = (next: Ref[] | ((stack: Ref[]) => Ref[])) => setNavigation(old => ({ rootKey, stack: typeof next === 'function' ? next(old.rootKey === rootKey ? old.stack : [subject]) : next }))
   const [tab, setTab] = useState<Tab>(initialTab === 'yaml' ? 'yaml' : 'details')
   useEffect(() => onTab?.(tab), [onTab, tab])
   const [res, setRes] = useState<{ key: string; r?: Resource; error?: string; gone?: boolean } | null>(null)
@@ -157,9 +161,10 @@ export function ResourceDrawer({ client, hub, target, subject, initialTab, onTab
     if (ed && !reviewing) setReviewing({ ref: ed.doc.ref, base: ed.doc.base, original: ed.doc.text, edited: ed.text, kindTitle: kindTitleOf?.(current.kind) ?? current.kind })
   }
   const cancelEdit = () => mayLeave(endEdit)
-  const keys = useRef({ close, depth: stack.length, startEdit, review, cancelEdit, editing: !!editing })
+  const back = () => mayLeave(() => { setStack(s => s.slice(0, -1)); setTab('details') })
+  const keys = useRef({ back, close, depth: stack.length, startEdit, review, cancelEdit, editing: !!editing })
   useEffect(() => {
-    keys.current = { close, depth: stack.length, startEdit, review, cancelEdit, editing: !!editing }
+    keys.current = { back, close, depth: stack.length, startEdit, review, cancelEdit, editing: !!editing }
   })
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -171,11 +176,7 @@ export function ResourceDrawer({ client, hub, target, subject, initialTab, onTab
         // Alt+←: back along the relations (never Backspace: it edits text);
         // never the page's history (browser mode would leave the app).
         e.preventDefault()
-        if (k.depth > 1)
-          mayLeave(() => {
-            setStack((s) => s.slice(0, -1))
-            setTab('details')
-          })
+        if (k.depth > 1) k.back()
       } else if (e.code === 'KeyE' && !e.repeat && !e.altKey && !e.ctrlKey && !e.metaKey && !e.shiftKey && !isTyping(e.target) && !k.editing) {
         // By the physical key: a Russian layout types "у".
         e.preventDefault()
@@ -190,7 +191,10 @@ export function ResourceDrawer({ client, hub, target, subject, initialTab, onTab
   }, [])
 
   const shown = res?.key === key ? res : null
-  const r = shown?.r
+  const loading = !shown
+  // Keep the previous static layout while loading another object. Privileged
+  // value/port children below are removed immediately; stale controls are inert.
+  const r = shown?.r ?? (loading ? res?.r : undefined)
   const actions = actionsOf?.(current.kind) ?? []
   // The object shown now (after relation navigation: that one), with the UID read.
   // A deleted object has nothing to open or act on.
@@ -208,9 +212,8 @@ export function ResourceDrawer({ client, hub, target, subject, initialTab, onTab
   const moved = !!editing?.doc.version && !!revision && revision !== editing.doc.version
 
   return (
-    <aside ref={panelRef} style={{ width: detailsWidth ?? 'min(720px,55%)', maxWidth: 'calc(100% - 100px)' }} role="dialog" aria-label={`${current.kind} ${title}`} data-area="details" tabIndex={-1} className="resource-drawer absolute inset-y-0 right-0 z-10 flex flex-col border-l border-line outline-none">
+    <DetailsPanel panelRef={panelRef} label={`${current.kind} ${title}`}>
       {/* Name first, whole; the object's tools on a line of their own. */}
-      <PanelResize label={t('panels.details')} reverse value={detailsWidth ?? 720} min={280} max={() => Math.max(100, (panelRef.current?.parentElement?.clientWidth ?? window.innerWidth) - 100)} onDone={(details) => usePanelWidths.setState({ details })} />
       <header className="drawer-heading">
         {stack.length > 1 && (
           // Where the relations led: each step is a way back.
@@ -253,7 +256,7 @@ export function ResourceDrawer({ client, hub, target, subject, initialTab, onTab
           </button>
         </div>
         {hasTools && (
-          <div className="drawer-tools">
+          <div className="drawer-tools" inert={loading}>
             {onLogs && hasLogs?.(current.kind) && (
               <button
                 className="rounded-md border border-line px-2 py-0.5 text-xs text-fg-muted hover:bg-hover hover:text-fg"
@@ -304,7 +307,7 @@ export function ResourceDrawer({ client, hub, target, subject, initialTab, onTab
                 {t('action.menu')} ▾
               </button>
             )}
-            {menuAt && onAction && (
+            {menuAt && shown && onAction && (
               <Menu
                 label={t('action.menu')}
                 at={menuAt}
@@ -328,8 +331,8 @@ export function ResourceDrawer({ client, hub, target, subject, initialTab, onTab
           </button>
         ))}
       </nav>
-      <div className="min-h-0 flex-1 overflow-y-auto">
-        {!shown && <p className="p-4 text-fg-subtle">{t('app.loading')}</p>}
+      <div className="relative min-h-0 flex-1" aria-busy={loading}>
+      <div className="h-full overflow-y-auto" inert={loading}>
         {shown?.error &&
           (shown.gone ? (
             <p role="status" className="m-4 rounded-md border border-line px-3 py-2 text-fg-muted">
@@ -390,16 +393,18 @@ export function ResourceDrawer({ client, hub, target, subject, initialTab, onTab
             target={target}
             r={r}
             onGo={go}
-            eventsKind={eventsKindOf?.(current.kind)}
+            eventsKind={shown ? eventsKindOf?.(current.kind) : undefined}
             // Keyed by the object: its values never show for another one.
             values={
-              valuesOf?.(current.kind) &&
+              shown && valuesOf?.(current.kind) &&
               r.ref.uid && <ValuesSection key={key} client={client} subject={{ ...r.ref, provider: target.provider, target: target.id }} revision={revision} gone={shown?.gone} kindTitle={kindTitleOf?.(current.kind) ?? current.kind} />
             }
             // Right under the facts: the events list below is a fixed-height box.
-            ports={hasForward?.(current.kind) && <PortsSection key={key} client={client} subject={{ ...r.ref, provider: target.provider, target: target.id }} />}
+            ports={shown && hasForward?.(current.kind) && <PortsSection key={key} client={client} subject={{ ...r.ref, provider: target.provider, target: target.id }} />}
           />
         )}
+      </div>
+      {loading && <LoadingOverlay label={`${t('app.loading')} · ${refTitle(current)}`} />}
       </div>
       {reviewing && editing && (
         <EditDialog
@@ -415,7 +420,7 @@ export function ResourceDrawer({ client, hub, target, subject, initialTab, onTab
           }}
         />
       )}
-    </aside>
+    </DetailsPanel>
   )
 }
 

@@ -7,10 +7,10 @@ import { ProviderIcon, SearchIcon } from './icons'
 import { TargetInfoButton } from './TargetDetails'
 
 /** App-wide navigation stays visible while individual panels scroll. */
-export function AppHeader({ target, onHelp, client }: { target: Target | null; onHelp: () => void; client: Client }) {
+export function AppHeader({ target, onHelp, onAbout, client }: { target: Target | null; onHelp: () => void; onAbout: () => void; client: Client }) {
   return (
     <header className="app-header">
-      <div className="app-brand">SPK Ocular</div>
+      <button type="button" className="app-brand flex items-center gap-2" onClick={onAbout} aria-label={t('about.title')} title={t('about.title')} aria-haspopup="dialog"><img src="./icon.svg" width="24" height="24" alt="" className="h-6 w-6" />SPK Ocular</button>
       <div className="app-context" aria-label={t('shell.context')}>
         {target ? <>
           <ProviderIcon provider={target.provider} className="h-4 w-4 shrink-0 text-fg-muted" />

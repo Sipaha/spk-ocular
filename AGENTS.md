@@ -72,7 +72,7 @@ contract checks, documentation validation, and both builds. Use
 VITEST_MAX_WORKERS=2 on this workspace. The existing TanStack React Compiler
 warning is not a failed build.
 
-`make package-linux RELEASE_VERSION=0.1.0 ARCH=amd64` produces native packages
+`make package-linux RELEASE_VERSION=1.0.0 ARCH=amd64` produces native packages
 and archives. `packaging/verify.py` validates their real contents. Packaging
 requires a native host of the requested architecture; never relabel a binary.
 Windows/macOS use `packaging/portable.py` on native hosts and
@@ -153,8 +153,13 @@ unreturned partial export. Do not use the UI's tail/merge limits for archive rea
 
 ### Workspace and interaction
 
-Selecting or restoring a target never connects it. Connect belongs in the
-resource-list area; UI reads cannot create sessions. Cancel is attempt-scoped
+Selecting or restoring an unopened target never connects it. Connect belongs in
+the resource-list area; ordinary UI reads cannot create sessions. Once explicitly
+connected, a target stays connected while idle, minimized or unselected until
+Disconnect/application exit; idle cleanup applies only to implicit sessions.
+Configuration changes automatically check a replacement incarnation for the same
+target, retaining the workspace during recovery. This does not authorize stale
+reviewed writes or retry mutations. Failed recovery requires a new Connect. Cancel is attempt-scoped
 and stops checks, backoff and credential helpers. Report real phase/error/time
 and at most three total automatic attempts. Granted agent sessions remain
 independent. Preserve held edits when a connection becomes unavailable.

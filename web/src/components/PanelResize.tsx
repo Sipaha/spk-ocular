@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'react'
 import { create } from 'zustand'
 
 /** Widths live above targets and drawers, so navigation does not reset the layout. */
-export const usePanelWidths = create<{ targets: number; navigation: number; details: number | null }>(() => ({ targets: 240, navigation: 192, details: null }))
+export const usePanelWidths = create<{ targets: number; navigation: number; details: number | null; helmDetails: number | null; agentsTargets: number }>(() => ({ targets: 240, navigation: 192, details: null, helmDetails: null, agentsTargets: 210 }))
 
 interface Props {
   label: string
@@ -58,6 +58,7 @@ export function PanelResize({ label, axis = 'width', reverse = false, value, min
     onPointerDown={(e) => {
       if (e.button !== 0) return
       e.preventDefault()
+      e.currentTarget.focus({ preventScroll: true })
       const panel = e.currentTarget.parentElement!
       const size = panel.getBoundingClientRect()[axis]
       drag.current = { panel, start: axis === 'width' ? e.clientX : e.clientY, size, next: size, frame: null, cursor: document.body.style.cursor, select: document.body.style.userSelect }
@@ -70,6 +71,7 @@ export function PanelResize({ label, axis = 'width', reverse = false, value, min
     onPointerCancel={() => release(false)}
     onLostPointerCapture={() => release(false)}
     onKeyDown={(e) => {
+      if (e.key === 'Escape' && drag.current) { e.preventDefault(); e.stopPropagation(); release(false); return }
       const decrease = axis === 'width' ? 'ArrowLeft' : 'ArrowUp'
       const increase = axis === 'width' ? 'ArrowRight' : 'ArrowDown'
       if (![decrease, increase, 'Home', 'End'].includes(e.key)) return

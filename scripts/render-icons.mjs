@@ -1,6 +1,6 @@
 // Rasterize the SVG at 4x each output size, then downsample with Catmull-Rom.
 import { createRequire } from 'node:module'
-import { readFileSync, mkdtempSync } from 'node:fs'
+import { readFileSync, mkdtempSync, mkdirSync, writeFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { execFileSync } from 'node:child_process'
@@ -14,6 +14,8 @@ const { chromium } = require('@playwright/test')
 const browser = await chromium.launch()
 try {
  const svg = readFileSync(join(root, 'internal/appfiles/icons/icon.svg'), 'utf8')
+ mkdirSync(join(root, 'web/public'), { recursive: true })
+ writeFileSync(join(root, 'web/public/icon.svg'), svg)
  for (const size of [16, 24, 32, 48, 64, 128, 256]) {
   const full = size * 4
   const page = await browser.newPage({ viewport: { width: full, height: full }, deviceScaleFactor: 1 })

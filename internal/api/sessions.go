@@ -37,13 +37,13 @@ type sessionEntry struct {
 	closing bool
 }
 
-// sessionIdle: a session without views is closed after this long (a page
-// that went away). A local timer, not cluster polling.
+// sessionIdle: an implicit session without views is closed after this long.
+// Explicit UI connections remain open until disconnected. A local timer, not
+// cluster polling.
 const sessionIdle = 60 * time.Second
 
-// Recent targets (P18): the recentTargets targets left last keep their
-// sessions (caches, watches) so switching back is instant; unused, one
-// closes recentIdle after it was left.
+// Recent implicit targets keep their sessions briefly after selection changes.
+// Explicit UI connections are not subject to this retention budget.
 const (
 	recentTargets = 2
 	recentIdle    = 10 * time.Minute
@@ -91,7 +91,11 @@ func (s *Service) session(ctx context.Context, providerID, target string) (provi
 	if fromUI(ctx) {
 		a, e := s.connections[key], s.sessions[key]
 		if e != nil && e.hash != hash {
+			restore := s.explicitConnectionLocked(key, e)
 			s.closeSessionLocked(key)
+			if restore && !s.closed {
+				s.startConnectionLocked(providerID, target, hash, opener)
+			}
 			e = nil
 		}
 		if a == nil || a.status.State != "connected" || e == nil || a.owner != e.owner {
@@ -242,8 +246,9 @@ func (s *Service) setBackgroundLocked(key string, e *sessionEntry, on bool) {
 	})
 }
 
-// revalidateSessions closes sessions whose target vanished or now resolves
-// to another configuration (called when local configuration changed).
+// revalidateSessions retires obsolete incarnations after local configuration
+// changes. Explicit connections automatically check the replacement configuration;
+// implicit sessions and removed targets do not open a new connection.
 func (s *Service) revalidateSessions(ctx context.Context, providerID string) {
 	p, ok := s.reg.Get(providerID)
 	if !ok {
@@ -267,7 +272,18 @@ func (s *Service) revalidateSessions(ctx context.Context, providerID string) {
 		if h, ok := hashes[key]; ok && h == e.hash {
 			continue
 		}
+		restore := s.explicitConnectionLocked(key, e)
 		s.closeSessionLocked(key)
+		if restore && !s.closed {
+			if hash, found := hashes[key]; found {
+				if opener, ok := p.(provider.Opener); ok {
+					s.startConnectionLocked(e.provider, e.target, hash, opener)
+				}
+			} else if a := s.connections[key]; a != nil {
+				a.status.State, a.status.Phase = "failed", "failed"
+				a.status.ErrorClass, a.status.Error = CodeNotFound, "connection target was removed from configuration"
+			}
+		}
 	}
 	for key, a := range s.connections {
 		if keyProvider(key) != providerID || a.status.State != "connecting" {
@@ -282,6 +298,16 @@ func (s *Service) revalidateSessions(ctx context.Context, providerID string) {
 		if a.provisional != nil {
 			go a.provisional.Close()
 		}
+		if !s.closed {
+			if hash, found := hashes[key]; found {
+				if opener, ok := p.(provider.Opener); ok {
+					s.startConnectionLocked(a.provider, a.target, hash, opener)
+				}
+			} else {
+				a.status.State, a.status.Phase = "failed", "failed"
+				a.status.ErrorClass, a.status.Error = CodeNotFound, "connection target was removed from configuration"
+			}
+		}
 	}
 }
 
@@ -290,10 +316,8 @@ func keyProvider(key string) string {
 	return p
 }
 
-// selectSession makes cur the selected target's session key, prev (if
-// another) a recent one, and closes the sessions that are neither current
-// nor recent — but not busy ones: with a stream (a log tab of that target
-// goes on) or agents' calls (AgentCall).
+// selectSession updates foreground/background state and recent implicit targets.
+// Explicit UI connections and busy sessions are retained independently.
 func (s *Service) selectSession(prev, cur string) {
 	streams := s.streams.Owners()
 	s.sessMu.Lock()
@@ -324,7 +348,7 @@ func (s *Service) selectSession(prev, cur string) {
 	}
 	for key, e := range s.sessions {
 		_, recent := s.left[key]
-		if key != cur && !recent && !e.spared(now) && streams[e.owner] == 0 {
+		if key != cur && !recent && !s.explicitConnectionLocked(key, e) && !e.spared(now) && streams[e.owner] == 0 {
 			s.closeSessionLocked(key)
 		}
 	}
@@ -672,8 +696,16 @@ func (s *Service) armReaperLocked() {
 	})
 }
 
-// reapIdleSessions closes sessions that have had no views and no streams
-// (an open log tab) for sessionIdle.
+// explicitConnectionLocked matches the live UI connection to its session
+// incarnation. A closing agent-held session must still finish normally.
+func (s *Service) explicitConnectionLocked(key string, e *sessionEntry) bool {
+	a := s.connections[key]
+	return !e.closing && a != nil && a.status.State == "connected" && a.owner == e.owner
+}
+
+// reapIdleSessions closes unused implicit sessions. Explicit UI connections
+// remain open even without view leases (Helm), with a minimized window, or
+// while another target is selected. No frontend heartbeat is required.
 func (s *Service) reapIdleSessions() {
 	owners := s.views.Owners()
 	for o, n := range s.streams.Owners() {
@@ -683,7 +715,7 @@ func (s *Service) reapIdleSessions() {
 	s.sessMu.Lock()
 	defer s.sessMu.Unlock()
 	for key, e := range s.sessions {
-		if owners[e.owner] > 0 || len(e.agentCalls) > 0 {
+		if s.explicitConnectionLocked(key, e) || owners[e.owner] > 0 || len(e.agentCalls) > 0 {
 			e.lastUsed = now
 			continue
 		}

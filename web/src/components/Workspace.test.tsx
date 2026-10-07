@@ -51,7 +51,8 @@ describe('Workspace', () => {
     expect(screen.queryByText('No objects')).toBeNull()
     f.client.getRows = vi.fn(async () => ({ viewId: 'delayed', version: 2, reset: true, upserts: [], deleted: [], status: { state: 'ready' as const } }))
     await act(async () => f.emit({ type: 'view_changed', payload: { viewId: 'delayed', version: 2 } }))
-    await screen.findByText('No objects')
+    const empty = await screen.findByText('No objects')
+    expect(empty.closest('[data-table-scroll]')).not.toBeNull()
     expect(screen.queryByRole('status', { name: 'Loading…' })).toBeNull()
   })
 

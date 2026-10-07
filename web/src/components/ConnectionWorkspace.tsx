@@ -52,7 +52,7 @@ export function ConnectionWorkspace({ target, pending, onConnect, onCancel }: {
           {active && <span aria-hidden className="h-3 w-3 shrink-0 animate-spin rounded-full border border-line border-t-accent" />}
           {phase}
         </p>
-        {status && status.attempt > 0 && <p className="mt-2 text-xs text-fg-subtle">
+        {status && status.state !== 'disconnected' && status.attempt > 0 && <p className="mt-2 text-xs text-fg-subtle">
           {t('connection.attempt', { attempt: status.attempt, max: status.maxAttempts })} · {t('connection.elapsed', { seconds: elapsed })}
         </p>}
         {status?.error && <div role={status.state === 'failed' ? 'alert' : undefined} className="mt-4 border-l border-line pl-3 text-xs">

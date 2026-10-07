@@ -3,6 +3,7 @@ package appfiles
 import (
 	"bytes"
 	"image/png"
+	"os"
 	"testing"
 )
 
@@ -34,5 +35,19 @@ func TestPanelIconFamilyFitsNativeSizesAndX11Payload(t *testing.T) {
 	// Leave headroom for the property request header.
 	if total*4 >= 250000 {
 		t.Fatalf("window icon family exceeds safe X11 request payload: %d bytes", total*4)
+	}
+}
+
+func TestBrowserIconUsesCanonicalProductMark(t *testing.T) {
+	source, err := os.ReadFile("icons/icon.svg")
+	if err != nil {
+		t.Fatal(err)
+	}
+	browser, err := os.ReadFile("../../web/public/icon.svg")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(source, browser) {
+		t.Fatal("browser favicon differs from the canonical product SVG; run scripts/render-icons.mjs")
 	}
 }

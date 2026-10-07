@@ -183,9 +183,16 @@ func TestCancelLateConnectionCannotReplaceNewAttempt(t *testing.T) {
 	require.False(t, p.opened[1].isClosed())
 }
 
-func TestConfigurationChangeCancelsPendingConnection(t *testing.T) {
+func TestConfigurationChangeReplacesPendingConnection(t *testing.T) {
 	entered := make(chan struct{})
-	p := &connectionProvider{openable: newOpenable("a"), check: func(ctx context.Context, _ int64) error { close(entered); <-ctx.Done(); return ctx.Err() }}
+	p := &connectionProvider{openable: newOpenable("a"), check: func(ctx context.Context, n int64) error {
+		if n > 1 {
+			return nil
+		}
+		close(entered)
+		<-ctx.Done()
+		return ctx.Err()
+	}}
 	s, _ := newService(t, p)
 	_, err := s.ConnectTarget(context.Background(), "k", "a")
 	require.NoError(t, err)
@@ -193,8 +200,10 @@ func TestConfigurationChangeCancelsPendingConnection(t *testing.T) {
 	p.setHash("a", "changed")
 	s.revalidateSessions(context.Background(), "k")
 	awaitConnectWorkers(t, s)
-	require.Equal(t, "disconnected", connectionState(t, s).State)
+	require.Equal(t, "connected", connectionState(t, s).State)
+	require.Equal(t, int64(2), p.checks.Load())
 	require.True(t, p.opened[0].isClosed())
+	require.False(t, p.opened[1].isClosed())
 }
 
 func TestCancelUIConnectionPreservesAnExistingAgentSession(t *testing.T) {
@@ -290,4 +299,105 @@ func TestDisconnectSelectedUIKeepsAgentCallAndAllowsExplicitReconnect(t *testing
 	view, err = s.ListTargets(UIContext(t.Context()))
 	require.NoError(t, err)
 	require.True(t, view.Groups[0].Targets[0].Open)
+}
+
+// Helm has no resource view lease. Explicit connections must not depend on
+// frontend timers, visible windows, resource reads, or a recent-target budget.
+func TestExplicitConnectionsSurviveIdleAndTargetSwitching(t *testing.T) {
+	p := &connectionProvider{openable: newOpenable("a", "b", "c", "d"), check: func(context.Context, int64) error { return nil }}
+	s, _ := newService(t, p)
+	ctx := UIContext(t.Context())
+	for _, id := range []string{"a", "b", "c", "d"} {
+		require.NoError(t, s.SelectTarget(ctx, "k", id))
+		_, err := s.ConnectTarget(ctx, "k", id)
+		require.NoError(t, err)
+		awaitConnectWorkers(t, s)
+	}
+	require.Len(t, p.opened, 4)
+	for _, sess := range p.opened {
+		require.False(t, sess.isClosed(), "switching must not evict explicit connections")
+	}
+	// No views, streams, requests or UI heartbeat for longer than both idle limits.
+	s.sessMu.Lock()
+	future := time.Now().Add(2 * recentIdle)
+	for key, e := range s.sessions {
+		e.lastUsed = future.Add(-2 * recentIdle)
+		if _, left := s.left[key]; left {
+			s.left[key] = e.lastUsed
+		}
+	}
+	s.sessMu.Unlock()
+	s.now = func() time.Time { return future }
+	s.reapIdleSessions()
+	require.Len(t, s.sessions, 4)
+	for _, sess := range p.opened {
+		require.False(t, sess.isClosed())
+	}
+	require.Equal(t, int64(4), p.checks.Load(), "successful connection workers stop; idle must not start retries")
+	require.NoError(t, s.CloseTarget(ctx, "k", "a"))
+	require.True(t, p.opened[0].isClosed(), "explicit Disconnect still closes a background target")
+	require.NoError(t, s.CloseTarget(ctx, "k", "d"))
+	require.True(t, p.opened[3].isClosed(), "explicit Disconnect still closes the selected target")
+	require.Len(t, s.sessions, 2)
+}
+
+func TestConnectedConfigurationChangeRecoversWithoutAnotherConnect(t *testing.T) {
+	p := &connectionProvider{openable: newOpenable("a"), check: func(context.Context, int64) error { return nil }}
+	s, _ := newService(t, p)
+	ctx := UIContext(t.Context())
+	_, err := s.ConnectTarget(ctx, "k", "a")
+	require.NoError(t, err)
+	old := awaitConnection(t, s, "connected")
+	p.setHash("a", "replacement")
+	s.revalidateSessions(ctx, "k")
+	fresh := awaitConnection(t, s, "connected")
+	require.NotEqual(t, old.ID, fresh.ID)
+	require.Equal(t, int64(2), p.checks.Load())
+	require.True(t, p.opened[0].isClosed())
+	require.False(t, p.opened[1].isClosed())
+	require.NoError(t, s.CloseTarget(ctx, "k", "a"))
+	p.setHash("a", "after-disconnect")
+	s.revalidateSessions(ctx, "k")
+	awaitConnectWorkers(t, s)
+	require.Equal(t, "disconnected", connectionState(t, s).State)
+	require.Equal(t, int64(2), p.checks.Load(), "Disconnect removes the intent to reconnect")
+}
+
+func TestConnectedConfigurationRecoveryFailureStopsWithReason(t *testing.T) {
+	p := &connectionProvider{openable: newOpenable("a"), check: func(_ context.Context, n int64) error {
+		if n == 1 {
+			return nil
+		}
+		return &provider.Error{Class: provider.ClassUnauthorized, Message: "credentials expired"}
+	}}
+	s, _ := newService(t, p)
+	ctx := UIContext(t.Context())
+	_, err := s.ConnectTarget(ctx, "k", "a")
+	require.NoError(t, err)
+	awaitConnection(t, s, "connected")
+	p.setHash("a", "changed")
+	s.revalidateSessions(ctx, "k")
+	failed := awaitConnection(t, s, "failed")
+	require.Equal(t, "credentials expired", failed.Error)
+	require.Equal(t, "unauthorized", failed.ErrorClass)
+	awaitConnectWorkers(t, s)
+	require.Equal(t, int64(2), p.checks.Load())
+	require.Empty(t, s.sessions)
+	require.True(t, p.opened[0].isClosed())
+	require.True(t, p.opened[1].isClosed())
+}
+
+func TestUIReadRestoresChangedConnectedConfiguration(t *testing.T) {
+	p := &connectionProvider{openable: newOpenable("a"), check: func(context.Context, int64) error { return nil }}
+	s, _ := newService(t, p)
+	ctx := UIContext(t.Context())
+	_, err := s.ConnectTarget(ctx, "k", "a")
+	require.NoError(t, err)
+	old := awaitConnection(t, s, "connected")
+	p.setHash("a", "changed-before-watcher")
+	_, err = s.ListKinds(ctx, "k", "a")
+	require.True(t, IsCoded(err, CodeGone), "the old incarnation is not served")
+	fresh := awaitConnection(t, s, "connected")
+	require.NotEqual(t, old.ID, fresh.ID)
+	require.Equal(t, int64(2), p.checks.Load())
 }

@@ -1,6 +1,7 @@
 import { connectSelected } from './fixtures'
 import { expect, type Page } from '@playwright/test'
-import { test } from './fixtures'
+import { test, scratchRoot } from './fixtures'
+import { join } from 'node:path'
 import { token } from './synth'
 
 // The generic UI takes everything from the provider's metadata (P6 Task 1):
@@ -318,4 +319,55 @@ test('connection information preserves the resource page and old Overview select
   await expect(dialog).toHaveCount(0)
   await expect(page.getByRole('option', { name: /^demo\b/ })).toHaveAttribute('aria-selected', 'true')
   await expect(grid.getByRole('gridcell', { name: 'alpha', exact: true })).toBeVisible()
+})
+
+
+test('empty state stays below the table header', async ({ page }) => {
+  const grid = await openDemo(page)
+  const header = grid.getByRole('columnheader', { name: /^Name/ })
+  const before = (await header.boundingBox())!.y
+  const zone = page.getByRole('textbox', { name: 'Zone' })
+  await zone.fill('empty')
+  await zone.press('Enter')
+  const empty = page.locator('[data-table-empty]')
+  await expect(empty).toContainText('No objects')
+  expect((await header.boundingBox())!.y).toBeCloseTo(before, 0)
+  expect((await empty.boundingBox())!.y).toBeGreaterThan((await header.boundingBox())!.y)
+  await expect(grid.locator('[data-table-scroll] [data-table-empty]')).toBeVisible()
+  await page.screenshot({ path: join(scratchRoot, 'table-empty-inside.png') })
+})
+
+test('object switching retains the details layout under an inert overlay and rejects late answers', async ({ page }) => {
+  const grid = await openDemo(page)
+  await grid.getByRole('gridcell', { name: 'alpha', exact: true }).click()
+  const drawer = page.locator('[data-area="details"]')
+  await expect(drawer.getByRole('heading', { name: 'alpha', exact: true })).toBeVisible()
+  const original = await drawer.elementHandle()
+  const before = await drawer.boundingBox()
+  let release!: () => void
+  const delayed = new Promise<void>(resolve => { release = resolve })
+  await page.route('**/api/GetResource', async route => {
+    if (route.request().postDataJSON().name === 'crate-91c2') await delayed
+    await route.continue()
+  })
+  try {
+    await grid.getByRole('gridcell', { name: 'beta', exact: true }).click()
+    await expect(drawer.locator('[data-loading-overlay]')).toContainText('beta')
+    expect(await drawer.evaluate((node, previous) => node === previous, original)).toBe(true)
+    expect(await drawer.boundingBox()).toEqual(before)
+    // Static facts remain; they cannot launch operations on the previous object.
+    await expect(drawer.getByRole('heading', { name: 'alpha', exact: true })).toBeVisible()
+    await expect(drawer.locator('.drawer-tools')).toHaveAttribute('inert', '')
+    await page.screenshot({ path: join(scratchRoot, 'details-loading-overlay.png') })
+    await grid.getByRole('gridcell', { name: 'alpha', exact: true }).click()
+    await expect(drawer.locator('[data-loading-overlay]')).toHaveCount(0)
+    const lateAnswer = page.waitForResponse(response => response.url().endsWith('/api/GetResource') && response.request().postDataJSON().name === 'crate-91c2')
+    release()
+    await lateAnswer
+    await page.unroute('**/api/GetResource')
+    await expect(drawer.getByRole('heading', { name: 'alpha', exact: true })).toBeVisible()
+    await expect(drawer.getByRole('heading', { name: 'beta', exact: true })).toHaveCount(0)
+    await expect(drawer.locator('.drawer-tools')).not.toHaveAttribute('inert')
+    await page.screenshot({ path: join(scratchRoot, 'details-loading-finished.png') })
+  } finally { release() }
 })

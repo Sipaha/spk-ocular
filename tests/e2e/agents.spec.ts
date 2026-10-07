@@ -141,6 +141,18 @@ test('contextual permissions preserve other scopes and require explicit grants',
   await zone.press('Enter')
   await page.getByRole('button', { name: 'Agent permissions' }).click()
   const panel = page.getByRole('dialog', { name: 'Agent access' })
+  const targetsPanel = panel.locator('.agents-targets')
+  const targetsWidth = (await targetsPanel.boundingBox())!.width
+  const resize = targetsPanel.getByRole('separator', { name: 'Resize targets panel', exact: true })
+  await resize.press('ArrowRight')
+  expect((await targetsPanel.boundingBox())!.width).toBeCloseTo(targetsWidth + 20, 0)
+  const split = (await resize.boundingBox())!
+  await page.mouse.move(split.x + 2, split.y + 100)
+  await page.mouse.down()
+  await page.mouse.move(split.x + 62, split.y + 100, { steps: 8 })
+  await page.mouse.up()
+  expect((await targetsPanel.boundingBox())!.width).toBeCloseTo(targetsWidth + 80, 0)
+  await page.screenshot({ path: join(scratchRoot, 'agents-resized-targets.png') })
   const editor = panel.getByRole('region', { name: 'demo', exact: true })
   const blue = editor.getByRole('region', { name: 'Zone blue', exact: true })
   const green = editor.getByRole('region', { name: 'Zone green', exact: true })

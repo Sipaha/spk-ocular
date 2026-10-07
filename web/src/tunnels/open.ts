@@ -1,6 +1,6 @@
 import { Browser } from '@wailsio/runtime'
 
-/** Opens a tunnel's URL in the user's browser (desktop: the system browser via Wails). */
+/** Opens an application link in the user's browser (desktop: the system browser via Wails). */
 export async function openURL(url: string, mode: 'desktop' | 'browser'): Promise<void> {
   if (mode === 'desktop') {
     await Browser.OpenURL(url)

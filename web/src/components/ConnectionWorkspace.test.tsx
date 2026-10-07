@@ -102,3 +102,29 @@ it('starts a new retry countdown from its attempt timestamp after an idle period
     expect(screen.getByText(/0 s elapsed/)).toBeInTheDocument()
   } finally { clock.mockRestore() }
 })
+
+
+it('does not present a completed connection as an ongoing attempt after Disconnect', () => {
+  render(<ConnectionWorkspace target={k8s('prod', { connection: progress({
+    state: 'disconnected', phase: 'closed', startedAt: Date.now() - 210000,
+    finishedAt: Date.now(),
+  }) })} onConnect={vi.fn()} onCancel={vi.fn()} />)
+  expect(screen.getByRole('status')).toHaveTextContent('Not connected')
+  expect(screen.queryByText(/Attempt .*of.*elapsed/)).not.toBeInTheDocument()
+  expect(screen.getByRole('button', { name: 'Connect' })).toBeEnabled()
+})
+
+
+it('keeps the mounted workspace during automatic connection recovery', async () => {
+  const target = k8s('prod', { open: true, connection: progress({ state: 'connected', phase: 'ready' }) })
+  const f = fakeClient([target])
+  f.state.view.selected = target
+  render(<App client={f.client} />)
+  const grid = await screen.findByRole('grid', { name: 'resources' })
+  f.state.view.groups[0].targets[0] = { ...target, connection: progress({ id: 8 }) }
+  await act(async () => f.emit({ type: 'targets_changed' }))
+  await screen.findByText('Connecting…')
+  expect(screen.getByRole('grid', { name: 'resources' })).toBe(grid)
+  expect(screen.queryByRole('button', { name: 'Connect' })).not.toBeInTheDocument()
+  expect(f.client.connectTarget).not.toHaveBeenCalled()
+})

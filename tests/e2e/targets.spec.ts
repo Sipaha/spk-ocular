@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { expect, type Page } from '@playwright/test'
 import { test } from './fixtures'
 import { EXTRA, ONE, TWO, env, kubeconfig, writeAtomic } from './fixtures'
@@ -120,6 +122,9 @@ test('a selected context that disappears is deselected, and comes back', async (
 })
 
 test('screenshot', async ({ page }) => {
+  const icon = await page.request.get('/icon.svg')
+  expect(icon.ok()).toBeTruthy()
+  expect(await icon.body()).toEqual(readFileSync(join(import.meta.dirname, '../../internal/appfiles/icons/icon.svg')))
   await page.setViewportSize({ width: 1280, height: 800 })
   await page.goto('/')
   await option(page, 'prod').click()

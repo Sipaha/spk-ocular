@@ -89,10 +89,16 @@ A forbidden Kubernetes namespace probe permits connection with typed scopes.
 Cancellation interrupts the check and backoff; removing the private session
 lifetime marker terminates credential helpers and rejects late helper starts.
 
-Once explicitly connected, the selected connection and the two most recently
-left connections stay warm.
-Busy sessions remain alive while used by views, streams, or agents. Recent idle
-sessions expire after 10 minutes; other unused sessions expire after 60 seconds.
+Explicit UI connections remain open until Disconnect or application shutdown,
+including in Helm, while the window is minimized, and after switching targets.
+They do not depend on frontend heartbeat timers or resource-view leases.
+Configuration changes retire the old incarnation and automatically check a new
+one for the same existing target, retaining its mounted workspace while checks
+run. Previously reviewed writes still fail their old configuration preconditions;
+recovery never repeats or authorizes mutations. Failed recovery or background
+authentication that cannot proceed without a person can still require Connect
+again. Busy implicit sessions remain alive while used by views, streams or agents. The two most recently left implicit sessions expire after 10 minutes;
+other unused implicit sessions expire after 60 seconds.
 Closing a non-selected connection ends its owned views and streams. Terminal
 and tunnel handles own their original connection snapshots independently.
 
@@ -288,6 +294,13 @@ minutes after load. Avoid measurements when system memory pressure would evict
 pages and make Private_Dirty look artificially small.
 
 ## Helm boundary
+
+The Helm UI reuses `ResourceTable` and `DetailsPanel` for list navigation,
+sorting, column resizing and detail-panel sizing. Only the Helm SDK operation
+and repository forms remain specialized. Resource details retain their static
+layout under a loading overlay while a new object is fetched; stale controls
+are inert and protected value/port components unmount immediately on selection
+changes. Late responses cannot replace the current object.
 
 `internal/helm` wraps the embedded Helm 4 SDK. A Kubernetes session supplies its
 already admitted REST configuration, including proxy/authentication/exec shim;

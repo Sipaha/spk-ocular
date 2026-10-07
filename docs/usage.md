@@ -6,15 +6,23 @@ The desktop application opens one window and exits when that window closes.
 It has no tray process. Choose a Kubernetes context or Docker connection in the
 left sidebar, then press **Connect** in the resource-list area. Selecting a target
 or restoring the previous selection never starts a connection. Discovery reads
-local configuration without contacting servers. Existing connections can stay
-open while switching targets; restarting the app requires Connect again.
+local configuration without contacting servers. Explicit connections remain
+open while switching targets, reading Helm charts, editing values, or minimizing
+the window. Use **Disconnect** in the target context menu to close a connection.
+Idle timers do not disconnect explicitly opened targets. Temporary watch/feed
+failures reconnect automatically while retaining cached rows. Configuration changes automatically check a replacement session for the
+same target. Connect is needed again after failed recovery, a restart, or an
+explicit Disconnect. Background authentication that cannot proceed without a
+person is a recovery failure, not an idle timeout.
 
 During connection, the page shows the actual phase, elapsed time, attempt number,
 last error, and time until a retry. Temporary availability failures get at most
 **three total attempts**. Authentication and configuration errors stop immediately.
 **Cancel** stops both an active attempt and the wait before a retry, including
 session-owned credential helpers. After cancellation or failure, Connect starts
-a new sequence. Configuration changes also require a new explicit connection.
+a new sequence. Configuration changes retire the old pending check or connected
+session, then automatically check the replacement configuration for the same
+target.
 
 `spk-ocular --browser --port 5190` serves the same interface on loopback HTTP.
 Use the local URL printed at startup. The browser interface requires its
@@ -22,7 +30,19 @@ per-process page token and does not accept remote Host values.
 
 Connection information is available through the information button next to the
 connection name in the header. Closing that dialog returns focus without
-resetting the resource table, its filter, or an unsaved editor.
+resetting the resource table, its filter, or an unsaved editor. When switching
+objects, the detail layout stays visible under a loading overlay until the new
+response arrives; controls for the previous object cannot run during that wait.
+
+## About the application
+
+Click the Ocular name and icon in the top bar to open About. It shows the running
+build version, Apache 2.0 license, product website, source repository and author
+information. The author profile links to Pavel Simonov’s personal About site in
+the selected language; Russian uses an explicit language marker. Desktop links
+open in the system browser; browser-mode links open in a separate tab. Escape,
+the close button or backdrop closes the dialog and restores focus. Opening it
+preserves workspaces, connections and unsaved edits.
 
 ## Language
 
@@ -297,7 +317,15 @@ agent project grants do not cover it; see [agent access](agent-api.md).
 
 ## Helm
 
-Connected Kubernetes targets offer Helm Releases and Charts. Ocular embeds Helm
+The divider between the release/chart list and its details can be dragged or
+resized with arrow keys. The target list in agent permissions uses the same
+resize controls as the main sidebar, resource navigation, resource details and
+bottom dock. Escape during a drag restores the previous size; panel widths
+survive navigation within the running application.
+
+Connected Kubernetes targets offer Helm Releases and Charts using the same
+resource table and detail-panel components as other sections. The tables support
+filtering, sorting and remembered column widths. Ocular embeds Helm
 4.3.0; no system `helm` executable is required. Releases respect the existing
 namespace selection, including an explicitly empty set. Successful namespace
 reads remain visible when another namespace fails; the failed scope is reported.

@@ -1,7 +1,15 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import type { Client } from '../api/client'
-import type { Ref, ScopeSel, Target } from '../api/types'
+import type { Column, Row, Ref, ScopeSel, Target } from '../api/types'
+import { DetailsPanel } from '../components/DetailsPanel'
+import { LoadingOverlay } from '../components/LoadingOverlay'
+import { SearchIcon } from '../components/icons'
+import { columnWidthsKey } from '../components/columnWidths'
+import { persistTargetEntries } from '../components/navigationPersist'
+import { memoOf, remember as rememberPage, rememberSort } from '../components/pageMemo'
+import { showNotice, targetKey } from '../store'
+import { ResourceTable } from '../components/ResourceTable'
 import { Select } from '../components/Select'
 import { holdEdits, mayLeave } from '../edit/guard'
 import { t } from '../i18n'
@@ -10,9 +18,10 @@ import type { HelmChart, HelmDetail, HelmOperation, HelmPlan, HelmRelease, HelmR
 const emptySettings: HelmSettings = { repositories: [], storage: { driver: 'secret' } }
 const initialOperation = (namespace: string): HelmOperation => ({ action: 'install', name: '', namespace, chart: { repository: '', name: '', version: '' }, values: '{}\n', revision: 0, timeoutSeconds: 300, wait: true, disableHooks: false, createNamespace: false, keepHistory: false })
 const errorText = (e: unknown) => e instanceof Error ? e.message : String(e)
-const button = 'rounded border border-line px-2 py-1 hover:bg-hover disabled:opacity-50'
+const button = 'whitespace-nowrap rounded border border-line px-2 py-1 hover:bg-hover disabled:opacity-50'
 
 export function HelmWorkspace({ client, target, scope, scopePicker, initialTab, onSection, onResource }: { client: Client; target: Target; scope: ScopeSel; scopePicker: ReactNode; initialTab: 'releases' | 'charts'; onSection?: (tab: 'releases' | 'charts') => void; onResource?: (ref: Ref) => void }) {
+  const tkey = targetKey(target)
   const [tab, setTab] = useState<'releases' | 'charts' | 'settings'>(initialTab)
   const [settings, setSettings] = useState<HelmSettings>(emptySettings)
   const [settingsReady, setSettingsReady] = useState(false)
@@ -89,30 +98,48 @@ export function HelmWorkspace({ client, target, scope, scopePicker, initialTab, 
   }
   const patch = (p: Partial<HelmOperation>) => setOperation(o => o ? { ...o, ...p } : o)
   const cancelEdit = () => mayLeave(() => { if (plan) void client.helm({ command: 'forget', provider: target.provider, target: target.id, planId: plan.id }).catch(() => {}); setPlan(null); setOperation(null) })
-  const shownReleases = releases.filter(r => `${r.name} ${r.namespace} ${r.chart} ${r.status}`.toLowerCase().includes(filter.toLowerCase()))
-  const matchingCharts = charts.filter(c => `${c.name} ${c.description} ${c.version}`.toLowerCase().includes(filter.toLowerCase()))
-  const shownCharts = [...new Map(matchingCharts.slice().reverse().map(c => [`${c.repository}/${c.name}`, c])).values()].sort((a, b) => a.name.localeCompare(b.name))
+  const shownCharts = [...new Map(charts.slice().reverse().map(c => [`${c.repository}/${c.name}`, c])).values()].sort((a, b) => a.name.localeCompare(b.name))
+  const columns: Column[] = (tab === 'releases' ? ['name', 'namespace', 'chartVersion', 'appVersion', 'revision', 'status', 'updated'] : ['name', 'repository', 'description', 'chartVersion', 'appVersion']).map(id => ({ id, title: t(`helm.${id}` as 'helm.name'), type: id === 'revision' ? 'number' : id === 'status' ? 'status' : 'text', scopeColumn: id === 'namespace', width: id === 'description' ? 280 : id === 'updated' ? 220 : undefined }))
+  const tableRows: Row[] = tab === 'releases' ? releases.map(r => ({
+    id: `${r.namespace}/${r.name}`, ref: { provider: target.provider, target: target.id, kind: 'ocular.helm.releases', scope: r.namespace, name: r.name },
+    cells: [{ text: r.name }, { text: r.namespace }, { text: `${r.chart} ${r.chartVersion}` }, { text: r.appVersion }, { num: r.revision, text: String(r.revision) }, { text: r.status }, { text: new Date(r.updated).toLocaleString(document.documentElement.lang || undefined), num: Date.parse(r.updated) }],
+    health: { state: r.status === 'failed' ? 'error' : r.status.startsWith('pending') ? 'progressing' : 'ok' },
+  })) : shownCharts.map(c => ({
+    id: `${c.repository}/${c.name}`, ref: { provider: target.provider, target: target.id, kind: 'ocular.helm.charts', name: c.name },
+    cells: [{ text: c.name }, { text: c.repository }, { text: c.description }, { text: c.version + (c.deprecated ? ` (${t('helm.deprecated')})` : '') }, { text: c.appVersion }],
+    health: { state: c.deprecated ? 'warning' : 'ok' },
+  }))
+  const openRow = (row: Row) => {
+    if (busy) return
+    mayLeave(() => {
+      if (tab === 'releases') { const r = releases.find(r => `${r.namespace}/${r.name}` === row.id); if (r) void openRelease(r) }
+      else { const c = shownCharts.find(c => `${c.repository}/${c.name}` === row.id); if (c) void openChart(c) }
+    })
+  }
   return <section className="helm-workspace flex min-h-0 flex-1 flex-col">
-    <header className="resource-header flex h-10 shrink-0 items-center gap-2 border-b border-line px-3">
-      <h1 className="resource-title">Helm</h1>
-      <Select label={t('helm.section')} value={tab} options={(['releases', 'charts', 'settings'] as const).map(v => ({ value: v, label: t(`helm.${v}`) }))} onChange={v => navigate(v as typeof tab)} disabled={busy} className="min-w-0 flex-1" />
+    <header className="resource-toolbar">
+      <h1 className="resource-title">{t(`helm.${tab}`)}</h1>
+      {tab !== 'settings' && <span className="resource-count" aria-label="count">{busy && !tableRows.length ? '…' : tableRows.length}</span>}
+      <Select label={t('helm.section')} value={tab} options={(['releases', 'charts', 'settings'] as const).map(v => ({ value: v, label: t(`helm.${v}`) }))} onChange={v => navigate(v as typeof tab)} disabled={busy} className="min-w-0 max-w-56" />
+      {tab !== 'settings' && !operation && (tab === 'releases' ? scopePicker : <Select value={repository} options={[{ value: '', label: t('helm.allRepositories') }, ...settings.repositories.map(r => ({ value: r.name, label: r.name }))]} label={t('helm.repository')} onChange={v => { setRepository(v); setChart(null); setCharts([]); setBusy(true); setError('') }} disabled={busy} />)}
       {busy ? <button className={button} onClick={() => controller.current?.abort()}>{t('helm.stop')}</button> : <button className={button} onClick={() => { setBusy(tab !== 'settings'); setError(''); setRefresh(v => v + 1) }} disabled={!!operation || dirtySettings}>{t('helm.refresh')}</button>}
+      {tab !== 'settings' && !operation && <label className="resource-filter field-shell"><SearchIcon className="h-3.5 w-3.5 text-fg-subtle" /><input data-primary-filter className="w-full bg-transparent outline-none placeholder:text-fg-subtle" aria-label={t('helm.search')} placeholder={t('table.filter')} value={filter} onChange={e => setFilter(e.target.value)} spellCheck={false} /></label>}
     </header>
     {error && <div role="alert" className="border-b border-line px-3 py-2 text-danger">{error}</div>}
     {notice && <div role="status" className="border-b border-line px-3 py-2">{notice}</div>}
     {busy && <div role="status" className="px-3 py-1 text-fg-muted">{t('app.loading')}</div>}
     {tab === 'settings' ? <SettingsEditor value={settings} onChange={v => { setSettings(v); setDirtySettings(true) }} busy={busy || !settingsReady} onSave={async () => { const r = await call({ command: 'save-settings', settings }); if (r) { dirty.current = false; setDirtySettings(false); if (r.settings) setSettings(r.settings); setNotice(t('helm.saved')); if (!settings.repositories.some(r => r.name === repository)) setRepository(settings.repositories[0]?.name ?? '') } }} /> : <>
-      {!operation && <div className="flex min-h-10 shrink-0 flex-wrap items-center gap-2 border-b border-line px-3 py-1">
-        {tab === 'releases' ? scopePicker : <Select value={repository} options={[{ value: '', label: t('helm.allRepositories') }, ...settings.repositories.map(r => ({ value: r.name, label: r.name }))]} label={t('helm.repository')} onChange={v => { setRepository(v); setChart(null); setCharts([]); setBusy(true); setError('') }} disabled={busy} />}
-        <input className="helm-input flex-1" aria-label={t('helm.search')} placeholder={t('helm.search')} value={filter} onChange={e => setFilter(e.target.value)} />
-      </div>}
-      <div className="flex min-h-0 flex-1 overflow-hidden">
-        {!operation && <div className="min-w-0 flex-1 overflow-auto pr-6">
-          <table className="helm-table"><thead><tr>{(tab === 'releases' ? ['name', 'namespace', 'chartVersion', 'appVersion', 'revision', 'status', 'updated'] : ['name', 'repository', 'description', 'chartVersion', 'appVersion']).map(h => <th key={h}>{t(`helm.${h}` as 'helm.name')}</th>)}</tr></thead><tbody>
-            {tab === 'releases' ? shownReleases.map(r => <tr key={`${r.namespace}/${r.name}`} className={detail?.name === r.name && detail.namespace === r.namespace ? 'bg-hover' : ''}><td><button disabled={busy} onClick={() => mayLeave(() => { void openRelease(r) })}>{r.name}</button></td><td>{r.namespace}</td><td>{r.chart} {r.chartVersion}</td><td>{r.appVersion}</td><td>{r.revision}</td><td>{r.status}</td><td>{new Date(r.updated).toLocaleString(document.documentElement.lang || undefined)}</td></tr>) : shownCharts.map(c => <tr key={`${c.repository}/${c.name}/${c.version}`}><td><button disabled={busy} onClick={() => { void openChart(c) }}>{c.name}</button></td><td>{c.repository}</td><td title={c.description}>{c.description}</td><td>{c.version}{c.deprecated ? ` (${t('helm.deprecated')})` : ''}</td><td>{c.appVersion}</td></tr>)}
-          </tbody></table>
-          {!busy && !error && (tab === 'releases' ? shownReleases.length === 0 : shownCharts.length === 0) && <p className="p-4 text-fg-muted">{tab === 'charts' && !settings.repositories.length ? t('helm.addRepositoryFirst') : t('helm.empty')}</p>}
-        </div>}
+      <div className="relative flex min-h-0 flex-1 overflow-hidden">
+        {!operation && <ResourceTable key={tab} columns={columns} rows={tableRows} hideScope={tab === 'releases' && scope.mode === 'one'} filter={filter}
+          selected={detail ? `${detail.namespace}/${detail.name}` : chart ? `${chart.repository}/${chart.name}` : null}
+          initialWidths={memoOf(tkey).columnWidths?.[`ocular.helm.${tab}`]} initialSort={memoOf(tkey).sorts[`ocular.helm.${tab}`]}
+          onSort={sort => rememberSort(tkey, `ocular.helm.${tab}`, sort)}
+          onWidths={widths => {
+            const kind = `ocular.helm.${tab}`
+            rememberPage(tkey, { columnWidths: { ...memoOf(tkey).columnWidths, [kind]: widths } })
+            void persistTargetEntries(client, target.provider, target.id, { [columnWidthsKey(kind)]: JSON.stringify(widths) }).catch(() => showNotice(t('table.widthsNotSaved')))
+          }}
+          areaFocus onSelect={openRow} emptyMessage={!busy && !error ? t(tab === 'charts' && !settings.repositories.length ? 'helm.addRepositoryFirst' : 'helm.empty') : null} />}
         {operation ? <div className="flex min-w-0 flex-1 flex-col overflow-auto p-3">
           <div className="mb-3 flex items-center gap-2"><h2 className="font-semibold">{t(`helm.${operation.action}`)} · {target.title}</h2><span className="flex-1" /><button className={button} disabled={busy} onClick={cancelEdit}>{t('helm.cancel')}</button></div>
           {plan ? <>
@@ -136,14 +163,16 @@ export function HelmWorkspace({ client, target, scope, scopePicker, initialTab, 
             {(operation.action === 'install' || operation.action === 'upgrade') && <><label htmlFor="helm-values">{t('helm.values')}</label><textarea id="helm-values" className="helm-code min-h-64 flex-1" spellCheck={false} value={operation.values} disabled={busy} onChange={e => patch({ values: e.target.value })} /></>}
             <div className="mt-3"><button className={button} disabled={busy || !operation.name || !operation.namespace} onClick={() => { void prepare() }}>{t('helm.prepare')}</button></div>
           </>}
-        </div> : (detail || chart) && <aside className="helm-detail flex min-w-0 flex-col border-l border-line">
-          <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-line p-2"><h2 className="font-semibold">{detail?.name ?? chart?.name}</h2><span className="flex-1" /><button className={button} onClick={() => { controller.current?.abort(); controller.current = null; setBusy(false); setDetail(null); setChart(null) }}>{t('helm.close')}</button></div>
+        </div> : (detail || chart) && <DetailsPanel widthKey="helmDetails" label={`Helm ${detail?.namespace ? detail.namespace + '/' : ''}${detail?.name ?? chart?.name}`}>
+          <header className="drawer-heading"><div className="flex min-w-0 items-center gap-2"><h2 className="resource-title min-w-0 break-words">{detail?.name ?? chart?.name}</h2><span className="flex-1" /><button className={button} onClick={() => { controller.current?.abort(); controller.current = null; setBusy(false); setDetail(null); setChart(null) }}>{t('helm.close')}</button></div></header>
           <div className="flex shrink-0 flex-wrap gap-2 p-2">{detail ? <><button className={button} disabled={busy} onClick={() => begin('upgrade')}>{t('helm.upgrade')}</button><button className={button} disabled={busy} onClick={() => begin('uninstall')}>{t('helm.uninstall')}</button></> : <button className={button} disabled={busy} onClick={() => begin('install')}>{t('helm.install')}</button>}</div>
+          <div className="relative flex min-h-0 flex-1 flex-col" aria-busy={busy}><div className="flex min-h-0 flex-1 flex-col" inert={busy}>
           {detail ? <>
-            <div className="flex shrink-0 flex-wrap gap-2 border-b border-line px-2 pb-2">{(['resources', 'values', 'computedValues', 'manifest', 'hooks', 'notes', 'history'] as const).map(v => <button key={v} className={`${button} ${detailTab === v ? 'bg-hover' : ''}`} onClick={() => setDetailTab(v)}>{t(`helm.${v}`)}</button>)}</div>
-            {detailTab === 'resources' ? <div className="overflow-auto"><p className="px-2 py-1 text-fg-muted">{t('helm.declaredResources')}</p><table className="helm-table"><tbody>{detail.resources.map((r, i) => <tr key={i}><td>{r.kind}</td><td>{r.ref && onResource ? <button onClick={() => onResource(r.ref!)}>{r.name}</button> : r.name}</td><td>{r.namespace || '—'}</td><td>{r.apiVersion}</td></tr>)}</tbody></table></div> : detailTab === 'history' ? <div className="overflow-auto p-2">{detail.history.map(r => <div className="mb-2 flex items-center gap-2" key={r.revision}><button className={button} disabled={busy} onClick={() => { void openRelease(r, r.revision) }}>#{r.revision} · {r.chartVersion} · {r.status}</button><button className={button} disabled={busy} onClick={() => begin('rollback', r.revision)}>{t('helm.rollback')}</button></div>)}</div> : <pre className="helm-code m-0 flex-1">{detail[detailTab]}</pre>}
+            <nav role="tablist" className="drawer-tabs flex shrink-0 flex-wrap gap-1 border-b border-line px-3">{(['resources', 'values', 'computedValues', 'manifest', 'hooks', 'notes', 'history'] as const).map(v => <button key={v} role="tab" aria-selected={detailTab === v} className={`border-b-2 px-3 py-1.5 ${detailTab === v ? 'border-accent text-accent' : 'border-transparent text-fg-muted hover:text-fg'}`} onClick={() => setDetailTab(v)}>{t(`helm.${v}`)}</button>)}</nav>
+            {detailTab === 'resources' ? <div className="overflow-auto"><p className="px-2 py-1 text-fg-muted">{t('helm.declaredResources')}</p><table className="helm-table"><tbody>{detail.resources.map((r, i) => <tr key={i}><td>{r.kind}</td><td>{r.ref && onResource ? <button onClick={() => onResource(r.ref!)}>{r.name}</button> : r.name}</td><td>{r.namespace || '—'}</td><td>{r.apiVersion}</td></tr>)}</tbody></table></div> : detailTab === 'history' ? <div className="overflow-auto p-2">{detail.history.map(r => <div className="mb-2 flex flex-wrap items-center gap-2" key={r.revision}><button className={button} disabled={busy} onClick={() => { void openRelease(r, r.revision) }}>#{r.revision} · {r.chartVersion} · {r.status}</button><button className={button} disabled={busy} onClick={() => begin('rollback', r.revision)}>{t('helm.rollback')}</button></div>)}</div> : <pre className="helm-code m-0 flex-1">{detail[detailTab]}</pre>}
           </> : <div className="overflow-auto p-2"><p>{chart?.description}</p>{chart && <Select value={chart.version} label={t('helm.chartVersion')} options={charts.filter(c => c.name === chart.name && c.repository === chart.repository).map(c => ({ value: c.version, label: c.version }))} onChange={v => { void openChart({ ...chart, version: v }) }} disabled={busy} />}<p>{chart?.appVersion}</p><pre className="helm-code">{chart?.readme || chart?.values}</pre></div>}
-        </aside>}
+          </div>{busy && <LoadingOverlay />}</div>
+        </DetailsPanel>}
       </div>
     </>}
   </section>
