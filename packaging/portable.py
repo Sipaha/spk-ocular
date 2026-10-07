@@ -72,6 +72,15 @@ def make_icons(directory):
     return ico, icns
 
 
+def dmg_size(directory):
+    # srcfolder's automatic estimate can leave too little filesystem space.
+    # Count allocated blocks conservatively without following Applications.
+    mib = 1024 * 1024
+    payload = sum(((p.stat().st_size + 4095) // 4096) * 4096
+                  for p in directory.rglob('*') if not p.is_symlink() and p.is_file())
+    return f'{max(128, (payload * 2 + mib - 1) // mib + 64)}m'
+
+
 def build(release_version, platform, arch, stage):
     env = {**os.environ, 'GOOS': platform, 'GOARCH': arch, 'CGO_ENABLED': '0' if platform == 'windows' else '1'}
     if platform == 'darwin':
@@ -159,7 +168,8 @@ def package(release_version, platform, arch):
             dmg_stage = Path(scratch)
             run('ditto', app, dmg_stage / app.name)
             (dmg_stage / 'Applications').symlink_to('/Applications')
-            run('hdiutil', 'create', '-volname', 'SPK Ocular', '-srcfolder', dmg_stage, '-ov', '-format', 'UDZO', output / (base + '.dmg'))
+            run('hdiutil', 'create', '-volname', 'SPK Ocular', '-srcfolder', dmg_stage,
+                '-size', dmg_size(dmg_stage), '-ov', '-format', 'UDZO', output / (base + '.dmg'))
     for path in output.iterdir():
         if path.name.endswith('.sha256'):
             continue

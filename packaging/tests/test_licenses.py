@@ -13,6 +13,21 @@ import release
 
 
 class LicenseInputs(unittest.TestCase):
+    def test_go_json_is_utf8_even_with_windows_default_encoding(self):
+        real_run = subprocess.run
+        payload = json.dumps({'Standard': True, 'Dir': 'runtime/“quoted”'}, ensure_ascii=False)
+        script = f'import sys; sys.stdout.buffer.write({payload.encode("utf-8")!r})'
+
+        def simulated_go(args, **kwargs):
+            # Exercise the real subprocess decoder with a Windows-like default.
+            kwargs.setdefault('encoding', 'cp1252')
+            return real_run([sys.executable, '-c', script], **kwargs)
+
+        with patch.object(licenses.subprocess, 'run', side_effect=simulated_go):
+            modules, standard_dirs = licenses.package_graph()
+        self.assertEqual(modules, {})
+        self.assertEqual(standard_dirs, {Path('runtime/“quoted”')})
+
     def test_missing_license_does_not_silently_drop_a_component(self):
         with tempfile.TemporaryDirectory() as scratch:
             root = Path(scratch)

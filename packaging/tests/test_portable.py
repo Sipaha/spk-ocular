@@ -12,6 +12,15 @@ import verify
 
 
 class PortableContracts(unittest.TestCase):
+    def test_dmg_has_filesystem_headroom_and_does_not_follow_applications(self):
+        with tempfile.TemporaryDirectory() as scratch:
+            root = Path(scratch)
+            self.assertEqual(portable.dmg_size(root), '128m')
+            with (root / 'application').open('wb') as output:
+                output.truncate(100 * 1024 * 1024 + 1)
+            (root / 'Applications').symlink_to(root, target_is_directory=True)
+            self.assertEqual(portable.dmg_size(root), '265m')
+
     def test_pe_architecture_and_gui_subsystem_are_read_from_binary(self):
         for arch, machine in [('amd64', 0x8664), ('arm64', 0xAA64)]:
             data = bytearray(256)

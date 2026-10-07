@@ -87,6 +87,10 @@ third-party notices are retained. Missing legal texts stop the build; new
 frontend licenses other than MIT require review. The Wails npm runtime omits its
 license text, so the collector verifies its version against the Go module and
 uses that module's upstream MIT license.
+Go JSON and environment output are decoded explicitly as UTF-8, independently
+of the Windows system code page.
+macOS DMG creation reserves explicit filesystem headroom based on the staged
+payload rather than relying on `hdiutil`'s minimal automatic size estimate.
 
 The generated `THIRD-PARTY-NOTICES.txt` is committed with dependency changes and
 embedded in every binary. Run `make licenses` to regenerate it and

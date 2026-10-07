@@ -47,7 +47,7 @@ def package_graph():
                 if tags:
                     args += ['-tags', tags]
                 args += ['./cmd/spk-ocular']
-                result = subprocess.run(args, cwd=ROOT, env=env, text=True, capture_output=True, check=True)
+                result = subprocess.run(args, cwd=ROOT, env=env, text=True, encoding='utf-8', capture_output=True, check=True)
                 for pkg in decode_stream(result.stdout):
                     if pkg.get('Standard'):
                         standard_dirs.add(Path(pkg['Dir']))
@@ -105,8 +105,8 @@ def collect():
              'Windows and macOS on amd64 and arm64; some components are target-specific.\n'
              'Full upstream legal texts are reproduced, including inherited notices.\n'
              'Upstream files may describe optional components not linked by Ocular.\n']
-    goroot = Path(subprocess.check_output(['go', 'env', 'GOROOT'], cwd=ROOT, text=True).strip())
-    goversion = subprocess.check_output(['go', 'env', 'GOVERSION'], cwd=ROOT, text=True).strip()
+    goroot = Path(subprocess.check_output(['go', 'env', 'GOROOT'], cwd=ROOT, text=True, encoding='utf-8').strip())
+    goversion = subprocess.check_output(['go', 'env', 'GOVERSION'], cwd=ROOT, text=True, encoding='utf-8').strip()
     texts.append(render_component(f'Go runtime and standard library ({goversion})', component_files(goroot, standard_dirs)))
     for (name, version), entry in sorted(modules.items()):
         texts.append(render_component(f'{name} {version}', component_files(entry['root'], entry['dirs'])))
