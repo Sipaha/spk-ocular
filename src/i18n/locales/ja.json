@@ -219,5 +219,6 @@
   "issues": "不具合を報告",
   "license": "Apache 2.0",
   "localLabel": "ローカル / オープンソース",
-  "downloadCompactFormat": "{format} を取得"
+  "downloadCompactFormat": "{format} を取得",
+  "aboutAuthor": "開発者について"
 }

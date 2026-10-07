@@ -36,6 +36,10 @@ try{
   await page.goto(root+(lang==='en'?'en/':''),{waitUntil:'networkidle'});
   await expect(page.locator('html')).toHaveAttribute('data-theme',theme);
   await expect(page.locator('html')).toHaveAttribute('lang',lang);
+  const about='https://sipaha.github.io/about/'+(lang==='ru'?'?lang=ru':`${lang}/`);
+  await expect(page.locator('.author-link')).toHaveAttribute('href',about);
+  await expect(page.locator('.support-link')).toHaveAttribute('href',about+'#support');
+  await expect(page.locator('.support-link')).toBeVisible();
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
   expect(await page.locator('h1').evaluate(el=>el.clientHeight/parseFloat(getComputedStyle(el).lineHeight))).toBeLessThanOrEqual(width>=1024?2.1:3.1);
   await page.locator('img').evaluateAll(els=>els.forEach(el=>el.loading='eager'));

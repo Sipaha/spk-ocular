@@ -146,7 +146,7 @@ p { color: var(--muted); text-wrap: pretty; }
 .free-mark span { color: var(--accent); font-size: 58px; font-weight: 400; }
 .free-note { font-size: 12px; margin-block: 15px 32px; }
 .free-grid aside h3 { font-size: 20px; }
-.free-grid aside>p:last-child { font-size: 14px; margin-top: 15px; }
+.free-grid aside>.support-text { font-size: 14px; margin-top: 15px; }
 .download-section .section-head { margin-bottom: 32px; }
 .section-head .platform-note { font-size: 12px; margin-top: 12px; }
 .download-box { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 34px; }
@@ -323,3 +323,5 @@ select { padding: 10px 36px 10px 12px; border: 1px solid var(--line); border-rad
 
 /* Keep Japanese download phrases together instead of leaving a syllable on its own line. */
 :lang(ja) [data-download-text] { word-break: keep-all; }
+
+.support-link { margin-top: 18px; max-width: 100%; }

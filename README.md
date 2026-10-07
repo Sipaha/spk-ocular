@@ -41,8 +41,11 @@ This works with native fragment links and JavaScript disabled.
 Every feature is free for individuals and businesses of any size, revenue or
 funding. There are no paid tiers or seat charges. Development is supported only
 through voluntary cryptocurrency donations. Donations never unlock features.
-The support section explains this policy; it contains no payment address or QR
-code because the owner has not supplied verified wallet/network details.
+The support section explains this policy and links to the owner’s personal
+about site at `#support`, where donation details are maintained. The footer has
+an About the author link. Both links target the matching about locale; Russian
+uses an explicit `?lang=ru` choice. Wallet addresses and QR codes are not duplicated
+on the Ocular website.
 
 Local agent grants apply to processes running as the same OS user. Do not imply
 separate authenticated agent identities or a security sandbox. Kubernetes and

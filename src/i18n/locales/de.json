@@ -219,5 +219,6 @@
   "issues": "Fehler melden",
   "license": "Apache 2.0",
   "localLabel": "LOKAL / OPEN SOURCE",
-  "downloadCompactFormat": "Download {format}"
+  "downloadCompactFormat": "Download {format}",
+  "aboutAuthor": "Über den Autor"
 }

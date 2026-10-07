@@ -44,7 +44,9 @@ marker and preserve unrelated query parameters. With JavaScript disabled, all lo
 `details` link menu remain usable. No runtime translation API or external fonts.
 
 Every localized page has canonical and alternate links; `sitemap.xml` includes
-all routes. Source/donation/download URLs are locale-independent. Social images
+all routes. Source/download URLs are locale-independent. Author and support links open the
+matching locale on `https://sipaha.github.io/about/`; Russian uses `?lang=ru`
+to preserve the explicit language choice. Social images
 for additional locales reuse the existing English card; they are not presented
 as translated visual assets.
 

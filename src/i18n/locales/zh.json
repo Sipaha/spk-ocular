@@ -219,5 +219,6 @@
   "issues": "报告问题",
   "license": "Apache 2.0",
   "localLabel": "本地运行 / 开源",
-  "downloadCompactFormat": "下载 {format}"
+  "downloadCompactFormat": "下载 {format}",
+  "aboutAuthor": "关于作者"
 }

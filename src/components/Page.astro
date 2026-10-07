@@ -9,6 +9,7 @@ interface Props { lang: Lang; }
 const { lang } = Astro.props;
 const d = copy(lang);
 const base = '/spk-ocular/';
+const about = 'https://sipaha.github.io/about/' + (lang === 'ru' ? '?lang=ru' : `${lang}/`);
 const docs = REPO + '/blob/master/docs/usage.md';
 const agentDocs = REPO + '/blob/master/docs/agent-api.md';
 const shots = ['workloads', 'logs', 'helm', 'docker'];
@@ -82,7 +83,7 @@ const navIDs = ['features', 'interface', 'free'];
     </section>
     <section id="free" class="free-section section"><div class="container free-grid">
       <div><p class="eyebrow">{d.freeLabel}</p><h2>{d.freeTitle}</h2><p class="free-text">{d.freeText}</p><div class="download-action"><a class="button" href="#downloads" aria-label={d.chooseDownload} data-download-label={JSON.stringify({download:d.download,downloadCompactFormat:d.downloadCompactFormat,downloadFormatFor:d.downloadFormatFor,choose:d.chooseDownload,chooseCompact:d.chooseCompact,chooseFor:d.chooseDownloadFor})}><span data-download-text>{d.chooseDownload}</span><span aria-hidden="true">↓</span></a><a class="all-releases" href={RELEASES}>{d.allReleases}<span aria-hidden="true">↗</span></a></div></div>
-      <aside id="support"><span class="free-mark" aria-hidden="true">0<span> / ∞</span></span><p class="free-note">{d.freeNote}</p><h3>{d.supportTitle}</h3><p>{d.supportText}</p></aside>
+      <aside id="support"><span class="free-mark" aria-hidden="true">0<span> / ∞</span></span><p class="free-note">{d.freeNote}</p><h3>{d.supportTitle}</h3><p class="support-text">{d.supportText}</p><a class="text-link support-link" href={about+'#support'}>{d.supportTitle}<span aria-hidden="true">↗</span></a></aside>
     </div></section>
     <section id="downloads" class="section download-section"><div class="container">
       <div class="section-head"><h2>{d.downloads}</h2><p>{d.downloadsText}</p><p class="platform-note">{d.platforms}</p></div>
@@ -99,5 +100,5 @@ const navIDs = ['features', 'interface', 'free'];
     </div></section>
     <section class="container section faq-section"><h2>{d.faqTitle}</h2><div class="faq">{d.faqs.map(([q,a])=><article><h3>{q}</h3><p>{a}</p></article>)}</div></section>
   </main>
-  <footer class="container footer"><div><a class="brand" href="#main"><img src={base+'icon.svg'} width="28" height="28" alt="" /><span>SPK <strong>Ocular</strong></span></a><p>{d.footer}</p></div><nav aria-label={d.projectLinks}><a href={REPO}>{d.source}</a><a href={docs}>{d.docs}</a><a href="#support">{d.supportTitle}</a><a href={REPO+'/issues'}>{d.issues}</a><a href={REPO+'/blob/master/LICENSE'}>{d.license}</a></nav></footer>
+  <footer class="container footer"><div><a class="brand" href="#main"><img src={base+'icon.svg'} width="28" height="28" alt="" /><span>SPK <strong>Ocular</strong></span></a><p>{d.footer}</p></div><nav aria-label={d.projectLinks}><a href={REPO}>{d.source}</a><a href={docs}>{d.docs}</a><a href="#support">{d.supportTitle}</a><a href={REPO+'/issues'}>{d.issues}</a><a href={REPO+'/blob/master/LICENSE'}>{d.license}</a><a class="author-link" href={about}>{d.aboutAuthor}</a></nav></footer>
 </Base>

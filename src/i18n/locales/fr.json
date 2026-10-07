@@ -219,5 +219,6 @@
   "issues": "Signaler un bug",
   "license": "Apache 2.0",
   "localLabel": "LOCAL / OPEN SOURCE",
-  "downloadCompactFormat": "Télécharger {format}"
+  "downloadCompactFormat": "Télécharger {format}",
+  "aboutAuthor": "À propos de l’auteur"
 }

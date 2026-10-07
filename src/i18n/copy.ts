@@ -49,7 +49,7 @@ export const en = {
     ['Do I need to install Helm separately?', 'No. Ocular embeds Helm for browsing charts and managing releases. Kubernetes permissions and access to the chart repository are still required.'],
     ['Can I use it with my coding agent?', 'Yes, through the local agent API. You grant access to selected environments, scopes and operations. Protected writes require review. Agents running as your OS user share these permissions. You can pause their access at any time.'],
   ],
-  footer: 'Kubernetes and Docker. On your terms.', source: 'Source code', issues: 'Report an issue', license: 'Apache 2.0',
+  aboutAuthor: 'About the author', footer: 'Kubernetes and Docker. On your terms.', source: 'Source code', issues: 'Report an issue', license: 'Apache 2.0',
 };
 export type Copy = typeof en;
 export const ru: Copy = {
@@ -97,7 +97,7 @@ export const ru: Copy = {
     ['Нужно отдельно устанавливать Helm?', 'Нет. Helm встроен в Ocular: можно просматривать чарты и управлять релизами. Права в Kubernetes и доступ к репозиторию чартов по-прежнему необходимы.'],
     ['Можно работать через своего агента для разработки?', 'Да, через локальный API агентов. Вы разрешаете доступ к выбранным окружениям, пространствам имён и операциям. Защищённые изменения требуют подтверждения. Разрешения общие для агентов вашего пользователя ОС. Их доступ можно приостановить в любой момент.'],
   ],
-  footer: 'Kubernetes и Docker. Ваше рабочее пространство.', source: 'Исходный код', issues: 'Сообщить об ошибке', license: 'Apache 2.0',
+  aboutAuthor: 'Об авторе', footer: 'Kubernetes и Docker. Ваше рабочее пространство.', source: 'Исходный код', issues: 'Сообщить об ошибке', license: 'Apache 2.0',
 };
 export type Lang = 'ru' | 'en' | 'zh' | 'es' | 'de' | 'fr' | 'pt' | 'ja';
 const dictionaries: Record<Lang, Copy> = {ru, en, zh, es, de, fr, pt, ja};
