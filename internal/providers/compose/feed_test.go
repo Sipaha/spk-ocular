@@ -812,23 +812,51 @@ func TestFeedFirstReadyWaitsForReconciliation(t *testing.T) {
 	release := make(chan struct{})
 	e.fe.AddHook(enginefake.StallHeaders("/containers/"+b.ID+"/json", release))
 	var once sync.Once
-	e.fe.AddHook(func(w http.ResponseWriter, _ *http.Request, path string) bool {
+	e.fe.AddHook(func(w http.ResponseWriter, r *http.Request, path string) bool {
 		if path != "/containers/json" {
 			return false
 		}
 		done := false
 		once.Do(func() {
-			w.Header().Set("Content-Type", "application/json")
-			_, _ = fmt.Fprintf(w, `[{"Id":%q}]`, a.ID)
 			e.fe.PutContainer(b)
 			e.fe.Emit(containerEvent("create", b))
+			// Emit queues the server-side event; it does not acknowledge
+			// the feed reader. Hold the list until b is actually dirty so
+			// this event belongs to initial reconciliation, not live work.
+			e.s.mu.Lock()
+			f := e.s.feeds[FeedContainers]
+			e.s.mu.Unlock()
+			f.mu.Lock()
+			d := f.dirtyNow
+			f.mu.Unlock()
+			for {
+				d.mu.Lock()
+				read := d.keys[b.ID]
+				d.mu.Unlock()
+				if read {
+					break
+				}
+				select {
+				case <-r.Context().Done():
+					done = true
+					return
+				case <-time.After(time.Millisecond):
+				}
+			}
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = fmt.Fprintf(w, `[{"Id":%q}]`, a.ID)
 			done = true
 		})
 		return done
 	})
 	sk := e.watch(KindContainers)
+	deadline := time.After(5 * time.Second)
 	for e.fe.Count("/containers/"+b.ID+"/json") == 0 {
-		time.Sleep(2 * time.Millisecond)
+		select {
+		case <-deadline:
+			t.Fatal("the reconciliation inspect did not start")
+		case <-time.After(2 * time.Millisecond):
+		}
 	}
 	time.Sleep(50 * time.Millisecond)
 	sk.mu.Lock()

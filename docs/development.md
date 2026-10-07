@@ -83,6 +83,11 @@ parent solution's `.agents/tmp`. `E2E_BIN`, `E2E_PORT` and `E2E_SYNTH_PORT` sele
 the browser binary and ports. Check port availability and choose another free
 port instead of killing a process belonging to another task.
 
+Fake Engine event emission queues a server-side message; it does not acknowledge
+the client's reader. Tests for initial reconciliation hold the list response
+until the feed has recorded the event, so a late live event cannot be mistaken
+for work observed during the initial snapshot.
+
 Go tests exercise fake Kubernetes/Engine servers, scope unions, stream lifecycles,
 action writes, secret masking, and persistence. Tests never require a real cluster
 for `make check`. Explicit integration targets fail if their fixture is absent:
