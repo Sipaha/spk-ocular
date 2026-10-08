@@ -39,6 +39,9 @@ jobs:
       - name: Install WiX in workspace scratch
         if: runner.os == 'Windows'
         run: dotnet tool install wix --version 5.0.2 --tool-path "$GOBIN"
+      - name: Compile the owned macOS capture and OCR verifier
+        if: runner.os == 'macOS'
+        run: swiftc -O -o "$GOBIN/native-macos-smoke" packaging/macos-smoke.swift
       - name: Native platform tests
         env:
           TARGET_OS: ${{ matrix.os }}

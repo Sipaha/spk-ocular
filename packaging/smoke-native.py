@@ -12,6 +12,7 @@ import tempfile
 import urllib.request
 
 from release import ROOT
+from diagnostics import report_failure
 
 
 def capture(platform, pid, png):
@@ -33,7 +34,7 @@ def capture(platform, pid, png):
             raise RuntimeError('cannot find the owned native X window')
         subprocess.run(['import', '-window', owned, str(png)], check=True)
     else:
-        subprocess.run(['swift', str(ROOT / 'packaging/macos-smoke.swift'), str(pid), str(png)], check=True, timeout=60)
+        subprocess.run([str(Path(os.environ['GOBIN']) / 'native-macos-smoke'), str(pid), str(png)], check=True, timeout=60)
     if png.stat().st_size < 4096:
         raise RuntimeError('native screenshot is empty')
 
@@ -137,4 +138,8 @@ if __name__ == '__main__':
     parser.add_argument('--arch', choices=['amd64', 'arm64'], required=True)
     parser.add_argument('--version', required=True)
     args = parser.parse_args()
-    smoke(args.os, args.arch, args.version)
+    try:
+        smoke(args.os, args.arch, args.version)
+    except Exception as error:
+        report_failure(error)
+        raise
