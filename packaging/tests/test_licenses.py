@@ -13,6 +13,19 @@ import release
 
 
 class LicenseInputs(unittest.TestCase):
+    def test_notice_order_is_identical_with_windows_path_comparison(self):
+        with tempfile.TemporaryDirectory() as scratch:
+            root = Path(scratch)
+            (root / 'LICENSE').write_text('Root MIT license\n')
+            nested = root / 'internal'
+            nested.mkdir()
+            (nested / 'LICENSE').write_text('Nested ISC license\n')
+            normal = licenses.component_files(root, {nested})
+            with patch.object(Path, '__lt__', lambda left, right: str(left).lower() < str(right).lower()):
+                windows = licenses.component_files(root, {nested})
+            self.assertEqual(windows, normal)
+            self.assertEqual([file['name'] for file in windows], ['LICENSE', 'internal/LICENSE'])
+
     def test_go_json_is_utf8_even_with_windows_default_encoding(self):
         real_run = subprocess.run
         payload = json.dumps({'Standard': True, 'Dir': 'runtime/“quoted”'}, ensure_ascii=False)

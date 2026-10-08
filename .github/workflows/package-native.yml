@@ -79,7 +79,7 @@ jobs:
         env:
           TARGET_OS: ${{ matrix.os }}
           ARCH: ${{ matrix.arch }}
-        run: python packaging/smoke-native.py --os "$TARGET_OS" --arch "$ARCH"
+        run: python packaging/smoke-native.py --os "$TARGET_OS" --arch "$ARCH" --version "$RELEASE_VERSION"
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: package-${{ matrix.os }}-${{ matrix.arch }}

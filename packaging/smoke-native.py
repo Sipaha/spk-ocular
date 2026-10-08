@@ -33,12 +33,12 @@ def capture(platform, pid, png):
             raise RuntimeError('cannot find the owned native X window')
         subprocess.run(['import', '-window', owned, str(png)], check=True)
     else:
-        subprocess.run(['screencapture', '-x', str(png)], check=True)
+        subprocess.run(['swift', str(ROOT / 'packaging/macos-smoke.swift'), str(pid), str(png)], check=True, timeout=60)
     if png.stat().st_size < 4096:
         raise RuntimeError('native screenshot is empty')
 
 
-def smoke(platform, arch):
+def smoke(platform, arch, version):
     scratch = Path(os.environ['OCULAR_SCRATCH_DIR']) / 'native-smoke'
     scratch.mkdir(parents=True, exist_ok=True)
     profile = Path(tempfile.mkdtemp(prefix='p-', dir=scratch.parent))
@@ -60,6 +60,7 @@ def smoke(platform, arch):
     registry.chmod(0o600)
     stage = ROOT / 'build' / f'package-{platform}-{arch}'
     binary = ROOT / 'build/bin/spk-ocular-release' if platform == 'linux' else stage / ('spk-ocular.exe' if platform == 'windows' else 'SPK Ocular.app/Contents/MacOS/spk-ocular')
+    assert subprocess.check_output([str(binary), 'version'], env=env, text=True).strip() == 'spk-ocular ' + version
     opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
     info_file = profile / 'data/test-api.json'
     info_file.unlink(missing_ok=True)
@@ -100,8 +101,10 @@ def smoke(platform, arch):
                 raise RuntimeError(f'native page did not open a synthetic view: {stats}')
             (scratch / 'ready.json').write_text(json.dumps(stats, indent=2))
             time.sleep(3)
-            png = scratch / 'native.png'
+            png = scratch / f'{platform}-{arch}.png'
             capture(platform, child.pid, png)
+            report = {'platform': platform, 'arch': arch, 'version': version, 'commit': subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=ROOT, text=True).strip(), 'production': True, 'fixtureSynthetic': True, 'ownedWindow': True, 'pid': child.pid, 'screenshot': png.name}
+            (scratch / 'report.json').write_text(json.dumps(report, indent=2))
             print('Native webview opened a synthetic view; screenshot:', png)
         except Exception:
             if child.poll() is None:
@@ -132,5 +135,6 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--os', choices=['windows', 'darwin', 'linux'], required=True)
     parser.add_argument('--arch', choices=['amd64', 'arm64'], required=True)
+    parser.add_argument('--version', required=True)
     args = parser.parse_args()
-    smoke(args.os, args.arch)
+    smoke(args.os, args.arch, args.version)

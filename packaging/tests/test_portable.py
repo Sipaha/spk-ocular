@@ -67,7 +67,11 @@ class PortableContracts(unittest.TestCase):
                         data = name.encode()
                         (root / name).write_bytes(data)
                         (root / (name + '.sha256')).write_text(f'{hashlib.sha256(data).hexdigest()}  {name}\n')
-            self.assertEqual(len(verify.verify_checksums(root, '1.2.3', ['amd64', 'arm64'], verify.PLATFORMS).splitlines()), 20)
+            name = 'NATIVE-VERIFICATION.zip'
+            data = b'native evidence fixture'
+            (root / name).write_bytes(data)
+            (root / (name + '.sha256')).write_text(f'{hashlib.sha256(data).hexdigest()}  {name}\n')
+            self.assertEqual(len(verify.verify_checksums(root, '1.2.3', ['amd64', 'arm64'], verify.PLATFORMS).splitlines()), 21)
             for platform in verify.PLATFORMS:
                 path = root / verify.assets('1.2.3', 'arm64', platform)[0]
                 data = path.read_bytes()

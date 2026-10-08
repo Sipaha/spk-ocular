@@ -50,6 +50,14 @@ jobs:
           pattern: package-*
           merge-multiple: true
           path: dist/release
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+        with:
+          pattern: native-diagnostics-*
+          path: .agents/tmp/native-evidence
+      - name: Bundle verified owned production screenshots
+        env:
+          RELEASE_VERSION: ${{ needs.validate.outputs.version }}
+        run: python3 packaging/native-evidence.py --source .agents/tmp/native-evidence --output dist/release/NATIVE-VERIFICATION.zip --version "$RELEASE_VERSION"
       - name: Verify the complete asset set
         env:
           RELEASE_VERSION: ${{ needs.validate.outputs.version }}

@@ -27,6 +27,9 @@ def assets(release_version, arch, platform='linux'):
 
 def verify_checksums(directory, release_version, arches, platforms=("linux",)):
     expected = sorted(name for platform in platforms for arch in arches for name in assets(release_version, arch, platform))
+    if set(platforms)==set(PLATFORMS) and set(arches)=={'amd64','arm64'}:
+        expected.append('NATIVE-VERIFICATION.zip')
+        expected.sort()
     actual = sorted(p.name for p in directory.iterdir() if p.is_file() and p.name != 'SHA256SUMS')
     if actual != sorted(expected + [name + '.sha256' for name in expected]):
         raise ValueError(f'incomplete or unexpected asset set: {actual}')

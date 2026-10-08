@@ -77,7 +77,7 @@ def component_files(root, directories):
             if p.is_file() and LEGAL_NAME.fullmatch(p.name) and p in legal_files(p.parent):
                 files.add(p)
     return [{'name': p.relative_to(root).as_posix(), 'text': p.read_text(encoding='utf-8')}
-            for p in sorted(files)]
+            for p in sorted(files, key=lambda path: path.relative_to(root).as_posix())]
 
 
 def render_component(name, files):

@@ -57,6 +57,18 @@ jobs:
           desktop-file-validate /usr/share/applications/spk-ocular.desktop
           test -s /usr/share/icons/hicolor/256x256/apps/spk-ocular.png
           sudo apt-get remove -y spk-ocular
+      - name: Actual owned Linux native window and screenshot
+        env:
+          ARCH: ${{ matrix.arch }}
+        run: xvfb-run -a python3 packaging/smoke-native.py --os linux --arch "$ARCH" --version "$RELEASE_VERSION"
+      - name: Upload native screenshots and reports
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+        with:
+          name: native-diagnostics-linux-${{ matrix.arch }}
+          path: .agents/tmp/native-smoke/
+          if-no-files-found: error
+          retention-days: 7
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: package-linux-${{ matrix.arch }}

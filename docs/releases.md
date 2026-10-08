@@ -29,7 +29,7 @@ Windows installers are unsigned. Publisher signing needs separately provisioned
 certificates; no release credentials are fabricated or required for development
 builds. In-app automatic updating remains planned.
 
-Each file has a `.sha256` sidecar. The complete GitHub Release also includes
+Each file has a `.sha256` sidecar. `NATIVE-VERIFICATION.zip` contains all six owned production-window screenshots and matching source/version reports with synthetic test data, excluding app logs and credentials. The complete GitHub Release also includes
 `SHA256SUMS`. Archives carry BUILD-INFO and the project license. Checksums detect
 corrupt downloads; they are not independent publisher signatures.
 
@@ -59,8 +59,7 @@ it does not need to match the development VERSION file. The description comes fr
 Localized descriptions live alongside it, such as `ru.md`. The same test gate
 runs before all six native package jobs. Architecture, contents, version and checksums are checked before
 upload. Linux jobs install/remove DEB packages; Windows jobs install/remove MSI
-packages; macOS jobs mount and verify the DMG and its sealed app bundle. Windows
-and macOS jobs start the native webview with synthetic data and save a screenshot. The publish job verifies the complete expected
+packages; macOS jobs mount and verify the DMG and its sealed app bundle. All six jobs start the native webview with synthetic data and save a screenshot. The publish job verifies the complete expected
 asset set, uploads everything to a draft, and checks the remote names and sizes
 before publishing. A draft with unexpected assets is refused for manual review.
 Published versions cannot be overwritten; use a new version for corrections.
@@ -87,6 +86,7 @@ third-party notices are retained. Missing legal texts stop the build; new
 frontend licenses other than MIT require review. The Wails npm runtime omits its
 license text, so the collector verifies its version against the Go module and
 uses that module's upstream MIT license.
+License files use explicit POSIX relative-name order on every platform. CI scans reachable Go vulnerabilities with the pinned patched SDK.
 Go JSON and environment output are decoded explicitly as UTF-8, independently
 of the Windows system code page.
 macOS DMG creation reserves explicit filesystem headroom based on the staged

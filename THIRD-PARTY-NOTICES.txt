@@ -7,7 +7,7 @@ Full upstream legal texts are reproduced, including inherited notices.
 Upstream files may describe optional components not linked by Ocular.
 
 ==============================================================================
-Go runtime and standard library (go1.26.1)
+Go runtime and standard library (go1.26.8)
 ==============================================================================
 
 --- LICENSE ---
@@ -11976,10 +11976,10 @@ helm.sh/helm/v4 v4.3.0
 --- internal/chart/v3/loader/testdata/LICENSE ---
 LICENSE placeholder.
 
---- internal/chart/v3/loader/testdata/frobnitz/LICENSE ---
+--- internal/chart/v3/loader/testdata/frobnitz.v3.reqs/LICENSE ---
 LICENSE placeholder.
 
---- internal/chart/v3/loader/testdata/frobnitz.v3.reqs/LICENSE ---
+--- internal/chart/v3/loader/testdata/frobnitz/LICENSE ---
 LICENSE placeholder.
 
 --- internal/chart/v3/loader/testdata/frobnitz_backslash/LICENSE ---
@@ -12009,13 +12009,13 @@ LICENSE placeholder.
 --- pkg/chart/v2/loader/testdata/LICENSE ---
 LICENSE placeholder.
 
---- pkg/chart/v2/loader/testdata/frobnitz/LICENSE ---
-LICENSE placeholder.
-
 --- pkg/chart/v2/loader/testdata/frobnitz.v1/LICENSE ---
 LICENSE placeholder.
 
 --- pkg/chart/v2/loader/testdata/frobnitz.v2.reqs/LICENSE ---
+LICENSE placeholder.
+
+--- pkg/chart/v2/loader/testdata/frobnitz/LICENSE ---
 LICENSE placeholder.
 
 --- pkg/chart/v2/loader/testdata/frobnitz_backslash/LICENSE ---
