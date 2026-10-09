@@ -5,6 +5,9 @@ import { test } from './fixtures'
 // The Ctrl+K palette against the synthetic provider: views by alias, rows of
 // the current table, recent objects (persisted in SQLite), a context switch.
 
+// Live GetRows handlers must settle before Playwright disposes their responses.
+test.afterEach(async ({ page }) => { await page.unrouteAll({ behavior: 'wait' }) })
+
 async function openDemo(page: Page) {
   await page.goto('/')
   await page.getByRole('option', { name: /^demo\b/ }).click()
