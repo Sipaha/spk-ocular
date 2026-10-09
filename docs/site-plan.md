@@ -12,14 +12,13 @@ publish application releases or authorize wallet publication.
 
 Public website feature descriptions must correspond to features included in a
 published application release. Unreleased feature announcements are not approved.
-The existing file-inspector section is retained at the owner's request rather
-than rolled back during UI work; reconcile its copy with the released feature
-when that application release is published.
+The file-inspector section is retained at the owner's request; its copy matches
+the released 1.1.2 implementation.
 
 The released-capability copy explains direct Kubernetes API access without
 kubectl, embedded Helm SDK use without a separate Helm CLI, and Ctrl+K/Command+K
 navigation. kubeconfig-configured external authentication helpers remain required.
-All eight locales describe these existing v1.0.1 capabilities without competitor
+All eight locales describe these released v1.1.2 capabilities without competitor
 comparisons or exclusivity claims.
 
 ## Implemented presentation
@@ -34,9 +33,13 @@ The page now presents:
 - An explicit desktop-app introduction for developers and DevOps, with local
   operation and no-account access beside Download.
 - A large localized app screenshot with a concrete task caption.
-- Investigation through resource health, events, relationships and configuration.
-- Related logs, search, terminals and port forwarding, without promising complete
-  observation or unrestricted log history.
+- Investigation through resource health, events, relationships, configuration and
+  read-only Deployment revision comparison.
+- Related logs, search, native log windows, plain-text exports, instance/container
+  selection, terminals and port forwarding, without promising complete observation
+  or unrestricted log history.
+- A cached container file tree, symlink navigation, protected UTF-8 editing and
+  native streamed file/folder downloads with explicit runtime requirements.
 - Docker standalone containers with Compose project/service grouping, with the
   runtime boundary and UI-only standalone access stated explicitly.
 - The implemented Helm lifecycle, repositories and embedded SDK.
@@ -47,11 +50,10 @@ The page now presents:
   requirements, signature status and visible FAQ answers.
 - A three-step installation guide and separate release/development download paths.
 
-Screenshots show the current development build on an isolated local Kubernetes
+Screenshots show version 1.1.2 on an isolated local Kubernetes
 fixture and a verified disposable Docker engine, including standalone containers
 and Compose grouping; Helm uses a separately labeled synthetic fixture. Screenshots are real
-app captures, not reconstructed mockups. Product implementation is not proof that
-a corresponding stable release asset has been published. Stable packages are
+app captures, not reconstructed mockups. Stable packages are
 available through [GitHub Releases](https://github.com/Sipaha/spk-ocular/releases/latest);
 the site selects validated assets from the latest stable release.
 

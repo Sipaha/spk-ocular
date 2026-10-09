@@ -1,6 +1,6 @@
 # Builds and releases
 
-Current patch release: [1.0.1](https://github.com/Sipaha/spk-ocular/releases/tag/v1.0.1), built with Go 1.26.8. Its complete native matrix, published package contents and checksums are verified. The native evidence archive contains owned-window screenshots for all six targets; the live site exposes matching package and checksum links. Published 1.0.0 assets remain immutable.
+Current stable release: [1.1.2](https://github.com/Sipaha/spk-ocular/releases/tag/v1.1.2), built with Go 1.26.9. Its complete native matrix, published package contents and checksums are verified. The native evidence archive contains owned-window screenshots for all six targets; the live site exposes matching package and checksum links. Earlier published release assets remain immutable.
 
 ## Distribution contract
 

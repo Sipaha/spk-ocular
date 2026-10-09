@@ -2,7 +2,7 @@
 
 ## Toolchain
 
-Use Go 1.26.8 as declared by `go.mod`, Node.js 22 and pnpm 10.33.0.
+Use Go 1.26.9 as declared by `go.mod`, Node.js 22 and pnpm 10.33.0.
 Linux builds require a C compiler, pkg-config, GTK 3, WebKit2GTK 4.1 and libsoup 3
 development packages. The full check also uses golangci-lint v2.11.4,
 actionlint v1.7.12, Python 3, desktop-file-utils, and Playwright Chromium.
