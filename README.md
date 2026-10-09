@@ -63,6 +63,15 @@ and large product screens, [Lens](https://lenshq.io/) for product hierarchy, and
 [K8Studio](https://k8studio.io/) for investigation workflows (reviewed 2026-10-06).
 No vendor claims, customer logos, testimonials or performance statistics are reused.
 
+## Screenshot source
+
+All twelve RU/EN product screenshots show SPK Ocular 1.1.0 on isolated fixtures.
+Kubernetes captures use the owned ocular-dev demo cluster; Docker captures use the
+verified ocular-dind engine, and Helm uses the explicitly labeled synthetic
+release. The file screen shows an actual /app project with config, scripts, src,
+public, tests, hidden files and a symlink, with application.yaml open.
+Versioned image URLs prevent old cached screenshots from surviving the update.
+
 ## Develop and verify
 
 Use Node 22 and pnpm 10.33.0. Install with `pnpm install --frozen-lockfile`.

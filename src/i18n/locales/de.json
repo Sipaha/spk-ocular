@@ -67,7 +67,7 @@
       "points": [
         "Ressourcenstatus, Ereignisse und Beziehungen",
         "Namespace-Auswahl, Suche und Favoriten",
-        "YAML und aktuelle Ressourcendetails"
+        "Deployment-Revisionsverlauf und schreibgeschützter YAML-Vergleich"
       ],
       "image": "health",
       "alt": "Problems-Ansicht von SPK Ocular auf einem lokalen Kubernetes-Demo-Cluster",
@@ -78,9 +78,9 @@
       "title": "Die entscheidenden Hinweise im Blick behalten.",
       "text": "Verfolgen Sie Logs zusammengehöriger Workloads, filtern Sie unwichtige Meldungen und suchen Sie nach dem entscheidenden Eintrag. Öffnen Sie ein Terminal oder leiten Sie einen Service-Port weiter, um genauer zu prüfen.",
       "points": [
-        "Mehrere Log-Quellen, Suche und Filter nach Log-Level",
-        "Terminal-Tabs neben Ihren Ressourcen",
-        "Portweiterleitung für lokalen Zugriff auf Dienste"
+        "Alle Protokollstufen, Textfilter und Suche",
+        "Separate Protokollfenster und Klartextexporte",
+        "Terminals, Containerauswahl und lokale Portweiterleitung"
       ],
       "image": "logs",
       "alt": "SPK Ocular mit Kubernetes-Pod-Details und laufenden Anwendungslogs",
@@ -102,7 +102,10 @@
   ],
   "toolsTitle": "Die Werkzeuge für den Alltag sind schon da.",
   "tools": [
-    ["Schnelle Navigation · Ctrl+K", "Wechseln Sie zu einer Ansicht, Umgebung, einem Namespace, einer Ressource in der aktuellen Tabelle oder einem zuletzt geöffneten Objekt. Unter macOS verwenden Sie Command+K."],
+    [
+      "Schnelle Navigation · Ctrl+K",
+      "Wechseln Sie zu einer Ansicht, Umgebung, einem Namespace, einer Ressource in der aktuellen Tabelle oder einem zuletzt geöffneten Objekt. Unter macOS verwenden Sie Command+K."
+    ],
     [
       "Kubernetes-Ressourcen",
       "Pods, Deployments, Services und benutzerdefinierte Ressourcen mit Details und Beziehungen."
@@ -121,7 +124,7 @@
     ]
   ],
   "gallery": "So sieht die Arbeit damit aus.",
-  "galleryText": "Echte Bildschirmaufnahmen des aktuellen Entwicklungsbuilds. Mit Demo-Daten, keine Produkt-Mockups.",
+  "galleryText": "Echte Ansichten von SPK Ocular 1.1.0. Demodaten statt Produkt-Mockups.",
   "galleryTabs": [
     "Workloads",
     "Logs und Details",
@@ -225,15 +228,16 @@
   "freeNav": "Kostenlos",
   "supportNav": "Spenden",
   "headerDownload": "Download",
-  "filesLabel": "CONTAINERDATEIEN / ENTWICKLUNGSVERSION",
+  "filesLabel": "CONTAINERDATEIEN",
   "filesTitle": "Ordner durchsuchen. Dateien direkt bearbeiten.",
-  "filesText": "Öffnen Sie einen Docker-Container oder einen Kubernetes-Pod, durchsuchen Sie seine Ordner und bearbeiten Sie Textdateien direkt in Ocular.",
+  "filesText": "Durchsuchen Sie Docker-Container und Kubernetes-Pods, folgen Sie symbolischen Links und bearbeiten Sie Konfigurationen im zwischengespeicherten Ordnerbaum. Die Desktop-App kopiert ganze Dateien und Ordner auf Ihren Computer.",
   "filesPoints": [
-    "Syntaxhervorhebung für gängige Code- und Konfigurationsformate",
-    "UTF-8-Textdateien bis 2 MiB",
-    "Im Container speichern, mit Schutz ungespeicherter Änderungen und Prüfung externer Änderungen"
+    "Ordnercache, Eintragszahlen und Navigation über symbolische Links",
+    "Syntaxhervorhebung und UTF-8-Bearbeitung bis 2 MiB",
+    "Speichern mit Schutz ungespeicherter Änderungen und Prüfung externer Änderungen",
+    "Desktop-Downloads mit nativem Dialog für das Zielverzeichnis"
   ],
-  "filesBoundary": "Im nächsten Release verfügbar. Erfordert einen laufenden Linux-Container mit sh und üblichen Dateiwerkzeugen; diese können in minimalen Images fehlen.",
-  "filesAlt": "SPK Ocular mit Containerordnern und einem YAML-Editor mit Syntaxhervorhebung",
+  "filesBoundary": "Erfordert einen laufenden Linux-Container: sh zum Durchsuchen, readlink für symbolische Links und tar für Downloads. Dateien und Ordner werden ohne die Editorgrenze von 2 MiB gestreamt; vorhandene Zielnamen werden nicht überschrieben. Downloads im Browsermodus benötigen die Desktop-App.",
+  "filesAlt": "SPK Ocular mit aufgeklapptem Anwendungsordnerbaum und hervorgehobener YAML-Konfiguration",
   "filesCaption": "Echte Anwendung · lokale Docker-Demoumgebung"
 }

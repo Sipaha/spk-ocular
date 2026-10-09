@@ -67,7 +67,7 @@
       "points": [
         "État des ressources, événements et relations",
         "Choix des espaces de noms, recherche et favoris",
-        "YAML et détails actualisés des ressources"
+        "Historique des révisions de Deployment et comparaison YAML en lecture seule"
       ],
       "image": "health",
       "alt": "Vue Problems de SPK Ocular sur un cluster Kubernetes local de démonstration",
@@ -78,9 +78,9 @@
       "title": "Gardez les indices sous les yeux.",
       "text": "Suivez les logs des workloads liés, filtrez le bruit et recherchez le message utile. Ouvrez un terminal ou transférez le port d’un service pour approfondir l’analyse.",
       "points": [
-        "Plusieurs sources de logs, recherche et filtres par niveau",
-        "Onglets de terminal à côté des ressources",
-        "Transfert de ports pour accéder aux services localement"
+        "Tous les niveaux de journal, filtres textuels et recherche",
+        "Fenêtres de journaux séparées et exports en texte brut",
+        "Terminaux, sélection de conteneur et redirection locale de ports"
       ],
       "image": "logs",
       "alt": "Détails d’un pod Kubernetes et logs de l’application dans SPK Ocular",
@@ -102,7 +102,10 @@
   ],
   "toolsTitle": "Les outils du quotidien sont déjà là.",
   "tools": [
-    ["Navigation rapide · Ctrl+K", "Accédez à une vue, un environnement, un namespace, une ressource du tableau actuel ou un objet récemment ouvert. Sur macOS, utilisez Command+K."],
+    [
+      "Navigation rapide · Ctrl+K",
+      "Accédez à une vue, un environnement, un namespace, une ressource du tableau actuel ou un objet récemment ouvert. Sur macOS, utilisez Command+K."
+    ],
     [
       "Ressources Kubernetes",
       "Pods, deployments, services et ressources personnalisées avec détails et relations."
@@ -121,7 +124,7 @@
     ]
   ],
   "gallery": "Découvrez l’interface.",
-  "galleryText": "De véritables écrans du build de développement actuel. Des données de démonstration, pas des maquettes.",
+  "galleryText": "Écrans réels de SPK Ocular 1.1.0. Données de démonstration, sans maquettes.",
   "galleryTabs": [
     "Workloads",
     "Logs et détails",
@@ -225,15 +228,16 @@
   "freeNav": "Gratuit",
   "supportNav": "Soutenir",
   "headerDownload": "Télécharger",
-  "filesLabel": "FICHIERS DU CONTENEUR / VERSION DE DÉVELOPPEMENT",
+  "filesLabel": "FICHIERS DU CONTENEUR",
   "filesTitle": "Parcourez les dossiers. Modifiez les fichiers sur place.",
-  "filesText": "Ouvrez un conteneur Docker ou un pod Kubernetes, parcourez ses dossiers et modifiez les fichiers texte directement dans Ocular.",
+  "filesText": "Parcourez les conteneurs Docker et les Pods Kubernetes, suivez les liens symboliques et modifiez les configurations dans une arborescence mise en cache. L’application de bureau copie des fichiers et dossiers entiers sur votre ordinateur.",
   "filesPoints": [
-    "Coloration syntaxique des formats courants de code et de configuration",
-    "Fichiers texte UTF-8 jusqu’à 2 Mio",
-    "Enregistrement dans le conteneur avec protection des modifications non enregistrées et vérification des changements externes"
+    "Dossiers en cache, nombres d’entrées et navigation par liens symboliques",
+    "Coloration syntaxique et édition UTF-8 jusqu’à 2 MiB",
+    "Enregistrement avec protection des modifications non enregistrées et vérification des changements externes",
+    "Téléchargements de bureau avec sélecteur natif de répertoire de destination"
   ],
-  "filesBoundary": "Disponible dans la prochaine version. Nécessite un conteneur Linux en cours d’exécution avec sh et les utilitaires de fichiers standard ; ils peuvent manquer dans les images minimales.",
-  "filesAlt": "Inspecteur de fichiers SPK Ocular avec dossiers et éditeur YAML avec coloration syntaxique",
+  "filesBoundary": "Nécessite un conteneur Linux actif : sh pour parcourir, readlink pour les liens et tar pour télécharger. Les fichiers et dossiers sont transférés sans la limite de 2 MiB de l’éditeur ; les noms existants ne sont pas écrasés. Les téléchargements en mode navigateur nécessitent l’application de bureau.",
+  "filesAlt": "SPK Ocular avec une arborescence d’application développée et une configuration YAML colorée",
   "filesCaption": "Application réelle · environnement de démonstration Docker local"
 }

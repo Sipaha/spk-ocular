@@ -67,7 +67,7 @@
       "points": [
         "资源状态、事件和关联关系",
         "命名空间选择、搜索和收藏",
-        "YAML 与实时资源详情"
+        "Deployment 修订历史和只读 YAML 比较"
       ],
       "image": "health",
       "alt": "SPK Ocular 在本地 Kubernetes 演示集群中显示问题资源",
@@ -78,9 +78,9 @@
       "title": "让排查线索始终可见。",
       "text": "跟踪相关工作负载的日志，过滤无关内容并搜索关键消息。需要进一步检查时，可以打开终端或转发服务端口。",
       "points": [
-        "多个日志来源、搜索和级别过滤",
-        "资源旁边的终端标签页",
-        "将服务端口转发到本地"
+        "所有日志级别、文本过滤和搜索",
+        "独立日志窗口和纯文本导出",
+        "终端、容器选择和本地端口转发"
       ],
       "image": "logs",
       "alt": "SPK Ocular 中的 Kubernetes pod 详情与实时应用日志",
@@ -102,7 +102,10 @@
   ],
   "toolsTitle": "日常工具，已经就位。",
   "tools": [
-    ["快速导航 · Ctrl+K", "快速跳转到视图、环境、命名空间、当前表格中的资源或最近打开的对象。macOS 上使用 Command+K。"],
+    [
+      "快速导航 · Ctrl+K",
+      "快速跳转到视图、环境、命名空间、当前表格中的资源或最近打开的对象。macOS 上使用 Command+K。"
+    ],
     [
       "Kubernetes 资源",
       "查看 pod、deployment、service 和自定义资源的详情及关联关系。"
@@ -121,7 +124,7 @@
     ]
   ],
   "gallery": "看看它如何工作。",
-  "galleryText": "当前开发版本的真实截图。使用演示数据，并非产品界面模型。",
+  "galleryText": "SPK Ocular 1.1.0 的真实界面。使用演示数据，而非产品模型图。",
   "galleryTabs": [
     "工作负载",
     "日志与详情",
@@ -225,15 +228,16 @@
   "freeNav": "免费",
   "supportNav": "支持",
   "headerDownload": "下载",
-  "filesLabel": "容器文件 / 开发构建",
+  "filesLabel": "容器文件",
   "filesTitle": "浏览文件夹，直接编辑文件。",
-  "filesText": "打开 Docker 容器或 Kubernetes pod，浏览其文件夹，并直接在 Ocular 中编辑文本文件。",
+  "filesText": "浏览 Docker 容器和 Kubernetes Pod，跟随符号链接，并在缓存目录树中编辑配置文件。桌面应用可将完整文件和文件夹复制到计算机。",
   "filesPoints": [
-    "常见代码和配置格式的语法高亮",
-    "最大 2 MiB 的 UTF-8 文本文件",
-    "保存到容器，保护未保存的编辑并检查外部修改"
+    "缓存目录、条目计数和符号链接导航",
+    "语法高亮和最大 2 MiB 的 UTF-8 编辑",
+    "保存时保护未保存的修改并检查外部变更",
+    "通过原生目标目录选择器进行桌面下载"
   ],
-  "filesBoundary": "将在下一个版本中提供。需要正在运行的 Linux 容器，并具备 sh 和标准文件工具；精简镜像可能不包含这些工具。",
-  "filesAlt": "SPK Ocular 容器文件检查器，显示文件夹和带语法高亮的 YAML 编辑器",
+  "filesBoundary": "需要运行中的 Linux 容器：sh 用于浏览，readlink 用于符号链接，tar 用于下载。文件和文件夹以流式方式传输，不受编辑器 2 MiB 限制，且不会覆盖已有名称。浏览器模式下载需要桌面应用。",
+  "filesAlt": "SPK Ocular 展开的应用目录树和语法高亮的 YAML 配置",
   "filesCaption": "真实应用 · 本地 Docker 演示环境"
 }

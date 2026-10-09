@@ -67,7 +67,7 @@
       "points": [
         "Estado de recursos, eventos y relaciones",
         "Selección de espacios de nombres, búsqueda y favoritos",
-        "YAML y detalles actualizados de los recursos"
+        "Historial de revisiones de Deployment y comparación de YAML de solo lectura"
       ],
       "image": "health",
       "alt": "Vista Problems de SPK Ocular en un clúster Kubernetes local de demostración",
@@ -78,9 +78,9 @@
       "title": "Mantén las pistas a la vista.",
       "text": "Sigue los logs de cargas de trabajo relacionadas, filtra el ruido y busca el mensaje relevante. Abre un terminal o reenvía el puerto de un servicio cuando necesites investigar más.",
       "points": [
-        "Varias fuentes de logs, búsqueda y filtros por nivel",
-        "Pestañas de terminal junto a los recursos",
-        "Reenvío de puertos para acceder a servicios localmente"
+        "Todos los niveles de registro, filtros de texto y búsqueda",
+        "Ventanas de registros separadas y exportación de texto",
+        "Terminales, selección de contenedor y reenvío local de puertos"
       ],
       "image": "logs",
       "alt": "Detalles de un pod Kubernetes y logs de la aplicación en SPK Ocular",
@@ -102,7 +102,10 @@
   ],
   "toolsTitle": "Las herramientas del día a día ya están aquí.",
   "tools": [
-    ["Navegación rápida · Ctrl+K", "Salta a una vista, entorno, namespace, recurso de la tabla actual u objeto abierto recientemente. En macOS, usa Command+K."],
+    [
+      "Navegación rápida · Ctrl+K",
+      "Salta a una vista, entorno, namespace, recurso de la tabla actual u objeto abierto recientemente. En macOS, usa Command+K."
+    ],
     [
       "Recursos de Kubernetes",
       "Pods, deployments, services y recursos personalizados con detalles y relaciones."
@@ -121,7 +124,7 @@
     ]
   ],
   "gallery": "Mira cómo funciona.",
-  "galleryText": "Pantallas reales de la compilación de desarrollo actual. Datos de demostración, no maquetas del producto.",
+  "galleryText": "Pantallas reales de SPK Ocular 1.1.0. Datos de demostración, no maquetas.",
   "galleryTabs": [
     "Cargas de trabajo",
     "Logs y detalles",
@@ -225,15 +228,16 @@
   "freeNav": "Gratis",
   "supportNav": "Apoyar",
   "headerDownload": "Descargar",
-  "filesLabel": "ARCHIVOS DEL CONTENEDOR / VERSIÓN DE DESARROLLO",
+  "filesLabel": "ARCHIVOS DEL CONTENEDOR",
   "filesTitle": "Explora carpetas. Edita archivos directamente.",
-  "filesText": "Abre un contenedor Docker o un pod Kubernetes, explora sus carpetas y edita archivos de texto directamente en Ocular.",
+  "filesText": "Explore contenedores Docker y Pods Kubernetes, siga enlaces simbólicos y edite configuraciones en un árbol de carpetas en caché. La aplicación de escritorio copia archivos y carpetas completos a su equipo.",
   "filesPoints": [
-    "Resaltado de sintaxis para formatos habituales de código y configuración",
-    "Archivos de texto UTF-8 de hasta 2 MiB",
-    "Guardado en el contenedor con protección de cambios sin guardar y comprobación de cambios externos"
+    "Carpetas en caché, recuentos de entradas y navegación por enlaces",
+    "Resaltado de sintaxis y edición UTF-8 hasta 2 MiB",
+    "Guardado con protección de cambios sin guardar y comprobación de cambios externos",
+    "Descargas de escritorio con selector nativo de directorio de destino"
   ],
-  "filesBoundary": "Disponible en la próxima versión. Requiere un contenedor Linux en ejecución con sh y utilidades de archivos estándar; las imágenes mínimas pueden no incluirlas.",
-  "filesAlt": "Inspector de archivos de SPK Ocular con carpetas y un editor YAML con resaltado",
+  "filesBoundary": "Requiere un contenedor Linux en ejecución: sh para explorar, readlink para enlaces y tar para descargas. Los archivos y carpetas se transfieren sin el límite de 2 MiB del editor; no se sobrescriben nombres existentes. Las descargas en modo navegador requieren la aplicación de escritorio.",
+  "filesAlt": "SPK Ocular con el árbol de carpetas de la aplicación expandido y configuración YAML resaltada",
   "filesCaption": "Aplicación real · entorno de demostración Docker local"
 }

@@ -67,7 +67,7 @@
       "points": [
         "Estado dos recursos, eventos e relações",
         "Seleção de namespaces, busca e favoritos",
-        "YAML e detalhes atualizados dos recursos"
+        "Histórico de revisões de Deployment e comparação de YAML somente leitura"
       ],
       "image": "health",
       "alt": "Tela Problems do SPK Ocular em um cluster Kubernetes local de demonstração",
@@ -78,9 +78,9 @@
       "title": "Mantenha as evidências à vista.",
       "text": "Acompanhe logs de workloads relacionados, filtre o ruído e busque a mensagem relevante. Abra um terminal ou encaminhe a porta de um serviço para investigar mais a fundo.",
       "points": [
-        "Várias fontes de logs, busca e filtros por nível",
-        "Abas de terminal junto dos recursos",
-        "Encaminhamento de portas para acesso local a serviços"
+        "Todos os níveis de log, filtros de texto e pesquisa",
+        "Janelas de logs separadas e exportação de texto",
+        "Terminais, escolha de contêiner e encaminhamento local de portas"
       ],
       "image": "logs",
       "alt": "Detalhes de um pod Kubernetes e logs da aplicação no SPK Ocular",
@@ -102,7 +102,10 @@
   ],
   "toolsTitle": "As ferramentas do dia a dia já estão aqui.",
   "tools": [
-    ["Navegação rápida · Ctrl+K", "Vá para uma visualização, ambiente, namespace, recurso da tabela atual ou objeto aberto recentemente. No macOS, use Command+K."],
+    [
+      "Navegação rápida · Ctrl+K",
+      "Vá para uma visualização, ambiente, namespace, recurso da tabela atual ou objeto aberto recentemente. No macOS, use Command+K."
+    ],
     [
       "Recursos do Kubernetes",
       "Pods, deployments, services e recursos personalizados com detalhes e relações."
@@ -121,7 +124,7 @@
     ]
   ],
   "gallery": "Veja como funciona.",
-  "galleryText": "Telas reais do build de desenvolvimento atual. Dados de demonstração, sem mockups do produto.",
+  "galleryText": "Telas reais do SPK Ocular 1.1.0. Dados de demonstração, não mockups.",
   "galleryTabs": [
     "Workloads",
     "Logs e detalhes",
@@ -225,15 +228,16 @@
   "freeNav": "Grátis",
   "supportNav": "Apoiar",
   "headerDownload": "Baixar",
-  "filesLabel": "ARQUIVOS DO CONTÊINER / VERSÃO DE DESENVOLVIMENTO",
+  "filesLabel": "ARQUIVOS DO CONTÊINER",
   "filesTitle": "Explore pastas. Edite arquivos diretamente.",
-  "filesText": "Abra um contêiner Docker ou um pod Kubernetes, explore suas pastas e edite arquivos de texto diretamente no Ocular.",
+  "filesText": "Explore contêineres Docker e Pods Kubernetes, siga links simbólicos e edite configurações em uma árvore de pastas em cache. O aplicativo desktop copia arquivos e pastas inteiros para seu computador.",
   "filesPoints": [
-    "Realce de sintaxe para formatos comuns de código e configuração",
-    "Arquivos de texto UTF-8 de até 2 MiB",
-    "Salve no contêiner com proteção de alterações não salvas e verificação de mudanças externas"
+    "Pastas em cache, contagens de entradas e navegação por links",
+    "Destaque de sintaxe e edição UTF-8 até 2 MiB",
+    "Salvamento com proteção de alterações não salvas e verificação de mudanças externas",
+    "Downloads no desktop com seletor nativo de diretório de destino"
   ],
-  "filesBoundary": "Disponível na próxima versão. Requer um contêiner Linux em execução com sh e utilitários de arquivos padrão; imagens mínimas podem não incluí-los.",
-  "filesAlt": "Inspetor de arquivos do SPK Ocular com pastas e editor YAML com realce de sintaxe",
+  "filesBoundary": "Exige um contêiner Linux em execução: sh para explorar, readlink para links e tar para downloads. Arquivos e pastas são transferidos sem o limite de 2 MiB do editor; nomes existentes não são sobrescritos. Downloads no modo navegador exigem o aplicativo desktop.",
+  "filesAlt": "SPK Ocular com árvore de pastas da aplicação expandida e configuração YAML destacada",
   "filesCaption": "Aplicativo real · ambiente de demonstração Docker local"
 }
