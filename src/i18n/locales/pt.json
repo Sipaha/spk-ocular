@@ -202,7 +202,7 @@
       "Não é necessário servidor ou componente Ocular no cluster. O aplicativo usa seu acesso existente ao Kubernetes. Alguns recursos dependem de serviços do cluster, como o metrics-server para métricas de recursos."
     ],
     [
-      "Ocular substitui o Docker Desktop?",
+      "O Ocular inclui um mecanismo de contêineres?",
       "Não. Ocular trabalha com engines Docker existentes, contêineres independentes e projetos Compose. Não fornece uma engine de contêineres nem uma máquina virtual."
     ],
     [
@@ -223,5 +223,16 @@
   "aboutAuthor": "Sobre o autor",
   "freeNav": "Grátis",
   "supportNav": "Apoiar",
-  "headerDownload": "Baixar"
+  "headerDownload": "Baixar",
+  "filesLabel": "ARQUIVOS DO CONTÊINER / VERSÃO DE DESENVOLVIMENTO",
+  "filesTitle": "Explore pastas. Edite arquivos diretamente.",
+  "filesText": "Abra um contêiner Docker ou um pod Kubernetes, explore suas pastas e edite arquivos de texto diretamente no Ocular.",
+  "filesPoints": [
+    "Realce de sintaxe para formatos comuns de código e configuração",
+    "Arquivos de texto UTF-8 de até 2 MiB",
+    "Salve no contêiner com proteção de alterações não salvas e verificação de mudanças externas"
+  ],
+  "filesBoundary": "Disponível na próxima versão. Requer um contêiner Linux em execução com sh e utilitários de arquivos padrão; imagens mínimas podem não incluí-los.",
+  "filesAlt": "Inspetor de arquivos do SPK Ocular com pastas e editor YAML com realce de sintaxe",
+  "filesCaption": "Aplicativo real · ambiente de demonstração Docker local"
 }

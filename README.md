@@ -156,3 +156,13 @@ The optional dispatch trigger also supports deployment when the workflow is
 available on the default branch. No application tag or release is created.
 Changing the public address requires updating `astro.config.mjs` and canonical,
 language and social links in `src/layouts/Base.astro`.
+
+## Container file inspector presentation
+
+The feature section presents the container file inspector with actual localized
+screens from an isolated Docker fixture. Copy identifies upcoming-release
+availability, UTF-8/2 MiB editing limits, and the running Linux container/tool
+requirements. File browsing does not require `ls`. All eight locales describe
+Ocular's own behavior without competitor comparisons or exclusivity claims.
+Public product copy must not name competing products to compare features or
+claim that they lack a capability; this is the owner's publishing preference.

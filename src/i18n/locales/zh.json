@@ -202,7 +202,7 @@
       "不需要 Ocular 服务器或集群组件。应用使用已有的 Kubernetes 访问配置。部分功能依赖集群服务，例如资源指标需要 metrics-server。"
     ],
     [
-      "Ocular 能替代 Docker Desktop 吗？",
+      "Ocular 是否包含容器引擎？",
       "不能。Ocular 使用已有的 Docker 引擎，管理独立容器和 Compose 项目。它不提供容器引擎或虚拟机。"
     ],
     [
@@ -223,5 +223,16 @@
   "aboutAuthor": "关于作者",
   "freeNav": "免费",
   "supportNav": "支持",
-  "headerDownload": "下载"
+  "headerDownload": "下载",
+  "filesLabel": "容器文件 / 开发构建",
+  "filesTitle": "浏览文件夹，直接编辑文件。",
+  "filesText": "打开 Docker 容器或 Kubernetes pod，浏览其文件夹，并直接在 Ocular 中编辑文本文件。",
+  "filesPoints": [
+    "常见代码和配置格式的语法高亮",
+    "最大 2 MiB 的 UTF-8 文本文件",
+    "保存到容器，保护未保存的编辑并检查外部修改"
+  ],
+  "filesBoundary": "将在下一个版本中提供。需要正在运行的 Linux 容器，并具备 sh 和标准文件工具；精简镜像可能不包含这些工具。",
+  "filesAlt": "SPK Ocular 容器文件检查器，显示文件夹和带语法高亮的 YAML 编辑器",
+  "filesCaption": "真实应用 · 本地 Docker 演示环境"
 }
