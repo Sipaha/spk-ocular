@@ -16,7 +16,7 @@ export const en = {
   galleryCaptions: ['Spot failing pods in the namespaces you selected.', 'Inspect a pod and follow its logs without leaving the resource.', 'Review release values and open revision history.', 'Standalone containers and Compose services in one container list.'],
   installSteps: ['Choose DEB/RPM for Linux, MSI for Windows or DMG for macOS. Portable archives are also available.', 'Check the SHA-256 checksum, then install and open Ocular.', 'Use your existing kubeconfig or Docker context to inspect your environment.'],
   explore: 'See it in action', freeShort: 'All features free. For you and your company.', platforms: 'Linux, Windows & macOS · x86-64 & ARM64',
-  heroCaption: 'Inspect a pod. Follow its logs alongside.', demo: 'Actual app · local demo cluster', syntheticDemo: 'Actual app · simulated Helm release', fullImage: 'Open full-size screenshot',
+  heroCaption: 'Inspect a pod. Follow its logs alongside.', demo: 'Actual app · local demo cluster', syntheticDemo: 'Actual app · simulated Helm release', fullImage: 'Open full-size screenshot', closeImage: 'Close screenshot',
   facts: [['Kubernetes + Docker', 'One place for daily operations'], ['No account required', 'Direct access from your computer'], ['Helm built in', 'No separate Helm CLI']],
   overview: 'From “what failed?” to “what next?”', overviewText: 'The details you need to investigate and act, without piecing together a dozen separate windows.',
   workflows: [
@@ -71,7 +71,7 @@ export const ru: Copy = {
   galleryCaptions: ['Найдите проблемные pods в выбранных пространствах имён.', 'Проверьте pod и смотрите его логи рядом с подробностями.', 'Изучите values релиза и откройте историю ревизий.', 'Отдельные контейнеры и сервисы Compose в общем списке контейнеров.'],
   installSteps: ['Выберите DEB/RPM для Linux, MSI для Windows или DMG для macOS. Также доступны переносимые архивы.', 'Проверьте контрольную сумму SHA-256, установите и откройте Ocular.', 'Используйте существующий kubeconfig или Docker context для работы со своим окружением.'],
   explore: 'Посмотреть в деле', freeShort: 'Все функции бесплатны. Для вас и вашей компании.', platforms: 'Linux, Windows и macOS · x86-64 и ARM64',
-  heroCaption: 'Состояние pod и его логи рядом.', demo: 'Настоящее приложение · локальный демостенд', syntheticDemo: 'Настоящее приложение · тестовый релиз Helm', fullImage: 'Открыть скриншот в полном размере',
+  heroCaption: 'Состояние pod и его логи рядом.', demo: 'Настоящее приложение · локальный демостенд', syntheticDemo: 'Настоящее приложение · тестовый релиз Helm', fullImage: 'Открыть скриншот в полном размере', closeImage: 'Закрыть скриншот',
   facts: [['Kubernetes + Docker', 'Единое рабочее пространство'], ['Без аккаунта', 'Прямой доступ с вашего компьютера'], ['Helm уже внутри', 'Без отдельной установки CLI']],
   overview: 'От «что сломалось?» к «что делать?»', overviewText: 'Ресурсы, события и инструменты для диагностики рядом. Не нужно собирать картину из десятка отдельных окон.',
   workflows: [

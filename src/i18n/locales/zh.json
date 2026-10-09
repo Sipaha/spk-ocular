@@ -42,6 +42,7 @@
   "heroCaption": "pod 状态和日志并排显示。",
   "demo": "真实应用 · 本地演示集群",
   "syntheticDemo": "真实应用 · 模拟 Helm 发布",
+  "closeImage": "关闭截图",
   "fullImage": "打开完整尺寸截图",
   "facts": [
     [

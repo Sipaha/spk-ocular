@@ -117,3 +117,41 @@ for (const menu of document.querySelectorAll<HTMLDetailsElement>('.language-menu
   });
   document.addEventListener('click', event => { if (!menu.contains(event.target as Node)) menu.open = false; });
 }
+
+const preview = document.querySelector<HTMLDialogElement>('.image-preview');
+if (preview && typeof preview.showModal === 'function') {
+  const image = preview.querySelector<HTMLImageElement>('img')!;
+  let opener: HTMLAnchorElement | undefined;
+  let previousOverflow = '';
+  document.querySelectorAll<HTMLAnchorElement>('[data-image-preview]').forEach(link => {
+    link.addEventListener('click', event => {
+      if (event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
+      event.preventDefault();
+      opener = link;
+      const source = link.querySelector('img') || link.closest('figure')?.querySelector('img');
+      image.src = link.getAttribute('href')!;
+      image.alt = source?.alt || preview.getAttribute('aria-label')!;
+      previousOverflow = document.documentElement.style.overflow;
+      preview.showModal();
+      document.documentElement.style.overflow = 'hidden';
+    });
+  });
+  preview.addEventListener('keydown', event => {
+    if (event.key === 'Tab') {
+      event.preventDefault();
+      preview.querySelector<HTMLButtonElement>('button')!.focus();
+    }
+  });
+  preview.querySelector('button')!.addEventListener('click', () => preview.close());
+  let backdropDown = false;
+  preview.addEventListener('pointerdown', event => { backdropDown = event.target === preview; });
+  preview.addEventListener('click', event => {
+    if (backdropDown && event.target === preview) preview.close();
+    backdropDown = false;
+  });
+  preview.addEventListener('close', () => {
+    document.documentElement.style.overflow = previousOverflow;
+    image.removeAttribute('src');
+    opener?.focus({preventScroll: true});
+  });
+}

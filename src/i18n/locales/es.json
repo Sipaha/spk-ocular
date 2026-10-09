@@ -42,6 +42,7 @@
   "heroCaption": "El estado del pod y sus logs, lado a lado.",
   "demo": "Aplicación real · clúster local de demostración",
   "syntheticDemo": "Aplicación real · release de Helm simulado",
+  "closeImage": "Cerrar captura",
   "fullImage": "Abrir captura a tamaño completo",
   "facts": [
     [

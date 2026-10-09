@@ -42,6 +42,7 @@
   "heroCaption": "Pod-Status und Logs nebeneinander.",
   "demo": "Echte App · lokaler Demo-Cluster",
   "syntheticDemo": "Echte App · simuliertes Helm-Release",
+  "closeImage": "Screenshot schließen",
   "fullImage": "Screenshot in voller Größe öffnen",
   "facts": [
     [

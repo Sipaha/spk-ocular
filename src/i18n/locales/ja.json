@@ -42,6 +42,7 @@
   "heroCaption": "Pod の状態とログを並べて確認。",
   "demo": "実際のアプリ · ローカルのデモクラスタ",
   "syntheticDemo": "実際のアプリ · 模擬 Helm リリース",
+  "closeImage": "スクリーンショットを閉じる",
   "fullImage": "原寸大のスクリーンショットを開く",
   "facts": [
     [

@@ -52,7 +52,7 @@ const navIDs = ['features', 'interface', 'free'];
       <div class="hero-meta"><a href="#free">{d.freeShort}<span aria-hidden="true">↗</span></a><span>{d.platforms}</span></div>
       <figure class="hero-visual">
         <div class="visual-caption"><span><span class="status-dot" aria-hidden="true"></span>SPK Ocular</span><span>{d.heroCaption}</span></div>
-        <a href={shotURL('logs')} aria-label={d.fullImage}><img src={shotURL('logs')} width="1440" height="900" alt={d.galleryAlts[1]} fetchpriority="high" decoding="async" /></a>
+        <a data-image-preview href={shotURL('logs')} aria-label={d.fullImage}><img src={shotURL('logs')} width="1440" height="900" alt={d.galleryAlts[1]} fetchpriority="high" decoding="async" /></a>
         <figcaption>{d.demo}</figcaption>
       </figure>
     </section>
@@ -62,11 +62,11 @@ const navIDs = ['features', 'interface', 'free'];
       <div class="workflows">
         {d.workflows.map((flow,i)=><article class:list={['workflow', {reverse:i===1}]} id={flow.image}>
           <div class="workflow-copy"><p class="eyebrow">{flow.label}</p><h3>{flow.title}</h3><p>{flow.text}</p><ul>{flow.points.map(point=><li>{point}</li>)}</ul><a class="text-link" href={docs+(flow.image==='helm'?'#helm':'')}>{flow.link}<span aria-hidden="true">↗</span></a></div>
-          <figure class="workflow-image"><a href={shotURL(flow.image)} aria-label={d.fullImage}><img src={shotURL(flow.image)} width="1440" height="900" alt={flow.alt} loading="lazy" decoding="async" /></a><figcaption>{flow.image==='helm'?d.syntheticDemo:d.demo}</figcaption></figure>
+          <figure class="workflow-image"><a data-image-preview href={shotURL(flow.image)} aria-label={d.fullImage}><img src={shotURL(flow.image)} width="1440" height="900" alt={flow.alt} loading="lazy" decoding="async" /></a><figcaption>{flow.image==='helm'?d.syntheticDemo:d.demo}</figcaption></figure>
         </article>)}
         <article class="workflow reverse" id="container-files">
           <div class="workflow-copy"><p class="eyebrow">{d.filesLabel}</p><h3>{d.filesTitle}</h3><p>{d.filesText}</p><ul>{d.filesPoints.map(point=><li>{point}</li>)}</ul><p>{d.filesBoundary}</p></div>
-          <figure class="workflow-image"><a href={shotURL('files')} aria-label={d.fullImage}><img src={shotURL('files')} width="1440" height="900" alt={d.filesAlt} loading="lazy" decoding="async" /></a><figcaption>{d.filesCaption}</figcaption></figure>
+          <figure class="workflow-image"><a data-image-preview href={shotURL('files')} aria-label={d.fullImage}><img src={shotURL('files')} width="1440" height="900" alt={d.filesAlt} loading="lazy" decoding="async" /></a><figcaption>{d.filesCaption}</figcaption></figure>
         </article>
       </div>
       <div class="tool-section"><h3>{d.toolsTitle}</h3><div class="tool-grid">{d.tools.map(([title,text],i)=><article><span class="tool-index" aria-hidden="true">0{i+1}</span><div><h4>{title}</h4><p>{text}</p></div></article>)}</div></div>
@@ -79,8 +79,8 @@ const navIDs = ['features', 'interface', 'free'];
       <div class="section-head"><h2>{d.gallery}</h2><p>{d.galleryText}</p>{d.screenshotNote && <p class="screenshot-note">{d.screenshotNote}</p>}</div>
       <div class="gallery-tabs" role="tablist" aria-label={d.nav[1]} hidden>{d.galleryTabs.map((title,i)=><button type="button" role="tab" id={'tab-'+i} aria-controls={'shot-'+i} aria-selected={i===0?'true':'false'} tabindex={i===0?0:-1}>{title}</button>)}</div>
       <div class="gallery">{shots.map((shot,i)=><figure id={'shot-'+i} class="gallery-panel" data-gallery-panel>
-        <a href={shotURL(shot)} aria-label={d.fullImage}><img src={shotURL(shot)} width="1440" height="900" alt={d.galleryAlts[i]} loading="lazy" decoding="async" /></a>
-        <figcaption><span>{d.galleryCaptions[i]} · {shot==='helm'?d.syntheticDemo:d.demo}</span><a href={shotURL(shot)}>{d.fullImage} ↗</a></figcaption>
+        <a data-image-preview href={shotURL(shot)} aria-label={d.fullImage}><img src={shotURL(shot)} width="1440" height="900" alt={d.galleryAlts[i]} loading="lazy" decoding="async" /></a>
+        <figcaption><span>{d.galleryCaptions[i]} · {shot==='helm'?d.syntheticDemo:d.demo}</span><a data-image-preview href={shotURL(shot)}>{d.fullImage} ↗</a></figcaption>
       </figure>)}</div>
     </div></section>
     <section class="container section local-section">
@@ -106,5 +106,9 @@ const navIDs = ['features', 'interface', 'free'];
     </div></section>
     <section class="container section faq-section"><h2>{d.faqTitle}</h2><div class="faq">{d.faqs.map(([q,a])=><article><h3>{q}</h3><p>{a}</p></article>)}</div></section>
   </main>
+  <dialog class="image-preview" aria-label={d.fullImage}>
+    <button type="button" class="image-preview-close" aria-label={d.closeImage} autofocus>×</button>
+    <img alt="" width="1440" height="900" />
+  </dialog>
   <footer class="container footer"><div><a class="brand" href="#main"><img src={base+'icon.svg'} width="28" height="28" alt="" /><span>SPK <strong>Ocular</strong></span></a><p>{d.footer}</p></div><nav aria-label={d.projectLinks}><a href={REPO}>{d.source}</a><a href={docs}>{d.docs}</a><a href="#support">{d.supportTitle}</a><a href={REPO+'/issues'}>{d.issues}</a><a href={REPO+'/blob/master/LICENSE'}>{d.license}</a><a class="author-link" href={about}>{d.aboutAuthor}</a></nav></footer>
 </Base>

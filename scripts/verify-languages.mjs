@@ -48,9 +48,16 @@ try {
   expect(await page.locator('.header-inner').evaluate(el=>el.scrollWidth<=el.clientWidth)).toBe(true);
   await page.locator('main img').evaluateAll(els=>els.forEach(el=>el.loading='eager'));
   await expect.poll(()=>page.locator('main img').evaluateAll(els=>els.every(el=>el.complete&&el.naturalWidth>0))).toBe(true);
+  await page.locator('.hero-visual [data-image-preview]').click();
+  await expect(page.locator('.image-preview')).toBeVisible();
+  await expect(page.locator('.image-preview button')).toHaveAttribute('aria-label',d.closeImage);
+  await page.locator('.image-preview img').evaluate(el=>el.decode());
   await page.addScriptTag({content:axe});
   const result=await page.evaluate(()=>window.axe.run(document,{runOnly:{type:'tag',values:['wcag2a','wcag2aa','wcag21aa']}}));
   expect(result.violations.map(v=>({id:v.id,nodes:v.nodes.map(n=>n.target)}))).toEqual([]);
+  await page.screenshot({path:path.join(out,`i18n-${lang}-${theme}-${width}-preview.png`)});
+  await page.keyboard.press('Escape');
+  await expect(page.locator('.hero-visual [data-image-preview]')).toBeFocused();
   await page.screenshot({path:path.join(out,`i18n-${lang}-${theme}-${width}.png`),fullPage:true});
   await page.locator('.language').click();
   await expect(page.locator('.language-options')).toBeVisible();

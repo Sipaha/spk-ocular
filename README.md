@@ -29,7 +29,10 @@ The theme control uses a fixed-size Phosphor SVG; its MIT license is in
 visible. Both desktop and mobile header navigation include a GitHub link to
 the SPK Ocular repository. The link uses GitHub’s mark from Primer Octicons,
 bundled locally; its MIT license is in `public/licenses/octicons.txt`. All content, full-size screenshots and download fallback links work
-without JavaScript. Gallery tabs enhance static figures; FAQ answers stay visible.
+without JavaScript. Gallery tabs enhance static figures; FAQ answers stay visible. Screenshot links
+open a modal preview without leaving the page. Escape, the close button or the
+backdrop dismiss it and restore focus and scroll position. Modified clicks and
+JavaScript-disabled visits retain the original full-size image links.
 Reduced motion, keyboard navigation and semantic light/dark colors are preserved.
 Section anchors subtract the section’s responsive top padding from the scroll
 offset, leaving 28px between the sticky header and the first section content.
