@@ -65,20 +65,31 @@ func (s *session) LogInfo(ctx context.Context, ref core.Ref) (core.LogInfo, erro
 		if err != nil {
 			return core.LogInfo{}, err
 		}
-		return streamsInfo([]*engine.ContainerInspect{c}, false), nil
+		info := streamsInfo([]*engine.ContainerInspect{c}, false)
+		source := containerRef(c)
+		source.Target = ref.Target
+		info.Instances = []core.LogInstance{{Ref: source, Title: containerName(c)}}
+		return info, nil
 	case KindServices:
 		members, err := s.serviceMembers(ctx, ref)
 		if err != nil {
 			return core.LogInfo{}, err
 		}
-		return streamsInfo(members, true), nil
+		info := streamsInfo(members, true)
+		for _, c := range members {
+			source := containerRef(c)
+			source.Target = ref.Target
+			info.Instances = append(info.Instances, core.LogInstance{Ref: source, Title: containerName(c)})
+		}
+		return info, nil
 	}
 	return core.LogInfo{}, &provider.Error{Class: provider.ClassUnsupported, Message: fmt.Sprintf("%s have no logs", ref.Kind)}
 }
 
 func streamsInfo(cs []*engine.ContainerInspect, aggregate bool) core.LogInfo {
 	stream, all := msg("logs.stream"), msg("logs.allStreams")
-	info := core.LogInfo{Aggregate: aggregate, ChannelLabel: &stream, AllChannelsLabel: &all}
+	instance, allInstances := msg("level.container"), msg("logs.allContainers")
+	info := core.LogInfo{Aggregate: aggregate, ChannelLabel: &stream, AllChannelsLabel: &all, InstanceLabel: &instance, AllInstancesLabel: &allInstances}
 	tty := len(cs) > 0
 	for _, c := range cs {
 		tty = tty && c.Config.Tty

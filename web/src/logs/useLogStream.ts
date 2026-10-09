@@ -1,3 +1,4 @@
+import type { LogWindowBridge, LogStreamSnapshot } from './windowBridge'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { ApiError, asMessage, type Client } from '../api/client'
 import { messageText } from '../i18n'
@@ -47,6 +48,7 @@ export interface StreamStatus {
 }
 
 interface Options {
+  bridge?: LogWindowBridge
   client: Client
   ref: Ref
   query: LogQuery
@@ -70,12 +72,15 @@ const DONE_STATES = new Set(['ended', 'error'])
  * (a late chunk of a replaced stream must not reach the new buffer), and a
  * stream that can no longer be read (broken frame) is aborted at once.
  */
-export function useLogStream({ client, ref, query, paused, frozen }: Options) {
+export function useLogStream({ client, ref, query, paused, frozen, bridge }: Options) {
   const [win, setWin] = useState<Window>(EMPTY_WINDOW)
   const [sources, setSources] = useState<Map<number, LogSource>>(() => new Map())
   const [status, setStatus] = useState<StreamStatus>({ phase: 'opening' })
   const [generation, setGeneration] = useState(0)
 
+  const sourceSnapshot = useRef(new Map<number, LogSource>())
+  const statusSnapshot = useRef<StreamStatus>({ phase: 'opening' })
+  useEffect(() => { statusSnapshot.current = status },[status])
   const winRef = useRef<Window>(EMPTY_WINDOW)
   // One Ingest for the tab's life: line ids stay unique across reopened
   // streams (search results and row keys are by id).
@@ -109,6 +114,7 @@ export function useLogStream({ client, ref, query, paused, frozen }: Options) {
         if (used.has(id) || !s.state || !DONE_STATES.has(s.state.state)) continue
         next ??= new Map(m)
         next.delete(id)
+        sourceSnapshot.current.delete(id)
         ingestRef.current.forgetSource(id)
       }
       return next ?? m
@@ -173,6 +179,11 @@ export function useLogStream({ client, ref, query, paused, frozen }: Options) {
 
   const refKey = `${ref.provider}/${ref.target}/${ref.kind}/${ref.scope ?? ''}/${ref.name}/${ref.uid ?? ''}`
   const queryKey = JSON.stringify(query)
+  useEffect(() => {
+    if(!bridge || bridge.role !== 'owner') return
+    bridge.configureStream((): LogStreamSnapshot => ({nextId:ingestRef.current.nextId,carry:ingestRef.current.snapshotCarry(),win:append(winRef.current,pendingRef.current,frozenRef.current),sources:[...sourceSnapshot.current.values()],status:statusSnapshot.current,query}))
+  },[bridge,query])
+  useEffect(() => { if(bridge?.role === 'owner' && bridge.connected) void bridge.post('status',status) },[bridge,status])
 
   useEffect(() => {
     const ac = new AbortController()
@@ -183,13 +194,17 @@ export function useLogStream({ client, ref, query, paused, frozen }: Options) {
     pendingChars.current = 0
     droppedWhilePaused.current = 0
     commit(EMPTY_WINDOW)
+    sourceSnapshot.current.clear()
+    if(bridge?.role === 'owner' && bridge.connected) void bridge.post('reset')
     setSources(new Map())
     setStatus({ phase: 'opening' })
     let ended = false
 
     const onFrame = (f: Frame) => {
+      bridge?.publish(f)
       switch (f.k) {
         case 'source':
+          sourceSnapshot.current.set(f.id,{id:f.id,key:f.key,label:f.label,channel:f.channel})
           setSources((m) => new Map(m).set(f.id, { id: f.id, key: f.key, label: f.label, channel: f.channel }))
           break
         case 'lines':
@@ -208,7 +223,9 @@ export function useLogStream({ client, ref, query, paused, frozen }: Options) {
             const s = m.get(f.s)
             if (!s) return m
             const st = { state: f.state, class: f.class, msg: f.msg }
-            return new Map(m).set(f.s, { ...s, state: st, warn: WARN_STATES.has(f.state) ? st : s.warn })
+            const source = { ...s, state: st, warn: WARN_STATES.has(f.state) ? st : s.warn }
+            sourceSnapshot.current.set(f.s,source)
+            return new Map(m).set(f.s, source)
           })
           break
         case 'ready':
@@ -228,6 +245,22 @@ export function useLogStream({ client, ref, query, paused, frozen }: Options) {
           })
           break
       }
+    }
+
+    if(bridge?.role === 'guest') {
+      const off=bridge.listen(message => {
+        if(!live) return
+        if(message.type === 'frame') onFrame(message.payload as Frame)
+        else if(message.type === 'reset' || message.type === 'cleared') { ingestRef.current.forget(); pendingRef.current=[];pendingChars.current=0;commit(EMPTY_WINDOW);setSources(new Map());setStatus({phase:'opening'}) }
+        else if(message.type === 'snapshot') {
+          const snapshot=message.payload as LogStreamSnapshot
+          ingestRef.current.restore(snapshot.win.entries,snapshot.nextId,snapshot.carry)
+          pendingRef.current=[];pendingChars.current=0
+          commit(snapshot.win);setSources(new Map(snapshot.sources.map(source=>[source.id,source])));setStatus(snapshot.status)
+        } else if(message.type === 'status') setStatus(message.payload as StreamStatus)
+      })
+      void bridge.post('subscribe',q)
+      return () => { live=false;off();if(timerRef.current){clearTimeout(timerRef.current);timerRef.current=null} }
     }
 
     void (async () => {
@@ -281,14 +314,20 @@ export function useLogStream({ client, ref, query, paused, frozen }: Options) {
     }
     // ref is identified by refKey; a new generation reopens
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [client, refKey, queryKey, generation, commit, flush, queue])
+  }, [client, refKey, queryKey, generation, commit, flush, queue, bridge])
 
-  const reopen = useCallback(() => setGeneration((g) => g + 1), [])
+  const reopen = useCallback(() => { if(bridge?.role === 'guest') void bridge.post('reopen'); else setGeneration((g) => g + 1) }, [bridge])
   const clear = useCallback(() => {
+    if(bridge?.role === 'guest') void bridge.post('clear')
+    if(bridge?.role === 'owner' && bridge.connected) void bridge.post('cleared')
     pendingRef.current = []
     pendingChars.current = 0
     commit({ entries: [], chars: 0, evicted: 0 })
-  }, [commit])
+  }, [commit,bridge])
+  useEffect(() => {
+    if(bridge?.role !== 'owner') return
+    return bridge.listen(message=>{if(message.type==='clear')clear();if(message.type==='reopen')reopen()})
+  },[bridge,clear,reopen])
 
   return { win, sources, status, reopen, clear }
 }

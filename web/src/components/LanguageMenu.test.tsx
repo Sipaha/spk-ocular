@@ -15,7 +15,9 @@ describe('language menu', () => {
   it('offers native names and updates the durable preference without touching connections', async () => {
     const { client } = fakeClient([])
     render(<LanguageMenu client={client} />)
+    expect(screen.getByRole('button', { name: 'Language' })).toHaveTextContent('English')
     fireEvent.click(screen.getByRole('button', { name: 'Language' }))
+    expect(screen.getAllByRole('option')).toHaveLength(8)
     for (const name of ['Русский', 'English', '简体中文', 'Español', 'Deutsch', 'Français', 'Português (Brasil)', '日本語']) {
       expect(screen.getByRole('option', { name })).toBeVisible()
     }

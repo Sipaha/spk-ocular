@@ -1,8 +1,13 @@
+import { DeploymentRevisions } from './DeploymentRevisions'
+import { LinkArrowIcon } from './icons'
+import { ToolDialog } from './ToolDialog'
+import { prefetchToolInfo } from './toolInfo'
+import { useInstancePicker } from './useInstancePicker'
 import { LoadingOverlay } from './LoadingOverlay'
 import { DetailsPanel } from './DetailsPanel'
 import { lazy, Suspense, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { ApiError, type Client } from '../api/client'
-import type { ActionDescriptor, EditDoc, Relation, Ref, Resource } from '../api/types'
+import type { ActionDescriptor, EditDoc, ExecInstance, Relation, Ref, Resource } from '../api/types'
 import { Menu } from '../actions/Menu'
 import { EditDialog, type EditReview } from '../edit/EditDialog'
 import { holdEdits, mayLeave } from '../edit/guard'
@@ -18,6 +23,7 @@ import type { ViewHub } from '../views/viewSync'
 import { HealthDot, ResourceTable, healthText } from './ResourceTable'
 import { errorDetail } from '../errors'
 
+const FileBrowser = lazy(() => import('../files/FileBrowser'))
 const YamlView = lazy(() => import('./YamlView'))
 
 interface Props {
@@ -32,7 +38,7 @@ interface Props {
   onClose: () => void
   /** Kinds with logs get a Logs button. */
   hasLogs?: (kindId: string) => boolean
-  onLogs?: (ref: Ref) => void
+  onLogs?: (ref: Ref, dialog?: boolean) => void
   hasExec?: (kindId: string) => boolean
   hasForward?: (kindId: string) => boolean
   onTerminal?: (ref: Ref, dialog: boolean) => void
@@ -61,6 +67,8 @@ const toolBtn = 'rounded-md border border-line px-2 py-0.5 text-xs text-fg-muted
 type Tab = 'details' | 'yaml'
 
 export function ResourceDrawer({ client, hub, target, subject, initialTab, onTab, onClose, hasLogs, onLogs, hasExec, onTerminal, hasForward, actionsOf, onAction, eventsKindOf, editableOf, valuesOf, kindTitleOf }: Props) {
+  const [filesOpen, setFilesOpen] = useState<{subject:Ref; instance:ExecInstance} | null>(null)
+  const [filesDialog, setFilesDialog] = useState<Ref | null>(null)
   const panelRef = useRef<HTMLElement>(null)
   const rootKey = `${target.provider}/${target.id}/${subject.kind}/${subject.scope ?? ''}/${subject.name}/${subject.uid ?? ''}`
   const [navigation, setNavigation] = useState({ rootKey, stack: [subject] })
@@ -73,7 +81,9 @@ export function ResourceDrawer({ client, hub, target, subject, initialTab, onTab
   const [menuAt, setMenuAt] = useState<{ x: number; y: number } | null>(null)
   const actionsBtn = useRef<HTMLButtonElement>(null)
   const current = stack[stack.length - 1]
+  const filesSubject = useMemo(() => ({ ...current, provider: target.provider, target: target.id }), [current, target.provider, target.id])
   const key = `${current.kind}/${current.scope ?? ''}/${current.name}/${current.uid ?? ''}`
+  const { pickExec, popup: filesPicker, cancel:cancelFilesPicker } = useInstancePicker(client, `${rootKey}/${key}`)
   const revision = useObjectRevision(hub, target, current)
   // The last object recorded as recently opened (once per object shown).
   const touched = useRef<string | null>(null)
@@ -192,6 +202,9 @@ export function ResourceDrawer({ client, hub, target, subject, initialTab, onTab
 
   const shown = res?.key === key ? res : null
   const loading = !shown
+  useEffect(() => {
+    if (shown?.r && !shown.gone) prefetchToolInfo(client, {...shown.r.ref,provider:target.provider,target:target.id}, !!hasExec?.(current.kind), !!hasLogs?.(current.kind))
+  }, [client, shown, current.kind, hasExec, hasLogs, target.provider, target.id])
   // Keep the previous static layout while loading another object. Privileged
   // value/port children below are removed immediately; stale controls are inert.
   const r = shown?.r ?? (loading ? res?.r : undefined)
@@ -261,32 +274,21 @@ export function ResourceDrawer({ client, hub, target, subject, initialTab, onTab
               <button
                 className="rounded-md border border-line px-2 py-0.5 text-xs text-fg-muted hover:bg-hover hover:text-fg"
                 onClick={() => onLogs({ ...(r?.ref ?? current), provider: target.provider, target: target.id })}
-                title={t('logs.openHint')}
+                onContextMenu={event=>{event.preventDefault();event.stopPropagation();event.currentTarget.focus();onLogs(shownRef(),true)}}
+                title={t('tools.logsHint')}
               >
                 {t('logs.open')}
               </button>
             )}
             {onTerminal && hasExec?.(current.kind) && (
-              // A split button: the terminal at once, or ▾ to choose the
-              // container and the command first.
-              <span className="inline-flex">
-                <button
-                  className="rounded-l-md border border-line px-2 py-0.5 text-xs text-fg-muted hover:bg-hover hover:text-fg"
-                  onClick={() => onTerminal({ ...(r?.ref ?? current), provider: target.provider, target: target.id }, false)}
-                  title={t('term.openHint')}
-                >
-                  {t('term.open')}
-                </button>
-                <button
-                  className="-ml-px rounded-r-md border border-line px-1.5 py-0.5 text-xs text-fg-muted hover:bg-hover hover:text-fg"
-                  onClick={() => onTerminal({ ...(r?.ref ?? current), provider: target.provider, target: target.id }, true)}
-                  title={t('term.dialogHint')}
-                  aria-label={t('term.dialog')}
-                >
-                  ▾
-                </button>
-              </span>
+              <button className={toolBtn} onClick={()=>onTerminal(shownRef(),false)}
+                onContextMenu={event=>{event.preventDefault();event.stopPropagation();event.currentTarget.focus();onTerminal(shownRef(),true)}} title={t('tools.terminalHint')}>
+                {t('term.open')}
+              </button>
             )}
+            {hasExec?.(current.kind) && <button className={toolBtn} title={t('tools.filesHint')}
+              onContextMenu={event=>{event.preventDefault();event.stopPropagation();event.currentTarget.focus();cancelFilesPicker(false);mayLeave(()=>setFilesDialog(filesSubject))}}
+              onClick={() => mayLeave(() => pickExec(filesSubject, instance => mayLeave(() => setFilesOpen({subject:filesSubject,instance}))))}>{t('files.title')}</button>}
             {editableOf?.(current.kind) && (
               <button className={toolBtn} disabled={!canEdit || !!editing || loadingEdit} onClick={startEdit} title={t('edit.openHint')}>
                 {t('edit.open')}
@@ -393,6 +395,7 @@ export function ResourceDrawer({ client, hub, target, subject, initialTab, onTab
             target={target}
             r={r}
             onGo={go}
+            kindTitleOf={kindTitleOf}
             eventsKind={shown ? eventsKindOf?.(current.kind) : undefined}
             // Keyed by the object: its values never show for another one.
             values={
@@ -420,12 +423,15 @@ export function ResourceDrawer({ client, hub, target, subject, initialTab, onTab
           }}
         />
       )}
+      {filesPicker}
+      {filesDialog && <ToolDialog client={client} subject={filesDialog} mode="files" onClose={()=>setFilesDialog(null)} onOpen={selection=>{setFilesDialog(null);if(selection.instance) mayLeave(()=>setFilesOpen({subject:selection.ref,instance:{...selection.instance!,defaultChannel:selection.channel ?? ''}}))}}/>}
+      {filesOpen && <Suspense fallback={null}><FileBrowser client={client} subject={filesOpen.subject} selectedInstance={filesOpen.instance} onClose={() => setFilesOpen(null)} /></Suspense>}
     </DetailsPanel>
   )
 }
 
-function Details(props: { client: Client; hub: ViewHub; target: { provider: string; id: string }; r: Resource; onGo: (ref: Ref) => void; eventsKind?: string; ports?: ReactNode; values?: ReactNode }) {
-  const { hub, target, r, onGo, eventsKind, ports, values } = props
+function Details(props: { client: Client; hub: ViewHub; target: { provider: string; id: string }; r: Resource; onGo: (ref: Ref) => void; kindTitleOf?: (kind: string) => string; eventsKind?: string; ports?: ReactNode; values?: ReactNode }) {
+  const { client, hub, target, r, onGo, kindTitleOf, eventsKind, ports, values } = props
   const groups = useMemo(() => {
     const m = new Map<string, Relation[]>()
     for (const rel of r.relations ?? []) m.set(rel.type, [...(m.get(rel.type) ?? []), rel])
@@ -454,26 +460,24 @@ function Details(props: { client: Client; hub: ViewHub; target: { provider: stri
       </dl>
       {values}
       {ports}
+      <DeploymentRevisions key={`${r.ref.uid}/${r.ref.name}`} client={client} resource={r}/>
       {(groups.length > 0 || r.relationsError) && (
         <section aria-label={t('drawer.related')}>
           <h3 className="mb-1.5 text-[12px] font-semibold uppercase tracking-wider text-fg-subtle">{t('drawer.related')}</h3>
           {groups.map(([type, rels]) => (
-            <div key={type} className="mb-2">
-              <p className="text-xs text-fg-subtle">{relationLabel(type)}</p>
-              <ul>
-                {rels.map((rel) => (
-                  <li key={`${rel.ref.kind}/${rel.ref.name}/${rel.ref.uid ?? ''}`}>
-                    {rel.inert ? (
-                      <span className="text-fg-muted" title={t('drawer.relationInert')}>
-                        {rel.ref.kind}/{refTitle(rel.ref)}
-                      </span>
-                    ) : (
-                      <button className="text-accent hover:underline" onClick={() => onGo({ ...rel.ref, provider: target.provider, target: target.id })}>
-                        {rel.ref.kind}/{refTitle(rel.ref)}
-                      </button>
-                    )}
+            <div key={type} className="mb-3">
+              <p className="mb-1.5 flex items-center gap-2 text-[12px] text-fg-subtle">{relationLabel(type)}<span className="font-mono text-[11px]">{rels.length}</span></p>
+              <ul className="overflow-hidden rounded-md border border-line divide-y divide-line">
+                {rels.map(rel => {
+                  const title = `${rel.ref.kind}/${refTitle(rel.ref)}`
+                  const content = <><span className="max-w-[40%] shrink-0 truncate rounded border border-line px-1.5 py-0.5 text-[11px] text-fg-subtle" title={rel.ref.kind}>{(kindTitleOf?.(rel.ref.kind) && kindTitleOf(rel.ref.kind) !== rel.ref.kind ? kindTitleOf(rel.ref.kind) : rel.ref.kind.split('/').pop())}</span>
+                    <span className="min-w-0 flex-1"><span className="block truncate text-[13px]">{refTitle(rel.ref)}</span>{rel.ref.scope && rel.ref.scope !== r.ref.scope && <span className="block truncate text-[11px] text-fg-subtle">{rel.ref.scope}</span>}</span>
+                    {!rel.inert && <LinkArrowIcon className="h-[14px] w-[14px] shrink-0 text-fg-subtle group-hover:text-accent"/>}</>
+                  return <li key={`${rel.ref.kind}/${rel.ref.scope ?? ''}/${rel.ref.name}/${rel.ref.uid ?? ''}`} data-related-resource>
+                    {rel.inert ? <span className="flex min-h-[32px] items-center gap-2 px-2 py-1 text-fg-muted" title={`${title} · ${t('drawer.relationInert')}`}>{content}</span>
+                      : <button aria-label={title} title={title} className="group flex min-h-[32px] w-full items-center gap-2 px-2 py-1 text-left text-fg-muted outline-none hover:bg-hover hover:text-fg focus-visible:bg-hover focus-visible:text-accent" onClick={()=>onGo({...rel.ref,provider:target.provider,target:target.id})}>{content}</button>}
                   </li>
-                ))}
+                })}
               </ul>
             </div>
           ))}

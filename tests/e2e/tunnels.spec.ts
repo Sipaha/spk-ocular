@@ -28,7 +28,6 @@ const panel = (page: Page) => page.getByRole('region', { name: 'Port forwards' }
 
 test('forward, request through the tunnel, stop', async ({ page }) => {
   await page.goto('/')
-  const base = await stats(page)
   await selectObject(page, 'api')
   await page.keyboard.press('Enter')
   const ports = page.getByRole('dialog', { name: 'services api' }).getByRole('region', { name: 'Ports' })
@@ -37,6 +36,9 @@ test('forward, request through the tunnel, stop', async ({ page }) => {
 
   const dlg = await forwardDialog(page, 'api', 80)
   await expect(selects(dlg).first()).toHaveText('http') // the port says it speaks http
+  // Selecting/reconnecting can release handles left by the previous page.
+  // Measure the allocation after that transition, immediately before Forward.
+  const base = await stats(page)
   await dlg.getByRole('button', { name: 'Forward' }).click()
   await expect(dlg).toHaveCount(0)
 

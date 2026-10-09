@@ -22,6 +22,8 @@ type ExecInstance struct {
 
 // ExecInfo says where a command can run for an object.
 type ExecInfo struct {
+	// Aggregate means the object offers instances rather than being one itself.
+	Aggregate       bool           `json:"aggregate"`
 	Instances       []ExecInstance `json:"instances"`
 	DefaultInstance string         `json:"defaultInstance"`
 	// InstanceLabel and ChannelLabel name the levels (k8s: Pod, Container);

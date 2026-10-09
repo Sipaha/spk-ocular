@@ -23,7 +23,7 @@ const pod: Ref = { provider: 'kubernetes', target: 'dev', scope: 'ns', kind: 'ap
 afterEach(() => vi.unstubAllGlobals())
 
 describe('LogViewer', () => {
-  it('streams lines from several sources with ANSI, search and levels; gone asks to reopen', async () => {
+  it('streams lines from several sources with ANSI, search and text filters; gone asks to reopen', async () => {
     const { client: c } = fakeClient([k8s('dev')])
     c.logInfo = vi.fn(async () => ({ channels: [{ id: 'app', title: 'app' }], defaultChannel: 'app', aggregate: true, previous: false }))
     const s1 = stream()
@@ -56,7 +56,8 @@ describe('LogViewer', () => {
     await waitFor(() => expect(document.querySelector('mark.log-match-current')).toHaveTextContent('boom'))
     expect(screen.getByLabelText('matches')).toHaveTextContent('1/1')
 
-    await user.click(screen.getByRole('button', { name: 'ERROR' }))
+    expect(screen.queryByRole('button', { name: /^(DEBUG|INFO|ERROR|WARN|TRACE|UNKNOWN)$/ })).not.toBeInTheDocument()
+    await user.type(screen.getByLabelText('Filter (*)'), 'INFO')
     await waitFor(() => expect(screen.queryByText(/boom/)).not.toBeInTheDocument())
     expect(screen.getByLabelText('line count')).toHaveTextContent('1 of 2 lines')
 

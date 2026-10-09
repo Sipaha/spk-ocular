@@ -19,9 +19,9 @@ const bin = process.env.E2E_BIN ?? '../../build/bin/spk-ocular'
 export default defineConfig({
   testDir: '.',
   outputDir: join(scratchRoot, 'playwright-synth'),
-  testMatch: ['about.spec.ts', 'helm.spec.ts', 'logs.spec.ts', 'agents.spec.ts', 'connections.spec.ts', 'terminal.spec.ts', 'tunnels.spec.ts', 'actions.spec.ts', 'problems.spec.ts', 'palette.spec.ts', 'keyboard.spec.ts', 'generic.spec.ts', 'warm.spec.ts', 'languages.spec.ts'],
+  testMatch: ['files.spec.ts', 'about.spec.ts', 'helm.spec.ts', 'logs.spec.ts', 'agents.spec.ts', 'connections.spec.ts', 'terminal.spec.ts', 'tunnels.spec.ts', 'actions.spec.ts', 'problems.spec.ts', 'palette.spec.ts', 'keyboard.spec.ts', 'generic.spec.ts', 'warm.spec.ts', 'languages.spec.ts'],
   workers: 1,
-  use: { baseURL: `http://127.0.0.1:${port}`, locale: 'en-US', screenshot: 'only-on-failure', permissions: ['clipboard-read', 'clipboard-write'] },
+  use: { baseURL: `http://127.0.0.1:${port}`, locale: 'en-US', screenshot: 'only-on-failure', permissions: ['clipboard-read', 'clipboard-write'], launchOptions: { ignoreDefaultArgs: ['--hide-scrollbars'] } },
   webServer: {
     command: `${bin} --browser --port ${port} --test-api --test-synthetic`,
     url: `http://127.0.0.1:${port}/`,

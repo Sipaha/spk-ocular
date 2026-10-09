@@ -28,11 +28,10 @@ const inNav = (t: EventTarget | null) => t instanceof HTMLElement && !!t.closest
 
 export const KEYS: KeyDef[] = [
   { id: 'palette', scope: 'global', keys: 'Ctrl+K', help: 'keys.palette', inFields: true, match: (e) => !e.altKey && isShortcut(e, 'KeyK', { ctrl: true, shift: false }) },
-  // "?" by the physical key (a Russian layout types ","), or by the character.
-  { id: 'help', scope: 'global', keys: '?', help: 'keys.help', match: (e) => plain(e) && (e.key === '?' || isShortcut(e, 'Slash', { shift: true })) },
-  // "/" by the physical key (a Russian layout types "."), or by the character
-  // (layouts with "/" elsewhere, e.g. Shift+7).
-  { id: 'filter', scope: 'global', keys: '/', help: 'keys.filter', match: (e) => plain(e) && (e.key === '/' || isShortcut(e, 'Slash', { shift: false })) },
+  // Physical punctuation keys are independent of the active layout.
+  { id: 'help', scope: 'global', keys: '?', help: 'keys.help', match: (e) => plain(e) && isShortcut(e, 'Slash', { shift: true }) },
+  // Slash types a different character in Russian; it still focuses filters.
+  { id: 'filter', scope: 'global', keys: '/', help: 'keys.filter', match: (e) => plain(e) && isShortcut(e, 'Slash', { shift: false }) },
   // F-keys type nothing: they work from a field too.
   { id: 'nextArea', scope: 'global', keys: 'F6', help: 'keys.nextArea', inFields: true, match: (e) => plain(e) && e.key === 'F6' && !e.shiftKey },
   { id: 'prevArea', scope: 'global', keys: 'Shift+F6', help: 'keys.prevArea', inFields: true, match: (e) => plain(e) && e.key === 'F6' && e.shiftKey },

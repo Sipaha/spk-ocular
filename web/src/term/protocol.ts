@@ -251,6 +251,8 @@ export class TermConnection {
 
   resize(cols: number, rows: number) {
     if (cols < 1 || rows < 1) return
+    cols = Math.min(1000, cols); rows = Math.min(1000, rows)
+    if (this.lastSize?.cols === cols && this.lastSize.rows === rows) return
     this.lastSize = { cols, rows }
     if (!this.closed && this.ws.readyState === OPEN) this.sendResize(cols, rows)
   }

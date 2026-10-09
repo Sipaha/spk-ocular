@@ -206,3 +206,7 @@ func (w *API) Helm(ctx context.Context, req api.HelmRequest) (api.HelmResponse, 
 func (w *API) Configurations(req kubernetes.ConfigRequest) (kubernetes.ConfigState, error) {
 	return w.a.Configurations(api.UIContext(context.Background()), req)
 }
+
+func (w *API) Files(req api.FilesRequest) (api.FilesResponse, error) {
+	return w.a.Files(api.UIContext(context.Background()), req)
+}

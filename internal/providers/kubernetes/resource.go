@@ -104,6 +104,33 @@ func (s *session) Get(ctx context.Context, ref core.Ref) (*core.Resource, error)
 		Facts:  fs,
 		YAML:   string(y),
 	}
+	if def == deploymentsKind || def == replicaSetsKind {
+		template, templateErr := yaml.Marshal(withoutHash(fieldAt(u.Object, "spec", "template")))
+		if templateErr == nil {
+			out.TemplateYAML = string(template)
+		}
+	}
+	if def == deploymentsKind {
+		out.RevisionsAvailable = true
+		revs, trunc, revisionErr := s.revisions(ctx, u)
+		out.RevisionsTruncated = trunc
+		if revisionErr != nil {
+			out.RevisionsError = revisionErr.Error()
+		} else {
+			current := withoutHash(fieldAt(u.Object, "spec", "template"))
+			for _, rev := range revs {
+				var images []string
+				for _, c := range slice(rev.template, "spec", "containers") {
+					images = append(images, strOf(c, "image"))
+				}
+				out.Revisions = append(out.Revisions, core.ResourceRevision{
+					Ref:    core.Ref{Provider: ProviderID, Target: s.target, Scope: rev.rs.GetNamespace(), Kind: replicaSetsKind.desc.ID, Name: rev.rs.GetName(), UID: string(rev.rs.GetUID())},
+					Number: rev.n, Created: rev.rs.GetCreationTimestamp().Format(time.RFC3339), Current: sameTemplate(rev.template, current),
+					Replicas: i64(rev.rs.Object, "status", "replicas"), Ready: i64(rev.rs.Object, "status", "readyReplicas"), Cause: rev.rs.GetAnnotations()[changeCauseKey], Images: images,
+				})
+			}
+		}
+	}
 	rels, truncated, relErr := s.relations(ctx, def, u)
 	out.Relations = rels
 	out.RelationsTruncated = truncated

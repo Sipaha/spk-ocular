@@ -90,7 +90,8 @@ for work observed during the initial snapshot.
 
 Go tests exercise fake Kubernetes/Engine servers, scope unions, stream lifecycles,
 action writes, secret masking, and persistence. Tests never require a real cluster
-for `make check`. Explicit integration targets fail if their fixture is absent:
+for `make check`. Synthetic browser tests exclude Chromium’s `--hide-scrollbars`
+launch flag so screenshots and scrollbar drag checks exercise visible controls. Explicit integration targets fail if their fixture is absent:
 
 - `make kind-up`, `make test-kind`, `make e2e-kind`, `make kind-down`: disposable
   kind-ocular-dev, with kubeconfig in `build/kind-ocular-dev.kubeconfig`.
@@ -251,3 +252,11 @@ for system/browser precedence and translation limits.
 For local Playwright fixtures, clear HTTP/HTTPS proxy variables in the test
 command if the runner's inherited proxy intercepts loopback readiness checks;
 this is a per-command test setting, not a change to user/global proxy settings.
+
+Tool interaction regressions cover prefetch, cancellation, single-Pod setup,
+concrete-container choices, read-only revision comparisons and relation navigation.
+Terminal tests check physical Cyrillic keydown/keypress pairs and one resize on
+drag release. A real BusyBox PTY fixture distinguishes shell SIGWINCH prompt
+redraws from synthetic terminal size reports; the app must never filter these
+shell bytes to conceal a redraw. Window actions are accessible icon buttons at
+the right edge of the log toolbar.

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/url"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -153,7 +154,7 @@ func (s *session) ExecInfo(ctx context.Context, ref core.Ref) (core.ExecInfo, er
 	}
 	pod, container := msg("level.pod"), msg("level.container")
 	none := msg("exec.noPods")
-	info := core.ExecInfo{InstanceLabel: &pod, ChannelLabel: &container, NoInstances: &none}
+	info := core.ExecInfo{Aggregate: s.kind(ref.Kind) != podsKind, InstanceLabel: &pod, ChannelLabel: &container, NoInstances: &none}
 	for _, p := range pods {
 		info.Instances = append(info.Instances, execInstance(p))
 	}
@@ -547,7 +548,10 @@ func (h *execHandle) Run(ctx context.Context, t provider.Terminal) (provider.Exi
 	if err := channelRunnable(execInstance(p), h.container); err != nil {
 		return provider.ExitStatus{}, err
 	}
-	q := url.Values{"container": {h.container}, "command": h.argv, "stdin": {"true"}, "stdout": {"true"}, "tty": {"true"}}
+	q := url.Values{"container": {h.container}, "command": h.argv, "stdin": {"true"}, "stdout": {"true"}, "tty": {strconv.FormatBool(!t.Raw)}}
+	if t.Raw {
+		q.Set("stderr", "true")
+	}
 	u, err := h.conn.podURL(h.ns, h.pod, "exec", q)
 	if err != nil {
 		return provider.ExitStatus{}, &provider.Error{Class: provider.ClassInternal, Message: err.Error()}
@@ -559,7 +563,7 @@ func (h *execHandle) Run(ctx context.Context, t provider.Terminal) (provider.Exi
 	// closeOnCancel: the WebSocket handshake would not notice ctx ending
 	// (upgrade.go); the SPDY path's upgrader does by itself.
 	err = ex.StreamWithContext(closeOnCancel(ctx), remotecommand.StreamOptions{
-		Stdin: t.Stdin, Stdout: t.Stdout, Tty: true, TerminalSizeQueue: sizeQueue{t.Sizes},
+		Stdin: t.Stdin, Stdout: t.Stdout, Stderr: t.Stderr, Tty: !t.Raw, TerminalSizeQueue: sizeQueue{t.Sizes},
 	})
 	var ce exec.CodeExitError
 	switch {

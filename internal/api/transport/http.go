@@ -212,6 +212,7 @@ func (h *HTTP) routes() {
 	h.mux.HandleFunc("POST /api/OpenLogStream", handle(func(ctx context.Context, r *api.LogStreamRequest) (any, error) {
 		return h.api.OpenLogStream(ctx, *r)
 	}))
+	h.mux.Handle("POST /api/Files", noStore(http.MaxBytesHandler(handle(func(ctx context.Context, r *api.FilesRequest) (any, error) { return h.api.Files(ctx, *r) }), 13<<20)))
 	h.mux.HandleFunc("POST /api/ExecInfo", handle(func(ctx context.Context, r *core.Ref) (any, error) {
 		return h.api.ExecInfo(ctx, *r)
 	}))

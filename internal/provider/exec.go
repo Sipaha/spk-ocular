@@ -53,6 +53,9 @@ type ExecHandle interface {
 // page has not acknowledged enough output (backpressure reaches the
 // command).
 type Terminal struct {
+	// Raw disables the pseudo-terminal for byte-preserving file operations.
+	Raw    bool
+	Stderr io.Writer
 	Stdin  io.Reader
 	Stdout io.Writer
 	Sizes  TermSizes

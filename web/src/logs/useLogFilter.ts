@@ -1,11 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { LogEntry } from './buffer'
-import { LOG_LEVELS, type LogLevel } from './levels'
 import { compileFilter, compileRegex, plainRanges, type Range } from './match'
 import { RegexSearch, type RegexState, type WorkerLike } from './regexSearch'
-
-// DEBUG is hidden by default (high volume, low signal); one click brings it back.
-const DEFAULT_LEVELS: LogLevel[] = LOG_LEVELS.filter((l) => l !== 'DEBUG')
 
 const makeWorker = (): WorkerLike => new Worker(new URL('./search.worker.ts', import.meta.url), { type: 'module' }) as unknown as WorkerLike
 
@@ -20,15 +16,14 @@ const useDebounced = (v: string, ms = 250) => {
 
 /**
  * useLogFilter owns what lies between the buffer and the rendered list:
- * level toggles, the "*" hide-filter, search (plain, or regex in a worker)
+ * the "*" hide-filter, search (plain, or regex in a worker)
  * and match navigation. navTick bumps only on explicit navigation, so new
  * lines never yank the viewport to a match.
  */
-export function useLogFilter(entries: LogEntry[], opts: { worker?: () => WorkerLike } = {}) {
-  const [search, setSearch] = useState('')
-  const [useRegex, setUseRegex] = useState(false)
-  const [filterText, setFilterText] = useState('')
-  const [levels, setLevels] = useState<Set<LogLevel>>(() => new Set(DEFAULT_LEVELS))
+export function useLogFilter(entries: LogEntry[], opts: { worker?: () => WorkerLike; initial?: { search?: string; filterText?: string; useRegex?: boolean } } = {}) {
+  const [search, setSearch] = useState(opts.initial?.search ?? '')
+  const [useRegex, setUseRegex] = useState(opts.initial?.useRegex ?? false)
+  const [filterText, setFilterText] = useState(opts.initial?.filterText ?? '')
   const [matchIndex, setMatchIndex] = useState(0)
   const [navTick, setNavTick] = useState(0)
   const bumpNav = useCallback(() => setNavTick((n) => n + 1), [])
@@ -37,10 +32,8 @@ export function useLogFilter(entries: LogEntry[], opts: { worker?: () => WorkerL
 
   const filtered = useMemo(() => {
     const pass = compileFilter(f)
-    const all = levels.size === LOG_LEVELS.length
-    if (!pass && all) return entries
-    return entries.filter((e) => (all || levels.has(e.level ?? 'UNKNOWN')) && (!pass || pass(e.plain)))
-  }, [entries, levels, f])
+    return pass ? entries.filter((e) => pass(e.plain)) : entries
+  }, [entries, f])
 
   // regex: compiled here only to validate; matching happens in the worker
   const regex = useMemo(() => (useRegex && q ? compileRegex(q) : null), [useRegex, q])
@@ -101,18 +94,9 @@ export function useLogFilter(entries: LogEntry[], opts: { worker?: () => WorkerL
     if (q) setNavTick((n) => n + 1)
   }
 
-  const toggleLevel = useCallback((l: LogLevel) => {
-    setLevels((s) => {
-      const n = new Set(s)
-      if (n.has(l)) n.delete(l)
-      else n.add(l)
-      return n
-    })
-  }, [])
-
-  return {
-    search, setSearch, useRegex, setUseRegex, filterText, setFilterText, levels, toggleLevel,
+  return useMemo(() => ({
+    search, setSearch, useRegex, setUseRegex, filterText, setFilterText,
     filtered, matches, current, setMatchIndex, navTick, bumpNav, rangesFor,
     regexState: regexError ? ('invalid' as const) : regexState, regexError,
-  }
+  }), [search, useRegex, filterText, filtered, matches, current, navTick, bumpNav, rangesFor, regexError, regexState])
 }

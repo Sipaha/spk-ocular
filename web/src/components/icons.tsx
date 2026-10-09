@@ -2,6 +2,14 @@
 
 type P = { className?: string }
 
+export const GlobeIcon = ({ className }: P) => (
+  <svg viewBox="0 0 24 24" className={className} aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.8">
+    <circle cx="12" cy="12" r="9" />
+    <ellipse cx="12" cy="12" rx="4" ry="9" />
+    <path d="M3 12h18" />
+  </svg>
+)
+
 export const InfoIcon = ({ className }: P) => (
   <svg viewBox="0 0 24 24" className={className} aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
     <circle cx="12" cy="12" r="9" />
@@ -59,5 +67,32 @@ export const SearchIcon = ({ className }: P) => (
   <svg viewBox="0 0 24 24" className={className} aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="2">
     <circle cx="11" cy="11" r="7" />
     <path d="m20 20-3.5-3.5" strokeLinecap="round" />
+  </svg>
+)
+
+export const FolderIcon = ({ className, open = false }: P & { open?: boolean }) => (
+  <svg viewBox="0 0 24 24" className={className} aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round">
+    <path d="M3 7V5.5A1.5 1.5 0 0 1 4.5 4H9l2 3h8.5A1.5 1.5 0 0 1 21 8.5V10" />
+    {open ? <path d="M3 7v12h15l3-9H7l-4 9" /> : <path d="M3 7v12h18V10H3" />}
+  </svg>
+)
+
+export const FileIcon = ({ className }: P) => (
+  <svg viewBox="0 0 24 24" className={className} aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round">
+    <path d="M5 3h9l5 5v13H5Z M14 3v5h5 M8 12h8 M8 16h6" />
+  </svg>
+)
+
+export const LinkArrowIcon = ({ className }: P) => (
+  <svg viewBox="0 0 16 16" className={className} aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M4 12 12 4M5 4h7v7" />
+  </svg>
+)
+
+/** A secondary window, with the direction indicating detach or return. */
+export const WindowActionIcon = ({className, returning=false}: P & {returning?:boolean}) => (
+  <svg viewBox="0 0 24 24" className={className} aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M10 4H4v16h16v-6M14 4h6v6"/>
+    {returning ? <path d="m20 4-9 9m0-5v5h5"/> : <path d="m11 13 9-9"/>}
   </svg>
 )

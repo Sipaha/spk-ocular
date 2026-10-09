@@ -14,6 +14,7 @@ var messageTexts = map[string]string{
 	"scope.singular":                 "Namespace",
 	"scope.plural":                   "namespaces",
 	"scope.all":                      "All namespaces",
+	"logs.allPods":                   "All Pods",
 	"logs.allContainers":             "All containers",
 	"exec.noPods":                    "No running pods",
 	"level.pod":                      "Pod",

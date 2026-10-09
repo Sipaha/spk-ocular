@@ -10,7 +10,7 @@ import { TargetInfoButton } from './TargetDetails'
 export function AppHeader({ target, onHelp, onAbout, client }: { target: Target | null; onHelp: () => void; onAbout: () => void; client: Client }) {
   return (
     <header className="app-header">
-      <button type="button" className="app-brand flex items-center gap-2" onClick={onAbout} aria-label={t('about.title')} title={t('about.title')} aria-haspopup="dialog"><img src="./icon.svg" width="24" height="24" alt="" className="h-6 w-6" />SPK Ocular</button>
+      <div className="app-brand flex items-center gap-2"><img src="./icon.svg" width="24" height="24" alt="" className="h-6 w-6" />SPK Ocular</div>
       <div className="app-context" aria-label={t('shell.context')}>
         {target ? <>
           <ProviderIcon provider={target.provider} className="h-4 w-4 shrink-0 text-fg-muted" />
@@ -24,6 +24,7 @@ export function AppHeader({ target, onHelp, onAbout, client }: { target: Target 
         <kbd>Ctrl K</kbd>
       </button>
       <LanguageMenu client={client} />
+      <button type="button" className="about-trigger" onClick={onAbout} aria-label={t('about.title')} title={t('about.title')} aria-haspopup="dialog">{t('about.open')}</button>
       <button className="help-trigger" onClick={onHelp} aria-label={t('keys.title')} title={`${t('keys.title')} (?)`}>?</button>
     </header>
   )

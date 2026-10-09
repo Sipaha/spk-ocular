@@ -1,3 +1,4 @@
+import { layoutResizing, useLayoutResizing } from '../components/layoutResize'
 import { useEffect, useRef, useState } from 'react'
 import { Terminal, type ITheme } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
@@ -70,6 +71,7 @@ function describe(info: TerminalInfo): string {
  * or the native paste (bracketed when the program asks for it).
  */
 export default function TerminalView({ client, tab, active, mode }: Props) {
+  const resizing = useLayoutResizing()
   const hostRef = useRef<HTMLDivElement>(null)
   const termRef = useRef<Terminal | null>(null)
   const fitRef = useRef<FitAddon | null>(null)
@@ -184,14 +186,25 @@ export default function TerminalView({ client, tab, active, mode }: Props) {
     term.onBinary((d) => connRef.current?.input(Uint8Array.from(d, (ch) => ch.charCodeAt(0) & 0xff)))
     term.onResize(({ cols, rows }) => connRef.current?.resize(cols, rows))
     term.attachCustomKeyEventHandler((ev) => {
+      if (ev.isComposing || ev.getModifierState?.('AltGraph')) return true
+      // WebKitGTK's Cyrillic key events can replay the growing helper textarea.
+      // Handle plain physical typing once; composition and AltGr stay with xterm.
+      if (!ev.ctrlKey && !ev.altKey && !ev.metaKey && /^[\p{Script=Cyrillic}]$/u.test(ev.key ?? '') && (ev.type === 'keydown' || ev.type === 'keypress')) {
+        ev.preventDefault()
+        if (ev.type === 'keydown') {
+          if (term.textarea) term.textarea.value = ''
+          send(ev.key)
+        }
+        return false
+      }
       if (ev.type !== 'keydown') return true
-      if (isShortcut(ev, 'KeyC', { ctrl: true, shift: true })) {
+      if (!ev.altKey && isShortcut(ev, 'KeyC', { ctrl: true, shift: true })) {
         ev.preventDefault()
         const sel = term.getSelection()
         if (sel) void copyText(sel, mode)
         return false
       }
-      if (isShortcut(ev, 'KeyV', { ctrl: true, shift: true })) {
+      if (!ev.altKey && isShortcut(ev, 'KeyV', { ctrl: true, shift: true })) {
         ev.preventDefault()
         // The clipboard answers later: the text goes to the connection the
         // gesture was made in, or nowhere (and says so).
@@ -226,7 +239,7 @@ export default function TerminalView({ client, tab, active, mode }: Props) {
       if (timer) clearTimeout(timer)
       timer = setTimeout(() => {
         timer = null
-        if (host.clientWidth > 0 && host.clientHeight > 0) fit.fit()
+        if (!layoutResizing() && host.clientWidth > 0 && host.clientHeight > 0) fit.fit()
       }, 50)
     })
     ro.observe(host)
@@ -250,14 +263,14 @@ export default function TerminalView({ client, tab, active, mode }: Props) {
 
   // Activation: one fit (the size may have changed while hidden) and focus.
   useEffect(() => {
-    if (!active) return
+    if (!active || resizing) return
     const id = requestAnimationFrame(() => {
       const host = hostRef.current
       if (host && host.clientWidth > 0 && host.clientHeight > 0) fitRef.current?.fit()
       termRef.current?.focus()
     })
     return () => cancelAnimationFrame(id)
-  }, [active])
+  }, [active, resizing])
 
   const again = () => {
     if (custom && !confirmAgain) {

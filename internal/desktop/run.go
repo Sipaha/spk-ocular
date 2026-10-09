@@ -4,6 +4,8 @@ package desktop
 
 import (
 	"context"
+	"errors"
+	"io"
 	"io/fs"
 	"log/slog"
 	"os"
@@ -12,6 +14,7 @@ import (
 	"sync/atomic"
 
 	"github.com/wailsapp/wails/v3/pkg/application"
+	wailevents "github.com/wailsapp/wails/v3/pkg/events"
 
 	"github.com/spk/spk-ocular/internal/api"
 	"github.com/spk/spk-ocular/internal/api/transport"
@@ -38,6 +41,14 @@ func Run(ctx context.Context, o Options) error {
 		cutOffSessionBus() // before application.New() initializes GTK
 	}
 
+	downloadSource, ok := o.Service.(interface {
+		DownloadFiles(context.Context, api.FilesRequest, io.Writer) error
+	})
+	if !ok {
+		return errors.New("container download service is unavailable")
+	}
+	fileDownloads := &FileDownloads{ctx: ctx, source: downloadSource}
+	logWindows := &LogWindows{windows: map[string]*application.WebviewWindow{}}
 	app := application.New(application.Options{
 		// Warn: Info logs every asset request. Never Debug in a build that
 		// ships: Wails logs binding results there.
@@ -46,13 +57,16 @@ func Run(ctx context.Context, o Options) error {
 		Description: "Lightweight local infrastructure viewer",
 		Icon:        o.IconPNG,
 		Windows:     application.WindowsOptions{WebviewUserDataPath: filepath.Join(o.DataDir, "webview")},
-		Services:    []application.Service{application.NewService(transport.NewAPI(o.Service))},
+		Services:    []application.Service{application.NewService(transport.NewAPI(o.Service)), application.NewService(logWindows), application.NewService(fileDownloads)},
 		Assets:      application.AssetOptions{Handler: application.AssetFileServerFS(o.FrontendFS)},
 		OnShutdown: func() { // on the GTK main thread
 			shutDown.Store(true)
 			cancel()
 		},
 	})
+
+	logWindows.app = app
+	fileDownloads.app = app
 
 	// Relay core events to the page (Wails events; payload is the one arg);
 	// agents' waiting plans also wake the window's own watch.
@@ -91,6 +105,9 @@ func Run(ctx context.Context, o Options) error {
 	})
 
 	configureWindowIcons(win)
+	logWindows.mainWindow = win
+	fileDownloads.window = win
+	win.OnWindowEvent(wailevents.Common.WindowClosing, func(_ *application.WindowEvent) { app.Quit() })
 
 	go watchPending(ctx, o.Service, win, bus == busOK, pendingWake)
 

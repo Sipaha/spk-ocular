@@ -77,3 +77,11 @@ describe('Ingest across streams', () => {
     expect(e.level).toBeNull()
   })
 })
+
+it('restores an empty cleared window without losing stream ids or ANSI carry',()=>{
+ const owner=new Ingest()
+ owner.entries(1,[['','\u001b[31mERROR first']])
+ const guest=new Ingest()
+ guest.restore([],owner.nextId,owner.snapshotCarry())
+ expect(guest.entries(1,[['','continuation']])).toEqual(owner.entries(1,[['','continuation']]))
+})

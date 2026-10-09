@@ -125,13 +125,15 @@ describe('terminal tabs', () => {
       { instances: [{ id: 'c1', title: 'web-1', ready: true, channels: null, defaultChannel: '' }], defaultInstance: 'c1' },
       { instances: null, defaultInstance: '', noInstances: { key: 'compose.exec.noRunning', text: 'The service has no running containers' } },
     ]
-    f.client.execInfo = vi.fn(async () => withNulls.shift() as never)
+    let current = withNulls[0]
+    f.client.execInfo = vi.fn(async () => current as never)
     await user.click(await within(grid).findByText('api-2'))
     await user.keyboard('{Shift>}S{/Shift}')
     let dialog = await screen.findByRole('dialog', { name: 'Open a terminal' })
     await waitFor(() => expect(within(dialog).getByRole('button', { name: 'Open' })).toBeEnabled())
     expect(within(dialog).queryByRole('button', { name: 'Channel' })).not.toBeInTheDocument()
     await user.click(within(dialog).getByRole('button', { name: 'Cancel' }))
+    current = withNulls[1]
     await user.click(await within(grid).findByText('api-2'))
     await user.keyboard('{Shift>}S{/Shift}')
     dialog = await screen.findByRole('dialog', { name: 'Open a terminal' })

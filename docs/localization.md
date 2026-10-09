@@ -2,7 +2,9 @@
 
 The application supports Russian, English, Simplified Chinese, Spanish, German,
 French, Brazilian Portuguese and Japanese. The header language menu displays
-native language names and offers **Automatic**. The choice is stored in the
+the current native language name with a globe icon at 14 px. Its menu offers
+only the eight supported languages; system/browser detection is the initial
+default until a manual choice is saved. The choice is stored in the
 Ocular profile's SQLite `ui_prefs.language`, shared by desktop and browser mode.
 It survives restarts and does not depend on browser storage being writable.
 

@@ -171,6 +171,23 @@ than being silently discarded. A stopped source waits on events, not polling.
 
 ## Streams
 
+Terminal fitting is deferred during panel pointer drags, then the final size is
+applied once. The protocol suppresses equal dimensions. Native Cyrillic keydown
+is forwarded once and its keypress replay suppressed; composing/AltGr events
+retain xterm handling. Shell-generated SIGWINCH redraws remain raw output.
+
+Workload tool metadata is prefetched with details and cached for five seconds.
+Selections pin concrete identities; pending clicks are cancellable and never
+show a Loading dropdown row. A shared dropdown chooses an
+explicit exec instance for Terminal/Files or a concrete UID-bearing Pod Ref for
+Logs. Aggregate LogInfo exposes owned Pod refs, including terminated Pods, without
+changing stream ownership checks; the original workload remains the All Pods
+choice. Provider metadata distinguishes container choices from stdout/stderr
+streams: Docker logs retain their immediate stream opening, while concrete Pods
+offer container choices. Explicit setup uses provider-supplied instance labels. Right-click setup always shows
+instance selectors, even for one option; only Terminal accepts a command.
+Cancellation and context changes invalidate pending picker responses.
+
 UI logs and terminal traffic use a token-protected loopback server in both app
 modes. They never stream through the `wails://` asset transport. Stream IDs are
 one-shot and bound to session ownership. Guards run before consuming an ID.
@@ -273,7 +290,9 @@ inset before their rows; the subordinate
 Add kubeconfig action uses muted 12 px text.
 Use graphite surfaces, system fonts, 14 px text, a 17 px root rem, 32 px table
 rows, 40 px headers/toolbars, 14 px semibold resource-page titles, and mostly
-2/4 px radii. The SVG app icon embeds as
+2/4 px radii. Command-palette rows have a 38 px minimum height and vertically
+center the section, object name and hint despite their different font sizes.
+The SVG app icon embeds as
 256×256 PNG. Desktop and installer icons derive from the website’s optical-eye design,
 with heavier aligned outlines and fewer details for small taskbar sizes. The
 SVG is rasterized at four-times each output size and downsampled with
@@ -336,3 +355,76 @@ row-level policies remain the database administrator's responsibility.
 
 Tunnel failure counters and their last-error details are published under the same
 lock, so a snapshot cannot report a failure without its associated error.
+
+## Container file inspector
+
+The UI-only `Files` method is exposed through both HTTP (bounded request with
+no-store) and Wails. It prepares provider exec handles with explicit instance and
+channel identity. The provider Terminal raw mode disables the PTY, separates
+stderr, and preserves stdout bytes; existing interactive terminals keep their
+PTY behavior. Paths and content are passed as argv/stdin, never interpolated
+into shell source. Output and UTF-8 text are bounded to 2 MiB, errors to 8 KiB,
+and each operation to 30 seconds. Saves compare the captured configuration
+revision and original content digest before writing without mutation retries.
+The frontend holds unsaved edits, ignores obsolete responses, and loads
+CodeMirror language parsers on demand. Directory lists stay cached for the
+inspector's lifetime, even after collapse, and reload only on explicit Refresh.
+First loads have a non-selectable animated child placeholder; Refresh preserves
+children and animates the parent row. File reads overlay the editor with a visible
+loading state. Symlink listings include their raw readlink target, including
+relative paths; the UI-only resolve operation uses readlink -f within the pinned
+container before revealing a target. Paths remain argv values, and NUL framing
+preserves whitespace and newline characters in entry names and link targets.
+
+Desktop `FileDownloads` owns the native local-directory grant and accepts no
+renderer-provided destination path. `Service.DownloadFiles` is a separate UI-only
+byte stream using the same pinned identity and connection revision. A remote
+`sh`/`tar` command passes paths as argv and feeds a backpressured pipe; stderr is
+bounded and the exit status must be successful before publishing. Tar entries
+are confined through `os.Root`, portable path checks and exclusive file creation.
+Links are installed last, and external links/special entries are refused.
+An owner-only staging tree is removed on any failure. Linux/macOS publish via
+exclusive rename flags; Windows uses MoveFileEx without replacement. Existing
+names, including names created during transfer, remain intact. Downloads run
+for at most 30 minutes and contain at most 100,000 entries. Their bytes never
+pass through Wails JSON or the text-editor API.
+
+The editor captures modified physical keys before both content and search-panel
+keymaps, normalizes only shortcut keys, and runs CodeMirror's existing commands.
+It does not reinterpret ordinary typing, IME composition or AltGr.
+
+### Detached log rendering
+
+The main window remains the single provider-stream owner when a log tab is
+shown in a secondary window. The child hydrates from a bounded log-buffer snapshot
+and consumes ordered NDJSON frames, maintaining the original entry IDs and
+source ANSI/level carry. Query and view changes travel back to the owner. Wails
+windows relay through an application-only service and direct Wails events,
+bypassing the coalescing resource-event queue; browser popups use BroadcastChannel.
+Frame sends are serialized, and log query equality compares fields rather than
+JSON key order. No window state or log contents are persisted. Closing the main
+window explicitly quits Wails even when a secondary window remains open.
+
+Resource navigation section headings use 14 px semibold text. Search fields keep
+icons at a fixed size and allow only their input to shrink with a panel.
+
+Native log downloads use the application-only Wails service and a system file
+chooser attached to the requesting window. The UI sends bounded UTF-8 text,
+never a caller-provided destination path. Only the chooser's returned path is
+written, using an owner-only staged file and replacement after a successful
+write. The desktop loopback server no longer enables the old Downloads save
+route. Agent log exports remain separate and continue using their private
+Downloads export contract.
+
+The file inspector renders through a body portal above resource-panel resize
+handles. Its tree uses compact 24 px virtualized rows with full-path keys and
+lazily loaded directory branches. The provider default pins the object, instance
+and container; location controls are informational rather than selectors. Folder
+refresh and expansion do not replace the editor or discard drafts.
+
+Deployment revision metadata is attached to resource details by the Kubernetes
+provider using owner UID and retained ReplicaSet revision annotations, with the
+same bounded history lookup as rollout review. ReplicaSet/Deployment details
+expose a normalized Pod-template YAML for lazy read-only comparison. The UI never
+infers revision availability from a kind ID and never mutates resources from the
+revision section; failed and truncated history is reported separately.

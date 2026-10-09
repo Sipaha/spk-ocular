@@ -1,3 +1,4 @@
+import type { FilesRequest, FilesResponse } from './types'
 import type { ConfigRequest, ConfigState } from '../configurations/types'
 import type { HelmRequest, HelmResponse } from '../helm/types'
 import { Call, Events } from '@wailsio/runtime'
@@ -63,6 +64,7 @@ export interface Client {
   logInfo(ref: Ref): Promise<LogInfo>
   /** Registers a log stream; read it from streamBase() + '/logs/' + streamId. */
   openLogStream(ref: Ref, query: LogQuery): Promise<LogStreamInfo>
+  files(req: FilesRequest): Promise<FilesResponse>
   execInfo(ref: Ref): Promise<ExecInfo>
   /** Registers a terminal; open a WebSocket to wsBase(streamBase()) + '/term/' + streamId. */
   openTerminal(req: TerminalRequest): Promise<TerminalInfo>
@@ -191,6 +193,7 @@ export const httpClient: Client = {
   touchRecent: (ref, title) => done(post('TouchRecent', { ref, title })),
   logInfo: (ref) => post('LogInfo', ref),
   openLogStream: (ref, query) => post('OpenLogStream', { ref, query }),
+  files: (req) => post('Files', req),
   execInfo: (ref) => post('ExecInfo', ref),
   openTerminal: (req) => post('OpenTerminal', req),
   reopenTerminal: (terminalId, cols, rows) => post('ReopenTerminal', { terminalId, cols, rows }),
@@ -325,6 +328,7 @@ export const wailsClient: Client = {
   touchRecent: (ref, title) => wcall('TouchRecent', { ref, title }),
   logInfo: (ref) => wcall('LogInfo', ref),
   openLogStream: (ref, query) => wcall('OpenLogStream', { ref, query }),
+  files: (req) => wcall('Files', req),
   execInfo: (ref) => wcall('ExecInfo', ref),
   openTerminal: (req) => wcall('OpenTerminal', req),
   reopenTerminal: (terminalId, cols, rows) => wcall('ReopenTerminal', { terminalId, cols, rows }),

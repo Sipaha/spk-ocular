@@ -118,12 +118,30 @@ type Relation struct {
 }
 
 // Resource is the full view of one object for the details panel.
+// ResourceRevision is retained workload history, identified by its immutable object UID.
+type ResourceRevision struct {
+	Ref      Ref      `json:"ref"`
+	Number   int64    `json:"number"`
+	Created  string   `json:"created"`
+	Current  bool     `json:"current"`
+	Replicas int64    `json:"replicas"`
+	Ready    int64    `json:"ready"`
+	Cause    string   `json:"cause,omitempty"`
+	Images   []string `json:"images"`
+}
+
 type Resource struct {
-	Ref       Ref        `json:"ref"`
-	Health    Health     `json:"health"`
-	Facts     []Detail   `json:"facts"`
-	YAML      string     `json:"yaml"`
-	Relations []Relation `json:"relations"`
+	Revisions          []ResourceRevision `json:"revisions,omitempty"`
+	RevisionsAvailable bool               `json:"revisionsAvailable,omitempty"`
+	RevisionsError     string             `json:"revisionsError,omitempty"`
+	RevisionsTruncated bool               `json:"revisionsTruncated,omitempty"`
+	// TemplateYAML is the normalized Pod template for read-only revision comparison.
+	TemplateYAML string     `json:"templateYAML,omitempty"`
+	Ref          Ref        `json:"ref"`
+	Health       Health     `json:"health"`
+	Facts        []Detail   `json:"facts"`
+	YAML         string     `json:"yaml"`
+	Relations    []Relation `json:"relations"`
 	// RelationsError: some relations could not be looked up (denied, slow);
 	// the rest of the resource is still valid.
 	RelationsError string `json:"relationsError,omitempty"`

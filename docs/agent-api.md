@@ -129,7 +129,9 @@ live reading and export to a local file. It does not require an additional
 method. Log contents are never added to the audit journal.
 
 - `GetLogInfo` lists channels, the default channel, aggregation and support for
-  the previous container instance.
+  the previous container instance. Aggregate Kubernetes workloads also return
+  concrete owned Pod refs (including stopped Pods); every subsequent request
+  remains subject to its own namespace and kind grant checks.
 - `GetLogs` returns a bounded JSON snapshot. Without time bounds, `limit` defaults
   to 200 matching lines. **Either time bound makes `limit` mandatory.** Its range
   is 1–5000. `maxBytes` bounds the complete encoded JSON response, including

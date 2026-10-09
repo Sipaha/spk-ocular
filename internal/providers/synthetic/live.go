@@ -69,7 +69,7 @@ func (s *session) ExecInfo(_ context.Context, ref core.Ref) (core.ExecInfo, erro
 	if len(insts) == 0 {
 		return core.ExecInfo{}, &provider.Error{Class: provider.ClassNotFound, Message: ref.Name}
 	}
-	info := core.ExecInfo{DefaultInstance: insts[0]}
+	info := core.ExecInfo{Aggregate: true, DefaultInstance: insts[0]}
 	for _, id := range insts {
 		info.Instances = append(info.Instances, core.ExecInstance{
 			ID: id, Title: id, Ready: true, DefaultChannel: "main",
@@ -191,6 +191,9 @@ func (h *execHandle) Close() {
 // size change prints "size CxR". A non-empty argv runs as one line and the
 // command then ends (0 unless it was an exit).
 func (h *execHandle) Run(ctx context.Context, t provider.Terminal) (st provider.ExitStatus, err error) {
+	if t.Raw {
+		return provider.ExitStatus{}, &provider.Error{Class: provider.ClassUnsupported, Message: "synthetic container files are not available"}
+	}
 	h.p.live.execs.Add(1)
 	defer h.p.live.execs.Add(-1)
 	ctx, cancel := context.WithCancel(ctx)

@@ -1,6 +1,7 @@
 import { groupLabel, kindLabel } from '../presentation'
 import { HelmWorkspace } from '../helm/HelmWorkspace'
 import { agents } from '../agents/store'
+import { useInstancePicker, runningChannel } from './useInstancePicker'
 import { PanelResize, usePanelWidths } from './PanelResize'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { Client } from '../api/client'
@@ -30,6 +31,7 @@ import { matchesRow, ResourceTable } from './ResourceTable'
 import { SearchIcon, StarIcon, WarningIcon } from './icons'
 import { dock } from '../dock/store'
 import { editsHeld, mayLeave, useEditHolder } from '../edit/guard'
+import { ToolDialog } from './ToolDialog'
 import { TerminalDialog } from '../term/TerminalDialog'
 import { lend, type PaletteHost } from '../palette/store'
 
@@ -181,11 +183,13 @@ export function Workspace({ client, hub, target, onFavorite, onMoveFavorite, onN
 
   // Tabs live in the dock above this keyed Workspace and survive target switches.
   const targetRef = useMemo(() => ({ provider: target.provider, id: target.id }), [target.provider, target.id])
-  const openLogs = useCallback((ref: Ref) => dock.openLogs(targetRef, target.title, ref), [targetRef, target.title])
+  const { pickExec, pickLogs, popup: instancePopup, cancel:cancelPicker } = useInstancePicker(client, `${target.provider}/${target.id}`)
+  const [logDialog, setLogDialog] = useState<Ref | null>(null)
+  const openLogs = useCallback((ref: Ref, dialog = false) => dialog ? (cancelPicker(false), setLogDialog(ref)) : pickLogs(ref, (selected, channel) => dock.openLogs(targetRef, target.title, selected, channel)), [pickLogs, targetRef, target.title, setLogDialog, cancelPicker])
   const [termDialog, setTermDialog] = useState<Ref | null>(null)
   const openTerminal = useCallback(
-    (ref: Ref, dialog: boolean) => (dialog ? setTermDialog(ref) : dock.openTerminal(targetRef, target.title, { ref })),
-    [targetRef, target.title, setTermDialog],
+    (ref: Ref, dialog: boolean) => (dialog ? (cancelPicker(false), setTermDialog(ref)) : pickExec(ref, instance => dock.openTerminal(targetRef, target.title, { ref, instance:instance.id, channel:runningChannel(instance)?.id }))),
+    [pickExec, targetRef, target.title, setTermDialog, cancelPicker],
   )
   const hasLogs = useCallback((kindId: string) => !!kinds?.find((k) => k.id === kindId)?.logs, [kinds])
   const hasExec = useCallback((kindId: string) => !!kinds?.find((k) => k.id === kindId)?.exec, [kinds])
@@ -449,6 +453,8 @@ export function Workspace({ client, hub, target, onFavorite, onMoveFavorite, onN
           />
         )}
         </div>
+        {instancePopup}
+        {logDialog && <ToolDialog client={client} subject={logDialog} mode="logs" onClose={()=>setLogDialog(null)} onOpen={selection=>{setLogDialog(null);dock.openLogs(targetRef,target.title,selection.ref,selection.channel)}}/>}
         {termDialog && (
           <TerminalDialog
             client={client}
@@ -693,7 +699,7 @@ function ResourcePage(props: {
   scopeMenu: SelectMemory
   onScope: (s: ScopeSel) => void
   hasLogs: (kindId: string) => boolean
-  onLogs: (ref: Ref) => void
+  onLogs: (ref: Ref, dialog?: boolean) => void
   hasExec: (kindId: string) => boolean
   onTerminal: (ref: Ref, dialog: boolean) => void
   hasForward: (kindId: string) => boolean

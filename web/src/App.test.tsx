@@ -92,7 +92,7 @@ describe('App', () => {
     const f = fakeClient([k8s('alpha'), k8s('beta'), k8s('gamma')])
     render(<App client={f.client} />)
     await screen.findByRole('option', { name: /alpha/ })
-    await userEvent.keyboard('/')
+    await userEvent.keyboard('[Slash]')
     expect(screen.getByRole('textbox', { name: 'Filter' })).toHaveFocus()
     await userEvent.keyboard('a')
     // alpha, beta, gamma all contain "a": cursor starts on the first one

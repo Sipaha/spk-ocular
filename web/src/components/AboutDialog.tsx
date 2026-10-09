@@ -31,7 +31,6 @@ export function AboutDialog({ info, onClose }: { info: AppInfo | null; onClose: 
       if (alive.current) setError(t('about.linkFailed', { error: e instanceof Error ? e.message : String(e) }))
     })
   }
-  const [bioBefore, bioAfter] = t('about.biography').split('Citeck')
   const link = 'text-accent underline-offset-4 hover:underline focus-visible:underline'
   return <div className="fixed inset-0 z-40 flex items-start justify-center bg-black/40 pt-[8vh]" onMouseDown={event => {
     if (event.target === event.currentTarget) { event.preventDefault(); onClose() }
@@ -63,8 +62,7 @@ export function AboutDialog({ info, onClose }: { info: AppInfo | null; onClose: 
         </nav>
         <section className="border-t border-line pt-4">
           <h3 className="mb-2 text-xs text-fg-subtle">{t('about.author')}</h3>
-          <p className="font-semibold">{language === 'ru' ? 'Павел Симонов' : 'Pavel Simonov'} <span className="font-normal text-fg-subtle">· Sipaha</span></p>
-          <p className="mb-2 mt-1 text-fg-muted">{bioBefore}<a className={link} href="https://www.citeck.ru/" target="_blank" rel="noopener noreferrer" onClick={external}>Citeck</a>{bioAfter}</p>
+          <p className="mb-2 font-semibold">{language === 'ru' ? 'Павел Симонов' : 'Pavel Simonov'} <span className="font-normal text-fg-subtle">· Sipaha</span></p>
           <a className={link} href={localizedSiteURL('about', language)} target="_blank" rel="noopener noreferrer" onClick={external}>{t('about.authorProfile')}</a>
         </section>
         {error && <p role="alert" className="mt-3 text-danger">{error}</p>}

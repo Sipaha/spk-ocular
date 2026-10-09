@@ -9,7 +9,7 @@ import { dock, MIN_DOCK, useDock, type DockTab } from './store'
 
 // Heavy parts are lazy chunks: the log viewer (virtual list, ANSI, search
 // worker) and the terminal (xterm).
-const LogViewer = lazy(() => import('../logs/LogViewer'))
+const LogHost = lazy(() => import('../logs/LogHost').then(module=>({default:module.LogHost})))
 const TerminalView = lazy(() => import('../term/TerminalView'))
 
 interface Props {
@@ -50,7 +50,7 @@ export function Dock({ client, current, mode, onHeightDone }: Props) {
           <div key={tb.id} role="tabpanel" aria-label={tb.title} hidden={tb.id !== active} className="absolute inset-0">
             <Suspense fallback={<p className="p-3 text-fg-subtle">{t('app.loading')}</p>}>
               {tb.kind === 'logs' ? (
-                <LogViewer client={client} subject={tb.ref} active={tb.id === active} />
+                <LogHost client={client} tab={tb} active={tb.id === active} />
               ) : (
                 <TerminalView client={client} tab={tb} active={tb.id === active} mode={mode} />
               )}

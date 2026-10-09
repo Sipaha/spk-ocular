@@ -26,15 +26,15 @@ describe('globalShortcut', () => {
   it('? is help by the physical key (Shift+/ types "," on a Russian layout), never in a field', () => {
     expect(globalShortcut(ev({ code: 'Slash', key: '?', shiftKey: true }))).toBe('help')
     expect(globalShortcut(ev({ code: 'Slash', key: ',', shiftKey: true }))).toBe('help')
-    expect(globalShortcut(ev({ code: 'Comma', key: '?', shiftKey: true }))).toBe('help') // a layout with ? elsewhere
+    expect(globalShortcut(ev({ code: 'Comma', key: '?', shiftKey: true }))).toBeNull() // a different physical key
     const input = document.body.appendChild(document.createElement('input'))
     expect(globalShortcut(ev({ code: 'Slash', key: '?', shiftKey: true, target: input }))).toBeNull()
   })
 
-  it('/ focuses a filter: by the key or the physical key without Shift', () => {
+  it('/ focuses a filter: by the physical key without Shift', () => {
     expect(globalShortcut(ev({ code: 'Slash', key: '/' }))).toBe('filter')
     expect(globalShortcut(ev({ code: 'Slash', key: '.' }))).toBe('filter')
-    expect(globalShortcut(ev({ code: 'Digit7', key: '/', shiftKey: true }))).toBe('filter') // a layout with / on Shift+7
+    expect(globalShortcut(ev({ code: 'Digit7', key: '/', shiftKey: true }))).toBeNull() // a different physical key
     const area = document.body.appendChild(document.createElement('textarea'))
     expect(globalShortcut(ev({ code: 'Slash', key: '/', target: area }))).toBeNull()
     expect(globalShortcut(ev({ code: 'Slash', key: '/', ctrlKey: true }))).toBeNull()

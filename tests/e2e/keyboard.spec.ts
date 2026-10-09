@@ -31,7 +31,7 @@ test('F6 goes round the areas; views by arrows; ? shows the keys', async ({ page
   await page.keyboard.press('Shift+Slash')
   const help = page.getByRole('dialog', { name: 'Keyboard' })
   await expect(help.getByRole('region', { name: 'Anywhere' })).toContainText('Ctrl+K')
-  await page.keyboard.press('Escape')
+  await help.dispatchEvent('keydown',{key:',',code:'Slash',shiftKey:true,bubbles:true})
   await expect(help).toBeHidden()
   await expect(page.locator('[data-table-scroll]').first()).toBeFocused()
 })
@@ -76,7 +76,7 @@ test('workspace header and grouped log controls stay reachable in a narrow windo
   await page.getByRole('gridcell', { name: 'api', exact: true }).click()
   await page.getByRole('dialog', { name: 'services api' }).getByRole('button', { name: 'Logs', exact: true }).click()
   const panel = page.getByRole('region', { name: 'Bottom panel' })
-  await expect(panel.getByLabel('line count')).toHaveText('5 of 6 lines')
+  await expect(panel.getByLabel('line count')).toHaveText('6 lines')
   for (const label of ['Log source', 'Search in logs', 'Filter logs', 'Log display', 'Log actions']) {
     const group = panel.getByRole('group', { name: label, exact: true })
     await expect(group).toBeInViewport()

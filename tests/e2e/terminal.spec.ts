@@ -52,6 +52,8 @@ test('changing the dock height resizes the terminal', async ({ page }) => {
   await page.mouse.up()
   await expect.poll(async () => Math.abs((await sizes(page)).at(-1)!.rows - before.rows)).toBeGreaterThan(5)
   expect((await sizes(page)).at(-1)!.cols).toBe(before.cols)
+  await page.mouse.move(10,10)
+  await expect(sep).not.toBeFocused()
 })
 
 test('a flood stops at Ctrl+C and the terminal stays responsive', async ({ page }) => {
@@ -122,4 +124,28 @@ test('closing the tab ends the command and frees the terminal', async ({ page })
   await expect.poll(async () => since(page, base)).toMatchObject({ terminals: 1, syn_execs: 1, syn_handles: 2 }) // the kept prototype + the running copy
   await page.getByRole('tab', { name: /main · api/ }).getByRole('button', { name: 'Close tab' }).click()
   await expect.poll(async () => since(page, base)).toMatchObject({ terminals: 0, syn_execs: 0, syn_handles: 0 })
+})
+
+
+test('physical Cyrillic keys send each character once, and resize sends only the final geometry',async({page})=>{
+ await openShell(page)
+ const textarea=activePanel(page).locator('textarea.xterm-helper-textarea')
+ for(const [key,code] of [['п','KeyG'],['р','KeyH'],['и','KeyB'],['в','KeyD'],['е','KeyT'],['т','KeyN']]) {
+  await textarea.dispatchEvent('keydown',{key,code,keyCode:0,bubbles:true,cancelable:true})
+  await textarea.dispatchEvent('keypress',{key,code,charCode:key.charCodeAt(0),bubbles:true,cancelable:true})
+ }
+ await page.keyboard.press('Enter')
+ await expectScreen(page,'you said: привет')
+ await expect(screen(page)).not.toContainText('ппрпри')
+ const before=await sizes(page)
+ const sep=page.getByRole('separator',{name:'Resize the bottom panel',exact:true})
+ const box=(await sep.boundingBox())!
+ await page.mouse.move(box.x+box.width/2,box.y+1);await page.mouse.down()
+ for(let i=1;i<=5;i++) {
+  await page.mouse.move(box.x+box.width/2,box.y+1-i*20)
+  await expect.poll(async()=>(await sizes(page)).length).toBe(before.length)
+ }
+ await page.mouse.up()
+ await expect.poll(async()=>(await sizes(page)).length).toBe(before.length+1)
+ await page.mouse.move(10,10);await expect(sep).not.toBeFocused()
 })

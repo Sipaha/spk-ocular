@@ -1,13 +1,15 @@
+import { WindowActionIcon } from '../components/icons'
+import type { LogViewState, LogWindowBridge } from './windowBridge'
+import { useLayoutResizing } from '../components/layoutResize'
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import type { Client } from '../api/client'
 import type { LogInfo, LogQuery, Ref } from '../api/types'
 import { Select as AppSelect, type SelectOption } from '../components/Select'
 import { classLabel, messageText, t, type MessageKey } from '../i18n'
 import { isShortcut } from '../keyboard'
-import { LEVEL_CLASS, LOG_LEVELS } from './levels'
 import { LogViewport } from './LogViewport'
 import { rowText, shortLabels, sourceColor, type RowOpts } from './row'
-import { logFileName, saveLogs } from './save'
+import { logFileName, downloadLogs } from './save'
 import { useLogFilter } from './useLogFilter'
 import { useLogStream, type LogSource } from './useLogStream'
 import { refTitle } from '../refs'
@@ -26,25 +28,30 @@ interface Props {
   subject: Ref
   /** The visible tab: keyboard shortcuts are live only there. */
   active: boolean
+  bridge?: LogWindowBridge
+  initial?: LogViewState
+  initialChannel?: string
+  onWindowAction?: () => void
 }
 
 /**
  * LogViewer: one object's logs. Composes useLogStream (the stream and its
- * buffer), useLogFilter (levels, filter, search) and LogViewport (the
+ * buffer), useLogFilter (filter, search) and LogViewport (the
  * virtual list).
  */
-export default function LogViewer({ client, subject, active }: Props) {
+export default function LogViewer({ client, subject, active, bridge, initial, initialChannel, onWindowAction }: Props) {
   const [info, setInfo] = useState<LogInfo | null>(null)
   const [infoError, setInfoError] = useState<string | null>(null)
-  const [channel, setChannel] = useState<string | null>(null)
-  const [tail, setTail] = useState(500)
-  const [since, setSince] = useState<{ key: string; at: string } | null>(null)
-  const [previous, setPrevious] = useState(false)
-  const [showTime, setShowTime] = useState(false)
-  const [showSource, setShowSource] = useState<boolean | null>(null) // null: automatic
-  const [wrap, setWrap] = useState(false)
-  const [follow, setFollow] = useState(true)
+  const [channel, setChannel] = useState<string | null>(initial?.channel ?? initialChannel ?? null)
+  const [tail, setTail] = useState(initial?.tail ?? 500)
+  const [since, setSince] = useState<{ key: string; at: string } | null>(initial?.since ?? null)
+  const [previous, setPrevious] = useState(initial?.previous ?? false)
+  const [showTime, setShowTime] = useState(initial?.showTime ?? false)
+  const [showSource, setShowSource] = useState<boolean | null>(initial?.showSource ?? null) // null: automatic
+  const [wrap, setWrap] = useState(initial?.wrap ?? false)
+  const [follow, setFollow] = useState(initial?.follow ?? true)
   const [selecting, setSelecting] = useState(false)
+  const resizing = useLayoutResizing()
   const [note, setNote] = useState<string | null>(null)
 
   useEffect(() => {
@@ -53,7 +60,7 @@ export default function LogViewer({ client, subject, active }: Props) {
       (i) => {
         if (!live) return
         setInfo(i)
-        setChannel(i.defaultChannel)
+        setChannel(old => old ?? i.defaultChannel)
       },
       (e) => live && setInfoError(e instanceof Error ? e.message : String(e)),
     )
@@ -61,6 +68,19 @@ export default function LogViewer({ client, subject, active }: Props) {
       live = false
     }
   }, [client, subject])
+
+  useEffect(() => {
+    if (!bridge) return
+    bridge.configureView(subject, () => ({ channel, tail, since, previous, showTime, showSource, wrap, follow, ...bridge.captureFilter?.() }), state => {
+      setChannel(state.channel); setTail(state.tail); setSince(state.since); setPrevious(state.previous)
+      setShowTime(state.showTime); setShowSource(state.showSource); setWrap(state.wrap); setFollow(state.follow)
+      bridge.applyFilter?.(state)
+    }, q => {
+      setChannel(q.channel ?? '');setTail(q.tailLines ?? 500);setPrevious(!!q.previous)
+      setSince(q.sinceTime ? { key: since?.key ?? '', at: q.sinceTime } : null)
+    })
+    if (bridge.role === 'guest') void bridge.post('view', bridge.captureView?.())
+  }, [bridge, subject, channel, tail, since, previous, showTime, showSource, wrap, follow])
 
   const query = useMemo<LogQuery | null>(
     () => (channel === null ? null : { channel, previous, follow: !previous, tailLines: tail, sinceTime: since?.at }),
@@ -79,6 +99,9 @@ export default function LogViewer({ client, subject, active }: Props) {
       subject={subject}
       active={active}
       query={query}
+      bridge={bridge}
+      initial={initial}
+      windowButton={onWindowAction && <button type="button" onClick={onWindowAction} aria-label={t(bridge?.role === 'guest' ? 'logs.returnWindow' : 'logs.detachWindow')} title={t(bridge?.role === 'guest' ? 'logs.returnWindow' : 'logs.detachWindow')} className="ml-1 flex h-[26px] w-[26px] shrink-0 items-center justify-center !p-0"><WindowActionIcon returning={bridge?.role === 'guest'} className="h-4 w-4"/></button>}
       toolbar={
         <>
           <Select
@@ -110,7 +133,7 @@ export default function LogViewer({ client, subject, active }: Props) {
           )}
         </>
       }
-      view={{ showTime, setShowTime, showSource, setShowSource, wrap, setWrap, follow, setFollow, selecting, setSelecting, note, setNote }}
+      view={{ showTime, setShowTime, showSource, setShowSource, wrap, setWrap, follow, setFollow, resizing, selecting, setSelecting, note, setNote }}
     />
   )
 }
@@ -124,16 +147,18 @@ interface ViewState {
   setWrap: (v: boolean) => void
   follow: boolean
   setFollow: (v: boolean) => void
+  resizing: boolean
   selecting: boolean
   setSelecting: (v: boolean) => void
   note: string | null
   setNote: (v: string | null) => void
 }
 
-function Stream({ client, subject, active, query, toolbar, view }: { client: Client; subject: Ref; active: boolean; query: LogQuery; toolbar: ReactNode; view: ViewState }) {
-  const { showTime, setShowTime, wrap, setWrap, follow, setFollow, selecting, setSelecting, note, setNote } = view
-  const { win, sources, status, reopen, clear } = useLogStream({ client, ref: subject, query, paused: selecting, frozen: !follow })
-  const f = useLogFilter(win.entries)
+function Stream({ client, subject, active, query, toolbar, view, bridge, initial, windowButton }: { client: Client; subject: Ref; active: boolean; query: LogQuery; toolbar: ReactNode; view: ViewState; bridge?: LogWindowBridge; initial?: LogViewState
+  initialChannel?: string; windowButton?: ReactNode }) {
+  const { showTime, setShowTime, wrap, setWrap, follow, setFollow, resizing, selecting, setSelecting, note, setNote } = view
+  const { win, sources, status, reopen, clear } = useLogStream({ client, ref: subject, query, paused: selecting || resizing, frozen: !follow, bridge })
+  const f = useLogFilter(win.entries, { initial })
   const showSource = view.showSource ?? sources.size > 1
 
   const liveLabels = useMemo(() => {
@@ -146,13 +171,20 @@ function Stream({ client, subject, active, query, toolbar, view }: { client: Cli
   // While the user drag-selects, the prefix layout must not change under
   // the selection (a new source can change the short labels and widths).
   const [heldLabels, setHeldLabels] = useState(liveLabels)
-  if (!selecting && heldLabels !== liveLabels) setHeldLabels(liveLabels)
-  const labels = selecting ? heldLabels : liveLabels
+  if (!selecting && !resizing && heldLabels !== liveLabels) setHeldLabels(liveLabels)
+  const labels = selecting || resizing ? heldLabels : liveLabels
   const width = Math.max(0, ...[...labels.values()].map((l) => l.label.length))
   const rowOpts = useMemo<RowOpts>(
     () => ({ showTime, showSource, labelOf: (src) => (labels.get(src)?.label ?? '?').padEnd(width) }),
     [showTime, showSource, labels, width],
   )
+
+  const { search, filterText, useRegex, setSearch, setFilterText, setUseRegex } = f
+  useEffect(() => {
+    if (!bridge) return
+    bridge.configureFilter(() => ({search,filterText,useRegex}), state => { setSearch(state.search ?? ''); setFilterText(state.filterText ?? ''); setUseRegex(!!state.useRegex) })
+    if(bridge.role === 'guest' && bridge.captureView) void bridge.post('view',bridge.captureView())
+  },[bridge,search,filterText,useRegex,setSearch,setFilterText,setUseRegex])
 
   const rootRef = useRef<HTMLDivElement>(null)
   const parentRef = useRef<HTMLDivElement>(null)
@@ -161,17 +193,21 @@ function Stream({ client, subject, active, query, toolbar, view }: { client: Cli
   const shownText = () => f.filtered.map((e) => rowText(e, rowOpts)).join('\n')
 
   const copyShown = () => void navigator.clipboard?.writeText(shownText()).catch(() => {})
+  const downloadPending = useRef(false)
+  const [downloading, setDownloading] = useState(false)
   const save = async () => {
+    if(downloadPending.current) return
+    downloadPending.current=true;setDownloading(true)
     try {
-      const path = await saveLogs(client, logFileName(refTitle(subject)), shownText())
+      const path = await downloadLogs(logFileName(refTitle(subject)), shownText(), bridge?.id)
       setNote(path ? t('logs.saved', { path }) : null)
     } catch (e) {
       setNote(t('logs.saveFailed', { error: e instanceof Error ? e.message : String(e) }))
-    }
+    } finally { downloadPending.current=false;setDownloading(false) }
   }
 
   const onKeyDown = (e: React.KeyboardEvent) => {
-    if (!active) return
+    if (!active || e.altKey) return
     const target = e.target as HTMLElement
     const inInput = target.tagName === 'INPUT' || target.tagName === 'SELECT' || target.tagName === 'TEXTAREA'
     const inSearch = target === searchRef.current
@@ -262,16 +298,6 @@ function Stream({ client, subject, active, query, toolbar, view }: { client: Cli
           spellCheck={false}
           className="w-32 rounded border border-line bg-app px-2 py-0.5 outline-none focus:border-accent"
         />
-        {LOG_LEVELS.map((l) => (
-          <button
-            key={l}
-            onClick={() => f.toggleLevel(l)}
-            aria-pressed={f.levels.has(l)}
-            className={['log-level rounded px-1.5 py-0.5 font-medium', f.levels.has(l) ? `${LEVEL_CLASS[l]} bg-hover` : 'text-fg-subtle'].join(' ')}
-          >
-            {l}
-          </button>
-        ))}
         </div>
         <div role="group" aria-label={t('shell.logDisplay')} className="log-control-group">
         <Toggle on={showTime} onClick={() => setShowTime(!showTime)} title={t('logs.time.tooltip')}>
@@ -288,12 +314,13 @@ function Stream({ client, subject, active, query, toolbar, view }: { client: Cli
         <Btn onClick={copyShown} title={t('logs.copy.tooltip')}>
           {t('logs.copy')}
         </Btn>
-        <Btn onClick={() => void save()} title={t('logs.save.tooltip')}>
+        <Btn disabled={downloading} onClick={() => void save()} title={t('logs.save.tooltip')}>
           {t('logs.save')}
         </Btn>
         <Btn onClick={clear} title={t('logs.clear.tooltip')}>
           {t('logs.clear')}
         </Btn>
+        {windowButton}
         </div>
       </div>
       {(problems.length > 0 || status.notice) && <Problems problems={problems} notice={status.notice} labels={labels} />}

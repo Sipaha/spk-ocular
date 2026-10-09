@@ -578,7 +578,23 @@ export interface Relation {
   inert?: boolean
 }
 
+export interface ResourceRevision {
+  ref: Ref
+  number: number
+  created: string
+  current: boolean
+  replicas: number
+  ready: number
+  cause?: string
+  images: string[]
+}
+
 export interface Resource {
+  revisions?: ResourceRevision[]
+  revisionsAvailable?: boolean
+  revisionsError?: string
+  revisionsTruncated?: boolean
+  templateYAML?: string
   ref: Ref
   health: Health
   facts: Detail[]
@@ -621,6 +637,11 @@ export interface LogChannel {
 }
 
 export interface LogInfo {
+  selectChannels?: boolean
+  instanceLabel?: Message
+  allInstancesLabel?: Message
+  /** Concrete sources of an aggregate workload, including stopped Pods. */
+  instances?: { ref: Ref; title: string }[]
   channels: LogChannel[]
   defaultChannel: string
   /** The object is a group of sources (a workload's pods). */
@@ -665,6 +686,8 @@ export interface ExecInstance {
 }
 
 export interface ExecInfo {
+  /** The object offers instances rather than being one itself. */
+  aggregate?: boolean
   instances: ExecInstance[]
   defaultInstance: string
   /** The provider's names of the levels (Pod, Container); absent: generic words. */
@@ -863,3 +886,6 @@ export interface AgentAuditEntry {
   /** reads folded into this record */
   count: number
 }
+
+export interface FilesRequest { configRev?: string; ref: Ref; instance: string; channel: string; command: 'list' | 'read' | 'write' | 'resolve'; path: string; text?: string; expect?: string }
+export interface FilesResponse { configRev: string; path: string; entries?: { name: string; directory: boolean; symlink: boolean; target?: string }[]; text: string; version?: string }

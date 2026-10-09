@@ -138,6 +138,10 @@ describe('TermConnection', () => {
     expect(ws.controls('resize')).toEqual([])
     ws.open()
     expect(ws.controls('resize')).toEqual([{ k: 'resize', cols: 100, rows: 30 }])
+    conn.resize(100, 30)
+    expect(ws.controls('resize')).toHaveLength(1)
+    conn.resize(100, 31)
+    expect(ws.controls('resize')).toHaveLength(2)
   })
 
   it('reports the exit code with the end, after the output', () => {

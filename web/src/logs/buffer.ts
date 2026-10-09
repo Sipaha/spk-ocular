@@ -32,7 +32,7 @@ export interface LogEntry {
 }
 
 /** Per-source ingestion state: multi-line records inherit their source's level and ANSI style. */
-interface Carry {
+export interface Carry {
   level: LogLevel | null
   style: Style
 }
@@ -58,6 +58,20 @@ export class Ingest {
     }
     this.carry.set(src, c)
     return out
+  }
+
+  /** Restore the same ids and ANSI/level carry when rendering an owned stream
+   * in another OS window. The provider stream itself continues in the owner. */
+  snapshotCarry(): [number, Carry][] { return [...this.carry] }
+
+  restore(entries: LogEntry[], nextId?: number, carry?: [number, Carry][]) {
+    this.carry.clear()
+    this.nextId = nextId ?? (entries.length ? entries[entries.length - 1].id + 1 : 1)
+    if (carry) { this.carry = new Map(carry); return }
+    for (const entry of entries) {
+      const { end } = stripAnsi(entry.raw ?? entry.plain, entry.style ?? PLAIN)
+      this.carry.set(entry.src, { level: entry.level, style: end })
+    }
   }
 
   /** A new stream: no carry (ids go on: they stay unique in the tab). */

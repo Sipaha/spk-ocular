@@ -25,6 +25,7 @@ var messageTexts = map[string]string{
 	"error.notFound":                  "{kind} {name} is not found",
 	"error.gone":                      "{kind} {name} no longer exists: another object has its name now",
 	"logs.stream":                     "Stream",
+	"logs.allContainers":              "All containers",
 	"logs.allStreams":                 "stdout and stderr",
 	"level.container":                 "Container",
 	"exec.noRunning":                  "The service has no running containers",

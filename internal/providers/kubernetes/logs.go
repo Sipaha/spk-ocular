@@ -27,7 +27,22 @@ func (s *session) LogInfo(ctx context.Context, ref core.Ref) (core.LogInfo, erro
 	if err != nil {
 		return core.LogInfo{}, err
 	}
-	return logInfoOf(s.kind(ref.Kind), u)
+	def := s.kind(ref.Kind)
+	info, err := logInfoOf(def, u)
+	if err != nil || !info.Aggregate {
+		return info, err
+	}
+	pods, err := workloadPods(ctx, s.conn.dyn, def, u)
+	if err != nil {
+		return core.LogInfo{}, err
+	}
+	rankPods(pods)
+	for _, p := range pods {
+		source := ref
+		source.Kind, source.Name, source.UID, source.Title = podsKind.desc.ID, p.GetName(), string(p.GetUID()), ""
+		info.Instances = append(info.Instances, core.LogInstance{Ref: source, Title: p.GetName()})
+	}
+	return info, nil
 }
 
 func logInfoOf(def *kindDef, u *unstructured.Unstructured) (core.LogInfo, error) {
@@ -35,6 +50,9 @@ func logInfoOf(def *kindDef, u *unstructured.Unstructured) (core.LogInfo, error)
 	if err == nil {
 		container, all := msg("level.container"), msg("logs.allContainers")
 		info.ChannelLabel, info.AllChannelsLabel = &container, &all
+		pod, allPods := msg("level.pod"), msg("logs.allPods")
+		info.InstanceLabel, info.AllInstancesLabel = &pod, &allPods
+		info.SelectChannels = true
 	}
 	return info, err
 }

@@ -8,6 +8,20 @@ Keep website and application worktrees separate. Authorized pushes to `pages`
 run the website checks and GitHub Pages deployment. Website publication does not
 publish application releases or authorize wallet publication.
 
+## Publication policy
+
+Public website feature descriptions must correspond to features included in a
+published application release. Unreleased feature announcements are not approved.
+The existing file-inspector section is retained at the owner's request rather
+than rolled back during UI work; reconcile its copy with the released feature
+when that application release is published.
+
+The released-capability copy explains direct Kubernetes API access without
+kubectl, embedded Helm SDK use without a separate Helm CLI, and Ctrl+K/Command+K
+navigation. kubeconfig-configured external authentication helpers remain required.
+All eight locales describe these existing v1.0.1 capabilities without competitor
+comparisons or exclusivity claims.
+
 ## Implemented presentation
 
 The Astro website retains Russian and English routes, light/dark themes,
@@ -99,3 +113,12 @@ one diagnosis/review task. Check whether visitors understand free commercial use
 and optional donations without coaching. App telemetry and website analytics
 remain separate decisions; no collection is implied. Prefer useful task guides,
 truthful demonstrations and tested package channels to broad AI claims.
+
+The container file inspector section uses fresh RU/EN screenshots from an
+isolated Docker demo project with an expanded application tree. Its 1.1.0 copy
+describes syntax highlighting, save protection, symlink navigation and streamed
+native file/folder copies, with explicit sh/readlink/tar, editor-size, desktop-only
+and destination-collision requirements. All twelve product images and both social
+cards are refreshed; versioned image URLs avoid stale cached media.
+The owner's public-copy preference is to describe Ocular's own capabilities
+without named competitor comparisons or claims of exclusivity.

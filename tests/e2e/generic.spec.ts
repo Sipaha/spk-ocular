@@ -73,7 +73,7 @@ test('details: the title shown, the key followed; no events; a terminal with now
   await expect(drawer.getByText('key: crate-7f3a')).toBeVisible()
   await drawer.getByRole('tab', { name: 'Details' }).click()
   await expect(drawer.getByRole('region', { name: 'Events' })).toHaveCount(0)
-  await drawer.getByRole('button', { name: 'Terminal…' }).click()
+  await drawer.getByRole('button', { name: 'Terminal', exact: true }).click({button:'right'})
   const term = page.getByRole('dialog', { name: 'Open a terminal' })
   await expect(term).toContainText('Nowhere to run it now')
   await expect(term).toContainText('alpha')

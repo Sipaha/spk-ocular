@@ -2,7 +2,7 @@
 // time/source prefixes and ANSI spans; copying uses the same visible rowText.
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { RefObject } from 'react'
-import { useVirtualizer } from '@tanstack/react-virtual'
+import { observeElementRect, useVirtualizer } from '@tanstack/react-virtual'
 import { t } from '../i18n'
 import type { LogEntry } from './buffer'
 import { LEVEL_CLASS } from './levels'
@@ -100,12 +100,27 @@ export function LogViewport({
   // Keep it stable during resize/scroll; new log data still updates the keys.
   const getItemKey = useCallback((i: number) => entries[i]?.id ?? i, [entries])
 
+  // Width does not affect fixed-height rows. Ignore width-only observations so
+  // dragging adjacent panels does not rerender the log list for every pixel.
+  const observeRect = useCallback<typeof observeElementRect<HTMLDivElement>>((instance, callback) => {
+    let lastHeight = -1
+    return observeElementRect(instance, rect => {
+      if (wordWrap || rect.height !== lastHeight) {
+        lastHeight = rect.height
+        callback(wordWrap ? rect : { width: 0, height: rect.height })
+      }
+    })
+  }, [wordWrap])
   // eslint-disable-next-line react-hooks/incompatible-library -- useVirtualizer returns are consumed locally, no stale UI risk
   const virtualizer = useVirtualizer({
     count: entries.length,
+    observeElementRect: observeRect,
+    useAnimationFrameWithResizeObserver: true,
     getScrollElement: () => parentRef.current,
     estimateSize: () => probedRowHeight ?? 20,
     overscan: 30,
+    // GTK overlay horizontal scrollbars must not cover the newest log row.
+    paddingEnd: 24,
     // Key rows by the entry's monotonic id, NOT the buffer index. When the
     // sliding window trims old lines off the front, indices shift but ids
     // don't — React nodes and the measurement cache follow the LINE, so the
@@ -157,6 +172,8 @@ export function LogViewport({
   // every selectionchange (it sits under the pointer, always mounted).
   const dragSelRef = useRef<DragSelection | null>(null)
   const draggingRef = useRef(false)
+  const endDragRef = useRef<(() => void) | null>(null)
+  const pointerPositionRef = useRef<{x:number;y:number}|null>(null)
 
   // Select-all must not outlive the selection itself: once the browser
   // selection collapses or leaves the viewport (click on the toolbar, Esc,
@@ -251,7 +268,7 @@ export function LogViewport({
 
   // If the viewport unmounts mid-drag (tab close, window switch), the
   // select-none guard must not linger on <body>.
-  useEffect(() => () => { document.body.classList.remove('log-select-drag') }, [])
+  useEffect(() => () => { endDragRef.current?.(); document.body.classList.remove('log-select-drag') }, [])
 
   // Tracked-selection invalidation by user intent: a mousedown anywhere
   // OUTSIDE the viewer, or Escape, ends the logical drag selection. Clicks
@@ -384,19 +401,30 @@ export function LogViewport({
   useEffect(() => {
     const el = parentRef.current
     if (!el || typeof ResizeObserver === 'undefined') return
+    let lastWidth = el.clientWidth
+    let lastHeight = el.clientHeight
+    let frame: number | null = null
     const ro = new ResizeObserver(() => {
+      const width = el.clientWidth, height = el.clientHeight
+      const changed = height !== lastHeight || (wordWrap && width !== lastWidth)
+      lastWidth = width; lastHeight = height
+      if (!changed || !followRef.current || frame !== null) return
+      frame = requestAnimationFrame(() => {
+      frame = null
       if (!followRef.current) return
-      const len = entriesRef.current.length
-      if (len === 0) return
+      if (entriesRef.current.length === 0) return
       programmaticScrollRef.current = true
-      virtualizerRef.current.scrollToIndex(len - 1, { align: 'end' })
+      // Keep the tail in view through a resize without a virtualizer index
+      // lookup for every observer notification.
+      el.scrollTop = Math.max(0, el.scrollHeight - el.clientHeight)
       requestAnimationFrame(() => {
         requestAnimationFrame(() => { programmaticScrollRef.current = false })
       })
+      })
     })
     ro.observe(el)
-    return () => ro.disconnect()
-  }, [parentRef])
+    return () => { ro.disconnect(); if (frame !== null) cancelAnimationFrame(frame) }
+  }, [parentRef, wordWrap])
 
   // Search target: scroll only when the user explicitly navigated (the tick
   // bumps on a fresh query or F3 / Enter / ↑↓ button presses). Listening to
@@ -428,6 +456,13 @@ export function LogViewport({
         // (every chunk pulses it) — the old "can't unstick from the bottom" bug.
         onWheel={(e) => {
           if (e.deltaY < 0 && followRef.current) setFollow(false)
+          // WebKit can miss mouseup outside its window. A released wheel
+          // must not keep running the selection clamp or freezing ingestion.
+          if (draggingRef.current && !(e.buttons & 1)) endDragRef.current?.()
+          // Extending a native selection scrolls its focus back into view in
+          // WebKit. During wheel input, let the browser scroll freely and
+          // resume caret correction only after a real pointer movement.
+          if (draggingRef.current) lastPointerYRef.current = null
         }}
         onScroll={() => {
           if (!parentRef.current) return
@@ -468,7 +503,7 @@ export function LogViewport({
             // into the selection. Scrollbar drags land on the parent, not
             // here, so scrolling keeps select-all alive and doesn't pause the
             // stream.
-            onMouseDown={(e) => {
+            onPointerDown={(e) => {
               // LEFT button only. A right-click opens the context menu and
               // its mouseup never reaches us — a "drag" started here would
               // stay armed forever: the selection then follows the bare
@@ -476,6 +511,11 @@ export function LogViewport({
               // scrolling crawl. The click also must not touch the existing
               // selection state (context-menu Copy needs it intact).
               if (e.button !== 0) return
+              const content = e.currentTarget
+              const pointerId = e.pointerId
+              // Virtual rows can unmount during a wheel gesture. Capture on
+              // their stable wrapper so pointerup still reaches the page.
+              content.setPointerCapture(pointerId)
               selectAllRef.current = false
               // Fresh drag → new logical anchor (set on the first
               // selectionchange). Shift+click EXTENDS the browser selection
@@ -483,6 +523,7 @@ export function LogViewport({
               if (!e.shiftKey || dragSelRef.current === null) dragSelRef.current = null
               draggingRef.current = true
               lastPointerYRef.current = e.clientY
+              pointerPositionRef.current = {x:e.clientX,y:e.clientY}
               onSelectingChange(true)
               document.body.classList.add('log-select-drag')
               // mousemove only RECORDS the pointer — the clamp itself runs on
@@ -491,18 +532,32 @@ export function LogViewport({
               // from ev.buttons: the browser synthesizes mousemoves when
               // content scrolls under a held wheel, and those can carry a
               // stale buttons=0.
-              const onMove = (ev: MouseEvent) => { lastPointerYRef.current = ev.clientY }
+              const onMove = (ev: MouseEvent) => {
+                const previous=pointerPositionRef.current
+                if(previous?.x===ev.clientX && previous.y===ev.clientY) return
+                pointerPositionRef.current={x:ev.clientX,y:ev.clientY}
+                lastPointerYRef.current=ev.clientY
+              }
               const endDrag = () => {
                 window.removeEventListener('mousemove', onMove)
-                window.removeEventListener('mouseup', endDrag)
+                window.removeEventListener('mouseup', endDrag, true)
+                window.removeEventListener('pointerup', endDrag, true)
+                window.removeEventListener('pointercancel', endDrag, true)
+                content.removeEventListener('lostpointercapture', endDrag)
                 window.removeEventListener('blur', endDrag)
                 document.removeEventListener('visibilitychange', endDrag)
                 draggingRef.current = false
+                endDragRef.current = null
                 document.body.classList.remove('log-select-drag')
                 onSelectingChange(false)
+                if(content.hasPointerCapture(pointerId)) content.releasePointerCapture(pointerId)
               }
+              endDragRef.current=endDrag
               window.addEventListener('mousemove', onMove)
-              window.addEventListener('mouseup', endDrag)
+              window.addEventListener('mouseup', endDrag, true)
+              window.addEventListener('pointerup', endDrag, true)
+              window.addEventListener('pointercancel', endDrag, true)
+              content.addEventListener('lostpointercapture', endDrag)
               // Missed-mouseup safety nets: releasing the button outside a
               // lost/hidden window never delivers mouseup — a stuck drag
               // would make the selection follow the bare cursor forever.

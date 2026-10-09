@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { isShortcut } from '../keyboard'
 import { t, type MessageKey } from '../i18n'
 import { useScopeWords } from '../scopeNames'
 import { KEYS, type Scope, focusMark, restoreFocus } from '../shortcuts'
@@ -23,7 +24,7 @@ export function HelpDialog({ onClose }: { onClose: () => void }) {
         aria-label={t('keys.title')}
         tabIndex={-1}
         onKeyDown={(e) => {
-          if (e.key === 'Escape' || (e.key === '?' && !e.ctrlKey)) {
+          if (e.key === 'Escape' || (!e.altKey && isShortcut(e, 'Slash', { ctrl: false, shift: true }))) {
             e.preventDefault()
             onClose()
           } else if (e.key === 'Tab') {

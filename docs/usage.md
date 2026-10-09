@@ -36,9 +36,10 @@ response arrives; controls for the previous object cannot run during that wait.
 
 ## About the application
 
-Click the Ocular name and icon in the top bar to open About. It shows the running
+Click the **About** button next to the keyboard help in the top bar. It shows the running
 build version, Apache 2.0 license, product website, source repository and author
-information. The author profile links to Pavel Simonov’s personal About site in
+name and profile link. Employment and biography are kept on the author website.
+The author profile links to Pavel Simonov’s personal About site in
 the selected language; Russian uses an explicit language marker. Desktop links
 open in the system browser; browser-mode links open in a separate tab. Escape,
 the close button or backdrop closes the dialog and restores focus. Opening it
@@ -46,10 +47,12 @@ preserves workspaces, connections and unsaved edits.
 
 ## Language
 
-Use the header language menu to choose a native language name or **Automatic**.
+The header language button shows a globe and the current native language name.
+Its menu offers the eight supported languages.
 The saved choice works in desktop and browser mode, including when browser
-storage is blocked. Automatic desktop mode follows a supported system locale;
-browser mode follows the first supported browser preference. English is the
+storage is blocked. Before a manual choice is saved, desktop mode follows a
+supported system locale and browser mode follows the first supported browser
+preference. English is the
 fallback. Changing language preserves open workspaces, editors and connections.
 External data and errors may remain in their original language; see
 [localization coverage](localization.md).
@@ -218,7 +221,9 @@ query every kind in the cluster.
 F6 cycles interface areas. Arrow keys navigate resource kinds and table rows.
 `?` opens the current keyboard reference. Ctrl+K inside a terminal belongs to
 the shell; use the header search button to open the palette from there.
-Shortcuts follow physical keys so they work with different keyboard layouts.
+Shortcuts follow physical keys so they work with different keyboard layouts,
+including punctuation keys and CodeMirror history, selection, comments and search
+panel commands. Plain text, IME composition and AltGr retain their input behavior.
 
 ## Details and changes
 
@@ -246,11 +251,47 @@ range, Space toggles a mark, and Ctrl+A marks visible rows. Filtering a marked
 row out removes its mark. Bulk actions prepare and run one guarded operation
 per resource, and report each result independently.
 
+Related resources appear as compact grouped rows with a kind badge, truncated
+name, full-name tooltip and navigation arrow. Unresolvable references remain
+plain non-clickable rows; cross-namespace rows show their scope.
+
+Deployment details include **Deployment revisions**: retained ReplicaSets ordered
+by revision number, with the current template marked, creation time, ready/total
+replicas, container images and change cause. **View YAML** reads the selected
+revision's Pod template; **Compare** compares it with the current Deployment or
+another retained revision. Comparisons omit the controller's pod-template-hash
+label. These views are read-only and UID-pinned; permission failures and truncated
+history are explicit. Kubernetes may already have removed older revisions under
+revisionHistoryLimit. This section adds no rollback control.
+
 ## Logs, terminals, and tunnels
 
-Logs support multiple sources, bounded history, search, filters, copying, and
+Logs show all levels without severity toggle buttons or a default DEBUG filter.
+Use text filters and search for any log format. Logs support multiple sources, bounded history, search, filters, copying, and
 follow mode. Scrolling up pauses following; Follow resumes it. Gaps, truncated
-history, and unavailable sources are shown explicitly.
+history, and unavailable sources are shown explicitly. The icon at the right edge
+of the toolbar detaches logs into a window or returns them to the main panel;
+its tooltip and accessible label describe the action.
+
+Left-click **Logs**, **Terminal**, or **Files** on a workload to choose a Pod
+when several are available; one Pod opens directly with its default container.
+On a concrete Pod, several containers produce a container dropdown; one opens
+directly. Logs also offers **All Pods** or **All containers** where applicable.
+The log list includes stopped Pods, while Terminal and Files offer running
+instances/containers. Variant metadata is prefetched when details load and cached
+for five seconds; clicking never inserts a Loading row in the dropdown.
+
+Right-click any of these three buttons for a full setup dialog. Pod and container
+selectors stay visible even with one option. Terminal alone includes a Command
+field; Shift+S also opens its setup. The former terminal split-button arrow is
+removed. Cancelling either picker or setup starts nothing. Files keeps the chosen
+Pod and container pinned for the lifetime of the inspector.
+
+Terminal layout dragging fits and sends the final geometry on release, with
+identical resize messages suppressed; focus returns from the mouse separator.
+BusyBox ash can itself emit a new prompt line after a real SIGWINCH: this is shell
+output, not an Enter sent by the UI, and is preserved. Plain physical Cyrillic
+keys are sent once; IME composition and AltGr remain handled by xterm.
 
 Terminal tabs keep their connection when you change the selected target. Closing
 a Kubernetes terminal sends a hang-up sequence before disconnecting. A connection
@@ -380,3 +421,99 @@ Values, manifests, chart defaults and hooks may contain secrets. They remain in
 the UI/short-lived operation state and are not written into resource caches,
 recent-object history, agent grants or the agent journal. Helm API calls are
 UI-only: existing wildcard agent permissions do not expose Helm data or actions.
+
+## Container files
+
+Use **Files** in resource details for a resource that supports terminals. The
+selected instance/container is pinned for the inspector and displayed
+as read-only context in its header, ordered as namespace/scope, source object,
+instance/Pod, and container (without repeating the source when it is the instance). Browse the compact filesystem tree, including
+hidden entries, or enter an absolute directory path. Expand folders with their
+arrow or the keyboard; a single click selects a file and a double click or Enter
+opens it for editing. Right-click a folder and choose **Refresh** to reload that
+branch without discarding the open editor. A folder's first load displays an
+animated child placeholder; subsequent openings reuse its cached list, including
+after collapse. Empty folders replace their loading child with **No elements**,
+retaining the same row height and aligning with child-entry icons. Loaded folders show their cached direct-entry count
+even while collapsed. Only explicit Refresh reloads the list and shows an animated
+indicator on the folder row while retaining its children. Opening a file shows
+an animated loading state in the editor pane. Double-clicking names selects the
+row, never the name text. The tree uses the editor's monospace font.
+The compact header bars use explicit 4 px top and bottom padding around their
+26 px controls; their total 35 px height includes the 1 px bottom border.
+Errors appear in a dismissible overlay above the footer without moving or resizing
+the tree and editor. Dismissing an error preserves the open draft.
+The inspector occupies the window with 12 px edge margins, up to 1800 px wide.
+The status footer is 27 px high, with centered text and a 22 px file-type picker.
+Drag the boundary between the tree and editor to resize the tree; the width is
+kept while the inspector remains open. The focused separator also supports arrow
+keys and Home/End; Escape cancels an active drag. Its hit area sits on the editor
+side of the boundary so the tree scrollbar remains usable at the tree edge.
+Symlinks have a distinct 14 px SVG arrow; their tooltips show the stored destination. **Go to target** resolves the link
+inside the pinned container and reveals its actual file or folder, including
+relative links and chains. Unsaved edits are protected before opening a different
+file. Broken or inaccessible links report an error. Symlinks are otherwise marked
+and followed using the container's normal permissions. Select a regular UTF-8 text file to edit; binary files and
+files larger than 2 MiB are refused. Syntax highlighting is selected by filename
+and can be overridden with the file-type picker in the footer (or Plain text). Common formats
+include YAML, JSON, XML/HTML, CSS, JavaScript/TypeScript, Python, Go, Rust, Java,
+C/C++, SQL, Markdown, shell, Dockerfile, TOML and configuration formats.
+
+Save writes back to the selected container; Ctrl+S/Command+S also saves. Unsaved
+edits are protected when closing or opening another file. Browsing, expanding
+folders and refreshing the tree keep the open draft.
+In the desktop app, right-click either a file or a folder and choose
+**Download**. A native directory chooser selects the local destination. The
+selected file or entire folder is copied with its original name, including
+binary files, hidden files and empty subfolders; the editor's 2 MiB limit does
+not apply. Existing destination names are refused, never overwritten or merged.
+Cancelling the chooser starts no transfer. Downloads read the container's saved
+contents, not an unsaved editor draft. The browser UI explains that this native
+operation requires the desktop app.
+
+Downloads require `sh` and `tar` in the container. They stream without a PTY and
+stage privately on the destination filesystem before publishing the complete
+result. A failed transfer removes the staging tree. Regular files and directories
+are copied with owner-only local permissions; safe relative symlinks and regular
+file hard links within the selected folder are retained. Selecting a symlink,
+links outside the downloaded folder, special files and names unsafe on supported
+platforms produce an error. Transfers have a 30-minute timeout and a 100,000-entry
+limit, but no editor-size or UTF-8 content restriction.
+
+The connection revision and original SHA-256 content must still match. A changed
+file requires reopening; transport failures are not automatically retried.
+Writes preserve an existing file's inode and permissions and stage input in a
+private temporary sibling before checking the original contents. This is not an
+atomic transaction with other container processes: an external writer can race
+the final comparison/write, and a failed write can leave partial contents.
+
+This currently requires a running Linux container with `sh`, `head`, `mktemp`,
+`sha256sum`, `wc`, `tr`, `cat` and `rm` (GNU or BusyBox tools).
+Displaying symlink destinations and resolving links additionally requires `readlink`. Minimal/distroless
+images without these tools show an error. Access uses Docker exec or Kubernetes
+pods/exec permissions; it does not grant additional OS permissions. Files are
+available only to the application UI, not agent grants, and contents are not
+persisted in Ocular's settings or resource caches.
+
+### Log windows, downloads and resizing
+
+**Download** opens the system file chooser in desktop mode, including detached
+log windows. Choose a destination and filename; cancelling writes nothing. The
+UTF-8 export contains the displayed filtered lines and their enabled prefixes;
+ANSI colors, emphasis and terminal hyperlinks are removed.
+Exports are staged in a private sibling file before replacing the chosen file.
+Browser mode uses the browser save picker where supported, with its ordinary
+download manager as fallback. Ctrl+S/Command+S invokes the same action.
+
+The log toolbar's **Open in window** opens a separate OS window in desktop mode
+(or a popup in browser mode). It uses the existing tab's log stream and buffered
+lines. Sources, history options, search and display preferences stay synchronized.
+Use **Return to bottom panel**, or close the secondary window, to restore the
+original tab. Closing its main tab also closes the secondary window; closing the
+main application exits all its windows. Up to eight log windows can be detached.
+
+While dragging a layout separator, incoming log lines stay in the existing
+bounded pending buffer and are applied on release. This avoids rebuilding a large
+log window on every resize frame. Width-only changes do not remeasure fixed-height
+unwrapped rows. Wheel input releases a stale selection drag if WebKit missed
+mouseup, and stops caret correction from pulling the scroll position back.

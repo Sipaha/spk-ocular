@@ -161,7 +161,7 @@ function PaletteDialog({ client, act }: { client: Client; act: Actions }) {
               onMouseDown={(e) => e.preventDefault()}
               onClick={() => run(item)}
               onMouseMove={() => item.key !== cursor && setMoved(item.key)}
-              className={['palette-option flex cursor-pointer items-baseline gap-3 px-3 py-1.5', i === index ? 'bg-active text-fg' : 'text-fg-muted'].join(' ')}
+              className={['palette-option flex cursor-pointer items-center gap-3 px-3 py-1.5', i === index ? 'bg-active text-fg' : 'text-fg-muted'].join(' ')}
             >
               <span className="w-20 shrink-0 truncate text-[12px] uppercase tracking-wide text-fg-subtle">{item.section === 'scope' ? sources.scopeWords?.singular : t(`palette.section.${item.section}` as MessageKey)}</span>
               <span className="min-w-0 flex-1 truncate text-fg">{item.label}</span>

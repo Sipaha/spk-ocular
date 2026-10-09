@@ -1,4 +1,4 @@
-import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { type ReactNode, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { t } from '../i18n'
 import { SearchIcon } from './icons'
 
@@ -49,6 +49,7 @@ interface Props {
   searchLabel?: string
   /** The button's look (size): the field it stands in. */
   className?: string
+  leadingIcon?: ReactNode
   disabled?: boolean
   memory?: SelectMemory
   multiple?: Multiple
@@ -63,7 +64,7 @@ const BUTTON = 'select-look max-w-full truncate rounded-md border border-line bg
  * elsewhere closes; a letter jumps to the next option starting with it; with
  * search, typing filters and marks the first found.
  */
-export function Select({ value, options, label, onChange, search, searchLabel, className, disabled, memory, multiple }: Props) {
+export function Select({ value, options, label, onChange, search, searchLabel, className, leadingIcon, disabled, memory, multiple }: Props) {
   const [open, setOpenNow] = useState(memory?.read().open ?? false)
   const setOpen = (next: boolean) => {
     memory?.update(next ? { open: true } : { open: false, query: '', index: null, scroll: 0, focus: 'search' })
@@ -95,10 +96,10 @@ export function Select({ value, options, label, onChange, search, searchLabel, c
         onKeyDown={onKey}
         className={[BUTTON, className ?? ''].join(' ')}
       >
-        {multiple?.summary ?? current?.label ?? value}
+        {leadingIcon ? <span className="flex min-w-0 items-center gap-1.5">{leadingIcon}<span className="min-w-0 truncate">{multiple?.summary ?? current?.label ?? value}</span></span> : (multiple?.summary ?? current?.label ?? value)}
       </button>
       {open && (
-        <List
+        <SelectList
           value={value}
           options={options}
           label={label}
@@ -122,14 +123,14 @@ interface ListProps {
   options: SelectOption[]
   label: string
   search: string | null
-  anchor: React.RefObject<HTMLButtonElement | null>
+  anchor: React.RefObject<HTMLElement | null>
   onClose: (back: boolean) => void
   onChange: (value: string) => void
   memory?: SelectMemory
   multiple?: Multiple
 }
 
-function List({ value, options, label, search, anchor, onClose, onChange, memory, multiple }: ListProps) {
+export function SelectList({ value, options, label, search, anchor, onClose, onChange, memory, multiple }: ListProps) {
   const id = useId()
   const [query, setQueryNow] = useState(memory?.read().query ?? '')
   const [index, setIndexNow] = useState<number | null>(memory?.read().index ?? null)

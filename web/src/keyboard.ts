@@ -17,10 +17,11 @@ export interface ShortcutOpts {
 }
 
 export function isShortcut(
-  e: Pick<KeyboardEvent, 'code' | 'ctrlKey' | 'metaKey' | 'shiftKey'>,
+  e: Pick<KeyboardEvent, 'code' | 'ctrlKey' | 'metaKey' | 'shiftKey'> & Partial<Pick<KeyboardEvent, 'isComposing' | 'getModifierState'>>,
   codes: string | string[],
   opts: ShortcutOpts = {},
 ): boolean {
+  if (e.isComposing || e.getModifierState?.('AltGraph')) return false
   const list = Array.isArray(codes) ? codes : [codes]
   if (!list.includes(e.code)) return false
   const ctrlHeld = e.ctrlKey || e.metaKey

@@ -225,10 +225,28 @@ describe('Ctrl with a non-Latin layout', () => {
     await waitFor(() => expect(h.conns).toHaveLength(1))
     const term = h.terms[0]
     expect(term.keys(key('KeyK', 'k'))).toBe(true)
+    expect(term.keys(key('KeyK', 'л', { isComposing: true }))).toBe(true)
+    expect(term.keys(key('KeyK', 'л', { getModifierState: name => name === 'AltGraph' }))).toBe(true)
     expect(term.keys(key('KeyK', 'л', { altKey: true }))).toBe(true)
     expect(term.keys(key('F6', 'F6'))).toBe(true)
-    expect(term.keys({ type: 'keydown', code: 'KeyK', key: 'л', preventDefault() {} })).toBe(true)
     expect(h.conns[0].input).not.toHaveBeenCalled()
+  })
+})
+
+describe('plain Cyrillic typing', () => {
+  it('sends one character per physical key and suppresses its keypress replay', async () => {
+    render(<TerminalView client={fakeClient() as unknown as Client} tab={tab} active mode="browser" />)
+    await waitFor(() => expect(h.conns).toHaveLength(1))
+    const term=h.terms[0], conn=h.conns[0]
+    for (const letter of 'привет') {
+      expect(term.keys({type:'keydown',key:letter,code:'KeyK',preventDefault(){}})).toBe(false)
+      expect(term.keys({type:'keypress',key:letter,preventDefault(){}})).toBe(false)
+    }
+    expect(conn.input.mock.calls.map(call=>call[0]).join('')).toBe('привет')
+    expect(conn.input).toHaveBeenCalledTimes(6)
+    expect(term.keys({type:'keydown',key:'ж',isComposing:true})).toBe(true)
+    expect(term.keys({type:'keydown',key:'ж',altKey:true})).toBe(true)
+    expect(conn.input).toHaveBeenCalledTimes(6)
   })
 })
 

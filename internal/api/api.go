@@ -96,6 +96,7 @@ type API interface {
 	OpenLogStream(ctx context.Context, req LogStreamRequest) (LogStreamInfo, error)
 	// ExecInfo: where a command can run for an object (instances = pods,
 	// channels = containers).
+	Files(ctx context.Context, req FilesRequest) (FilesResponse, error)
 	ExecInfo(ctx context.Context, ref core.Ref) (core.ExecInfo, error)
 	// OpenTerminal prepares a command and registers its terminal (owned by
 	// the app, not the session); the page opens a WebSocket to

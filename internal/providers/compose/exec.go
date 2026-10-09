@@ -2,6 +2,7 @@ package compose
 
 import (
 	"context"
+	"encoding/binary"
 	"errors"
 	"fmt"
 	"io"
@@ -82,7 +83,7 @@ func (s *session) ExecInfo(ctx context.Context, ref core.Ref) (core.ExecInfo, er
 		return core.ExecInfo{}, err
 	}
 	label := msg("level.container")
-	info := core.ExecInfo{InstanceLabel: &label, Instances: []core.ExecInstance{}}
+	info := core.ExecInfo{Aggregate: ref.Kind != KindContainers, InstanceLabel: &label, Instances: []core.ExecInstance{}}
 	for _, c := range cs {
 		if !execRunnable(c) {
 			continue
@@ -252,11 +253,11 @@ func (h *execHandle) Run(ctx context.Context, t provider.Terminal) (provider.Exi
 		}
 		size = engine.ConsoleSize{Rows: sz.Rows, Cols: sz.Cols}
 	}
-	xid, err := cl.CreateExec(ctx, h.id, engine.ExecConfig{Cmd: h.argv, Tty: true, Size: size})
+	xid, err := cl.CreateExec(ctx, h.id, engine.ExecConfig{Cmd: h.argv, Tty: !t.Raw, Size: size})
 	if err != nil {
 		return provider.ExitStatus{}, h.startError(err)
 	}
-	xc, err := cl.StartExec(ctx, xid, true, size)
+	xc, err := cl.StartExec(ctx, xid, !t.Raw, size)
 	if err != nil {
 		return provider.ExitStatus{}, h.startError(err)
 	}
@@ -284,7 +285,12 @@ func (h *execHandle) Run(ctx context.Context, t provider.Terminal) (provider.Exi
 	if t.Stdin != nil {
 		go func() { _, _ = io.Copy(xc, t.Stdin) }()
 	}
-	_, copyErr := io.Copy(t.Stdout, xc)
+	var copyErr error
+	if t.Raw {
+		copyErr = copyExecOutput(xc, t.Stdout, t.Stderr)
+	} else {
+		_, copyErr = io.Copy(t.Stdout, xc)
+	}
 	if ctx.Err() != nil {
 		return provider.ExitStatus{}, ctx.Err()
 	}
@@ -348,4 +354,30 @@ func (h *execHandle) startError(err error) error {
 		}
 	}
 	return providerError(err)
+}
+
+// copyExecOutput preserves stdout bytes and separates Docker's stderr frames.
+func copyExecOutput(r io.Reader, out, stderr io.Writer) error {
+	if stderr == nil {
+		stderr = io.Discard
+	}
+	for {
+		var h [8]byte
+		if _, err := io.ReadFull(r, h[:]); err != nil {
+			if err == io.EOF {
+				return nil
+			}
+			return err
+		}
+		if h[1] != 0 || h[2] != 0 || h[3] != 0 || h[0] > 2 {
+			return errors.New("invalid Docker exec frame")
+		}
+		w := out
+		if h[0] == 2 {
+			w = stderr
+		}
+		if _, err := io.CopyN(w, r, int64(binary.BigEndian.Uint32(h[4:]))); err != nil {
+			return err
+		}
+	}
 }

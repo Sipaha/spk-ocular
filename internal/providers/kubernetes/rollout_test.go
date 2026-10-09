@@ -436,3 +436,33 @@ func TestOnlyEnvListsAreSaidAsValues(t *testing.T) {
 	to := map[string]any{"spec": map[string]any{"xenv": []any{map[string]any{"name": "A", "value": "1"}}}}
 	assert.Equal(t, []string{"xenv[A]: added"}, core.Texts(templateChanges(from, to)))
 }
+
+func TestDeploymentRevisionDetailsAreReadOnlyAndUIDPinned(t *testing.T) {
+	client := groupClient(history(nil)...)
+	s := newSession("ctx", "h", client, false)
+	t.Cleanup(s.Close)
+	ref := core.Ref{Provider: ProviderID, Target: "ctx", Scope: "ns", Kind: "apps/deployments", Name: "web", UID: "uid-web"}
+	resource, err := s.Get(context.Background(), ref)
+	require.NoError(t, err)
+	require.True(t, resource.RevisionsAvailable)
+	require.Len(t, resource.Revisions, 3)
+	assert.Equal(t, int64(3), resource.Revisions[0].Number)
+	assert.True(t, resource.Revisions[0].Current)
+	assert.Equal(t, int64(2), resource.Revisions[0].Replicas)
+	assert.Equal(t, int64(1), resource.Revisions[0].Ready)
+	assert.NotContains(t, resource.TemplateYAML, templateHash)
+	assert.Contains(t, resource.TemplateYAML, "v3")
+	assert.False(t, resource.Revisions[2].Current)
+	assert.Equal(t, int64(0), resource.Revisions[2].Replicas)
+	old, err := s.Get(context.Background(), resource.Revisions[2].Ref)
+	require.NoError(t, err)
+	assert.Contains(t, old.TemplateYAML, "v1")
+	assert.NotContains(t, old.TemplateYAML, templateHash)
+	stale := resource.Revisions[2].Ref
+	stale.UID = "replaced"
+	_, err = s.Get(context.Background(), stale)
+	require.Error(t, err)
+	for _, action := range client.Actions() {
+		assert.Contains(t, []string{"get", "list"}, action.GetVerb(), "revision browsing cannot mutate resources")
+	}
+}

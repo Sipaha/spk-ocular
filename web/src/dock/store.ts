@@ -28,6 +28,7 @@ interface TabBase {
 export interface LogsTab extends TabBase {
   kind: 'logs'
   ref: Ref
+  channel?: string
 }
 
 export interface TermTab extends TabBase {
@@ -61,9 +62,9 @@ function activate(tab: DockTab) {
 }
 
 export const dock = {
-  /** One log tab per object and target; opening it again activates it. */
-  openLogs(target: TargetRef, targetTitle: string, ref: Ref) {
-    activate({ kind: 'logs', id: `logs:${targetKey(target)}:${refKey(ref)}`, target, targetTitle, ref, title: `${ref.kind.split('/').pop()}/${refTitle(ref)}` })
+  /** One log tab per object, target and explicit channel; reopening activates it. */
+  openLogs(target: TargetRef, targetTitle: string, ref: Ref, channel?: string) {
+    activate({ kind: 'logs', id: `logs:${targetKey(target)}:${refKey(ref)}${channel ? `:${channel}` : ''}`, target, targetTitle, ref, channel, title: `${ref.kind.split('/').pop()}/${refTitle(ref)}` })
   },
   /** Every open is a new terminal (two shells in one pod are normal). */
   openTerminal(target: TargetRef, targetTitle: string, open: TermOpen, title = refTitle(open.ref)) {

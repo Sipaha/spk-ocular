@@ -258,3 +258,36 @@ test('a service run of several parts: each part in the dialog, the sum in a noti
   await expect(dialog).toBeHidden()
   expect(ran).toBe(1)
 })
+
+test('container file inspector reads and saves without ls and captures localized screens', async ({ page }) => {
+ const name=`ocular-files-demo-${Date.now()}`
+ const initial='server:\n  host: 0.0.0.0\n  port: 8080\n\nlogging:\n  format: json\n  output: stdout\n'
+ const id=docker('run','-d','--name',name,'--label','ocular.test=files-ui','busybox:latest','sh','-c',`mkdir -p /config; printf '%s' "$1" > /config/server.yaml; printf 'APP_ENV=development\n' > /config/.env; rm -f /bin/ls; exec sleep 3600`,'files',initial).trim()
+ try {
+  await page.setViewportSize({width:1440,height:900})
+  await page.goto('/');await page.getByRole('option',{name:/^ocular-dind\b/}).click();await connectSelected(page)
+  const grid=page.getByRole('grid',{name:'resources'})
+  await expect(row(grid,name)).toBeVisible();await row(grid,name).click()
+  for(const lang of ['en','ru']){
+   if(lang==='ru'){
+    await page.getByRole('button',{name:'Language',exact:true}).click()
+    await page.getByRole('option',{name:'Русский',exact:true}).click()
+   }
+   await page.getByRole('button',{name:lang==='ru'?'Файлы':'Files',exact:true}).click()
+   const dialog=page.getByRole('dialog',{name:lang==='ru'?'Файлы':'Files',exact:true})
+   await dialog.getByRole('textbox',{name:lang==='ru'?'Путь в контейнере':'Container path'}).fill('/config')
+   await dialog.getByRole('button',{name:lang==='ru'?'Открыть':'Open',exact:true}).click()
+   await dialog.getByRole('treeitem',{name:'server.yaml',exact:true}).dblclick()
+   const editor=dialog.locator('.cm-content');await expect(editor).toContainText('port: 8080')
+   await expect(editor.locator('span').first()).toBeVisible()
+   await page.screenshot({path:join(scratchRoot,`files-${lang}.png`)})
+   if(lang==='en'){
+    await editor.click();await page.keyboard.press('Control+End');await page.keyboard.type('\nhealthcheck: /ready')
+    await page.keyboard.press('Control+s');await expect(dialog).toContainText('Saved to container')
+    expect(docker('exec',id,'cat','/config/server.yaml')).toContain('healthcheck: /ready')
+    expect(docker('exec',id,'sh','-c','test ! -e /bin/ls && echo absent').trim()).toBe('absent')
+   }
+   await dialog.getByRole('button',{name:lang==='ru'?'Закрыть':'Close',exact:true}).click()
+  }
+ } finally { docker('rm','-f',id) }
+})

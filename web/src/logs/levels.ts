@@ -2,7 +2,6 @@
 
 export type LogLevel = 'ERROR' | 'WARN' | 'INFO' | 'DEBUG' | 'TRACE' | 'UNKNOWN'
 
-export const LOG_LEVELS: LogLevel[] = ['ERROR', 'WARN', 'INFO', 'DEBUG', 'TRACE', 'UNKNOWN']
 
 export const LEVEL_CLASS: Record<LogLevel, string> = {
   ERROR: 'text-log-error',

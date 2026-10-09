@@ -411,3 +411,49 @@ func TestFallbackRecognisesClientGoUpgradeFailures(t *testing.T) {
 	assert.False(t, shouldFallback(errors.New("command terminated with non-zero exit code")))
 	assert.False(t, shouldFallback(context.Canceled))
 }
+
+func TestRawExecUsesSeparateStderrWithoutPTY(t *testing.T) {
+	var got remotecommand.StreamOptions
+	s, urls := execSessionFor(t, func(_ context.Context, o remotecommand.StreamOptions) error {
+		got = o
+		_, err := o.Stdout.Write([]byte("a\r\nb\n"))
+		if err != nil {
+			return err
+		}
+		_, err = o.Stderr.Write([]byte("warning\n"))
+		return err
+	}, pod("ns", "p", "uid-1"))
+	h, err := s.PrepareExec(t.Context(), podRef1, provider.ExecRequest{Command: []string{"cat", "/config.yaml"}})
+	require.NoError(t, err)
+	defer h.Close()
+	var out, stderr strings.Builder
+	st, err := h.Run(t.Context(), provider.Terminal{Raw: true, Stdin: strings.NewReader(""), Stdout: &out, Stderr: &stderr})
+	require.NoError(t, err)
+	require.Equal(t, provider.ExitStatus{Known: true}, st)
+	require.False(t, got.Tty)
+	require.Equal(t, "false", (*urls)[0].Query().Get("tty"))
+	require.Equal(t, "true", (*urls)[0].Query().Get("stderr"))
+	require.Equal(t, "a\r\nb\n", out.String())
+	require.Equal(t, "warning\n", stderr.String())
+}
+
+func TestWorkloadLogInfoOffersOwnedPodsIncludingTerminatedOnes(t *testing.T) {
+	stopped := webPod("stopped", "u-stopped", "rs1", 20, func(o map[string]any) { o["status"].(map[string]any)["phase"] = "Succeeded" })
+	s, _ := execSessionFor(t, nil, deployment("web", "d1", "app"), replicaSet("web-rs", "rs1", "d1"),
+		webPod("running", "u-running", "rs1", 10), stopped, webPod("foreign", "u-foreign", "rs-other", 30))
+	info, err := s.LogInfo(context.Background(), webRef())
+	require.NoError(t, err)
+	require.Len(t, info.Instances, 2)
+	refs := map[string]core.Ref{}
+	for _, instance := range info.Instances {
+		refs[instance.Title] = instance.Ref
+	}
+	assert.Equal(t, core.Ref{Provider: ProviderID, Target: "ctx", Scope: "ns", Kind: "pods", Name: "stopped", UID: "u-stopped"}, refs["stopped"])
+	assert.Equal(t, "u-running", refs["running"].UID)
+	single, err := s.LogInfo(context.Background(), refs["stopped"])
+	require.NoError(t, err)
+	assert.False(t, single.Aggregate)
+	assert.Empty(t, single.Instances)
+	_, err = s.LogInfo(context.Background(), core.Ref{Provider: ProviderID, Target: "ctx", Scope: "ns", Kind: "apps/deployments", Name: "web", UID: "replaced"})
+	require.Error(t, err)
+}

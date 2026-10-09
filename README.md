@@ -1,4 +1,24 @@
-# SPK Ocular
+<p align="center">
+  <img src="internal/appfiles/icons/icon.png" alt="SPK Ocular" width="72" height="72" />
+</p>
+
+<h1 align="center">SPK Ocular</h1>
+
+<p align="center">Kubernetes and Docker in one local workspace.</p>
+
+<p align="center">
+  <a href="https://github.com/Sipaha/spk-ocular/releases/latest"><img src="https://img.shields.io/github/v/release/Sipaha/spk-ocular?sort=semver&amp;style=flat-square" alt="Latest release" /></a>
+  <a href="https://github.com/Sipaha/spk-ocular/releases"><img src="https://img.shields.io/github/downloads/Sipaha/spk-ocular/total?style=flat-square" alt="Total release asset downloads" /></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache--2.0-blue?style=flat-square" alt="Apache 2.0 license" /></a>
+  <img src="https://img.shields.io/badge/platform-Linux%20%7C%20Windows%20%7C%20macOS-grey?style=flat-square" alt="Linux, Windows and macOS" />
+</p>
+
+<p align="center">
+  <a href="https://sipaha.github.io/spk-ocular/en/">Website</a> ·
+  <a href="docs/usage.md">Documentation</a> ·
+  <a href="https://sipaha.github.io/about/en/">About the author</a>
+</p>
+
 
 SPK Ocular is a local desktop application for Kubernetes and Docker.
 It uses a native system webview and your existing connection configuration.
@@ -8,7 +28,8 @@ not collect telemetry. Helm is embedded; a separate Helm CLI is not required.
 - Live resource tables, discovery of Kubernetes API resources, details, and metrics.
 - Multiple namespaces, global favorites, resource search, and saved table layouts.
 - Standalone Docker containers and Compose project/service grouping.
-- Logs, interactive terminals, and local Kubernetes port forwarding.
+- Logs in the bottom panel or a separate OS window, interactive terminals, and local Kubernetes port forwarding.
+- Container folders and UTF-8 file editing with syntax highlighting (up to 2 MiB).
 - Reviewed Kubernetes changes, Secret value editing, and bulk actions.
 - Helm chart browsing, repositories, release history, install, upgrade, rollback
   and uninstall with review before execution.
@@ -26,8 +47,9 @@ included in a downloaded version.
 ## Languages
 
 The application offers Russian, English, Simplified Chinese, Spanish, German,
-French, Brazilian Portuguese and Japanese. Choose a language in the header or
-leave **Automatic** enabled. A manual choice is saved in the local profile and
+French, Brazilian Portuguese and Japanese. The header shows the current native
+language name. Before a manual choice, the app detects the system/browser language.
+A manual choice is saved in the local profile and
 survives restarts. See [localization](docs/localization.md) for coverage and fallback rules.
 
 ## Install

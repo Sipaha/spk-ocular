@@ -47,7 +47,12 @@ test('all eight language menus, persistent choices and live workspace state', as
       await page.setViewportSize({ width, height: 820 })
       const header = page.locator('.app-header')
       expect(await header.evaluate(el => el.scrollWidth <= el.clientWidth)).toBeTruthy()
+      await expect(page.locator('.language-menu button')).toContainText(languageNames[language])
+      expect(await page.locator('.language-menu button').evaluate(el => getComputedStyle(el).fontSize)).toBe('14px')
+      await expect(page.locator('button.about-trigger')).toBeInViewport({ ratio: 1 })
       await page.locator('.language-menu button').click()
+      const menuLabel = await page.locator('.language-menu button').getAttribute('aria-label')
+      await expect(page.getByRole('listbox', { name: menuLabel!, exact: true }).getByRole('option')).toHaveCount(8)
       for (const name of Object.values(languageNames)) {
         const option = page.getByRole('option', { name, exact: true })
         await expect(option).toBeVisible()
@@ -90,8 +95,7 @@ test('ordered browser languages and manual choice work with denied storage', asy
     await choose(denied, 'ru')
     await denied.reload()
     await expect(denied.locator('html')).toHaveAttribute('lang', 'ru')
-    await denied.locator('.language-menu button').click()
-    await denied.getByRole('listbox').getByRole('option').first().click() // Automatic in the current language.
+    await choose(denied, 'pt')
     await expect(denied.locator('html')).toHaveAttribute('lang', 'pt')
     await denied.reload()
     await expect(denied.locator('html')).toHaveAttribute('lang', 'pt')
