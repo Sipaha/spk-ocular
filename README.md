@@ -65,7 +65,7 @@ No vendor claims, customer logos, testimonials or performance statistics are reu
 
 ## Screenshot source
 
-All twelve RU/EN product screenshots show SPK Ocular 1.1.0 on isolated fixtures.
+All twelve RU/EN product screenshots show SPK Ocular 1.1.2 on isolated fixtures.
 Kubernetes captures use the owned ocular-dev demo cluster; Docker captures use the
 verified ocular-dind engine, and Helm uses the explicitly labeled synthetic
 release. The file screen shows an actual /app project with config, scripts, src,

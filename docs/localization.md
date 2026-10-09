@@ -70,9 +70,9 @@ explains Ctrl+K/Command+K navigation to views, environments, namespaces, current
 table resources and recent objects. These capabilities are present in v1.0.1.
 Keep these descriptions factual, with no competitor or exclusivity claims.
 
-The 1.1.0 copy describes container file browsing/editing and native folder/file
+The 1.1.2 copy describes container file browsing/editing and native folder/file
 copies, Deployment revision comparison, native log windows and text exports.
 Both RU/EN screenshot sets are freshly captured; the other six locales retain
 the explicit English-UI notice. Preserve sh/readlink/tar requirements, the UTF-8
 editor limit of 2 MiB, desktop-only downloads and refusal to overwrite existing
-names. Screenshot and social-image URLs carry the 1.1.0 version query.
+names. Screenshot and social-image URLs carry the 1.1.2 version query.
