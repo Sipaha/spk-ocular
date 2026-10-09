@@ -21,14 +21,22 @@ jobs:
           go install golang.org/x/vuln/cmd/govulncheck@v1.1.4
           pnpm --dir tests/e2e exec playwright install --with-deps chromium
       - name: Full local and CI gate
-        run: make check
+        run: |
+          set -o pipefail
+          mkdir -p .agents/tmp/check
+          make check 2>&1 | tee .agents/tmp/check/make-check.log
       - name: Reachable Go vulnerabilities
-        run: govulncheck ./...
+        run: |
+          set -o pipefail
+          mkdir -p .agents/tmp/check
+          govulncheck ./... 2>&1 | tee .agents/tmp/check/vulnerabilities.log
       - name: Upload failure diagnostics
         if: failure()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: test-diagnostics
-          path: .agents/tmp/playwright-*
+          path: |
+            .agents/tmp/check/*.log
+            .agents/tmp/playwright-*
           if-no-files-found: ignore
           retention-days: 7
