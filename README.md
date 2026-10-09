@@ -30,7 +30,9 @@ visible. Both desktop and mobile header navigation include a GitHub link to
 the SPK Ocular repository. The link uses GitHub’s mark from Primer Octicons,
 bundled locally; its MIT license is in `public/licenses/octicons.txt`. All content, full-size screenshots and download fallback links work
 without JavaScript. Gallery tabs enhance static figures; FAQ answers stay visible. Screenshot links
-open a modal preview without leaving the page. Escape, the close button or the
+open a modal preview without leaving the page. Images are centered in the full
+viewport and fit all available width/height without enlarging beyond their native
+1:1 size. The close button overlays the preview without reserving image space. Escape, the close button or the
 backdrop dismiss it and restore focus and scroll position. Modified clicks and
 JavaScript-disabled visits retain the original full-size image links.
 Reduced motion, keyboard navigation and semantic light/dark colors are preserved.

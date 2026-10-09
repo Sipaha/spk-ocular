@@ -54,6 +54,22 @@ try{
   await expect(page).toHaveURL(originalURL);
   await expect(preview.locator('img')).toHaveAttribute('src',await screenshot.getAttribute('href'));
   await preview.locator('img').evaluate(el=>el.decode());
+  if (lang==='ru' && theme==='light' && width===1440) {
+   for (const viewport of [{width:375,height:900},{width:900,height:375},{width:1635,height:900},{width:2560,height:1440}]) {
+    await page.setViewportSize(viewport);
+    const geometry=await preview.locator('img').evaluate(el=>{
+     const r=el.getBoundingClientRect();
+     const scale=Math.min(1,innerWidth/el.naturalWidth,innerHeight/el.naturalHeight);
+     return {x:r.x,y:r.y,w:r.width,h:r.height,expectedW:el.naturalWidth*scale,expectedH:el.naturalHeight*scale,vw:innerWidth,vh:innerHeight};
+    });
+    expect(Math.abs(geometry.w-geometry.expectedW)).toBeLessThanOrEqual(1);
+    expect(Math.abs(geometry.h-geometry.expectedH)).toBeLessThanOrEqual(1);
+    expect(Math.abs(geometry.x-(geometry.vw-geometry.w)/2)).toBeLessThanOrEqual(1);
+    expect(Math.abs(geometry.y-(geometry.vh-geometry.h)/2)).toBeLessThanOrEqual(1);
+    await page.screenshot({path:path.join(out,`preview-fit-${viewport.width}-${viewport.height}.png`)});
+   }
+   await page.setViewportSize({width,height:1000});
+  }
   await expect(preview.locator('button')).toBeFocused();
   await page.keyboard.press('Tab');
   await expect(preview.locator('button')).toBeFocused();
