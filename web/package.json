@@ -4,9 +4,9 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc --noEmit -p . && vite build && node scripts/check-bundle.mjs && node scripts/collect-licenses.mjs",
+    "build": "node scripts/check-source-paths.mjs && tsc --noEmit -p . && vite build && node scripts/check-bundle.mjs && node scripts/collect-licenses.mjs",
     "test": "vitest run",
-    "lint": "eslint . && tsc --noEmit -p ."
+    "lint": "node scripts/check-source-paths.mjs && eslint . && tsc --noEmit -p ."
   },
   "dependencies": {
     "@codemirror/commands": "^6.11.1",

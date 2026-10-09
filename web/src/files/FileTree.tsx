@@ -4,7 +4,7 @@ import { Loading } from './Loading'
 import { Menu } from '../actions/Menu'
 import { t } from '../i18n'
 import { FileIcon, FolderIcon, LinkArrowIcon } from '../components/icons'
-import { fileTreeRows, type Directories, type FileTreeRow } from './fileTree'
+import { fileTreeRows, type Directories, type FileTreeRow } from './treeModel'
 
 const rowHeight = 24
 interface Props {

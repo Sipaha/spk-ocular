@@ -115,7 +115,7 @@ remain separate decisions; no collection is implied. Prefer useful task guides,
 truthful demonstrations and tested package channels to broad AI claims.
 
 The container file inspector section uses fresh RU/EN screenshots from an
-isolated Docker demo project with an expanded application tree. Its 1.1.1 copy
+isolated Docker demo project with an expanded application tree. Its 1.1.2 copy
 describes syntax highlighting, save protection, symlink navigation and streamed
 native file/folder copies, with explicit sh/readlink/tar, editor-size, desktop-only
 and destination-collision requirements. All twelve product images and both social

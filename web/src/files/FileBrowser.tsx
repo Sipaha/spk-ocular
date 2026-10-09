@@ -13,7 +13,7 @@ import { t } from '../i18n'
 import { downloadContainerFiles } from './download'
 import { Loading } from './Loading'
 import { FileTree } from './FileTree'
-import { ancestorsOf, cleanDirectoryPath, type Directories } from './fileTree'
+import { ancestorsOf, cleanDirectoryPath, type Directories } from './treeModel'
 
 const Editor = lazy(() => import('../components/YamlView'))
 const button = 'h-[26px] rounded border border-line px-2 text-[13px] hover:bg-hover disabled:opacity-50'

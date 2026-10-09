@@ -260,3 +260,8 @@ drag release. A real BusyBox PTY fixture distinguishes shell SIGWINCH prompt
 redraws from synthetic terminal size reports; the app must never filter these
 shell bytes to conceal a redraw. Window actions are accessible icon buttons at
 the right edge of the log toolbar.
+
+Frontend lint/build reject case-insensitive module-path collisions, including
+identically named .ts/.tsx modules. Model and component names must remain
+distinct on Windows/macOS, not only on Linux. Playwright palette tests wait for
+route handlers to settle before response disposal during page teardown.

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { ancestorsOf, cleanDirectoryPath, fileTreeRows, type Directories } from './fileTree'
+import { ancestorsOf, cleanDirectoryPath, fileTreeRows, type Directories } from './treeModel'
 
 const directories: Directories = {
   '/': { entries: [{ name: 'README.md', directory: false, symlink: false }, { name: 'etc', directory: true, symlink: false }, { name: 'app', directory: true, symlink: false }] },
