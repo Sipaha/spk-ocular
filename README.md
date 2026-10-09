@@ -50,9 +50,11 @@ on the Ocular website.
 
 Local agent grants apply to processes running as the same OS user. Do not imply
 separate authenticated agent identities or a security sandbox. Kubernetes and
-Docker capabilities are distinct from providing a container runtime. The Helm
-section describes the implemented development build, not a separately verified
-published release. Docker includes standalone containers and Compose project/service
+Docker capabilities are distinct from providing a container runtime. The direct Kubernetes API, embedded Helm SDK and Ctrl+K/Command+K navigation
+copy describes features present in the published v1.0.1 release. kubectl and a
+separate Helm CLI are unnecessary; kubeconfig-configured external authentication
+helpers still need to be installed. New product copy describes released features
+without announcements or competitor comparisons. Docker includes standalone containers and Compose project/service
 grouping; it does not supply a runtime. Standalone containers remain UI-only and
 are not included in existing agent project grants. The gallery explicitly identifies development screenshots.
 

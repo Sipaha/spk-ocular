@@ -102,6 +102,7 @@
   ],
   "toolsTitle": "As ferramentas do dia a dia já estão aqui.",
   "tools": [
+    ["Navegação rápida · Ctrl+K", "Vá para uma visualização, ambiente, namespace, recurso da tabela atual ou objeto aberto recentemente. No macOS, use Command+K."],
     [
       "Recursos do Kubernetes",
       "Pods, deployments, services e recursos personalizados com detalhes e relações."
@@ -153,11 +154,11 @@
   "agentBoundary": "Agentes locais executados com o mesmo usuário do sistema operacional compartilham essas permissões. Ocular não os isola dos outros programas no computador. Contêineres Docker independentes estão disponíveis apenas na interface; as permissões de projetos não os incluem.",
   "agentDocs": "Como funciona o acesso dos agentes",
   "localTitle": "Sua infraestrutura continua sendo sua.",
-  "localText": "Ocular usa seu kubeconfig e seus Docker contexts e se conecta diretamente do seu computador. Não exige conta no Ocular, servidor central de gerenciamento nem componente Ocular no cluster.",
+  "localText": "Ocular se conecta diretamente à API do Kubernetes a partir do seu computador, sem kubectl. O Helm usa o SDK integrado, então não é necessário instalar uma CLI do Helm separada. Use seu kubeconfig e seus contextos Docker existentes. Não é necessária uma conta Ocular, um servidor central nem componentes Ocular no cluster.",
   "localPoints": [
     [
       "Seu acesso existente",
-      "Use as credenciais e permissões já configuradas para os ambientes."
+      "Use suas credenciais e permissões configuradas. Os programas externos de autenticação indicados no kubeconfig ainda precisam estar instalados."
     ],
     [
       "Código aberto",
@@ -207,7 +208,7 @@
     ],
     [
       "Preciso instalar Helm separadamente?",
-      "Não. Ocular inclui Helm para navegar por charts e gerenciar releases. Permissões no Kubernetes e acesso ao repositório de charts continuam necessários."
+      "Não. Ocular usa o SDK do Helm integrado para navegar por charts e gerenciar releases. Não é necessária uma CLI do Helm separada. As permissões do Kubernetes e o acesso ao repositório de charts continuam necessários."
     ],
     [
       "Posso usar com meu agente de programação?",

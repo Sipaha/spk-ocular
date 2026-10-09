@@ -102,6 +102,7 @@
   ],
   "toolsTitle": "Die Werkzeuge für den Alltag sind schon da.",
   "tools": [
+    ["Schnelle Navigation · Ctrl+K", "Wechseln Sie zu einer Ansicht, Umgebung, einem Namespace, einer Ressource in der aktuellen Tabelle oder einem zuletzt geöffneten Objekt. Unter macOS verwenden Sie Command+K."],
     [
       "Kubernetes-Ressourcen",
       "Pods, Deployments, Services und benutzerdefinierte Ressourcen mit Details und Beziehungen."
@@ -153,11 +154,11 @@
   "agentBoundary": "Lokale Agenten, die unter demselben Betriebssystembenutzer laufen, teilen diese Berechtigungen. Ocular isoliert sie nicht von anderen Programmen auf Ihrem Computer. Eigenständige Docker-Container sind derzeit nur in der Oberfläche verfügbar; Projektfreigaben umfassen sie nicht.",
   "agentDocs": "So funktioniert der Agentenzugriff",
   "localTitle": "Ihre Infrastruktur bleibt in Ihrer Hand.",
-  "localText": "Ocular verwendet Ihre kubeconfig und Docker contexts und verbindet sich direkt von Ihrem Computer aus. Weder ein Ocular-Konto noch ein zentraler Verwaltungsserver oder eine Ocular-Komponente im Cluster ist erforderlich.",
+  "localText": "Ocular verbindet sich von Ihrem Computer direkt mit der Kubernetes API, ohne kubectl. Helm nutzt das eingebettete SDK; eine separate Helm CLI ist nicht nötig. Verwenden Sie Ihre vorhandene kubeconfig und Docker-Kontexte. Ein Ocular-Konto, ein zentraler Verwaltungsserver oder eine Ocular-Komponente im Cluster sind nicht erforderlich.",
   "localPoints": [
     [
       "Ihr vorhandener Zugriff",
-      "Verwenden Sie die bereits eingerichteten Zugangsdaten und Berechtigungen Ihrer Umgebungen."
+      "Verwenden Sie Ihre konfigurierten Zugangsdaten und Berechtigungen. Externe Authentifizierungsprogramme, die in der kubeconfig angegeben sind, müssen weiterhin installiert sein."
     ],
     [
       "Open Source",
@@ -207,7 +208,7 @@
     ],
     [
       "Muss ich Helm separat installieren?",
-      "Nein. Ocular integriert Helm zum Durchsuchen von Charts und Verwalten von Releases. Kubernetes-Berechtigungen und Zugriff auf das Chart-Repository bleiben notwendig."
+      "Nein. Ocular nutzt das eingebettete Helm SDK zum Durchsuchen von Charts und Verwalten von Releases. Eine separate Helm CLI ist nicht nötig. Kubernetes-Berechtigungen und Zugriff auf das Chart-Repository sind weiterhin erforderlich."
     ],
     [
       "Kann ich meinen Coding-Agenten verwenden?",

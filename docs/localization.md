@@ -60,3 +60,12 @@ theme persistence and WCAG AA. Dedicated browser cases cover language detection,
 saved choices, direct routes, hash/query, storage denial and no-JavaScript switching.
 Inspect screenshots in Solution scratch before publishing. Add each future locale
 to both content and tests; do not advertise incomplete dictionaries.
+
+## Released capability copy
+
+The local-access section describes direct Kubernetes API access without kubectl,
+the embedded Helm SDK without a separate Helm CLI, and the continuing need for
+external authentication helpers configured in kubeconfig. The tools section
+explains Ctrl+K/Command+K navigation to views, environments, namespaces, current
+table resources and recent objects. These capabilities are present in v1.0.1.
+Keep these descriptions factual, with no competitor or exclusivity claims.

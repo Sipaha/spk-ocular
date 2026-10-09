@@ -102,6 +102,7 @@
   ],
   "toolsTitle": "日常工具，已经就位。",
   "tools": [
+    ["快速导航 · Ctrl+K", "快速跳转到视图、环境、命名空间、当前表格中的资源或最近打开的对象。macOS 上使用 Command+K。"],
     [
       "Kubernetes 资源",
       "查看 pod、deployment、service 和自定义资源的详情及关联关系。"
@@ -153,11 +154,11 @@
   "agentBoundary": "以同一操作系统用户身份运行的本地代理共享这些权限。Ocular 不会将它们与电脑上的其他程序隔离。独立 Docker 容器目前只能通过界面访问，项目授权不包含它们。",
   "agentDocs": "了解代理访问机制",
   "localTitle": "基础设施仍由你掌控。",
-  "localText": "Ocular 使用已有的 kubeconfig 和 Docker contexts，从电脑直接连接环境。无需 Ocular 账号、中央管理服务器，也无需在集群中安装 Ocular 组件。",
+  "localText": "Ocular 从您的电脑直接连接 Kubernetes API，无需 kubectl。Helm 通过内置 SDK 运行，无需单独安装 Helm CLI。使用现有的 kubeconfig 和 Docker 上下文即可，无需 Ocular 账号、中央管理服务器或集群内的 Ocular 组件。",
   "localPoints": [
     [
       "已有的访问权限",
-      "使用为环境配置好的凭据和权限。"
+      "使用已配置的凭据和权限。kubeconfig 中指定的外部认证程序仍需安装。"
     ],
     [
       "开源",
@@ -207,7 +208,7 @@
     ],
     [
       "需要单独安装 Helm 吗？",
-      "不需要。Ocular 内置 Helm，可浏览 chart 和管理发布。但仍需 Kubernetes 权限以及 chart 仓库的访问权限。"
+      "不需要。Ocular 使用内置 Helm SDK 浏览 chart 并管理发布，无需单独安装 Helm CLI。仍需 Kubernetes 权限以及 chart 仓库的访问权限。"
     ],
     [
       "可以配合编程代理使用吗？",
