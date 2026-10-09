@@ -32,7 +32,8 @@ bundled locally; its MIT license is in `public/licenses/octicons.txt`. All conte
 without JavaScript. Gallery tabs enhance static figures; FAQ answers stay visible. Screenshot links
 open a modal preview without leaving the page. Images are centered in the full
 viewport and fit all available width/height without enlarging beyond their native
-1:1 size. The close button overlays the preview without reserving image space. Escape, the close button or the
+1:1 size. The circular close button uses a centered SVG icon and overlays the preview
+without reserving image space; its focus ring appears for keyboard interaction. Escape, the close button or the
 backdrop dismiss it and restore focus and scroll position. Modified clicks and
 JavaScript-disabled visits retain the original full-size image links.
 Reduced motion, keyboard navigation and semantic light/dark colors are preserved.

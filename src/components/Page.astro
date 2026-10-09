@@ -107,7 +107,7 @@ const navIDs = ['features', 'interface', 'free'];
     <section class="container section faq-section"><h2>{d.faqTitle}</h2><div class="faq">{d.faqs.map(([q,a])=><article><h3>{q}</h3><p>{a}</p></article>)}</div></section>
   </main>
   <dialog class="image-preview" aria-label={d.fullImage}>
-    <button type="button" class="image-preview-close" aria-label={d.closeImage} autofocus>×</button>
+    <button type="button" class="image-preview-close" aria-label={d.closeImage} autofocus><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18" /></svg></button>
     <img alt="" width="1440" height="900" />
   </dialog>
   <footer class="container footer"><div><a class="brand" href="#main"><img src={base+'icon.svg'} width="28" height="28" alt="" /><span>SPK <strong>Ocular</strong></span></a><p>{d.footer}</p></div><nav aria-label={d.projectLinks}><a href={REPO}>{d.source}</a><a href={docs}>{d.docs}</a><a href="#support">{d.supportTitle}</a><a href={REPO+'/issues'}>{d.issues}</a><a href={REPO+'/blob/master/LICENSE'}>{d.license}</a><a class="author-link" href={about}>{d.aboutAuthor}</a></nav></footer>

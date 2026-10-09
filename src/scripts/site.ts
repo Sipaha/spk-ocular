@@ -128,6 +128,7 @@ if (preview && typeof preview.showModal === 'function') {
       if (event.button !== 0 || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey) return;
       event.preventDefault();
       opener = link;
+      preview.dataset.keyboardFocus = String(event.detail === 0);
       const source = link.querySelector('img') || link.closest('figure')?.querySelector('img');
       image.src = link.getAttribute('href')!;
       image.alt = source?.alt || preview.getAttribute('aria-label')!;
@@ -138,13 +139,14 @@ if (preview && typeof preview.showModal === 'function') {
   });
   preview.addEventListener('keydown', event => {
     if (event.key === 'Tab') {
+      preview.dataset.keyboardFocus = 'true';
       event.preventDefault();
       preview.querySelector<HTMLButtonElement>('button')!.focus();
     }
   });
   preview.querySelector('button')!.addEventListener('click', () => preview.close());
   let backdropDown = false;
-  preview.addEventListener('pointerdown', event => { backdropDown = event.target === preview; });
+  preview.addEventListener('pointerdown', event => { preview.dataset.keyboardFocus = 'false'; backdropDown = event.target === preview; });
   preview.addEventListener('click', event => {
     if (backdropDown && event.target === preview) preview.close();
     backdropDown = false;

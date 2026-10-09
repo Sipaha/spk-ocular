@@ -79,6 +79,12 @@ try{
   await expect(screenshot).toBeFocused();
   await expect.poll(()=>page.evaluate(()=>document.documentElement.style.overflow)).toBe('');
   await screenshot.click();
+  await expect(preview).toHaveAttribute('data-keyboard-focus','false');
+  await expect(preview.locator('button svg')).toBeVisible();
+  await page.screenshot({path:path.join(out,`${lang}-${theme}-${width}-preview-pointer.png`)});
+  await page.keyboard.press('Tab');
+  await expect(preview).toHaveAttribute('data-keyboard-focus','true');
+  await expect(preview.locator('button')).toBeFocused();
   await preview.locator('button').click();
   await expect(preview).not.toBeVisible();
   await screenshot.click();

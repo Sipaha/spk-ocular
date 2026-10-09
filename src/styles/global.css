@@ -331,4 +331,7 @@ select { padding: 10px 36px 10px 12px; border: 1px solid var(--line); border-rad
 .image-preview::backdrop { background: rgb(0 0 0 / 88%); }
 .image-preview[open] { display: flex; align-items: center; justify-content: center; }
 .image-preview img { width: auto; height: auto; max-width: 100%; max-height: 100%; object-fit: contain; }
-.image-preview-close { position: absolute; top: 8px; right: 16px; width: 44px; height: 44px; border: 1px solid #777; border-radius: 6px; background: #202020; color: white; font-size: 30px; line-height: 1; cursor: pointer; }
+.image-preview-close { position: absolute; top: 12px; right: 12px; display: grid; place-items: center; width: 44px; height: 44px; padding: 0; border: 0; border-radius: 50%; background: rgb(0 0 0 / 50%); color: #e8edf4; cursor: pointer; }
+.image-preview-close:hover { background: rgb(0 0 0 / 80%); color: white; }
+.image-preview-close:focus-visible { outline: none; }
+.image-preview[data-keyboard-focus=true] .image-preview-close:focus-visible { outline: 2px solid #b8d1ff; outline-offset: 3px; }
