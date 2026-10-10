@@ -98,6 +98,12 @@ func (h *HTTP) routes() {
 	h.mux.Handle("POST /api/Configurations", noStore(http.MaxBytesHandler(handle(func(ctx context.Context, r *kubernetes.ConfigRequest) (any, error) {
 		return h.api.Configurations(ctx, *r)
 	}), 2<<20)))
+	h.mux.HandleFunc("POST /api/ClusterTimeline", handle(func(ctx context.Context, req *api.TimelineRequest) (any, error) {
+		return h.api.ClusterTimeline(ctx, *req)
+	}))
+	h.mux.HandleFunc("POST /api/RBACSnapshot", handle(func(ctx context.Context, req *api.RBACRequest) (any, error) { return h.api.RBACSnapshot(ctx, *req) }))
+	h.mux.HandleFunc("POST /api/CheckAccess", handle(func(ctx context.Context, req *api.AccessRequest) (any, error) { return h.api.CheckAccess(ctx, *req) }))
+	h.mux.HandleFunc("POST /api/ClusterGraph", handle(func(ctx context.Context, req *api.GraphRequest) (any, error) { return h.api.ClusterGraph(ctx, *req) }))
 	h.mux.Handle("POST /api/Helm", noStore(http.MaxBytesHandler(handle(func(ctx context.Context, req *api.HelmRequest) (any, error) { return h.api.Helm(ctx, *req) }), 6<<20)))
 	h.mux.HandleFunc("POST /api/SetLanguage", handle(func(ctx context.Context, r *struct {
 		Language string `json:"language"`

@@ -1,3 +1,7 @@
+import { lazy, Suspense } from 'react'
+const RbacWorkspace = lazy(() => import('../rbac/RbacWorkspace'))
+const TimelineWorkspace = lazy(() => import('../timeline/TimelineWorkspace'))
+const GraphWorkspace = lazy(() => import('../graph/GraphWorkspace'))
 import { groupLabel, kindLabel } from '../presentation'
 import { HelmWorkspace } from '../helm/HelmWorkspace'
 import { agents } from '../agents/store'
@@ -420,6 +424,21 @@ export function Workspace({ client, hub, target, onFavorite, onMoveFavorite, onN
           <div role={kindsError ? 'alert' : 'status'} className="p-4 text-fg-muted">
             {kindsError || t('nav.noKinds')}
           </div>
+        ) : page.kind.workspace === 'rbac' ? (
+          <Suspense fallback={<LoadingState />}><RbacWorkspace key={page.key} client={client} target={target} scope={scope}
+            scopePicker={<ScopePicker scope={scope} scopes={scopes} scopeMenu={scopeMenu} onScope={setScope} />}
+            drawer={{client,hub,target,hasLogs,onLogs:openLogs,hasExec,onTerminal:openTerminal,hasForward,actionsOf,onAction:openAction,eventsKindOf,editableOf,valuesOf,kindTitleOf}}
+          /></Suspense>
+        ) : page.kind.workspace === 'timeline' ? (
+          <Suspense fallback={<LoadingState />}><TimelineWorkspace key={page.key} client={client} target={target} scope={scope}
+            scopePicker={<ScopePicker scope={scope} scopes={scopes} scopeMenu={scopeMenu} onScope={setScope} />}
+            drawer={{client,hub,target,hasLogs,onLogs:openLogs,hasExec,onTerminal:openTerminal,hasForward,actionsOf,onAction:openAction,eventsKindOf,editableOf,valuesOf,kindTitleOf}}
+          /></Suspense>
+        ) : page.kind.workspace === 'graph' ? (
+          <Suspense fallback={<LoadingState />}><GraphWorkspace key={page.key} client={client} target={target} scope={scope}
+            scopePicker={<ScopePicker scope={scope} scopes={scopes} scopeMenu={scopeMenu} onScope={setScope} />}
+            drawer={{client,hub,target,hasLogs,onLogs:openLogs,hasExec,onTerminal:openTerminal,hasForward,actionsOf,onAction:openAction,eventsKindOf,editableOf,valuesOf,kindTitleOf}}
+          /></Suspense>
         ) : page.kind.workspace?.startsWith('helm-') ? (
           <HelmWorkspace key={page.key} client={client} target={target} scope={scope} onResource={ref => paletteActs.current?.openObject(ref)} onSection={tab => setKind(`ocular.helm.${tab}`)} initialTab={page.kind.workspace === 'helm-charts' ? 'charts' : 'releases'} scopePicker={<ScopePicker scope={scope} scopes={scopes} scopeMenu={scopeMenu} onScope={setScope} />} />
         ) : (

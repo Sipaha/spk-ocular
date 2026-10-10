@@ -341,3 +341,12 @@ body.log-select-drag { -webkit-user-select: none; user-select: none; }
 .file-footer-select { height: 22px; padding-block: 0; line-height: 20px; }
 
 .file-tree-scroll [role="status"] { font-size: inherit; line-height: inherit; }
+
+/* Graph navigation reserves the standard drawer's actual width. Camera resize
+   keeps the viewed world center instead of covering the selected node. */
+.graph-workspace .resource-drawer, .timeline-workspace .resource-drawer, .rbac-workspace .resource-drawer { position: relative; inset: auto; flex: 0 0 auto; }
+
+.timeline-axis, .timeline-row {
+  display: grid;
+  grid-template-columns: minmax(150px, 28%) minmax(0, 1fr);
+}

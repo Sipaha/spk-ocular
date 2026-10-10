@@ -1,12 +1,11 @@
 import { useEffect, useId, useRef, useState } from 'react'
 import type { AppInfo } from '../api/types'
 import { getLanguage, t } from '../i18n'
-import type { Language } from '../languages'
 import { focusMark, restoreFocus } from '../shortcuts'
 import { openURL } from '../tunnels/open'
 
-export function localizedSiteURL(site: 'about' | 'spk-ocular', language: Language): string {
-  return `https://sipaha.github.io/${site}/${language === 'ru' ? '?lang=ru' : language + '/'}`
+export function siteURL(site: 'about' | 'spk-ocular'): string {
+  return `https://sipaha.github.io/${site}/`
 }
 
 /** App information never replaces the active workspace or its held edits. */
@@ -57,13 +56,13 @@ export function AboutDialog({ info, onClose }: { info: AppInfo | null; onClose: 
           <dt className="text-fg-subtle">{t('about.license')}</dt><dd><a className={link} href="https://github.com/Sipaha/spk-ocular/blob/master/LICENSE" target="_blank" rel="noopener noreferrer" onClick={external}>Apache License 2.0</a></dd>
         </dl>
         <nav className="mb-5 flex flex-wrap gap-x-5 gap-y-2" aria-label="SPK Ocular">
-          <a className={link} href={localizedSiteURL('spk-ocular', language)} target="_blank" rel="noopener noreferrer" onClick={external}>{t('about.website')}</a>
+          <a className={link} href={siteURL('spk-ocular')} target="_blank" rel="noopener noreferrer" onClick={external}>{t('about.website')}</a>
           <a className={link} href="https://github.com/Sipaha/spk-ocular" target="_blank" rel="noopener noreferrer" onClick={external}>{t('about.source')}</a>
         </nav>
         <section className="border-t border-line pt-4">
           <h3 className="mb-2 text-xs text-fg-subtle">{t('about.author')}</h3>
           <p className="mb-2 font-semibold">{language === 'ru' ? 'Павел Симонов' : 'Pavel Simonov'} <span className="font-normal text-fg-subtle">· Sipaha</span></p>
-          <a className={link} href={localizedSiteURL('about', language)} target="_blank" rel="noopener noreferrer" onClick={external}>{t('about.authorProfile')}</a>
+          <a className={link} href={siteURL('about')} target="_blank" rel="noopener noreferrer" onClick={external}>{t('about.authorProfile')}</a>
         </section>
         {error && <p role="alert" className="mt-3 text-danger">{error}</p>}
       </div>

@@ -590,6 +590,7 @@ export interface ResourceRevision {
 }
 
 export interface Resource {
+ rbacSubject?: Ref
   revisions?: ResourceRevision[]
   revisionsAvailable?: boolean
   revisionsError?: string
@@ -889,3 +890,40 @@ export interface AgentAuditEntry {
 
 export interface FilesRequest { configRev?: string; ref: Ref; instance: string; channel: string; command: 'list' | 'read' | 'write' | 'resolve'; path: string; text?: string; expect?: string }
 export interface FilesResponse { configRev: string; path: string; entries?: { name: string; directory: boolean; symlink: boolean; target?: string }[]; text: string; version?: string }
+
+
+export interface ClusterGraph {
+ nodes: GraphNode[]
+ edges: GraphEdge[]
+ problems: {kind: string; scope?: string; class: string}[]
+ truncated: boolean
+ discovery: string
+ capturedAt: number
+}
+export interface GraphNode {id: string; ref: Ref; kindTitle: string; health: HealthState}
+export interface GraphEdge {source: string; target: string; type: string}
+export interface GraphRequest {provider: string; target: string; scope: ScopeSel}
+
+export interface TimelineRequest {provider: string; target: string; scope: ScopeSel}
+export interface ClusterTimeline {
+ events: TimelineEvent[]
+ resources: TimelineResource[]
+ problems: {kind: string; scope?: string; class: string}[]
+ discovery: string
+ truncated: boolean
+ capturedAt: number
+}
+export interface TimelineResource {ref: Ref; kindTitle: string; ownerUid?: string}
+export interface TimelineEvent {
+ id: string; ref: Ref; subject: Ref; subjectKind: string; openable: boolean
+ type: string; reason: string; message: string; count: number
+ firstAt: number; lastAt: number; timeFallback: boolean; messageTruncated: boolean
+}
+
+export interface RBACRule {verbs: string[]; apiGroups: string[]; resources: string[]; resourceNames: string[]; nonResourceURLs: string[]}
+export interface RBACGrant {binding: Ref; bindingKind: string; role: Ref; roleKind: string; subjectKind: string; subjectName: string; namespace?: string; clusterWide: boolean; rules: RBACRule[]; error?: string; aggregated: boolean}
+export interface RBACSnapshot {principal: string; groups: string[]; subject?: Ref; accounts: Ref[]; grants: RBACGrant[]; problems: {kind: string; scope?: string; class: string}[]; truncated: boolean; discovery: string; capturedAt: number}
+export interface RBACRequest {provider: string; target: string; scope: ScopeSel; subject?: Ref}
+export interface AccessAttributes {verb: string; group: string; resource: string; subresource: string; namespace: string; name: string}
+export interface AccessRequest {provider: string; target: string; ref?: Ref; attributes: AccessAttributes}
+export interface AccessReview {attributes: AccessAttributes; state: 'allowed' | 'denied' | 'unknown'; reason: string; evaluationError: string; checkedAt: number}

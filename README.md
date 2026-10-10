@@ -14,9 +14,9 @@
 </p>
 
 <p align="center">
-  <a href="https://sipaha.github.io/spk-ocular/en/">Website</a> ·
+  <a href="https://sipaha.github.io/spk-ocular/">Website</a> ·
   <a href="docs/usage.md">Documentation</a> ·
-  <a href="https://sipaha.github.io/about/en/">About the author</a>
+  <a href="https://sipaha.github.io/about/">About the author</a>
 </p>
 
 
@@ -27,6 +27,13 @@ not collect telemetry. Helm is embedded; a separate Helm CLI is not required.
 
 - Live resource tables, discovery of Kubernetes API resources, details, and metrics.
 - Multiple namespaces, global favorites, resource search, and saved table layouts.
+- [RBAC explanation](docs/rbac-explanation.md) with binding/role provenance and
+  self-only server access checks (development builds; not in published v1.1.2).
+- [Events timeline](docs/events-timeline.md) for bounded, time-based workload
+  investigation with ownership groups and standard resource tools (development
+  builds; not in published v1.1.2).
+- [Cluster graph](docs/cluster-graph.md) with namespace regions, fast canvas navigation,
+  resource details and an optional declared-route layer.
 - Standalone Docker containers and Compose project/service grouping.
 - Logs in the bottom panel or a separate OS window, interactive terminals, and local Kubernetes port forwarding.
 - Container folders and UTF-8 file editing with syntax highlighting (up to 2 MiB).
@@ -39,8 +46,7 @@ All features are free for individuals and companies of any size, revenue or
 funding. Development is supported only through voluntary cryptocurrency donations;
 donations do not unlock features.
 
-[Product website](https://sipaha.github.io/spk-ocular/) ·
-[English website](https://sipaha.github.io/spk-ocular/en/).
+[Product website](https://sipaha.github.io/spk-ocular/).
 This README describes the current source; consult release notes for the features
 included in a downloaded version.
 

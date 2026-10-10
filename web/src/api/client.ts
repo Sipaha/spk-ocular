@@ -1,3 +1,5 @@
+import type { RBACRequest, RBACSnapshot, AccessRequest, AccessReview } from './types'
+import type { ClusterGraph, GraphRequest, ClusterTimeline, TimelineRequest } from './types'
 import type { FilesRequest, FilesResponse } from './types'
 import type { ConfigRequest, ConfigState } from '../configurations/types'
 import type { HelmRequest, HelmResponse } from '../helm/types'
@@ -20,6 +22,10 @@ export class ApiError extends Error {
 }
 
 export interface Client {
+ rbacSnapshot(req: RBACRequest, signal?: AbortSignal): Promise<RBACSnapshot>
+ checkAccess(req: AccessRequest, signal?: AbortSignal): Promise<AccessReview>
+ clusterTimeline(req: TimelineRequest, signal?: AbortSignal): Promise<ClusterTimeline>
+ clusterGraph(req: GraphRequest, signal?: AbortSignal): Promise<ClusterGraph>
  configurations(req: ConfigRequest): Promise<ConfigState>
   helm(req: HelmRequest, signal?: AbortSignal): Promise<HelmResponse>
   appInfo(): Promise<AppInfo>
@@ -166,6 +172,10 @@ export const httpClient: Client = {
   configurations: (req) => post('Configurations', req),
   appInfo: () => post('AppInfo', {}),
   setLanguage: (language) => post('SetLanguage', { language }),
+  rbacSnapshot: (req, signal) => post('RBACSnapshot',req,signal),
+  checkAccess: (req, signal) => post('CheckAccess',req,signal),
+  clusterTimeline: (req, signal) => post('ClusterTimeline', req, signal),
+  clusterGraph: (req, signal) => post('ClusterGraph', req, signal),
   helm: (req, signal) => post('Helm', req, signal),
   listTargets: () => post('ListTargets', {}),
   selectTarget: (provider, id) => done(post('SelectTarget', { provider, id })),
@@ -295,6 +305,10 @@ export const wailsClient: Client = {
   configurations: (req) => wcall('Configurations', req),
   appInfo: () => wcall('AppInfo'),
   setLanguage: (language) => wcall('SetLanguage', language),
+  rbacSnapshot: (req, signal) => wcallAbortable(signal,'RBACSnapshot',req),
+  checkAccess: (req, signal) => wcallAbortable(signal,'CheckAccess',req),
+  clusterTimeline: (req, signal) => wcallAbortable(signal, 'ClusterTimeline', req),
+  clusterGraph: (req, signal) => wcallAbortable(signal, 'ClusterGraph', req),
   helm: (req, signal) => wcallAbortable(signal, 'Helm', req),
   listTargets: () => wcall('ListTargets'),
   selectTarget: (provider, id) => wcall('SelectTarget', provider, id),

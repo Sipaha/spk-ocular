@@ -210,3 +210,18 @@ func (w *API) Configurations(req kubernetes.ConfigRequest) (kubernetes.ConfigSta
 func (w *API) Files(req api.FilesRequest) (api.FilesResponse, error) {
 	return w.a.Files(api.UIContext(context.Background()), req)
 }
+
+func (w *API) ClusterGraph(ctx context.Context, req api.GraphRequest) (core.Graph, error) {
+	return w.a.ClusterGraph(api.UIContext(ctx), req)
+}
+
+func (w *API) ClusterTimeline(ctx context.Context, req api.TimelineRequest) (core.Timeline, error) {
+	return w.a.ClusterTimeline(api.UIContext(ctx), req)
+}
+
+func (w *API) RBACSnapshot(ctx context.Context, req api.RBACRequest) (core.RBACSnapshot, error) {
+	return w.a.RBACSnapshot(api.UIContext(ctx), req)
+}
+func (w *API) CheckAccess(ctx context.Context, req api.AccessRequest) (core.AccessReview, error) {
+	return w.a.CheckAccess(api.UIContext(ctx), req)
+}

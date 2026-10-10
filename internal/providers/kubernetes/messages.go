@@ -11,6 +11,9 @@ import (
 // (web/src/i18n.ts, providerTexts) with the same parameters, the rest in
 // this English.
 var messageTexts = map[string]string{
+	"rbac.source":                    "RBAC source could not be read ({class})",
+	"rbac.replaced":                  "ServiceAccount was replaced; select the current object explicitly",
+	"rbac.unsupported":               "This resource kind is unavailable for access checks",
 	"scope.singular":                 "Namespace",
 	"scope.plural":                   "namespaces",
 	"scope.all":                      "All namespaces",

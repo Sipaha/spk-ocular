@@ -34,13 +34,66 @@ resetting the resource table, its filter, or an unsaved editor. When switching
 objects, the detail layout stays visible under a loading overlay until the new
 response arrives; controls for the previous object cannot run during that wait.
 
+## RBAC explanation
+
+On a connected Kubernetes target, open **Access Control → RBAC explanation**.
+Inspect the current connection identity or a ServiceAccount, follow binding/role
+provenance and filter declared permissions. **Find declared grant** searches the
+snapshot; **Check my access with the server** asks for the current connection's
+actual authorization, without impersonating the selected account or executing
+an operation. Missing sources never imply missing permissions.
+
+ServiceAccount properties offer **Permissions**, and a Forbidden resource read
+offers **Check this Forbidden**. Permission inspection preserves open YAML drafts;
+source navigation uses the standard edit guard. See [RBAC explanation](rbac-explanation.md)
+for namespace boundaries, limits, identity and review semantics. Available in
+development builds, not published v1.1.2.
+
+## Events timeline
+
+On a connected Kubernetes target, open **Cluster → Events timeline**. Inspect
+warning and normal event series on a time axis, filter by resource kind/time,
+and search workloads, reasons or messages. Select an event and use **Open
+resource** to access the standard properties and logs; known ownership ancestors
+can also be opened. **Refresh** reads a new snapshot and preserves open resource
+edits. Older Kubernetes events may already have expired, and incomplete access
+or size caps are disclosed. Bars show first/last observations of cumulative
+series, not continuous failure duration. See [Events timeline](events-timeline.md)
+for coverage, limits and evidence semantics. Available in development builds;
+not included in published v1.1.2.
+
+## Cluster graph
+
+On a connected Kubernetes target, open **Cluster → Cluster graph**. The same
+namespace picker can select one, several or all namespaces. The canvas includes
+discovered readable resources (including custom resources and retained objects);
+cluster-scoped objects form a separate region. Empty explicit namespace sets do
+not widen to all namespaces.
+
+Drag the background to pan, use the wheel or zoom buttons to zoom, and choose
+**Fit graph** to return to the overview. Search finds resources across the chosen
+namespaces. Arrow keys move through resources; Enter opens the focused object.
+Clicking a node opens the standard right-hand details/YAML panel with its usual
+tools. Unsaved edits remain protected when selecting another object or leaving.
+
+**Route layer** overlays directed, animated declared routes on the same graph,
+without changing layout, camera or selection. It represents Ingress/Gateway
+routes to Services and Service selectors to Pods, not observed network traffic.
+No collector is needed; no packet counts, throughput or latency are inferred.
+
+The graph is a snapshot: **Refresh** rereads it while retaining the camera and
+selected UID. It does not open permanent watches for every resource type.
+Denied/error sources and unfinished discovery are shown as partial coverage.
+A 30,000-node / 120,000-edge cap is explicitly reported; narrow the namespace
+selection if the cap is reached. See [graph architecture](cluster-graph.md).
+
 ## About the application
 
 Click the **About** button next to the keyboard help in the top bar. It shows the running
 build version, Apache 2.0 license, product website, source repository and author
 name and profile link. Employment and biography are kept on the author website.
-The author profile links to Pavel Simonov’s personal About site in
-the selected language; Russian uses an explicit language marker. Desktop links
+Product and author links use language-neutral website roots; each website
+selects its language from its saved choice and browser preferences. Desktop links
 open in the system browser; browser-mode links open in a separate tab. Escape,
 the close button or backdrop closes the dialog and restores focus. Opening it
 preserves workspaces, connections and unsaved edits.

@@ -23,6 +23,7 @@ import type { ViewHub } from '../views/viewSync'
 import { HealthDot, ResourceTable, healthText } from './ResourceTable'
 import { errorDetail } from '../errors'
 
+const RbacDialog = lazy(() => import('../rbac/RbacDialog'))
 const FileBrowser = lazy(() => import('../files/FileBrowser'))
 const YamlView = lazy(() => import('./YamlView'))
 
@@ -67,6 +68,7 @@ const toolBtn = 'rounded-md border border-line px-2 py-0.5 text-xs text-fg-muted
 type Tab = 'details' | 'yaml'
 
 export function ResourceDrawer({ client, hub, target, subject, initialTab, onTab, onClose, hasLogs, onLogs, hasExec, onTerminal, hasForward, actionsOf, onAction, eventsKindOf, editableOf, valuesOf, kindTitleOf }: Props) {
+  const [access,setAccess]=useState<{subject?:Ref;failedRef?:Ref}|null>(null)
   const [filesOpen, setFilesOpen] = useState<{subject:Ref; instance:ExecInstance} | null>(null)
   const [filesDialog, setFilesDialog] = useState<Ref | null>(null)
   const panelRef = useRef<HTMLElement>(null)
@@ -77,7 +79,7 @@ export function ResourceDrawer({ client, hub, target, subject, initialTab, onTab
   const setStack = (next: Ref[] | ((stack: Ref[]) => Ref[])) => setNavigation(old => ({ rootKey, stack: typeof next === 'function' ? next(old.rootKey === rootKey ? old.stack : [subject]) : next }))
   const [tab, setTab] = useState<Tab>(initialTab === 'yaml' ? 'yaml' : 'details')
   useEffect(() => onTab?.(tab), [onTab, tab])
-  const [res, setRes] = useState<{ key: string; r?: Resource; error?: string; gone?: boolean } | null>(null)
+  const [res, setRes] = useState<{ key: string; r?: Resource; error?: string; errorClass?: string; gone?: boolean } | null>(null)
   const [menuAt, setMenuAt] = useState<{ x: number; y: number } | null>(null)
   const actionsBtn = useRef<HTMLButtonElement>(null)
   const current = stack[stack.length - 1]
@@ -107,6 +109,7 @@ export function ResourceDrawer({ client, hub, target, subject, initialTab, onTab
           key,
           r: old?.key === key ? old.r : undefined,
           error: e instanceof Error ? e.message : String(e),
+          errorClass: e instanceof ApiError ? e.code : undefined,
           gone: e instanceof ApiError && (e.code === 'not_found' || e.code === 'gone'),
         })),
     )
@@ -211,7 +214,7 @@ export function ResourceDrawer({ client, hub, target, subject, initialTab, onTab
   const actions = actionsOf?.(current.kind) ?? []
   // The object shown now (after relation navigation: that one), with the UID read.
   // A deleted object has nothing to open or act on.
-  const hasTools = !shown?.gone && ((!!onLogs && !!hasLogs?.(current.kind)) || (!!onTerminal && !!hasExec?.(current.kind)) || (!!onAction && actions.length > 0) || !!editableOf?.(current.kind))
+  const hasTools = !shown?.gone && (!!r?.rbacSubject || (!!onLogs && !!hasLogs?.(current.kind)) || (!!onTerminal && !!hasExec?.(current.kind)) || (!!onAction && actions.length > 0) || !!editableOf?.(current.kind))
   // Shown by its title (a container's name) once read; the key stays the name.
   const title = refTitle(r?.ref ?? current)
   const shownRef = (): Ref => ({ ...(r?.ref ?? current), provider: target.provider, target: target.id })
@@ -270,6 +273,7 @@ export function ResourceDrawer({ client, hub, target, subject, initialTab, onTab
         </div>
         {hasTools && (
           <div className="drawer-tools" inert={loading}>
+            {r?.rbacSubject && <button className={toolBtn} onClick={()=>setAccess({subject:r.rbacSubject})}>{t('rbac.permissions')}</button>}
             {onLogs && hasLogs?.(current.kind) && (
               <button
                 className="rounded-md border border-line px-2 py-0.5 text-xs text-fg-muted hover:bg-hover hover:text-fg"
@@ -343,6 +347,7 @@ export function ResourceDrawer({ client, hub, target, subject, initialTab, onTab
           ) : (
             <p role="alert" className="m-4 rounded-md bg-danger/10 px-3 py-2 text-danger">
               {shown.error}
+              {target.provider==='kubernetes'&&shown.errorClass==='forbidden'&&<button className={'ml-2 '+toolBtn} onClick={()=>setAccess({failedRef:{...current,provider:target.provider,target:target.id}})}>{t('rbac.explainForbidden')}</button>}
             </p>
           ))}
         {r && tab === 'yaml' && editLoad?.key === key && (
@@ -423,6 +428,7 @@ export function ResourceDrawer({ client, hub, target, subject, initialTab, onTab
           }}
         />
       )}
+      {access&&<Suspense fallback={null}><RbacDialog client={client} target={target} {...access} onClose={()=>setAccess(null)} onResource={ref=>{setAccess(null);go(ref)}}/></Suspense>}
       {filesPicker}
       {filesDialog && <ToolDialog client={client} subject={filesDialog} mode="files" onClose={()=>setFilesDialog(null)} onOpen={selection=>{setFilesDialog(null);if(selection.instance) mayLeave(()=>setFilesOpen({subject:selection.ref,instance:{...selection.instance!,defaultChannel:selection.channel ?? ''}}))}}/>}
       {filesOpen && <Suspense fallback={null}><FileBrowser client={client} subject={filesOpen.subject} selectedInstance={filesOpen.instance} onClose={() => setFilesOpen(null)} /></Suspense>}

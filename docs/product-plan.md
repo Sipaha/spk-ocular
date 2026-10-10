@@ -49,8 +49,7 @@ The agent API provides explicit grants and review controls. Names supplied by ag
 The Helm lifecycle is implemented: chart/version browsing, repositories, values, install, upgrade, history, resources, rollback and uninstall. Named additive agent permission groups and scope/group switches are also implemented. Behavior and verification boundaries are documented in [usage](usage.md), [agent access](agent-api.md) and [development](development.md). Distinguish development-build demonstrations from functionality available in a published release. Helm has SDK/fake-API tests and an explicit disposable kind/PostgreSQL integration target covering lifecycle, failures, cancellation and upstream SQL compatibility. Validation is bounded by those fixtures, not every cluster policy, database deployment or chart. Other relevant gaps include generic creation/multi-document apply, Compose desired-state lifecycle, simultaneous workspaces, cross-environment comparison, persistent user action history and distribution/update improvements. Current documentation discloses unsigned Windows installers, ad-hoc/non-notarized macOS bundles and the Linux runtime baseline.
 
 **Website baseline:** the redesigned Astro site is published at
-[the Russian homepage](https://sipaha.github.io/spk-ocular/) and
-[the English homepage](https://sipaha.github.io/spk-ocular/en/), from the independent
+[the product homepage](https://sipaha.github.io/spk-ocular/), from the independent
 `pages` branch. It includes localized real app screens, themes, a gallery, mobile
 navigation, free-commercial-use messaging, agent trust boundaries, installation
 and signature guidance, SEO/social metadata and no-JavaScript download fallbacks.
@@ -88,6 +87,8 @@ K8Studio and Radar are particularly relevant additional comparisons: local opera
 | Komodor | Current plans use custom pricing with a platform fee plus AI token usage. Human approval, agent controls and audit are explicit value. [Pricing](https://komodor.com/platform/pricing-and-plans/) | Sell verified operational outcomes; avoid reusing older per-node pricing or treating testimonials as benchmarks. |
 
 Lens IDE's documented MCP is read-only, distinct from Lens Agents; K8Studio documents reviewed mutations. Ocular's review controls are therefore a meaningful specific comparison, not a category-wide exclusive. [Lens MCP](https://docs.lenshq.io/k8slens/mcp-server/how-it-works/), [K8Studio AI](https://k8studio.io/ai-assistant/).
+
+The agreed investigation feature shortlist is maintained in [the backlog](backlog.md#investigation-workbench). The Events API snapshot timeline and RBAC explanation are implemented in development builds; persistent local observation history remains separate.
 
 ## Product priorities and concrete ideas
 

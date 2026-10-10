@@ -104,6 +104,10 @@ func (s *session) Get(ctx context.Context, ref core.Ref) (*core.Resource, error)
 		Facts:  fs,
 		YAML:   string(y),
 	}
+	if def.gvr.Group == "" && def.gvr.Resource == "serviceaccounts" {
+		ref := out.Ref
+		out.RBACSubject = &ref
+	}
 	if def == deploymentsKind || def == replicaSetsKind {
 		template, templateErr := yaml.Marshal(withoutHash(fieldAt(u.Object, "spec", "template")))
 		if templateErr == nil {

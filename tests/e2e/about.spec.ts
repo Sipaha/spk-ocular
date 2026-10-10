@@ -35,7 +35,7 @@ test('About preserves the workspace, shows the running build and opens the autho
   const opened = page.waitForEvent('popup')
   await dialog.getByRole('link', { name: 'About the author' }).click()
   const profile = await opened
-  await profile.waitForURL('https://sipaha.github.io/about/en/')
+  await profile.waitForURL('https://sipaha.github.io/about/')
   await profile.close()
   await page.keyboard.press('Escape')
   await expect(dialog).toHaveCount(0)
@@ -43,7 +43,7 @@ test('About preserves the workspace, shows the running build and opens the autho
   expect(await grid.evaluate((current, before) => current === before, original)).toBe(true)
 })
 
-test('About has complete native-language text and explicit author URLs at both window sizes', async ({ page }) => {
+test('About has complete native-language text and neutral website URLs at both window sizes', async ({ page }) => {
   await page.goto('/')
   const errors: string[] = []
   page.on('pageerror', e => errors.push(e.message))
@@ -55,7 +55,8 @@ test('About has complete native-language text and explicit author URLs at both w
     const dialog = page.getByRole('dialog', { name: /SPK Ocular/ })
     await expect(dialog).not.toContainText('Citeck')
     const profile = dialog.locator('a[href*="/about/"]')
-    await expect(profile).toHaveAttribute('href', `https://sipaha.github.io/about/${language === 'ru' ? '?lang=ru' : language + '/'}`)
+    await expect(profile).toHaveAttribute('href', 'https://sipaha.github.io/about/')
+    await expect(dialog.locator('a[href^="https://sipaha.github.io/spk-ocular/"]')).toHaveAttribute('href','https://sipaha.github.io/spk-ocular/')
     for (const width of [860,1280]) {
       await page.setViewportSize({ width, height: 800 })
       expect(await page.locator('.app-header').evaluate(e => e.scrollWidth <= e.clientWidth)).toBe(true)

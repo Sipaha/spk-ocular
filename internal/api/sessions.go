@@ -361,6 +361,15 @@ func (s *Service) ListKinds(ctx context.Context, providerID, target string) (Kin
 	}
 	catalog := catalogOf(e.sess)
 	if fromUI(ctx) {
+		if _, ok := e.sess.(provider.GraphSource); ok {
+			catalog.Kinds = append(append([]core.KindDescriptor(nil), catalog.Kinds...), graphKind())
+		}
+		if _, ok := e.sess.(provider.TimelineSource); ok {
+			catalog.Kinds = append(append([]core.KindDescriptor(nil), catalog.Kinds...), timelineKind())
+		}
+		if _, ok := e.sess.(provider.RBACSource); ok {
+			catalog.Kinds = append(append([]core.KindDescriptor(nil), catalog.Kinds...), rbacKind())
+		}
 		if _, ok := e.sess.(helmSession); ok {
 			catalog.Kinds = append(append([]core.KindDescriptor(nil), catalog.Kinds...), helmKinds()...)
 		}

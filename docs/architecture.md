@@ -139,6 +139,39 @@ The cache stores reduced objects, omits Secret/ConfigMap values from list caches
 and attributes metrics only to matching live UIDs. Background caches use bounded
 retention. View lifecycles are keyed by immutable requests and session ownership.
 
+## RBAC explanation
+
+Optional provider `RBACSource` exposes UI-only `RBACSnapshot` and `CheckAccess`
+through an admitted connection. Namespace-bounded bindings resolve User/Group/SA
+subjects and referenced roles, with metadata-only ServiceAccount inventory and
+visible incomplete coverage. SelfSubjectReview identifies the current connection;
+SelfSubjectAccessReview checks its exact request attributes without adding subject
+impersonation. Both are non-persistent introspection. The frontend virtualizes
+rule rows and separates declared matches from server decisions, invalidating late
+checks when fields change. Resource properties expose guarded inspection and
+Forbidden read checks. See [RBAC explanation](rbac-explanation.md).
+
+## Events timeline
+
+The UI-only `ClusterTimeline` API uses optional provider `TimelineSource` and an
+explicit admitted connection. It reads bounded Events API snapshots and
+metadata-only workload ownership, with per-namespace scope, visible partial
+coverage and session cancellation. The frontend groups UID-based controller
+chains and virtualizes event rows; standard ResourceDrawer navigation retains
+edit guards. Cumulative event series are not audit history or continuous failure
+durations. See [Events timeline](events-timeline.md).
+
+## Cluster graph
+
+The UI-only `ClusterGraph` API and specialized `graph` workspace use compact,
+bounded inventory snapshots from optional provider `GraphSource` implementations.
+Kubernetes discovery supplies resource types; scoped reads remain namespace
+specific. Relationships are resolved by UID and indexed selectors/references.
+Worker layout and an imperative Canvas2D camera keep pan/zoom independent of
+React node rendering. Selection reuses ResourceDrawer and its edit guards.
+The optional layer shows declared routes, not measured traffic.
+See [cluster graph](cluster-graph.md) for coverage, limits and lifecycle.
+
 ## Docker and Compose
 
 The Docker provider retains the stable internal ID `compose` for persisted

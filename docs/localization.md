@@ -62,6 +62,6 @@ selection and process-restart persistence. Language screenshots cover 1280 px
 and 860 px windows; capture artifacts belong in `OCULAR_SCRATCH_DIR`.
 
 The About dialog is localized in all eight languages. Product and author links
-use explicit localized website URLs, including `?lang=ru` on Russian roots, so
-website detection or blocked storage cannot override the selected language.
+use language-neutral website roots; the websites select their languages from
+saved choices and browser preferences.
 Author names, version identifiers and the formal license name remain data.

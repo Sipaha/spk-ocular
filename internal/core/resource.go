@@ -131,6 +131,7 @@ type ResourceRevision struct {
 }
 
 type Resource struct {
+	RBACSubject        *Ref               `json:"rbacSubject,omitempty"`
 	Revisions          []ResourceRevision `json:"revisions,omitempty"`
 	RevisionsAvailable bool               `json:"revisionsAvailable,omitempty"`
 	RevisionsError     string             `json:"revisionsError,omitempty"`

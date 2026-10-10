@@ -47,6 +47,10 @@ export function fakeClient(targets: Target[], connected = false) {
     audit: [] as AgentAuditEntry[],
   }
   const client: Client = {
+ rbacSnapshot: vi.fn(async()=>({principal:"test-user",groups:[],accounts:[],grants:[],problems:[],truncated:false,discovery:"ready",capturedAt:Date.now()})),
+ checkAccess: vi.fn(async(req:import("../api/types").AccessRequest)=>({attributes:req.attributes,state:"denied" as const,reason:"",evaluationError:"",checkedAt:Date.now()})),
+ clusterTimeline: vi.fn(async () => ({events:[],resources:[],problems:[],discovery:"ready",truncated:false,capturedAt:Date.now()})),
+    clusterGraph: vi.fn(async () => ({nodes:[],edges:[],problems:[],truncated:false,discovery:"ready",capturedAt:0})),
     files: vi.fn(async () => ({ path: "/", configRev: "test", text: "", entries: [] })),
     configurations: vi.fn(async () => ({ initialized: true, encrypted: false, locked: false, candidates: [], entries: [] })),
     helm: vi.fn(async () => ({})),

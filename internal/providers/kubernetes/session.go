@@ -18,6 +18,7 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/dynamic"
+	"k8s.io/client-go/metadata"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 	clientcmdapi "k8s.io/client-go/tools/clientcmd/api"
@@ -134,6 +135,10 @@ func sessionWithLifetime(cfg *rest.Config, target, title, hash, lifetime string)
 		return nil, err
 	}
 	sess.caches.tables = sess.tables
+	if sess.graphMetadata, err = metadata.NewForConfig(cfg); err != nil {
+		sess.Close()
+		return nil, err
+	}
 	get, err := httpGetter(cfg)
 	if err != nil {
 		sess.Close()
@@ -191,6 +196,8 @@ func configHash(name string, cfg *clientcmdapi.Config, files []string) string {
 }
 
 type session struct {
+	graphGate     chan struct{}
+	graphMetadata metadata.Interface
 	// ctx lives as long as the session: shared background requests
 	// (metrics) end with it.
 	ctx    context.Context
@@ -240,7 +247,7 @@ type session struct {
 func newSession(target, hash string, dyn dynamic.Interface, watchList bool) *session {
 	ctx, cancel := context.WithCancel(context.Background())
 	s := &session{
-		ctx: ctx, cancel: cancel, target: target, hash: hash, dyn: dyn, caches: newCacheManager(dyn, watchList), now: time.Now, problemSources: problemSources,
+		graphGate: make(chan struct{}, 1), ctx: ctx, cancel: cancel, target: target, hash: hash, dyn: dyn, caches: newCacheManager(dyn, watchList), now: time.Now, problemSources: problemSources,
 		conn:        newConn(&rest.Config{Host: "https://cluster.invalid"}, dyn, target, target, hash),
 		incarnation: randomHex(16), spent: spentGrants{byNonce: map[string]time.Time{}},
 	}

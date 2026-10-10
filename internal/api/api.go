@@ -19,6 +19,10 @@ import (
 )
 
 type API interface {
+	RBACSnapshot(context.Context, RBACRequest) (core.RBACSnapshot, error)
+	CheckAccess(context.Context, AccessRequest) (core.AccessReview, error)
+	ClusterGraph(context.Context, GraphRequest) (core.Graph, error)
+	ClusterTimeline(context.Context, TimelineRequest) (core.Timeline, error)
 	Configurations(context.Context, kubernetes.ConfigRequest) (kubernetes.ConfigState, error)
 	Helm(ctx context.Context, req HelmRequest) (HelmResponse, error)
 	AppInfo(ctx context.Context) (AppInfo, error)

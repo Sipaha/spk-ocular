@@ -9,6 +9,39 @@ capabilities and proposed validation priorities. It does not authorize additiona
 implementation or publication. [Website direction](site-plan.md) tracks remaining
 site and download-journey work separately from application features.
 
+## Investigation workbench
+
+The Events Timeline is implemented in development builds. The remaining items
+follow the agreed feature shortlist; the list does not authorize publication.
+Implementation scope for each subsequent feature is selected separately.
+
+- [x] **[Events Timeline](events-timeline.md):** explicit bounded Events API
+  snapshots/Refresh, UID-based workload ownership groups, warning/kind/time
+  filters and standard resource properties/log navigation. API retention, partial
+  coverage and cumulative series semantics are disclosed. Not yet released.
+- [ ] **Persistent observed timeline:** bounded local observation history with
+  visible gaps, UID replacement and retention, without retrospective audit claims.
+- [x] **[RBAC explanation](rbac-explanation.md):** ServiceAccount declaration
+  provenance, current-connection server access checks, guarded source navigation
+  and Forbidden resource-read inspection. Partial coverage and authorization
+  boundaries are explicit. Implemented in development builds; not yet released.
+- [ ] **Security and NetworkPolicy inspection:** show policy selection and
+  declared connectivity alongside risky security contexts and RBAC. Declarative
+  analysis must not claim proven packet reachability or exploitability.
+- [ ] **Resource/environment comparison:** explicitly pair resources, including
+  across targets, and compare normalized YAML and important workload settings.
+- [ ] **GitOps awareness:** show known Argo CD ownership/source/revision/sync
+  context and explain reconciliation before edits.
+- [ ] **Historical metrics:** connect to an existing Prometheus and link existing
+  Grafana dashboards; no implicit collector installation.
+- [ ] **Investigation workspace continuity:** pinned properties/logs and restored
+  layouts, without replaying commands or silently retaining sensitive drafts.
+- [ ] **Optional integrated AI assistant:** reuse explicit agent grants and change
+  review; provider/context privacy and local models need a separate design.
+
+Paid-tier boundaries are documented in [product direction](product-plan.md).
+Ocular's features remain free; competitor packaging does not change that policy.
+
 ## Distribution and platforms
 
 - Developer ID signing and notarization for macOS, and publisher signing for

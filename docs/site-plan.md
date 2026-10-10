@@ -2,8 +2,7 @@
 
 The product website lives on the independent `pages` branch, checked out in
 `.site`. The redesign is published at
-[the Russian homepage](https://sipaha.github.io/spk-ocular/) and
-[the English homepage](https://sipaha.github.io/spk-ocular/en/).
+[the product homepage](https://sipaha.github.io/spk-ocular/).
 Keep website and application worktrees separate. Authorized pushes to `pages`
 run the website checks and GitHub Pages deployment. Website publication does not
 publish application releases or authorize wallet publication.

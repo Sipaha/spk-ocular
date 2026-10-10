@@ -48,6 +48,7 @@ const rows = [
 'Workloads|Рабочие нагрузки|工作负载|Cargas de trabajo|Workloads|Charges de travail|Cargas de trabalho|ワークロード',
 'Network|Сеть|网络|Red|Netzwerk|Réseau|Rede|ネットワーク',
 'Config|Конфигурация|配置|Configuración|Konfiguration|Configuration|Configuração|設定',
+'Cluster graph|Граф кластера|集群图|Grafo del clúster|Clustergraph|Graphe du cluster|Grafo do cluster|クラスタグラフ',
 'Cluster|Кластер|集群|Clúster|Cluster|Cluster|Cluster|クラスタ',
 'Storage|Хранилища|存储|Almacenamiento|Speicher|Stockage|Armazenamento|ストレージ',
 'Access Control|Управление доступом|访问控制|Control de acceso|Zugriffssteuerung|Contrôle d’accès|Controle de acesso|アクセス制御',
@@ -73,6 +74,9 @@ export function groupLabel(provider: string, title: string, language: Language =
   return provider === 'kubernetes' || provider === 'compose' ? columnLabel(title, language) : title
 }
 export function kindLabel(provider: string, kind: KindDescriptor): string {
+ if(kind.workspace === 'rbac') return t('rbac.title')
+ if(kind.workspace === 'timeline') return t('timeline.title')
+ if(kind.workspace === 'graph') return t('graph.title')
   if (provider === 'kubernetes') {
     if (kind.id === 'ocular.helm.releases') return t('helm.releases')
     if (kind.id === 'ocular.helm.charts') return t('helm.charts')

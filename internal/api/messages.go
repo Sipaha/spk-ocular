@@ -10,6 +10,7 @@ import (
 // the UI says the keys it knows in its language (web/src/i18n.ts,
 // providerTexts), the rest in this English.
 var messageTexts = map[string]string{
+	"rbacInput":     "Check the target, namespace selection and API request fields",
 	"cannotChange":  "objects of this target cannot be changed",
 	"noAction":      "no such action: {kind} has no action {action}",
 	"unknownKind":   "no such action: unknown kind {kind}",

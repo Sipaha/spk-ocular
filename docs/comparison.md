@@ -1,6 +1,7 @@
 # Competitive comparison
 
-Evidence checked 2026-10-05. This compares documented products, not measured
+Competitor evidence checked 2026-10-05; the Ocular column describes current
+repository behavior, including explicitly marked unreleased development work. This compares documented products, not measured
 performance. “Not verified” means no reliable entitlement/capability conclusion
 was established; it does not mean the feature is absent. Prices and plans can
 change. Ocular entries describe the current source, not the availability of published release assets.
@@ -39,7 +40,8 @@ compare focused workflows without claiming full platform replacement.
 | Side-by-side environment/resource comparison | Proposed | Paid editor compares current unsaved edits with the loaded/saved baseline; arbitrary two-resource diff not established | Core differentiator | YAML Compare explicitly diffs two selected objects; cross-cluster selection for this action is not established | No blanket parity claim |
 | Agent inspection | Local agent API with scoped grants | Built-in MCP documented read-only | Not verified | MCP documented | Extensions/plugins vary |
 | Reviewed agent mutations | Implemented for documented operations; same-OS-user trust boundary | Not in the documented read-only IDE MCP; separate Lens Agents is different | Not verified | Documented confirmation, RBAC and server dry-run | Plugin-dependent; do not assume absent |
-| Topology / observed timeline | Relations/Problems exist; broader guided topology/timeline proposed | Exact paid workflow boundaries not fully compared | Not established by this study | Prominent documented paid workflow | Radar provides relevant topology/timeline examples |
+| Topology / observed timeline | Relations/Problems, cluster graph and Events API snapshot timeline implemented in development builds; persistent observation history remains proposed | Exact paid workflow boundaries not fully compared | Not established by this study | Prominent documented paid workflow | Radar provides relevant topology/timeline examples |
+| RBAC explanation / own authorization checks | Implemented in development builds: ServiceAccount binding/role provenance, self-only server checks and visible partial coverage; no dedicated role-management workflow | Exact workflow not reviewed here | Exact workflow not reviewed here | Professional documents RBAC management and user permissions | Inspection and management scopes differ; no blanket parity claim |
 | Enterprise identity/governance | No authenticated per-agent identities or central organization service | Higher paid plans / separate products | Team licensing/SSO terms; not equivalent to cluster RBAC | Product/tier-specific | Open-source RBAC-aware UIs are not automatically identity platforms |
 
 Sources for the detailed rows: [Lens Helm charts](https://docs.lenshq.io/k8slens/using-lens/helm/charts/),
