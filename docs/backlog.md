@@ -11,8 +11,8 @@ site and download-journey work separately from application features.
 
 ## Investigation workbench
 
-The Events Timeline is implemented in development builds. The remaining items
-follow the agreed feature shortlist; the list does not authorize publication.
+Events Timeline, RBAC explanation and resource comparison are implemented in
+development builds. The remaining items follow the agreed feature shortlist; the list does not authorize publication.
 Implementation scope for each subsequent feature is selected separately.
 
 - [x] **[Events Timeline](events-timeline.md):** explicit bounded Events API
@@ -28,8 +28,10 @@ Implementation scope for each subsequent feature is selected separately.
 - [ ] **Security and NetworkPolicy inspection:** show policy selection and
   declared connectivity alongside risky security contexts and RBAC. Declarative
   analysis must not claim proven packet reachability or exploitability.
-- [ ] **Resource/environment comparison:** explicitly pair resources, including
-  across targets, and compare normalized YAML and important workload settings.
+- [x] **[Resource/environment comparison](resource-comparison.md):** explicitly
+  selected UID-pinned resources across connected targets, normalized saved YAML
+  diff and optional service fields/status. Read-only, with Secret payloads
+  excluded. Implemented in development builds; not yet released.
 - [ ] **GitOps awareness:** show known Argo CD ownership/source/revision/sync
   context and explain reconciliation before edits.
 - [ ] **Historical metrics:** connect to an existing Prometheus and link existing

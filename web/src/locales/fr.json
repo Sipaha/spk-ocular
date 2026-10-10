@@ -936,7 +936,25 @@
     "files.expand": "Développer {path}",
     "files.collapse": "Réduire {path}",
     "files.folderMenu": "Dossier {path}",
-    "files.absolutePath": "Saisissez un chemin de dossier absolu."
+    "files.absolutePath": "Saisissez un chemin de dossier absolu.",
+    "compare.title": "Comparer les ressources",
+    "compare.pin": "Utiliser comme base de comparaison",
+    "compare.with": "Comparer avec la base",
+    "compare.baseline": "Base de comparaison",
+    "compare.clear": "Effacer la base",
+    "compare.pickOther": "Ouvrez une autre ressource pour comparer",
+    "compare.connectionChanged": "Connexion fermée ou modifiée. Reconnectez-vous et sélectionnez à nouveau les ressources.",
+    "compare.left": "Gauche · base",
+    "compare.right": "Droite · ressource comparée",
+    "compare.snapshotHint": "Instantanés en lecture seule des objets enregistrés, lus séparément. Les modifications non enregistrées ne sont pas comparées. Actualiser relit les deux objets.",
+    "compare.normalizationHint": "Les clés sont triées ; ordre des listes, noms, espaces de noms et annotations utiles sont conservés. Les champs omis par le fournisseur ne peuvent pas être restaurés.",
+    "compare.differentKinds": "Types de ressources ou fournisseurs différents : les schémas peuvent différer.",
+    "compare.serviceFields": "Afficher les champs de gestion et le statut",
+    "compare.omitted": "Champs de gestion masqués : {count}",
+    "compare.secretExcluded": "Les contenus Secret et masques de taille sont exclus dans les deux modes. Des métadonnées identiques ne signifient pas des valeurs Secret identiques.",
+    "compare.identical": "Aucune différence dans les champs comparés",
+    "compare.diff": "Différences du YAML normalisé",
+    "compare.captured": "Lu à {time}"
   },
   "provider": {
     "kubernetes.rbac.source": "Impossible de lire la source RBAC ({class})",
@@ -1248,6 +1266,7 @@
     "api.loginNeeded": "une connexion au cluster est nécessaire pour continuer : sélectionnez la cible et appuyez sur Connecter",
     "api.closedByUser": "la connexion à la cible a été fermée",
     "api.loginByPerson": "une connexion au cluster est effectuée par une personne : sélectionnez la cible dans Ocular et appuyez sur Connecter",
-    "api.rbacInput": "Vérifier la cible, les espaces sélectionnés et les champs API"
+    "api.rbacInput": "Vérifier la cible, les espaces sélectionnés et les champs API",
+    "api.compareUnavailable": "Il faut deux ressources liées à leur UID sur des connexions inchangées et un YAML valide pour un objet de 1 Mio, 20000 lignes et profondeur 64 au maximum"
   }
 }

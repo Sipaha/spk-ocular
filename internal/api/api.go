@@ -62,6 +62,8 @@ type API interface {
 	// TouchViews renews the leases of the UI's open views and returns the
 	// ids that are gone.
 	TouchViews(ctx context.Context, viewIDs []string) ([]string, error)
+	CompareResources(ctx context.Context, req CompareRequest) (ResourceComparison, error)
+
 	// GetResource: the details of one object (YAML, facts, relations).
 	GetResource(ctx context.Context, ref core.Ref) (*core.Resource, error)
 	// GetTargetState / SetTargetState keep small per-target UI state (last

@@ -47,6 +47,7 @@ export function fakeClient(targets: Target[], connected = false) {
     audit: [] as AgentAuditEntry[],
   }
   const client: Client = {
+ compareResources: vi.fn(async()=>({left:{ref:{provider:"kubernetes",target:"a",kind:"pods",name:"p",uid:"u"},yaml:"name: p\n",fullYAML:"name: p\n",capturedAt:0,omitted:[],valuesExcluded:false},right:{ref:{provider:"kubernetes",target:"a",kind:"pods",name:"q",uid:"v"},yaml:"name: q\n",fullYAML:"name: q\n",capturedAt:0,omitted:[],valuesExcluded:false}})),
  rbacSnapshot: vi.fn(async()=>({principal:"test-user",groups:[],accounts:[],grants:[],problems:[],truncated:false,discovery:"ready",capturedAt:Date.now()})),
  checkAccess: vi.fn(async(req:import("../api/types").AccessRequest)=>({attributes:req.attributes,state:"denied" as const,reason:"",evaluationError:"",checkedAt:Date.now()})),
  clusterTimeline: vi.fn(async () => ({events:[],resources:[],problems:[],discovery:"ready",truncated:false,capturedAt:Date.now()})),

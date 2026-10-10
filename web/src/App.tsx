@@ -1,3 +1,5 @@
+import {clearComparison} from './compare/store'
+import Comparison from './compare/Comparison'
 import { useEffect, useMemo, useState, useRef } from 'react'
 import type { Client } from './api/client'
 import { setLanguage, t } from './i18n'
@@ -26,6 +28,7 @@ import { AgentConfirm } from './agents/ConfirmDialog'
 import { agentLoaders, agents, useAgents } from './agents/store'
 
 export function App({ client }: { client: Client }) {
+  useEffect(()=>clearComparison,[client])
   const act = useMemo(() => actions(client), [client])
   const configRef = useRef<ConfigurationActions>(null)
   const connect = () => {
@@ -160,6 +163,7 @@ export function App({ client }: { client: Client }) {
             {t('connection.disconnected')}
             <button className="ml-3 text-accent" onClick={() => mayLeave(() => { connect() })}>{t('connection.connect')}</button>
           </div>}
+          <Comparison client={client}/>
           {target ? (
             showWorkspace ?
               <Workspace key={`${target.provider}/${target.id}`} client={client} hub={hub} target={target} onFavorite={act.setKindFavorite} onMoveFavorite={act.moveFavoriteKind} onNavSection={act.setNavSection} /> :

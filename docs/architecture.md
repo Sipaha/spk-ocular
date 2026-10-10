@@ -461,3 +461,14 @@ same bounded history lookup as rollout review. ReplicaSet/Deployment details
 expose a normalized Pod-template YAML for lazy read-only comparison. The UI never
 infers revision availability from a kind ID and never mutates resources from the
 revision section; failed and truncated history is reported separately.
+
+## Resource comparison
+
+The UI-only `CompareResources` API reads two explicitly selected Resource YAML
+objects through admitted sessions. Selections pin UID, scope, configuration and
+connection incarnation. Bounded normalization sorts mapping keys, preserves array
+order and 64-bit integer precision, excludes Secret payloads, and returns paired
+representations with/without Kubernetes service fields. The global comparison
+state retains only two references across navigation; the open modal owns the
+non-persistent YAML snapshots. No new agent endpoint or mutation path is added.
+See [resource comparison](resource-comparison.md).

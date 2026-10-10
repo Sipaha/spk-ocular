@@ -936,7 +936,25 @@
     "files.expand": "展开 {path}",
     "files.collapse": "折叠 {path}",
     "files.folderMenu": "文件夹 {path}",
-    "files.absolutePath": "请输入文件夹的绝对路径。"
+    "files.absolutePath": "请输入文件夹的绝对路径。",
+    "compare.title": "比较资源",
+    "compare.pin": "设为比较基准",
+    "compare.with": "与基准比较",
+    "compare.baseline": "比较基准",
+    "compare.clear": "清除基准",
+    "compare.pickOther": "打开另一个资源进行比较",
+    "compare.connectionChanged": "连接已关闭或更改。请重新连接并再次选择资源。",
+    "compare.left": "左侧 · 基准",
+    "compare.right": "右侧 · 比较资源",
+    "compare.snapshotHint": "分别读取的已保存对象的只读快照。不会比较未保存的修改。刷新会重新读取两个对象。",
+    "compare.normalizationHint": "映射键已排序；保留数组顺序、名称、命名空间和有意义的注解。无法恢复提供程序已省略的字段。",
+    "compare.differentKinds": "资源类型或提供程序不同：结构可能不同。",
+    "compare.serviceFields": "显示管理字段和状态",
+    "compare.omitted": "隐藏的管理字段：{count}",
+    "compare.secretExcluded": "两种模式都排除 Secret 内容及大小掩码。元数据相同不代表 Secret 值相同。",
+    "compare.identical": "比较字段没有差异",
+    "compare.diff": "规范化 YAML 差异",
+    "compare.captured": "读取时间：{time}"
   },
   "provider": {
     "kubernetes.rbac.source": "无法读取 RBAC 来源（{class}）",
@@ -1248,6 +1266,7 @@
     "api.loginNeeded": "需要登录集群以继续：选择目标并点击连接",
     "api.closedByUser": "与目标的连接已被用户关闭",
     "api.loginByPerson": "通过人员登录集群：在 Ocular 中选择目标并点击连接",
-    "api.rbacInput": "请检查目标、命名空间选择和 API 请求字段"
+    "api.rbacInput": "请检查目标、命名空间选择和 API 请求字段",
+    "api.compareUnavailable": "比较需要两个固定 UID 的资源，连接不能更改，且有效的单对象 YAML 不超过 1 MiB、20000 行及 64 层深度"
   }
 }

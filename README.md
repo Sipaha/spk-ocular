@@ -163,3 +163,7 @@ and publication.
 [Apache License 2.0](LICENSE). Dependencies retain their own licenses; see
 [third-party notices](THIRD-PARTY-NOTICES.txt). Run `spk-ocular licenses` to read
 the notices embedded in a downloaded build.
+
+Resource comparison in development builds supports explicitly paired resources
+across connected targets, normalized saved YAML and optional service fields.
+See [resource comparison](docs/resource-comparison.md); it is not yet released.

@@ -927,3 +927,8 @@ export interface RBACRequest {provider: string; target: string; scope: ScopeSel;
 export interface AccessAttributes {verb: string; group: string; resource: string; subresource: string; namespace: string; name: string}
 export interface AccessRequest {provider: string; target: string; ref?: Ref; attributes: AccessAttributes}
 export interface AccessReview {attributes: AccessAttributes; state: 'allowed' | 'denied' | 'unknown'; reason: string; evaluationError: string; checkedAt: number}
+
+export interface CompareSelection { ref: Ref; configRev: string; connectionId: number; targetTitle?: string }
+export interface ComparisonSide { ref: Ref; yaml: string; fullYAML: string; capturedAt: number; omitted: string[]; valuesExcluded: boolean }
+export interface ResourceComparison { left: ComparisonSide; right: ComparisonSide }
+export interface CompareRequest { left: CompareSelection; right: CompareSelection }

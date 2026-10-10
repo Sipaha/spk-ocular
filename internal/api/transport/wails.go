@@ -70,6 +70,10 @@ func (w *API) ResyncView(viewID string) error {
 func (w *API) TouchViews(viewIDs []string) ([]string, error) {
 	return w.a.TouchViews(api.UIContext(context.Background()), viewIDs)
 }
+func (w *API) CompareResources(ctx context.Context, req api.CompareRequest) (api.ResourceComparison, error) {
+	return w.a.CompareResources(api.UIContext(ctx), req)
+}
+
 func (w *API) GetResource(ref core.Ref) (*core.Resource, error) {
 	return w.a.GetResource(api.UIContext(context.Background()), ref)
 }

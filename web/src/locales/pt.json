@@ -936,7 +936,25 @@
     "files.expand": "Expandir {path}",
     "files.collapse": "Recolher {path}",
     "files.folderMenu": "Pasta {path}",
-    "files.absolutePath": "Digite um caminho absoluto para a pasta."
+    "files.absolutePath": "Digite um caminho absoluto para a pasta.",
+    "compare.title": "Comparar recursos",
+    "compare.pin": "Usar como base de comparação",
+    "compare.with": "Comparar com a base",
+    "compare.baseline": "Base de comparação",
+    "compare.clear": "Limpar base",
+    "compare.pickOther": "Abra outro recurso para comparar",
+    "compare.connectionChanged": "A conexão foi fechada ou alterada. Reconecte e selecione os recursos novamente.",
+    "compare.left": "Esquerda · base",
+    "compare.right": "Direita · recurso comparado",
+    "compare.snapshotHint": "Retratos somente para leitura de objetos salvos, lidos separadamente. Alterações não salvas não são comparadas. Atualizar lê ambos os objetos novamente.",
+    "compare.normalizationHint": "As chaves são ordenadas; a ordem das listas, nomes, namespaces e anotações relevantes são preservados. Campos omitidos pelo provedor não podem ser restaurados.",
+    "compare.differentKinds": "Tipos de recurso ou provedores diferentes: os esquemas podem variar.",
+    "compare.serviceFields": "Mostrar campos de gestão e status",
+    "compare.omitted": "Campos de gestão ocultos: {count}",
+    "compare.secretExcluded": "Conteúdos de Secret e máscaras de tamanho são excluídos nos dois modos. Metadados iguais não significam valores de Secret iguais.",
+    "compare.identical": "Nenhuma diferença nos campos comparados",
+    "compare.diff": "Diferenças do YAML normalizado",
+    "compare.captured": "Lido em {time}"
   },
   "provider": {
     "kubernetes.rbac.source": "Não foi possível ler a fonte RBAC ({class})",
@@ -1248,6 +1266,7 @@
     "api.loginNeeded": "é necessário fazer login no cluster para continuar: selecione o alvo e pressione Conectar",
     "api.closedByUser": "a conexão com o alvo foi fechada",
     "api.loginByPerson": "um login no cluster é realizado por uma pessoa: selecione o alvo no Ocular e pressione Conectar",
-    "api.rbacInput": "Verifique destino, namespaces selecionados e campos da solicitação API"
+    "api.rbacInput": "Verifique destino, namespaces selecionados e campos da solicitação API",
+    "api.compareUnavailable": "São necessários dois recursos com UID fixo em conexões inalteradas e YAML válido de um objeto com até 1 MiB, 20000 linhas e profundidade 64"
   }
 }

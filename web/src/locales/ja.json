@@ -936,7 +936,25 @@
     "files.expand": "{path} を展開",
     "files.collapse": "{path} を折りたたむ",
     "files.folderMenu": "フォルダー {path}",
-    "files.absolutePath": "フォルダーの絶対パスを入力してください。"
+    "files.absolutePath": "フォルダーの絶対パスを入力してください。",
+    "compare.title": "リソースを比較",
+    "compare.pin": "比較の基準にする",
+    "compare.with": "基準と比較",
+    "compare.baseline": "比較の基準",
+    "compare.clear": "基準を解除",
+    "compare.pickOther": "別のリソースを開いて比較してください",
+    "compare.connectionChanged": "接続が閉じられたか変更されました。再接続してリソースを選び直してください。",
+    "compare.left": "左 · 基準",
+    "compare.right": "右 · 比較対象",
+    "compare.snapshotHint": "保存済みオブジェクトを個別に読み取った読み取り専用スナップショットです。未保存の編集は比較しません。更新で両方を再読込します。",
+    "compare.normalizationHint": "キーを並べ替え、配列の順序、名前、名前空間、意味のある注釈を保持します。プロバイダーが省略したフィールドは復元できません。",
+    "compare.differentKinds": "リソース種別またはプロバイダーが異なります。スキーマが異なる場合があります。",
+    "compare.serviceFields": "管理フィールドと状態を表示",
+    "compare.omitted": "非表示の管理フィールド：{count}",
+    "compare.secretExcluded": "両モードで Secret の内容とサイズマスクを除外します。メタデータが同じでも Secret の値が同じとは限りません。",
+    "compare.identical": "比較対象のフィールドに差分はありません",
+    "compare.diff": "正規化した YAML の差分",
+    "compare.captured": "読込時刻：{time}"
   },
   "provider": {
     "kubernetes.rbac.source": "RBACの情報を取得できません（{class}）",
@@ -1248,6 +1266,7 @@
     "api.loginNeeded": "クラスターへのログインが必要です: ターゲットを選択し、Connect を押してください",
     "api.closedByUser": "ターゲットへの接続がユーザーによって閉じられました",
     "api.loginByPerson": "クラスターへのログインはユーザーによって行われます: Ocular でターゲットを選択し、Connect を押してください",
-    "api.rbacInput": "接続先、名前空間の選択、APIリクエストの項目を確認してください"
+    "api.rbacInput": "接続先、名前空間の選択、APIリクエストの項目を確認してください",
+    "api.compareUnavailable": "比較には UID を固定した 二つのリソース、変更のない接続、1 MiB・20000 行・深さ 64 以下の有効な単一オブジェクト YAML が必要です"
   }
 }

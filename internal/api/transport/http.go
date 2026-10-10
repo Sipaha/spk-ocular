@@ -200,6 +200,7 @@ func (h *HTTP) routes() {
 	h.mux.HandleFunc("POST /api/TouchRecent", handle(func(ctx context.Context, r *api.TouchRecentRequest) (any, error) {
 		return nil, h.api.TouchRecent(ctx, *r)
 	}))
+	h.mux.HandleFunc("POST /api/CompareResources", handle(func(ctx context.Context, r *api.CompareRequest) (any, error) { return h.api.CompareResources(ctx, *r) }))
 	h.mux.HandleFunc("POST /api/GetResource", handle(func(ctx context.Context, r *core.Ref) (any, error) {
 		return h.api.GetResource(ctx, *r)
 	}))

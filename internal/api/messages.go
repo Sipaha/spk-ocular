@@ -10,15 +10,16 @@ import (
 // the UI says the keys it knows in its language (web/src/i18n.ts,
 // providerTexts), the rest in this English.
 var messageTexts = map[string]string{
-	"rbacInput":     "Check the target, namespace selection and API request fields",
-	"cannotChange":  "objects of this target cannot be changed",
-	"noAction":      "no such action: {kind} has no action {action}",
-	"unknownKind":   "no such action: unknown kind {kind}",
-	"sessionClosed": "the session closed meanwhile; try again",
-	"configChanged": "the configuration of {target} changed since the action was reviewed; review it again",
-	"loginNeeded":   "a login to the cluster is needed to go on: select the target and press Connect",
-	"closedByUser":  "the connection to the target was closed",
-	"loginByPerson": "a login to the cluster is done by a person: select the target in Ocular and press Connect",
+	"compareUnavailable": "Comparison requires two UID-pinned resources on unchanged connected targets and valid single-object YAML within 1 MiB, 20000 lines and depth 64",
+	"rbacInput":          "Check the target, namespace selection and API request fields",
+	"cannotChange":       "objects of this target cannot be changed",
+	"noAction":           "no such action: {kind} has no action {action}",
+	"unknownKind":        "no such action: unknown kind {kind}",
+	"sessionClosed":      "the session closed meanwhile; try again",
+	"configChanged":      "the configuration of {target} changed since the action was reviewed; review it again",
+	"loginNeeded":        "a login to the cluster is needed to go on: select the target and press Connect",
+	"closedByUser":       "the connection to the target was closed",
+	"loginByPerson":      "a login to the cluster is done by a person: select the target in Ocular and press Connect",
 }
 
 // apiMessage is the API's sentence key as a message (no params).

@@ -1,3 +1,4 @@
+import {ComparisonTools} from '../compare/ComparisonTools'
 import { DeploymentRevisions } from './DeploymentRevisions'
 import { LinkArrowIcon } from './icons'
 import { ToolDialog } from './ToolDialog'
@@ -214,7 +215,7 @@ export function ResourceDrawer({ client, hub, target, subject, initialTab, onTab
   const actions = actionsOf?.(current.kind) ?? []
   // The object shown now (after relation navigation: that one), with the UID read.
   // A deleted object has nothing to open or act on.
-  const hasTools = !shown?.gone && (!!r?.rbacSubject || (!!onLogs && !!hasLogs?.(current.kind)) || (!!onTerminal && !!hasExec?.(current.kind)) || (!!onAction && actions.length > 0) || !!editableOf?.(current.kind))
+  const hasTools = !shown?.gone && (!!r?.ref.uid || !!r?.rbacSubject || (!!onLogs && !!hasLogs?.(current.kind)) || (!!onTerminal && !!hasExec?.(current.kind)) || (!!onAction && actions.length > 0) || !!editableOf?.(current.kind))
   // Shown by its title (a container's name) once read; the key stays the name.
   const title = refTitle(r?.ref ?? current)
   const shownRef = (): Ref => ({ ...(r?.ref ?? current), provider: target.provider, target: target.id })
@@ -273,6 +274,7 @@ export function ResourceDrawer({ client, hub, target, subject, initialTab, onTab
         </div>
         {hasTools && (
           <div className="drawer-tools" inert={loading}>
+            {shown?.r?.ref.uid&&!shown.error&&<ComparisonTools subject={shownRef()}/>}
             {r?.rbacSubject && <button className={toolBtn} onClick={()=>setAccess({subject:r.rbacSubject})}>{t('rbac.permissions')}</button>}
             {onLogs && hasLogs?.(current.kind) && (
               <button

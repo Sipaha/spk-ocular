@@ -570,3 +570,15 @@ bounded pending buffer and are applied on release. This avoids rebuilding a larg
 log window on every resize frame. Width-only changes do not remeasure fixed-height
 unwrapped rows. Wheel input releases a stale selection drag if WebKit missed
 mouseup, and stops caret correction from pulling the scroll position back.
+
+## Resource comparison
+
+In resource properties, use **Use as comparison baseline**, then open another
+resource (also on another connected target) and choose **Compare with baseline**.
+The read-only dialog compares normalized saved YAML, preserving meaningful fields
+and array order. **Show service fields and status** includes otherwise hidden
+Kubernetes metadata and status. Secret payloads remain excluded. **Refresh**
+reads both UID-pinned objects again; editor drafts remain untouched. See
+[resource comparison](resource-comparison.md) for identity, normalization and
+retention boundaries. This feature is implemented in development builds and is
+not yet released.

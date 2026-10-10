@@ -1,3 +1,4 @@
+import type {CompareRequest,ResourceComparison} from './types'
 import type { RBACRequest, RBACSnapshot, AccessRequest, AccessReview } from './types'
 import type { ClusterGraph, GraphRequest, ClusterTimeline, TimelineRequest } from './types'
 import type { FilesRequest, FilesResponse } from './types'
@@ -22,6 +23,7 @@ export class ApiError extends Error {
 }
 
 export interface Client {
+ compareResources(req:CompareRequest,signal?:AbortSignal):Promise<ResourceComparison>
  rbacSnapshot(req: RBACRequest, signal?: AbortSignal): Promise<RBACSnapshot>
  checkAccess(req: AccessRequest, signal?: AbortSignal): Promise<AccessReview>
  clusterTimeline(req: TimelineRequest, signal?: AbortSignal): Promise<ClusterTimeline>
@@ -190,6 +192,7 @@ export const httpClient: Client = {
   closeView: (viewId) => done(post('CloseView', { viewId })),
   resyncView: (viewId) => done(post('ResyncView', { viewId })),
   touchViews: (viewIds) => post('TouchViews', { viewIds }),
+  compareResources: (req,signal) => post('CompareResources',req,signal),
   getResource: (ref) => post('GetResource', ref),
   getMetrics: (viewId, rowIds, signal) => post('GetMetrics', { viewId, rowIds, seq: nextMetricsSeq() }, signal),
   getTargetState: (provider, target) => post('GetTargetState', { provider, target }),
@@ -323,6 +326,7 @@ export const wailsClient: Client = {
   closeView: (viewId) => wcall('CloseView', viewId),
   resyncView: (viewId) => wcall('ResyncView', viewId),
   touchViews: (viewIds) => wcall('TouchViews', viewIds),
+  compareResources: (req,signal) => wcallAbortable(signal,'CompareResources',req),
   getResource: (ref) => wcall('GetResource', ref),
   getMetrics: (viewId, rowIds, signal) => {
     const seq = nextMetricsSeq()

@@ -936,7 +936,25 @@
     "files.expand": "Expandir {path}",
     "files.collapse": "Contraer {path}",
     "files.folderMenu": "Carpeta {path}",
-    "files.absolutePath": "Introduce una ruta absoluta a una carpeta."
+    "files.absolutePath": "Introduce una ruta absoluta a una carpeta.",
+    "compare.title": "Comparar recursos",
+    "compare.pin": "Usar como base de comparación",
+    "compare.with": "Comparar con la base",
+    "compare.baseline": "Base de comparación",
+    "compare.clear": "Borrar base",
+    "compare.pickOther": "Abra otro recurso para comparar",
+    "compare.connectionChanged": "La conexión se cerró o cambió. Vuelva a conectarse y seleccione los recursos de nuevo.",
+    "compare.left": "Izquierda · base",
+    "compare.right": "Derecha · recurso comparado",
+    "compare.snapshotHint": "Instantáneas de solo lectura de objetos guardados, leídas por separado. No se comparan cambios sin guardar. Actualizar vuelve a leer ambos objetos.",
+    "compare.normalizationHint": "Se ordenan las claves; se conservan el orden de las listas, los nombres, los espacios de nombres y las anotaciones relevantes. No se recuperan campos omitidos por el proveedor.",
+    "compare.differentKinds": "Distintos tipos de recursos o proveedores: los esquemas pueden diferir.",
+    "compare.serviceFields": "Mostrar campos de gestión y estado",
+    "compare.omitted": "Campos de gestión ocultos: {count}",
+    "compare.secretExcluded": "El contenido de Secret y las máscaras de tamaño se excluyen en ambos modos. Metadatos iguales no implican valores de Secret iguales.",
+    "compare.identical": "No hay diferencias en los campos comparados",
+    "compare.diff": "Diferencias de YAML normalizado",
+    "compare.captured": "Leído a las {time}"
   },
   "provider": {
     "kubernetes.rbac.source": "No se pudo leer la fuente RBAC ({class})",
@@ -1248,6 +1266,7 @@
     "api.loginNeeded": "se necesita iniciar sesión en el clúster para continuar: seleccione el objetivo y presione Conectar",
     "api.closedByUser": "la conexión al objetivo fue cerrada",
     "api.loginByPerson": "se ha iniciado sesión en el clúster por una persona: seleccione el objetivo en Ocular y presione Conectar",
-    "api.rbacInput": "Revise destino, espacios seleccionados y campos de la solicitud API"
+    "api.rbacInput": "Revise destino, espacios seleccionados y campos de la solicitud API",
+    "api.compareUnavailable": "Se requieren dos recursos con UID fijo en conexiones sin cambios y YAML válido de un objeto de hasta 1 MiB, 20000 líneas y profundidad 64"
   }
 }

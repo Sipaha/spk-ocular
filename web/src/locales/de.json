@@ -936,7 +936,25 @@
     "files.expand": "{path} aufklappen",
     "files.collapse": "{path} zuklappen",
     "files.folderMenu": "Ordner {path}",
-    "files.absolutePath": "Geben Sie einen absoluten Verzeichnispfad ein."
+    "files.absolutePath": "Geben Sie einen absoluten Verzeichnispfad ein.",
+    "compare.title": "Ressourcen vergleichen",
+    "compare.pin": "Als Vergleichsbasis verwenden",
+    "compare.with": "Mit Basis vergleichen",
+    "compare.baseline": "Vergleichsbasis",
+    "compare.clear": "Basis löschen",
+    "compare.pickOther": "Zum Vergleichen eine weitere Ressource öffnen",
+    "compare.connectionChanged": "Verbindung geschlossen oder geändert. Erneut verbinden und Ressourcen neu auswählen.",
+    "compare.left": "Links · Basis",
+    "compare.right": "Rechts · Vergleichsressource",
+    "compare.snapshotHint": "Schreibgeschützte, getrennt gelesene Momentaufnahmen gespeicherter Objekte. Ungespeicherte Änderungen werden nicht verglichen. Aktualisieren liest beide erneut.",
+    "compare.normalizationHint": "Schlüssel werden sortiert; Array-Reihenfolge, Namen, Namespaces und relevante Annotationen bleiben erhalten. Vom Anbieter ausgelassene Felder können nicht wiederhergestellt werden.",
+    "compare.differentKinds": "Verschiedene Ressourcenarten oder Anbieter: Schemas können abweichen.",
+    "compare.serviceFields": "Verwaltungsfelder und Status anzeigen",
+    "compare.omitted": "Ausgeblendete Verwaltungsfelder: {count}",
+    "compare.secretExcluded": "Secret-Inhalte und Größenmasken sind in beiden Modi ausgeschlossen. Gleiche Metadaten bedeuten keine gleichen Secret-Werte.",
+    "compare.identical": "Keine Unterschiede in den verglichenen Feldern",
+    "compare.diff": "Unterschiede im normalisierten YAML",
+    "compare.captured": "Gelesen um {time}"
   },
   "provider": {
     "kubernetes.rbac.source": "RBAC-Quelle konnte nicht gelesen werden ({class})",
@@ -1248,6 +1266,7 @@
     "api.loginNeeded": "Ein Login in den Cluster ist erforderlich, um fortzufahren: Wählen Sie das Ziel aus und drücken Sie Verbinden",
     "api.closedByUser": "Die Verbindung zum Ziel wurde vom Benutzer geschlossen",
     "api.loginByPerson": "Ein Login in den Cluster wurde von einer Person durchgeführt: Wählen Sie das Ziel in Ocular aus und drücken Sie Verbinden",
-    "api.rbacInput": "Ziel, Namespace-Auswahl und API-Anfragefelder prüfen"
+    "api.rbacInput": "Ziel, Namespace-Auswahl und API-Anfragefelder prüfen",
+    "api.compareUnavailable": "Der Vergleich erfordert zwei UID-gebundene Ressourcen mit unveränderten Verbindungen und gültiges YAML eines Objekts bis 1 MiB, 20000 Zeilen und Tiefe 64"
   }
 }
