@@ -36,7 +36,7 @@ try{
   await page.goto(root+(lang==='en'?'en/':''),{waitUntil:'networkidle'});
   await expect(page.locator('html')).toHaveAttribute('data-theme',theme);
   await expect(page.locator('html')).toHaveAttribute('lang',lang);
-  const about='https://sipaha.github.io/about/'+(lang==='ru'?'?lang=ru':`${lang}/`);
+  const about='https://sipaha.github.io/about/';
   await expect(page.locator('.author-link')).toHaveAttribute('href',about);
   await expect(page.locator('.support-link')).toHaveAttribute('href',about+'#support');
   await expect(page.locator('.support-link')).toBeVisible();

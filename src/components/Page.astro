@@ -9,7 +9,7 @@ interface Props { lang: Lang; }
 const { lang } = Astro.props;
 const d = copy(lang);
 const base = '/spk-ocular/';
-const about = 'https://sipaha.github.io/about/' + (lang === 'ru' ? '?lang=ru' : `${lang}/`);
+const about = 'https://sipaha.github.io/about/';
 const docs = REPO + '/blob/master/docs/usage.md';
 const agentDocs = REPO + '/blob/master/docs/agent-api.md';
 const shots = ['workloads', 'logs', 'helm', 'docker'];

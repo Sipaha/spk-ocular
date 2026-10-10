@@ -28,7 +28,7 @@ try {
   await page.route(API,r=>r.fulfill({json:{tag_name:'v0.1.0',assets}}));
   await page.goto(origin+pagePath(lang,base),{waitUntil:'networkidle'});
   await expect(page.locator('html')).toHaveAttribute('lang',lang);
-  const about='https://sipaha.github.io/about/'+(lang==='ru'?'?lang=ru':`${lang}/`);
+  const about='https://sipaha.github.io/about/';
   await expect(page.locator('.author-link')).toHaveAttribute('href',about);
   await expect(page.locator('.support-link')).toHaveAttribute('href',about+'#support');
   await expect(page.locator('.support-link')).toBeVisible();

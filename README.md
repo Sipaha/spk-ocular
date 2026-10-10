@@ -50,8 +50,8 @@ through voluntary cryptocurrency donations. Donations never unlock features.
 The support section explains this policy and links to the owner’s personal
 about site at `#support`, where donation details are maintained. The footer has
 an About the author link. Desktop and mobile header navigation also include a
-short Support link directly to the donation section. Both links target the matching about locale; Russian
-uses an explicit `?lang=ru` choice. Wallet addresses and QR codes are not duplicated
+short Support link directly to the donation section. Author and support links use the language-neutral about root; the destination
+chooses its own language from saved choice and browser preferences. Wallet addresses and QR codes are not duplicated
 on the Ocular website.
 
 Local agent grants apply to processes running as the same OS user. Do not imply
