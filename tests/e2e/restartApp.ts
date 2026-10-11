@@ -62,4 +62,3 @@ export const start = async (port: number, e: ReturnType<typeof env>): Promise<Ch
     throw new Error(`app did not start: ${stderr}`, { cause: error })
   }
 }
-
