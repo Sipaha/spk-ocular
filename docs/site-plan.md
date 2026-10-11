@@ -12,17 +12,17 @@ publish application releases or authorize wallet publication.
 Public website feature descriptions must correspond to features included in a
 published application release. Unreleased feature announcements are not approved.
 The file-inspector section is retained at the owner's request; its copy matches
-the released 1.1.2 implementation.
+the released implementation.
 
 The released-capability copy explains direct Kubernetes API access without
 kubectl, embedded Helm SDK use without a separate Helm CLI, and Ctrl+K/Command+K
 navigation. kubeconfig-configured external authentication helpers remain required.
-All eight locales describe these released v1.1.2 capabilities without competitor
+All eight locales describe released capabilities without competitor
 comparisons or exclusivity claims.
 
 ## Implemented presentation
 
-The Astro website retains Russian and English routes, light/dark themes,
+The Astro website provides eight localized routes, light/dark themes,
 canonical/hreflang/OG metadata, bundled fonts and progressive enhancement.
 Its main message is **Kubernetes and Docker in one workspace**, supported
 by real product screens and daily tasks rather than connection-button mechanics.
@@ -34,9 +34,14 @@ The page now presents:
 - A large localized app screenshot with a concrete task caption.
 - Investigation through resource health, events, relationships, configuration and
   read-only Deployment revision comparison.
-- Related logs, search, native log windows, plain-text exports, instance/container
-  selection, terminals and port forwarding, without promising complete observation
-  or unrestricted log history.
+- Related logs, search, native log windows and full retained-source history
+  downloads independent of viewer filters, with progress/cancellation and explicit
+  retention/export/incomplete-read limits; Copy keeps its filtered-buffer behavior.
+  Instance/container selection, terminals and port forwarding remain available.
+- A cluster graph of UID relationships and declared routes, bounded Events
+  Timeline snapshots, RBAC provenance with separate self-only server decisions,
+  saved-resource YAML comparison excluding Secret payloads/drafts, and metadata-only
+  workspace continuity with explicit connection/resume and no command replay.
 - A cached container file tree, symlink navigation, protected UTF-8 editing and
   native streamed file/folder downloads with explicit runtime requirements.
 - Docker standalone containers with Compose project/service grouping, with the
@@ -49,7 +54,7 @@ The page now presents:
   requirements, signature status and visible FAQ answers.
 - A three-step installation guide and separate release/development download paths.
 
-Screenshots show version 1.1.2 on an isolated local Kubernetes
+Screenshots show version 1.2.0 on an isolated local Kubernetes
 fixture and a verified disposable Docker engine, including standalone containers
 and Compose grouping; Helm uses a separately labeled synthetic fixture. Screenshots are real
 app captures, not reconstructed mockups. Stable packages are
@@ -101,7 +106,7 @@ not evidence of measured conversion uplift for Ocular.
 ## Verification and feedback
 
 The website's `make check` runs release logic tests, Astro checks/build and real
-browser checks across both languages, themes and desktop/tablet/mobile widths.
+browser checks across all eight languages, themes and desktop/tablet/mobile widths.
 The browser verifier covers image loading, keyboard gallery navigation, theme
 persistence, WCAG AA checks, free-use messaging, mobile navigation, anchors,
 no-JavaScript rendering, API failure and package/architecture/checksum selection.
@@ -116,10 +121,11 @@ remain separate decisions; no collection is implied. Prefer useful task guides,
 truthful demonstrations and tested package channels to broad AI claims.
 
 The container file inspector section uses fresh RU/EN screenshots from an
-isolated Docker demo project with an expanded application tree. Its 1.1.2 copy
+isolated Docker demo project with an expanded application tree. Its copy
 describes syntax highlighting, save protection, symlink navigation and streamed
 native file/folder copies, with explicit sh/readlink/tar, editor-size, desktop-only
-and destination-collision requirements. All twelve product images and both social
-cards are refreshed; versioned image URLs avoid stale cached media.
+and destination-collision requirements. All twenty-two RU/EN product images and
+both social cards are refreshed; versioned image URLs avoid stale cached media.
+The other six locales disclose their English screenshot UI.
 The owner's public-copy preference is to describe Ocular's own capabilities
 without named competitor comparisons or claims of exclusivity.

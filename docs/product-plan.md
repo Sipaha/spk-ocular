@@ -8,7 +8,7 @@ Make Ocular an effective daily operations workspace for engineers moving between
 
 The proposed primary audience is hands-on developers and small platform/SRE teams; consultants managing several environments and engineers using local coding agents are secondary audience hypotheses. Ocular should initially earn repeat use for specific tasks. Enterprise fleet governance, a container runtime and a CI/CD platform are different products.
 
-The published website currently presents **Kubernetes and Docker in one workspace**, with real development-build screens and dedicated investigation, logs, Helm and agent-access sections. A recorded agent grant/review demonstration remains a possible addition. Local operation, open licensing, native presentation and AI integration are useful attributes, but none is established as unique.
+The published website currently presents **Kubernetes and Docker in one workspace**, with real 1.2.0 application screens and dedicated investigation, logs, Helm and agent-access sections. A recorded agent grant/review demonstration remains a possible addition. Local operation, open licensing, native presentation and AI integration are useful attributes, but none is established as unique.
 
 The application now includes standalone Docker containers as well as Compose
 projects. The confirmed terminology direction is **Kubernetes and Docker**, with
