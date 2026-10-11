@@ -147,7 +147,7 @@ test('logs of a pod from its details; previous of a crash-looping one', async ({
   // Read while the crash-looping container restarts, the kubelet answers
   // "unable to retrieve container logs for containerd://…" (the previous
   // container was just replaced): read it again then.
-  const previous = logPanel(page).getByRole('button', { name: 'Previous' })
+  const previous = logPanel(page).getByRole('button', { name: 'Previous', exact: true })
   await expect(async () => {
     if ((await previous.getAttribute('aria-pressed')) === 'true') await previous.click()
     await previous.click()

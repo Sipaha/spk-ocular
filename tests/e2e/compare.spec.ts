@@ -76,7 +76,7 @@ test('service fields switch within the same snapshots; Secret exclusions and all
  const names={en:'English',ru:'Русский',zh:'简体中文',es:'Español',de:'Deutsch',fr:'Français',pt:'Português (Brasil)',ja:'日本語'}
  for(const [code,name] of Object.entries(names)){
   await page.locator('.language-menu button').click();await page.getByRole('option',{name,exact:true}).click();await expect(page.locator('html')).toHaveAttribute('lang',code)
-  await page.locator('.drawer-tools button').filter({hasText:/^(Compare with baseline|Сравнить с базой|与基准比较|Comparar con la base|Mit Basis vergleichen|Comparer avec la base|Comparar com a base|基準と比較)$/}).click()
+  await page.locator('.drawer-tools').getByRole('button',{name:/^(Compare with baseline|Сравнить с базой|与基准比较|Comparar con la base|Mit Basis vergleichen|Comparer avec la base|Comparar com a base|基準と比較)$/,exact:true}).click()
   const modal=page.locator('[aria-modal="true"]');await expect(modal).toContainText('web');await expect(modal.getByRole('checkbox')).toBeVisible()
   await page.screenshot({path:join(scratchRoot,'comparison-'+code+'.png')});await page.keyboard.press('Escape')
  }

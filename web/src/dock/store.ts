@@ -1,3 +1,4 @@
+import {fitsPins, type WorkspaceSnapshot} from '../workspace/snapshot'
 import { create } from 'zustand'
 import type { Ref, TargetRef } from '../api/types'
 import { refTitle } from '../refs'
@@ -23,6 +24,9 @@ interface TabBase {
   target: TargetRef
   targetTitle: string
   title: string
+  /** Explicitly retained as metadata across application restarts. */
+  pinned?: boolean
+  dormant?: boolean
 }
 
 export interface LogsTab extends TabBase {
@@ -40,7 +44,9 @@ export interface TermTab extends TabBase {
   rev?: string
 }
 
-export type DockTab = LogsTab | TermTab
+export interface PropertiesTab extends TabBase {kind:'properties';ref:Ref;detailsTab?:'details'|'yaml';openEpoch?:number}
+export interface RestoredTerminalTab extends TabBase {kind:'term-restored';ref:Ref}
+export type DockTab = LogsTab | TermTab | PropertiesTab | RestoredTerminalTab
 
 export interface DockState {
   tabs: DockTab[]
@@ -58,18 +64,31 @@ const targetKey = (t: TargetRef) => `${t.provider}/${t.id}`
 let termSeq = 0
 
 function activate(tab: DockTab) {
-  useDock.setState((s) => ({ tabs: s.tabs.some((x) => x.id === tab.id) ? s.tabs : [...s.tabs, tab], active: tab.id }))
+  useDock.setState((s) => ({ tabs: s.tabs.some((x) => x.id === tab.id) ? s.tabs.map(x=>x.id===tab.id?{...tab,pinned:x.pinned,dormant:false}:x) : [...s.tabs, tab], active: tab.id }))
 }
 
 export const dock = {
+  pin(id:string):boolean {
+    const state=useDock.getState();const tabs=state.tabs.map(t=>t.id===id?{...t,pinned:!t.pinned}:t);if(!fitsPins(tabs))return false;useDock.setState({tabs});return true
+  },
+  openProperties(target:TargetRef,targetTitle:string,ref:Ref,detailsTab:'details'|'yaml'='details'):boolean {
+    const tab:PropertiesTab={kind:'properties',id:`properties:${targetKey(target)}:${refKey(ref)}`,target,targetTitle,ref:{...ref,provider:target.provider,target:target.id},title:`${ref.kind.split('/').pop()}/${refTitle(ref)}`,detailsTab,pinned:true};
+    const state=useDock.getState();const tabs=state.tabs.some(t=>t.id===tab.id)?state.tabs.map(t=>t.id===tab.id?{...tab,openEpoch:t.kind==='properties'?(t.openEpoch??0)+1:1}:t):[...state.tabs,tab];if(!fitsPins(tabs))return false;useDock.setState({tabs,active:tab.id});return true
+  },
+  propertiesTab(id:string,detailsTab:string){if(detailsTab!=='details'&&detailsTab!=='yaml')return;const current=useDock.getState().tabs.find(t=>t.id===id);if(current?.kind!=='properties'||current.detailsTab===detailsTab)return;useDock.setState(s=>({tabs:s.tabs.map(t=>t.id===id&&t.kind==='properties'?{...t,detailsTab}:t)}))},
+  resumeLogs(id:string){useDock.setState(s=>({tabs:s.tabs.map(t=>t.id===id&&t.kind==='logs'?{...t,dormant:false}:t)}))},
+  restore(snapshot:WorkspaceSnapshot){
+    const state=useDock.getState();const restored:DockTab[]=snapshot.panels.map((p,i)=>{const target={provider:p.ref.provider,id:p.ref.target};const common={target,targetTitle:p.ref.target,ref:p.ref,title:`${p.ref.kind.split('/').pop()}/${p.ref.name}`,pinned:true,dormant:true};return p.kind==='logs'?{...common,kind:'logs',id:`logs:${targetKey(target)}:${refKey(p.ref)}${p.channel?`:${p.channel}`:''}`,channel:p.channel}:p.kind==='properties'?{...common,kind:'properties',id:`properties:${targetKey(target)}:${refKey(p.ref)}`,detailsTab:p.tab}: {...common,kind:'term-restored',id:`restored-terminal:${i}:${targetKey(target)}:${refKey(p.ref)}`}});
+    const tabs=[...state.tabs.map(t=>restored.some(r=>r.id===t.id)?{...t,pinned:true}:t),...restored.filter(t=>!state.tabs.some(old=>old.id===t.id))];useDock.setState({tabs,active:state.active??restored[snapshot.active]?.id??null})
+  },
   /** One log tab per object, target and explicit channel; reopening activates it. */
   openLogs(target: TargetRef, targetTitle: string, ref: Ref, channel?: string) {
-    activate({ kind: 'logs', id: `logs:${targetKey(target)}:${refKey(ref)}${channel ? `:${channel}` : ''}`, target, targetTitle, ref, channel, title: `${ref.kind.split('/').pop()}/${refTitle(ref)}` })
+    activate({ kind: 'logs', id: `logs:${targetKey(target)}:${refKey(ref)}${channel ? `:${channel}` : ''}`, target, targetTitle, ref:{...ref,provider:target.provider,target:target.id}, channel, title: `${ref.kind.split('/').pop()}/${refTitle(ref)}` })
   },
   /** Every open is a new terminal (two shells in one pod are normal). */
   openTerminal(target: TargetRef, targetTitle: string, open: TermOpen, title = refTitle(open.ref)) {
     termSeq++
-    activate({ kind: 'term', id: `term:${targetKey(target)}:${refKey(open.ref)}:${termSeq}`, target, targetTitle, open, title })
+    activate({ kind: 'term', id: `term:${targetKey(target)}:${refKey(open.ref)}:${termSeq}`, target, targetTitle, open:{...open,ref:{...open.ref,provider:target.provider,target:target.id}}, title })
   },
   update(id: string, patch: Partial<Pick<TermTab, 'title' | 'hint' | 'rev'>>) {
     useDock.setState((s) => ({ tabs: s.tabs.map((t) => (t.id === id ? { ...t, ...patch } : t)) }))

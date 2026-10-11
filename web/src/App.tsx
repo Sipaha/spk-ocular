@@ -1,3 +1,4 @@
+import {useWorkspacePersistence,useWorkspaceStatus} from './workspace/persistence'
 import {clearComparison} from './compare/store'
 import Comparison from './compare/Comparison'
 import { useEffect, useMemo, useState, useRef } from 'react'
@@ -13,7 +14,6 @@ import { AppHeader } from './components/AppHeader'
 import { StatusBar } from './components/StatusBar'
 import { EmptyWorkspace } from './components/TargetDetails'
 import { Dock } from './dock/Dock'
-import { dock } from './dock/store'
 import { TunnelsPanel } from './tunnels/TunnelsPanel'
 import { tunnelLoader } from './tunnels/store'
 import { Palette } from './palette/Palette'
@@ -29,6 +29,8 @@ import { agentLoaders, agents, useAgents } from './agents/store'
 
 export function App({ client }: { client: Client }) {
   useEffect(()=>clearComparison,[client])
+  useWorkspacePersistence(client)
+  const workspaceStatus=useWorkspaceStatus()
   const act = useMemo(() => actions(client), [client])
   const configRef = useRef<ConfigurationActions>(null)
   const connect = () => {
@@ -62,26 +64,6 @@ export function App({ client }: { client: Client }) {
   const nextWorkspaceKey = showWorkspace ? key : null
   if (workspaceKey !== nextWorkspaceKey) setWorkspaceKey(nextWorkspaceKey)
   const loadError = useStore((s) => s.loadError)
-  const targetProvider = target?.provider
-  const targetId = target?.id
-
-  // A selected target: the bottom panel's height is remembered per target.
-  // Its log and terminal tabs stay across switches (recent targets keep
-  // their sessions in the background; a closed session ends its log tabs).
-  useEffect(() => {
-    if (!targetProvider || !targetId) return
-    let live = true
-    client.getTargetState(targetProvider, targetId).then(
-      (st) => {
-        const h = Number(st.logsHeight)
-        if (live && h > 0) dock.setHeight(h)
-      },
-      () => {},
-    )
-    return () => {
-      live = false
-    }
-  }, [client, targetProvider, targetId])
 
   useEffect(() => {
     const off = client.subscribeEvents((e) => {
@@ -155,6 +137,7 @@ export function App({ client }: { client: Client }) {
   return (
     <div className="relative flex h-full flex-col">
       <AppHeader client={client} target={target} onHelp={() => setHelp(true)} onAbout={() => setAbout(true)} />
+      {workspaceStatus.error&&<div role="alert" className="flex shrink-0 flex-wrap items-center gap-2 border-b border-line px-3 py-1 text-xs text-warning" data-workspace-error>{t(`workspace.error.${workspaceStatus.error}`)}<button className="text-accent" onClick={workspaceStatus.retry}>{t('workspace.retry')}</button>{!workspaceStatus.ready&&<button className="text-accent" onClick={workspaceStatus.reset}>{t('workspace.reset')}</button>}</div>}
       <div className="flex min-h-0 flex-1">
         <Sidebar act={act} client={client} configRef={configRef} />
         <div className="flex min-w-0 flex-1 flex-col">
@@ -175,11 +158,10 @@ export function App({ client }: { client: Client }) {
           )}
           <Dock
             client={client}
+            hub={hub}
             current={target ? { provider: target.provider, id: target.id } : null}
             mode={info?.mode === 'desktop' ? 'desktop' : 'browser'}
-            onHeightDone={(h) => {
-              if (target) void client.setTargetState(target.provider, target.id, 'logsHeight', String(Math.round(h))).catch(() => {})
-            }}
+            onHeightDone={() => {}}
           />
         </div>
       </div>

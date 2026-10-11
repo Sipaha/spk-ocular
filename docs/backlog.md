@@ -11,33 +11,36 @@ site and download-journey work separately from application features.
 
 ## Investigation workbench
 
-Events Timeline, RBAC explanation and resource comparison are implemented in
-development builds. The remaining items follow the agreed feature shortlist; the list does not authorize publication.
+Events Timeline, RBAC explanation, resource comparison and workspace continuity
+are implemented from 1.2.0. The remaining items follow the agreed
+feature shortlist; the list does not authorize publication.
 Implementation scope for each subsequent feature is selected separately.
 
 - [x] **[Events Timeline](events-timeline.md):** explicit bounded Events API
   snapshots/Refresh, UID-based workload ownership groups, warning/kind/time
   filters and standard resource properties/log navigation. API retention, partial
-  coverage and cumulative series semantics are disclosed. Not yet released.
+  coverage and cumulative series semantics are disclosed. Included from 1.2.0.
 - [ ] **Persistent observed timeline:** bounded local observation history with
   visible gaps, UID replacement and retention, without retrospective audit claims.
 - [x] **[RBAC explanation](rbac-explanation.md):** ServiceAccount declaration
   provenance, current-connection server access checks, guarded source navigation
   and Forbidden resource-read inspection. Partial coverage and authorization
-  boundaries are explicit. Implemented in development builds; not yet released.
+  boundaries are explicit. Included from 1.2.0.
 - [ ] **Security and NetworkPolicy inspection:** show policy selection and
   declared connectivity alongside risky security contexts and RBAC. Declarative
   analysis must not claim proven packet reachability or exploitability.
 - [x] **[Resource/environment comparison](resource-comparison.md):** explicitly
   selected UID-pinned resources across connected targets, normalized saved YAML
   diff and optional service fields/status. Read-only, with Secret payloads
-  excluded. Implemented in development builds; not yet released.
+  excluded. Included from 1.2.0.
 - [ ] **GitOps awareness:** show known Argo CD ownership/source/revision/sync
   context and explain reconciliation before edits.
 - [ ] **Historical metrics:** connect to an existing Prometheus and link existing
   Grafana dashboards; no implicit collector installation.
-- [ ] **Investigation workspace continuity:** pinned properties/logs and restored
-  layouts, without replaying commands or silently retaining sensitive drafts.
+- [x] **[Investigation workspace continuity](workspace-continuity.md):** pinned
+  resource/log references, ended terminal slots and restored layouts. Explicit
+  connection/resume, UID guards, no command replay or persisted contents/drafts.
+  Included from 1.2.0.
 - [ ] **Optional integrated AI assistant:** reuse explicit agent grants and change
   review; provider/context privacy and local models need a separate design.
 
@@ -77,7 +80,8 @@ Ocular's features remain free; competitor packaging does not change that policy.
 
 ## Workspace and streams
 
-- Persisted column order and restored log/terminal tabs across application restarts.
+- Persisted column order; pinned log references and ended terminal slots already
+  have [workspace continuity](workspace-continuity.md), without session replay.
 - Additional rollout-container log sources and selection/highlighting refinements.
 - Hidden/minimized WebKit stream behavior and high-volume terminal memory analysis.
 - Session recording and cleanup of abandoned reconnect prototypes.

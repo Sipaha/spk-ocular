@@ -1,5 +1,7 @@
 """Exercise missing/proprietary input failures and preservation of nested notices."""
 import json
+import os
+import runpy
 from pathlib import Path
 import subprocess
 import sys
@@ -40,6 +42,51 @@ class LicenseInputs(unittest.TestCase):
             modules, standard_dirs = licenses.package_graph()
         self.assertEqual(modules, {})
         self.assertEqual(standard_dirs, {Path('runtime/“quoted”')})
+
+    def test_real_go_graph_accepts_missing_empty_and_existing_embed_assets(self):
+        with tempfile.TemporaryDirectory() as scratch:
+            root = Path(scratch)
+            command = root / 'cmd/spk-ocular'
+            command.mkdir(parents=True)
+            (root / 'go.mod').write_text('module example.test/license-fixture\n\ngo 1.26.9\n')
+            (command / 'main.go').write_text('package main\nimport "embed"\n//go:embed all:dist\nvar assets embed.FS\nfunc main() {}\n')
+            temporary = root / 'scratch'
+            for state in ('missing', 'empty', 'existing'):
+                with self.subTest(state=state):
+                    dist = command / 'dist'
+                    if state != 'missing':
+                        dist.mkdir(exist_ok=True)
+                    if state == 'existing':
+                        (dist / '.gitkeep').write_bytes(b'local placeholder content')
+                        (dist / 'index.html').write_bytes(b'local staged frontend')
+                    before = {p.name: p.read_bytes() for p in dist.iterdir()} if dist.exists() else None
+                    if state != 'existing':
+                        result = subprocess.run(['go', 'list', './cmd/spk-ocular'], cwd=root,
+                                                capture_output=True, text=True, env={**os.environ, 'GOOS': 'linux', 'GOARCH': 'amd64', 'CGO_ENABLED': '0'})
+                        self.assertNotEqual(result.returncode, 0)
+                        self.assertIn('dist', result.stderr)
+                    with patch.object(licenses, 'ROOT', root), patch.dict(os.environ, {'OCULAR_SCRATCH_DIR': str(temporary)}):
+                        modules, standard_dirs = licenses.package_graph()
+                    self.assertEqual(modules, {})
+                    self.assertTrue(standard_dirs)
+                    after = {p.name: p.read_bytes() for p in dist.iterdir()} if dist.exists() else None
+                    self.assertEqual(before, after)
+                    self.assertEqual(list(temporary.iterdir()), [])
+
+    def test_failed_go_graph_reports_stderr_and_cleans_its_overlay(self):
+        with tempfile.TemporaryDirectory() as scratch:
+            root = Path(scratch)
+            (root / 'packaging').mkdir()
+            (root / 'packaging/licenses.py').write_bytes(Path(licenses.__file__).read_bytes())
+            (root / 'web').mkdir()
+            (root / 'web/license-inputs.json').write_text(json.dumps({'schema': 1, 'packages': [{'name': 'fixture'}]}))
+            temporary = root / 'scratch'
+            failure = subprocess.CalledProcessError(1, ['go', 'list'], stderr='fixture dependency lookup failed\n')
+            with patch.dict(os.environ, {'OCULAR_SCRATCH_DIR': str(temporary)}), patch.object(subprocess, 'run', side_effect=failure), patch.object(sys, 'argv', ['licenses.py']):
+                with self.assertRaises(SystemExit) as raised:
+                    runpy.run_path(str(root / 'packaging/licenses.py'), run_name='__main__')
+            self.assertIn('fixture dependency lookup failed', str(raised.exception))
+            self.assertEqual(list(temporary.iterdir()), [])
 
     def test_missing_license_does_not_silently_drop_a_component(self):
         with tempfile.TemporaryDirectory() as scratch:

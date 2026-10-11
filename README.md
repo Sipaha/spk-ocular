@@ -28,10 +28,9 @@ not collect telemetry. Helm is embedded; a separate Helm CLI is not required.
 - Live resource tables, discovery of Kubernetes API resources, details, and metrics.
 - Multiple namespaces, global favorites, resource search, and saved table layouts.
 - [RBAC explanation](docs/rbac-explanation.md) with binding/role provenance and
-  self-only server access checks (development builds; not in published v1.1.2).
+  self-only server access checks (from 1.2.0).
 - [Events timeline](docs/events-timeline.md) for bounded, time-based workload
-  investigation with ownership groups and standard resource tools (development
-  builds; not in published v1.1.2).
+  investigation with ownership groups and standard resource tools (from 1.2.0).
 - [Cluster graph](docs/cluster-graph.md) with namespace regions, fast canvas navigation,
   resource details and an optional declared-route layer.
 - Standalone Docker containers and Compose project/service grouping.
@@ -164,6 +163,10 @@ and publication.
 [third-party notices](THIRD-PARTY-NOTICES.txt). Run `spk-ocular licenses` to read
 the notices embedded in a downloaded build.
 
-Resource comparison in development builds supports explicitly paired resources
+Resource comparison from 1.2.0 supports explicitly paired resources
 across connected targets, normalized saved YAML and optional service fields.
-See [resource comparison](docs/resource-comparison.md); it is not yet released.
+See [resource comparison](docs/resource-comparison.md); it is included from 1.2.0.
+
+[Workspace continuity](docs/workspace-continuity.md) from 1.2.0 retains
+pinned properties/log references, ended terminal slots and panel sizes across
+restarts, with explicit connection/resume and no saved contents or command replay.

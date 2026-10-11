@@ -16,6 +16,50 @@ class ReleaseInputs(unittest.TestCase):
             with self.subTest(value=value), self.assertRaises(ValueError):
                 release.version(value)
 
+    def test_isolated_binary_directory_reaches_make_and_nfpm(self):
+        from unittest.mock import patch
+        with tempfile.TemporaryDirectory() as scratch:
+            root = Path(scratch)
+            binaries = root / 'private binaries'
+            calls = []
+            configs = []
+            (root / 'source/packaging').mkdir(parents=True)
+            (root / 'source/packaging/nfpm.yaml').write_text('contents:\n  - src: build/bin/spk-ocular-release\n')
+
+            def checked(command, **kwargs):
+                if command[:2] == ['go', 'env']:
+                    return 'linux amd64'
+                if command[0] == 'git':
+                    return '1234' if '--format=%ct' in command else 'abc123'
+                return 'spk-ocular 1.2.0'
+
+            def run(command, **kwargs):
+                calls.append((command, kwargs))
+                if command[0] == 'nfpm':
+                    configs.append(Path(command[3]).read_text())
+                    Path(command[-1]).write_bytes(b'package')
+
+            def archive(path, entries, epoch):
+                path.write_bytes(b'archive')
+
+            with patch.object(release, 'ROOT', root / 'source'), \
+                    patch.object(release.subprocess, 'check_output', side_effect=checked), \
+                    patch.object(release.subprocess, 'run', side_effect=run), \
+                    patch.object(release, 'elf_arch', return_value='amd64') as elf, \
+                    patch.object(release, 'document_paths', return_value=[]), \
+                    patch.object(release, 'archive', side_effect=archive):
+                release.package('1.2.0', 'amd64', binaries)
+            self.assertIn(f'BIN_DIR={binaries}', calls[0][0])
+            self.assertEqual([call.args[0] for call in elf.call_args_list],
+                             [binaries / 'spk-ocular-release', binaries / 'spk-ocular'])
+            for command, kwargs in calls[1:]:
+                self.assertEqual(command[0], 'nfpm')
+            import json
+            self.assertEqual(len(configs), 2)
+            for config in configs:
+                self.assertIn('src: ' + json.dumps(str(binaries / 'spk-ocular-release')), config)
+            self.assertFalse(Path(calls[1][0][3]).exists())
+
     def test_archive_is_reproducible_and_does_not_capture_host_ownership(self):
         import tarfile
         with tempfile.TemporaryDirectory() as scratch:

@@ -96,3 +96,32 @@ export const WindowActionIcon = ({className, returning=false}: P & {returning?:b
     {returning ? <path d="m20 4-9 9m0-5v5h5"/> : <path d="m11 13 9-9"/>}
   </svg>
 )
+
+const actionPaths = {
+  pin: 'M9 3h6l-1 6 4 4v2H6v-2l4-4-1-6ZM12 15v6',
+  baseline: 'M4 3h10l4 4v3M14 3v5h4M4 3v18h6M13 12h7v9l-3.5-2-3.5 2Z',
+  compare: 'M3 4h7v16H3ZM14 4h7v16h-7ZM5 8h3m-3 4h3m8-4h3m-1.5-1.5v3M16 15h3',
+  permissions: 'M12 3 4 6v6c0 5 8 9 8 9s8-4 8-9V6ZM9 12l2 2 4-4',
+  logs: 'M4 4h16v16H4ZM8 8h8M8 12h8M8 16h5',
+  terminal: 'M3 4h18v16H3ZM7 9l3 3-3 3m6 0h4',
+  files: 'M3 7V5h6l2 3h10v12H3ZM3 8h8',
+  edit: 'm4 16 12-12 4 4L8 20H4ZM13 7l4 4',
+  actions: 'M5 12h.01M12 12h.01M19 12h.01',
+  reconnect: 'M20 11a8 8 0 0 0-14-5L3 9M3 4v5h5M4 13a8 8 0 0 0 14 5l3-3m0 5v-5h-5',
+  previous: 'M4 9a8 8 0 1 1-1 7M4 4v5h5m3-2v5l3 2',
+  time: 'M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18ZM12 7v5l3 2',
+  source: 'M4 4h6v6H4ZM14 4h6v6h-6ZM9 20h6v-6H9ZM7 10v2h10v-2m-5 2v2',
+  wrap: 'M4 6h16M4 11h12a4 4 0 0 1 0 8h-4m3-3-3 3 3 3M4 16h4',
+  copy: 'M8 8h12v13H8ZM16 8V3H3v13h5',
+  download: 'M12 3v12m-5-5 5 5 5-5M4 16v5h16v-5',
+  clear: 'M4 6h16M9 6V3h6v3M6 6l1 15h10l1-15M10 10v7m4-7v7',
+  regex: 'M5 16v.01M15 5v10m-4-8 8 6m-8 0 8-6',
+  up: 'M12 20V4m-6 6 6-6 6 6',
+  down: 'M12 4v16m-6-6 6 6 6-6',
+} as const
+export type ActionIconName = keyof typeof actionPaths
+
+/** Shared toolbar glyphs with the same stroke and size as the application icon set. */
+export const ActionIcon = ({name,className}:P & {name:ActionIconName}) => (
+  <svg viewBox="0 0 24 24" className={className??'h-4 w-4'} aria-hidden="true" fill="none" stroke="currentColor" strokeWidth={name==='actions'?3:1.8} strokeLinecap="round" strokeLinejoin="round"><path d={actionPaths[name]}/></svg>
+)

@@ -1,6 +1,9 @@
+import {dock} from '../dock/store'
+import {useWorkspaceStatus} from '../workspace/persistence'
 import {ComparisonTools} from '../compare/ComparisonTools'
 import { DeploymentRevisions } from './DeploymentRevisions'
-import { LinkArrowIcon } from './icons'
+import { ActionIcon, LinkArrowIcon } from './icons'
+import { ActionIconButton } from './ActionIconButton'
 import { ToolDialog } from './ToolDialog'
 import { prefetchToolInfo } from './toolInfo'
 import { useInstancePicker } from './useInstancePicker'
@@ -13,7 +16,7 @@ import { Menu } from '../actions/Menu'
 import { EditDialog, type EditReview } from '../edit/EditDialog'
 import { holdEdits, mayLeave } from '../edit/guard'
 import { actionLabel, classLabel, detailLabel, relationLabel, t } from '../i18n'
-import { showNotice } from '../store'
+import { showNotice, useStore } from '../store'
 import { inTerminal } from '../keyboard'
 import { consumed, focusMark, isTyping, overlayOpen, restoreFocus } from '../shortcuts'
 import { refTitle } from '../refs'
@@ -29,6 +32,7 @@ const FileBrowser = lazy(() => import('../files/FileBrowser'))
 const YamlView = lazy(() => import('./YamlView'))
 
 interface Props {
+  embedded?: boolean
   client: Client
   hub: ViewHub
   target: { provider: string; id: string }
@@ -68,7 +72,9 @@ const toolBtn = 'rounded-md border border-line px-2 py-0.5 text-xs text-fg-muted
 
 type Tab = 'details' | 'yaml'
 
-export function ResourceDrawer({ client, hub, target, subject, initialTab, onTab, onClose, hasLogs, onLogs, hasExec, onTerminal, hasForward, actionsOf, onAction, eventsKindOf, editableOf, valuesOf, kindTitleOf }: Props) {
+export function ResourceDrawer({ embedded = false, client, hub, target, subject, initialTab, onTab, onClose, hasLogs, onLogs, hasExec, onTerminal, hasForward, actionsOf, onAction, eventsKindOf, editableOf, valuesOf, kindTitleOf }: Props) {
+  const leave=(run:()=>void)=>embedded?run():mayLeave(run)
+  const workspaceReady=useWorkspaceStatus(s=>s.ready)
   const [access,setAccess]=useState<{subject?:Ref;failedRef?:Ref}|null>(null)
   const [filesOpen, setFilesOpen] = useState<{subject:Ref; instance:ExecInstance} | null>(null)
   const [filesDialog, setFilesDialog] = useState<Ref | null>(null)
@@ -96,6 +102,7 @@ export function ResourceDrawer({ client, hub, target, subject, initialTab, onTab
     client.getResource(current).then(
       (r) => {
         if (!live) return
+        if(embedded&&(!r?.ref||current.uid&&(r.ref.uid!==current.uid||r.ref.kind!==current.kind||r.ref.name!==current.name||(r.ref.scope??'')!==(current.scope??'')))){setRes({key,error:t('workspace.replaced'),gone:true});return}
         setRes({ key, r })
         if (touched.current !== key) {
           touched.current = key
@@ -118,7 +125,7 @@ export function ResourceDrawer({ client, hub, target, subject, initialTab, onTab
       live = false
     }
     // revision: refetch when the object changes (any field, not only table cells)
-  }, [client, current, key, revision, target.provider, target.id])
+  }, [client, current, key, revision, target.provider, target.id, embedded])
 
   // The edit of the object shown (its text as edited), by key: another
   // object never shows it. The editor opens on the YAML tab.
@@ -150,7 +157,7 @@ export function ResourceDrawer({ client, hub, target, subject, initialTab, onTab
   // Closing gives focus back to where details were opened from (else the table).
   const [mark] = useState(focusMark)
   const close = () =>
-    mayLeave(() => {
+    leave(() => {
       onClose()
       restoreFocus(mark)
     })
@@ -174,8 +181,8 @@ export function ResourceDrawer({ client, hub, target, subject, initialTab, onTab
     const ed = editRef.current
     if (ed && !reviewing) setReviewing({ ref: ed.doc.ref, base: ed.doc.base, original: ed.doc.text, edited: ed.text, kindTitle: kindTitleOf?.(current.kind) ?? current.kind })
   }
-  const cancelEdit = () => mayLeave(endEdit)
-  const back = () => mayLeave(() => { setStack(s => s.slice(0, -1)); setTab('details') })
+  const cancelEdit = () => leave(endEdit)
+  const back = () => leave(() => { setStack(s => s.slice(0, -1)); setTab('details') })
   const keys = useRef({ back, close, depth: stack.length, startEdit, review, cancelEdit, editing: !!editing })
   useEffect(() => {
     keys.current = { back, close, depth: stack.length, startEdit, review, cancelEdit, editing: !!editing }
@@ -183,6 +190,10 @@ export function ResourceDrawer({ client, hub, target, subject, initialTab, onTab
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (consumed(e) || inTerminal(e.target) || overlayOpen()) return
+      const node=e.target instanceof HTMLElement?e.target:null
+      const focusedDrawer=node?.closest('[data-resource-drawer]')
+      if(focusedDrawer&&focusedDrawer!==panelRef.current)return
+      if(embedded&&(!node||!panelRef.current?.contains(node)||panelRef.current.closest('[hidden]')))return
       const k = keys.current
       // Esc steps out of the editor first (asking when edits would be lost).
       if (e.key === 'Escape' && !(e.target instanceof HTMLElement && e.target.closest('.cm-panels'))) (k.editing ? k.cancelEdit : k.close)()
@@ -202,7 +213,7 @@ export function ResourceDrawer({ client, hub, target, subject, initialTab, onTab
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [])
+  }, [embedded])
 
   const shown = res?.key === key ? res : null
   const loading = !shown
@@ -220,16 +231,16 @@ export function ResourceDrawer({ client, hub, target, subject, initialTab, onTab
   const title = refTitle(r?.ref ?? current)
   const shownRef = (): Ref => ({ ...(r?.ref ?? current), provider: target.provider, target: target.id })
   const go = (ref: Ref) =>
-    mayLeave(() => {
+    leave(() => {
       setStack((s) => [...s, ref])
       setTab('details')
     })
-  const pickTab = (tb: Tab) => (tb === tab ? undefined : mayLeave(() => setTab(tb)))
+  const pickTab = (tb: Tab) => (tb === tab ? undefined : leave(() => setTab(tb)))
   // The live object moved on since its text was read.
   const moved = !!editing?.doc.version && !!revision && revision !== editing.doc.version
 
   return (
-    <DetailsPanel panelRef={panelRef} label={`${current.kind} ${title}`}>
+    <DetailsPanel embedded={embedded} panelRef={panelRef} label={embedded?`${t('workspace.propertiesLabel')} · ${title}`:`${current.kind} ${title}`}>
       {/* Name first, whole; the object's tools on a line of their own. */}
       <header className="drawer-heading">
         {stack.length > 1 && (
@@ -241,7 +252,7 @@ export function ResourceDrawer({ client, hub, target, subject, initialTab, onTab
                   className="max-w-48 truncate rounded px-1 hover:bg-hover hover:text-fg"
                   title={`${ref.kind} ${refTitle(ref)}`}
                   onClick={() =>
-                    mayLeave(() => {
+                    leave(() => {
                       setStack((s) => s.slice(0, i + 1))
                       setTab('details')
                     })
@@ -259,7 +270,7 @@ export function ResourceDrawer({ client, hub, target, subject, initialTab, onTab
         )}
         <div className="flex items-center gap-2">
           {stack.length > 1 && (
-            <button className="rounded px-1.5 text-fg-muted hover:bg-hover hover:text-fg" onClick={() => mayLeave(() => setStack((s) => s.slice(0, -1)))} aria-label={t('drawer.back')} title={`${t('drawer.back')} (Alt+←)`}>
+            <button className="rounded px-1.5 text-fg-muted hover:bg-hover hover:text-fg" onClick={() => leave(() => setStack((s) => s.slice(0, -1)))} aria-label={t('drawer.back')} title={`${t('drawer.back')} (Alt+←)`}>
               ←
             </button>
           )}
@@ -274,46 +285,45 @@ export function ResourceDrawer({ client, hub, target, subject, initialTab, onTab
         </div>
         {hasTools && (
           <div className="drawer-tools" inert={loading}>
+            {!embedded&&shown?.r?.ref.uid&&!shown.error&&<ActionIconButton label={t('workspace.pinProperties')} description={t('workspace.pinPropertiesHint')} disabled={!workspaceReady} onClick={()=>{const targetInfo=useStore.getState().view?.groups.flatMap(g=>g.targets).find(item=>item.provider===target.provider&&item.id===target.id);if(!dock.openProperties(target,targetInfo?.title??target.id,shownRef(),tab))showNotice(t('workspace.limit'))}}><ActionIcon name="pin"/></ActionIconButton>}
             {shown?.r?.ref.uid&&!shown.error&&<ComparisonTools subject={shownRef()}/>}
-            {r?.rbacSubject && <button className={toolBtn} onClick={()=>setAccess({subject:r.rbacSubject})}>{t('rbac.permissions')}</button>}
+            {r?.rbacSubject && <ActionIconButton label={t('rbac.permissions')} description={t('rbac.permissionsHint')} onClick={()=>setAccess({subject:r.rbacSubject})}><ActionIcon name="permissions"/></ActionIconButton>}
             {onLogs && hasLogs?.(current.kind) && (
-              <button
-                className="rounded-md border border-line px-2 py-0.5 text-xs text-fg-muted hover:bg-hover hover:text-fg"
+              <ActionIconButton
                 onClick={() => onLogs({ ...(r?.ref ?? current), provider: target.provider, target: target.id })}
                 onContextMenu={event=>{event.preventDefault();event.stopPropagation();event.currentTarget.focus();onLogs(shownRef(),true)}}
-                title={t('tools.logsHint')}
+                label={t('logs.open')} description={t('tools.logsHint')}
               >
-                {t('logs.open')}
-              </button>
+                <ActionIcon name="logs"/>
+              </ActionIconButton>
             )}
             {onTerminal && hasExec?.(current.kind) && (
-              <button className={toolBtn} onClick={()=>onTerminal(shownRef(),false)}
-                onContextMenu={event=>{event.preventDefault();event.stopPropagation();event.currentTarget.focus();onTerminal(shownRef(),true)}} title={t('tools.terminalHint')}>
-                {t('term.open')}
-              </button>
+              <ActionIconButton onClick={()=>onTerminal(shownRef(),false)}
+                onContextMenu={event=>{event.preventDefault();event.stopPropagation();event.currentTarget.focus();onTerminal(shownRef(),true)}} label={t('term.open')} description={t('tools.terminalHint')}>
+                <ActionIcon name="terminal"/>
+              </ActionIconButton>
             )}
-            {hasExec?.(current.kind) && <button className={toolBtn} title={t('tools.filesHint')}
-              onContextMenu={event=>{event.preventDefault();event.stopPropagation();event.currentTarget.focus();cancelFilesPicker(false);mayLeave(()=>setFilesDialog(filesSubject))}}
-              onClick={() => mayLeave(() => pickExec(filesSubject, instance => mayLeave(() => setFilesOpen({subject:filesSubject,instance}))))}>{t('files.title')}</button>}
+            {!embedded&&hasExec?.(current.kind) && <ActionIconButton label={t('files.title')} description={t('tools.filesHint')}
+              onContextMenu={event=>{event.preventDefault();event.stopPropagation();event.currentTarget.focus();cancelFilesPicker(false);leave(()=>setFilesDialog(filesSubject))}}
+              onClick={() => leave(() => pickExec(filesSubject, instance => leave(() => setFilesOpen({subject:filesSubject,instance}))))}><ActionIcon name="files"/></ActionIconButton>}
             {editableOf?.(current.kind) && (
-              <button className={toolBtn} disabled={!canEdit || !!editing || loadingEdit} onClick={startEdit} title={t('edit.openHint')}>
-                {t('edit.open')}
-              </button>
+              <ActionIconButton disabled={!canEdit || !!editing || loadingEdit} onClick={startEdit} label={t('edit.open')} description={t('edit.openHint')}>
+                <ActionIcon name="edit"/>
+              </ActionIconButton>
             )}
             {onAction && actions.length > 0 && (
-              <button
+              <ActionIconButton
                 ref={actionsBtn}
-                className="rounded-md border border-line px-2 py-0.5 text-xs text-fg-muted hover:bg-hover hover:text-fg"
                 aria-haspopup="menu"
                 aria-expanded={!!menuAt}
-                title={t('action.menuHint')}
+                label={t('action.menu')} description={t('action.menuHint')}
                 onClick={() => {
                   const b = actionsBtn.current?.getBoundingClientRect()
                   setMenuAt({ x: b?.left ?? 0, y: (b?.bottom ?? 0) + 2 })
                 }}
               >
-                {t('action.menu')} ▾
-              </button>
+                <ActionIcon name="actions"/>
+              </ActionIconButton>
             )}
             {menuAt && shown && onAction && (
               <Menu
@@ -432,7 +442,7 @@ export function ResourceDrawer({ client, hub, target, subject, initialTab, onTab
       )}
       {access&&<Suspense fallback={null}><RbacDialog client={client} target={target} {...access} onClose={()=>setAccess(null)} onResource={ref=>{setAccess(null);go(ref)}}/></Suspense>}
       {filesPicker}
-      {filesDialog && <ToolDialog client={client} subject={filesDialog} mode="files" onClose={()=>setFilesDialog(null)} onOpen={selection=>{setFilesDialog(null);if(selection.instance) mayLeave(()=>setFilesOpen({subject:selection.ref,instance:{...selection.instance!,defaultChannel:selection.channel ?? ''}}))}}/>}
+      {filesDialog && <ToolDialog client={client} subject={filesDialog} mode="files" onClose={()=>setFilesDialog(null)} onOpen={selection=>{setFilesDialog(null);if(selection.instance) leave(()=>setFilesOpen({subject:selection.ref,instance:{...selection.instance!,defaultChannel:selection.channel ?? ''}}))}}/>}
       {filesOpen && <Suspense fallback={null}><FileBrowser client={client} subject={filesOpen.subject} selectedInstance={filesOpen.instance} onClose={() => setFilesOpen(null)} /></Suspense>}
     </DetailsPanel>
   )

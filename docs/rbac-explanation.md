@@ -79,7 +79,7 @@ a per-session gate. The frontend virtualizes individual rule rows, including
 roles containing many rules.
 
 All eight UI languages include the workflow and its own error messages. This
-feature is implemented in development builds and is not in published v1.1.2.
+feature is implemented from 1.2.0 and is included from 1.2.0.
 
 Primary semantics: [Kubernetes RBAC](https://kubernetes.io/docs/reference/access-authn-authz/rbac/),
 [authorization reviews](https://kubernetes.io/docs/reference/access-authn-authz/authorization/)

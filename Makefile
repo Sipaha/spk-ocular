@@ -147,7 +147,7 @@ e2e-dind: build
 
 .PHONY: package-linux package-windows package-macos test-packaging lint-workflows
 package-linux:
-	python3 packaging/release.py --version "$(RELEASE_VERSION)" --arch "$(ARCH)"
+	python3 packaging/release.py --version "$(RELEASE_VERSION)" --arch "$(ARCH)" --bin-dir "$(abspath $(BIN_DIR))"
 
 package-windows:
 	python3 packaging/portable.py --version "$(RELEASE_VERSION)" --os windows --arch "$(ARCH)"

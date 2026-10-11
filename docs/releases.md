@@ -1,6 +1,6 @@
 # Builds and releases
 
-Current stable release: [1.1.2](https://github.com/Sipaha/spk-ocular/releases/tag/v1.1.2), built with Go 1.26.9. Its complete native matrix, published package contents and checksums are verified. The native evidence archive contains owned-window screenshots for all six targets; the live site exposes matching package and checksum links. Earlier published release assets remain immutable.
+Published stable versions and their release notes are available in [GitHub Releases](https://github.com/Sipaha/spk-ocular/releases/latest). The release workflow checks the complete native matrix, package contents and checksums before publication. Its native evidence archive contains owned-window screenshots for all six targets. Published release assets remain immutable.
 
 ## Distribution contract
 
@@ -115,6 +115,9 @@ identify Ocular's modifications.
    or the sequence of development commits. VERSION is the default development
    base; tagged builds take their version directly from the tag.
 2. Run `make check` and `make package-linux RELEASE_VERSION=VERSION ARCH=ARCH`.
+   For an isolated local build, pass an absolute scratch `BIN_DIR` to Make;
+   the Linux packaging builder and nfpm use that same directory. Pass matching
+   `--bin-dir` to `packaging/verify.py` when inspecting that build.
    Inspect artifacts with `packaging/verify.py` and open the packaged desktop
    binary in an isolated test profile. Never replace the user's running app.
 3. Review and commit the intended changes. Use the project's required author

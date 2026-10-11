@@ -125,6 +125,10 @@ func testRoutes(c *appCore) http.Handler {
 	// (filter, sort, open details) would leak into the next one. The key
 	// names the web client's pageMemoPersist.
 	mux.HandleFunc("POST /api/_test/ui-state/reset", func(w http.ResponseWriter, r *http.Request) {
+		if err := c.Service.ResetTargetStateKey(r.Context(), "workspacePanels"); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
 		if err := c.Service.ResetTargetStateKey(r.Context(), "pageMemo"); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return

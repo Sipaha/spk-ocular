@@ -122,6 +122,7 @@ export function fakeClient(targets: Target[], connected = false) {
     touchRecent: vi.fn(async () => {}),
     logInfo: vi.fn(async () => ({ channels: [{ id: 'app', title: 'app' }], defaultChannel: 'app', aggregate: false, previous: true })),
     openLogStream: vi.fn(async () => ({ streamId: 's1' })),
+    openLogHistory: vi.fn(async () => ({ streamId: 'h1' })),
     execInfo: vi.fn(async (ref: Ref) => ({
       instances: [{ id: ref.uid ?? ref.name, title: ref.name, ready: true, channels: [{ id: 'app', title: 'app', running: true }], defaultChannel: 'app' }],
       defaultInstance: ref.uid ?? ref.name,

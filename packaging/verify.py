@@ -90,7 +90,8 @@ def tar_contents(data):
         return files
 
 
-def verify_native(directory, release_version, arch):
+def verify_native(directory, release_version, arch, bin_dir=None):
+    bin_dir = Path(bin_dir or ROOT / "build/bin").resolve()
     base = f'spk-ocular_{release_version}_linux_{arch}'
     deb = directory / (base + '.deb')
     for field, expected_value in [('Package', 'spk-ocular'), ('Architecture', arch), ('Maintainer', 'Pavel Simonov <sipahabk@gmail.com>')]:
@@ -116,7 +117,7 @@ def verify_native(directory, release_version, arch):
         if dependency not in tags[1049]:
             raise ValueError(f'RPM dependency missing: {dependency}')
     expected = {
-        'usr/bin/spk-ocular': (ROOT / 'build/bin/spk-ocular-release', 0o755),
+        'usr/bin/spk-ocular': (bin_dir / 'spk-ocular-release', 0o755),
         'usr/share/applications/spk-ocular.desktop': (ROOT / 'packaging/linux/spk-ocular.desktop', 0o644),
         'usr/share/icons/hicolor/256x256/apps/spk-ocular.png': (ROOT / 'internal/appfiles/icons/icon.png', 0o644),
         'usr/share/icons/hicolor/scalable/apps/spk-ocular.svg': (ROOT / 'internal/appfiles/icons/icon.svg', 0o644),
@@ -140,7 +141,7 @@ def verify_native(directory, release_version, arch):
         data, mode = contents[member]
         if mode != 0o755:
             raise ValueError('archive binary must be executable')
-        source = ROOT / ('build/bin/spk-ocular-release' if member == 'spk-ocular' else 'build/bin/spk-ocular')
+        source = bin_dir / ('spk-ocular-release' if member == 'spk-ocular' else 'spk-ocular')
         if data != source.read_bytes():
             raise ValueError('archive binary differs from the verified build')
         with tempfile.TemporaryDirectory() as scratch:
@@ -168,6 +169,7 @@ if __name__ == '__main__':
     choice.add_argument('--all-architectures', action='store_true')
     choice.add_argument('--all-platforms', action='store_true')
     parser.add_argument('--directory', type=Path)
+    parser.add_argument('--bin-dir', type=Path, help='directory containing the verified local build')
     args = parser.parse_args()
     release_version = version(args.version)
     directory = args.directory or ROOT / 'dist' / release_version / f'linux-{args.arch}'
@@ -176,4 +178,4 @@ if __name__ == '__main__':
         (directory / 'SHA256SUMS').write_text(checksums)
         print('Verified the complete release asset set and wrote SHA256SUMS')
     else:
-        verify_native(directory, release_version, args.arch)
+        verify_native(directory, release_version, args.arch, args.bin_dir)

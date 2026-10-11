@@ -22,11 +22,13 @@ var logWindowID = regexp.MustCompile(`^[a-zA-Z0-9-]{1,80}$`)
 // LogWindows is an application UI service, deliberately outside the agent API.
 // The main window owns the log stream; secondary windows receive its frames.
 type LogWindows struct {
-	app        *application.App
-	mainWindow *application.WebviewWindow
-	mu         sync.Mutex
-	openMu     sync.Mutex
-	windows    map[string]*application.WebviewWindow
+	app           *application.App
+	mainWindow    *application.WebviewWindow
+	mu            sync.Mutex
+	openMu        sync.Mutex
+	windows       map[string]*application.WebviewWindow
+	exports       map[string]*nativeLogExport
+	exportsClosed bool
 }
 
 func (m *LogWindows) Open(id, title string) error {
@@ -50,6 +52,7 @@ func (m *LogWindows) Open(id, title string) error {
 	w := m.app.Window.NewWithOptions(application.WebviewWindowOptions{Name: "logs-" + id, Title: title + " · SPK Ocular", Hidden: true, Width: 1000, Height: 650, MinWidth: 480, MinHeight: 280, URL: "/?logsWindow=" + id, BackgroundColour: application.NewRGBA(21, 24, 30, 255), DevToolsEnabled: devToolsEnabled, Linux: application.LinuxWindow{WebviewGpuPolicy: webviewGPUPolicy(os.Getenv("SPK_OCULAR_GPU"))}})
 	configureWindowIcons(w)
 	w.OnWindowEvent(events.Common.WindowClosing, func(_ *application.WindowEvent) {
+		m.abortWindowExports(id)
 		m.mu.Lock()
 		delete(m.windows, id)
 		m.mu.Unlock()

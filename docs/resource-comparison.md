@@ -1,6 +1,6 @@
 # Resource comparison
 
-Resource comparison is available in development builds; it is not yet released.
+Resource comparison is available from 1.2.0; it is included from 1.2.0.
 It compares two explicitly selected saved objects, including resources from
 separate connected targets. It performs no apply, edit or other mutation.
 

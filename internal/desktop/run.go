@@ -61,6 +61,7 @@ func Run(ctx context.Context, o Options) error {
 		Assets:      application.AssetOptions{Handler: application.AssetFileServerFS(o.FrontendFS)},
 		OnShutdown: func() { // on the GTK main thread
 			shutDown.Store(true)
+			logWindows.closeExports()
 			cancel()
 		},
 	})

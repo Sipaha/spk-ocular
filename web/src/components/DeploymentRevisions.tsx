@@ -13,17 +13,30 @@ export function DeploymentRevisions({client,resource}:{client:Client;resource:Re
   if (!resource.revisionsAvailable) return null
   return <section aria-label={t('revisions.title')}>
     <h3 className="mb-1.5 text-[12px] font-semibold uppercase tracking-wider text-fg-subtle">{t('revisions.title')}</h3>
-    {resource.revisionsError ? <p role="alert" className="text-xs text-warning">{resource.revisionsError}</p> : !resource.revisions?.length ? <p className="text-xs text-fg-subtle">{t('revisions.empty')}</p> : <ul className="divide-y divide-line rounded-md border border-line">
-      {resource.revisions.map(revision=><li key={revision.ref.uid || revision.ref.name} className="flex flex-col gap-1 px-2 py-2" data-deploy-revision>
-        <div className="flex flex-wrap items-center gap-2"><strong className="text-[13px]">{t('revisions.number',{number:revision.number})}</strong>
-          {revision.current && <span className="rounded bg-success/10 px-1.5 py-0.5 text-[11px] text-success">{t('revisions.current')}</span>}
-          <span className="ml-auto text-[11px] text-fg-subtle" title={revision.created}>{new Date(revision.created).toLocaleString(getLanguage())}</span>
-        </div>
-        <div className="flex items-center gap-2 text-xs"><span className="min-w-0 flex-1 truncate text-fg-muted" title={(revision.images ?? []).join('\n')}>{(revision.images ?? []).join(', ')}</span><span className="shrink-0 text-fg-subtle">{t('revisions.replicas',{ready:revision.ready,total:revision.replicas})}</span></div>
-        {revision.cause && <p className="truncate text-xs text-fg-subtle" title={revision.cause}>{revision.cause}</p>}
-        <div className="flex gap-2"><button className="rounded border border-line px-2 py-0.5 text-xs text-fg-muted hover:bg-hover" onClick={()=>setOpened({revision,compare:false})}>{t('revisions.view')}</button><button className="rounded border border-line px-2 py-0.5 text-xs text-fg-muted hover:bg-hover" onClick={()=>setOpened({revision,compare:true})}>{t('revisions.compare')}</button></div>
-      </li>)}
-    </ul>}
+    {resource.revisionsError ? <p role="alert" className="text-xs text-warning">{resource.revisionsError}</p> : !resource.revisions?.length ? <p className="text-xs text-fg-subtle">{t('revisions.empty')}</p> : <div className="overflow-x-auto rounded border border-line" tabIndex={0} aria-label={t('revisions.title')}>
+      <table className="w-full min-w-[400px] table-fixed text-left text-xs" aria-label={t('revisions.title')}>
+        <colgroup><col className="w-[90px]"/><col/><col className="w-[48px]"/><col className="w-[80px]"/><col className="w-[60px]"/></colgroup>
+        <thead className="bg-hover/50 text-[11px] text-fg-subtle"><tr>
+          {(['revision','images','ready','created','actions'] as const).map(column=><th key={column} scope="col" title={t(`revisions.column.${column}`)} className="truncate px-2 py-1.5 font-medium">{t(`revisions.column.${column}`)}</th>)}
+        </tr></thead>
+        <tbody className="divide-y divide-line">
+          {resource.revisions.map(revision=><tr key={revision.ref.uid || revision.ref.name} className="h-8 hover:bg-hover/50" data-deploy-revision>
+            <th scope="row" className="px-2 py-1 font-normal"><span className="whitespace-nowrap font-medium tabular-nums">{t('revisions.number',{number:revision.number})}</span>
+              {revision.current && <span className="block text-[11px] text-success">{t('revisions.current')}</span>}
+            </th>
+            <td className="px-2 py-1"><div className="truncate text-fg-muted" title={(revision.images ?? []).join('\n')}>{(revision.images ?? []).join(', ') || '—'}</div>
+              {revision.cause && <div className="truncate text-[11px] text-fg-subtle" title={revision.cause}>{revision.cause}</div>}
+            </td>
+            <td className="px-2 py-1 tabular-nums text-fg-muted" title={t('revisions.replicas',{ready:revision.ready,total:revision.replicas})}>{revision.ready}/{revision.replicas}</td>
+            <td className="px-2 py-1 whitespace-nowrap tabular-nums text-fg-subtle" title={new Date(revision.created).toLocaleString(getLanguage())}>{new Date(revision.created).toLocaleDateString(getLanguage())}</td>
+            <td className="px-1 py-1"><div className="flex items-center gap-1">
+              <button className="flex h-6 w-6 items-center justify-center rounded text-fg-muted hover:bg-hover focus-visible:outline-2 focus-visible:outline-accent" aria-label={t('revisions.view')} title={t('revisions.view')} onClick={()=>setOpened({revision,compare:false})}><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" aria-hidden="true"><path d="m5 4-4 4 4 4m6-8 4 4-4 4M9.5 2l-3 12"/></svg></button>
+              <button className="flex h-6 w-6 items-center justify-center rounded text-fg-muted hover:bg-hover focus-visible:outline-2 focus-visible:outline-accent" aria-label={t('revisions.compare')} title={t('revisions.compare')} onClick={()=>setOpened({revision,compare:true})}><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" aria-hidden="true"><path d="M2 2h5v12H2zM9 2h5v12H9zM3.5 5h2m-2 3h2m5-3h2m-1-1v2m-1 4h2"/></svg></button>
+            </div></td>
+          </tr>)}
+        </tbody>
+      </table>
+    </div>}
     {resource.revisionsTruncated && <p className="mt-1 text-xs text-warning">{t('revisions.truncated')}</p>}
     {opened && <RevisionDialog key={opened.revision.ref.uid || opened.revision.ref.name} client={client} resource={resource} revision={opened.revision} initialCompare={opened.compare} onClose={()=>setOpened(null)}/>}
   </section>

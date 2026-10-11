@@ -1,4 +1,5 @@
-import { WindowActionIcon } from '../components/icons'
+import { ActionIconButton } from '../components/ActionIconButton'
+import { ActionIcon, WindowActionIcon } from '../components/icons'
 import type { LogViewState, LogWindowBridge } from './windowBridge'
 import { useLayoutResizing } from '../components/layoutResize'
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
@@ -9,10 +10,10 @@ import { classLabel, messageText, t, type MessageKey } from '../i18n'
 import { isShortcut } from '../keyboard'
 import { LogViewport } from './LogViewport'
 import { rowText, shortLabels, sourceColor, type RowOpts } from './row'
-import { logFileName, downloadLogs } from './save'
+import { downloadLogHistory } from './downloadHistory'
+import {CloseIcon} from '../components/icons'
 import { useLogFilter } from './useLogFilter'
 import { useLogStream, type LogSource } from './useLogStream'
-import { refTitle } from '../refs'
 
 const TAILS = [100, 500, 1000, 5000, -1]
 const SINCE: [string, number][] = [
@@ -101,7 +102,7 @@ export default function LogViewer({ client, subject, active, bridge, initial, in
       query={query}
       bridge={bridge}
       initial={initial}
-      windowButton={onWindowAction && <button type="button" onClick={onWindowAction} aria-label={t(bridge?.role === 'guest' ? 'logs.returnWindow' : 'logs.detachWindow')} title={t(bridge?.role === 'guest' ? 'logs.returnWindow' : 'logs.detachWindow')} className="ml-1 flex h-[26px] w-[26px] shrink-0 items-center justify-center !p-0"><WindowActionIcon returning={bridge?.role === 'guest'} className="h-4 w-4"/></button>}
+      windowButton={onWindowAction && <ActionIconButton onClick={onWindowAction} label={t(bridge?.role === 'guest' ? 'logs.returnWindow' : 'logs.detachWindow')} description={t(bridge?.role === 'guest' ? 'logs.returnWindow' : 'logs.detachWindow')} ><WindowActionIcon returning={bridge?.role === 'guest'} className="h-4 w-4"/></ActionIconButton>}
       toolbar={
         <>
           <Select
@@ -127,8 +128,8 @@ export default function LogViewer({ client, subject, active, bridge, initial, in
             options={[{ value: '', label: t('logs.sinceAll') }, ...SINCE.map(([k]) => ({ value: k, label: k }))]}
           />
           {info.previous && channel !== '*' && (
-            <Toggle on={previous} onClick={() => setPrevious((p) => !p)} title={t('logs.previous.tooltip')}>
-              {t('logs.previous')}
+            <Toggle on={previous} onClick={() => setPrevious((p) => !p)} label={t('logs.previous')} description={t('logs.previous.tooltip')}>
+              <ActionIcon name="previous"/>
             </Toggle>
           )}
         </>
@@ -194,16 +195,23 @@ function Stream({ client, subject, active, query, toolbar, view, bridge, initial
 
   const copyShown = () => void navigator.clipboard?.writeText(shownText()).catch(() => {})
   const downloadPending = useRef(false)
+  const downloadController=useRef<AbortController|null>(null)
+  const mounted=useRef(true)
   const [downloading, setDownloading] = useState(false)
+  const [downloadProgress,setDownloadProgress]=useState({lines:0,bytes:0})
+  useEffect(()=>{mounted.current=true;return()=>{mounted.current=false;downloadController.current?.abort()}},[])
+  useEffect(()=>()=>downloadController.current?.abort(),[client,subject,query.channel,query.previous])
   const save = async () => {
     if(downloadPending.current) return
-    downloadPending.current=true;setDownloading(true)
+    const controller=new AbortController()
+    downloadController.current=controller
+    downloadPending.current=true;setDownloading(true);setNote(null);setDownloadProgress({lines:0,bytes:0})
     try {
-      const path = await downloadLogs(logFileName(refTitle(subject)), shownText(), bridge?.id)
-      setNote(path ? t('logs.saved', { path }) : null)
+      const result=await downloadLogHistory(client,subject,query.channel??'',!!query.previous,controller.signal,bridge?.id,value=>{if(mounted.current&&!controller.signal.aborted)setDownloadProgress(value)})
+      if(mounted.current&&!controller.signal.aborted&&result)setNote(result.path?t('logs.saved',{path:result.path}):t('logs.historySaved',{lines:result.lines}))
     } catch (e) {
-      setNote(t('logs.saveFailed', { error: e instanceof Error ? e.message : String(e) }))
-    } finally { downloadPending.current=false;setDownloading(false) }
+      if(mounted.current)setNote(controller.signal.aborted?t('logs.historyCancelled'):t('logs.saveFailed',{error:e instanceof Error?e.message:String(e)}))
+    } finally {downloadPending.current=false;if(downloadController.current===controller)downloadController.current=null;if(mounted.current)setDownloading(false)}
   }
 
   const onKeyDown = (e: React.KeyboardEvent) => {
@@ -273,14 +281,14 @@ function Stream({ client, subject, active, query, toolbar, view, bridge, initial
           spellCheck={false}
           className="w-44 rounded border border-line bg-app px-2 py-0.5 outline-none focus:border-accent"
         />
-        <Toggle on={f.useRegex} onClick={() => f.setUseRegex(!f.useRegex)} title={t('logs.regex')}>
-          .*
+        <Toggle on={f.useRegex} onClick={() => f.setUseRegex(!f.useRegex)} label={t('logs.regex')} description={t('logs.regex')}>
+          <ActionIcon name="regex"/>
         </Toggle>
-        <Btn disabled={!f.matches.length} onClick={() => { f.setMatchIndex(f.current - 1); f.bumpNav() }} title={t('logs.prev')}>
-          ↑
+        <Btn disabled={!f.matches.length} onClick={() => { f.setMatchIndex(f.current - 1); f.bumpNav() }} label={t('logs.prev')} description={t('logs.prev')}>
+          <ActionIcon name="up"/>
         </Btn>
-        <Btn disabled={!f.matches.length} onClick={() => { f.setMatchIndex(f.current + 1); f.bumpNav() }} title={t('logs.next')}>
-          ↓
+        <Btn disabled={!f.matches.length} onClick={() => { f.setMatchIndex(f.current + 1); f.bumpNav() }} label={t('logs.next')} description={t('logs.next')}>
+          <ActionIcon name="down"/>
         </Btn>
         <span className="tabular-nums text-fg-subtle" aria-label="matches">
           {f.matches.length ? f.current + 1 : 0}/{f.matches.length}
@@ -300,25 +308,25 @@ function Stream({ client, subject, active, query, toolbar, view, bridge, initial
         />
         </div>
         <div role="group" aria-label={t('shell.logDisplay')} className="log-control-group">
-        <Toggle on={showTime} onClick={() => setShowTime(!showTime)} title={t('logs.time.tooltip')}>
-          {t('logs.time')}
+        <Toggle on={showTime} onClick={() => setShowTime(!showTime)} label={t('logs.time')} description={t('logs.time.tooltip')}>
+          <ActionIcon name="time"/>
         </Toggle>
-        <Toggle on={showSource} onClick={() => view.setShowSource(!showSource)} title={t('logs.source.tooltip')}>
-          {t('logs.source')}
+        <Toggle on={showSource} onClick={() => view.setShowSource(!showSource)} label={t('logs.source')} description={t('logs.source.tooltip')}>
+          <ActionIcon name="source"/>
         </Toggle>
-        <Toggle on={wrap} onClick={() => setWrap(!wrap)} title={t('logs.wrap.tooltip')}>
-          {t('logs.wrap')}
+        <Toggle on={wrap} onClick={() => setWrap(!wrap)} label={t('logs.wrap')} description={t('logs.wrap.tooltip')}>
+          <ActionIcon name="wrap"/>
         </Toggle>
         </div>
         <div role="group" aria-label={t('shell.logActions')} className="log-control-group log-actions">
-        <Btn onClick={copyShown} title={t('logs.copy.tooltip')}>
-          {t('logs.copy')}
+        <Btn onClick={copyShown} label={t('logs.copy')} description={t('logs.copy.tooltip')}>
+          <ActionIcon name="copy"/>
         </Btn>
-        <Btn disabled={downloading} onClick={() => void save()} title={t('logs.save.tooltip')}>
-          {t('logs.save')}
+        <Btn disabled={downloading} onClick={() => void save()} label={t('logs.save')} description={t('logs.save.tooltip')}>
+          <ActionIcon name="download"/>
         </Btn>
-        <Btn onClick={clear} title={t('logs.clear.tooltip')}>
-          {t('logs.clear')}
+        <Btn onClick={clear} label={t('logs.clear')} description={t('logs.clear.tooltip')}>
+          <ActionIcon name="clear"/>
         </Btn>
         {windowButton}
         </div>
@@ -352,11 +360,10 @@ function Stream({ client, subject, active, query, toolbar, view, bridge, initial
           {status.message && ` · ${status.message}`}
         </span>
         {terminal && (
-          <button className="text-accent hover:underline" onClick={reopen}>
-            {t('logs.reopen')}
-          </button>
+          <ActionIconButton label={t('logs.reopen')} description={t('logs.reopenHint')} onClick={reopen}><ActionIcon name="reconnect"/></ActionIconButton>
         )}
-        {note && <span className="truncate">{note}</span>}
+        {downloading&&<><span role="status" className="min-w-0 truncate" title={t('logs.historyReading',{lines:downloadProgress.lines,bytes:downloadProgress.bytes})}>{t('logs.historyReading',{lines:downloadProgress.lines,bytes:downloadProgress.bytes})}</span><ActionIconButton label={t('logs.historyCancel')} description={t('logs.historyCancel')} onClick={()=>downloadController.current?.abort()}><CloseIcon className="h-4 w-4"/></ActionIconButton></>}
+        {note&&!downloading&&<span role="status" className="min-w-0 truncate" title={note}>{note}</span>}
       </div>
     </div>
   )
@@ -385,20 +392,12 @@ function Problems({ problems, notice, labels }: { problems: LogSource[]; notice?
   )
 }
 
-function Btn({ children, ...p }: { children: ReactNode; onClick: () => void; title?: string; disabled?: boolean }) {
-  return (
-    <button {...p} className="rounded border border-line px-1.5 py-0.5 text-fg-muted enabled:hover:bg-hover enabled:hover:text-fg disabled:opacity-40">
-      {children}
-    </button>
-  )
+function Btn(props: React.ComponentProps<typeof ActionIconButton>) {
+  return <ActionIconButton {...props}/>
 }
 
-function Toggle({ on, children, ...p }: { on: boolean; children: ReactNode; onClick: () => void; title?: string }) {
-  return (
-    <button {...p} aria-pressed={on} className={['rounded border px-1.5 py-0.5', on ? 'border-accent bg-accent/15 text-accent' : 'border-line text-fg-muted hover:bg-hover'].join(' ')}>
-      {children}
-    </button>
-  )
+function Toggle({on,...props}: React.ComponentProps<typeof ActionIconButton> & {on:boolean}) {
+  return <ActionIconButton {...props} aria-pressed={on}/>
 }
 
 function Select(props: { label: string; value: string; onChange: (v: string) => void; options: SelectOption[] }) {

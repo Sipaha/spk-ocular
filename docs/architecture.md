@@ -441,13 +441,23 @@ window explicitly quits Wails even when a secondary window remains open.
 Resource navigation section headings use 14 px semibold text. Search fields keep
 icons at a fixed size and allow only their input to shrink with a panel.
 
+Log history downloads use the UI-only `OpenLogHistory` API and the existing
+session-owned, one-shot NDJSON transport. The provider receives a finite Archive
+read with TailAll, selected channel/previous setting and no viewer time/text
+filters. Backend and frontend bound bytes/lines/sources and reject incomplete
+history; source retention and sequential multi-source reads still apply. This
+adds no agent endpoint or grant. Closing a connection retires its export stream.
+
 Native log downloads use the application-only Wails service and a system file
-chooser attached to the requesting window. The UI sends bounded UTF-8 text,
-never a caller-provided destination path. Only the chooser's returned path is
-written, using an owner-only staged file and replacement after a successful
-write. The desktop loopback server no longer enables the old Downloads save
-route. Agent log exports remain separate and continue using their private
-Downloads export contract.
+chooser attached to the requesting window. Begin returns an opaque app-owned
+export id; Append writes bounded UTF-8 chunks, and Complete replaces
+the selected destination only after a successful sync. Cancel, window closure, app
+shutdown and expiry remove the owner-only staged file. The renderer never sends
+a destination path. Streaming browser save pickers likewise stage chunks; the
+legacy download-manager fallback is bounded to 64 MiB. A download must receive a
+valid complete end frame before committing. The desktop loopback server does not
+enable the old Downloads save route. Agent exports retain their separate private
+Downloads contract and existing permission checks.
 
 The file inspector renders through a body portal above resource-panel resize
 handles. Its tree uses compact 24 px virtualized rows with full-path keys and
@@ -472,3 +482,15 @@ representations with/without Kubernetes service fields. The global comparison
 state retains only two references across navigation; the open modal owns the
 non-persistent YAML snapshots. No new agent endpoint or mutation path is added.
 See [resource comparison](resource-comparison.md).
+
+## Investigation workspace continuity
+
+`web/src/workspace` strictly serializes whitelisted UID-pinned references and
+global panel dimensions into the existing 4096-byte target_state value. The
+App owns restoration and serialized writes; no provider/session is opened by
+loading metadata. The dock supports read-only standard ResourceDrawer panels,
+dormant log references and ended terminal slots. Explicit resume validates UID
+and admitted connection identity; properties cannot inherit main-editor drafts.
+Bodies, values, logs, commands and screens never enter this snapshot. Existing
+page/scope/filter/column persistence remains independent. See
+[workspace continuity](workspace-continuity.md).

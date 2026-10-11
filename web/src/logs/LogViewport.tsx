@@ -1,3 +1,5 @@
+import {ActionIconButton} from '../components/ActionIconButton'
+import {ActionIcon} from '../components/icons'
 // Virtualized log rows share stable selection and follow state. Rows show
 // time/source prefixes and ANSI spans; copying uses the same visible rowText.
 import { useCallback, useEffect, useRef, useState } from 'react'
@@ -607,14 +609,7 @@ export function LogViewport({
       {/* Floating follow button — only while NOT following. Click resumes
           follow AND jumps to the newest line. */}
       {!follow && (
-        <button
-          type="button"
-          onClick={resumeFollow}
-          title={t('logs.follow.tooltip')}
-          className="absolute bottom-3 right-5 z-10 flex items-center gap-1 rounded-full border border-line bg-panel px-3 py-1 text-xs font-medium text-accent shadow-md hover:bg-hover"
-        >
-          ↓ {t('logs.follow')}
-        </button>
+        <div className="absolute bottom-3 right-5 z-10"><ActionIconButton onClick={resumeFollow} label={t('logs.follow')} description={t('logs.follow.tooltip')} className="bg-panel text-accent"><ActionIcon name="down"/></ActionIconButton></div>
       )}
     </div>
   )

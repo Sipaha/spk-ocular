@@ -72,6 +72,7 @@ export interface Client {
   logInfo(ref: Ref): Promise<LogInfo>
   /** Registers a log stream; read it from streamBase() + '/logs/' + streamId. */
   openLogStream(ref: Ref, query: LogQuery): Promise<LogStreamInfo>
+  openLogHistory(ref:Ref,channel:string,previous:boolean,signal?:AbortSignal):Promise<LogStreamInfo>
   files(req: FilesRequest): Promise<FilesResponse>
   execInfo(ref: Ref): Promise<ExecInfo>
   /** Registers a terminal; open a WebSocket to wsBase(streamBase()) + '/term/' + streamId. */
@@ -206,6 +207,7 @@ export const httpClient: Client = {
   touchRecent: (ref, title) => done(post('TouchRecent', { ref, title })),
   logInfo: (ref) => post('LogInfo', ref),
   openLogStream: (ref, query) => post('OpenLogStream', { ref, query }),
+  openLogHistory: (ref,channel,previous,signal) => post('OpenLogHistory',{ref,channel,previous},signal),
   files: (req) => post('Files', req),
   execInfo: (ref) => post('ExecInfo', ref),
   openTerminal: (req) => post('OpenTerminal', req),
@@ -346,6 +348,7 @@ export const wailsClient: Client = {
   touchRecent: (ref, title) => wcall('TouchRecent', { ref, title }),
   logInfo: (ref) => wcall('LogInfo', ref),
   openLogStream: (ref, query) => wcall('OpenLogStream', { ref, query }),
+  openLogHistory: (ref,channel,previous,signal) => wcallAbortable(signal,'OpenLogHistory',{ref,channel,previous}),
   files: (req) => wcall('Files', req),
   execInfo: (ref) => wcall('ExecInfo', ref),
   openTerminal: (req) => wcall('OpenTerminal', req),

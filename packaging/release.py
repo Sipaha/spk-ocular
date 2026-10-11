@@ -4,6 +4,7 @@ import argparse
 import gzip
 import hashlib
 import io
+import json
 import os
 from pathlib import Path
 import re
@@ -51,13 +52,14 @@ def document_paths(root=ROOT):
     return paths
 
 
-def package(release_version, arch):
+def package(release_version, arch, bin_dir=None):
     release_version = version(release_version)
     host = subprocess.check_output(['go', 'env', 'GOHOSTOS', 'GOHOSTARCH'], text=True).split()
     if host != ['linux', arch]:
         raise ValueError('desktop packages must be built on a native Linux runner of the requested architecture')
-    subprocess.run(['make', 'release', 'build-go', f'VERSION={release_version}'], cwd=ROOT, check=True)
-    desktop, browser = ROOT / 'build/bin/spk-ocular-release', ROOT / 'build/bin/spk-ocular'
+    bin_dir = Path(bin_dir or ROOT / 'build/bin').resolve()
+    subprocess.run(['make', 'release', 'build-go', f'VERSION={release_version}', f'BIN_DIR={bin_dir}'], cwd=ROOT, check=True)
+    desktop, browser = bin_dir / 'spk-ocular-release', bin_dir / 'spk-ocular'
     for binary in (desktop, browser):
         if elf_arch(binary) != arch:
             raise ValueError(f'wrong architecture: {binary}')
@@ -84,10 +86,19 @@ def package(release_version, arch):
     archive(browser_archive, common + [('spk-ocular-browser', browser, 0o755)], epoch)
     artifacts = [desktop_archive, browser_archive]
     env = {**os.environ, 'RELEASE_VERSION': release_version, 'ARCH': arch, 'SOURCE_DATE_EPOCH': str(epoch)}
-    for kind in ('deb', 'rpm'):
-        path = output / f'spk-ocular_{release_version}_linux_{arch}.{kind}'
-        subprocess.run(['nfpm', 'package', '--config', 'packaging/nfpm.yaml', '--packager', kind, '--target', str(path)], cwd=ROOT, env=env, check=True)
-        artifacts.append(path)
+    # nfpm expands metadata variables but not content source paths. Keep the
+    # checked-in config unchanged and bind its binary source in a private copy.
+    with tempfile.TemporaryDirectory(prefix='ocular-nfpm-') as scratch:
+        config = Path(scratch) / 'nfpm.yaml'
+        template = (ROOT / 'packaging/nfpm.yaml').read_text()
+        source = 'src: build/bin/spk-ocular-release'
+        if template.count(source) != 1:
+            raise ValueError('nfpm config must contain exactly one desktop binary source')
+        config.write_text(template.replace(source, 'src: ' + json.dumps(str(desktop))))
+        for kind in ('deb', 'rpm'):
+            path = output / f'spk-ocular_{release_version}_linux_{arch}.{kind}'
+            subprocess.run(['nfpm', 'package', '--config', str(config), '--packager', kind, '--target', str(path)], cwd=ROOT, env=env, check=True)
+            artifacts.append(path)
     for path in artifacts:
         digest = hashlib.sha256(path.read_bytes()).hexdigest()
         path.with_name(path.name + '.sha256').write_text(f'{digest}  {path.name}\n')
@@ -99,8 +110,9 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--version', required=True)
     parser.add_argument('--arch', choices=['amd64', 'arm64'], required=True)
+    parser.add_argument('--bin-dir', type=Path, help='isolated build output directory (default: build/bin)')
     args = parser.parse_args()
     try:
-        package(args.version, args.arch)
+        package(args.version, args.arch, args.bin_dir)
     except (ValueError, subprocess.CalledProcessError) as error:
         sys.exit(str(error))

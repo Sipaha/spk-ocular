@@ -33,6 +33,14 @@ literal `localhost,127.0.0.1,::1` entries in both `NO_PROXY` and `no_proxy`.
 Playwright's server-readiness probe does not interpret CIDR entries such as
 `127.0.0.0/8` as a loopback exemption.
 
+License collection inspects the full platform dependency graph through a temporary
+Go overlay containing an empty virtual embed asset. It works even when
+`cmd/spk-ocular/dist` is absent or empty, without restoring or changing local
+frontend staging files. This overlay is used only for dependency inspection;
+application builds embed the actual frontend bundle. Temporary files use
+`OCULAR_SCRATCH_DIR` when set, otherwise repository `.agents/tmp`, and are cleaned
+up on success or failure. Failed Go commands include their stderr diagnostics.
+
 ## Commands
 
 | Command | Purpose |
@@ -142,6 +150,9 @@ and resize DOM updates limited to one per animation frame.
 
 `make package-linux RELEASE_VERSION=1.0.0 ARCH=amd64` builds and packages on the
 matching native Linux host. It does not install, tag, push, or publish anything.
+Pass an absolute scratch `BIN_DIR` to Make to isolate both production binaries;
+pass the same directory as `--bin-dir` to the verifier. nfpm receives a temporary
+config bound to that binary path, without changing the checked-in configuration.
 Inspect the generated packages with:
 
 ```sh

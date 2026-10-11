@@ -124,6 +124,9 @@ func (w *API) LogInfo(ref core.Ref) (core.LogInfo, error) {
 func (w *API) OpenLogStream(req api.LogStreamRequest) (api.LogStreamInfo, error) {
 	return w.a.OpenLogStream(api.UIContext(context.Background()), req)
 }
+func (w *API) OpenLogHistory(req api.LogHistoryRequest) (api.LogStreamInfo, error) {
+	return w.a.OpenLogHistory(api.UIContext(context.Background()), req)
+}
 func (w *API) ExecInfo(ref core.Ref) (core.ExecInfo, error) {
 	return w.a.ExecInfo(api.UIContext(context.Background()), ref)
 }

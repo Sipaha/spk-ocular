@@ -1,3 +1,6 @@
+import type {ViewHub} from '../views/viewSync'
+import {useWorkspaceStatus} from '../workspace/persistence'
+import {showNotice} from '../store'
 import { PanelResize } from '../components/PanelResize'
 import { CloseIcon } from '../components/icons'
 import { lazy, Suspense } from 'react'
@@ -10,10 +13,14 @@ import { dock, MIN_DOCK, useDock, type DockTab } from './store'
 // Heavy parts are lazy chunks: the log viewer (virtual list, ANSI, search
 // worker) and the terminal (xterm).
 const LogHost = lazy(() => import('../logs/LogHost').then(module=>({default:module.LogHost})))
+const RestoredLogs=lazy(()=>import('../workspace/RestoredLogs'))
+const PropertiesHost=lazy(()=>import('../workspace/PropertiesHost'))
+const RestoredTerminal=lazy(()=>import('../workspace/PropertiesHost').then(module=>({default:module.RestoredTerminal})))
 const TerminalView = lazy(() => import('../term/TerminalView'))
 
 interface Props {
   client: Client
+  hub: ViewHub
   /** the selected target: tabs of another one say whose they are */
   current: TargetRef | null
   mode: 'desktop' | 'browser'
@@ -27,18 +34,19 @@ const sameTarget = (a: TargetRef, b: TargetRef | null) => !!b && a.provider === 
  * (streams go on, terminals keep their screen); closing a tab ends its
  * stream or terminal.
  */
-export function Dock({ client, current, mode, onHeightDone }: Props) {
+export function Dock({ client, hub, current, mode, onHeightDone }: Props) {
   const { tabs, active, height } = useDock()
   const targets = useStore((s) => s.view)
   if (!tabs.length) return null
   return (
-    <section aria-label={t('dock.label')} data-area="dock" className="flex shrink-0 flex-col border-t border-line bg-app" style={{ height }}>
+    <section aria-label={t('dock.label')} data-area="dock" className="flex shrink-0 flex-col border-t border-line bg-app" style={{ height, maxHeight:'85dvh' }}>
       <PanelResize label={t('logs.resize')} axis="height" reverse value={height} min={MIN_DOCK} max={() => window.innerHeight * 0.85} onDone={(h) => { dock.setHeight(h); onHeightDone(h) }} />
       <div role="tablist" className="dock-tabs">
         {tabs.map((tb) => (
           <TabHandle
             key={tb.id}
             tab={tb}
+            targetTitle={targets?.groups.flatMap(g=>g.targets).find(t=>t.provider===tb.target.provider&&t.id===tb.target.id)?.title??tb.targetTitle}
             active={tb.id === active}
             foreign={!sameTarget(tb.target, current)}
             stale={tb.kind === 'term' && reconfigured(targets, tb.target.provider, tb.target.id, tb.rev)}
@@ -49,8 +57,8 @@ export function Dock({ client, current, mode, onHeightDone }: Props) {
         {tabs.map((tb) => (
           <div key={tb.id} role="tabpanel" aria-label={tb.title} hidden={tb.id !== active} className="absolute inset-0">
             <Suspense fallback={<p className="p-3 text-fg-subtle">{t('app.loading')}</p>}>
-              {tb.kind === 'logs' ? (
-                <LogHost client={client} tab={tb} active={tb.id === active} />
+              {tb.kind === 'properties'? <PropertiesHost key={tb.openEpoch??0} client={client} hub={hub} tab={tb}/> : tb.kind==='term-restored'? <RestoredTerminal client={client} tab={tb}/> : tb.kind === 'logs' ? (
+                tb.dormant ? <RestoredLogs client={client} tab={tb}/> : <LogHost client={client} tab={tb} active={tb.id === active} />
               ) : (
                 <TerminalView client={client} tab={tb} active={tb.id === active} mode={mode} />
               )}
@@ -62,8 +70,9 @@ export function Dock({ client, current, mode, onHeightDone }: Props) {
   )
 }
 
-function TabHandle({ tab, active, foreign, stale }: { tab: DockTab; active: boolean; foreign: boolean; stale: boolean }) {
-  const tip = [tab.kind === 'term' ? tab.hint : undefined, tab.title].filter(Boolean).join('\n')
+function TabHandle({ tab, targetTitle, active, foreign, stale }: { tab: DockTab; targetTitle:string; active: boolean; foreign: boolean; stale: boolean }) {
+  const ready=useWorkspaceStatus(s=>s.ready)
+  const tip = [tab.kind==='properties'?t('workspace.propertiesLabel'):tab.kind==='logs'?t('logs.open'):t('term.open'),tab.kind === 'term' ? tab.hint : undefined, tab.title].filter(Boolean).join('\n')
   return (
     <div
       role="tab"
@@ -72,17 +81,19 @@ function TabHandle({ tab, active, foreign, stale }: { tab: DockTab; active: bool
       onClick={() => dock.activate(tab.id)}
       className={['dock-tab group flex max-w-72 items-center gap-1 rounded-t-md border border-b-0 px-2 py-0.5 text-xs', active ? 'border-line bg-app text-fg' : 'border-transparent text-fg-muted hover:text-fg'].join(' ')}
     >
-      {tab.kind === 'term' && <span aria-hidden className="font-mono text-[11px] text-fg-subtle">{'>_'}</span>}
+      {tab.kind === 'properties'&&<svg aria-hidden width="13" height="13" className="shrink-0 text-fg-subtle" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4"><path d="M4 2h6l3 3v9H4V2Zm5 0v4h4M6 8h5M6 11h5"/></svg>}
+      {(tab.kind === 'term'||tab.kind==='term-restored') && <span aria-hidden className="font-mono text-[11px] text-fg-subtle">{'>_'}</span>}
       <button className="min-w-0 truncate" title={tip} data-area-focus={active ? '' : undefined}>
         {tab.title}
       </button>
       {foreign && (
         // Not only a tooltip: a shell in another cluster must be visible as such.
         <span className="shrink-0 rounded bg-warning/15 px-1 text-[11px] text-warning" title={t('dock.otherTarget')}>
-          {tab.targetTitle}
+          {targetTitle}
         </span>
       )}
       {stale && <Reconfigured />}
+      <button className={`flex h-6 w-6 shrink-0 items-center justify-center rounded hover:bg-hover ${tab.pinned?'text-accent':'text-fg-muted'}`} disabled={!ready||!(tab.kind==='term'?tab.open.ref.uid:tab.ref.uid)} aria-label={t('workspace.keep')} aria-pressed={!!tab.pinned} title={tab.pinned?t('workspace.unpin'):t('workspace.keep')} onClick={e=>{e.stopPropagation();if(!dock.pin(tab.id))showNotice(t('workspace.limit'))}}><svg aria-hidden width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4"><path d="M5 2h6l-1 5 3 3H3l3-3-1-5ZM8 10v4"/></svg></button>
       <button className="flex h-6 w-6 shrink-0 items-center justify-center rounded text-fg-muted hover:bg-hover hover:text-fg" onClick={(e) => { e.stopPropagation(); dock.close(tab.id) }} aria-label={t('logs.closeTab')} title={t('logs.closeTab')}>
         <CloseIcon className="h-4 w-4" />
       </button>

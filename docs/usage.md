@@ -46,8 +46,7 @@ an operation. Missing sources never imply missing permissions.
 ServiceAccount properties offer **Permissions**, and a Forbidden resource read
 offers **Check this Forbidden**. Permission inspection preserves open YAML drafts;
 source navigation uses the standard edit guard. See [RBAC explanation](rbac-explanation.md)
-for namespace boundaries, limits, identity and review semantics. Available in
-development builds, not published v1.1.2.
+for namespace boundaries, limits, identity and review semantics. Available from 1.2.0.
 
 ## Events timeline
 
@@ -59,8 +58,7 @@ can also be opened. **Refresh** reads a new snapshot and preserves open resource
 edits. Older Kubernetes events may already have expired, and incomplete access
 or size caps are disclosed. Bars show first/last observations of cumulative
 series, not continuous failure duration. See [Events timeline](events-timeline.md)
-for coverage, limits and evidence semantics. Available in development builds;
-not included in published v1.1.2.
+for coverage, limits and evidence semantics. Available from 1.2.0.
 
 ## Cluster graph
 
@@ -251,7 +249,9 @@ detail tables retain widths only while mounted.
 
 The last kind, scope, row filter, sort, cursor, and open details are restored per
 connection. Row checkmarks are intentionally not restored. Log and terminal
-tabs survive switching connections, but do not survive restarting the process.
+tabs survive switching connections. From 1.2.0, explicitly pinned
+references and ended terminal slots also survive restart; actual contents and
+commands do not. See [workspace continuity](workspace-continuity.md).
 
 ## Search and keyboard
 
@@ -304,13 +304,23 @@ range, Space toggles a mark, and Ctrl+A marks visible rows. Filtering a marked
 row out removes its mark. Bulk actions prepare and run one guarded operation
 per resource, and report each result independently.
 
+Resource-inspector actions use compact icon buttons, with descriptive tooltips
+on hover and keyboard focus. Accessible names and shortcuts are unchanged.
+Tooltips include the right-click setup options for logs, terminals and files.
+Only one action tooltip is shown at a time; Escape dismisses it without closing
+the underlying panel. The ellipsis opens the object-action menu; a bookmarked
+document selects the comparison baseline.
+
 Related resources appear as compact grouped rows with a kind badge, truncated
 name, full-name tooltip and navigation arrow. Unresolvable references remain
 plain non-clickable rows; cross-namespace rows show their scope.
 
 Deployment details include **Deployment revisions**: retained ReplicaSets ordered
-by revision number, with the current template marked, creation time, ready/total
-replicas, container images and change cause. **View YAML** reads the selected
+by revision number in a compact table, with the current template marked,
+creation date (full timestamp in a tooltip), ready/total replicas, container images
+and change cause. Long images and causes are truncated with full-value tooltips;
+narrow inspectors scroll the table horizontally. The row icon buttons retain
+accessible labels and tooltips for YAML and comparison. **View YAML** reads the selected
 revision's Pod template; **Compare** compares it with the current Deployment or
 another retained revision. Comparisons omit the controller's pod-template-hash
 label. These views are read-only and UID-pinned; permission failures and truncated
@@ -320,6 +330,10 @@ revisionHistoryLimit. This section adds no rollback control.
 ## Logs, terminals, and tunnels
 
 Logs show all levels without severity toggle buttons or a default DEBUG filter.
+Log display toggles and actions use icon buttons with descriptive hover/focus
+tooltips; active toggles stay highlighted. Channel, line-limit and time-range
+selectors and search/filter inputs retain text. Paired circular arrows reopen a
+log stream; the history-clock icon selects logs from the previous instance.
 Use text filters and search for any log format. Logs support multiple sources, bounded history, search, filters, copying, and
 follow mode. Scrolling up pauses following; Follow resumes it. Gaps, truncated
 history, and unavailable sources are shown explicitly. The icon at the right edge
@@ -415,7 +429,8 @@ The divider between the release/chart list and its details can be dragged or
 resized with arrow keys. The target list in agent permissions uses the same
 resize controls as the main sidebar, resource navigation, resource details and
 bottom dock. Escape during a drag restores the previous size; panel widths
-survive navigation within the running application.
+survive navigation and, from 1.2.0, application restarts through the
+[workspace metadata](workspace-continuity.md).
 
 Connected Kubernetes targets offer Helm Releases and Charts using the same
 resource table and detail-panel components as other sections. The tables support
@@ -550,13 +565,27 @@ persisted in Ocular's settings or resource caches.
 
 ### Log windows, downloads and resizing
 
-**Download** opens the system file chooser in desktop mode, including detached
-log windows. Choose a destination and filename; cancelling writes nothing. The
-UTF-8 export contains the displayed filtered lines and their enabled prefixes;
-ANSI colors, emphasis and terminal hyperlinks are removed.
-Exports are staged in a private sibling file before replacing the chosen file.
-Browser mode uses the browser save picker where supported, with its ordinary
-download manager as fallback. Ctrl+S/Command+S invokes the same action.
+**Download** reads all currently retained history of the selected log source in a
+separate finite archive. It uses the selected channel and previous-instance option,
+but ignores the viewer's line limit, time range, search and text filter. It does
+not export only the viewport or the bounded viewer buffer. **Copy** continues to
+copy the filtered loaded lines. Each exported line includes its original provider
+timestamp, when available, and source label; ANSI formatting is removed.
+
+In desktop mode, including detached log windows, choose the destination before
+history reads start. Native and supported browser save pickers write chunks to a
+staged file and replace the destination only after a complete stream. Progress
+shows lines/bytes, and **Cancel log download** stops the export. Closing its tab or
+changing source/channel cancels it. Cancelling the chooser starts no history read.
+Source failures, gaps, truncated lines, limits or an interrupted stream abort the
+staged download instead of silently saving a partial history as complete.
+
+The archive read is bounded to 1 GiB, 10000000 lines, 1000 sources and 5 minutes.
+Browsers without a streaming save picker use a 64 MiB in-memory download-manager
+fallback and report an error beyond that size; use the desktop app or a streaming
+save picker for larger exports. Ctrl+S/Command+S invokes the same action. History
+is limited to what Kubernetes/Docker still retain: expired/rotated logs and deleted
+Pods are not recovered, and several sources are read separately, not atomically.
 
 The log toolbar's **Open in window** opens a separate OS window in desktop mode
 (or a popup in browser mode). It uses the existing tab's log stream and buffered
@@ -580,5 +609,5 @@ and array order. **Show service fields and status** includes otherwise hidden
 Kubernetes metadata and status. Secret payloads remain excluded. **Refresh**
 reads both UID-pinned objects again; editor drafts remain untouched. See
 [resource comparison](resource-comparison.md) for identity, normalization and
-retention boundaries. This feature is implemented in development builds and is
-not yet released.
+retention boundaries. This feature is implemented from 1.2.0 and is
+included from 1.2.0.

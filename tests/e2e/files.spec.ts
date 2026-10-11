@@ -2,6 +2,7 @@ import { expect } from '@playwright/test'
 import { test, scratchRoot } from './fixtures'
 import { selectObject } from './synth'
 import { join } from 'node:path'
+import { languageNames, languages } from '../../web/src/languages'
 
 test('container files: directories, highlighted editing, save, conflict and discard', async ({ page }) => {
  let contents='server:\n  port: 8080\n'; let version='original'; const requests: Record<string,unknown>[]=[]
@@ -409,6 +410,13 @@ test('deployment revisions show retained history, read-only YAML and normalized 
  const revisions=page.getByRole('region',{name:'Deployment revisions',exact:true})
  await expect(revisions.getByText('Revision 1',{exact:true})).toBeVisible()
  await expect(revisions.getByText('Current',{exact:true})).toBeVisible()
+ const table=revisions.getByRole('table',{name:'Deployment revisions',exact:true})
+ await expect(table.getByRole('columnheader')).toHaveText(['Revision','Images / change','Ready','Created','Actions'])
+ await expect(table.getByRole('row')).toHaveCount(3)
+ expect(await table.evaluate(el=>el.parentElement!.scrollWidth===el.parentElement!.clientWidth)).toBeTruthy()
+ for(const row of await table.locator('[data-deploy-revision]').all()) expect((await row.boundingBox())!.height).toBeLessThanOrEqual(48)
+ await expect(table.getByText('Initial deployment',{exact:true})).toHaveAttribute('title','Initial deployment')
+ await expect(table.getByText('2/2',{exact:true})).toHaveAttribute('title','2/2 ready')
  await page.screenshot({path:join(scratchRoot,'related-and-deploy-revisions.png')})
  await revisions.locator('[data-deploy-revision]').filter({hasText:'Revision 2'}).getByRole('button',{name:'Compare',exact:true}).click()
  await expect(page.getByRole('dialog',{name:'Deployment revisions',exact:true})).toContainText('Pod templates are identical.')
@@ -430,6 +438,27 @@ test('deployment revisions show retained history, read-only YAML and normalized 
  await expect(dialog.locator('[data-op="-"]')).toContainText('app:v2')
  await page.screenshot({path:join(scratchRoot,'deploy-revision-compare.png')})
  await dialog.getByRole('button',{name:'Close',exact:true}).click()
+ try {
+ for(const language of languages) {
+  await page.locator('.language-menu button').click()
+  await page.getByRole('option',{name:languageNames[language],exact:true}).click()
+  await expect(page.locator('html')).toHaveAttribute('lang',language)
+  const translatedTable=page.locator('table').filter({has:page.locator('[data-deploy-revision]')})
+  await expect(translatedTable.getByRole('columnheader')).toHaveCount(5)
+  await expect(translatedTable.locator('[data-deploy-revision]').first().getByRole('button')).toHaveCount(2)
+  if(language==='ru') {
+   await page.setViewportSize({width:1000,height:900})
+   await page.screenshot({path:join(scratchRoot,'deploy-revisions-ru-compact.png')})
+   expect(await translatedTable.evaluate(el=>el.parentElement!.scrollWidth>el.parentElement!.clientWidth)).toBeTruthy()
+   await translatedTable.evaluate(el=>{el.parentElement!.scrollLeft=el.parentElement!.scrollWidth})
+   await expect(translatedTable.locator('[data-deploy-revision]').first().getByRole('button').last()).toBeInViewport()
+  }
+ }
+ } finally {
+ await page.locator('.language-menu button').click()
+ await page.getByRole('option',{name:languageNames.en,exact:true}).click()
+ await page.setViewportSize({width:1280,height:900})
+ }
  const related=page.getByRole('region',{name:'Related',exact:true})
  const link=related.getByRole('button',{name:'pods/api-very-long-pod-name-123456789',exact:true})
  await expect(link).toHaveAttribute('title','pods/api-very-long-pod-name-123456789')

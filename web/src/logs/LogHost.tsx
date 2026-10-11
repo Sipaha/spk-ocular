@@ -1,3 +1,4 @@
+import {ActionIconButton} from '../components/ActionIconButton'
 import { WindowActionIcon } from '../components/icons'
 import { lazy, Suspense, useEffect, useState } from 'react'
 import type { Client } from '../api/client'
@@ -20,6 +21,6 @@ export function LogHost({ client, tab, active }: { client: Client; tab: LogsTab;
  return <>
   {error && <p role="alert" className="p-2 text-danger">{error}</p>}
   <div className="h-full" hidden={detached}><Suspense fallback={<p>{t('app.loading')}</p>}><LogViewer client={client} subject={tab.ref} initialChannel={tab.channel} active={active&&!detached} bridge={bridge} onWindowAction={()=>void detach()}/></Suspense></div>
-  {detached && <div className="relative flex h-full items-center justify-center gap-3 text-fg-muted"><span>{t('logs.inWindow')}</span><button className="absolute right-3 top-2 flex h-[26px] w-[26px] items-center justify-center rounded border border-line hover:bg-hover" aria-label={t('logs.returnWindow')} title={t('logs.returnWindow')} onClick={()=>{setDetached(false);void bridge.close()}}><WindowActionIcon returning className="h-4 w-4"/></button></div>}
+  {detached && <div className="relative flex h-full items-center justify-center gap-3 text-fg-muted"><span>{t('logs.inWindow')}</span><div className="absolute right-3 top-2"><ActionIconButton label={t('logs.returnWindow')} description={t('logs.returnWindow')} onClick={()=>{setDetached(false);void bridge.close()}}><WindowActionIcon returning className="h-4 w-4"/></ActionIconButton></div></div>}
  </>
 }

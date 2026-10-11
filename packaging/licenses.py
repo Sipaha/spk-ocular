@@ -11,6 +11,7 @@ import os
 from pathlib import Path
 import re
 import subprocess
+import tempfile
 
 ROOT = Path(__file__).resolve().parent.parent
 OUTPUT = ROOT / 'THIRD-PARTY-NOTICES.txt'
@@ -37,29 +38,42 @@ def decode_stream(text):
 def package_graph():
     modules = {}
     standard_dirs = set()
-    for platform in ('linux', 'windows', 'darwin'):
-        for arch in ('amd64', 'arm64'):
-            for desktop in (False, True):
-                tags = 'wails production' + (' gtk3' if platform == 'linux' else '') if desktop else ''
-                env = {**os.environ, 'GOOS': platform, 'GOARCH': arch,
-                       'CGO_ENABLED': '1' if desktop and platform != 'windows' else '0'}
-                args = ['go', 'list', '-mod=readonly', '-deps', '-json']
-                if tags:
-                    args += ['-tags', tags]
-                args += ['./cmd/spk-ocular']
-                result = subprocess.run(args, cwd=ROOT, env=env, text=True, encoding='utf-8', capture_output=True, check=True)
-                for pkg in decode_stream(result.stdout):
-                    if pkg.get('Standard'):
-                        standard_dirs.add(Path(pkg['Dir']))
-                        continue
-                    mod = pkg.get('Module')
-                    if not mod or mod.get('Main'):
-                        continue
-                    if mod.get('Replace'):
-                        raise ValueError(f'Review replacement license provenance: {mod["Path"]}')
-                    key = (mod['Path'], mod['Version'])
-                    entry = modules.setdefault(key, {'root': Path(mod['Dir']), 'dirs': set()})
-                    entry['dirs'].add(Path(pkg['Dir']))
+    # Listing dependencies must not require a staged SPA or modify its directory.
+    # A virtual empty asset satisfies go:embed for metadata inspection only;
+    # actual application builds still embed the real frontend through Makefile.
+    scratch_root = Path(os.environ.get('OCULAR_SCRATCH_DIR', ROOT / '.agents/tmp'))
+    scratch_root.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory(prefix='license-graph-', dir=scratch_root) as scratch:
+        scratch = Path(scratch).resolve()
+        placeholder = scratch / 'empty-asset'
+        placeholder.write_bytes(b'')
+        overlay = scratch / 'overlay.json'
+        overlay.write_text(json.dumps({'Replace': {
+            str(ROOT / 'cmd/spk-ocular/dist/.gitkeep'): str(placeholder),
+        }}), encoding='utf-8')
+        for platform in ('linux', 'windows', 'darwin'):
+            for arch in ('amd64', 'arm64'):
+                for desktop in (False, True):
+                    tags = 'wails production' + (' gtk3' if platform == 'linux' else '') if desktop else ''
+                    env = {**os.environ, 'GOOS': platform, 'GOARCH': arch,
+                           'CGO_ENABLED': '1' if desktop and platform != 'windows' else '0'}
+                    args = ['go', 'list', '-overlay=' + str(overlay), '-mod=readonly', '-deps', '-json']
+                    if tags:
+                        args += ['-tags', tags]
+                    args += ['./cmd/spk-ocular']
+                    result = subprocess.run(args, cwd=ROOT, env=env, text=True, encoding='utf-8', capture_output=True, check=True)
+                    for pkg in decode_stream(result.stdout):
+                        if pkg.get('Standard'):
+                            standard_dirs.add(Path(pkg['Dir']))
+                            continue
+                        mod = pkg.get('Module')
+                        if not mod or mod.get('Main'):
+                            continue
+                        if mod.get('Replace'):
+                            raise ValueError(f'Review replacement license provenance: {mod["Path"]}')
+                        key = (mod['Path'], mod['Version'])
+                        entry = modules.setdefault(key, {'root': Path(mod['Dir']), 'dirs': set()})
+                        entry['dirs'].add(Path(pkg['Dir']))
     return modules, standard_dirs
 
 
@@ -143,4 +157,7 @@ if __name__ == '__main__':
     try:
         main()
     except (ValueError, subprocess.CalledProcessError) as error:
-        raise SystemExit(str(error)) from error
+        detail = str(error)
+        if isinstance(error, subprocess.CalledProcessError) and error.stderr:
+            detail += '\n' + error.stderr.rstrip()
+        raise SystemExit(detail) from error

@@ -2,6 +2,7 @@ import { connectSelected } from './fixtures'
 import { expect, type Page } from '@playwright/test'
 import { test, scratchRoot } from './fixtures'
 import { join } from 'node:path'
+import {languageNames,languages} from '../../web/src/languages'
 
 async function token(page: Page) {
   return (await page.locator('meta[name="spk-ocular-api-token"]').getAttribute('content'))!
@@ -82,7 +83,7 @@ test('a stream that ends says so and can be reopened', async ({ page }) => {
   const panel = await openLogs(page, 'api')
   await emit(page, 'api', { end: true })
   await expect(panel.getByLabel('stream state')).toHaveText('Complete')
-  await panel.getByRole('button', { name: 'Previous' }).click()
+  await panel.getByRole('button', { name: 'Previous', exact: true }).click()
   await expect(rows(panel).first()).toHaveText(/^previous: INFO api\/main starting/)
   await expect(panel.getByLabel('stream state')).toHaveText('Complete')
 })
@@ -297,7 +298,7 @@ test('left panel resize keeps search geometry fixed and avoids log row updates d
 
 test('Download chooses a destination and exports uncolored text; the last row clears the scrollbar', async ({ page }) => {
  await page.addInitScript(()=>{
-  ;(window as unknown as {showSaveFilePicker:()=>Promise<unknown>}).showSaveFilePicker=async()=>({name:'chosen.log',createWritable:async()=>({write:async(text:string)=>{(window as unknown as {downloadedLogs:string}).downloadedLogs=text},close:async()=>{},abort:async()=>{}})})
+  ;(window as unknown as {showSaveFilePicker:()=>Promise<unknown>}).showSaveFilePicker=async()=>({name:'chosen.log',createWritable:async()=>({write:async(text:string)=>{const target=window as unknown as {downloadedLogs?:string};target.downloadedLogs=(target.downloadedLogs??'')+text},close:async()=>{},abort:async()=>{}})})
  })
  const panel=await openLogs(page,'api')
  await emit(page,'api',{lines:['\u001b[1;31mcolored download proof\u001b[0m',`last row ${'long text '.repeat(400)}`]})
@@ -309,8 +310,127 @@ test('Download chooses a destination and exports uncolored text; the last row cl
   return viewport.y+viewport.height-row.y-row.height
  }).toBeGreaterThanOrEqual(20)
  await panel.getByRole('button',{name:'Download',exact:true}).click()
- await expect.poll(()=>page.evaluate(()=>(window as unknown as {downloadedLogs?:string}).downloadedLogs)).toContain('colored download proof')
+ await expect.poll(()=>page.evaluate(()=>(window as unknown as {downloadedLogs?:string}).downloadedLogs)).toContain('INFO api/main starting')
+ expect(await page.evaluate(()=>(window as unknown as {downloadedLogs:string}).downloadedLogs)).toContain('INFO api/main ready')
  expect(await page.evaluate(()=>(window as unknown as {downloadedLogs:string}).downloadedLogs)).not.toContain('\u001b')
  await expect(panel).toContainText('Saved to chosen.log')
  await page.screenshot({path:join(scratchRoot,'logs-scrollbar-clearance.png')})
+})
+
+
+test('inspector and log actions use compact icons with hover/focus descriptions in all eight languages',async({page})=>{
+ const panel=await openLogs(page,'api')
+ const details=page.locator('[data-area=details]')
+ const logs=details.getByRole('button',{name:'Logs',exact:true})
+ await logs.hover()
+ await expect(page.getByRole('tooltip')).toContainText('Right-click to choose Pod and container.')
+ await logs.focus()
+ await page.keyboard.press('Escape')
+ await expect(page.getByRole('tooltip')).toHaveCount(0)
+ await expect(details).toBeVisible()
+ await expect(logs).toBeFocused()
+ const copy=panel.getByRole('button',{name:'Copy',exact:true})
+ await copy.focus()
+ await expect(page.getByRole('tooltip')).toHaveText('Copy the shown lines (Ctrl+Shift+C)')
+ const rect=(await page.getByRole('tooltip').boundingBox())!
+ expect(rect.x).toBeGreaterThanOrEqual(0);expect(rect.x+rect.width).toBeLessThanOrEqual(1280)
+ await page.keyboard.press('Escape')
+ await panel.getByRole('button',{name:'Time',exact:true}).click()
+ await expect(panel.getByRole('button',{name:'Time',exact:true})).toHaveAttribute('aria-pressed','true')
+ try {
+  for(const language of languages){
+   await page.locator('.language-menu button').click()
+   await page.getByRole('option',{name:languageNames[language],exact:true}).click()
+   await expect(page.locator('html')).toHaveAttribute('lang',language)
+   for(const width of [1280,960]){
+    await page.setViewportSize({width,height:900})
+    const icons=page.locator('.drawer-tools .action-icon-button, .log-toolbar .action-icon-button')
+    expect(await icons.count()).toBeGreaterThanOrEqual(14)
+    for(const icon of await icons.all()){
+     await expect(icon).toHaveText('');await expect(icon.locator('svg')).toHaveCount(1)
+     expect(await icon.getAttribute('aria-label')).toBeTruthy()
+     expect(await icon.evaluate(el=>document.getElementById(el.getAttribute('aria-describedby')!)?.textContent)).toBeTruthy()
+     const box=(await icon.boundingBox())!;expect(box.width).toBe(28);expect(box.height).toBe(28)
+     await expect(icon).toBeInViewport({ratio:1})
+    }
+    const tools=details.locator('.drawer-tools')
+    const ys=await tools.locator('button').evaluateAll(els=>els.map(el=>el.getBoundingClientRect().y))
+    expect(new Set(ys).size).toBe(1)
+    expect(await page.evaluate(()=>document.documentElement.scrollWidth)).toBe(width)
+    const last=panel.locator('.log-toolbar .action-icon-button').last()
+    await panel.locator('input').first().focus()
+    await last.focus();await expect(page.getByRole('tooltip')).toBeVisible()
+    const tip=(await page.getByRole('tooltip').boundingBox())!
+    expect(tip.x).toBeGreaterThanOrEqual(0);expect(tip.x+tip.width).toBeLessThanOrEqual(width)
+    await page.screenshot({path:join(scratchRoot,`icon-actions-${language}-${width}.png`)})
+    await page.keyboard.press('Escape');await expect(page.getByRole('tooltip')).toHaveCount(0)
+   }
+  }
+ } finally {
+  await page.locator('.language-menu button').click()
+  await page.getByRole('option',{name:languageNames.en,exact:true}).click()
+ }
+})
+
+
+test('Download reads all retained history rather than viewport, loaded buffer or panel filters',async({page})=>{
+ await page.addInitScript(()=>{
+  ;(window as unknown as {showSaveFilePicker:()=>Promise<unknown>}).showSaveFilePicker=async()=>({name:'full-history.log',createWritable:async()=>({write:async(text:string)=>{const target=window as unknown as {historyText?:string};target.historyText=(target.historyText??'')+text},close:async()=>{(window as unknown as {historyCommitted:boolean}).historyCommitted=true},abort:async()=>{(window as unknown as {historyAborted:boolean}).historyAborted=true}})})
+ })
+ let historyReads=0
+ await page.route('**/api/OpenLogHistory',async route=>{
+  historyReads++;const request=route.request().postDataJSON()
+  expect(request.channel).toBe('main');expect(request.previous).toBe(false)
+  expect(Object.keys(request).sort()).toEqual(['channel','previous','ref'])
+  expect(request.ref.uid).toBeTruthy()
+  await route.fulfill({json:{streamId:'full-history-fixture'}})
+ })
+ await page.route('**/logs/full-history-fixture',route=>{
+  const source={k:'source',id:1,key:'history-uid/main',label:'api/main'}
+  const lines=Array.from({length:4000},(_,i)=>['2026-10-11T01:00:00Z',`archive line ${i}`])
+  return route.fulfill({contentType:'application/x-ndjson',body:[source,{k:'lines',s:1,l:lines},{k:'end',reason:'done'}].map(f=>JSON.stringify(f)+'\n').join('')})
+ })
+ const panel=await openLogs(page,'api')
+ await expect(panel.getByLabel('line count')).toHaveText('6 lines')
+ await panel.getByLabel('Filter (*)',{exact:true}).fill('DOES_NOT_MATCH_HISTORY')
+ await panel.getByRole('button',{name:'Download',exact:true}).click()
+ await expect.poll(()=>page.evaluate(()=>(window as unknown as {historyCommitted?:boolean}).historyCommitted)).toBe(true)
+ const text=await page.evaluate(()=>(window as unknown as {historyText:string}).historyText)
+ expect(text.split('\n').filter(Boolean)).toHaveLength(4000);expect(text).toContain('archive line 0\n');expect(text).toContain('archive line 3999\n')
+ expect(historyReads).toBe(1);await expect(panel).toContainText('Saved to full-history.log')
+ await page.screenshot({path:join(scratchRoot,'history-export-all-lines.png')})
+})
+
+test('Incomplete history aborts its chosen destination without committing a partial file',async({page})=>{
+ await page.addInitScript(()=>{
+  ;(window as unknown as {showSaveFilePicker:()=>Promise<unknown>}).showSaveFilePicker=async()=>({name:'existing.log',createWritable:async()=>({write:async()=>{},close:async()=>{(window as unknown as {committed:boolean}).committed=true},abort:async()=>{(window as unknown as {aborted:boolean}).aborted=true}})})
+ })
+ await page.route('**/api/OpenLogHistory',route=>route.fulfill({json:{streamId:'incomplete-fixture'}}))
+ await page.route('**/logs/incomplete-fixture',route=>route.fulfill({contentType:'application/x-ndjson',body:[{k:'source',id:1,key:'history-uid/main',label:'api/main'},{k:'lines',s:1,l:[['','partial prefix']]},{k:'state',s:1,state:'truncated',msg:'source history incomplete'},{k:'end',reason:'done'}].map(f=>JSON.stringify(f)+'\n').join('')}))
+ const panel=await openLogs(page,'api');await panel.getByRole('button',{name:'Download',exact:true}).click()
+ await expect.poll(()=>page.evaluate(()=>(window as unknown as {aborted?:boolean}).aborted)).toBe(true)
+ expect(await page.evaluate(()=>(window as unknown as {committed?:boolean}).committed)).not.toBe(true)
+ await expect(panel).toContainText('source history incomplete')
+ await page.screenshot({path:join(scratchRoot,'history-export-incomplete.png')})
+})
+
+test('Cancelling a pending history download aborts its destination and ignores a late reply',async({page})=>{
+ await page.addInitScript(()=>{
+  ;(window as unknown as {showSaveFilePicker:()=>Promise<unknown>}).showSaveFilePicker=async()=>({name:'pending.log',createWritable:async()=>({write:async()=>{},close:async()=>{(window as unknown as {committed:boolean}).committed=true},abort:async()=>{(window as unknown as {aborted:boolean}).aborted=true}})})
+ })
+ await page.route('**/api/OpenLogHistory',route=>route.fulfill({json:{streamId:'pending-history'}}))
+ let release!:()=>void
+ const paused=new Promise<void>(resolve=>{release=resolve})
+ let started=false
+ await page.route('**/logs/pending-history',async route=>{
+  started=true;await paused
+  try{await route.fulfill({contentType:'application/x-ndjson',body:'{"k":"source","id":1,"key":"uid/main","label":"api/main"}\n{"k":"end","reason":"done"}\n'})}catch{/* The cancelled fetch may already be gone. */}
+ })
+ const panel=await openLogs(page,'api');await panel.getByRole('button',{name:'Download',exact:true}).click()
+ await expect.poll(()=>started).toBe(true)
+ await panel.getByRole('button',{name:'Cancel log download',exact:true}).click()
+ await expect.poll(()=>page.evaluate(()=>(window as unknown as {aborted?:boolean}).aborted)).toBe(true)
+ release();await expect(panel).toContainText('Log download cancelled')
+ expect(await page.evaluate(()=>(window as unknown as {committed?:boolean}).committed)).not.toBe(true)
+ await expect(panel.getByRole('button',{name:'Download',exact:true})).toBeEnabled()
 })
