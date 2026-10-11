@@ -125,7 +125,7 @@
     ]
   ],
   "gallery": "看看它如何工作。",
-  "galleryText": "SPK Ocular 1.1.2 的真实界面。使用演示数据，而非产品模型图。",
+  "galleryText": "SPK Ocular 1.2.0 的真实界面。使用演示数据，而非产品模型图。",
   "galleryTabs": [
     "工作负载",
     "日志与详情",
@@ -240,5 +240,39 @@
   ],
   "filesBoundary": "需要运行中的 Linux 容器：sh 用于浏览，readlink 用于符号链接，tar 用于下载。文件和文件夹以流式方式传输，不受编辑器 2 MiB 限制，且不会覆盖已有名称。浏览器模式下载需要桌面应用。",
   "filesAlt": "SPK Ocular 展开的应用目录树和语法高亮的 YAML 配置",
-  "filesCaption": "真实应用 · 本地 Docker 演示环境"
+  "filesCaption": "真实应用 · 本地 Docker 演示环境",
+  "investigationTitle": "关联证据，开展调查。",
+  "investigation": [
+    {
+      "title": "集群图谱",
+      "text": "按 UID 探索资源关系以及 Service、Ingress 和 Gateway 声明的路由。这里展示的是配置，而非实测网络流量。",
+      "image": "graph",
+      "alt": "SPK Ocular · 集群图谱"
+    },
+    {
+      "title": "事件时间线",
+      "text": "按工作负载所有权分组查看有上限的 Kubernetes Events 快照。需显式刷新；保留期限和不完整覆盖始终可见。这不是审计历史。",
+      "image": "timeline",
+      "alt": "SPK Ocular · 事件时间线"
+    },
+    {
+      "title": "解释 RBAC",
+      "text": "追溯 ServiceAccount 绑定和角色规则。以当前连接身份向服务器检查请求；声明的权限与自身访问判定分别显示。",
+      "image": "rbac",
+      "alt": "SPK Ocular · 解释 RBAC"
+    },
+    {
+      "title": "比较已保存的资源",
+      "text": "选择已连接环境中的一对资源，比较规范化的只读 YAML。排除 Secret 内容和未保存的修改；可选择显示服务字段。",
+      "image": "compare",
+      "alt": "SPK Ocular · 比较已保存的资源"
+    },
+    {
+      "title": "保留调查工作区",
+      "text": "固定只读属性，并在重启后保留日志引用、已结束的终端标签和面板尺寸。连接和恢复均需显式操作；不保存或重放内容与命令。",
+      "image": "workspace",
+      "alt": "SPK Ocular · 保留调查工作区"
+    }
+  ],
+  "logHistoryText": "下载源仍保留的全部日志历史，不受查看器筛选或行数限制影响。流式写入支持进度和取消，并明确报告保留期限、导出上限和不完整读取。复制仍使用筛选后的查看器缓冲区。"
 }

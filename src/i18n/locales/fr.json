@@ -125,7 +125,7 @@
     ]
   ],
   "gallery": "Découvrez l’interface.",
-  "galleryText": "Écrans réels de SPK Ocular 1.1.2. Données de démonstration, sans maquettes.",
+  "galleryText": "Écrans réels de SPK Ocular 1.2.0. Données de démonstration, sans maquettes.",
   "galleryTabs": [
     "Workloads",
     "Logs et détails",
@@ -240,5 +240,39 @@
   ],
   "filesBoundary": "Nécessite un conteneur Linux actif : sh pour parcourir, readlink pour les liens et tar pour télécharger. Les fichiers et dossiers sont transférés sans la limite de 2 MiB de l’éditeur ; les noms existants ne sont pas écrasés. Les téléchargements en mode navigateur nécessitent l’application de bureau.",
   "filesAlt": "SPK Ocular avec une arborescence d’application développée et une configuration YAML colorée",
-  "filesCaption": "Application réelle · environnement de démonstration Docker local"
+  "filesCaption": "Application réelle · environnement de démonstration Docker local",
+  "investigationTitle": "Reliez les éléments de votre investigation.",
+  "investigation": [
+    {
+      "title": "Graphe du cluster",
+      "text": "Explorez les relations fondées sur les UID et les routes déclarées de Service, Ingress et Gateway. Il s’agit de configuration, pas de trafic mesuré.",
+      "image": "graph",
+      "alt": "SPK Ocular · Graphe du cluster"
+    },
+    {
+      "title": "Chronologie des événements",
+      "text": "Examinez des instantanés limités de Kubernetes Events regroupés par propriétaires des charges de travail. Actualisez explicitement ; la rétention et la couverture incomplète restent visibles. Ce n’est pas un historique d’audit.",
+      "image": "timeline",
+      "alt": "SPK Ocular · Chronologie des événements"
+    },
+    {
+      "title": "Comprendre RBAC",
+      "text": "Retracez les liaisons ServiceAccount et les règles des rôles. Vérifiez les requêtes sur le serveur avec l’identité de la connexion actuelle ; les déclarations et les décisions sur votre propre accès restent distinctes.",
+      "image": "rbac",
+      "alt": "SPK Ocular · Comprendre RBAC"
+    },
+    {
+      "title": "Comparer des ressources enregistrées",
+      "text": "Sélectionnez deux ressources sur des environnements connectés et comparez leur YAML normalisé en lecture seule. Les contenus Secret et les brouillons non enregistrés sont exclus ; les champs de service sont facultatifs.",
+      "image": "compare",
+      "alt": "SPK Ocular · Comparer des ressources enregistrées"
+    },
+    {
+      "title": "Conserver votre espace d’investigation",
+      "text": "Épinglez des propriétés en lecture seule et conservez les références aux logs, les onglets de terminal terminés et les dimensions des panneaux après un redémarrage. Connectez-vous et reprenez explicitement ; aucun contenu ni commande n’est enregistré ou rejoué.",
+      "image": "workspace",
+      "alt": "SPK Ocular · Conserver votre espace d’investigation"
+    }
+  ],
+  "logHistoryText": "Téléchargez tout l’historique des logs conservé par la source, indépendamment des filtres ou des limites du visualiseur. L’écriture en flux affiche la progression et permet l’annulation ; rétention, limites d’export et lectures incomplètes sont signalées. La copie utilise toujours le tampon filtré du visualiseur."
 }

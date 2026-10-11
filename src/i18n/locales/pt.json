@@ -125,7 +125,7 @@
     ]
   ],
   "gallery": "Veja como funciona.",
-  "galleryText": "Telas reais do SPK Ocular 1.1.2. Dados de demonstração, não mockups.",
+  "galleryText": "Telas reais do SPK Ocular 1.2.0. Dados de demonstração, não mockups.",
   "galleryTabs": [
     "Workloads",
     "Logs e detalhes",
@@ -240,5 +240,39 @@
   ],
   "filesBoundary": "Exige um contêiner Linux em execução: sh para explorar, readlink para links e tar para downloads. Arquivos e pastas são transferidos sem o limite de 2 MiB do editor; nomes existentes não são sobrescritos. Downloads no modo navegador exigem o aplicativo desktop.",
   "filesAlt": "SPK Ocular com árvore de pastas da aplicação expandida e configuração YAML destacada",
-  "filesCaption": "Aplicativo real · ambiente de demonstração Docker local"
+  "filesCaption": "Aplicativo real · ambiente de demonstração Docker local",
+  "investigationTitle": "Investigue com as evidências conectadas.",
+  "investigation": [
+    {
+      "title": "Grafo do cluster",
+      "text": "Explore relações baseadas em UID e rotas declaradas de Service, Ingress e Gateway. São configurações, não tráfego medido.",
+      "image": "graph",
+      "alt": "SPK Ocular · Grafo do cluster"
+    },
+    {
+      "title": "Linha do tempo de eventos",
+      "text": "Inspecione snapshots limitados de Kubernetes Events agrupados pelos proprietários das cargas de trabalho. Atualize explicitamente; a retenção e a cobertura incompleta continuam visíveis. Não é um histórico de auditoria.",
+      "image": "timeline",
+      "alt": "SPK Ocular · Linha do tempo de eventos"
+    },
+    {
+      "title": "Entenda o RBAC",
+      "text": "Rastreie vínculos de ServiceAccount e regras de funções. Verifique solicitações no servidor com a identidade da conexão atual; declarações e decisões sobre seu próprio acesso ficam separadas.",
+      "image": "rbac",
+      "alt": "SPK Ocular · Entenda o RBAC"
+    },
+    {
+      "title": "Compare recursos salvos",
+      "text": "Selecione dois recursos em ambientes conectados e compare YAML normalizado somente para leitura. Conteúdo de Secret e rascunhos não salvos são excluídos; campos de serviço são opcionais.",
+      "image": "compare",
+      "alt": "SPK Ocular · Compare recursos salvos"
+    },
+    {
+      "title": "Preserve seu espaço de investigação",
+      "text": "Fixe propriedades somente para leitura e mantenha referências a logs, abas de terminal encerradas e tamanhos dos painéis após reiniciar. Conecte e retome explicitamente; nenhum conteúdo ou comando é salvo ou reproduzido.",
+      "image": "workspace",
+      "alt": "SPK Ocular · Preserve seu espaço de investigação"
+    }
+  ],
+  "logHistoryText": "Baixe todo o histórico de logs retido pela origem, independentemente dos filtros ou limites do visualizador. A gravação em streaming oferece progresso e cancelamento; retenção, limites de exportação e leituras incompletas são informados. Copiar continua usando o buffer filtrado do visualizador."
 }

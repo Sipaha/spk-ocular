@@ -125,7 +125,7 @@
     ]
   ],
   "gallery": "So sieht die Arbeit damit aus.",
-  "galleryText": "Echte Ansichten von SPK Ocular 1.1.2. Demodaten statt Produkt-Mockups.",
+  "galleryText": "Echte Ansichten von SPK Ocular 1.2.0. Demodaten statt Produkt-Mockups.",
   "galleryTabs": [
     "Workloads",
     "Logs und Details",
@@ -240,5 +240,39 @@
   ],
   "filesBoundary": "Erfordert einen laufenden Linux-Container: sh zum Durchsuchen, readlink für symbolische Links und tar für Downloads. Dateien und Ordner werden ohne die Editorgrenze von 2 MiB gestreamt; vorhandene Zielnamen werden nicht überschrieben. Downloads im Browsermodus benötigen die Desktop-App.",
   "filesAlt": "SPK Ocular mit aufgeklapptem Anwendungsordnerbaum und hervorgehobener YAML-Konfiguration",
-  "filesCaption": "Echte Anwendung · lokale Docker-Demoumgebung"
+  "filesCaption": "Echte Anwendung · lokale Docker-Demoumgebung",
+  "investigationTitle": "Untersuchen Sie zusammenhängende Hinweise.",
+  "investigation": [
+    {
+      "title": "Clustergraph",
+      "text": "Untersuchen Sie UID-basierte Beziehungen und deklarierte Routen von Service, Ingress und Gateway. Angezeigt wird die Konfiguration, kein gemessener Netzwerkverkehr.",
+      "image": "graph",
+      "alt": "SPK Ocular · Clustergraph"
+    },
+    {
+      "title": "Ereigniszeitleiste",
+      "text": "Untersuchen Sie begrenzte Kubernetes-Events-Snapshots, gruppiert nach den Eigentümern der Workloads. Aktualisieren Sie ausdrücklich; Aufbewahrung und unvollständige Abdeckung bleiben sichtbar. Dies ist kein Auditverlauf.",
+      "image": "timeline",
+      "alt": "SPK Ocular · Ereigniszeitleiste"
+    },
+    {
+      "title": "RBAC erklären",
+      "text": "Verfolgen Sie ServiceAccount-Bindungen und Rollenregeln. Prüfen Sie Anfragen mit der Identität der aktuellen Verbindung auf dem Server; deklarierte Rechte und Entscheidungen über den eigenen Zugriff werden getrennt angezeigt.",
+      "image": "rbac",
+      "alt": "SPK Ocular · RBAC erklären"
+    },
+    {
+      "title": "Gespeicherte Ressourcen vergleichen",
+      "text": "Wählen Sie zwei Ressourcen auf verbundenen Zielen und vergleichen Sie normalisiertes, schreibgeschütztes YAML. Secret-Inhalte und ungespeicherte Entwürfe sind ausgeschlossen; Dienstfelder sind optional.",
+      "image": "compare",
+      "alt": "SPK Ocular · Gespeicherte Ressourcen vergleichen"
+    },
+    {
+      "title": "Arbeitsbereich behalten",
+      "text": "Heften Sie schreibgeschützte Eigenschaften an und behalten Sie Logreferenzen, beendete Terminaltabs und Panelgrößen über Neustarts hinweg. Verbinden und fortsetzen müssen Sie ausdrücklich; Inhalte und Befehle werden weder gespeichert noch erneut ausgeführt.",
+      "image": "workspace",
+      "alt": "SPK Ocular · Arbeitsbereich behalten"
+    }
+  ],
+  "logHistoryText": "Laden Sie die gesamte von der Quelle aufbewahrte Loghistorie unabhängig von Filtern oder Zeilenlimits der Anzeige herunter. Streaming unterstützt Fortschritt und Abbruch; Aufbewahrung, Exportlimits und unvollständige Lesevorgänge werden ausdrücklich angezeigt. Kopieren nutzt weiterhin den gefilterten Anzeigepuffer."
 }

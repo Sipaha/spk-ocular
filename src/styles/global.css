@@ -91,10 +91,13 @@ p { color: var(--muted); text-wrap: pretty; }
 .facts span { font-size: 12px; color: var(--muted); }
 .section-head { max-width: 830px; margin-bottom: 62px; }
 .section-head p { font-size: 18px; margin-top: 22px; max-width: 640px; }
+.investigation-head { margin-top: 100px; }
+.investigation-head h3 { font-size: 27px; }
 .workflows { display: grid; gap: 96px; }
 .workflow { display: grid; grid-template-columns: .8fr 1.35fr; gap: 65px; align-items: center; }
 .workflow.reverse { grid-template-columns: 1.35fr .8fr; }
 .workflow.reverse .workflow-copy { order: 2; }
+.workflow-copy { min-width: 0; overflow-wrap: anywhere; }
 .workflow h3 { font-size: clamp(28px, 2.4vw, 36px); }
 .workflow-copy>p:not(.eyebrow) { margin-top: 22px; font-size: 15px; }
 .workflow .eyebrow { margin-bottom: 18px; }

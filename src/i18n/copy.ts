@@ -5,6 +5,10 @@ import fr from './locales/fr.json';
 import pt from './locales/pt.json';
 import ja from './locales/ja.json';
 export const en = {
+  investigationTitle: "Investigate with the evidence connected.",
+  investigation: [{"title": "Cluster graph", "text": "Explore UID-based relationships and declared Service, Ingress and Gateway routes. This is configuration, not measured traffic.", "image": "graph", "alt": "SPK Ocular · Cluster graph"}, {"title": "Events timeline", "text": "Inspect bounded Kubernetes Events snapshots grouped by workload ownership. Refresh explicitly; retention and incomplete coverage stay visible. This is not an audit history.", "image": "timeline", "alt": "SPK Ocular · Events timeline"}, {"title": "Explain RBAC", "text": "Trace ServiceAccount bindings and role rules. Check requests as the current connection with the server; declarations and self-access decisions stay separate.", "image": "rbac", "alt": "SPK Ocular · Explain RBAC"}, {"title": "Compare saved resources", "text": "Pair resources on connected targets and compare normalized read-only YAML. Secret payloads and unsaved drafts are excluded; service fields are optional.", "image": "compare", "alt": "SPK Ocular · Compare saved resources"}, {"title": "Keep your investigation workspace", "text": "Pin read-only properties and keep log references, ended terminal slots and panel sizes across restarts. Connect and resume explicitly; no contents or commands are saved or replayed.", "image": "workspace", "alt": "SPK Ocular · Keep your investigation workspace"}],
+  logHistoryText: "Download all retained source log history regardless of viewer filters or line limits. Streaming writes support progress and cancellation; retention, export limits and incomplete reads remain explicit. Copy still uses the filtered viewer buffer.",
+
   downloadCompactFormat: 'Download {format}', localLabel: 'LOCAL / OPEN SOURCE', languageLabel: 'Choose language', projectLinks: 'Project links', screenshotNote: '',
   title: 'SPK Ocular | Free Kubernetes & Docker desktop app',
   description: 'Inspect Kubernetes and Docker, follow logs and manage Helm releases in one desktop app. All features free for individuals and businesses of any size.',
@@ -33,7 +37,7 @@ export const en = {
   filesCaption: "Actual app · local Docker demo",
   toolsTitle: 'The everyday tools, already here.',
   tools: [["Quick navigation · Ctrl+K", "Jump to a view, environment, namespace, resource in the current table or recently opened object. Use Command+K on macOS."], ['Kubernetes resources', 'Pods, deployments, services and custom resources, with details and relationships.'], ['Docker', 'Inspect standalone containers alongside Compose projects and services. Follow logs, open a terminal and review container actions.'], ['Reviewed changes', 'Inspect a change before applying it. Existing infrastructure permissions still apply.'], ['A workspace that remembers', 'Keep namespace selections, filters, favorites and column widths between visits.']],
-  gallery: 'A closer look at your next workspace.', galleryText: "Real screens from SPK Ocular 1.1.2. Demo data, not product mockups.",
+  gallery: 'A closer look at your next workspace.', galleryText: "Real screens from SPK Ocular 1.2.0. Demo data, not product mockups.",
   galleryTabs: ['Workloads', 'Logs & details', 'Helm releases', 'Docker containers'],
   galleryAlts: ['Kubernetes pods and health in SPK Ocular on a local demo cluster', 'Kubernetes resource details and application logs in SPK Ocular', 'Helm release values in SPK Ocular using a simulated release', 'Standalone Docker container and Compose containers in SPK Ocular on a local demo engine'],
   agentLabel: 'YOUR AGENTS. YOUR RULES.', agentTitle: 'Give your agent useful access. Keep control of changes.',
@@ -60,6 +64,10 @@ export const en = {
 };
 export type Copy = typeof en;
 export const ru: Copy = {
+  investigationTitle: "Разбирайтесь, сохраняя связи и контекст.",
+  investigation: [{"title": "Граф кластера", "text": "Изучайте связи ресурсов по UID и объявленные маршруты Service, Ingress и Gateway. Это конфигурация, а не измеренный сетевой трафик.", "image": "graph", "alt": "SPK Ocular · Граф кластера"}, {"title": "Хронология событий", "text": "Просматривайте ограниченные снимки Kubernetes Events с группировкой по владельцам нагрузок. Обновление явное; срок хранения и неполное покрытие видны. Это не история аудита.", "image": "timeline", "alt": "SPK Ocular · Хронология событий"}, {"title": "Объяснение RBAC", "text": "Прослеживайте привязки ServiceAccount и правила ролей. Проверяйте запросы на сервере от имени текущего подключения; объявленные права и решения о собственном доступе показаны отдельно.", "image": "rbac", "alt": "SPK Ocular · Объяснение RBAC"}, {"title": "Сравнение сохранённых ресурсов", "text": "Выбирайте пару ресурсов на подключённых окружениях и сравнивайте нормализованный YAML без редактирования. Данные Secret и несохранённые правки исключены; служебные поля включаются отдельно.", "image": "compare", "alt": "SPK Ocular · Сравнение сохранённых ресурсов"}, {"title": "Сохранение рабочего пространства", "text": "Закрепляйте свойства только для чтения и сохраняйте ссылки на логи, завершённые вкладки терминала и размеры панелей после перезапуска. Подключение и продолжение явные; содержимое и команды не сохраняются и не воспроизводятся.", "image": "workspace", "alt": "SPK Ocular · Сохранение рабочего пространства"}],
+  logHistoryText: "Скачивайте всю сохранённую источником историю логов независимо от фильтров и лимита строк просмотра. Потоковая запись показывает прогресс и поддерживает отмену; срок хранения, пределы выгрузки и неполное чтение сообщаются явно. Копирование использует отфильтрованный буфер просмотра.",
+
   downloadCompactFormat: 'Скачать {format}', localLabel: 'ЛОКАЛЬНО / ОТКРЫТЫЙ КОД', languageLabel: 'Выбрать язык', projectLinks: 'Ссылки проекта', screenshotNote: '',
   title: 'SPK Ocular | Бесплатное приложение для Kubernetes и Docker',
   description: 'Kubernetes, Docker, логи и Helm в одном приложении. Все функции бесплатны для людей и компаний любого размера, оборота и финансирования.',
@@ -88,7 +96,7 @@ export const ru: Copy = {
   filesCaption: "Настоящее приложение · локальный стенд Docker",
   toolsTitle: 'Рабочие инструменты уже на месте.',
   tools: [["Быстрый переход · Ctrl+K", "Переходите к разделу, окружению, пространству имён, ресурсу в текущей таблице или недавно открытому объекту. На macOS используйте Command+K."], ['Ресурсы Kubernetes', 'Pods, deployments, services и пользовательские ресурсы с подробностями и связями.'], ['Docker', 'Отдельные контейнеры и проекты с сервисами Compose. Просматривайте логи, открывайте терминал и проверяйте действия с контейнерами.'], ['Проверка изменений', 'Просматривайте изменения перед применением. Права доступа инфраструктуры продолжают действовать.'], ['Рабочее место с памятью', 'Выбранные пространства имён, фильтры, избранное и ширины колонок сохраняются.']],
-  gallery: 'Посмотрите, как это устроено.', galleryText: "Настоящие экраны SPK Ocular 1.1.2. Демонстрационные данные, а не макеты интерфейса.",
+  gallery: 'Посмотрите, как это устроено.', galleryText: "Настоящие экраны SPK Ocular 1.2.0. Демонстрационные данные, а не макеты интерфейса.",
   galleryTabs: ['Рабочие нагрузки', 'Логи и детали', 'Релизы Helm', 'Контейнеры Docker'],
   galleryAlts: ['Pods Kubernetes и их состояния в SPK Ocular на локальном демостенде', 'Детали ресурса Kubernetes и логи приложения в SPK Ocular', 'Значения тестового релиза Helm в SPK Ocular', 'Отдельный контейнер Docker и контейнеры Compose в SPK Ocular на локальном демостенде'],
   agentLabel: 'ВАШИ АГЕНТЫ. ВАШИ ПРАВИЛА.', agentTitle: 'Дайте агенту контекст. Оставьте контроль себе.',

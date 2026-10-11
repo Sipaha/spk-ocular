@@ -62,7 +62,7 @@ separate Helm CLI are unnecessary; kubeconfig-configured external authentication
 helpers still need to be installed. New product copy describes released features
 without announcements or competitor comparisons. Docker includes standalone containers and Compose project/service
 grouping; it does not supply a runtime. Standalone containers remain UI-only and
-are not included in existing agent project grants. The gallery explicitly identifies development screenshots.
+are not included in existing agent project grants. The gallery identifies released-version screenshots and demonstration data.
 
 Design references: [Aptakube](https://aptakube.com/) for task-led feature stories
 and large product screens, [Lens](https://lenshq.io/) for product hierarchy, and
@@ -71,7 +71,7 @@ No vendor claims, customer logos, testimonials or performance statistics are reu
 
 ## Screenshot source
 
-All twelve RU/EN product screenshots show SPK Ocular 1.1.2 on isolated fixtures.
+All twenty-two RU/EN product screenshots show SPK Ocular 1.2.0 on isolated fixtures.
 Kubernetes captures use the owned ocular-dev demo cluster; Docker captures use the
 verified ocular-dind engine, and Helm uses the explicitly labeled synthetic
 release. The file screen shows an actual /app project with config, scripts, src,
@@ -139,16 +139,16 @@ not shown. Desktop installers appear before native portable archives,
 regardless of GitHub upload order. No unmeasured memory or comparative size claims
 are published. The site neither uploads user data nor starts any app connection.
 
-`workloads-{ru,en}.webp`, `logs-{ru,en}.webp` and `health-{ru,en}.webp`
-show read-only inspection of the disposable `kind-ocular-dev` / `ocular-demo`
-fixture. `helm-{ru,en}.webp` shows the built-in synthetic Helm fixture, labeled
-separately. `docker-{ru,en}.webp` shows a disposable standalone container
-alongside Compose containers on the verified `ocular-dind` engine. Its temporary
-container is removed after capture. Captures use the current `fc39a6e-dirty` development build with isolated
-HOME, Docker, Ocular and kubeconfig directories. They contain no user environment
-or credentials. WebP conversion preserves the real app image; the UI is not
-reconstructed or generated. Social cards are rendered by `scripts/social.mjs`
-from the built page's current copy, font and real screenshot.
+`workloads`, `logs`, `health`, `graph`, `timeline`, `rbac`, `compare` and
+`workspace` RU/EN screenshots show read-only inspection of the verified disposable
+`kind-ocular-dev` / `ocular-demo` fixture. `helm` shows the built-in synthetic
+Helm release, labeled separately. `docker` and `files` show an owned standalone
+container alongside Compose containers on the verified `ocular-dind` engine.
+All product screenshots were captured from the 1.2.0 application in isolated
+profiles, with no user environment or credentials. WebP conversion preserves the
+actual app image. Social cards are rendered by `scripts/social.mjs` from the
+current page copy, font and screenshot. Other website locales use the English
+screenshot set and disclose that UI language explicitly.
 
 Screenshots use demonstration data and are labeled accordingly. Product facts
 must match `README.md` and `docs/usage.md` on `master`. When the product changes,
@@ -177,9 +177,8 @@ language and social links in `src/layouts/Base.astro`.
 ## Container file inspector presentation
 
 The feature section presents the container file inspector with actual localized
-screens from an isolated Docker fixture. Copy identifies upcoming-release
-availability, UTF-8/2 MiB editing limits, and the running Linux container/tool
-requirements. File browsing does not require `ls`. All eight locales describe
+screens from an isolated Docker fixture. Copy identifies UTF-8/2 MiB editing
+limits and the running Linux container/tool requirements. File browsing does not require `ls`. All eight locales describe
 Ocular's own behavior without competitor comparisons or exclusivity claims.
 Public product copy must not name competing products to compare features or
 claim that they lack a capability; this is the owner's publishing preference.
