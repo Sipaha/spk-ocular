@@ -1,5 +1,5 @@
 // What the palette offers for an input: fuzzy over the current target's
-// views, all targets, scopes, the current table's rows and recent objects,
+// views, all targets, scopes and eligible live rows. History ranks matching rows,
 // or a command (":po", ":deploy web", ":ns demo", ":ns *", ":ctx prod").
 // Aliases come from the providers (KindDescriptor.aliases, TargetGroup
 // .aliases): nothing here knows Kubernetes.
@@ -17,7 +17,7 @@ export type PaletteAction =
   | { type: 'object'; ref: Ref }
   | { type: 'command'; id: 'agents' }
 
-export type Section = 'recent' | 'kind' | 'target' | 'scope' | 'object' | 'command'
+export type Section = 'kind' | 'target' | 'scope' | 'object' | 'command'
 
 export interface PaletteItem {
   /** Stable across live updates: the cursor follows it. */
@@ -91,38 +91,27 @@ const scopeItem = (src: Sources, name: string, typed = false): PaletteItem => ({
 
 const allScopesItem = (src: Sources): PaletteItem => ({ key: 'scope:*', section: 'scope', label: wordsOf(src).all, hint: '*', action: { type: 'scope', scope: { mode: 'all' } } })
 
-const objectItem = (kinds: KindDescriptor[], ref: Ref, label: string, section: 'object' | 'recent'): PaletteItem => ({
-  key: `${section}:${refKey(ref)}`,
-  section,
-  label,
-  hint: section === 'recent' ? `${t('palette.recent')} · ${objectHint(kinds, ref)}` : objectHint(kinds, ref),
-  action: { type: 'object', ref },
+const objectItem = (kinds: KindDescriptor[], ref: Ref): PaletteItem => ({
+  key: `object:${refKey(ref)}`,
+  section: 'object', label: refTitle(ref), hint: objectHint(kinds, ref),
+  action: {type:'object',ref},
 })
 
-/** The live rows, then recent entries of other objects (one item per object). */
-function objects(src: Sources): { rows: PaletteItem[]; recents: PaletteItem[] } {
-  const names = new Set(src.selectedScope ? selectedScopes(src.selectedScope) : [])
-  // A scope-less Ref is a global object. Keep the target's selection when
-  // its current table is unscoped, and use Ref.scope even for absent kinds.
-  const allowed = (ref: Ref) => !ref.scope || src.selectedScope?.mode === 'all' || names.has(ref.scope)
-  const seen = new Set<string>()
-  const rows: PaletteItem[] = []
-  for (const r of src.rows) {
-    if (!allowed(r.ref)) continue
-    const k = refKey(r.ref)
-    if (seen.has(k)) continue
-    seen.add(k)
-    rows.push(objectItem(src.kinds, r.ref, refTitle(r.ref), 'object'))
-  }
-  const recents: PaletteItem[] = []
-  for (const r of src.recents) {
-    if (!allowed(r.ref)) continue
-    const k = refKey(r.ref)
-    if (seen.has(k)) continue
-    seen.add(k)
-    recents.push(objectItem(src.kinds, r.ref, r.title || refTitle(r.ref), 'recent'))
-  }
-  return { rows, recents }
+/** History can rank eligible live rows; it cannot introduce absent objects. */
+function objects(src: Sources): PaletteItem[] {
+ const names=new Set(src.selectedScope?selectedScopes(src.selectedScope):[])
+ const allowed=(ref:Ref)=>!ref.scope||src.selectedScope?.mode==='all'||names.has(ref.scope)
+ const seen=new Set<string>()
+ return src.rows.filter(row=>{
+  const key=refKey(row.ref)
+  if(!allowed(row.ref)||seen.has(key))return false
+  seen.add(key);return true
+ }).map(row=>objectItem(src.kinds,row.ref))
+}
+function recentPriority(src:Sources): (item:PaletteItem)=>number {
+ const priorities=new Map<string,number>()
+ src.recents.forEach((r,index)=>{const key=`object:${refKey(r.ref)}`;if(!priorities.has(key))priorities.set(key,1000-Math.min(index,999))})
+ return item=>priorities.get(item.key)??0
 }
 
 /** The app's own panels, whatever the target. */
@@ -132,7 +121,7 @@ const commands = (): { item: PaletteItem; texts: [string, number][] }[] => [
 
 type Scored = { item: PaletteItem; score: number; order: number }
 
-function ranked(query: string, list: { item: PaletteItem; texts: [string, number][] }[]): PaletteItem[] {
+function ranked(query: string, list: { item: PaletteItem; texts: [string, number][] }[], priority: (item:PaletteItem)=>number = ()=>0): PaletteItem[] {
   const out: Scored[] = []
   list.forEach(({ item, texts }, order) => {
     let best: number | null = null
@@ -140,7 +129,7 @@ function ranked(query: string, list: { item: PaletteItem; texts: [string, number
       const s = fuzzyScore(query, text)
       if (s !== null && (best === null || s + bias > best)) best = s + bias
     }
-    if (best !== null) out.push({ item, score: best, order })
+    if (best !== null) out.push({ item, score: best + priority(item), order })
   })
   out.sort((a, b) => b.score - a.score || a.order - b.order)
   return out.map((s) => s.item)
@@ -149,15 +138,12 @@ function ranked(query: string, list: { item: PaletteItem; texts: [string, number
 const visibleKinds = (src: Sources) => src.kinds.filter((k) => !k.hidden)
 
 function fuzzy(query: string, src: Sources): Built {
-  const { rows, recents } = objects(src)
+  const rows = objects(src)
   const kinds = visibleKinds(src).map((k) => ({ item: kindItem(k), texts: [[k.title, 0], ...(k.aliases ?? []).map((a): [string, number] => [a, 0])] as [string, number][] }))
   const targets = src.targets.map((x) => ({ item: targetItem(x), texts: [[x.target.title, 0], [x.target.subtitle ?? '', -2000]] as [string, number][] }))
   const scopes = (src.scopes ?? []).map((n) => ({ item: scopeItem(src, n), texts: [[n, 0]] as [string, number][] }))
   const objs = rows.map((item) => ({ item, texts: [[item.label, 0]] as [string, number][] }))
-  const recs = recents.map((item) => ({ item, texts: [[item.label, 0]] as [string, number][] }))
-  // Nothing typed: what was opened last first; typed: ties go to live things.
-  const list = query.trim() ? [...kinds, ...targets, ...scopes, ...objs, ...recs, ...commands()] : [...recs, ...kinds, ...targets, ...scopes, ...objs, ...commands()]
-  const items = ranked(query, list).slice(0, MAX_ITEMS)
+  const items = ranked(query,[...kinds,...targets,...scopes,...objs,...commands()],recentPriority(src)).slice(0,MAX_ITEMS)
   return { items, cursor: items[0]?.key ?? null }
 }
 
@@ -169,7 +155,7 @@ const ownNames = (k: KindDescriptor) => [...(k.aliases ?? []), k.id].map(lower)
 
 /** Every name a kind answers to in a command: its own, the id's last
  * segment and the title (these may be another kind's too: "other.example/pods"). */
-const kindNames = (k: KindDescriptor) => [...ownNames(k), k.id.split('/').pop() ?? k.id, k.title].map(lower)
+const kindNames = (k: KindDescriptor) => [...ownNames(k), k.id.split('/').pop() ?? k.id, k.title, k.singular ?? ''].map(lower)
 
 /** One exact candidate is chosen; several (or none) leave the list to pick from. */
 const choose = (items: PaletteItem[], exact: PaletteItem[]): Built => ({ items: items.slice(0, MAX_ITEMS), cursor: exact.length === 1 ? exact[0].key : null })
@@ -219,6 +205,38 @@ function command(input: string, src: Sources): Built {
   return { items: [], cursor: null, unknown: true }
 }
 
+export interface TypedKindQuery { kinds: KindDescriptor[]; filter: string }
+
+/** Exact provider aliases win; an unambiguous prefix also supports "dep model".
+ * Ambiguity offers views to choose from and must not start multiple reads. */
+export function typedKindQuery(input:string,kinds:KindDescriptor[]):TypedKindQuery|null {
+ if(input.trimStart().startsWith(':'))return null
+ const text=input.trim(),space=text.search(/\s/)
+ if(space<0||!text.slice(space).trim())return null
+ if(kinds.some(k=>lower(k.title)===lower(text)))return null
+ const head=lower(text.slice(0,space)),filter=text.slice(space).trim()
+ const resources=kinds.filter(k=>!k.workspace)
+ const own=resources.filter(k=>ownNames(k).includes(head))
+ const exact=resources.filter(k=>kindNames(k).includes(head))
+ const ownPrefix=resources.filter(k=>!k.hidden).filter(k=>ownNames(k).some(n=>n.startsWith(head)))
+ const prefix=resources.filter(k=>!k.hidden&&kindNames(k).some(n=>n&&n.startsWith(head)))
+ const matches=own.length?own:exact.length?exact:ownPrefix.length?ownPrefix:prefix
+ return matches.length?{kinds:matches,filter}:null
+}
+function typedItems(query:TypedKindQuery,src:Sources):Built {
+ if(query.kinds.length!==1)return choose(query.kinds.map(k=>kindItem(k,query.filter)),[])
+ const kind=query.kinds[0]
+ const found=objects(src).filter(item=>item.action.type==='object'&&item.action.ref.kind===kind.id)
+ const words=query.filter.split(/\s+/).filter(Boolean)
+ const matches=found.map((item,order)=>({item,order,scores:words.map(word=>fuzzyScore(word,item.label))})).filter(entry=>entry.scores.every(score=>score!==null))
+ const priority=recentPriority(src)
+ matches.sort((a,b)=>(b.scores.reduce<number>((sum,score)=>sum+(score??0),0)+priority(b.item))-(a.scores.reduce<number>((sum,score)=>sum+(score??0),0)+priority(a.item))||a.order-b.order)
+ const items=matches.map(entry=>entry.item).slice(0,MAX_ITEMS)
+ if(!items.length)items.push(kindItem(kind,query.filter))
+ return {items,cursor:items[0]?.key??null}
+}
 export function buildItems(input: string, src: Sources): Built {
-  return input.trimStart().startsWith(':') ? command(input.trimStart(), src) : fuzzy(input, src)
+ if(input.trimStart().startsWith(':'))return command(input.trimStart(),src)
+ const typed=typedKindQuery(input,src.kinds)
+ return typed?typedItems(typed,src):fuzzy(input,src)
 }

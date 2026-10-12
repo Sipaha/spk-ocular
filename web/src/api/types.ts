@@ -932,3 +932,13 @@ export interface CompareSelection { ref: Ref; configRev: string; connectionId: n
 export interface ComparisonSide { ref: Ref; yaml: string; fullYAML: string; capturedAt: number; omitted: string[]; valuesExcluded: boolean }
 export interface ResourceComparison { left: ComparisonSide; right: ComparisonSide }
 export interface CompareRequest { left: CompareSelection; right: CompareSelection }
+
+export interface SecurityRequest {provider: string; target: string; scope: ScopeSel}
+export interface SecuritySnapshot {
+ findings: SecurityFinding[]; problems: ClusterGraph['problems']; discovery: string; truncated: boolean; capturedAt: number; resources: number; reports: number
+ cveState: 'available' | 'empty' | 'missing' | 'denied' | 'error' | 'partial' | 'not-requested'
+}
+export interface SecurityFinding {
+ id: string; ref: Ref; kindTitle: string; category: 'configuration' | 'network' | 'rbac' | 'cve'; severity: 'critical' | 'high' | 'medium' | 'low' | 'unknown'
+ rule: string; container?: string; evidence: string; title?: string; image?: string; package?: string; installed?: string; fixed?: string; scanner?: string; scannedAt?: number; workload?: string
+}

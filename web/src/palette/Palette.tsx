@@ -1,24 +1,28 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import type { Client } from '../api/client'
-import type { RecentObject } from '../api/types'
-import { t, type MessageKey } from '../i18n'
+import type { Row, RecentObject } from '../api/types'
+import { classLabel, t, type MessageKey } from '../i18n'
 import { type Actions, useStore } from '../store'
-import { SearchIcon } from '../components/icons'
-import { buildItems, type PaletteItem, type Sources } from './items'
+import { typedKindQuery, buildItems, type PaletteItem, type Sources } from './items'
 import { scopeWords } from '../scopeNames'
 import { closePalette, usePalette } from './store'
 import { focusMark, restoreFocus } from '../shortcuts'
+import type { ViewHub, ViewState } from '../views/viewSync'
 import { agents } from '../agents/store'
 
 /** Ctrl+K: go to a view, context, namespace, row of the table or recent object. */
-export function Palette({ client, act }: { client: Client; act: Actions }) {
+export function Palette({ client, act, hub }: { client: Client; act: Actions; hub: ViewHub }) {
   const open = usePalette((s) => s.open)
-  return open ? <PaletteDialog client={client} act={act} /> : null
+  return open ? <PaletteDialog client={client} act={act} hub={hub} /> : null
 }
 
 const PAGE = 10
+const EMPTY_ROWS:Row[]=[]
+const EMPTY_SEARCH:ViewState={viewId:null,kind:null,resync:false,rows:EMPTY_ROWS,status:{state:'loading'},openError:null,halted:false}
+const noSearchSubscribe=()=>()=>{}
+const emptySearch=()=>EMPTY_SEARCH
 
-function PaletteDialog({ client, act }: { client: Client; act: Actions }) {
+function PaletteDialog({ client, act, hub }: { client: Client; act: Actions; hub: ViewHub }) {
   const host = usePalette((s) => s.host)
   const rows = usePalette((s) => s.rows)
   const liveScopes = usePalette((s) => s.liveScopes)
@@ -55,6 +59,26 @@ function PaletteDialog({ client, act }: { client: Client; act: Actions }) {
     return () => restoreFocus(mark)
   }, [mark])
 
+  const typed=typedKindQuery(query,host?.kinds??[])
+  const searchedKind=typed?.kinds.length===1?typed.kinds[0]:null
+  const lookupScope=searchedKind?.scoped?host?.selectedScope:{mode:'none' as const}
+  const searchKey=host&&searchedKind&&searchedKind.id!==host.currentKind&&lookupScope ? JSON.stringify({provider:host.target.provider,target:host.target.id,kind:searchedKind.id,scope:lookupScope}) : ''
+  const lookupSync=useMemo(()=>{
+   if(!searchKey)return null
+   const request=JSON.parse(searchKey) as {provider:string;target:string;kind:string;scope:NonNullable<Sources['selectedScope']>}
+   return hub.prepare(request.provider,request.target,{kind:request.kind,scope:request.scope})
+  },[hub,searchKey])
+  useEffect(()=>{
+   if(!lookupSync)return
+   hub.attach(lookupSync)
+   return()=>hub.release(lookupSync)
+  },[hub,lookupSync])
+  const lookup=useSyncExternalStore(lookupSync?.subscribe??noSearchSubscribe,lookupSync?.snapshot??emptySearch)
+  const searchRows:Row[]=searchKey?lookup?.rows??EMPTY_ROWS:rows
+  const searching=!!searchKey&&(!lookup||lookup.status.state==='loading')
+  const searchError=searchKey&&lookup?.status.state==='error' ? lookup.openError||lookup.status.message||t('status.error') : ''
+  const failures=lookup?.status.coverage?.filter(source=>source.state!=='ready'&&source.state!=='loading')??[]
+  const searchWarning=lookup?.status.state==='stale' ? lookup.status.message||t('coverage.stale') : failures.length ? t('coverage.notObserved')+': '+failures.map(source=>source.source+' · '+classLabel(source.class??source.state)).join(', ') : ''
   const sources: Sources = useMemo(() => {
     const group = view?.groups.find((g) => g.provider === hostProvider)
     return {
@@ -65,10 +89,10 @@ function PaletteDialog({ client, act }: { client: Client; act: Actions }) {
       scopeAliases: host ? (group?.aliases?.scope ?? []) : [],
       scopeWords: scopeWords(group?.scopeNames),
       targetAliases: [...new Set((view?.groups ?? []).flatMap((g) => g.aliases?.target ?? []))],
-      rows: host ? rows : [],
+      rows: host ? searchRows : [],
       recents: host ? recents : [],
     }
-  }, [view, host, hostProvider, liveScopes, rows, recents])
+  }, [view, host, hostProvider, liveScopes, searchRows, recents])
   const built = useMemo(() => buildItems(query, sources), [query, sources])
   // Examples from the provider's own aliases (":po", ":ns"): the UI knows no kind.
   const placeholder = useMemo(() => {
@@ -77,7 +101,7 @@ function PaletteDialog({ client, act }: { client: Client; act: Actions }) {
     const examples = [...sources.kinds.filter((k) => !k.hidden && k.aliases?.length).slice(0, 2).map((k) => `:${k.aliases![0]}`), ...sources.scopeAliases.slice(0, 1).map((a) => `:${a} …`)]
     return examples.length ? t('palette.examples', { placeholder: base, list: examples.join(', ') }) : base
   }, [sources, host])
-  const cursor = moved && built.items.some((i) => i.key === moved) ? moved : built.cursor
+  const cursor = moved && built.items.some((i) => i.key === moved) ? moved : searching || searchError ? null : built.cursor
   const index = built.items.findIndex((i) => i.key === cursor)
 
   useLayoutEffect(() => {
@@ -126,13 +150,12 @@ function PaletteDialog({ client, act }: { client: Client; act: Actions }) {
     }
   }
 
-  const note = built.unknown ? t('palette.unknown') : !built.items.length ? t('palette.empty') : index < 0 ? t('palette.pick') : null
+  const note = searchError ? searchError : searching ? t('app.loading') : searchWarning ? searchWarning : built.unknown ? t('palette.unknown') : !built.items.length ? t('palette.empty') : index < 0 ? t('palette.pick') : null
 
   return (
     <div className="fixed inset-0 z-40 flex items-start justify-center bg-black/40 pt-[12vh]" onMouseDown={(e) => e.target === e.currentTarget && closePalette()}>
       <div role="dialog" aria-modal="true" aria-label={t('palette.label')} className="palette-dialog flex max-h-[70vh] w-[min(640px,92%)] flex-col overflow-hidden border border-line bg-panel" onKeyDown={onKey}>
         <label className="palette-search flex items-center gap-3 border-b border-line">
-          <SearchIcon className="h-4 w-4 shrink-0 text-fg-subtle" />
           <input
             ref={input}
             role="combobox"
@@ -170,7 +193,7 @@ function PaletteDialog({ client, act }: { client: Client; act: Actions }) {
           ))}
         </div>
         <footer className="flex items-center gap-3 border-t border-line px-3 py-1.5 text-xs text-fg-subtle">
-          {note && <span role="status">{note}</span>}
+          {note && <span role={searchError?'alert':'status'}>{note}</span>}
           {host && <span className="ml-auto">{t('palette.coverage')}</span>}
         </footer>
       </div>

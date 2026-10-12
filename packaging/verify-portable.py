@@ -8,6 +8,7 @@ import subprocess
 import tempfile
 import zipfile
 
+from browser_smoke import verify_browser
 from portable import binary_arch, documents
 from release import ROOT, version
 from verify import assets, tar_contents, verify_checksums
@@ -39,23 +40,21 @@ def verify(directory, release_version, platform, arch):
             data = data if isinstance(data, bytes) else data.read_bytes()
             if files.get(path) != (data, mode):
                 raise ValueError(f'{name}: wrong document or BUILD-INFO: {path}')
-        browser = name.startswith('spk-ocular-browser_')
-        member = 'spk-ocular-browser' if browser else 'spk-ocular'
+        member = 'spk-ocular'
         if platform == 'windows':
             member += '.exe'
             source = stage / member
         else:
-            source = stage / member if browser else stage / 'SPK Ocular.app/Contents/MacOS/spk-ocular'
-            if not browser:
-                member = 'SPK Ocular.app/Contents/MacOS/spk-ocular'
-                plist = plistlib.loads(files['SPK Ocular.app/Contents/Info.plist'][0])
-                if plist['CFBundleIdentifier'] != 'io.github.sipaha.SPKOcular' or plist['CFBundleShortVersionString'] != release_version.split('-')[0]:
-                    raise ValueError('incorrect macOS bundle metadata')
-                for p in (stage / 'SPK Ocular.app').rglob('*'):
-                    if p.is_file() and files.get(p.relative_to(stage).as_posix()) != (p.read_bytes(), p.stat().st_mode & 0o777):
-                        raise ValueError('archive differs from the signed app bundle')
+            source = stage / 'SPK Ocular.app/Contents/MacOS/spk-ocular'
+            member = 'SPK Ocular.app/Contents/MacOS/spk-ocular'
+            plist = plistlib.loads(files['SPK Ocular.app/Contents/Info.plist'][0])
+            if plist['CFBundleIdentifier'] != 'io.github.sipaha.SPKOcular' or plist['CFBundleShortVersionString'] != release_version.split('-')[0]:
+                raise ValueError('incorrect macOS bundle metadata')
+            for p in (stage / 'SPK Ocular.app').rglob('*'):
+                if p.is_file() and files.get(p.relative_to(stage).as_posix()) != (p.read_bytes(), p.stat().st_mode & 0o777):
+                    raise ValueError('archive differs from the signed app bundle')
         data, mode = files[member]
-        if mode != 0o755 or binary_arch(data, platform, 3 if browser else 2) != arch or data != source.read_bytes():
+        if mode != 0o755 or binary_arch(data, platform, 2) != arch or data != source.read_bytes():
             raise ValueError(f'{name}: wrong binary architecture, mode, subsystem or contents')
         # Running the actual native executable also catches missing runtime DLLs.
         with tempfile.TemporaryDirectory() as scratch:
@@ -65,6 +64,7 @@ def verify(directory, release_version, platform, arch):
             actual = subprocess.check_output([str(source), 'version'], env=env, text=True).strip()
             if actual != f'spk-ocular {release_version}':
                 raise ValueError(f'wrong executable version: {actual}')
+            verify_browser(source)
             if subprocess.check_output([str(source), 'licenses'], env=env) != (ROOT / 'THIRD-PARTY-NOTICES.txt').read_bytes():
                 raise ValueError('embedded third-party notices differ from the packaged document')
     if platform == 'darwin':

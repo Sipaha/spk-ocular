@@ -10,6 +10,7 @@ import struct
 import subprocess
 import tarfile
 import tempfile
+from browser_smoke import verify_browser
 from release import ROOT, document_paths, elf_arch, version
 
 
@@ -20,9 +21,9 @@ def assets(release_version, arch, platform='linux'):
     if platform != 'linux':
         base = f'spk-ocular_{release_version}_{platform}_{arch}'
         extension, installer = ('.zip', '.msi') if platform == 'windows' else ('.tar.gz', '.dmg')
-        return [base + extension, base + installer, f'spk-ocular-browser_{release_version}_{platform}_{arch}' + extension]
+        return [base + extension, base + installer]
     base = f'spk-ocular_{release_version}_linux_{arch}'
-    return [base + ext for ext in ('.tar.gz', '.deb', '.rpm')] + [f'spk-ocular-browser_{release_version}_linux_{arch}.tar.gz']
+    return [base + ext for ext in ('.tar.gz', '.deb', '.rpm')]
 
 
 def verify_checksums(directory, release_version, arches, platforms=("linux",)):
@@ -130,7 +131,7 @@ def verify_native(directory, release_version, arch, bin_dir=None):
         for kind, files in [('DEB', deb_files), ('RPM', rpm_files)]:
             if files.get(name) != (source.read_bytes(), mode):
                 raise ValueError(f'{kind}: wrong contents or mode for {name}')
-    for filename, member in [(base + '.tar.gz', 'spk-ocular'), (f'spk-ocular-browser_{release_version}_linux_{arch}.tar.gz', 'spk-ocular-browser')]:
+    for filename, member in [(base + '.tar.gz', 'spk-ocular')]:
         contents = tar_contents((directory / filename).read_bytes())
         for path in document_paths():
             if contents.get(str(path.relative_to(ROOT))) != (path.read_bytes(), 0o644):
@@ -141,7 +142,7 @@ def verify_native(directory, release_version, arch, bin_dir=None):
         data, mode = contents[member]
         if mode != 0o755:
             raise ValueError('archive binary must be executable')
-        source = bin_dir / ('spk-ocular-release' if member == 'spk-ocular' else 'spk-ocular')
+        source = bin_dir / 'spk-ocular-release'
         if data != source.read_bytes():
             raise ValueError('archive binary differs from the verified build')
         with tempfile.TemporaryDirectory() as scratch:
@@ -155,10 +156,11 @@ def verify_native(directory, release_version, arch, bin_dir=None):
             actual = subprocess.check_output([str(binary), 'version'], env=env, text=True).strip()
             if actual != f'spk-ocular {release_version}':
                 raise ValueError('archive version mismatch')
+            verify_browser(binary)
             notices = subprocess.check_output([str(binary), 'licenses'], env=env)
             if notices != (ROOT / 'THIRD-PARTY-NOTICES.txt').read_bytes():
                 raise ValueError('embedded third-party notices differ from the packaged document')
-    print(f'Validated DEB, RPM and both archives for linux/{arch} {release_version}')
+    print(f'Validated DEB, RPM and desktop archive for linux/{arch} {release_version}')
 
 
 if __name__ == '__main__':

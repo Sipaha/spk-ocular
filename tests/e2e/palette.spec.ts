@@ -1,6 +1,7 @@
 import { connectSelected } from './fixtures'
 import { expect, type Page } from '@playwright/test'
-import { test } from './fixtures'
+import { test, scratchRoot } from './fixtures'
+import { join } from 'node:path'
 
 // The Ctrl+K palette against the synthetic provider: views by alias, rows of
 // the current table, recent objects (persisted in SQLite), a context switch.
@@ -20,10 +21,11 @@ async function palette(page: Page) {
   await page.keyboard.press('Control+k')
   const dlg = page.getByRole('dialog', { name: 'Go to' })
   await expect(dlg.getByRole('combobox', { name: 'Go to' })).toBeFocused()
+  await expect(dlg.locator('.palette-search svg')).toHaveCount(0)
   return dlg
 }
 
-test('a view by its alias, a row of the table, then the same object as recent from another view', async ({ page }) => {
+test('current-view matching and explicit type search do not introduce history-only objects', async ({ page }) => {
   await openDemo(page)
   let dlg = await palette(page)
   await page.keyboard.type('work')
@@ -39,10 +41,13 @@ test('a view by its alias, a row of the table, then the same object as recent fr
   await page.keyboard.press('Enter')
   await expect(page.getByRole('heading', { name: 'Workloads' })).toBeVisible()
 
-  // Workloads has no "workers" row: it is offered as recently opened.
+  // History does not introduce Services into a Workloads query.
   dlg = await palette(page)
+  await expect(dlg.getByRole('option').filter({hasText:'workers'})).toHaveCount(0)
+  await dlg.getByRole('combobox').fill('serv workers')
   const recent = dlg.getByRole('option').filter({ hasText: 'workers' })
-  await expect(recent).toContainText('Recent')
+  await expect(recent).toContainText('Object')
+  await page.screenshot({path:join(scratchRoot,'palette-type-name-without-magnifier.png')})
   await recent.click()
   await expect(page.getByRole('dialog', { name: 'services workers' })).toBeVisible()
   await expect(page.getByRole('heading', { name: 'Services', exact: true })).toBeVisible()
@@ -166,8 +171,10 @@ test('object search stays inside selected scopes across views and opens the matc
   await expect(dlg.getByRole('option')).toHaveCount(0)
   if (process.env.E2E_PALETTE_SCOPE_SCREENSHOT) await page.screenshot({ path: process.env.E2E_PALETTE_SCOPE_SCREENSHOT })
   await search.fill('alpha')
+  await expect(dlg.getByRole('option')).toHaveCount(0)
+  await search.fill('cr alpha')
   const recent = dlg.getByRole('option').filter({ hasText: 'alpha' })
-  await expect(recent).toContainText('Recent')
+  await expect(recent).toContainText('Object')
   await recent.click()
   await expect(page.getByRole('heading', { name: 'Crates', exact: true })).toBeVisible()
   await expect(nav.getByRole('button', { name: 'Crates', exact: true })).toHaveAttribute('aria-current', 'page')
@@ -184,11 +191,37 @@ test('object search stays inside selected scopes across views and opens the matc
   await nav.getByRole('button', { name: 'Services', exact: true }).click()
   dlg = await palette(page)
   await dlg.getByRole('combobox', { name: 'Go to' }).fill('gamma')
+  await expect(dlg.getByRole('option')).toHaveCount(0)
+  await dlg.getByRole('combobox', { name: 'Go to' }).fill('cr gamma')
   await expect(dlg.getByRole('option')).toHaveCount(1)
-  await expect(dlg.getByRole('option')).toContainText('Recent')
+  await expect(dlg.getByRole('option')).toContainText('Object')
   await page.keyboard.press('Enter')
   await expect(nav.getByRole('button', { name: 'Crates', exact: true })).toHaveAttribute('aria-current', 'page')
   await expect(zone).toHaveValue('')
   await expect(grid.getByRole('row', { selected: true })).toContainText('gamma')
   if (process.env.E2E_PALETTE_KIND_SCREENSHOT) await page.screenshot({ path: process.env.E2E_PALETTE_KIND_SCREENSHOT })
+})
+
+test('type and name reads only the selected kind and scope, then closes its temporary view',async({page})=>{
+ await openDemo(page)
+ const nav=page.getByRole('navigation',{name:'resources'})
+ await nav.getByRole('button',{name:'Crates',exact:true}).click()
+ const zone=page.getByRole('textbox',{name:'Zone',exact:true})
+ await zone.fill('blue');await zone.press('Enter')
+ await expect(page.getByRole('grid',{name:'resources'}).getByRole('gridcell',{name:'alpha',exact:true})).toBeVisible()
+ await nav.getByRole('button',{name:'Services',exact:true}).click()
+ await expect(page.getByRole('grid',{name:'resources'}).getByRole('gridcell',{name:'workers',exact:true})).toBeVisible()
+ const requests:{kind:string;scope:{mode:string;name?:string}}[]=[]
+ page.on('request',r=>{if(r.url().endsWith('/api/OpenView'))requests.push(r.postDataJSON().query)})
+ const dlg=await palette(page)
+ await dlg.getByRole('combobox').fill('cr alpha')
+ const object=dlg.getByRole('option').filter({hasText:'alpha'})
+ await expect(object).toContainText('Object')
+ expect(requests).toHaveLength(1);expect(requests[0]).toEqual({kind:'crates',scope:{mode:'one',name:'blue'}})
+ await dlg.getByRole('combobox').fill('cr beta')
+ await expect(dlg.getByRole('option').filter({hasText:'beta'})).toContainText('Object')
+ expect(requests).toHaveLength(1)
+ const closed=page.waitForResponse(r=>r.url().endsWith('/api/CloseView')&&r.ok())
+ await page.keyboard.press('Escape');await closed
+ await expect(page.getByRole('heading',{name:'Services',exact:true})).toBeVisible()
 })

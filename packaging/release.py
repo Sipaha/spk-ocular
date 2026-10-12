@@ -58,9 +58,9 @@ def package(release_version, arch, bin_dir=None):
     if host != ['linux', arch]:
         raise ValueError('desktop packages must be built on a native Linux runner of the requested architecture')
     bin_dir = Path(bin_dir or ROOT / 'build/bin').resolve()
-    subprocess.run(['make', 'release', 'build-go', f'VERSION={release_version}', f'BIN_DIR={bin_dir}'], cwd=ROOT, check=True)
-    desktop, browser = bin_dir / 'spk-ocular-release', bin_dir / 'spk-ocular'
-    for binary in (desktop, browser):
+    subprocess.run(['make', 'release', f'VERSION={release_version}', f'BIN_DIR={bin_dir}'], cwd=ROOT, check=True)
+    desktop = bin_dir / 'spk-ocular-release'
+    for binary in (desktop,):
         if elf_arch(binary) != arch:
             raise ValueError(f'wrong architecture: {binary}')
         with tempfile.TemporaryDirectory() as scratch:
@@ -82,9 +82,7 @@ def package(release_version, arch, bin_dir=None):
         ('spk-ocular.desktop', ROOT / 'packaging/linux/spk-ocular.desktop', 0o644),
         ('spk-ocular.png', ROOT / 'internal/appfiles/icons/icon.png', 0o644),
     ], epoch)
-    browser_archive = output / f'spk-ocular-browser_{release_version}_linux_{arch}.tar.gz'
-    archive(browser_archive, common + [('spk-ocular-browser', browser, 0o755)], epoch)
-    artifacts = [desktop_archive, browser_archive]
+    artifacts = [desktop_archive]
     env = {**os.environ, 'RELEASE_VERSION': release_version, 'ARCH': arch, 'SOURCE_DATE_EPOCH': str(epoch)}
     # nfpm expands metadata variables but not content source paths. Keep the
     # checked-in config unchanged and bind its binary source in a private copy.

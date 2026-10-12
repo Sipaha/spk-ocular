@@ -27,7 +27,7 @@ test('the worst first; evidence quieter; what could not be observed is said', as
   await expect(page.getByRole('note', { name: 'Coverage' })).toHaveText('Checked: Services, Workloads, Nodes')
 })
 
-test('first opening shows one loading state before the table and coverage', async ({ page }, testInfo) => {
+test('first opening retains known table headers while rows and coverage load', async ({ page }, testInfo) => {
   await page.addInitScript(() => {
     const NativeEventSource = window.EventSource
     window.EventSource = class extends NativeEventSource {
@@ -78,7 +78,9 @@ test('first opening shows one loading state before the table and coverage', asyn
     await nav.getByRole('button', { name: 'Problems', exact: true }).click()
     await expect(page.getByRole('heading', { name: 'Problems', exact: true })).toBeVisible()
     await expect(page.getByRole('status', { name: 'Loading…', exact: true })).toHaveText('Loading Problems…')
-    await expect(page.getByRole('grid', { name: 'resources' })).toHaveCount(0)
+    await expect(page.getByRole('grid', { name: 'resources' })).toBeVisible()
+    await expect(page.getByRole('grid', { name: 'resources' }).getByRole('columnheader').first()).toBeVisible()
+    await expect(page.getByRole('grid', { name: 'resources' }).locator('[data-row-id]')).toHaveCount(0)
     await expect(page.getByRole('note', { name: 'Not observed' })).toHaveCount(0)
     await expect(page.getByRole('note', { name: 'Coverage', exact: true })).toHaveCount(0)
     await page.screenshot({ path: testInfo.outputPath('problems-initial-loading.png') })

@@ -168,7 +168,7 @@ export function App({ client }: { client: Client }) {
       <TunnelsPanel client={client} mode={info?.mode === 'desktop' ? 'desktop' : 'browser'} />
       <AgentsPanel client={client} />
       <AgentConfirm client={client} reload={loadAgents.pending} />
-      <Palette client={client} act={act} />
+      <Palette client={client} act={act} hub={hub} />
       {about && <AboutDialog info={info} onClose={() => setAbout(false)} />}
       {help && <HelpDialog onClose={() => setHelp(false)} />}
       <DiscardPrompt />

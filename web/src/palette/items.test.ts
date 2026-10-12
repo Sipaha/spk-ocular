@@ -37,10 +37,9 @@ const labels = (r: ReturnType<typeof buildItems>) => r.items.map((i) => `${i.sec
 const cursorItem = (r: ReturnType<typeof buildItems>) => r.items.find((i) => i.key === r.cursor)
 
 describe('buildItems — fuzzy', () => {
-  it('an empty query lists recent objects, views, contexts, namespaces, the table, then the app\'s panels; hidden views are not offered', () => {
+  it('an empty query lists eligible views, contexts, namespaces and live objects; history adds no rows', () => {
     const r = buildItems('', sources())
     expect(labels(r)).toEqual([
-      'recent:api',
       'kind:Pods', 'kind:Deployments', 'kind:Namespaces',
       'target:prod', 'target:dev',
       'scope:default', 'scope:demo', 'scope:demo-2', 'scope:all',
@@ -61,9 +60,9 @@ describe('buildItems — fuzzy', () => {
     expect(labels(r)).toEqual(['object:web-1'])
   })
 
-  it('a recent entry of a replaced object (another UID) stays its own item', () => {
+  it('a replaced historical UID cannot introduce an absent object', () => {
     const r = buildItems('web', sources({ recents: [recent('web-1', 'uid-before')] }))
-    expect(labels(r)).toEqual(['object:web-1', 'recent:web-1'])
+    expect(labels(r)).toEqual(['object:web-1'])
   })
 
   it('contexts with the same title are told apart by their subtitle', () => {
@@ -209,12 +208,12 @@ describe('buildItems — object scope selection', () => {
     { scope: { mode: 'none' }, visible: [] },
     { scope: null, visible: [] },
   ]
-  it.each(scenarios)('filters both live and recent objects for $scope, preserving global objects', ({ scope, visible }) => {
+  it.each(scenarios)('filters eligible live rows for $scope, preserving global rows without adding history', ({ scope, visible }) => {
     const rows = ['demo', 'other', 'outside', ''].map((ns) => row(`match-live-${ns || 'global'}`, ns, ns ? 'pods' : 'nodes'))
     const recents = ['demo', 'other', 'outside', ''].map((ns) => ({ ...recent(`match-recent-${ns || 'global'}`), ref: row(`match-recent-${ns || 'global'}`, ns, ns ? 'unknown.io/things' : 'nodes').ref }))
     for (const query of ['', 'match']) {
       const items = buildItems(query, sources({ rows, recents, selectedScope: scope, scopes: null })).items.filter((i) => i.action.type === 'object')
-      expect(items.map((i) => i.label).sort()).toEqual([...visible, 'global'].flatMap((ns) => [`match-live-${ns}`, `match-recent-${ns}`]).sort())
+      expect(items.map((i) => i.label).sort()).toEqual([...visible, 'global'].map((ns) => `match-live-${ns}`).sort())
     }
   })
 
@@ -223,4 +222,25 @@ describe('buildItems — object scope selection', () => {
     expect(cursorItem(buildItems(':ns default', src))?.action).toEqual({ type: 'scope', scope: { mode: 'one', name: 'default' } })
     expect(labels(buildItems('default', src))).toContain('scope:default')
   })
+})
+
+describe('typed resource queries and history ranking',()=>{
+ it('dep model and pod model constrain type and name, retaining selected namespace boundaries',()=>{
+  const src=sources({selectedScope:{mode:'one',name:'demo'},rows:[row('ecos-model','demo','apps/deployments'),row('ecos-model-pod','demo','pods'),row('ecos-model-other','outside','apps/deployments')],recents:[recent('ghost-model')]})
+  expect(labels(buildItems('dep model',src))).toEqual(['object:ecos-model'])
+  expect(labels(buildItems('pod model',src))).toEqual(['object:ecos-model-pod'])
+ })
+ it('history ranks matching live results but cannot bypass matching or introduce another type or old UID',()=>{
+  const a=row('model-a'),b=row('model-b'),r={...recent('model-b'),ref:b.ref}
+  const src=sources({rows:[a,b],recents:[r,recent('ghost-model'),recent('model-a','replaced')]})
+  expect(labels(buildItems('model',src))).toEqual(['object:model-b','object:model-a'])
+  expect(labels(buildItems('missing',src))).toEqual([])
+  expect(labels(buildItems('pod model',src))).toEqual(['object:model-b','object:model-a'])
+ })
+ it('ambiguous type prefixes offer filtered views with no automatic selection',()=>{
+  const src=sources({kinds:[...kinds,kind('other/deployments','Other deployments',['deploy'])]})
+  const result=buildItems('dep model',src)
+  expect(result.cursor).toBeNull()
+  expect(result.items.map(item=>item.action)).toEqual([{type:'kind',kind:'apps/deployments',filter:'model'},{type:'kind',kind:'other/deployments',filter:'model'}])
+ })
 })

@@ -364,6 +364,9 @@ func (s *Service) ListKinds(ctx context.Context, providerID, target string) (Kin
 		if _, ok := e.sess.(provider.GraphSource); ok {
 			catalog.Kinds = append(append([]core.KindDescriptor(nil), catalog.Kinds...), graphKind())
 		}
+		if _, ok := e.sess.(provider.SecuritySource); ok {
+			catalog.Kinds = append(append([]core.KindDescriptor(nil), catalog.Kinds...), securityKind())
+		}
 		if _, ok := e.sess.(provider.TimelineSource); ok {
 			catalog.Kinds = append(append([]core.KindDescriptor(nil), catalog.Kinds...), timelineKind())
 		}

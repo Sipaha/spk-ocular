@@ -27,6 +27,8 @@ not collect telemetry. Helm is embedded; a separate Helm CLI is not required.
 
 - Live resource tables, discovery of Kubernetes API resources, details, and metrics.
 - Multiple namespaces, global favorites, resource search, and saved table layouts.
+- [Security](docs/security.md) for read-only configuration risks, NetworkPolicy
+  selection and existing Trivy Operator vulnerability reports (from 1.3.0).
 - [RBAC explanation](docs/rbac-explanation.md) with binding/role provenance and
   self-only server access checks (from 1.2.0).
 - [Events timeline](docs/events-timeline.md) for bounded, time-based workload
@@ -94,13 +96,21 @@ to Applications. Bundles have an ad-hoc signature but are not Developer ID signe
 or notarized. For a trusted download, macOS may require approval in
 System Settings → Privacy & Security → Open Anyway.
 
-Separate `spk-ocular-browser_VERSION_OS_ARCH` archives contain the browser-mode
-binary (`.zip`/`.exe` on Windows, `.tar.gz` elsewhere). Extract and run:
+The same desktop executable can serve the interface in your browser:
 
 ```sh
-./spk-ocular-browser --browser --port 5190
+spk-ocular --browser --port 5190
 # Open http://127.0.0.1:5190 in a local browser.
 ```
+
+From the executable’s directory on Windows, use
+`.\spk-ocular.exe --browser --port 5190` in PowerShell. For a macOS app bundle,
+run `/Applications/SPK\ Ocular.app/Contents/MacOS/spk-ocular --browser --port 5190`.
+Without `--browser`, the executable opens its native desktop window. The same
+native runtime libraries are required in either mode; Linux still needs the
+GTK/WebKit libraries listed above, but browser mode does not need a display.
+Packages from 1.3.0 use this single executable; earlier published browser-only
+archives remain available as immutable release assets.
 
 The browser endpoint is local only. In-app automatic updates are not implemented.
 

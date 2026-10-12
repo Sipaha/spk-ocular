@@ -51,7 +51,7 @@ class ReleaseInputs(unittest.TestCase):
                 release.package('1.2.0', 'amd64', binaries)
             self.assertIn(f'BIN_DIR={binaries}', calls[0][0])
             self.assertEqual([call.args[0] for call in elf.call_args_list],
-                             [binaries / 'spk-ocular-release', binaries / 'spk-ocular'])
+                             [binaries / 'spk-ocular-release'])
             for command, kwargs in calls[1:]:
                 self.assertEqual(command[0], 'nfpm')
             import json
@@ -88,7 +88,7 @@ class AssetManifest(unittest.TestCase):
                     data = name.encode()
                     (root / name).write_bytes(data)
                     (root / (name + '.sha256')).write_text(f'{hashlib.sha256(data).hexdigest()}  {name}\n')
-            self.assertEqual(len(verify.verify_checksums(root, '1.2.3', ['amd64', 'arm64']).splitlines()), 8)
+            self.assertEqual(len(verify.verify_checksums(root, '1.2.3', ['amd64', 'arm64']).splitlines()), 6)
             name = verify.assets('1.2.3', 'arm64')[0]
             (root / name).write_bytes(b'corrupted')
             with self.assertRaisesRegex(ValueError, 'checksum mismatch'):

@@ -26,9 +26,12 @@ Implementation scope for each subsequent feature is selected separately.
   provenance, current-connection server access checks, guarded source navigation
   and Forbidden resource-read inspection. Partial coverage and authorization
   boundaries are explicit. Included from 1.2.0.
-- [ ] **Security and NetworkPolicy inspection:** show policy selection and
-  declared connectivity alongside risky security contexts and RBAC. Declarative
-  analysis must not claim proven packet reachability or exploitability.
+- [x] **[Security and NetworkPolicy inspection](security.md):** read-only workload
+  hardening, declared role risks, ingress/egress policy selection and existing
+  Trivy Operator CVE reports with setup guidance. Included from 1.3.0.
+  No exploitability, CNI enforcement or connectivity claim.
+- [ ] **Extended security investigation:** declared permitted peers, binding-based
+  workload permission provenance and further report adapters; scope separately.
 - [x] **[Resource/environment comparison](resource-comparison.md):** explicitly
   selected UID-pinned resources across connected targets, normalized saved YAML
   diff and optional service fields/status. Read-only, with Secret payloads
@@ -63,7 +66,8 @@ Ocular's features remain free; competitor packaging does not change that policy.
 - SSH/custom providers and simultaneous workspaces or multiple windows.
 - Discovered-kind scale subresources, additional actions and child relationships;
   richer CRD column provenance and Problems coverage for custom resources.
-- Search objects of unopened kinds without unbounded background listing.
+- Broader object search beyond the explicit single-kind Ctrl+K type/name query,
+  without unbounded background listing.
 - Background credential-helper support for desktop keyring-backed caches.
 
 ## Editing and actions

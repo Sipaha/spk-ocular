@@ -279,3 +279,30 @@ describe('ResourceTable marks', () => {
     expect(outer).toHaveBeenCalledTimes(1)
   })
 })
+
+it('specialized cells preserve numeric sorting and share resizable column tracks', async () => {
+ const list=[{...row('high'),cells:[{text:'High',num:1}]},{...row('critical'),cells:[{text:'Critical',num:0}]}]
+ render(<ResourceTable columns={[{id:'severity',title:'Severity',type:'status',width:96}]} rows={list} hideScope={false} filter="" selected={null} onSelect={()=>{}} ariaLabel="findings" renderCell={(r)=> <strong>{r.cells[0].text}</strong>} />)
+ const grid=screen.getByRole('grid',{name:'findings'})
+ expect(within(grid).getAllByRole('row').slice(1).map(r=>r.textContent)).toEqual(['Critical','High'])
+ expect(grid.querySelector('[data-health]')).toBeNull()
+ const handle=within(grid).getByRole('separator',{name:'Resize column Severity'})
+ vi.spyOn(handle.parentElement!,'getBoundingClientRect').mockReturnValue({width:96} as DOMRect)
+ handle.focus();await userEvent.keyboard('{ArrowRight}')
+ expect(grid.style.getPropertyValue('--column-0')).toBe('106px')
+ await userEvent.click(within(grid).getByRole('columnheader'))
+ expect(within(grid).getAllByRole('row').slice(1).map(r=>r.textContent)).toEqual(['High','Critical'])
+})
+
+it('restores saved sorting when loading reveals columns and keeps the chosen ID across reordering', async () => {
+ const props={hideScope:false,filter:'',selected:null,onSelect:()=>{},initialSort:{col:'severity',desc:true},defaultSort:{column:'name'}}
+ const view=render(<ResourceTable {...props} columns={[]} rows={[]} />)
+ const cols:Column[]=[{id:'name',title:'Name',type:'text'},{id:'severity',title:'Severity',type:'status'}]
+ const rows=[{...row('a'),cells:[{text:'a'},{text:'Critical',num:0}]},{...row('b'),cells:[{text:'b'},{text:'High',num:1}]}]
+ view.rerender(<ResourceTable {...props} columns={cols} rows={rows} />)
+ expect(screen.getByRole('columnheader',{name:/Severity/})).toHaveAttribute('aria-sort','descending')
+ await userEvent.click(screen.getByRole('columnheader',{name:/Name/}))
+ view.rerender(<ResourceTable {...props} columns={[cols[1],cols[0]]} rows={rows.map(r=>({...r,cells:[r.cells[1],r.cells[0]]}))} />)
+ expect(screen.getByRole('columnheader',{name:/Name/})).toHaveAttribute('aria-sort','ascending')
+ expect(screen.getByRole('columnheader',{name:/Severity/})).toHaveAttribute('aria-sort','none')
+})

@@ -94,13 +94,10 @@ def build(release_version, platform, arch, stage):
     resource = ROOT / f'cmd/spk-ocular/rsrc_windows_{arch}.syso'
     suffix = '.exe' if platform == 'windows' else ''
     desktop = stage / ('spk-ocular' + suffix)
-    browser = stage / ('spk-ocular-browser' + suffix)
     flags = f'-s -w -X main.version={release_version}'
     try:
         shutil.rmtree(dist)
         shutil.copytree(ROOT / 'web/dist', dist)
-        # The browser binary keeps a console and does not link desktop resources.
-        run('go', 'build', '-trimpath', '-ldflags', flags, '-o', browser, './cmd/spk-ocular', env={**env, 'CGO_ENABLED': '0'})
         if platform == 'windows':
             ico, _ = make_icons(stage)
             run('go', 'run', 'github.com/akavel/rsrc@v0.10.2', '-ico', ico,
@@ -112,10 +109,9 @@ def build(release_version, platform, arch, stage):
         shutil.rmtree(dist)
         dist.mkdir()
         (dist / '.gitkeep').touch()
-    for binary, subsystem in [(desktop, 2), (browser, 3)]:
-        if binary_arch(binary.read_bytes(), platform, subsystem) != arch:
-            raise ValueError(f'wrong architecture: {binary}')
-    return desktop, browser
+    if binary_arch(desktop.read_bytes(), platform, 2) != arch:
+        raise ValueError(f'wrong architecture: {desktop}')
+    return desktop
 
 
 def package(release_version, platform, arch):
@@ -129,14 +125,12 @@ def package(release_version, platform, arch):
     if stage.exists():
         shutil.rmtree(stage)
     stage.mkdir(parents=True)
-    desktop, browser = build(release_version, platform, arch, stage)
+    desktop = build(release_version, platform, arch, stage)
     common = documents(release_version, platform, arch)
     epoch = int(subprocess.check_output(['git', 'log', '-1', '--format=%ct'], cwd=ROOT, text=True))
     base = f'spk-ocular_{release_version}_{platform}_{arch}'
-    browser_base = f'spk-ocular-browser_{release_version}_{platform}_{arch}'
     if platform == 'windows':
         zip_archive(output / (base + '.zip'), common + [('spk-ocular.exe', desktop, 0o755)], epoch)
-        zip_archive(output / (browser_base + '.zip'), common + [('spk-ocular-browser.exe', browser, 0o755)], epoch)
         run('wix', 'build', 'packaging/windows/spk-ocular.wxs', '-arch', 'x64' if arch == 'amd64' else 'arm64',
             '-d', f'Version={msi_version(release_version)}', '-d', f'DisplayVersion={release_version}',
             '-d', f'Stage={stage}', '-o', output / (base + '.msi'), '-pdbtype', 'none')
@@ -163,7 +157,6 @@ def package(release_version, platform, arch):
         run('codesign', '--verify', '--deep', '--strict', app)
         entries = [(p.relative_to(stage).as_posix(), p, p.stat().st_mode & 0o777) for p in app.rglob('*') if p.is_file()]
         archive(output / (base + '.tar.gz'), common + entries, epoch)
-        archive(output / (browser_base + '.tar.gz'), common + [('spk-ocular-browser', browser, 0o755)], epoch)
         with tempfile.TemporaryDirectory() as scratch:
             dmg_stage = Path(scratch)
             run('ditto', app, dmg_stage / app.name)

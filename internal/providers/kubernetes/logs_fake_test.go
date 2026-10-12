@@ -158,6 +158,9 @@ func (k *fakeKubelet) serve(w http.ResponseWriter, r *http.Request) {
 	ctr := q.Get("container")
 	k.mu.Lock()
 	k.requests = append(k.requests, q)
+	// Capture this request's generation before the client receives any bytes.
+	// Re-reading the replacement channel after a change can miss a drop.
+	cut, eof := k.cut, k.eof
 	if d := k.slow[pod]; d > 0 && q.Get("follow") != "true" {
 		k.mu.Unlock()
 		select {
@@ -241,8 +244,17 @@ func (k *fakeKubelet) serve(w http.ResponseWriter, r *http.Request) {
 		more := append([]fakeRec(nil), in.recs[sent:]...)
 		sent = len(in.recs)
 		ended := in.ended
-		changed, cut, eof := k.changed, k.cut, k.eof
+		changed := k.changed
 		k.mu.Unlock()
+		// A broken request must not deliver newly appended records even if
+		// both the drop and the change notifications are ready.
+		select {
+		case <-cut:
+			panic(http.ErrAbortHandler)
+		case <-eof:
+			return
+		default:
+		}
 		write(more)
 		if ended {
 			return

@@ -35,6 +35,7 @@ export function ColumnResize({ column, variable, value, onDone }: { column: stri
     else d.grid.style.removeProperty(variable)
     document.body.style.cursor = d.cursor
     document.body.style.userSelect = d.select
+    drag.current = null
   }, [variable])
   const update = (x: number) => {
     const d = drag.current
@@ -51,6 +52,7 @@ export function ColumnResize({ column, variable, value, onDone }: { column: stri
     onPointerDown={(e) => {
       if (e.button !== 0) return
       e.preventDefault(); e.stopPropagation()
+      e.currentTarget.focus({ preventScroll: true })
       const grid = e.currentTarget.closest<HTMLElement>('[role=grid]')!
       const width = e.currentTarget.parentElement!.getBoundingClientRect().width
       drag.current = { grid, start: e.clientX, width, next: width, previous: grid.style.getPropertyValue(variable), frame: null, cursor: document.body.style.cursor, select: document.body.style.userSelect }

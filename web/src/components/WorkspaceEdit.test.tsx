@@ -182,7 +182,7 @@ describe('editing an object in the details', () => {
     expect(f.client.openView).not.toHaveBeenCalledWith('kubernetes', 'prod', expect.objectContaining({ kind: 'nodes' }))
   })
 
-  it('opening another kind from recent objects changes the selected section only after discarding edits', async () => {
+  it('explicit type-and-name navigation changes the selected section only after discarding edits', async () => {
     const { f, drawer, v } = await openEditor()
     type(v, 'x: 1', 'x: 9')
     const ref: Ref = { provider: 'kubernetes', target: 'prod', kind: 'nodes', name: 'node-palette', uid: 'node-uid' }
@@ -192,7 +192,9 @@ describe('editing an object in the details', () => {
       v.focus()
       await userEvent.keyboard('{Control>}k{/Control}')
       const palette = await screen.findByRole('dialog', { name: 'Go to' })
-      await userEvent.click(await within(palette).findByRole('option', { name: /node-palette/ }))
+      await userEvent.type(within(palette).getByRole('combobox'),'nodes node-palette')
+      await waitFor(()=>expect(within(palette).getByRole('option',{name:/node-palette/})).toHaveTextContent('Object'))
+      await userEvent.click(within(palette).getByRole('option', { name: /node-palette/ }))
       return screen.findByRole('alertdialog', { name: 'Discard edits?' })
     }
     await choose()

@@ -49,7 +49,7 @@ up on success or failure. Failed Go commands include their stderr diagnostics.
 | `make build-desktop` | Native development window in `build/bin/spk-ocular-desktop` |
 | `make licenses` | Regenerate committed third-party notices from exact build inputs |
 | `make release VERSION=1.0.0` | Native production binary without DevTools |
-| `make package-linux` | Production DEB/RPM and desktop/browser archives |
+| `make package-linux` | Production DEB/RPM and desktop archives (one binary, two modes) |
 | `make lint` | Go vet and lint with both tag sets, ESLint/TypeScript, workflow/shell validation |
 | `make test` | Go race, web, browser e2e and packaging/documentation contract tests |
 | `make check` | Full gate: lint, tests and both development builds |
@@ -68,6 +68,11 @@ same native PNG. Published release assets change only with a new release.
 GTK supplies the 16/24/32/48/64/128 px family; the 256 px PNG remains the
 application and packaging fallback. The renderer needs e2e Chromium and uses
 Catmull-Rom for the final native sizes.
+
+The pure-Go `build-go` executable is a development/test harness, not a separate
+release product. Distribution packages use the native production executable for
+both the default window and `--browser`. The package verifiers run that actual
+executable’s browser mode in a private profile without DISPLAY/Wayland.
 
 `make run` and `make run-browser` use normal user configuration. Automated or
 manual verification must launch the built executable with isolated HOME,
@@ -90,6 +95,10 @@ partial loading; a single modified response can be replaced by a background pull
 parent solution's `.agents/tmp`. `E2E_BIN`, `E2E_PORT` and `E2E_SYNTH_PORT` select
 the browser binary and ports. Check port availability and choose another free
 port instead of killing a process belonging to another task.
+
+Log-stream fixtures capture the drop/EOF generation before delivering bytes and
+prioritize a pending drop over appended records. A metrics scheduling budget
+starts after inventory readiness so it measures sampling rather than discovery.
 
 Fake Engine event emission queues a server-side message; it does not acknowledge
 the client's reader. Tests for initial reconciliation hold the list response
@@ -250,6 +259,16 @@ running; they do not bypass the production registry. Provider tests verify
 persistent links, fresh nonces, record-bound ciphertext, absence of plaintext
 credentials/passwords and stale-writer refusal. No real kubeconfig is a test input.
 
+## Security verification
+
+`internal/providers/kubernetes/security_test.go` covers namespace-specific and
+read-only HTTP lists, projected report fields, permission states, inherited Pod
+settings, label selectors, sparse reports and pagination bounds. Service tests
+reject non-UI calls and implicit connections. `tests/e2e/security.spec.ts` checks
+setup guidance, report evidence, held edits, refresh failures, virtualized rows, shared column resizing/persistence
+and eight languages at normal/narrow widths. These fixtures do not execute a
+scanner or establish exploitability; see [Security](security.md).
+
 ## Localization checks
 
 `web/src/i18n.test.ts` checks every locale against English UI keys and the Go
@@ -276,3 +295,9 @@ Frontend lint/build reject case-insensitive module-path collisions, including
 identically named .ts/.tsx modules. Model and component names must remain
 distinct on Windows/macOS, not only on Linux. Playwright palette tests wait for
 route handlers to settle before response disposal during page teardown.
+
+Search fixtures verify history-only exclusion, type/name resolution, namespace
+boundaries and temporary-view cleanup through the shared ViewHub. Loading
+fixtures assert known headers before row arrival. Shared-grid checks cover
+column persistence, Escape rollback, reset, keyboard sorting/navigation and
+centered inspector close controls with held-edit protection.

@@ -1,5 +1,6 @@
 import { lazy, Suspense } from 'react'
 const RbacWorkspace = lazy(() => import('../rbac/RbacWorkspace'))
+const SecurityWorkspace = lazy(() => import('../security/SecurityWorkspace'))
 const TimelineWorkspace = lazy(() => import('../timeline/TimelineWorkspace'))
 const GraphWorkspace = lazy(() => import('../graph/GraphWorkspace'))
 import { groupLabel, kindLabel } from '../presentation'
@@ -300,13 +301,14 @@ export function Workspace({ client, hub, target, onFavorite, onMoveFavorite, onN
       lend('host', {
         target: targetRef,
         kinds: kinds ?? [],
+        currentKind: current?.id,
         scopes: scopeNames,
         selectedScope,
         openKind: (k, f) => paletteActs.current?.openKind(k, f),
         setScope: (s) => paletteActs.current?.setScope(s),
         openObject: (r) => paletteActs.current?.openObject(r),
       }),
-    [targetRef, kinds, scopeNames, selectedScope],
+    [targetRef, kinds, current?.id, scopeNames, selectedScope],
   )
 
   return (
@@ -426,6 +428,11 @@ export function Workspace({ client, hub, target, onFavorite, onMoveFavorite, onN
           </div>
         ) : page.kind.workspace === 'rbac' ? (
           <Suspense fallback={<LoadingState />}><RbacWorkspace key={page.key} client={client} target={target} scope={scope}
+            scopePicker={<ScopePicker scope={scope} scopes={scopes} scopeMenu={scopeMenu} onScope={setScope} />}
+            drawer={{client,hub,target,hasLogs,onLogs:openLogs,hasExec,onTerminal:openTerminal,hasForward,actionsOf,onAction:openAction,eventsKindOf,editableOf,valuesOf,kindTitleOf}}
+          /></Suspense>
+        ) : page.kind.workspace === 'security' ? (
+          <Suspense fallback={<LoadingState />}><SecurityWorkspace key={page.key} client={client} target={target} scope={scope}
             scopePicker={<ScopePicker scope={scope} scopes={scopes} scopeMenu={scopeMenu} onScope={setScope} />}
             drawer={{client,hub,target,hasLogs,onLogs:openLogs,hasExec,onTerminal:openTerminal,hasForward,actionsOf,onAction:openAction,eventsKindOf,editableOf,valuesOf,kindTitleOf}}
           /></Suspense>
@@ -917,9 +924,9 @@ function ResourcePage(props: {
       {!initialLoading && metrics && <MetricsNote metrics={metrics} />}
       <div className="relative flex min-h-0 flex-1 flex-col">
         <div data-area="table" aria-busy={view.status.state === 'loading'} className="flex min-h-0 flex-1 flex-col">
-        {initialLoading ? <LoadingState title={kindLabel(target.provider, kind)} /> : <ResourceTable
+        <ResourceTable
           areaFocus
-          emptyMessage={view.status.state === 'ready' ? view.rows.length === 0 ? emptyTableText(view.status.coverage) : t('nav.noMatches') : null}
+          emptyMessage={initialLoading ? <LoadingState title={kindLabel(target.provider, kind)} /> : view.status.state === 'ready' ? view.rows.length === 0 ? emptyTableText(view.status.coverage) : t('nav.noMatches') : null}
           columns={columns}
           rows={view.rows}
           hideScope={scope.mode === 'one'}
@@ -954,7 +961,7 @@ function ResourcePage(props: {
             rememberPage(tkey, { columnWidths: { ...memoOf(tkey).columnWidths, [kind.id]: widths } })
             void persistTargetEntries(client, target.provider, target.id, { [columnWidthsKey(kind.id)]: JSON.stringify(widths) }).catch(() => showNotice(t('table.widthsNotSaved')))
           }}
-        />}
+        />
         </div>
         {open && (
           <ResourceDrawer

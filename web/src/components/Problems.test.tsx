@@ -70,7 +70,7 @@ async function openProblems(rows: Row[], status: object = { state: 'ready' }) {
 const names = (grid: HTMLElement) => within(grid).queryAllByRole('row').slice(1).map((r) => within(r).getAllByRole('gridcell')[4]?.textContent)
 
 describe('Problems', () => {
-  it('shows only loading before initial rows, then exposes the observed coverage', async () => {
+  it('retains known headers while loading initial rows, then exposes observed coverage', async () => {
     const f = problemsClient([], {
       state: 'loading',
       coverage: [{ source: 'Pods', state: 'ready' }, { source: 'Warning events', state: 'loading' }],
@@ -79,7 +79,8 @@ describe('Problems', () => {
     await waitFor(() => expect(f.client.getRows).toHaveBeenCalledWith('v-problems', 0))
     expect(screen.getByRole('heading', { name: 'Problems' })).toBeVisible()
     expect(screen.getByRole('status', { name: 'Loading…' })).toHaveTextContent('Loading Problems…')
-    expect(screen.queryByRole('grid', { name: 'resources' })).not.toBeInTheDocument()
+    expect(screen.getByRole('grid', { name: 'resources' })).toBeVisible()
+    expect(within(screen.getByRole('grid', { name: 'resources' })).getAllByRole('columnheader').length).toBeGreaterThan(0)
     expect(screen.queryByRole('note', { name: 'Not observed' })).not.toBeInTheDocument()
     expect(screen.queryByRole('note', { name: 'Coverage' })).not.toBeInTheDocument()
     expect(screen.queryByText(/No objects/)).not.toBeInTheDocument()

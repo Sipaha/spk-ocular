@@ -6,16 +6,16 @@ Published stable versions and their release notes are available in [GitHub Relea
 
 SPK Ocular builds Linux, Windows and macOS for both amd64 and arm64. Each job
 runs on a matching native host. Production desktop builds disable DevTools;
-browser executables use CGO disabled.
+the same native executable supports `--browser` for a loopback HTTP UI.
+Distribution builds do not produce separate browser executables.
 
 | Platform | Native runners | Runtime | Artifacts per architecture |
 | --- | --- | --- | --- |
-| Linux | Ubuntu 24.04, Ubuntu 24.04 arm64 | glibc 2.39+, GTK 3, WebKit2GTK 4.1 | DEB, RPM, desktop tar.gz, browser tar.gz |
-| Windows | Windows 2025 x64, Windows 11 arm64 | Windows 10/11, WebView2 Runtime | MSI, desktop ZIP, browser ZIP |
-| macOS | macOS 15 Intel and Apple Silicon | macOS 12+ | DMG, desktop app tar.gz, browser tar.gz |
+| Linux | Ubuntu 24.04, Ubuntu 24.04 arm64 | glibc 2.39+, GTK 3, WebKit2GTK 4.1 | DEB, RPM, desktop tar.gz |
+| Windows | Windows 2025 x64, Windows 11 arm64 | Windows 10/11, WebView2 Runtime | MSI, desktop ZIP |
+| macOS | macOS 15 Intel and Apple Silicon | macOS 12+ | DMG, desktop app tar.gz |
 
-Names use `spk-ocular_VERSION_OS_ARCH.EXT`, or
-`spk-ocular-browser_VERSION_OS_ARCH.EXT` for browser executables. OS names are
+Names use `spk-ocular_VERSION_OS_ARCH.EXT`. OS names are
 `linux`, `windows`, and `darwin`; architectures are `amd64` and `arm64`.
 
 Windows MSI packages install per user, with a Start menu shortcut, and preserve
@@ -30,6 +30,14 @@ signed or notarized; macOS may require explicit approval under Privacy & Securit
 Windows installers are unsigned. Publisher signing needs separately provisioned
 certificates; no release credentials are fabricated or required for development
 builds. In-app automatic updating remains planned.
+
+This packaging contract applies from 1.3.0; earlier published browser-only
+assets remain unchanged. A complete new release has 14 native
+packages/archives, the native evidence bundle, their 15 checksum sidecars and
+`SHA256SUMS` (31 files). Native package verification also starts each distribution
+executable with `--browser` in an isolated profile and without a display, checks
+the embedded HTTP interface and stops only that owned process. Linux browser mode
+retains the native build’s GTK/WebKit runtime requirements.
 
 Each file has a `.sha256` sidecar. `NATIVE-VERIFICATION.zip` contains all six owned production-window screenshots and matching source/version reports with synthetic test data, excluding app logs and credentials. The complete GitHub Release also includes
 `SHA256SUMS`. Archives carry BUILD-INFO and the project license. Checksums detect

@@ -127,7 +127,7 @@ export function HelmWorkspace({ client, target, scope, scopePicker, initialTab, 
     </header>
     {error && <div role="alert" className="border-b border-line px-3 py-2 text-danger">{error}</div>}
     {notice && <div role="status" className="border-b border-line px-3 py-2">{notice}</div>}
-    {busy && <div role="status" className="px-3 py-1 text-fg-muted">{t('app.loading')}</div>}
+    {busy && (tab === 'settings' || tableRows.length > 0) && <div role="status" className="px-3 py-1 text-fg-muted">{t('app.loading')}</div>}
     {tab === 'settings' ? <SettingsEditor value={settings} onChange={v => { setSettings(v); setDirtySettings(true) }} busy={busy || !settingsReady} onSave={async () => { const r = await call({ command: 'save-settings', settings }); if (r) { dirty.current = false; setDirtySettings(false); if (r.settings) setSettings(r.settings); setNotice(t('helm.saved')); if (!settings.repositories.some(r => r.name === repository)) setRepository(settings.repositories[0]?.name ?? '') } }} /> : <>
       <div className="relative flex min-h-0 flex-1 overflow-hidden">
         {!operation && <ResourceTable key={tab} columns={columns} rows={tableRows} hideScope={tab === 'releases' && scope.mode === 'one'} filter={filter}
@@ -139,7 +139,7 @@ export function HelmWorkspace({ client, target, scope, scopePicker, initialTab, 
             rememberPage(tkey, { columnWidths: { ...memoOf(tkey).columnWidths, [kind]: widths } })
             void persistTargetEntries(client, target.provider, target.id, { [columnWidthsKey(kind)]: JSON.stringify(widths) }).catch(() => showNotice(t('table.widthsNotSaved')))
           }}
-          areaFocus onSelect={openRow} emptyMessage={!busy && !error ? t(tab === 'charts' && !settings.repositories.length ? 'helm.addRepositoryFirst' : 'helm.empty') : null} />}
+          areaFocus onSelect={openRow} emptyMessage={busy && !tableRows.length ? t('app.loading') : !busy && !error ? t(tab === 'charts' && !settings.repositories.length ? 'helm.addRepositoryFirst' : 'helm.empty') : null} />}
         {operation ? <div className="flex min-w-0 flex-1 flex-col overflow-auto p-3">
           <div className="mb-3 flex items-center gap-2"><h2 className="font-semibold">{t(`helm.${operation.action}`)} · {target.title}</h2><span className="flex-1" /><button className={button} disabled={busy} onClick={cancelEdit}>{t('helm.cancel')}</button></div>
           {plan ? <>

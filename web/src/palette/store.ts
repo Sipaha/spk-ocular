@@ -5,6 +5,7 @@ import type { KindDescriptor, Ref, Row, ScopeSel, TargetRef } from '../api/types
 export interface PaletteHost {
   target: TargetRef
   kinds: KindDescriptor[]
+  currentKind?: string
   /** The one-shot scope list; null: scopes cannot be listed. */
   scopes: string[] | null
   /** The target's selected scopes, even on an unscoped table; null until loaded. */

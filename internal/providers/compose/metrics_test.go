@@ -193,6 +193,13 @@ func TestMetricsCoverEveryRowFirst(t *testing.T) {
 		}
 		return false
 	})
+	// The budget measures stats scheduling, not initial discovery of 60
+	// containers. Keep the inventory admitted before starting that budget.
+	require.NoError(t, e.s.linuxDaemon(t.Context()))
+	feeds, err := e.s.acquire([]Feed{FeedContainers})
+	require.NoError(t, err)
+	defer e.s.release(feeds)
+	require.NoError(t, waitAll(t.Context(), feeds))
 	ctx, cancel := context.WithTimeout(t.Context(), 500*time.Millisecond)
 	defer cancel()
 	m, err := e.s.Metrics(ctx, metricsQuery(KindServices), rows)

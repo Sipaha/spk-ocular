@@ -2,7 +2,7 @@ import {dock} from '../dock/store'
 import {useWorkspaceStatus} from '../workspace/persistence'
 import {ComparisonTools} from '../compare/ComparisonTools'
 import { DeploymentRevisions } from './DeploymentRevisions'
-import { ActionIcon, LinkArrowIcon } from './icons'
+import { ActionIcon, CloseIcon, LinkArrowIcon } from './icons'
 import { ActionIconButton } from './ActionIconButton'
 import { ToolDialog } from './ToolDialog'
 import { prefetchToolInfo } from './toolInfo'
@@ -279,8 +279,8 @@ export function ResourceDrawer({ embedded = false, client, hub, target, subject,
           </h2>
           <span className="drawer-kind min-w-0 max-w-[40%] truncate" title={current.kind}>{current.kind}</span>
           <span className="flex-1" />
-          <button className="rounded px-2 text-lg leading-none text-fg-muted hover:bg-hover hover:text-fg" onClick={close} aria-label={t('drawer.close')}>
-            ×
+          <button data-drawer-close className="action-icon-button" onClick={close} aria-label={t('drawer.close')} title={t('drawer.close')}>
+            <CloseIcon className="h-[20px] w-[20px]"/>
           </button>
         </div>
         {hasTools && (
@@ -485,18 +485,29 @@ function Details(props: { client: Client; hub: ViewHub; target: { provider: stri
           {groups.map(([type, rels]) => (
             <div key={type} className="mb-3">
               <p className="mb-1.5 flex items-center gap-2 text-[12px] text-fg-subtle">{relationLabel(type)}<span className="font-mono text-[11px]">{rels.length}</span></p>
-              <ul className="overflow-hidden rounded-md border border-line divide-y divide-line">
-                {rels.map(rel => {
-                  const title = `${rel.ref.kind}/${refTitle(rel.ref)}`
-                  const content = <><span className="max-w-[40%] shrink-0 truncate rounded border border-line px-1.5 py-0.5 text-[11px] text-fg-subtle" title={rel.ref.kind}>{(kindTitleOf?.(rel.ref.kind) && kindTitleOf(rel.ref.kind) !== rel.ref.kind ? kindTitleOf(rel.ref.kind) : rel.ref.kind.split('/').pop())}</span>
-                    <span className="min-w-0 flex-1"><span className="block truncate text-[13px]">{refTitle(rel.ref)}</span>{rel.ref.scope && rel.ref.scope !== r.ref.scope && <span className="block truncate text-[11px] text-fg-subtle">{rel.ref.scope}</span>}</span>
-                    {!rel.inert && <LinkArrowIcon className="h-[14px] w-[14px] shrink-0 text-fg-subtle group-hover:text-accent"/>}</>
-                  return <li key={`${rel.ref.kind}/${rel.ref.scope ?? ''}/${rel.ref.name}/${rel.ref.uid ?? ''}`} data-related-resource>
-                    {rel.inert ? <span className="flex min-h-[32px] items-center gap-2 px-2 py-1 text-fg-muted" title={`${title} · ${t('drawer.relationInert')}`}>{content}</span>
-                      : <button aria-label={title} title={title} className="group flex min-h-[32px] w-full items-center gap-2 px-2 py-1 text-left text-fg-muted outline-none hover:bg-hover hover:text-fg focus-visible:bg-hover focus-visible:text-accent" onClick={()=>onGo({...rel.ref,provider:target.provider,target:target.id})}>{content}</button>}
-                  </li>
-                })}
-              </ul>
+              <div className="overflow-x-auto rounded border border-line" tabIndex={0} aria-label={relationLabel(type)}>
+                <table className="w-full min-w-[240px] table-fixed text-left" aria-label={relationLabel(type)}>
+                  <colgroup><col className="w-[100px]"/><col/><col className="w-[64px]"/></colgroup>
+                  <thead className="bg-hover/50 text-[11px] text-fg-subtle"><tr>
+                    {(['Type', 'Name', 'Open'] as const).map(column => <th key={column} scope="col" title={t(`drawer.relation${column}`)} className="truncate px-2 py-1.5 font-medium">{t(`drawer.relation${column}`)}</th>)}
+                  </tr></thead>
+                  <tbody className="divide-y divide-line">
+                    {rels.map(rel => {
+                      const title = `${rel.ref.kind}/${refTitle(rel.ref)}`
+                      return <tr key={`${rel.ref.kind}/${rel.ref.scope ?? ''}/${rel.ref.name}/${rel.ref.uid ?? ''}`} className="h-8 text-fg-muted hover:bg-hover/50" data-related-resource>
+                        <td className="px-2 py-1"><span className="block truncate text-[11px] text-fg-subtle" title={rel.ref.kind}>{(kindTitleOf?.(rel.ref.kind) && kindTitleOf(rel.ref.kind) !== rel.ref.kind ? kindTitleOf(rel.ref.kind) : rel.ref.kind.split('/').pop())}</span></td>
+                        <td className="px-2 py-1" title={rel.inert ? `${title} · ${t('drawer.relationInert')}` : title}>
+                          <span className="block truncate text-[13px]">{refTitle(rel.ref)}</span>
+                          {rel.ref.scope && rel.ref.scope !== r.ref.scope && <span className="block truncate text-[11px] text-fg-subtle" title={rel.ref.scope}>{rel.ref.scope}</span>}
+                        </td>
+                        <td className="px-2 py-1">
+                          {rel.inert ? <span className="text-fg-subtle" title={t('drawer.relationInert')}>—</span> : <button aria-label={title} title={title} className="flex h-6 w-6 items-center justify-center rounded text-fg-subtle outline-none hover:bg-hover hover:text-accent focus-visible:outline-2 focus-visible:outline-accent" onClick={()=>onGo({...rel.ref,provider:target.provider,target:target.id})}><LinkArrowIcon className="h-[14px] w-[14px]"/></button>}
+                        </td>
+                      </tr>
+                    })}
+                  </tbody>
+                </table>
+              </div>
             </div>
           ))}
           {r.relationsError && <p className="text-xs text-warning">{t('drawer.relationsPartial', { error: r.relationsError })}</p>}

@@ -98,6 +98,9 @@ func (h *HTTP) routes() {
 	h.mux.Handle("POST /api/Configurations", noStore(http.MaxBytesHandler(handle(func(ctx context.Context, r *kubernetes.ConfigRequest) (any, error) {
 		return h.api.Configurations(ctx, *r)
 	}), 2<<20)))
+	h.mux.HandleFunc("POST /api/ClusterSecurity", handle(func(ctx context.Context, req *api.SecurityRequest) (any, error) {
+		return h.api.ClusterSecurity(ctx, *req)
+	}))
 	h.mux.HandleFunc("POST /api/ClusterTimeline", handle(func(ctx context.Context, req *api.TimelineRequest) (any, error) {
 		return h.api.ClusterTimeline(ctx, *req)
 	}))

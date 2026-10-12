@@ -17,6 +17,9 @@ export interface Sort {
 }
 
 interface Props {
+  /** Specialized investigation cells retain the shared grid behavior and widths. */
+  renderCell?: (row: Row, column: Column, cell: Cell | undefined) => ReactNode
+  ariaLabel?: string
   emptyMessage?: ReactNode
   columns: Column[]
   rows: Row[]
@@ -127,7 +130,7 @@ export function matchesRow(r: Row, f: string): boolean {
   return r.cells.some((c) => (c.text ?? '').toLowerCase().includes(needle)) || (r.health.reason ?? '').toLowerCase().includes(needle)
 }
 
-export function ResourceTable({ emptyMessage, columns, rows, hideScope, filter, selected, reveal, onSelect, onOpen, onLogs, onTerminal, metrics, onVisibleRows, rowMenu, onDelete, defaultSort, initialSort, onSort, initialWidths, onWidths, areaFocus, marked, onMarked }: Props) {
+export function ResourceTable({ renderCell, ariaLabel = 'resources', emptyMessage, columns, rows, hideScope, filter, selected, reveal, onSelect, onOpen, onLogs, onTerminal, metrics, onVisibleRows, rowMenu, onDelete, defaultSort, initialSort, onSort, initialWidths, onWidths, areaFocus, marked, onMarked }: Props) {
   const now = useNow(10_000)
   const [widths, setWidths] = useState<Record<string, number>>(initialWidths ?? {})
   const resizeColumn = (id: string, width: number | null) => {
@@ -149,6 +152,16 @@ export function ResourceTable({ emptyMessage, columns, rows, hideScope, filter, 
     const col = defaultSort ? columns.findIndex((c) => c.id === defaultSort.column) : -1
     return col < 0 ? { col: 0, desc: false, clicks: 0 } : { col, desc: !!defaultSort?.desc, clicks: 0 }
   })
+  // Loading can reveal/refine a schema after the grid has mounted. Keep the
+  // selected sort by stable column ID rather than its previous position.
+  const [columnIDs, setColumnIDs] = useState(() => columns.map(c => c.id))
+  if (columnIDs.join('\n') !== columns.map(c => c.id).join('\n')) {
+    const previous = columnIDs[sort.col] ?? initialSort?.col ?? defaultSort?.column
+    const next = columns.findIndex(c => c.id === previous)
+    const fallback = columns.findIndex(c => c.id === defaultSort?.column)
+    setColumnIDs(columns.map(c => c.id))
+    setSort({...sort, col: next >= 0 ? next : Math.max(0, fallback), desc: !columnIDs.length && !sort.clicks ? initialSort?.desc ?? !!defaultSort?.desc : next >= 0 ? sort.desc : !!defaultSort?.desc})
+  }
   const sortCol = columns[sort.col]?.id
   useEffect(() => {
     if (sort.clicks && sortCol) onSort?.({ col: sortCol, desc: sort.desc })
@@ -333,7 +346,7 @@ export function ResourceTable({ emptyMessage, columns, rows, hideScope, filter, 
   }
 
   return (
-    <div className="resource-grid flex min-h-0 min-w-0 flex-1 flex-col" style={widthStyle} role="grid" aria-rowcount={sorted.length} aria-label="resources">
+    <div key={JSON.stringify(columns.map(c=>c.id))} className="resource-grid flex min-h-0 min-w-0 flex-1 flex-col" style={widthStyle} role="grid" aria-rowcount={sorted.length} aria-label={ariaLabel}>
       {/* The header scrolls sideways with the rows (a narrow window), never the page. */}
       <div ref={headRef} className="resource-grid-header shrink-0 overflow-hidden border-b border-line [scrollbar-gutter:stable]">
         <div className="grid" style={{ gridTemplateColumns: template, minWidth }} role="row">
@@ -411,6 +424,7 @@ export function ResourceTable({ emptyMessage, columns, rows, hideScope, filter, 
                 {visibleCols.map(({ c, i }) => {
                   const cell = cellOf(r, i)
                   const text = cellText(c, cell, now)
+                  const content = renderCell?.(r, c, cell)
                   // No status column (a table of the server's columns): the
                   // row's health is a dot by its first cell.
                   const dotHere = c.type === 'status' || (!hasStatus && i === 0)
@@ -427,8 +441,7 @@ export function ResourceTable({ emptyMessage, columns, rows, hideScope, filter, 
                         i === 0 ? 'font-medium' : '',
                       ].join(' ')}
                     >
-                      {dotHere && <HealthDot state={r.health.state} muted={c.type === 'status' && cell?.muted} />}
-                      {text}
+                      {content === undefined ? <>{dotHere && <HealthDot state={r.health.state} muted={c.type === 'status' && cell?.muted} />}{text}</> : content}
                     </span>
                   )
                 })}

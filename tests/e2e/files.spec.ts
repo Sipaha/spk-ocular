@@ -417,6 +417,19 @@ test('deployment revisions show retained history, read-only YAML and normalized 
  for(const row of await table.locator('[data-deploy-revision]').all()) expect((await row.boundingBox())!.height).toBeLessThanOrEqual(48)
  await expect(table.getByText('Initial deployment',{exact:true})).toHaveAttribute('title','Initial deployment')
  await expect(table.getByText('2/2',{exact:true})).toHaveAttribute('title','2/2 ready')
+ const relatedTables=page.locator('table').filter({has:page.locator('[data-related-resource]')})
+ await expect(relatedTables).toHaveCount(2)
+ await expect(relatedTables.first().getByRole('columnheader')).toHaveText(['Type','Name','Open'])
+ await expect(relatedTables.last().getByRole('button')).toHaveCount(0)
+ const assertRelatedAlignment=async()=>{
+  const starts=await relatedTables.first().locator('[data-related-resource] td:nth-child(2)').evaluateAll(cells=>cells.map(cell=>cell.getBoundingClientRect().left))
+  expect(starts).toHaveLength(2)
+  expect(Math.max(...starts)-Math.min(...starts)).toBeLessThanOrEqual(0.5)
+  const acrossGroups=await relatedTables.locator('th:nth-child(2)').evaluateAll(cells=>cells.map(cell=>cell.getBoundingClientRect().left))
+  expect(Math.max(...acrossGroups)-Math.min(...acrossGroups)).toBeLessThanOrEqual(0.5)
+  for(const row of await relatedTables.locator('[data-related-resource]').all()) expect((await row.boundingBox())!.height).toBeLessThanOrEqual(48)
+ }
+ await assertRelatedAlignment()
  await page.screenshot({path:join(scratchRoot,'related-and-deploy-revisions.png')})
  await revisions.locator('[data-deploy-revision]').filter({hasText:'Revision 2'}).getByRole('button',{name:'Compare',exact:true}).click()
  await expect(page.getByRole('dialog',{name:'Deployment revisions',exact:true})).toContainText('Pod templates are identical.')
@@ -445,6 +458,21 @@ test('deployment revisions show retained history, read-only YAML and normalized 
   await expect(page.locator('html')).toHaveAttribute('lang',language)
   const translatedTable=page.locator('table').filter({has:page.locator('[data-deploy-revision]')})
   await expect(translatedTable.getByRole('columnheader')).toHaveCount(5)
+  const headings={en:['Type','Name','Open'],ru:['Тип','Имя','Открыть'],zh:['类型','名称','打开'],es:['Tipo','Nombre','Abrir'],de:['Typ','Name','Öffnen'],fr:['Type','Nom','Ouvrir'],pt:['Tipo','Nome','Abrir'],ja:['種類','名前','開く']}
+  await expect(relatedTables.first().getByRole('columnheader')).toHaveText(headings[language])
+  for(const width of [1280,1000]) {
+   await page.setViewportSize({width,height:900})
+   await assertRelatedAlignment()
+   for(const relatedTable of await relatedTables.all()) {
+    expect(await relatedTable.evaluate(el=>el.parentElement!.scrollWidth===el.parentElement!.clientWidth)).toBeTruthy()
+    await relatedTable.evaluate(el=>{el.parentElement!.scrollLeft=el.parentElement!.scrollWidth})
+    const open=relatedTable.getByRole('button').first()
+    if(await open.count()) await expect(open).toBeInViewport()
+    await relatedTable.evaluate(el=>{el.parentElement!.scrollLeft=0})
+   }
+   if(language==='en'||language==='ru') await page.screenshot({path:join(scratchRoot,`relationships-${language}-${width}.png`)})
+  }
+
   await expect(translatedTable.locator('[data-deploy-revision]').first().getByRole('button')).toHaveCount(2)
   if(language==='ru') {
    await page.setViewportSize({width:1000,height:900})
@@ -462,8 +490,11 @@ test('deployment revisions show retained history, read-only YAML and normalized 
  const related=page.getByRole('region',{name:'Related',exact:true})
  const link=related.getByRole('button',{name:'pods/api-very-long-pod-name-123456789',exact:true})
  await expect(link).toHaveAttribute('title','pods/api-very-long-pod-name-123456789')
- await link.click()
+ await link.focus()
+ await page.keyboard.press('Enter')
  await expect(page.getByRole('dialog',{name:'pods api-very-long-pod-name-123456789',exact:true})).toBeVisible()
+ await page.keyboard.press('Alt+ArrowLeft')
+ await expect(page.getByRole('dialog',{name:'services api',exact:true})).toBeVisible()
 })
 
 test('right-click setup cancels an earlier pending left-click without starting a tool',async({page})=>{

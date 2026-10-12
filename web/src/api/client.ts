@@ -1,3 +1,4 @@
+import type {SecurityRequest,SecuritySnapshot} from './types'
 import type {CompareRequest,ResourceComparison} from './types'
 import type { RBACRequest, RBACSnapshot, AccessRequest, AccessReview } from './types'
 import type { ClusterGraph, GraphRequest, ClusterTimeline, TimelineRequest } from './types'
@@ -26,6 +27,7 @@ export interface Client {
  compareResources(req:CompareRequest,signal?:AbortSignal):Promise<ResourceComparison>
  rbacSnapshot(req: RBACRequest, signal?: AbortSignal): Promise<RBACSnapshot>
  checkAccess(req: AccessRequest, signal?: AbortSignal): Promise<AccessReview>
+ clusterSecurity(req: SecurityRequest, signal?: AbortSignal): Promise<SecuritySnapshot>
  clusterTimeline(req: TimelineRequest, signal?: AbortSignal): Promise<ClusterTimeline>
  clusterGraph(req: GraphRequest, signal?: AbortSignal): Promise<ClusterGraph>
  configurations(req: ConfigRequest): Promise<ConfigState>
@@ -177,6 +179,7 @@ export const httpClient: Client = {
   setLanguage: (language) => post('SetLanguage', { language }),
   rbacSnapshot: (req, signal) => post('RBACSnapshot',req,signal),
   checkAccess: (req, signal) => post('CheckAccess',req,signal),
+  clusterSecurity: (req, signal) => post('ClusterSecurity', req, signal),
   clusterTimeline: (req, signal) => post('ClusterTimeline', req, signal),
   clusterGraph: (req, signal) => post('ClusterGraph', req, signal),
   helm: (req, signal) => post('Helm', req, signal),
@@ -312,6 +315,7 @@ export const wailsClient: Client = {
   setLanguage: (language) => wcall('SetLanguage', language),
   rbacSnapshot: (req, signal) => wcallAbortable(signal,'RBACSnapshot',req),
   checkAccess: (req, signal) => wcallAbortable(signal,'CheckAccess',req),
+  clusterSecurity: (req, signal) => wcallAbortable(signal, 'ClusterSecurity', req),
   clusterTimeline: (req, signal) => wcallAbortable(signal, 'ClusterTimeline', req),
   clusterGraph: (req, signal) => wcallAbortable(signal, 'ClusterGraph', req),
   helm: (req, signal) => wcallAbortable(signal, 'Helm', req),

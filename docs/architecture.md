@@ -151,6 +151,16 @@ rule rows and separates declared matches from server decisions, invalidating lat
 checks when fields change. Resource properties expose guarded inspection and
 Forbidden read checks. See [RBAC explanation](rbac-explanation.md).
 
+## Security inspection
+
+The UI-only `ClusterSecurity` API uses optional provider `SecuritySource` and
+an explicit admitted connection. Bounded dynamic reads project workload hardening,
+role declarations, NetworkPolicy selection and Trivy VulnerabilityReport evidence
+without returning manifests, values or server error details. Namespace coverage,
+scanner availability and report timestamps remain explicit. The Security workspace
+uses standard guarded ResourceDrawer navigation and bounded table pages. It runs
+no scanner and performs no writes; see [Security](security.md).
+
 ## Events timeline
 
 The UI-only `ClusterTimeline` API uses optional provider `TimelineSource` and an
@@ -309,10 +319,18 @@ Resource navigation search is shared across target switches within one run and
 clears after restart. Search expands groups temporarily. Favorites appear in only
 one place. Namespace row/Enter selects one; checkbox/Space toggles a set.
 Column resizing uses inherited CSS variables, one DOM update per animation
-frame, and commits React/persistent state on release.
+frame, and commits React/persistent state on release. Known table headers remain
+mounted during the first row read; later schema refinements preserve sorting by
+column ID. Security uses this same virtual grid, with custom evidence/action
+cells and no separate pagination or table styling.
 
-The palette filters current/recent objects by the target's selected scopes,
-including on unscoped tables. It opens the object's kind and selects a row by
+The palette filters eligible live rows by the target's selected scopes, including
+on unscoped tables. History influences ranking only, with exact Ref/UID matches;
+it cannot create candidates. Explicit type-and-name queries may attach one
+temporary view to the shared ViewHub, preserving scope and normal session guards.
+No parallel inventory sweep or implicit connection is performed. The view
+lifetime follows the query/target/scope and palette, so late responses are
+discarded and late opens closed. It opens the object's kind and selects a row by
 full Ref + UID once that row arrives. A one-shot request cannot reselect a row
 later after an unrelated manual selection.
 

@@ -24,7 +24,10 @@ a new sequence. Configuration changes retire the old pending check or connected
 session, then automatically check the replacement configuration for the same
 target.
 
-`spk-ocular --browser --port 5190` serves the same interface on loopback HTTP.
+`spk-ocular --browser --port 5190` uses the ordinary desktop executable to serve
+the same interface on loopback HTTP instead of opening a window. No separate
+browser binary is required. Native runtime libraries remain required; browser
+mode does not need an X/Wayland display on Linux.
 Use the local URL printed at startup. The browser interface requires its
 per-process page token and does not accept remote Host values.
 
@@ -47,6 +50,16 @@ ServiceAccount properties offer **Permissions**, and a Forbidden resource read
 offers **Check this Forbidden**. Permission inspection preserves open YAML drafts;
 source navigation uses the standard edit guard. See [RBAC explanation](rbac-explanation.md)
 for namespace boundaries, limits, identity and review semantics. Available from 1.2.0.
+
+## Security
+
+On a connected Kubernetes target, open **Cluster → Security**. Review read-only
+configuration risks and existing Trivy Operator CVE reports, filter results and
+open their resource or report in the standard inspector. Each finding explains
+its observed fields and recommendation. Missing reports show what to install
+and which read permissions are needed; Ocular installs nothing automatically.
+Configuration findings are declarations, not an exploit or compliance verdict.
+See [Security](security.md) for checks, setup, coverage and limits. Available from 1.3.0.
 
 ## Events timeline
 
@@ -219,9 +232,10 @@ to each connection and survive switching connections and restarting the app.
 Resource reads for an explicit set stay within those namespaces; failures in
 one source are visible while accessible sources remain usable.
 
-While the initial resource results are loading, the content area shows one
-loading state beneath the toolbar. The table and coverage summary appear with data
-or a settled result. Already displayed rows and source failures remain visible
+While initial resource results are loading, the table remains mounted with its
+known column headers and one loading state in the row area. Server-defined
+columns appear as soon as their schema is available; unknown columns are not
+invented. Coverage summaries appear with observed data or a settled result. Already displayed rows and source failures remain visible
 while other sources load or the view refreshes; progress moves to a small toolbar
 indicator. Sources still loading are not warned as unavailable during that read.
 
@@ -256,20 +270,26 @@ commands do not. See [workspace continuity](workspace-continuity.md).
 ## Search and keyboard
 
 Ctrl+K opens the command palette. It searches kinds, connections, scope names,
-current table rows, and recently opened objects. Object results are restricted
-to selected namespaces, including recent results and results shown while the
-current table is unscoped. Global objects such as Nodes remain available.
+and current table rows. History only raises the priority of matching live results;
+it never introduces absent, deleted, replaced or out-of-context resources. Object
+results remain in the selected namespaces, even while the current table is
+unscoped. Global objects such as Nodes remain available.
 
 Opening an object selects its kind, opens details, and selects/reveals its exact
-row when available. The namespace selection remains unchanged. A missing kind
-can still be attempted through its recent object's details in the current view.
-A different UID is a different object, even if its name is identical.
+row when available. The namespace selection remains unchanged. A different UID is a different object, even if its name is identical.
 
 Commands use aliases supplied by the provider, for example `:po`, `:deploy web`,
 `:ns team-a`, `:ns *`, and `:ctx staging`. Ambiguous commands require an explicit
 selection. Namespace-switching commands remain available outside the current
-selection. The palette searches already loaded data and history; it does not
-query every kind in the cluster.
+selection. A query such as `dep model` or `pod model` resolves the first word
+from provider aliases, IDs, singular names or an unambiguous prefix, then matches
+the remaining name text within that resource kind. When another kind is needed,
+the open palette temporarily reads only that one view with the existing namespace
+selection. Loading and incomplete/error sources are visible; Enter waits for a
+result, and ambiguous kinds require a choice. The temporary view closes on query
+change, target/scope change or palette close; it does not connect another target
+or search every kind in the cluster. Its open search field uses the text placeholder
+without a redundant magnifier icon.
 
 F6 cycles interface areas. Arrow keys navigate resource kinds and table rows.
 `?` opens the current keyboard reference. Ctrl+K inside a terminal belongs to
@@ -304,6 +324,10 @@ range, Space toggles a mark, and Ctrl+A marks visible rows. Filtering a marked
 row out removes its mark. Bulk actions prepare and run one guarded operation
 per resource, and report each result independently.
 
+The inspector close button uses a centered proportional SVG in a 28 px square,
+with the same focus style as its action buttons. Closing retains the normal
+unsaved-edit guard.
+
 Resource-inspector actions use compact icon buttons, with descriptive tooltips
 on hover and keyboard focus. Accessible names and shortcuts are unchanged.
 Tooltips include the right-click setup options for logs, terminals and files.
@@ -311,9 +335,12 @@ Only one action tooltip is shown at a time; Escape dismisses it without closing
 the underlying panel. The ellipsis opens the object-action menu; a bookmarked
 document selects the comparison baseline.
 
-Related resources appear as compact grouped rows with a kind badge, truncated
-name, full-name tooltip and navigation arrow. Unresolvable references remain
-plain non-clickable rows; cross-namespace rows show their scope.
+Related resources appear in compact grouped Type / Name / Open tables. Fixed
+type and action columns align names across resource kinds; long names have
+full-name tooltips. The Open arrow supports mouse and keyboard navigation.
+Unresolvable references remain non-clickable rows; cross-namespace rows show
+their scope. All three columns fit ordinary narrow inspectors; exceptionally
+narrow panels can scroll each table horizontally.
 
 Deployment details include **Deployment revisions**: retained ReplicaSets ordered
 by revision number in a compact table, with the current template marked,
