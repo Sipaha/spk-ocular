@@ -100,7 +100,7 @@
   "tools": [
     [
       "Navegación rápida · Ctrl+K",
-      "Salta a una vista, entorno, namespace, recurso de la tabla actual u objeto abierto recientemente. En macOS, usa Command+K."
+      "Acceda a vistas, entornos y namespaces, o busque recursos por tipo y nombre, como dep model, dentro de los namespaces seleccionados. En macOS, use Command+K."
     ],
     [
       "Recursos de Kubernetes",
@@ -237,6 +237,12 @@
   "investigationTitle": "Investigue con las evidencias conectadas.",
   "investigation": [
     {
+      "title": "Riesgos de configuración e informes de imágenes",
+      "text": "Revise la configuración de las cargas de trabajo de Kubernetes, las reglas RBAC declaradas y la selección de recursos de NetworkPolicy. Consulte informes de vulnerabilidades existentes de Trivy Operator con datos de la imagen, el paquete y las correcciones disponibles. Ocular no ejecuta escaneos ni instala el operador; los hallazgos no demuestran que una vulnerabilidad sea explotable ni que se cumplan normas.",
+      "image": "security",
+      "alt": "Espacio Security de SPK Ocular con hallazgos de configuración e instrucciones para instalar Trivy Operator"
+    },
+    {
       "title": "Grafo del clúster",
       "text": "Explore relaciones basadas en UID y rutas declaradas de Service, Ingress y Gateway. Muestra configuración, no tráfico medido.",
       "image": "graph",
@@ -267,5 +273,6 @@
       "alt": "SPK Ocular · Conserve su espacio de investigación"
     }
   ],
-  "logHistoryText": "Descargue todo el historial de logs retenido por el origen, independientemente de filtros o límites del visor. La escritura en streaming ofrece progreso y cancelación; se indican la retención, los límites de exportación y las lecturas incompletas. Copiar sigue usando el búfer filtrado del visor."
+  "logHistoryText": "Descargue todo el historial de logs retenido por el origen, independientemente de filtros o límites del visor. La escritura en streaming ofrece progreso y cancelación; se indican la retención, los límites de exportación y las lecturas incompletas. Copiar sigue usando el búfer filtrado del visor.",
+  "securityDemo": "Aplicación real · hallazgos de seguridad simulados"
 }

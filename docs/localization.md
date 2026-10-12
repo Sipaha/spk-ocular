@@ -69,8 +69,10 @@ to both content and tests; do not advertise incomplete dictionaries.
 The local-access section describes direct Kubernetes API access without kubectl,
 the embedded Helm SDK without a separate Helm CLI, and the continuing need for
 external authentication helpers configured in kubeconfig. The tools section
-explains Ctrl+K/Command+K navigation to views, environments, namespaces, current
-table resources and recent objects. These capabilities are present in v1.0.1.
+explains Ctrl+K/Command+K navigation to views, environments and namespaces, and
+type/name resource queries such as `dep model` within selected namespaces.
+The query capability is available in the released 1.3.0 and 1.4.0 application;
+it reads one requested kind, rather than searching every kind in the cluster.
 Keep these descriptions factual, with no competitor or exclusivity claims.
 
 The 1.2.0 copy describes the cluster graph as declared relationships/routes,
@@ -81,8 +83,13 @@ explicit connection/resume and no command replay. Log downloads read retained
 source history independently of viewer filters; Copy retains its filtered-buffer
 behavior. Provider retention, export caps and incomplete reads are explicit.
 
-Both RU/EN screenshot sets are freshly captured; the other six locales retain
+Both RU/EN screenshot sets use actual app captures; the other six locales retain
 the explicit English-UI notice. Preserve sh/readlink/tar requirements, the UTF-8
 editor limit of 2 MiB, desktop-only file downloads and refusal to overwrite existing
-names. Screenshot and social-image URLs carry the 1.2.0 version query. New feature
-copy is published only after the complete 1.2.0 release assets are verified.
+names. Existing screenshot and social-image URLs carry the 1.2.0 version query.
+Security uses separately versioned 1.4.0 RU/EN captures and a localized caption
+identifying simulated security findings. All eight locales describe workload
+configuration, declared RBAC rules, NetworkPolicy selection and existing Trivy
+Operator reports without claiming live scans, exploitability or compliance.
+Security neither installs the operator nor runs scans. New feature copy must
+describe a verified published release; the complete 1.4.0 assets are verified.

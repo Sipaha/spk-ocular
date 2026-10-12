@@ -11,7 +11,7 @@ const d = copy(lang);
 const base = '/spk-ocular/';
 const about = 'https://sipaha.github.io/about/';
 const shots = ['workloads', 'logs', 'helm', 'docker'];
-const shotURL = (name: string) => `${base}media/${name}-${lang === 'ru' ? 'ru' : 'en'}.webp?v=1.2.0`;
+const shotURL = (name: string) => `${base}media/${name}-${lang === 'ru' ? 'ru' : 'en'}.webp?v=${name === 'security' ? '1.4.0' : '1.2.0'}`;
 const navIDs = ['features', 'interface', 'free'];
 ---
 <Base lang={lang} title={d.title} description={d.description}>
@@ -69,7 +69,7 @@ const navIDs = ['features', 'interface', 'free'];
       <div class="section-head investigation-head"><h3>{d.investigationTitle}</h3></div>
       <div class="workflows">{d.investigation.map((feature,i)=><article class:list={['workflow',{reverse:i%2===1}]} id={feature.image}>
         <div class="workflow-copy"><h3>{feature.title}</h3><p>{feature.text}</p></div>
-        <figure class="workflow-image"><a data-image-preview href={shotURL(feature.image)} aria-label={d.fullImage}><img src={shotURL(feature.image)} width="1440" height="900" alt={feature.alt} loading="lazy" decoding="async" /></a><figcaption>{d.demo}</figcaption></figure>
+        <figure class="workflow-image"><a data-image-preview href={shotURL(feature.image)} aria-label={d.fullImage}><img src={shotURL(feature.image)} width="1440" height="900" alt={feature.alt} loading="lazy" decoding="async" /></a><figcaption>{feature.image === 'security' ? d.securityDemo : d.demo}</figcaption></figure>
       </article>)}</div>
       <div class="tool-section"><h3>{d.toolsTitle}</h3><div class="tool-grid">{d.tools.map(([title,text],i)=><article><span class="tool-index" aria-hidden="true">0{i+1}</span><div><h4>{title}</h4><p>{text}</p></div></article>)}</div></div>
     </section>

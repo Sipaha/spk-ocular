@@ -100,7 +100,7 @@
   "tools": [
     [
       "Navigation rapide · Ctrl+K",
-      "Accédez à une vue, un environnement, un namespace, une ressource du tableau actuel ou un objet récemment ouvert. Sur macOS, utilisez Command+K."
+      "Accédez aux vues, environnements et namespaces, ou recherchez des ressources par type et nom, comme dep model, dans les namespaces sélectionnés. Sur macOS, utilisez Command+K."
     ],
     [
       "Ressources Kubernetes",
@@ -237,6 +237,12 @@
   "investigationTitle": "Reliez les éléments de votre investigation.",
   "investigation": [
     {
+      "title": "Risques de configuration et rapports sur les images",
+      "text": "Examinez les paramètres des workloads Kubernetes, les règles RBAC déclarées et la sélection des ressources par NetworkPolicy. Consultez les rapports de vulnérabilités existants de Trivy Operator avec les détails de l’image, du paquet et des correctifs disponibles. Ocular ne lance pas de scans et n’installe pas l’opérateur ; les résultats ne prouvent ni l’exploitabilité ni la conformité à des normes.",
+      "image": "security",
+      "alt": "Espace Security de SPK Ocular avec des résultats de configuration et des instructions d’installation de Trivy Operator"
+    },
+    {
       "title": "Graphe du cluster",
       "text": "Explorez les relations fondées sur les UID et les routes déclarées de Service, Ingress et Gateway. Il s’agit de configuration, pas de trafic mesuré.",
       "image": "graph",
@@ -267,5 +273,6 @@
       "alt": "SPK Ocular · Conserver votre espace d’investigation"
     }
   ],
-  "logHistoryText": "Téléchargez tout l’historique des logs conservé par la source, indépendamment des filtres ou des limites du visualiseur. L’écriture en flux affiche la progression et permet l’annulation ; rétention, limites d’export et lectures incomplètes sont signalées. La copie utilise toujours le tampon filtré du visualiseur."
+  "logHistoryText": "Téléchargez tout l’historique des logs conservé par la source, indépendamment des filtres ou des limites du visualiseur. L’écriture en flux affiche la progression et permet l’annulation ; rétention, limites d’export et lectures incomplètes sont signalées. La copie utilise toujours le tampon filtré du visualiseur.",
+  "securityDemo": "Application réelle · résultats de sécurité simulés"
 }

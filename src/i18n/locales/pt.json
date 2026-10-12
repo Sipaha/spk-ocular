@@ -100,7 +100,7 @@
   "tools": [
     [
       "Navegação rápida · Ctrl+K",
-      "Vá para uma visualização, ambiente, namespace, recurso da tabela atual ou objeto aberto recentemente. No macOS, use Command+K."
+      "Acesse visualizações, ambientes e namespaces, ou encontre recursos por tipo e nome, como dep model, nos namespaces selecionados. No macOS, use Command+K."
     ],
     [
       "Recursos do Kubernetes",
@@ -237,6 +237,12 @@
   "investigationTitle": "Investigue com as evidências conectadas.",
   "investigation": [
     {
+      "title": "Riscos de configuração e relatórios de imagens",
+      "text": "Revise as configurações de workloads do Kubernetes, as regras RBAC declaradas e a seleção de recursos por NetworkPolicy. Leia relatórios de vulnerabilidades existentes do Trivy Operator com detalhes da imagem, do pacote e das correções disponíveis. Ocular não executa varreduras nem instala o operador; os resultados não comprovam a possibilidade de exploração nem a conformidade com normas.",
+      "image": "security",
+      "alt": "Área Security do SPK Ocular com resultados de configuração e orientações para instalar o Trivy Operator"
+    },
+    {
       "title": "Grafo do cluster",
       "text": "Explore relações baseadas em UID e rotas declaradas de Service, Ingress e Gateway. São configurações, não tráfego medido.",
       "image": "graph",
@@ -267,5 +273,6 @@
       "alt": "SPK Ocular · Preserve seu espaço de investigação"
     }
   ],
-  "logHistoryText": "Baixe todo o histórico de logs retido pela origem, independentemente dos filtros ou limites do visualizador. A gravação em streaming oferece progresso e cancelamento; retenção, limites de exportação e leituras incompletas são informados. Copiar continua usando o buffer filtrado do visualizador."
+  "logHistoryText": "Baixe todo o histórico de logs retido pela origem, independentemente dos filtros ou limites do visualizador. A gravação em streaming oferece progresso e cancelamento; retenção, limites de exportação e leituras incompletas são informados. Copiar continua usando o buffer filtrado do visualizador.",
+  "securityDemo": "Aplicativo real · resultados de segurança simulados"
 }

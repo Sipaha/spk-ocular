@@ -100,7 +100,7 @@
   "tools": [
     [
       "快速导航 · Ctrl+K",
-      "快速跳转到视图、环境、命名空间、当前表格中的资源或最近打开的对象。macOS 上使用 Command+K。"
+      "跳转到视图、环境和命名空间，或在所选命名空间内按类型和名称查找资源，例如 dep model。在 macOS 上使用 Command+K。"
     ],
     [
       "Kubernetes 资源",
@@ -237,6 +237,12 @@
   "investigationTitle": "关联证据，开展调查。",
   "investigation": [
     {
+      "title": "配置风险与镜像报告",
+      "text": "检查 Kubernetes 工作负载设置、已声明的 RBAC 规则以及 NetworkPolicy 对资源的选择。查看现有 Trivy Operator 漏洞报告中的镜像、软件包和可用修复信息。Ocular 不运行扫描或安装该 Operator；检查结果不能证明漏洞可被利用或符合合规标准。",
+      "image": "security",
+      "alt": "SPK Ocular Security 工作区，显示配置风险和 Trivy Operator 安装指引"
+    },
+    {
       "title": "集群图谱",
       "text": "按 UID 探索资源关系以及 Service、Ingress 和 Gateway 声明的路由。这里展示的是配置，而非实测网络流量。",
       "image": "graph",
@@ -267,5 +273,6 @@
       "alt": "SPK Ocular · 保留调查工作区"
     }
   ],
-  "logHistoryText": "下载源仍保留的全部日志历史，不受查看器筛选或行数限制影响。流式写入支持进度和取消，并明确报告保留期限、导出上限和不完整读取。复制仍使用筛选后的查看器缓冲区。"
+  "logHistoryText": "下载源仍保留的全部日志历史，不受查看器筛选或行数限制影响。流式写入支持进度和取消，并明确报告保留期限、导出上限和不完整读取。复制仍使用筛选后的查看器缓冲区。",
+  "securityDemo": "实际应用 · 模拟的安全检查数据"
 }

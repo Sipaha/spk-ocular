@@ -100,7 +100,7 @@
   "tools": [
     [
       "Schnelle Navigation · Ctrl+K",
-      "Wechseln Sie zu einer Ansicht, Umgebung, einem Namespace, einer Ressource in der aktuellen Tabelle oder einem zuletzt geöffneten Objekt. Unter macOS verwenden Sie Command+K."
+      "Wechseln Sie zu Ansichten, Umgebungen und Namespaces oder suchen Sie in den ausgewählten Namespaces nach Ressourcentyp und Name, etwa mit dep model. Unter macOS verwenden Sie Command+K."
     ],
     [
       "Kubernetes-Ressourcen",
@@ -237,6 +237,12 @@
   "investigationTitle": "Untersuchen Sie zusammenhängende Hinweise.",
   "investigation": [
     {
+      "title": "Konfigurationsrisiken und Image-Berichte",
+      "text": "Prüfen Sie Kubernetes-Workload-Einstellungen, deklarierte RBAC-Regeln und die Ressourcenauswahl durch NetworkPolicy. Lesen Sie vorhandene Schwachstellenberichte von Trivy Operator mit Angaben zu Image, Paket und verfügbaren Fehlerbehebungen. Ocular führt keine Scans aus und installiert den Operator nicht; Befunde belegen weder Ausnutzbarkeit noch die Einhaltung von Standards.",
+      "image": "security",
+      "alt": "Security-Arbeitsbereich von SPK Ocular mit Konfigurationsbefunden und Installationshinweisen für Trivy Operator"
+    },
+    {
       "title": "Clustergraph",
       "text": "Untersuchen Sie UID-basierte Beziehungen und deklarierte Routen von Service, Ingress und Gateway. Angezeigt wird die Konfiguration, kein gemessener Netzwerkverkehr.",
       "image": "graph",
@@ -267,5 +273,6 @@
       "alt": "SPK Ocular · Arbeitsbereich behalten"
     }
   ],
-  "logHistoryText": "Laden Sie die gesamte von der Quelle aufbewahrte Loghistorie unabhängig von Filtern oder Zeilenlimits der Anzeige herunter. Streaming unterstützt Fortschritt und Abbruch; Aufbewahrung, Exportlimits und unvollständige Lesevorgänge werden ausdrücklich angezeigt. Kopieren nutzt weiterhin den gefilterten Anzeigepuffer."
+  "logHistoryText": "Laden Sie die gesamte von der Quelle aufbewahrte Loghistorie unabhängig von Filtern oder Zeilenlimits der Anzeige herunter. Streaming unterstützt Fortschritt und Abbruch; Aufbewahrung, Exportlimits und unvollständige Lesevorgänge werden ausdrücklich angezeigt. Kopieren nutzt weiterhin den gefilterten Anzeigepuffer.",
+  "securityDemo": "Echte Anwendung · simulierte Sicherheitsbefunde"
 }

@@ -22,7 +22,7 @@ product positioning: the copy instead names existing kubeconfig/Docker access.
 Future optional accounts or setup synchronization remain possible design choices,
 not advertised or selected implementation work. Desktop hero columns align at the top, with a small optical
 offset for the different heading/body font sizes. Task captions explain what each screenshot demonstrates. Investigation,
-logs/terminal/forwarding, Helm and scoped local agent access have dedicated
+logs/terminal/forwarding, Security, Helm and scoped local agent access have dedicated
 sections. Connection retries and low-level persistence mechanics belong in the
 application documentation, not the main marketing message. Public pages omit
 documentation/README guide links until the documentation is suitable for human
@@ -62,8 +62,14 @@ on the Ocular website.
 
 Local agent grants apply to processes running as the same OS user. Do not imply
 separate authenticated agent identities or a security sandbox. Kubernetes and
-Docker capabilities are distinct from providing a container runtime. The direct Kubernetes API, embedded Helm SDK and Ctrl+K/Command+K navigation
-copy describes features present in the published v1.0.1 release. kubectl and a
+Docker capabilities are distinct from providing a container runtime. The direct
+Kubernetes API and embedded Helm SDK copy describes released features.
+Ctrl+K/Command+K navigation includes type/name queries such as `dep model`
+within selected namespaces. Security describes read-only workload configuration,
+declared RBAC rules, NetworkPolicy selection and existing Trivy Operator reports.
+It does not advertise live scanning, operator installation, exploitability or
+compliance verification. These capabilities are present in the published 1.4.0
+application. kubectl and a
 separate Helm CLI are unnecessary; kubeconfig-configured external authentication
 helpers still need to be installed. New product copy describes released features
 without announcements or competitor comparisons. Docker includes standalone containers and Compose project/service
@@ -77,12 +83,16 @@ No vendor claims, customer logos, testimonials or performance statistics are reu
 
 ## Screenshot source
 
-All twenty-two RU/EN product screenshots show SPK Ocular 1.2.0 on isolated fixtures.
+The twenty-two existing RU/EN product screenshots show SPK Ocular 1.2.0 on isolated fixtures.
+The two Security screenshots show the released 1.4.0 application with its
+isolated synthetic provider. Their captions explicitly identify simulated
+security findings; they do not demonstrate a live scanner or real vulnerabilities.
 Kubernetes captures use the owned ocular-dev demo cluster; Docker captures use the
 verified ocular-dind engine, and Helm uses the explicitly labeled synthetic
 release. The file screen shows an actual /app project with config, scripts, src,
 public, tests, hidden files and a symlink, with application.yaml open.
-Versioned image URLs prevent old cached screenshots from surviving the update.
+Versioned image URLs identify each screenshot set: 1.2.0 for the existing screens
+and 1.4.0 for Security.
 
 ## Develop and verify
 
@@ -152,8 +162,9 @@ are published. The site neither uploads user data nor starts any app connection.
 `kind-ocular-dev` / `ocular-demo` fixture. `helm` shows the built-in synthetic
 Helm release, labeled separately. `docker` and `files` show an owned standalone
 container alongside Compose containers on the verified `ocular-dind` engine.
-All product screenshots were captured from the 1.2.0 application in isolated
-profiles, with no user environment or credentials. WebP conversion preserves the
+Product screenshots use isolated profiles, with no user environment or credentials.
+Security shows configuration findings and missing-report setup guidance from
+the synthetic provider, not a Trivy scan. WebP conversion preserves the
 actual app image. Social cards are rendered by `scripts/social.mjs` from the
 current page copy, font and screenshot. Other website locales use the English
 screenshot set and disclose that UI language explicitly.
