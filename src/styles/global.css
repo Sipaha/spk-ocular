@@ -296,6 +296,8 @@ select { padding: 10px 36px 10px 12px; border: 1px solid var(--line); border-rad
 
 .language-menu { position: relative; flex-shrink: 0; }
 .language-menu summary { display: flex; align-items: center; gap: 4px; cursor: pointer; list-style: none; padding: 6px 0; border-radius: 4px; }
+.language-label { line-height: 1; }
+.language-chevron { display: block; flex: none; }
 .language-menu summary::-webkit-details-marker { display: none; }
 .language-menu summary:focus-visible { outline: 3px solid var(--accent); outline-offset: 4px; }
 .language-options { position: absolute; inset-inline-end: 0; top: calc(100% + 8px); z-index: 30; min-width: 180px; padding: 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--bg); box-shadow: 0 8px 28px #0002; display: grid; max-height: min(440px, 70vh); overflow-y: auto; }

@@ -43,6 +43,10 @@ root adds `?lang=ru` to override browser detection; other choices remove that
 marker and preserve unrelated query parameters. With JavaScript disabled, all localized pages and the native
 `details` link menu remain usable. No runtime translation API or external fonts.
 
+The header uses a fixed-size SVG chevron aligned with the language label;
+Unicode arrow glyphs are avoided because their ink position depends on the font.
+The native details/summary menu remains usable without JavaScript.
+
 Every localized page has canonical and alternate links; `sitemap.xml` includes
 all routes. Source/download URLs are locale-independent. Author and support links use the language-neutral root
 `https://sipaha.github.io/about/`; the destination chooses its own language. Social images
