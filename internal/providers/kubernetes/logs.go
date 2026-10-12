@@ -62,6 +62,20 @@ func logChannelsOf(def *kindDef, u *unstructured.Unstructured) (core.LogInfo, er
 	case def == podsKind:
 		info := core.LogInfo{Channels: podChannels(u.Object, "spec"), Previous: true}
 		info.DefaultChannel = defaultChannel(u.GetAnnotations(), info.Channels)
+		// Fast tools prefer a running default, then the first running container.
+		// Logs remain available for completed Pods when no container is running.
+		channels := execChannels(u)
+		for _, c := range channels {
+			if c.ID == info.DefaultChannel && c.Running {
+				return info, nil
+			}
+		}
+		for _, c := range channels {
+			if c.Running {
+				info.DefaultChannel = c.ID
+				break
+			}
+		}
 		return info, nil
 	case logWorkloads[def]:
 		info := core.LogInfo{Channels: podChannels(u.Object, "spec", "template", "spec"), Aggregate: true}

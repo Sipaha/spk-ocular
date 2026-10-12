@@ -1,6 +1,51 @@
 import { connectSelected } from './fixtures'
 import { expect } from '@playwright/test'
 import { test } from './fixtures'
+import { mkdirSync } from 'node:fs'
+import { join } from 'node:path'
+import { scratchRoot } from './fixtures'
+
+test('modal palette covers overflowing navigation and resize handles',async({page})=>{
+ await page.route('**/api/ListKinds',async route=>{
+  const response=await route.fetch(),body=await response.json()
+  const kind=body.kinds.find((item:{id:string})=>item.id==='services')
+  body.kinds.push(...Array.from({length:80},(_,i)=>({...kind,id:`overflow-${i}`,title:`Overflow ${i}`,singular:`Overflow ${i}`})))
+  await route.fulfill({response,json:body})
+ })
+ await page.goto('/')
+ await page.getByRole('option',{name:/^demo\b/}).click();await connectSelected(page)
+ const nav=page.locator('[data-resource-nav-list]')
+ await expect.poll(()=>nav.evaluate(el=>el.scrollHeight-el.clientHeight)).toBeGreaterThan(500)
+ await nav.hover();await page.mouse.wheel(0,300)
+ await page.keyboard.press('Control+k')
+ const dialog=page.getByRole('dialog',{name:'Go to'})
+ await expect(dialog).toBeVisible()
+ expect(await nav.evaluate(el=>getComputedStyle(el).scrollbarWidth)).toBe('auto')
+ const rect=(await dialog.boundingBox())!,handle=(await page.getByRole('separator',{name:'Resize resource navigation',exact:true}).boundingBox())!
+ const point={x:handle.x+handle.width/2,y:rect.y+Math.min(100,rect.height/2)}
+ expect(await page.evaluate(({x,y})=>!!document.elementFromPoint(x,y)?.closest('.palette-dialog'),point)).toBe(true)
+ await page.screenshot({path:join(scratchRoot,'palette-overflow-divider.png')})
+ await page.keyboard.press('Escape')
+})
+
+test('help close is reachable by Tab and Shift+Tab and restores its opener', async ({ page }) => {
+  await page.goto('/')
+  const opener = page.getByRole('button', { name: 'Keyboard', exact: true })
+  await opener.click()
+  const dialog = page.getByRole('dialog', { name: 'Keyboard' })
+  const close = dialog.getByRole('button', { name: 'Close', exact: true })
+  await expect(dialog).toBeFocused()
+  await page.keyboard.press('Tab')
+  await expect(close).toBeFocused()
+  await page.keyboard.press('Shift+Tab')
+  await expect(close).toBeFocused()
+  const captures = join(scratchRoot, 'audit-screenshots')
+  mkdirSync(captures, { recursive: true })
+  await page.screenshot({ path: join(captures, 'help-focused-close.png') })
+  await page.keyboard.press('Enter')
+  await expect(dialog).toBeHidden()
+  await expect(opener).toBeFocused()
+})
 
 // The keyboard against the synthetic provider: areas (F6), views by arrows,
 // the help (?), a table page, and the app-wide palette beside a terminal.

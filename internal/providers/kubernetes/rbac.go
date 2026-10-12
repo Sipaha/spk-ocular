@@ -36,16 +36,11 @@ func (s *session) rbacRef(group, kind, ns, name, uid string) core.Ref {
 // RBAC reads declarations only. SelfSubjectReview identifies the connection;
 // it never guesses identity from a kubeconfig alias or impersonates a subject.
 func (s *session) RBAC(parent context.Context, scope core.ScopeSel, subject *core.Ref) (core.RBACSnapshot, error) {
-	ctx, cancel := context.WithCancel(parent)
-	defer cancel()
-	stop := context.AfterFunc(s.ctx, cancel)
-	defer stop()
-	select {
-	case s.graphGate <- struct{}{}:
-		defer func() { <-s.graphGate }()
-	case <-ctx.Done():
-		return core.RBACSnapshot{}, ctx.Err()
+	ctx, release, err := s.inventoryContext(parent)
+	if err != nil {
+		return core.RBACSnapshot{}, err
 	}
+	defer release()
 	snap := s.cat.snap()
 	out := core.RBACSnapshot{Groups: []string{}, Accounts: []core.Ref{}, Grants: []core.RBACGrant{}, Problems: []core.GraphProblem{}, Discovery: snap.state}
 	problem := func(kind, ns string, err error) {
@@ -115,8 +110,7 @@ func (s *session) RBAC(parent context.Context, scope core.ScopeSel, subject *cor
 	// Account inventory is metadata-only and bounded, independent of whether the
 	// current principal could be identified. Unknown identity can still use SSAR.
 	for _, ns := range namespaces {
-		token := ""
-		seen := map[string]bool{}
+		cursor := inventoryCursor{}
 		for {
 			if len(out.Accounts) >= rbacInventoryLimit {
 				out.Truncated = true
@@ -126,7 +120,7 @@ func (s *session) RBAC(parent context.Context, scope core.ScopeSel, subject *cor
 			var err error
 			if s.graphMetadata != nil {
 				var list *metav1.PartialObjectMetadataList
-				list, err = s.graphMetadata.Resource(serviceAccountGVR).Namespace(ns).List(ctx, metav1.ListOptions{Limit: 100, Continue: token})
+				list, err = s.graphMetadata.Resource(serviceAccountGVR).Namespace(ns).List(ctx, metav1.ListOptions{Limit: 100, Continue: cursor.token})
 				if err == nil {
 					next = list.GetContinue()
 					for _, u := range list.Items {
@@ -142,7 +136,7 @@ func (s *session) RBAC(parent context.Context, scope core.ScopeSel, subject *cor
 				}
 			} else {
 				var list *unstructured.UnstructuredList
-				list, err = s.dyn.Resource(serviceAccountGVR).Namespace(ns).List(ctx, metav1.ListOptions{Limit: 100, Continue: token})
+				list, err = s.dyn.Resource(serviceAccountGVR).Namespace(ns).List(ctx, metav1.ListOptions{Limit: 100, Continue: cursor.token})
 				if err == nil {
 					next = list.GetContinue()
 					for _, u := range list.Items {
@@ -161,15 +155,14 @@ func (s *session) RBAC(parent context.Context, scope core.ScopeSel, subject *cor
 				problem("serviceaccounts", ns, err)
 				break
 			}
-			if next == "" {
-				break
-			}
-			if seen[next] {
+			more, repeated := cursor.advance(next)
+			if repeated {
 				out.Truncated = true
 				break
 			}
-			seen[next] = true
-			token = next
+			if !more {
+				break
+			}
 		}
 	}
 	type roleResult struct {
@@ -181,14 +174,13 @@ func (s *session) RBAC(parent context.Context, scope core.ScopeSel, subject *cor
 	valuesUsed, textUsed := 0, 0
 	bindings := 0
 	readBindings := func(gvr schema.GroupVersionResource, ns string, cluster bool) {
-		token := ""
-		seen := map[string]bool{}
+		cursor := inventoryCursor{}
 		for {
 			if bindings >= rbacInventoryLimit || len(out.Grants) >= rbacGrantLimit {
 				out.Truncated = true
 				return
 			}
-			list, err := s.dyn.Resource(gvr).Namespace(ns).List(ctx, metav1.ListOptions{Limit: 100, Continue: token})
+			list, err := s.dyn.Resource(gvr).Namespace(ns).List(ctx, metav1.ListOptions{Limit: 100, Continue: cursor.token})
 			if err != nil {
 				problem(gvr.Resource, ns, err)
 				return
@@ -294,15 +286,14 @@ func (s *session) RBAC(parent context.Context, scope core.ScopeSel, subject *cor
 				out.Grants = append(out.Grants, grant)
 			}
 			next := list.GetContinue()
-			if next == "" {
-				return
-			}
-			if seen[next] {
+			more, repeated := cursor.advance(next)
+			if repeated {
 				out.Truncated = true
 				return
 			}
-			seen[next] = true
-			token = next
+			if !more {
+				return
+			}
 		}
 	}
 	if out.Principal != "" {

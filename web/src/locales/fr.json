@@ -395,6 +395,8 @@
     "target.menu": "Cible",
     "target.close": "Déconnecter",
     "palette.empty": "Rien trouvé",
+    "palette.layoutFallback": "Disposition du clavier : recherche de « {query} »",
+    "table.resources": "ressources",
     "logs.phase.opening": "Connexion en cours…",
     "fwd.starting": "Connexion en cours…",
     "term.connecting": "Connexion en cours…",

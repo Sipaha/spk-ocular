@@ -276,7 +276,8 @@ results remain in the selected namespaces, even while the current table is
 unscoped. Global objects such as Nodes remain available.
 
 Opening an object selects its kind, opens details, and selects/reveals its exact
-row when available. The namespace selection remains unchanged. A different UID is a different object, even if its name is identical.
+row when available. The revealed row's table receives keyboard focus, so `L`
+opens its logs immediately for kinds supporting logs. The namespace selection remains unchanged. A different UID is a different object, even if its name is identical.
 
 Commands use aliases supplied by the provider, for example `:po`, `:deploy web`,
 `:ns team-a`, `:ns *`, and `:ctx staging`. Ambiguous commands require an explicit
@@ -290,6 +291,17 @@ result, and ambiguous kinds require a choice. The temporary view closes on query
 change, target/scope change or palette close; it does not connect another target
 or search every kind in the cluster. Its open search field uses the text placeholder
 without a redundant magnifier icon.
+
+If the original query has no matching results, Ctrl+K tries one
+English QWERTY recovery of Russian or compatible Ukrainian physical letter keys.
+For example, the Russian-layout keys for `pod model` recover that query. The input stays unchanged and
+an eight-language hint names the recovered query. Real original-layout matches
+win; fuzzy subsequence matching remains unchanged. Explicit `:` commands are not
+rewritten. A recognized kind keeps its prefix and waits for its original read
+before recovering the name; loading/read errors are not treated as no matches.
+The same single scoped temporary view and UID/edit guards apply. This recovery
+is not transliteration, does not guess Latin/IME layouts from the UI language,
+and is available from 1.4.0.
 
 F6 cycles interface areas. Arrow keys navigate resource kinds and table rows.
 `?` opens the current keyboard reference. Ctrl+K inside a terminal belongs to
@@ -357,6 +369,9 @@ revisionHistoryLimit. This section adds no rollback control.
 ## Logs, terminals, and tunnels
 
 Logs show all levels without severity toggle buttons or a default DEBUG filter.
+Opening or reactivating logs focuses the visible log viewport. `End` in that
+viewport jumps to the newest line and resumes Follow; text fields retain their
+usual End behavior. The keyboard reference and Follow tooltip show the shortcut.
 Log display toggles and actions use icon buttons with descriptive hover/focus
 tooltips; active toggles stay highlighted. Channel, line-limit and time-range
 selectors and search/filter inputs retain text. Paired circular arrows reopen a
@@ -369,8 +384,14 @@ its tooltip and accessible label describe the action.
 
 Left-click **Logs**, **Terminal**, or **Files** on a workload to choose a Pod
 when several are available; one Pod opens directly with its default container.
-On a concrete Pod, several containers produce a container dropdown; one opens
-directly. Logs also offers **All Pods** or **All containers** where applicable.
+This explicit selection also applies to shortcuts: workload replicas are peer
+instances with potentially different logs and state, so quick tools do not
+automatically choose a Running Pod. Container defaults within a concrete Pod
+are a separate choice from selecting among workload replicas.
+On a concrete Pod, left-click and the tool's shortcut open directly with the
+annotated default container if running, otherwise the first running container.
+Logs retain the ordinary default for completed Pods with no running container.
+The setup dialog offers **All Pods** or **All containers** where applicable.
 The log list includes stopped Pods, while Terminal and Files offer running
 instances/containers. Variant metadata is prefetched when details load and cached
 for five seconds; clicking never inserts a Loading row in the dropdown.

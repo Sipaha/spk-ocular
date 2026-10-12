@@ -74,6 +74,9 @@ type Service struct {
 	// beforeMetricsGate (tests): runs between reading a view and taking
 	// its metrics gate.
 	beforeMetricsGate func()
+	// afterSessionResolved is a deterministic lifecycle-test barrier, unset in
+	// production. It runs before validating that the captured entry is still live.
+	afterSessionResolved func()
 
 	// agent is the agent socket's side the UI manages (nil: not served).
 	agent AgentControl

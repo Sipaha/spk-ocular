@@ -3,48 +3,48 @@ package api
 import (
 	"context"
 	"errors"
-	"github.com/spk/spk-ocular/internal/providers/kubernetes"
+	"github.com/spk/spk-ocular/internal/configuration"
 	"os/exec"
 	"path/filepath"
 	"runtime"
 	"time"
 )
 
-func (s *Service) Configurations(ctx context.Context, req kubernetes.ConfigRequest) (kubernetes.ConfigState, error) {
+func (s *Service) Configurations(ctx context.Context, req configuration.ConfigRequest) (configuration.ConfigState, error) {
 	if !fromUI(ctx) {
-		return kubernetes.ConfigState{}, coded("forbidden", errors.New("configuration management is available only in the UI"))
+		return configuration.ConfigState{}, coded("forbidden", errors.New("configuration management is available only in the UI"))
 	}
-	p, ok := s.reg.Get(kubernetes.ProviderID)
+	p, ok := s.reg.Get(configuration.KubernetesProviderID)
 	if !ok {
-		return kubernetes.ConfigState{Initialized: true}, nil
+		return configuration.ConfigState{Initialized: true}, nil
 	}
-	kube, ok := p.(*kubernetes.Provider)
+	kube, ok := p.(configuration.Source)
 	if !ok {
-		return kubernetes.ConfigState{Initialized: true}, nil
+		return configuration.ConfigState{}, coded(CodeUnsupported, errors.New("connection does not support configuration management"))
 	}
 	if req.Command == "reveal" {
 		path, err := kube.ConfigurationFile(req)
 		if err != nil {
-			return kubernetes.ConfigState{}, coded(CodeBadRequest, err)
+			return configuration.ConfigState{}, coded(CodeBadRequest, err)
 		}
 		name, args := configurationFileManager(runtime.GOOS, path)
 		if name == "" {
-			return kubernetes.ConfigState{}, coded(CodeBadRequest, errors.New("file manager is unavailable on this platform"))
+			return configuration.ConfigState{}, coded(CodeBadRequest, errors.New("file manager is unavailable on this platform"))
 		}
 		launchCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
 		defer cancel()
 		// Fixed executable and separate arguments: never execute a kubeconfig or a shell.
 		if err := exec.CommandContext(launchCtx, name, args...).Run(); err != nil {
-			return kubernetes.ConfigState{}, coded(CodeBadRequest, errors.New("could not open the file manager"))
+			return configuration.ConfigState{}, coded(CodeBadRequest, errors.New("could not open the file manager"))
 		}
-		req = kubernetes.ConfigRequest{Command: "status"}
+		req = configuration.ConfigRequest{Command: "status"}
 	}
 	out, err := kube.Configurations(req)
 	if err != nil {
 		return out, coded(CodeBadRequest, err)
 	}
 	if req.Command == "remove" || req.Command == "update" || req.Command == "reset" {
-		s.revalidateSessions(ctx, kubernetes.ProviderID)
+		s.revalidateSessions(ctx, configuration.KubernetesProviderID)
 	}
 	return out, nil
 }

@@ -39,7 +39,7 @@ func TestLogInfoListsContainersAndTheDefault(t *testing.T) {
 		{ID: "migrate", Title: "migrate", Note: "init"}, {ID: "mesh", Title: "mesh", Note: "sidecar"},
 		{ID: "debugger", Title: "debugger", Note: "ephemeral"},
 	}, info.Channels)
-	assert.Equal(t, "proxy", info.DefaultChannel, "kubectl's default-container annotation")
+	assert.Equal(t, "app", info.DefaultChannel, "a stopped annotated container yields to a running container")
 	assert.True(t, info.Previous)
 
 	ref.UID = "uid-old"
@@ -47,6 +47,30 @@ func TestLogInfoListsContainersAndTheDefault(t *testing.T) {
 	var pe *provider.Error
 	require.ErrorAs(t, err, &pe)
 	assert.Equal(t, provider.ClassGone, pe.Class, "never the logs of a same-named replacement")
+}
+
+func TestLogDefaultPrefersRunningAndRetainsCompletedLogs(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		running []string
+		want    string
+	}{
+		{"running annotated default", []string{"app", "proxy"}, "proxy"},
+		{"first running fallback", []string{"app"}, "app"},
+		{"completed default remains readable", nil, "proxy"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			u := pod("ns", "p", "uid", withLogContainers)
+			var statuses []any
+			for _, name := range tc.running {
+				statuses = append(statuses, map[string]any{"name": name, "state": map[string]any{"running": map[string]any{}}})
+			}
+			u.Object["status"].(map[string]any)["containerStatuses"] = statuses
+			info, err := logInfoOf(podsKind, u)
+			require.NoError(t, err)
+			assert.Equal(t, tc.want, info.DefaultChannel)
+		})
+	}
 }
 
 // Through the real informer: the pod's restart reaches the source.

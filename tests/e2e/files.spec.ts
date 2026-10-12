@@ -339,8 +339,12 @@ test('multiple Pods require a dropdown choice for Files, Terminal and Logs', asy
  await expect.poll(()=>terminalCalls.length).toBe(1)
  expect(terminalCalls[0].instance).toBe('worker-2')
  await expect(page.locator('.xterm-rows')).toContainText('synthetic terminal on worker-2')
- await page.getByRole('button',{name:'Logs',exact:true}).click()
+ await page.locator('[data-table-scroll]').first().focus()
+ await page.keyboard.press('l')
  await expect(pods.getByRole('option',{name:'All Pods',exact:true})).toBeVisible()
+ const choices=(await pods.boundingBox())!,tool=(await page.locator('[data-area="details"]').getByRole('button',{name:'Logs',exact:true}).boundingBox())!
+ expect(choices.width).toBeLessThan(400)
+ expect(Math.abs(choices.x-tool.x)).toBeLessThan(8)
  expect(logCalls).toHaveLength(0)
  await page.screenshot({path:join(scratchRoot,'logs-pod-dropdown.png')})
  await pods.getByRole('option',{name:'worker-2',exact:true}).click()
@@ -352,7 +356,7 @@ test('multiple Pods require a dropdown choice for Files, Terminal and Logs', asy
  expect(logCalls[1].ref.name).toBe('workers')
 })
 
-test('right-click setup keeps a single Pod visible and concrete Pods choose containers on left-click', async ({page}) => {
+test('concrete Pod tools open the running default directly and right-click retains container choice', async ({page}) => {
  const files:Record<string,unknown>[]=[]
  let execReads=0
  const podInfo={aggregate:false,defaultInstance:'api',instanceLabel:{key:'kubernetes.level.pod',text:'Pod'},channelLabel:{key:'kubernetes.level.container',text:'Container'},instances:[{id:'api',title:'api',ready:true,defaultChannel:'main',channels:[{id:'main',title:'main',running:true},{id:'sidecar',title:'sidecar',running:true}]}]}
@@ -364,12 +368,11 @@ test('right-click setup keeps a single Pod visible and concrete Pods choose cont
  await expect(page.getByRole('button',{name:'Terminal…',exact:true})).toHaveCount(0)
  await page.getByRole('button',{name:'Files',exact:true}).click()
  const containerList=page.getByRole('listbox',{name:'Container',exact:true})
- await expect(containerList.getByRole('option',{name:'sidecar',exact:true})).toBeVisible()
+ await expect(containerList).toHaveCount(0)
  await expect(page.getByText('Loading',{exact:true})).toHaveCount(0)
- await containerList.getByRole('option',{name:'sidecar',exact:true}).click()
  const inspector=page.getByRole('dialog',{name:'Files',exact:true})
- await expect(inspector.locator('[data-file-context]')).toContainText('sidecar')
- expect(files[0].channel).toBe('sidecar')
+ await expect(inspector.locator('[data-file-context]')).toContainText('main')
+ await expect.poll(()=>files[0]?.channel).toBe('main')
  await inspector.getByRole('button',{name:'Close',exact:true}).click()
  for(const [button,title] of [['Terminal','Open a terminal'],['Files','Open files'],['Logs','Open logs']]) {
   await page.getByRole('button',{name:button,exact:true}).click({button:'right'})
@@ -384,7 +387,7 @@ test('right-click setup keeps a single Pod visible and concrete Pods choose cont
   if(button==='Files') {
    await setup.getByRole('button',{name:'Open',exact:true}).click()
    await expect(inspector.locator('[data-file-context]')).toContainText('sidecar')
-   expect(files.at(-1)?.channel).toBe('sidecar')
+   await expect.poll(()=>files.at(-1)?.channel).toBe('sidecar')
    await inspector.getByRole('button',{name:'Close',exact:true}).click()
   } else await setup.getByRole('button',{name:'Cancel',exact:true}).click()
  }

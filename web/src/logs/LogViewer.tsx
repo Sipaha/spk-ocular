@@ -32,6 +32,7 @@ interface Props {
   bridge?: LogWindowBridge
   initial?: LogViewState
   initialChannel?: string
+  focusEpoch?: number
   onWindowAction?: () => void
 }
 
@@ -40,7 +41,7 @@ interface Props {
  * buffer), useLogFilter (filter, search) and LogViewport (the
  * virtual list).
  */
-export default function LogViewer({ client, subject, active, bridge, initial, initialChannel, onWindowAction }: Props) {
+export default function LogViewer({ client, subject, active, bridge, initial, initialChannel, focusEpoch, onWindowAction }: Props) {
   const [info, setInfo] = useState<LogInfo | null>(null)
   const [infoError, setInfoError] = useState<string | null>(null)
   const [channel, setChannel] = useState<string | null>(initial?.channel ?? initialChannel ?? null)
@@ -99,6 +100,7 @@ export default function LogViewer({ client, subject, active, bridge, initial, in
       client={client}
       subject={subject}
       active={active}
+      focusEpoch={focusEpoch}
       query={query}
       bridge={bridge}
       initial={initial}
@@ -155,7 +157,7 @@ interface ViewState {
   setNote: (v: string | null) => void
 }
 
-function Stream({ client, subject, active, query, toolbar, view, bridge, initial, windowButton }: { client: Client; subject: Ref; active: boolean; query: LogQuery; toolbar: ReactNode; view: ViewState; bridge?: LogWindowBridge; initial?: LogViewState
+function Stream({ client, subject, active, focusEpoch, query, toolbar, view, bridge, initial, windowButton }: { client: Client; subject: Ref; active: boolean; focusEpoch?: number; query: LogQuery; toolbar: ReactNode; view: ViewState; bridge?: LogWindowBridge; initial?: LogViewState
   initialChannel?: string; windowButton?: ReactNode }) {
   const { showTime, setShowTime, wrap, setWrap, follow, setFollow, resizing, selecting, setSelecting, note, setNote } = view
   const { win, sources, status, reopen, clear } = useLogStream({ client, ref: subject, query, paused: selecting || resizing, frozen: !follow, bridge })
@@ -189,6 +191,14 @@ function Stream({ client, subject, active, query, toolbar, view, bridge, initial
 
   const rootRef = useRef<HTMLDivElement>(null)
   const parentRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (!active) return
+    // Run after a picker/dialog restores its opener and a lazy viewer mounts.
+    const frame = requestAnimationFrame(() => {
+      if (!document.querySelector('[aria-modal="true"], [role="menu"]')) parentRef.current?.focus({ preventScroll: true })
+    })
+    return () => cancelAnimationFrame(frame)
+  }, [active, focusEpoch])
   const searchRef = useRef<HTMLInputElement>(null)
   const selectAllRef = useRef(false)
   const shownText = () => f.filtered.map((e) => rowText(e, rowOpts)).join('\n')

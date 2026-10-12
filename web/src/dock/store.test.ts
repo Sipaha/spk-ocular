@@ -29,4 +29,12 @@ describe('dock tabs', () => {
     dock.close(tabs[0].id)
     expect(useDock.getState().active).toBe(tabs[1].id)
   })
+  it('reopening the active logs requests focus without duplicating a pinned tab',()=>{
+    dock.openLogs(prod,'prod',pod('a'))
+    const id=useDock.getState().active!
+    dock.pin(id);dock.openLogs(prod,'prod',pod('a'))
+    const tabs=useDock.getState().tabs
+    expect(tabs).toHaveLength(1)
+    expect(tabs[0]).toMatchObject({id,pinned:true,focusEpoch:2})
+  })
 })

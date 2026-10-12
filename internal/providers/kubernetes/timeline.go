@@ -19,16 +19,11 @@ const timelineMessageLimit = 2048
 // logs, configuration values or Secret inventories are requested. Refreshes share
 // the inventory gate, and disconnect cancels an in-flight snapshot.
 func (s *session) Timeline(parent context.Context, scope core.ScopeSel) (core.Timeline, error) {
-	ctx, cancel := context.WithCancel(parent)
-	defer cancel()
-	stop := context.AfterFunc(s.ctx, cancel)
-	defer stop()
-	select {
-	case s.graphGate <- struct{}{}:
-		defer func() { <-s.graphGate }()
-	case <-ctx.Done():
-		return core.Timeline{}, ctx.Err()
+	ctx, release, err := s.inventoryContext(parent)
+	if err != nil {
+		return core.Timeline{}, err
 	}
+	defer release()
 	snap := s.cat.snap()
 	out := core.Timeline{Events: []core.TimelineEvent{}, Resources: []core.TimelineResource{}, Problems: []core.GraphProblem{}, Discovery: snap.state}
 	namespaces := []string{""}
@@ -54,14 +49,13 @@ func (s *session) Timeline(parent context.Context, scope core.ScopeSel) (core.Ti
 				return out, err
 			}
 			jobCtx, done := context.WithTimeout(ctx, 20*time.Second)
-			token := ""
-			seen := map[string]bool{}
+			cursor := inventoryCursor{}
 			for {
 				if (def == eventsKind && len(out.Events) >= timelineEventLimit) || (def != eventsKind && len(out.Resources) >= timelineResourceLimit) {
 					out.Truncated = true
 					break
 				}
-				options := metav1.ListOptions{Limit: 500, Continue: token}
+				options := metav1.ListOptions{Limit: 500, Continue: cursor.token}
 				var next string
 				var err error
 				if def == eventsKind {
@@ -131,15 +125,14 @@ func (s *session) Timeline(parent context.Context, scope core.ScopeSel) (core.Ti
 					out.Problems = append(out.Problems, core.GraphProblem{Kind: def.desc.ID, Scope: ns, Class: string(class)})
 					break
 				}
-				if next == "" {
-					break
-				}
-				if seen[next] {
+				more, repeated := cursor.advance(next)
+				if repeated {
 					out.Truncated = true
 					break
 				}
-				seen[next] = true
-				token = next
+				if !more {
+					break
+				}
 			}
 			done()
 		}

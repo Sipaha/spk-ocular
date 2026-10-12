@@ -29,10 +29,21 @@ async function openLogs(page: Page, object: string) {
   await page.keyboard.press('l')
   const panel = page.locator('[role=tabpanel]:not([hidden])')
   await expect(panel.getByLabel('stream state')).toHaveText('Live')
+  await expect(panel.locator('[data-log-viewport]')).toBeFocused()
   return panel
 }
 
 const rows = (panel: ReturnType<Page['locator']>) => panel.locator('[data-log-viewport] [data-index]')
+
+test('opening and reopening logs focuses the viewport and enables its shortcuts',async({page})=>{
+ const panel=await openLogs(page,'api'),vp=panel.locator('[data-log-viewport]')
+ await page.keyboard.press('Control+f')
+ await expect(panel.getByLabel('Search (Ctrl+F)')).toBeFocused()
+ await page.locator('[data-area="details"]').getByRole('button',{name:'Logs',exact:true}).click()
+ await expect(vp).toBeFocused()
+ await page.keyboard.press('Control+f')
+ await expect(panel.getByLabel('Search (Ctrl+F)')).toBeFocused()
+})
 
 test('one source: backlog, live lines, ANSI, text filters, search, copy', async ({ page }) => {
   const panel = await openLogs(page, 'api')
@@ -102,9 +113,22 @@ test('scrolling up stops following; new lines do not move the view; Follow retur
   await expect(panel.getByLabel('line count')).toHaveText('207 lines')
   expect(await vp.evaluate((el) => el.scrollTop)).toBe(top)
   await expect(panel.getByText('INFO while reading')).toHaveCount(0) // not scrolled into view (virtualized away)
-  await panel.getByRole('button', { name: 'Follow' }).click()
+  const follow=panel.getByRole('button',{name:'Follow'})
+  await follow.hover()
+  const tooltip=page.getByRole('tooltip')
+  await expect(tooltip).toContainText('(End)')
+  const tip=(await tooltip.boundingBox())!,button=(await follow.boundingBox())!
+  expect(tip.x+tip.width).toBeGreaterThanOrEqual(button.x)
+  expect(tip.x).toBeLessThanOrEqual(button.x+button.width)
+  expect(tip.x+tip.width).toBeLessThanOrEqual(await page.evaluate(()=>window.innerWidth)-8)
+  await page.screenshot({path:join(scratchRoot,'follow-tooltip-attached.png')})
+  const input=panel.getByLabel('Search (Ctrl+F)')
+  await input.focus();await page.keyboard.press('End')
+  await expect(follow).toBeVisible()
+  await vp.focus();await page.keyboard.press('End')
   await expect(panel.getByText('INFO while reading')).toBeVisible()
   await expect(panel.getByRole('button', { name: 'Follow' })).toHaveCount(0)
+  await expect(vp).toBeFocused()
 })
 
 test('the app select of the toolbar: focused list, live lines do not close it, Esc is its own', async ({ page }) => {

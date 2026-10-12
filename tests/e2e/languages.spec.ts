@@ -27,7 +27,8 @@ test('all eight language menus, persistent choices and live workspace state', as
   await page.goto('/')
   await page.getByRole('option', { name: /^demo\b/ }).click()
   await connectSelected(page)
-  const grid = page.getByRole('grid', { name: 'resources' })
+  const grid = page.getByRole('grid')
+  const gridNames: Record<Language, string> = { en: 'resources', ru: 'ресурсы', de: 'Ressourcen', es: 'recursos', fr: 'ressources', pt: 'recursos', zh: '资源', ja: 'リソース' }
   await expect(grid).toBeVisible()
   await page.locator('[data-primary-filter]').fill('blue')
   const resourcePage = await page.getByRole('heading', { level: 1 }).textContent()
@@ -37,6 +38,7 @@ test('all eight language menus, persistent choices and live workspace state', as
     const identity = await grid.evaluate(el => { const marker = crypto.randomUUID(); (el as HTMLElement).dataset.languageIdentity = marker; return marker })
     await choose(page, language)
     await expect(grid).toBeVisible()
+    await expect(grid).toHaveAccessibleName(gridNames[language])
     await expect(page.locator('[data-primary-filter]')).toHaveValue('blue')
     await expect(page.getByRole('heading', { level: 1 })).toHaveText(resourcePage!)
     const current = await stats(page)

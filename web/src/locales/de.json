@@ -395,6 +395,8 @@
     "target.menu": "Ziel",
     "target.close": "Trennen",
     "palette.empty": "Nichts gefunden",
+    "palette.layoutFallback": "Tastaturlayout: Suche nach „{query}“",
+    "table.resources": "Ressourcen",
     "logs.phase.opening": "Verbinden…",
     "fwd.starting": "Verbinden…",
     "term.connecting": "Verbinden…",

@@ -33,6 +33,8 @@ export interface LogsTab extends TabBase {
   kind: 'logs'
   ref: Ref
   channel?: string
+  /** Explicit open requests refocus an already active log tab. */
+  focusEpoch?: number
 }
 
 export interface TermTab extends TabBase {
@@ -83,7 +85,9 @@ export const dock = {
   },
   /** One log tab per object, target and explicit channel; reopening activates it. */
   openLogs(target: TargetRef, targetTitle: string, ref: Ref, channel?: string) {
-    activate({ kind: 'logs', id: `logs:${targetKey(target)}:${refKey(ref)}${channel ? `:${channel}` : ''}`, target, targetTitle, ref:{...ref,provider:target.provider,target:target.id}, channel, title: `${ref.kind.split('/').pop()}/${refTitle(ref)}` })
+    const id = `logs:${targetKey(target)}:${refKey(ref)}${channel ? `:${channel}` : ''}`
+    const previous = useDock.getState().tabs.find(tab => tab.id === id)
+    activate({ kind: 'logs', id, focusEpoch: (previous?.kind === 'logs' ? previous.focusEpoch ?? 0 : 0) + 1, target, targetTitle, ref:{...ref,provider:target.provider,target:target.id}, channel, title: `${ref.kind.split('/').pop()}/${refTitle(ref)}` })
   },
   /** Every open is a new terminal (two shells in one pod are normal). */
   openTerminal(target: TargetRef, targetTitle: string, open: TermOpen, title = refTitle(open.ref)) {

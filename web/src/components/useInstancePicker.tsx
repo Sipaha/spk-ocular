@@ -35,17 +35,23 @@ export function useInstancePicker(client: Client, context: string) {
     document.addEventListener('keydown', key, true)
     return () => { document.removeEventListener('mousedown', down, true); document.removeEventListener('keydown', key, true) }
   }, [picker, context, close])
-  const pick = useCallback(async (load: () => Promise<{label: string; choices: Choice[]; direct?: () => void}>) => {
+  const pick = useCallback(async (load: () => Promise<{label: string; choices: Choice[]; direct?: () => void}>, toolLabel: string) => {
     const seq = ++sequence.current.value
-    const anchor = { current: document.activeElement instanceof HTMLElement ? document.activeElement : document.body }
-    opener.current = anchor.current
+    const focused = document.activeElement instanceof HTMLElement ? document.activeElement : document.body
+    // A shortcut starts on the grid: anchor its choices to the visible tool,
+    // rather than stretching a menu across the entire scroll surface.
+    const tool = focused.matches('[data-table-scroll]')
+      ? [...document.querySelectorAll<HTMLButtonElement>('[data-area="details"] .drawer-tools button')].find(button => button.getAttribute('aria-label') === toolLabel)
+      : null
+    const anchor = { current: tool ?? focused }
+    opener.current = focused
     setPicker({ context, anchor, label: t('term.instance'), choices: [], loading: true })
     try {
       const result = await load()
       if (seq !== sequence.current.value || !anchor.current.isConnected) return
       if (result.direct) {
         setPicker(null)
-        anchor.current.focus()
+        focused.focus()
         result.direct()
       } else setPicker({context, anchor, label:result.label, choices:result.choices, loading:false})
     } catch (error) {
@@ -67,7 +73,7 @@ export function useInstancePicker(client: Client, context: string) {
         return {
           label: info.channelLabel ? messageText(info.channelLabel) : t('term.channel'),
           choices: channels.map(channel=>({value:channel.id,label:channel.title,choose:()=>choose(channel.id)})),
-          direct: channels.length === 1 ? ()=>choose(channels[0].id) : undefined,
+          direct: ()=>choose(runningChannel(only)!.id),
         }
       }
       return {
@@ -75,7 +81,7 @@ export function useInstancePicker(client: Client, context: string) {
         choices: instances.map(instance => ({value:instance.id, label:instance.ready ? instance.title : `${instance.title} (${t('term.notReady')})`, choose:()=>open(instance)})),
         direct: instances.length === 1 ? () => open(instances[0]) : undefined,
       }
-    })
+    }, t('term.open'))
   }, [client, pick])
   const pickLogs = useCallback((ref: Ref, open: (ref: Ref, channel?: string) => void) => {
     void pick(async () => {
@@ -88,7 +94,7 @@ export function useInstancePicker(client: Client, context: string) {
         return {
           label: info.channelLabel ? messageText(info.channelLabel) : t('term.channel'),
           choices: [{value:'*',label:info.allChannelsLabel ? messageText(info.allChannelsLabel) : t('logs.allChannels'),choose:()=>choose('*')}, ...channels.map(channel=>({value:channel.id,label:channel.title,choose:()=>choose(channel.id)}))],
-          direct: channels.length <= 1 ? ()=>open(ref, info.defaultChannel) : undefined,
+          direct: ()=>open(ref, info.defaultChannel),
         }
       }
       return {
@@ -96,7 +102,7 @@ export function useInstancePicker(client: Client, context: string) {
         choices: [{value:'*', label:info.allInstancesLabel ? messageText(info.allInstancesLabel) : t('logs.allPods'), choose:()=>open(ref)}, ...instances.map(instance => ({value:instance.ref.uid || instance.ref.name, label:instance.title, choose:()=>open(instance.ref)}))],
         direct: instances.length <= 1 ? () => open(ref) : undefined,
       }
-    })
+    }, t('logs.open'))
   }, [client, pick])
   const popup = picker?.context === context && !picker.loading && createPortal(<SelectList key={`${context}:${picker.loading}`} anchor={picker.anchor} label={picker.label} value=""
     options={picker.choices}

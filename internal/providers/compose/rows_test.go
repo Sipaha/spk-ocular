@@ -350,3 +350,18 @@ func TestKindFeeds(t *testing.T) {
 	assert.Empty(t, rowsOf(w, q(KindImages, "")))
 	assert.Len(t, rowsOf(w, q(KindContainers, "")), 1)
 }
+
+func TestProjectionIndexesKeepAmbiguousNamesAndOrderedProjectMetadata(t *testing.T) {
+	c := ctr("a", "p-web-1", "p", "web", onNet("duplicate", "", "10.0.0.1"), label(LabelWorkingDir, "/first"))
+	w := world(c, ctr("z", "p-web-2", "p", "web", label(LabelWorkingDir, "/last"), label(LabelConfigFiles, "/last/compose.yaml")), network("n1", "duplicate", "p"), network("n2", "duplicate", "other"))
+	w.Networks["n2"].Containers = map[string]engine.NetworkEndpoint{"a": {IPv4Address: "10.0.0.2/24"}}
+	x := newIndex(w)
+	require.Equal(t, []netLink{{name: "duplicate", ip: "10.0.0.1"}, {id: "n2", name: "duplicate", ip: "10.0.0.2"}}, x.links["a"])
+	require.Equal(t, "/first", x.project("p").workingDir)
+	require.Equal(t, "/last/compose.yaml", x.project("p").configFiles)
+	require.Equal(t, []string{"a", "z"}, containerIDs(x.project("p").containers))
+	// Each projection observes the new World independently, without cached aliases.
+	delete(w.Networks, "n1")
+	require.Equal(t, []netLink{{id: "n2", name: "duplicate", ip: "10.0.0.1"}}, newIndex(w).links["a"])
+	require.Equal(t, []netLink{{name: "duplicate", ip: "10.0.0.1"}, {id: "n2", name: "duplicate", ip: "10.0.0.2"}}, x.links["a"])
+}

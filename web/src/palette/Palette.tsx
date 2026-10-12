@@ -3,12 +3,13 @@ import type { Client } from '../api/client'
 import type { Row, RecentObject } from '../api/types'
 import { classLabel, t, type MessageKey } from '../i18n'
 import { type Actions, useStore } from '../store'
-import { typedKindQuery, buildItems, type PaletteItem, type Sources } from './items'
+import { typedKindQuery, buildKeyboardItems, type PaletteItem, type Sources } from './items'
 import { scopeWords } from '../scopeNames'
 import { closePalette, usePalette } from './store'
 import { focusMark, restoreFocus } from '../shortcuts'
 import type { ViewHub, ViewState } from '../views/viewSync'
 import { agents } from '../agents/store'
+import { createPortal } from 'react-dom'
 
 /** Ctrl+K: go to a view, context, namespace, row of the table or recent object. */
 export function Palette({ client, act, hub }: { client: Client; act: Actions; hub: ViewHub }) {
@@ -59,7 +60,27 @@ function PaletteDialog({ client, act, hub }: { client: Client; act: Actions; hub
     return () => restoreFocus(mark)
   }, [mark])
 
-  const typed=typedKindQuery(query,host?.kinds??[])
+  const baseSources: Sources = useMemo(() => {
+    const group = view?.groups.find((g) => g.provider === hostProvider)
+    return {
+      kinds: host?.kinds ?? [],
+      targets: (view?.groups ?? []).flatMap((g) => g.targets.map((target) => ({ target, groupTitle: g.title }))),
+      scopes: host ? (liveScopes ?? host.scopes) : [],
+      selectedScope: host?.selectedScope ?? null,
+      scopeAliases: host ? (group?.aliases?.scope ?? []) : [],
+      scopeWords: scopeWords(group?.scopeNames),
+      targetAliases: [...new Set((view?.groups ?? []).flatMap((g) => g.aliases?.target ?? []))],
+      rows: EMPTY_ROWS,
+      recents: host ? recents : [],
+    }
+  }, [view, host, hostProvider, liveScopes, recents])
+  const currentSources: Sources = useMemo(() => ({ ...baseSources, rows: host ? rows : EMPTY_ROWS }), [baseSources, host, rows])
+  const originalTyped = typedKindQuery(query, baseSources.kinds)
+  const originalNeedsRead = originalTyped?.kinds.length === 1 && originalTyped.kinds[0].id !== host?.currentKind
+  const originalSources = originalNeedsRead ? baseSources : currentSources
+  const baseSearch = useMemo(() => buildKeyboardItems(query, originalSources, !originalNeedsRead), [query, originalSources, originalNeedsRead])
+  const lookupQuery = originalTyped ? query : baseSearch.query
+  const typed=typedKindQuery(lookupQuery,host?.kinds??[])
   const searchedKind=typed?.kinds.length===1?typed.kinds[0]:null
   const lookupScope=searchedKind?.scoped?host?.selectedScope:{mode:'none' as const}
   const searchKey=host&&searchedKind&&searchedKind.id!==host.currentKind&&lookupScope ? JSON.stringify({provider:host.target.provider,target:host.target.id,kind:searchedKind.id,scope:lookupScope}) : ''
@@ -79,21 +100,10 @@ function PaletteDialog({ client, act, hub }: { client: Client; act: Actions; hub
   const searchError=searchKey&&lookup?.status.state==='error' ? lookup.openError||lookup.status.message||t('status.error') : ''
   const failures=lookup?.status.coverage?.filter(source=>source.state!=='ready'&&source.state!=='loading')??[]
   const searchWarning=lookup?.status.state==='stale' ? lookup.status.message||t('coverage.stale') : failures.length ? t('coverage.notObserved')+': '+failures.map(source=>source.source+' · '+classLabel(source.class??source.state)).join(', ') : ''
-  const sources: Sources = useMemo(() => {
-    const group = view?.groups.find((g) => g.provider === hostProvider)
-    return {
-      kinds: host?.kinds ?? [],
-      targets: (view?.groups ?? []).flatMap((g) => g.targets.map((target) => ({ target, groupTitle: g.title }))),
-      scopes: host ? (liveScopes ?? host.scopes) : [],
-      selectedScope: host?.selectedScope ?? null,
-      scopeAliases: host ? (group?.aliases?.scope ?? []) : [],
-      scopeWords: scopeWords(group?.scopeNames),
-      targetAliases: [...new Set((view?.groups ?? []).flatMap((g) => g.aliases?.target ?? []))],
-      rows: host ? searchRows : [],
-      recents: host ? recents : [],
-    }
-  }, [view, host, hostProvider, liveScopes, searchRows, recents])
-  const built = useMemo(() => buildItems(query, sources), [query, sources])
+  const sources: Sources = useMemo(() => ({ ...baseSources, rows: host ? searchRows : [] }), [baseSources, host, searchRows])
+  const search = useMemo(() => searchKey ? buildKeyboardItems(lookupQuery, sources, !searching && !searchError) : baseSearch, [searchKey, lookupQuery, sources, searching, searchError, baseSearch])
+  const built = search.built
+  const correctedQuery = search.query !== query ? search.query : null
   // Examples from the provider's own aliases (":po", ":ns"): the UI knows no kind.
   const placeholder = useMemo(() => {
     if (!host) return t('palette.placeholderTargets')
@@ -152,7 +162,7 @@ function PaletteDialog({ client, act, hub }: { client: Client; act: Actions; hub
 
   const note = searchError ? searchError : searching ? t('app.loading') : searchWarning ? searchWarning : built.unknown ? t('palette.unknown') : !built.items.length ? t('palette.empty') : index < 0 ? t('palette.pick') : null
 
-  return (
+  return createPortal(
     <div className="fixed inset-0 z-40 flex items-start justify-center bg-black/40 pt-[12vh]" onMouseDown={(e) => e.target === e.currentTarget && closePalette()}>
       <div role="dialog" aria-modal="true" aria-label={t('palette.label')} className="palette-dialog flex max-h-[70vh] w-[min(640px,92%)] flex-col overflow-hidden border border-line bg-panel" onKeyDown={onKey}>
         <label className="palette-search flex items-center gap-3 border-b border-line">
@@ -192,11 +202,12 @@ function PaletteDialog({ client, act, hub }: { client: Client; act: Actions; hub
             </div>
           ))}
         </div>
+        {correctedQuery && <div role="status" className="break-words border-t border-line px-3 py-1.5 text-xs text-fg-muted">{t('palette.layoutFallback', { query: correctedQuery })}</div>}
         <footer className="flex items-center gap-3 border-t border-line px-3 py-1.5 text-xs text-fg-subtle">
           {note && <span role={searchError?'alert':'status'}>{note}</span>}
           {host && <span className="ml-auto">{t('palette.coverage')}</span>}
         </footer>
       </div>
-    </div>
+    </div>, document.body
   )
 }

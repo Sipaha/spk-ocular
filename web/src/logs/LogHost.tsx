@@ -20,7 +20,7 @@ export function LogHost({ client, tab, active }: { client: Client; tab: LogsTab;
  const detach=async()=>{try{setError('');await bridge.open(`${tab.targetTitle} · ${tab.title}`);setDetached(true)}catch(e){setError(e instanceof Error?e.message:String(e))}}
  return <>
   {error && <p role="alert" className="p-2 text-danger">{error}</p>}
-  <div className="h-full" hidden={detached}><Suspense fallback={<p>{t('app.loading')}</p>}><LogViewer client={client} subject={tab.ref} initialChannel={tab.channel} active={active&&!detached} bridge={bridge} onWindowAction={()=>void detach()}/></Suspense></div>
+  <div className="h-full" hidden={detached}><Suspense fallback={<p>{t('app.loading')}</p>}><LogViewer client={client} subject={tab.ref} initialChannel={tab.channel} focusEpoch={tab.focusEpoch} active={active&&!detached} bridge={bridge} onWindowAction={()=>void detach()}/></Suspense></div>
   {detached && <div className="relative flex h-full items-center justify-center gap-3 text-fg-muted"><span>{t('logs.inWindow')}</span><div className="absolute right-3 top-2"><ActionIconButton label={t('logs.returnWindow')} description={t('logs.returnWindow')} onClick={()=>{setDetached(false);void bridge.close()}}><WindowActionIcon returning className="h-4 w-4"/></ActionIconButton></div></div>}
  </>
 }

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useId, useRef, useState, type ComponentProps } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useId, useRef, useState, type ComponentProps } from 'react'
 import { createPortal } from 'react-dom'
 
 let visibleTooltip:{id:string;dismiss:()=>void}|null=null
@@ -6,6 +6,7 @@ let visibleTooltip:{id:string;dismiss:()=>void}|null=null
 /** Compact action with a stable accessible name and a descriptive hover/focus tooltip. */
 export function ActionIconButton({label,description,children,className='',...props}: ComponentProps<'button'> & {label:string;description:string}) {
   const anchor=useRef<HTMLSpanElement>(null)
+  const tooltip=useRef<HTMLSpanElement>(null)
   const id=useId()
   const hideTimer=useRef<ReturnType<typeof setTimeout>|null>(null)
   const [tip,setTip]=useState<{left:number;top:number;above:boolean}|null>(null)
@@ -23,6 +24,14 @@ export function ActionIconButton({label,description,children,className='',...pro
     const above=window.innerHeight-rect.bottom<100
     setTip({left:Math.max(8,Math.min(rect.left,window.innerWidth-width-8)),top:above?rect.top-6:rect.bottom+6,above})
   }
+  useLayoutEffect(()=>{
+    if(!tip||!tooltip.current||!anchor.current)return
+    const rect=anchor.current.getBoundingClientRect(),size=tooltip.current.getBoundingClientRect()
+    const above=window.innerHeight-rect.bottom<size.height+14&&rect.top>size.height+14
+    const left=Math.max(8,Math.min(rect.left+(rect.width-size.width)/2,window.innerWidth-size.width-8))
+    const top=above?rect.top-6:rect.bottom+6
+    if(left!==tip.left||top!==tip.top||above!==tip.above)setTip({left,top,above})
+  },[tip])
   useEffect(()=>{
     if(!tip)return
     const escape=(event:KeyboardEvent)=>{if(event.key==='Escape'){event.preventDefault();event.stopPropagation();hide()}}
@@ -36,6 +45,6 @@ export function ActionIconButton({label,description,children,className='',...pro
   }}>
     <button {...props} type={props.type??'button'} aria-label={label} aria-describedby={id} className={'action-icon-button '+className}>{children}</button>
     {!tip&&<span id={id} className="sr-only">{description}</span>}
-    {tip&&createPortal(<span id={id} role="tooltip" onMouseEnter={cancelHide} onMouseLeave={leave} className="action-icon-tooltip" style={{left:tip.left,top:tip.top,transform:tip.above?'translateY(-100%)':undefined}}>{description}</span>,document.body)}
+    {tip&&createPortal(<span ref={tooltip} id={id} role="tooltip" onMouseEnter={cancelHide} onMouseLeave={leave} className="action-icon-tooltip" style={{left:tip.left,top:tip.top,transform:tip.above?'translateY(-100%)':undefined}}>{description}</span>,document.body)}
   </span>
 }

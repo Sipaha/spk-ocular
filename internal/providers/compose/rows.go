@@ -130,10 +130,13 @@ func withTarget(target string, rows []core.Row) []core.Row {
 // index is what one projection derives from a World once: Docker
 // containers, services, and who uses which network, volume, image.
 type index struct {
-	w          *World
-	containers []*engine.ContainerInspect // all containers, by id
-	services   []*service                 // by key
-	byService  map[string]*service
+	w                 *World
+	containers        []*engine.ContainerInspect // all containers, by id
+	services          []*service                 // by key
+	byService         map[string]*service
+	byProject         map[string]*project
+	networkNames      map[string]string // empty ID means the name is ambiguous
+	containerNetworks map[string][]*engine.Network
 	// links of each container to networks, by container id.
 	links       map[string][]netLink
 	netUsers    map[string][]*engine.ContainerInspect // network id → containers
@@ -154,15 +157,42 @@ type netLink struct {
 }
 
 func newIndex(w *World) *index {
-	x := &index{w: w, byService: map[string]*service{}, links: map[string][]netLink{},
+	x := &index{w: w, byService: map[string]*service{}, byProject: map[string]*project{}, networkNames: map[string]string{}, containerNetworks: map[string][]*engine.Network{}, links: map[string][]netLink{},
 		netUsers: map[string][]*engine.ContainerInspect{}, volumeUsers: map[string][]*engine.ContainerInspect{},
 		imageUsers: map[string][]*engine.ContainerInspect{}}
+	for _, n := range w.Networks {
+		if _, exists := x.networkNames[n.Name]; exists {
+			x.networkNames[n.Name] = ""
+		} else {
+			x.networkNames[n.Name] = n.ID
+		}
+		for id := range n.Containers {
+			x.containerNetworks[id] = append(x.containerNetworks[id], n)
+		}
+		p := x.ensureProject(n.Labels[LabelProject])
+		p.networks = append(p.networks, n)
+	}
+	for _, v := range w.Volumes {
+		p := x.ensureProject(v.Labels[LabelProject])
+		p.volumes = append(p.volumes, v)
+	}
 	for _, c := range w.Containers {
 		x.containers = append(x.containers, c)
 	}
 	sort.Slice(x.containers, func(i, j int) bool { return x.containers[i].ID < x.containers[j].ID })
 	for _, c := range x.containers {
 		p, s := projectOf(c), c.Config.Labels[LabelService]
+		pr := x.ensureProject(p)
+		pr.containers = append(pr.containers, c)
+		if !isOneoff(c) {
+			pr.members = append(pr.members, c)
+		}
+		if pr.workingDir == "" {
+			pr.workingDir = c.Config.Labels[LabelWorkingDir]
+		}
+		if pr.configFiles == "" {
+			pr.configFiles = c.Config.Labels[LabelConfigFiles]
+		}
 		if p != "" && s != "" && !isOneoff(c) {
 			key := serviceKey(p, s)
 			sv := x.byService[key]
@@ -192,6 +222,14 @@ func newIndex(w *World) *index {
 		}
 	}
 	sort.Slice(x.services, func(i, j int) bool { return x.services[i].key < x.services[j].key })
+	for _, sv := range x.services {
+		p := x.ensureProject(sv.project)
+		p.services = append(p.services, sv)
+	}
+	for _, p := range x.byProject {
+		sort.Slice(p.networks, func(i, j int) bool { return p.networks[i].ID < p.networks[j].ID })
+		sort.Slice(p.volumes, func(i, j int) bool { return p.volumes[i].Name < p.volumes[j].Name })
+	}
 	return x
 }
 
@@ -213,7 +251,7 @@ func (x *index) networkLinks(c *engine.ContainerInspect) []netLink {
 		}
 		out = append(out, netLink{id: id, name: name, ip: ep.IPAddress})
 	}
-	for _, n := range x.w.Networks {
+	for _, n := range x.containerNetworks[c.ID] {
 		ep, ok := n.Containers[c.ID]
 		if !ok || seen[n.ID] {
 			continue
@@ -233,40 +271,17 @@ func (x *index) networkLinks(c *engine.ContainerInspect) []netLink {
 // networkByName is the id of the only network with this name ("" when
 // none or several).
 func (x *index) networkByName(name string) string {
-	id := ""
-	for _, n := range x.w.Networks {
-		if n.Name == name {
-			if id != "" {
-				return ""
-			}
-			id = n.ID
-		}
-	}
-	return id
+	return x.networkNames[name]
 }
 
 // projectNames: every project a container, network or volume is labelled
 // with, sorted.
 func (x *index) projectNames() []string {
-	set := map[string]bool{}
-	for _, c := range x.containers {
-		if project := projectOf(c); project != "" {
-			set[project] = true
+	out := make([]string, 0, len(x.byProject))
+	for p := range x.byProject {
+		if p != "" {
+			out = append(out, p)
 		}
-	}
-	for _, n := range x.w.Networks {
-		if p := n.Labels[LabelProject]; p != "" {
-			set[p] = true
-		}
-	}
-	for _, v := range x.w.Volumes {
-		if p := v.Labels[LabelProject]; p != "" {
-			set[p] = true
-		}
-	}
-	out := make([]string, 0, len(set))
-	for p := range set {
-		out = append(out, p)
 	}
 	sort.Strings(out)
 	return out
@@ -408,41 +423,21 @@ type project struct {
 	workingDir, configFiles string
 }
 
-func (x *index) project(name string) *project {
-	p := &project{name: name}
-	for _, c := range x.containers {
-		if projectOf(c) != name {
-			continue
-		}
-		p.containers = append(p.containers, c)
-		if !isOneoff(c) {
-			p.members = append(p.members, c)
-		}
-		if p.workingDir == "" {
-			p.workingDir = c.Config.Labels[LabelWorkingDir]
-		}
-		if p.configFiles == "" {
-			p.configFiles = c.Config.Labels[LabelConfigFiles]
-		}
+// ensureProject is used only while constructing this immutable projection.
+func (x *index) ensureProject(name string) *project {
+	p := x.byProject[name]
+	if p == nil {
+		p = &project{name: name}
+		x.byProject[name] = p
 	}
-	for _, s := range x.services {
-		if s.project == name {
-			p.services = append(p.services, s)
-		}
-	}
-	for _, n := range x.w.Networks {
-		if n.Labels[LabelProject] == name {
-			p.networks = append(p.networks, n)
-		}
-	}
-	sort.Slice(p.networks, func(i, j int) bool { return p.networks[i].ID < p.networks[j].ID })
-	for _, v := range x.w.Volumes {
-		if v.Labels[LabelProject] == name {
-			p.volumes = append(p.volumes, v)
-		}
-	}
-	sort.Slice(p.volumes, func(i, j int) bool { return p.volumes[i].Name < p.volumes[j].Name })
 	return p
+}
+
+func (x *index) project(name string) *project {
+	if p := x.byProject[name]; p != nil {
+		return p
+	}
+	return &project{name: name}
 }
 
 // projectRow: its health is its services' (one-offs are not members).

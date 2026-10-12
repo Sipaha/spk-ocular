@@ -56,6 +56,7 @@ export const KEYS: KeyDef[] = [
   { id: 'next', scope: 'logs', keys: 'F3 Shift+F3', help: 'keys.logNext' },
   { id: 'save', scope: 'logs', keys: 'Ctrl+S', help: 'keys.logSave' },
   { id: 'clear', scope: 'logs', keys: 'Ctrl+L', help: 'keys.logClear' },
+  { id: 'follow', scope: 'logs', keys: 'End', help: 'logs.follow' },
   { id: 'copy', scope: 'terminal', keys: 'Ctrl+Shift+C', help: 'keys.termCopy' },
   { id: 'paste', scope: 'terminal', keys: 'Ctrl+Shift+V', help: 'keys.termPaste' },
   { id: 'rest', scope: 'terminal', keys: 'Ctrl+K Esc F6 …', help: 'keys.termRest' },

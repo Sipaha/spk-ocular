@@ -125,6 +125,9 @@ func (v *View) Since(since uint64) Page {
 	v.mu.Lock()
 	defer v.mu.Unlock()
 	p := Page{ViewID: v.id, Version: v.version, Status: v.status.Clone(), Upserts: []core.Row{}, Deleted: []string{}}
+	if since == v.version {
+		return p // current cursor: no row history needs scanning
+	}
 	if since == 0 || since < v.minRetained || since > v.version {
 		p.Reset = true
 		for _, r := range v.rows {

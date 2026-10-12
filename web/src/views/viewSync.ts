@@ -229,7 +229,9 @@ export class ViewSync {
     this.cursor = p.version
     const kind = p.reset && this.pendingKind ? { kind: this.pendingKind } : {}
     if (p.reset) this.pendingKind = null
-    this.emit({ rows: Array.from(this.rows.values()), status: p.status, halted: false, ...kind })
+    // Status-only pages publish status without invalidating table projections.
+    const rows = p.reset || p.upserts.length || p.deleted.length ? Array.from(this.rows.values()) : this.state.rows
+    this.emit({ rows, status: p.status, halted: false, ...kind })
   }
 
   /** Starts (or restarts after dispose — React StrictMode remounts). */

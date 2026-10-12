@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { KindDescriptor, RecentObject, Row, ScopeSel, Target } from '../api/types'
-import { buildItems, type Sources } from './items'
+import { buildItems, buildKeyboardItems, type Sources } from './items'
 
 const kind = (id: string, title: string, aliases: string[] = [], extra: Partial<KindDescriptor> = {}): KindDescriptor => ({ id, title, group: 'G', scoped: true, columns: [], aliases, ...extra })
 const kinds = [
@@ -242,5 +242,37 @@ describe('typed resource queries and history ranking',()=>{
   const result=buildItems('dep model',src)
   expect(result.cursor).toBeNull()
   expect(result.items.map(item=>item.action)).toEqual([{type:'kind',kind:'apps/deployments',filter:'model'},{type:'kind',kind:'other/deployments',filter:'model'}])
+ })
+})
+
+describe('keyboard fallback after no original matches', () => {
+ it('recovers type/name and name-only searches inside the selected scope, retaining UID', () => {
+  const wanted = row('model', 'demo', 'pods')
+  const src = sources({ selectedScope: { mode: 'one', name: 'demo' }, rows: [wanted, row('model', 'outside', 'pods')], recents: [recent('model-ghost')] })
+  for (const input of ['зщв ьщвуд', 'pod ьщвуд', 'ьщвуд']) {
+   const result = buildKeyboardItems(input, src)
+   expect(result.query).toBe(input === 'ьщвуд' ? 'model' : 'pod model')
+   expect(result.built.items.map(item => item.action)).toEqual([{ type: 'object', ref: wanted.ref }])
+  }
+ })
+ it('keeps real original matches ahead of any corrected results', () => {
+  const src = sources({ rows: [row('ьщвуд'), row('model')] })
+  const result = buildKeyboardItems('ьщвуд', src)
+  expect(result.query).toBe('ьщвуд')
+  expect(labels(result.built)).toEqual(['object:ьщвуд'])
+ })
+ it('waits for the original read and never rewrites commands', () => {
+  const src = sources({ rows: [row('model')] })
+  expect(buildKeyboardItems('pod ьщвуд', src, false).query).toBe('pod ьщвуд')
+  expect(buildKeyboardItems(':pod ьщвуд', src).query).toBe(':pod ьщвуд')
+ })
+ it('preserves a resolved localized kind and does not choose an ambiguous corrected type', () => {
+  const src = sources({ kinds: [kind('pods', 'Поды', ['pod'])], rows: [row('model')] })
+  expect(buildKeyboardItems('под ьщвуд', src).query).toBe('под model')
+  expect(labels(buildKeyboardItems('под ьщвуд', src).built)).toEqual(['object:model'])
+  const ambiguous = sources({ kinds: [kind('pods', 'Pods', ['pod']), kind('other/pods', 'Other Pods', ['pod'])] })
+  const result = buildKeyboardItems('зщв ьщвуд', ambiguous)
+  expect(result.built.cursor).toBeNull()
+  expect(result.built.items.map(item => item.action)).toEqual([{ type: 'kind', kind: 'pods', filter: 'model' }, { type: 'kind', kind: 'other/pods', filter: 'model' }])
  })
 })

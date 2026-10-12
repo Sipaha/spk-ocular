@@ -443,7 +443,11 @@ export function LogViewport({
   }, [searchNavTick])
 
   return (
-    <div className="relative min-h-0 flex-1">
+    <div className="relative min-h-0 flex-1" onKeyDown={event=>{
+      if(event.key==='End'&&!event.defaultPrevented&&!event.nativeEvent.isComposing&&!event.ctrlKey&&!event.metaKey&&!event.altKey&&!event.shiftKey){
+        event.preventDefault();resumeFollow();parentRef.current?.focus({preventScroll:true})
+      }
+    }}>
       <div
         ref={parentRef}
         // select-text keeps this subtree selectable while the body-level
@@ -609,7 +613,7 @@ export function LogViewport({
       {/* Floating follow button — only while NOT following. Click resumes
           follow AND jumps to the newest line. */}
       {!follow && (
-        <div className="absolute bottom-3 right-5 z-10"><ActionIconButton onClick={resumeFollow} label={t('logs.follow')} description={t('logs.follow.tooltip')} className="bg-panel text-accent"><ActionIcon name="down"/></ActionIconButton></div>
+        <div className="absolute bottom-3 right-5 z-10"><ActionIconButton onClick={resumeFollow} aria-keyshortcuts="End" label={t('logs.follow')} description={`${t('logs.follow.tooltip')} (End)`} className="bg-panel text-accent"><ActionIcon name="down"/></ActionIconButton></div>
       )}
     </div>
   )

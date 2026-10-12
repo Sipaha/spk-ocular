@@ -2,7 +2,7 @@ import { act, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { App } from '../App'
-import type { KindDescriptor, RecentObject } from '../api/types'
+import type { KindDescriptor, Page, RecentObject } from '../api/types'
 import { initialState, useStore } from '../store'
 import { kindsView, connectedClient as fakeClient, k8s, podRow, podsKind } from '../test/fakeClient'
 import { usePalette } from './store'
@@ -128,6 +128,80 @@ describe('Palette', () => {
     expect(f.client.openView).toHaveBeenCalledWith('kubernetes', 'prod', { kind: 'apps/deployments', scope: { mode: 'some', names: ['extra', 'web'] } })
     expect(await screen.findByRole('dialog', { name: 'apps/deployments old-web' })).toBeInTheDocument()
     expect(f.client.getResource).toHaveBeenLastCalledWith(expect.objectContaining({ name: 'old-web', uid: 'u-old' }))
+  })
+
+  it('recovers a Russian type/name query through one scoped view without rewriting the input', async () => {
+    const f = setup()
+    const wanted = f.state.rowsByKind['apps/deployments'][0]
+    wanted.ref.uid = 'layout-web-uid'
+    f.client.getTargetState = vi.fn(async () => ({ scope: JSON.stringify({ mode: 'one', name: 'web' }) }))
+    await openApp(f)
+    const dlg = await openPalette()
+    const input = within(dlg).getByRole('combobox') as HTMLInputElement
+    await userEvent.type(input, 'вуз цуи')
+    await within(dlg).findByRole('option', { name: /ObjectwebDeployments/ })
+    expect(input).toHaveValue('вуз цуи')
+    expect(within(dlg).getByText('Keyboard layout: searching for “dep web”')).toBeInTheDocument()
+    const reads = () => vi.mocked(f.client.openView).mock.calls.filter(call => call[2].kind === 'apps/deployments')
+    expect(reads()).toHaveLength(1)
+    expect(reads()[0]).toEqual(['kubernetes', 'prod', { kind: 'apps/deployments', scope: { mode: 'one', name: 'web' } }])
+    input.setSelectionRange(4, input.value.length)
+    await userEvent.keyboard('ифеср')
+    await within(dlg).findByRole('option', { name: /ObjectbatchDeployments/ })
+    expect(reads()).toHaveLength(1)
+    input.setSelectionRange(4, input.value.length)
+    await userEvent.keyboard('цуи{Enter}')
+    expect(await screen.findByRole('dialog', { name: 'apps/deployments web' })).toBeInTheDocument()
+    expect(f.client.getResource).toHaveBeenLastCalledWith(expect.objectContaining({ name: 'web', uid: 'layout-web-uid' }))
+  })
+
+  it('waits for the original typed read before recovering its name and closes that view on query change', async () => {
+    const f = setup()
+    const wanted = f.state.rowsByKind['apps/deployments'][0]
+    wanted.ref = { ...wanted.ref, name: 'model', uid: 'layout-model-uid' }
+    wanted.cells = [{ text: 'model' }]
+    const getRows = f.client.getRows
+    let release!: () => void
+    f.client.getRows = vi.fn((viewId: string, since: number) => viewId === 'v-apps/deployments' ? new Promise<Page>(resolve => { release = () => { void getRows(viewId, since).then(resolve) } }) : getRows(viewId, since))
+    await openApp(f)
+    const dlg = await openPalette()
+    const input = within(dlg).getByRole('combobox')
+    await userEvent.type(input, 'dep ьщвуд')
+    await within(dlg).findByText('Loading…')
+    expect(within(dlg).queryByText(/Keyboard layout:/)).toBeNull()
+    await userEvent.keyboard('{Enter}')
+    expect(dlg).toBeInTheDocument()
+    await act(async () => release())
+    await within(dlg).findByRole('option', { name: /ObjectmodelDeployments/ })
+    expect(within(dlg).getByText('Keyboard layout: searching for “dep model”')).toBeInTheDocument()
+    expect(vi.mocked(f.client.openView).mock.calls.filter(call => call[2].kind === 'apps/deployments')).toHaveLength(1)
+    await userEvent.clear(input)
+    await userEvent.type(input, 'nomatch')
+    await waitFor(() => expect(f.client.closeView).toHaveBeenCalledWith('v-apps/deployments'))
+  })
+
+  it('keeps a real original-layout title ahead of the recovered Latin name', async () => {
+    const f = setup()
+    const original = podRow('original', 'web')
+    original.ref.title = 'ьщвуд'
+    f.state.rows.push(original, podRow('model', 'web'))
+    await openApp(f)
+    const dlg = await openPalette()
+    await userEvent.keyboard('ьщвуд')
+    expect(within(dlg).getAllByRole('option')).toHaveLength(1)
+    expect(within(dlg).getByRole('option')).toHaveTextContent('ьщвуд')
+    expect(within(dlg).queryByText(/Keyboard layout:/)).toBeNull()
+  })
+
+  it('does not treat a failed original typed read as an empty search', async () => {
+    const f = setup()
+    f.state.statusByKind['apps/deployments'] = { state: 'error', message: 'permission denied' }
+    await openApp(f)
+    const dlg = await openPalette()
+    await userEvent.keyboard('dep ьщвуд')
+    expect(await within(dlg).findByRole('alert')).toHaveTextContent('permission denied')
+    expect(within(dlg).queryByText(/Keyboard layout:/)).toBeNull()
+    expect(vi.mocked(f.client.openView).mock.calls.filter(call => call[2].kind === 'apps/deployments')).toHaveLength(1)
   })
 
   it('late history cannot add unavailable rows even when scope changes on an unscoped table', async () => {

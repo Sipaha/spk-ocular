@@ -1,14 +1,13 @@
-// Regex search in a worker with a time budget. The worker holds its own
-// copy of the lines (sent incrementally) and answers with the ranges of
-// matching lines; a pattern that takes too long gets the worker terminated
-// (the only way to stop a runaway regex) and is reported as too slow.
+// Regex search in a worker with a time budget. The UI owns retained history;
+// each fresh worker matches incremental batches without retaining their text.
+// It answers with match ranges; a pattern that takes too long terminates the
+// worker (the only way to stop a runaway regex) and is reported as too slow.
 
 import { regexRanges, type Range } from './match'
 
 export type ToWorker =
   | { t: 'pattern'; seq: number; source: string }
   | { t: 'add'; seq: number; items: [id: number, text: string][] }
-  | { t: 'drop'; before: number }
 
 export type FromWorker = { t: 'hits'; seq: number; hits: [id: number, ranges: Range[]][]; reset: boolean }
 
@@ -50,8 +49,11 @@ export class RegexSearch {
       this.onChange()
       return
     }
-    this.worker = this.make()
-    this.worker.onmessage = (e) => this.receive(e.data)
+    const worker = this.make()
+    this.worker = worker
+    worker.onmessage = (e) => {
+      if (this.worker === worker) this.receive(e.data)
+    }
     this.send({ t: 'pattern', seq: ++this.seq, source })
     this.state = 'busy'
     this.add(lines)
@@ -62,7 +64,15 @@ export class RegexSearch {
   add(lines: { id: number; plain: string }[]) {
     if (!this.worker) return
     const items: [number, string][] = []
-    for (const l of lines) if (l.id > this.sentUpTo) items.push([l.id, l.plain])
+    // Entries have monotonic IDs: skip the retained prefix without scanning it.
+    let lo = 0
+    let hi = lines.length
+    while (lo < hi) {
+      const mid = (lo + hi) >>> 1
+      if (lines[mid].id <= this.sentUpTo) lo = mid + 1
+      else hi = mid
+    }
+    for (let i = lo; i < lines.length; i++) items.push([lines[i].id, lines[i].plain])
     if (!items.length) return
     this.sentUpTo = items[items.length - 1][0]
     this.send({ t: 'add', seq: ++this.seq, items })
@@ -72,7 +82,6 @@ export class RegexSearch {
   drop(before: number) {
     if (!this.worker) return
     this.floor = Math.max(this.floor, before)
-    this.worker.postMessage({ t: 'drop', before })
     for (const id of this.hits.keys()) if (id < before) this.hits.delete(id)
   }
 
@@ -122,7 +131,6 @@ export class RegexSearch {
 /** The worker's logic, shared with tests (search.worker.ts wires it up). */
 export function workerCore(post: (m: FromWorker) => void) {
   let re: RegExp | null = null
-  let lines: [number, string][] = []
   const scan = (items: [number, string][]) => {
     const hits: [number, Range[]][] = []
     if (!re) return hits
@@ -135,14 +143,9 @@ export function workerCore(post: (m: FromWorker) => void) {
   return (m: ToWorker) => {
     if (m.t === 'pattern') {
       re = new RegExp(m.source, 'gi')
-      post({ t: 'hits', seq: m.seq, hits: scan(lines), reset: true })
+      post({ t: 'hits', seq: m.seq, hits: [], reset: true })
     } else if (m.t === 'add') {
-      lines = lines.concat(m.items)
       post({ t: 'hits', seq: m.seq, hits: scan(m.items), reset: false })
-    } else if (m.t === 'drop') {
-      let i = 0
-      while (i < lines.length && lines[i][0] < m.before) i++
-      if (i) lines = lines.slice(i)
     }
   }
 }

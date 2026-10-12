@@ -72,6 +72,45 @@ describe('RegexSearch', () => {
     rs.stop()
   })
 
+  it('ignores queued replies from a replaced worker and replies below the dropped floor', () => {
+    const workers: WorkerLike[] = []
+    const rs = new RegexSearch(() => {
+      const w: WorkerLike = { onmessage: null, postMessage() {}, terminate: vi.fn() }
+      workers.push(w)
+      return w
+    }, () => {})
+    rs.setPattern('old', [{ id: 1, plain: 'old' }])
+    rs.setPattern('new', [{ id: 2, plain: 'new' }])
+    workers[1].onmessage!({ data: { t: 'hits', seq: 4, reset: false, hits: [[2, [[0, 3]]]] } })
+    workers[0].onmessage!({ data: { t: 'hits', seq: 2, reset: true, hits: [[1, [[0, 3]]]] } })
+    expect([...rs.hits.keys()]).toEqual([2])
+    rs.drop(3)
+    workers[1].onmessage!({ data: { t: 'hits', seq: 3, reset: false, hits: [[2, [[0, 3]]]] } })
+    expect([...rs.hits]).toEqual([])
+    rs.stop()
+  })
+
+  it('looks up only the newly added suffix of monotonic retained entries', async () => {
+    const w = fakeWorker()
+    const rs = new RegexSearch(() => w, () => {})
+    const entries = Array.from({ length: 50_000 }, (_, i) => ({ id: i + 1, plain: 'ok' }))
+    rs.setPattern('ok', entries)
+    await Promise.resolve()
+    let reads = 0
+    const next = new Proxy([...entries, { id: 50_001, plain: 'ok' }], {
+      get(target, key, receiver) {
+        if (typeof key === 'string' && /^\d+$/.test(key)) reads++
+        return Reflect.get(target, key, receiver)
+      },
+    })
+    rs.add(next)
+    await Promise.resolve()
+    expect(reads).toBeLessThan(25)
+    expect(w.sent.at(-1)).toMatchObject({ t: 'add', items: [[50_001, 'ok']] })
+    expect(rs.hits.has(50_001)).toBe(true)
+    rs.stop()
+  })
+
   it('kills a worker that does not answer in time', () => {
     vi.useFakeTimers()
     const hung: WorkerLike = { onmessage: null, postMessage() {}, terminate: vi.fn() }

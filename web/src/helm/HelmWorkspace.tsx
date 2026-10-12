@@ -3,6 +3,7 @@ import type { ReactNode } from 'react'
 import type { Client } from '../api/client'
 import type { Column, Row, Ref, ScopeSel, Target } from '../api/types'
 import { DetailsPanel } from '../components/DetailsPanel'
+import { CompactDetailRow, CompactDetailTable } from '../components/CompactDetailTable'
 import { LoadingOverlay } from '../components/LoadingOverlay'
 import { SearchIcon } from '../components/icons'
 import { columnWidthsKey } from '../components/columnWidths'
@@ -169,7 +170,14 @@ export function HelmWorkspace({ client, target, scope, scopePicker, initialTab, 
           <div className="relative flex min-h-0 flex-1 flex-col" aria-busy={busy}><div className="flex min-h-0 flex-1 flex-col" inert={busy}>
           {detail ? <>
             <nav role="tablist" className="drawer-tabs flex shrink-0 flex-wrap gap-1 border-b border-line px-3">{(['resources', 'values', 'computedValues', 'manifest', 'hooks', 'notes', 'history'] as const).map(v => <button key={v} role="tab" aria-selected={detailTab === v} className={`border-b-2 px-3 py-1.5 ${detailTab === v ? 'border-accent text-accent' : 'border-transparent text-fg-muted hover:text-fg'}`} onClick={() => setDetailTab(v)}>{t(`helm.${v}`)}</button>)}</nav>
-            {detailTab === 'resources' ? <div className="overflow-auto"><p className="px-2 py-1 text-fg-muted">{t('helm.declaredResources')}</p><table className="helm-table"><tbody>{detail.resources.map((r, i) => <tr key={i}><td>{r.kind}</td><td>{r.ref && onResource ? <button onClick={() => onResource(r.ref!)}>{r.name}</button> : r.name}</td><td>{r.namespace || '—'}</td><td>{r.apiVersion}</td></tr>)}</tbody></table></div> : detailTab === 'history' ? <div className="overflow-auto p-2">{detail.history.map(r => <div className="mb-2 flex flex-wrap items-center gap-2" key={r.revision}><button className={button} disabled={busy} onClick={() => { void openRelease(r, r.revision) }}>#{r.revision} · {r.chartVersion} · {r.status}</button><button className={button} disabled={busy} onClick={() => begin('rollback', r.revision)}>{t('helm.rollback')}</button></div>)}</div> : <pre className="helm-code m-0 flex-1">{detail[detailTab]}</pre>}
+            {detailTab === 'resources' ? <div className="overflow-auto"><p className="px-2 py-1 text-fg-muted">{t('helm.declaredResources')}</p><CompactDetailTable label={t('helm.declaredResources')} minWidth={400} columns={[{ id: 'kind', width: 100 }, { id: 'name' }, { id: 'namespace', width: 100 }, { id: 'apiVersion', width: 100 }]}>
+              {detail.resources.map((r, i) => <CompactDetailRow key={i}>
+                <td className="truncate px-2 py-1" title={r.kind}>{r.kind}</td>
+                <td className="truncate px-2 py-1" title={r.name}>{r.ref && onResource ? <button className="max-w-full truncate text-left text-accent outline-none focus-visible:outline-2 focus-visible:outline-accent" onClick={() => onResource(r.ref!)}>{r.name}</button> : r.name}</td>
+                <td className="truncate px-2 py-1" title={r.namespace}>{r.namespace || '—'}</td>
+                <td className="truncate px-2 py-1" title={r.apiVersion}>{r.apiVersion}</td>
+              </CompactDetailRow>)}
+            </CompactDetailTable></div> : detailTab === 'history' ? <div className="overflow-auto p-2">{detail.history.map(r => <div className="mb-2 flex flex-wrap items-center gap-2" key={r.revision}><button className={button} disabled={busy} onClick={() => { void openRelease(r, r.revision) }}>#{r.revision} · {r.chartVersion} · {r.status}</button><button className={button} disabled={busy} onClick={() => begin('rollback', r.revision)}>{t('helm.rollback')}</button></div>)}</div> : <pre className="helm-code m-0 flex-1">{detail[detailTab]}</pre>}
           </> : <div className="overflow-auto p-2"><p>{chart?.description}</p>{chart && <Select value={chart.version} label={t('helm.chartVersion')} options={charts.filter(c => c.name === chart.name && c.repository === chart.repository).map(c => ({ value: c.version, label: c.version }))} onChange={v => { void openChart({ ...chart, version: v }) }} disabled={busy} />}<p>{chart?.appVersion}</p><pre className="helm-code">{chart?.readme || chart?.values}</pre></div>}
           </div>{busy && <LoadingOverlay />}</div>
         </DetailsPanel>}

@@ -163,8 +163,8 @@ verification gate; see [development](docs/development.md) for its extra tools
 and isolated scratch configuration. For native Windows/macOS packages, run
 `python packaging/portable.py --version 1.0.0 --os windows --arch amd64` (use
 `darwin` for macOS) on a matching native host. Windows needs WiX 5.0.2; macOS
-needs Xcode Command Line Tools. CI runs on pull requests and pushes to
-`master` or `release/**`; tagged versions use the same tests before packaging
+needs Xcode Command Line Tools. CI runs on pull requests to `master`, pushes to
+`release/**` and manual runs; tagged versions use the same tests before packaging
 and publication.
 
 ## License

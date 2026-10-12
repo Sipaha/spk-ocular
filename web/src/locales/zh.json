@@ -460,6 +460,8 @@
     "palette.placeholderTargets": "上下文…",
     "palette.coverage": "对象：当前表格，或使用类型 + 名称搜索指定视图",
     "palette.empty": "未找到任何内容",
+    "palette.layoutFallback": "已修正键盘布局：搜索“{query}”",
+    "table.resources": "资源",
     "palette.unknown": "未知命令",
     "palette.pick": "未选择任何内容：使用 ↑ ↓ 选择，然后按 Enter",
     "palette.filtered": "按“{text}”过滤",

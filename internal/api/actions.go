@@ -118,13 +118,13 @@ func (s *Service) checkedSession(ctx context.Context, providerID, target, rev st
 	if s.configRev(current.ConfigHash) != rev {
 		return nil, said(CodeConflict, "configChanged", "target", target)
 	}
-	if _, err := s.session(ctx, providerID, target); err != nil {
+	e, err := s.sessionFor(ctx, providerID, target)
+	if err != nil {
 		return nil, err
 	}
 	s.sessMu.Lock()
 	defer s.sessMu.Unlock()
-	e := s.sessions[ownerKey(providerID, target)]
-	if e == nil {
+	if s.sessions[ownerKey(providerID, target)] != e {
 		return nil, said(CodeGone, "sessionClosed")
 	}
 	if s.configRev(e.hash) != rev {

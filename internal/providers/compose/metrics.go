@@ -64,6 +64,27 @@ func (s *session) Metrics(ctx context.Context, q provider.Query, rowIDs []string
 		}
 		parts[row] = append(parts[row], c.ID)
 	}
+	// Group requested services once; member ordering and sample limits stay unchanged.
+	type memberKey struct{ project, service string }
+	serviceMembers := map[memberKey][]*engine.ContainerInspect{}
+	if q.Kind == KindServices {
+		for _, row := range rowIDs {
+			project, service, ok := strings.Cut(row, "/")
+			if ok && q.Scope.Contains(project) {
+				serviceMembers[memberKey{project, service}] = nil
+			}
+		}
+		for _, o := range objs {
+			c := o.(*engine.ContainerInspect)
+			key := memberKey{projectOf(c), c.Config.Labels[LabelService]}
+			if _, requested := serviceMembers[key]; requested && !isOneoff(c) {
+				serviceMembers[key] = append(serviceMembers[key], c)
+			}
+		}
+		for _, members := range serviceMembers {
+			sortMembers(members)
+		}
+	}
 	for _, row := range rowIDs {
 		switch q.Kind {
 		case KindContainers:
@@ -78,7 +99,7 @@ func (s *session) Metrics(ctx context.Context, q provider.Query, rowIDs []string
 				continue
 			}
 			n := 0
-			for _, c := range membersOf(objs, project, service) {
+			for _, c := range serviceMembers[memberKey{project, service}] {
 				if !c.State.Running {
 					continue
 				}

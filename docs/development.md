@@ -143,6 +143,16 @@ Do not include that token in documentation or uploaded diagnostics.
 The embedded icon is a 256×256 PNG. Check `_NET_WM_ICON`, not just WM_HINTS.
 GTK overlay scrollbars intercept a wider region than the visible thumb: retain
 the 24 px resource-list inset and verify the entire star button is clickable.
+CSS scrollbars keep thumbs inside the webview stacking order, including behind
+the command palette and other dialogs; verify native GTK rendering as well as
+browser scrolling and resize controls.
+Keep standard scrollbar width/color at `auto`: non-auto values override WebKit's
+CSS scrollbar widgets under the [CSS Scrollbars interaction rules](https://drafts.csswg.org/css-scrollbars/#interaction).
+The workspace is an isolated stacking context; the palette
+is a body portal above it. Table focus uses a pointer-transparent inset overlay
+covering the header and rows within the grid's own stacking context.
+Popup action menus also use body portals so an isolated grid cannot place them
+behind an open dock or clip their viewport-relative positioning.
 Native selects are not used because GTK popup styling differs from the app.
 
 ## Performance verification
@@ -301,3 +311,19 @@ boundaries and temporary-view cleanup through the shared ViewHub. Loading
 fixtures assert known headers before row arrival. Shared-grid checks cover
 column persistence, Escape rollback, reset, keyboard sorting/navigation and
 centered inspector close controls with held-edit protection.
+
+Keyboard-layout palette fixtures cover physical RU/UA keys and case, original
+match priority, command exclusion, delayed typed reads, one scoped temporary
+view, UID navigation and all eight hints at normal/narrow widths. Workspace
+restart tests wait for complete persisted panel and dimension metadata before
+stopping the owned process; a prior panel-count-only snapshot can predate the
+latest queued layout write.
+
+Audit regression checks include bounded/chunked/trailing HTTP JSON, escaped
+maximum edit texts and clearing body deadlines before service work; a controlled
+session-admission interleaving; shared modal tab/Escape/restore semantics;
+journal filter changes, late pagination failures and return-to-same-filter
+ownership; independent view cursors and no-row array identity; and stateless
+regex batches/obsolete replies. Compose projections are compared against the
+previous implementation across randomized worlds and scopes. Operation counts
+and small microbenchmarks are not native RSS or universal latency claims.

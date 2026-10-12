@@ -7,9 +7,9 @@ import (
 
 	"github.com/spk/spk-ocular/internal/agentgrant"
 	"github.com/spk/spk-ocular/internal/api"
+	"github.com/spk/spk-ocular/internal/configuration"
 	"github.com/spk/spk-ocular/internal/core"
 	"github.com/spk/spk-ocular/internal/forwards"
-	"github.com/spk/spk-ocular/internal/providers/kubernetes"
 	"github.com/spk/spk-ocular/internal/store"
 	"github.com/spk/spk-ocular/internal/views"
 )
@@ -210,7 +210,7 @@ func (w *API) Helm(ctx context.Context, req api.HelmRequest) (api.HelmResponse, 
 	return w.a.Helm(api.UIContext(ctx), req)
 }
 
-func (w *API) Configurations(req kubernetes.ConfigRequest) (kubernetes.ConfigState, error) {
+func (w *API) Configurations(req configuration.ConfigRequest) (configuration.ConfigState, error) {
 	return w.a.Configurations(api.UIContext(context.Background()), req)
 }
 

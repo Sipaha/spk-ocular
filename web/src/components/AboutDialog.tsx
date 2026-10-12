@@ -1,7 +1,7 @@
 import { useEffect, useId, useRef, useState } from 'react'
 import type { AppInfo } from '../api/types'
 import { getLanguage, t } from '../i18n'
-import { focusMark, restoreFocus } from '../shortcuts'
+import { ModalCloseButton, useModalFocus } from './modal'
 import { openURL } from '../tunnels/open'
 
 export function siteURL(site: 'about' | 'spk-ocular'): string {
@@ -13,15 +13,14 @@ export function AboutDialog({ info, onClose }: { info: AppInfo | null; onClose: 
   const title = useId()
   const box = useRef<HTMLElement | null>(null)
   const close = useRef<HTMLButtonElement | null>(null)
-  const [mark] = useState(focusMark)
+  const modalKey = useModalFocus(box, onClose, close)
   const [error, setError] = useState('')
   const alive = useRef(true)
   const language = getLanguage()
   useEffect(() => {
     alive.current = true
-    close.current?.focus()
-    return () => { alive.current = false; restoreFocus(mark) }
-  }, [mark])
+    return () => { alive.current = false }
+  }, [])
   const external = (event: React.MouseEvent<HTMLAnchorElement>) => {
     if (info?.mode !== 'desktop') return
     event.preventDefault()
@@ -36,19 +35,11 @@ export function AboutDialog({ info, onClose }: { info: AppInfo | null; onClose: 
   }}>
     <section ref={box} role="dialog" aria-modal="true" aria-labelledby={title}
       className="about-dialog flex max-h-[84vh] w-[min(640px,92%)] min-w-0 flex-col rounded-lg border border-line bg-panel p-4 text-sm shadow-2xl"
-      onKeyDown={event => {
-        if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); onClose() }
-        else if (event.key === 'Tab') {
-          const controls = [...(box.current?.querySelectorAll<HTMLElement>('button:not(:disabled), a[href]') ?? [])]
-          const index = controls.indexOf(document.activeElement as HTMLElement)
-          event.preventDefault()
-          controls[(index + (event.shiftKey ? controls.length - 1 : 1)) % controls.length]?.focus()
-        }
-      }}>
+      onKeyDown={modalKey}>
       <header className="mb-4 flex shrink-0 items-start gap-3">
         <img src="./icon.svg" alt="" width="48" height="48" className="h-12 w-12 shrink-0" />
         <div className="min-w-0 flex-1"><h2 id={title} className="mb-1 text-lg font-semibold">{t('about.title')}</h2><p className="text-fg-muted">{t('about.description')}</p></div>
-        <button ref={close} type="button" className="rounded px-2 text-lg leading-none text-fg-muted hover:bg-hover hover:text-fg" aria-label={t('action.close')} onClick={onClose}>×</button>
+        <ModalCloseButton ref={close} label={t('action.close')} onClick={onClose} />
       </header>
       <div className="min-h-0 overflow-y-auto">
         <dl className="mb-4 grid grid-cols-[max-content_minmax(0,1fr)] gap-x-4 gap-y-2">

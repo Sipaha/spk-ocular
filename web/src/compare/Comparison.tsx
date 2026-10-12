@@ -6,7 +6,7 @@ import {EditDiff} from '../edit/EditDiff'
 import {errorDetail} from '../errors'
 import {getLanguage,t} from '../i18n'
 import {refTitle} from '../refs'
-import {focusMark,restoreFocus} from '../shortcuts'
+import {ModalCloseButton,useModalFocus} from '../components/modal'
 import {useStore} from '../store'
 import {clearComparison,closeComparison,selectionAvailable,useComparison} from './store'
 
@@ -35,9 +35,8 @@ function Dialog({client,request}:{client:Client;request:CompareRequest}){
  const [refresh,setRefresh]=useState(0)
  const [full,setFull]=useState(false)
  const box=useRef<HTMLElement>(null)
- const [mark]=useState(focusMark)
+ const modalKey=useModalFocus(box,closeComparison)
  const left=request.left,right=request.right
- useEffect(()=>{box.current?.focus();return()=>restoreFocus(mark)},[mark])
  useEffect(()=>{
   if(!available)return
   const abort=new AbortController()
@@ -49,16 +48,8 @@ function Dialog({client,request}:{client:Client;request:CompareRequest}){
  const after=validResult?(full?validResult.right.fullYAML:validResult.right.yaml):''
  const omitted=validResult?[...new Set([...validResult.left.omitted,...validResult.right.omitted])]:[]
  return createPortal(<div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-3" onMouseDown={e=>{if(e.target===e.currentTarget)closeComparison()}}>
-  <section ref={box} role="dialog" aria-modal="true" aria-label={t('compare.title')} tabIndex={-1} className="flex h-[min(900px,calc(100dvh-24px))] w-[min(1400px,calc(100vw-24px))] flex-col border border-line bg-panel outline-none" onKeyDown={e=>{
-   if(e.key==='Escape'){e.preventDefault();e.stopPropagation();closeComparison()}
-   if(e.key==='Tab'){
-    const controls=[...(box.current?.querySelectorAll<HTMLElement>('button:not(:disabled),input:not(:disabled),summary,[tabindex="0"]')??[])].filter(el=>el.getClientRects().length&&!el.closest('[inert]'))
-    const first=controls[0],last=controls.at(-1)
-    if(e.shiftKey&&(document.activeElement===first||document.activeElement===box.current)){e.preventDefault();last?.focus()}
-    else if(!e.shiftKey&&(document.activeElement===last||document.activeElement===box.current)){e.preventDefault();first?.focus()}
-   }
-  }}>
-   <header className="flex h-10 shrink-0 items-center gap-2 border-b border-line px-3"><strong className="text-sm">{t('compare.title')}</strong><span className="flex-1"/><button className={button} disabled={!available} onClick={()=>{setResult(null);setError('');setRefresh(n=>n+1)}}>{t('graph.refresh')}</button><button className="rounded px-2 text-lg hover:bg-hover" aria-label={t('drawer.close')} onClick={closeComparison}>×</button></header>
+  <section ref={box} role="dialog" aria-modal="true" aria-label={t('compare.title')} tabIndex={-1} className="flex h-[min(900px,calc(100dvh-24px))] w-[min(1400px,calc(100vw-24px))] flex-col border border-line bg-panel outline-none" onKeyDown={modalKey}>
+   <header className="flex h-10 shrink-0 items-center gap-2 border-b border-line px-3"><strong className="text-sm">{t('compare.title')}</strong><span className="flex-1"/><button className={button} disabled={!available} onClick={()=>{setResult(null);setError('');setRefresh(n=>n+1)}}>{t('graph.refresh')}</button><ModalCloseButton label={t('drawer.close')} onClick={closeComparison}/></header>
    <div className="grid shrink-0 grid-cols-2 gap-3 border-b border-line px-3 py-2 text-xs">
     <Side label={t('compare.left')} selection={left} side={validResult?.left}/><Side label={t('compare.right')} selection={right} side={validResult?.right}/>
    </div>

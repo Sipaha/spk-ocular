@@ -1,4 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 
 export interface MenuItem {
   id: string
@@ -83,14 +84,14 @@ export function Menu({ items, at, label, onClose }: Props) {
     e.stopPropagation()
   }
 
-  return (
+  return createPortal(
     <div
       ref={ref}
       role="menu"
       aria-label={label}
       onKeyDown={onKey}
       onContextMenu={(e) => e.preventDefault()}
-      className="popup-menu fixed z-30 min-w-44 rounded-md border border-line bg-panel"
+      className="popup-menu fixed z-50 min-w-44 rounded-md border border-line bg-panel"
       style={{ left: pos.x, top: pos.y }}
     >
       {items.map((it) => (
@@ -116,6 +117,6 @@ export function Menu({ items, at, label, onClose }: Props) {
           </button>
         </div>
       ))}
-    </div>
+    </div>, document.body
   )
 }

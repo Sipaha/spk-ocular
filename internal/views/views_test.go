@@ -379,3 +379,17 @@ func TestCoverageIsComparedAndCopied(t *testing.T) {
 	v.Apply(provider.Delta{Status: &changed})
 	assert.Greater(t, v.Since(0).Version, ver)
 }
+
+func TestCurrentCursorKeepsIndependentHistoryAndClonesStatus(t *testing.T) {
+	v := newView("v", nil)
+	v.Apply(provider.Delta{Upserts: []core.Row{row("a", "a", "1")}, Status: ready})
+	old := v.Version()
+	v.Apply(provider.Delta{Upserts: []core.Row{row("b", "b", "2")}, Status: &provider.ViewStatus{State: provider.StatusReady, Coverage: []provider.SourceCoverage{{Source: "team", State: provider.CoverageDenied}}}})
+	current := v.Since(v.Version())
+	require.False(t, current.Reset)
+	require.Empty(t, current.Upserts)
+	require.Empty(t, current.Deleted)
+	current.Status.Coverage[0].Source = "changed"
+	require.Equal(t, "team", v.Since(v.Version()).Status.Coverage[0].Source)
+	require.Equal(t, []string{"b"}, ids(v.Since(old).Upserts), "another cursor still has its delta")
+}

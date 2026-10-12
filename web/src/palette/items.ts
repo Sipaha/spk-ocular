@@ -9,6 +9,7 @@ import { refTitle } from '../refs'
 import { scopeWords, type ScopeWords } from '../scopeNames'
 import { fuzzyScore } from './score'
 import { selectedScopes } from '../scopes'
+import { englishKeyboardQuery } from './keyboardLayout'
 
 export type PaletteAction =
   | { type: 'kind'; kind: string; filter?: string }
@@ -239,4 +240,19 @@ export function buildItems(input: string, src: Sources): Built {
  if(input.trimStart().startsWith(':'))return command(input.trimStart(),src)
  const typed=typedKindQuery(input,src.kinds)
  return typed?typedItems(typed,src):fuzzy(input,src)
+}
+
+/** Keep real matches in the original layout. A filtered-view shortcut is
+ * not an object match; a resolved kind keeps its prefix while its name is
+ * recovered. Callers wait for an explicit other-kind read before fallback. */
+export function buildKeyboardItems(input: string, src: Sources, allowFallback = true): { query: string; built: Built } {
+ const built = buildItems(input, src)
+ if (!allowFallback || input.trimStart().startsWith(':')) return { query: input, built }
+ const typed = typedKindQuery(input, src.kinds)
+ const matched = typed?.kinds.length === 1 ? built.items.some(item => item.action.type === 'object') : built.items.length > 0
+ if (matched) return { query: input, built }
+ const mapped = englishKeyboardQuery(typed ? typed.filter : input)
+ if (mapped === null) return { query: input, built }
+ const query = typed ? input.trim().split(/\s/, 1)[0] + ' ' + mapped : mapped
+ return { query, built: buildItems(query, src) }
 }

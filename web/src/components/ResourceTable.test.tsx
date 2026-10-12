@@ -16,6 +16,20 @@ const row = (name: string): Row =>
 
 const ok = (values: MetricsView['values']): MetricsView => ({ status: 'ok', values })
 
+it('object reveal focuses the table without stealing focus from a modal or terminal', () => {
+  const props={columns,rows:[row('a')],hideScope:false,filter:'',selected:'id-a',onSelect:()=>{}}
+  const {rerender}=render(<ResourceTable {...props} reveal={{id:'id-a'}} />)
+  expect(document.querySelector('[data-table-scroll]')).toHaveFocus()
+  const modal=document.createElement('input')
+  modal.setAttribute('aria-modal','true');document.body.append(modal);modal.focus()
+  rerender(<ResourceTable {...props} reveal={{id:'id-a'}} />)
+  expect(modal).toHaveFocus();modal.remove()
+  const terminal=document.createElement('textarea')
+  terminal.setAttribute('data-terminal','');document.body.append(terminal);terminal.focus()
+  rerender(<ResourceTable {...props} reveal={{id:'id-a'}} />)
+  expect(terminal).toHaveFocus();terminal.remove()
+})
+
 it('column resizing changes a shared width without sorting; double-click resets it', async () => {
   const save = vi.fn()
   const sort = vi.fn()

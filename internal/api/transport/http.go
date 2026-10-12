@@ -7,21 +7,41 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"strings"
 	"time"
 
 	"github.com/spk/spk-ocular/internal/api"
+	"github.com/spk/spk-ocular/internal/configuration"
 	"github.com/spk/spk-ocular/internal/core"
 	"github.com/spk/spk-ocular/internal/events"
-	"github.com/spk/spk-ocular/internal/providers/kubernetes"
 	"github.com/spk/spk-ocular/internal/store"
 )
 
 const (
-	ssePing         = 25 * time.Second
-	sseWriteTimeout = 10 * time.Second
+	ssePing                  = 25 * time.Second
+	sseWriteTimeout          = 10 * time.Second
+	requestBodyTimeout       = 10 * time.Second
+	metadataBodyLimit  int64 = 2 << 20
 )
+
+// Content routes allow the worst-case JSON escaping of their existing decoded
+// budgets. Auth and Origin checks precede this limit; Wails keeps service limits.
+func requestBodyLimit(path string) int64 {
+	switch path {
+	case "/api/PrepareEdit", "/api/RunEdit":
+		return 40 << 20 // two 3 MiB strings can each use six-byte escapes
+	case "/api/PrepareValueEdit", "/api/RunValueEdit":
+		return 10 << 20 // 1.5 MiB input can use six-byte escapes
+	case "/api/Helm":
+		return 6 << 20
+	case "/api/Files":
+		return 13 << 20
+	default:
+		return metadataBodyLimit
+	}
+}
 
 type HTTP struct {
 	api       api.API
@@ -58,7 +78,28 @@ func handle[Req any](fn func(ctx context.Context, req *Req) (any, error)) http.H
 	return func(w http.ResponseWriter, r *http.Request) {
 		var req Req
 		if r.ContentLength != 0 {
-			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			limit := requestBodyLimit(r.URL.Path)
+			if r.ContentLength > limit {
+				writeErr(w, &api.CodedError{Code: api.CodeBadRequest, Detail: "request body is too large"})
+				return
+			}
+			r.Body = http.MaxBytesReader(w, r.Body, limit)
+			rc := http.NewResponseController(w)
+			_ = rc.SetReadDeadline(time.Now().Add(requestBodyTimeout))
+			decoder := json.NewDecoder(r.Body)
+			err := decoder.Decode(&req)
+			if err == nil {
+				var trailing any
+				if tail := decoder.Decode(&trailing); !errors.Is(tail, io.EOF) {
+					if tail == nil {
+						tail = errors.New("expected one JSON value")
+					}
+					err = tail
+				}
+			}
+			// A body deadline must never shorten a long provider operation/SSE.
+			_ = rc.SetReadDeadline(time.Time{})
+			if err != nil {
 				writeErr(w, &api.CodedError{Code: api.CodeBadRequest, Detail: "bad request body: " + err.Error()})
 				return
 			}
@@ -95,9 +136,9 @@ func writeErr(w http.ResponseWriter, err error) {
 }
 
 func (h *HTTP) routes() {
-	h.mux.Handle("POST /api/Configurations", noStore(http.MaxBytesHandler(handle(func(ctx context.Context, r *kubernetes.ConfigRequest) (any, error) {
+	h.mux.Handle("POST /api/Configurations", noStore(handle(func(ctx context.Context, r *configuration.ConfigRequest) (any, error) {
 		return h.api.Configurations(ctx, *r)
-	}), 2<<20)))
+	})))
 	h.mux.HandleFunc("POST /api/ClusterSecurity", handle(func(ctx context.Context, req *api.SecurityRequest) (any, error) {
 		return h.api.ClusterSecurity(ctx, *req)
 	}))
@@ -107,7 +148,7 @@ func (h *HTTP) routes() {
 	h.mux.HandleFunc("POST /api/RBACSnapshot", handle(func(ctx context.Context, req *api.RBACRequest) (any, error) { return h.api.RBACSnapshot(ctx, *req) }))
 	h.mux.HandleFunc("POST /api/CheckAccess", handle(func(ctx context.Context, req *api.AccessRequest) (any, error) { return h.api.CheckAccess(ctx, *req) }))
 	h.mux.HandleFunc("POST /api/ClusterGraph", handle(func(ctx context.Context, req *api.GraphRequest) (any, error) { return h.api.ClusterGraph(ctx, *req) }))
-	h.mux.Handle("POST /api/Helm", noStore(http.MaxBytesHandler(handle(func(ctx context.Context, req *api.HelmRequest) (any, error) { return h.api.Helm(ctx, *req) }), 6<<20)))
+	h.mux.Handle("POST /api/Helm", noStore(handle(func(ctx context.Context, req *api.HelmRequest) (any, error) { return h.api.Helm(ctx, *req) })))
 	h.mux.HandleFunc("POST /api/SetLanguage", handle(func(ctx context.Context, r *struct {
 		Language string `json:"language"`
 	}) (any, error) {
@@ -224,7 +265,7 @@ func (h *HTTP) routes() {
 	}))
 	h.mux.HandleFunc("POST /api/OpenLogHistory", handle(func(ctx context.Context, r *api.LogHistoryRequest) (any, error) { return h.api.OpenLogHistory(ctx, *r) }))
 
-	h.mux.Handle("POST /api/Files", noStore(http.MaxBytesHandler(handle(func(ctx context.Context, r *api.FilesRequest) (any, error) { return h.api.Files(ctx, *r) }), 13<<20)))
+	h.mux.Handle("POST /api/Files", noStore(handle(func(ctx context.Context, r *api.FilesRequest) (any, error) { return h.api.Files(ctx, *r) })))
 	h.mux.HandleFunc("POST /api/ExecInfo", handle(func(ctx context.Context, r *core.Ref) (any, error) {
 		return h.api.ExecInfo(ctx, *r)
 	}))

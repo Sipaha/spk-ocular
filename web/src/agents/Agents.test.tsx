@@ -371,6 +371,34 @@ describe('agent access: journal', () => {
     await waitFor(() => expect(f.client.listAgentAudit).toHaveBeenLastCalledWith({ agent: 'codex', provider: undefined, target: undefined, limit: 200 }))
     await waitFor(() => expect(within(table).getAllByRole('row').slice(1).every((r) => r.textContent?.includes('codex'))).toBe(true))
   })
+
+  it('retains the selected historical target when its live row disappears', async () => {
+    const { f, user } = await setup()
+    f.state.audit = [entry(1)]
+    const panel = await openPanel(user)
+    await user.click(within(panel).getByRole('tab', { name: 'Journal' }))
+    await within(panel).findByRole('table', { name: 'Journal' })
+    await user.click(within(panel).getByRole('button', { name: 'Target' }))
+    await user.click(screen.getByRole('option', { name: 'prod · Kubernetes' }))
+    await waitFor(() => expect(f.client.listAgentAudit).toHaveBeenLastCalledWith({ agent: undefined, provider: 'kubernetes', target: 'prod', limit: 200 }))
+    act(() => useStore.setState(state => ({ view: state.view && { ...state.view, groups: state.view.groups.map(group => ({ ...group, targets: group.targets.filter(target => target.id !== 'prod') })) } })))
+    expect(within(panel).getByRole('button', { name: 'Target' })).toHaveTextContent('prod')
+    expect(f.client.listAgentAudit).toHaveBeenLastCalledWith({ agent: undefined, provider: 'kubernetes', target: 'prod', limit: 200 })
+  })
+
+  it('updates mounted journal dates when the interface language changes', async () => {
+    const { f, user } = await setup()
+    f.state.audit = [entry(1)]
+    const panel = await openPanel(user)
+    await user.click(within(panel).getByRole('tab', { name: 'Journal' }))
+    const table = await within(panel).findByRole('table', { name: 'Journal' })
+    await waitFor(() => expect(within(table).getAllByRole('row')).toHaveLength(2))
+    const before = within(table).getAllByRole('row')[1].querySelector('td')!.textContent
+    await user.click(screen.getByRole('button', { name: 'Language' }))
+    await user.click(screen.getByRole('option', { name: '日本語' }))
+    await waitFor(() => expect(within(table).getAllByRole('row')[1].querySelector('td')!.textContent).not.toBe(before))
+    expect(within(table).getAllByRole('row')).toHaveLength(2)
+  })
 })
 
 describe('named access groups and switches', () => {

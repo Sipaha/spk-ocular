@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { Client } from '../api/client'
 import type { AgentAuditEntry, AgentTarget, Target } from '../api/types'
-import { classLabel, isMessageKey, t, type MessageKey } from '../i18n'
+import { classLabel, getLanguage, isMessageKey, t, type MessageKey } from '../i18n'
 import { showNotice, useStore } from '../store'
 import { copyText } from '../term/clipboard'
 import { errorDetail } from '../errors'
@@ -10,6 +10,7 @@ import { PanelResize, usePanelWidths } from '../components/PanelResize'
 import { Select } from '../components/Select'
 import { ProviderIcon } from '../components/icons'
 import { GrantEditor } from './GrantEditor'
+import { useAuditJournal } from './useAuditJournal'
 import { agents, agentTargetKey, pendingOf, shownPending, useAgents, type AgentsTab } from './store'
 
 /** The scope or object of a journal read folded over several (store.AuditSeveral). */
@@ -277,99 +278,35 @@ export function outcomeText(e: AgentAuditEntry): string {
   return isMessageKey(k) ? t(k) : (e.outcome ?? t('agents.phase.outcome'))
 }
 
-const PAGE = 200
-/** The open journal reloads its first page at most this often. */
-const RELOAD_MS = 1000
-
-const timeFormat = () => new Intl.DateTimeFormat(document.documentElement.lang || undefined, { dateStyle: 'short', timeStyle: 'medium' })
+const timeFormat = (language: string) => new Intl.DateTimeFormat(language, { dateStyle: 'short', timeStyle: 'medium' })
 
 function JournalTab({ client }: { client: Client }) {
   const rows = useRows()
   const tick = useAgents((s) => s.auditTick)
   const [agent, setAgent] = useState('')
-  const [target, setTarget] = useState('')
-  const [entries, setEntries] = useState<AgentAuditEntry[]>([])
-  const [more, setMore] = useState(false)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-  const [agentsSeen, setAgentsSeen] = useState<string[]>([])
-  const fmt = useMemo(() => timeFormat(), [])
-  const filter = useMemo(() => {
-    const r = rows.find((x) => x.key === target)
-    return { agent: agent || undefined, provider: r?.provider, target: r?.target }
-  }, [agent, target, rows])
-
-  // The first page: again on every change of the journal (at most once a
-  // second); older pages already read stay below it. Another filter
-  // starts over.
-  const shown = useRef<AgentAuditEntry[]>([])
-  const olderMore = useRef(false)
-  const lastLoad = useRef(0)
-  const lastFilter = useRef('')
-  useEffect(() => {
-    const key = JSON.stringify(filter)
-    let wait = Math.max(0, lastLoad.current + RELOAD_MS - Date.now())
-    if (key !== lastFilter.current) {
-      lastFilter.current = key
-      shown.current = []
-      olderMore.current = false
-      wait = 0
-    }
-    let live = true
-    const timer = setTimeout(() => {
-      lastLoad.current = Date.now()
-      client.listAgentAudit({ ...filter, limit: PAGE }).then(
-        (page) => {
-          if (!live) return
-          const full = page.length === PAGE
-          const oldest = page.length ? page[page.length - 1].id : Infinity
-          const keep = full ? shown.current.filter((e) => e.id < oldest) : []
-          shown.current = [...page, ...keep]
-          setEntries(shown.current)
-          setMore(full && (keep.length === 0 || olderMore.current))
-          setAgentsSeen((seen) => [...new Set([...seen, ...page.map((e) => e.agent)])].sort())
-          setLoading(false)
-          setError(null)
-        },
-        (e) => {
-          if (!live) return
-          setLoading(false)
-          setError(errorDetail(e))
-        },
-      )
-    }, wait)
-    return () => {
-      live = false
-      clearTimeout(timer)
-    }
-  }, [client, filter, tick])
-
-  const loadMore = () => {
-    const before = shown.current[shown.current.length - 1]?.id
-    if (!before) return
-    const key = lastFilter.current
-    client.listAgentAudit({ ...filter, before, limit: PAGE }).then(
-      (page) => {
-        if (key !== lastFilter.current) return
-        shown.current = [...shown.current, ...page.filter((e) => e.id < before)]
-        olderMore.current = page.length === PAGE
-        setEntries(shown.current)
-        setMore(olderMore.current)
-        setAgentsSeen((seen) => [...new Set([...seen, ...page.map((e) => e.agent)])].sort())
-      },
-      (e) => setError(errorDetail(e)),
-    )
-  }
+  const [target, setTarget] = useState<Pick<Row, 'key' | 'provider' | 'target' | 'title' | 'groupTitle'> | null>(null)
+  const language = getLanguage()
+  const fmt = useMemo(() => timeFormat(language), [language])
+  const provider = target?.provider, targetId = target?.target
+  const filter = useMemo(() => ({ agent: agent || undefined, provider, target: targetId }), [agent, provider, targetId])
+  const { entries, more, loading, paging, error, agentsSeen, loadMore } = useAuditJournal(client, filter, tick)
 
   const agentOptions = [{ value: '', label: t('agents.journal.anyAgent') }, ...[...new Set([...agentsSeen, ...(agent ? [agent] : [])])].map((a) => ({ value: a, label: a }))]
-  const targetOptions = [{ value: '', label: t('agents.journal.anyTarget') }, ...rows.map((r) => ({ value: r.key, label: `${r.title} · ${r.groupTitle}` }))]
+  const targetRows = target && !rows.some(row => row.key === target.key) ? [...rows, target] : rows
+  const targetOptions = [{ value: '', label: t('agents.journal.anyTarget') }, ...targetRows.map((r) => ({ value: r.key, label: `${r.title} · ${r.groupTitle}` }))]
   const titleOf = (e: AgentAuditEntry) => rows.find((r) => r.provider === e.provider && r.target === e.target)?.title ?? e.target ?? ''
 
   return (
     <div className="flex min-h-0 flex-1 flex-col text-xs">
       <div className="flex flex-wrap items-center gap-2 border-b border-line px-3 py-1.5">
         <Select label={t('agents.journal.agent')} value={agent} options={agentOptions} onChange={setAgent} />
-        <Select label={t('agents.journal.target')} value={target} options={targetOptions} onChange={setTarget} search />
+        <Select label={t('agents.journal.target')} value={target?.key ?? ''} options={targetOptions} onChange={key => {
+          if (!key) setTarget(null)
+          else {
+            const row = rows.find(item => item.key === key)
+            if (row) setTarget({ key: row.key, provider: row.provider, target: row.target, title: row.title, groupTitle: row.groupTitle })
+          }
+        }} search />
       </div>
       {error && <p role="alert" className="px-3 py-1 text-danger">{error}</p>}
       <div className="min-h-0 flex-1 overflow-y-auto">
@@ -410,7 +347,7 @@ function JournalTab({ client }: { client: Client }) {
         {loading && <p className="px-3 py-3 text-fg-subtle">{t('agents.journal.loading')}</p>}
         {!loading && !entries.length && !error && <p className="px-3 py-3 text-fg-subtle">{t('agents.journal.empty')}</p>}
         {more && (
-          <button type="button" className="m-2 rounded-md border border-line px-2 py-0.5 hover:bg-hover" onClick={loadMore}>
+          <button type="button" className="m-2 rounded-md border border-line px-2 py-0.5 hover:bg-hover disabled:opacity-50" disabled={paging} onClick={loadMore}>
             {t('agents.journal.more')}
           </button>
         )}

@@ -5,6 +5,53 @@ import { request } from 'node:http'
 import { join } from 'node:path'
 import { env, scratchRoot } from './fixtures'
 import { token } from './synth'
+import { mkdirSync } from 'node:fs'
+
+test('journal filter owns pending pages and ignores an older pagination failure', async ({ page }) => {
+  const entry = (id: number, agent: string) => ({ id, agent, at: '2026-10-12T12:34:56Z', method: 'ListObjects', phase: 'read', count: 1 })
+  let releaseOld: (() => void) | undefined
+  let releaseNew: (() => void) | undefined
+  let oldStarted = false
+  let newStarted = false
+  await page.route('**/api/ListAgentAudit', async route => {
+    const filter = route.request().postDataJSON()
+    if (filter.before) {
+      oldStarted = true
+      await new Promise<void>(resolve => { releaseOld = resolve })
+      await route.fulfill({ status: 500, json: { code: 'Internal', message: 'obsolete pagination failure' } })
+    } else if (filter.agent) {
+      newStarted = true
+      await new Promise<void>(resolve => { releaseNew = resolve })
+      await route.fulfill({ json: [entry(700, 'audit-selected')] })
+    } else await route.fulfill({ json: Array.from({ length: 200 }, (_, i) => entry(1000 - i, i ? 'audit-old' : 'audit-selected')) })
+  })
+  try {
+    await page.goto('/')
+    await page.getByRole('button', { name: 'Agents', exact: true }).click()
+    const panel = page.getByRole('dialog', { name: 'Agent access' })
+    await panel.getByRole('tab', { name: 'Journal', exact: true }).click()
+    const table = panel.getByRole('table', { name: 'Journal' })
+    await expect(table.locator('tbody tr')).toHaveCount(200)
+    await panel.getByRole('button', { name: 'More', exact: true }).click()
+    await expect.poll(() => oldStarted).toBeTruthy()
+    await expect(panel.getByRole('button', { name: 'More', exact: true })).toBeDisabled()
+    await panel.getByRole('button', { name: 'Agent', exact: true }).click()
+    await page.getByRole('option', { name: 'audit-selected', exact: true }).click()
+    await expect.poll(() => newStarted).toBeTruthy()
+    await expect(table.locator('tbody tr')).toHaveCount(0)
+    releaseOld!()
+    await expect(panel.getByRole('alert')).toHaveCount(0)
+    const captures = join(scratchRoot, 'audit-screenshots')
+    mkdirSync(captures, { recursive: true })
+    await page.screenshot({ path: join(captures, 'journal-new-filter-pending.png') })
+    releaseNew!()
+    await expect(table.locator('tbody tr')).toHaveCount(1)
+    await expect(table).toContainText('audit-selected')
+    await expect(table).not.toContainText('audit-old')
+    await expect(panel.getByRole('alert')).toHaveCount(0)
+    await page.screenshot({ path: join(captures, 'journal-new-filter-ready.png') })
+  } finally { releaseOld?.(); releaseNew?.() }
+})
 
 // Agent access end to end (P14): the user grants in the UI, an agent
 // talks to the real unix socket (Node http with socketPath), a destructive

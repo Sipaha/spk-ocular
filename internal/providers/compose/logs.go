@@ -175,6 +175,11 @@ func membersOf(objs map[string]any, project, service string) []*engine.Container
 			out = append(out, c)
 		}
 	}
+	sortMembers(out)
+	return out
+}
+
+func sortMembers(out []*engine.ContainerInspect) {
 	sort.Slice(out, func(i, j int) bool {
 		a, _ := strconv.Atoi(out[i].Config.Labels[LabelNumber])
 		b, _ := strconv.Atoi(out[j].Config.Labels[LabelNumber])
@@ -183,7 +188,6 @@ func membersOf(objs map[string]any, project, service string) []*engine.Container
 		}
 		return out[i].ID < out[j].ID
 	})
-	return out
 }
 
 // StreamLogs streams a container's logs, or a service's containers' as

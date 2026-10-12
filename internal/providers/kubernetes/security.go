@@ -61,16 +61,11 @@ var securitySources = []securitySource{
 // Security projects only declared risk fields. No Secret/ConfigMap resources,
 // token contents, image downloads, scanners or writes are requested.
 func (s *session) Security(parent context.Context, scope core.ScopeSel) (core.SecuritySnapshot, error) {
-	ctx, cancel := context.WithCancel(parent)
-	defer cancel()
-	stop := context.AfterFunc(s.ctx, cancel)
-	defer stop()
-	select {
-	case s.graphGate <- struct{}{}:
-		defer func() { <-s.graphGate }()
-	case <-ctx.Done():
-		return core.SecuritySnapshot{}, ctx.Err()
+	ctx, release, err := s.inventoryContext(parent)
+	if err != nil {
+		return core.SecuritySnapshot{}, err
 	}
+	defer release()
 	out := core.SecuritySnapshot{Findings: []core.SecurityFinding{}, Problems: []core.GraphProblem{}, Discovery: s.cat.snap().state, CVEState: "empty"}
 	namespaces := []string{""}
 	if scope.Mode != core.ScopeAll {
@@ -117,8 +112,7 @@ func (s *session) Security(parent context.Context, scope core.ScopeSel) (core.Se
 				break
 			}
 			jobCtx, done := context.WithTimeout(ctx, 20*time.Second)
-			token := ""
-			seen := map[string]bool{}
+			cursor := inventoryCursor{}
 			complete := true
 			for page := 0; ; page++ {
 				if out.Resources >= securityResourceLimit || usedBytes >= securityByteLimit || pages >= 4096 || page >= 512 {
@@ -127,7 +121,7 @@ func (s *session) Security(parent context.Context, scope core.ScopeSel) (core.Se
 					break
 				}
 				pages++
-				list, err := s.dyn.Resource(source.gvr).Namespace(ns).List(jobCtx, metav1.ListOptions{Limit: 50, Continue: token})
+				list, err := s.dyn.Resource(source.gvr).Namespace(ns).List(jobCtx, metav1.ListOptions{Limit: 50, Continue: cursor.token})
 				if err != nil {
 					class, _ := classify(err)
 					// An optional report API that is not installed is setup state,
@@ -238,16 +232,15 @@ func (s *session) Security(parent context.Context, scope core.ScopeSel) (core.Se
 					}
 				}
 				next := list.GetContinue()
-				if next == "" {
-					break
-				}
-				if seen[next] {
+				more, repeated := cursor.advance(next)
+				if repeated {
 					out.Truncated = true
 					complete = false
 					break
 				}
-				seen[next] = true
-				token = next
+				if !more {
+					break
+				}
 			}
 			done()
 			if source.kind == "NetworkPolicy" {

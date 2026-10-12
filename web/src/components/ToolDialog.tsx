@@ -4,7 +4,7 @@ import type { Client } from '../api/client'
 import type { ExecInfo, ExecInstance, LogInfo, Ref } from '../api/types'
 import { messageText, t } from '../i18n'
 import { refTitle } from '../refs'
-import { focusMark, restoreFocus } from '../shortcuts'
+import { useModalFocus } from './modal'
 import { parseArgv } from '../term/argv'
 import { Select } from './Select'
 import { runningChannel } from './useInstancePicker'
@@ -24,9 +24,8 @@ export function ToolDialog({client, subject, mode, onOpen, onClose}: Props) {
   const [command, setCommand] = useState('')
   const [error, setError] = useState('')
   const box = useRef<HTMLFormElement>(null)
-  const [mark] = useState(focusMark)
+  const modalKey = useModalFocus(box, onClose)
   const title = mode === 'terminal' ? t('term.dialogTitle') : mode === 'logs' ? t('logs.dialogTitle') : t('files.dialogTitle')
-  useEffect(() => { box.current?.focus(); return () => restoreFocus(mark) }, [mark])
   useEffect(() => {
     let live = true
     if (mode === 'logs') {
@@ -75,15 +74,7 @@ export function ToolDialog({client, subject, mode, onOpen, onClose}: Props) {
   return createPortal(<div className="fixed inset-0 z-50 flex items-start justify-center bg-black/40 pt-24" onMouseDown={event=>{if(event.target === event.currentTarget) onClose()}}>
     <form ref={box} role="dialog" aria-modal="true" aria-label={title} tabIndex={-1} onSubmit={submit}
       className="flex w-[min(560px,90%)] flex-col gap-3 rounded-lg border border-line bg-panel p-4 shadow-2xl outline-none"
-      onKeyDown={event=>{
-        if(event.key === 'Escape') {event.stopPropagation();onClose()}
-        if(event.key === 'Tab') {
-          const controls=[...(box.current?.querySelectorAll<HTMLElement>('button:not(:disabled), input:not(:disabled)') ?? [])]
-          const first=controls[0],last=controls.at(-1)
-          if(event.shiftKey && (document.activeElement === first || document.activeElement === box.current)) {event.preventDefault();last?.focus()}
-          else if(!event.shiftKey && document.activeElement === last) {event.preventDefault();first?.focus()}
-        }
-      }}>
+      onKeyDown={modalKey}>
       <h2 className="font-semibold">{title} · <span className="text-fg-muted">{refTitle(subject)}</span></h2>
       {error && <p role="alert" className="rounded-md bg-danger/10 px-3 py-2 text-xs text-danger">{error}</p>}
       {!exec && !logs && !error && <p className="text-fg-subtle">{t('app.loading')}</p>}

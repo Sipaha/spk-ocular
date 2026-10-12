@@ -4,7 +4,8 @@ import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNod
 import { ColumnResize } from './ColumnResize'
 import type { Cell, Column, HealthState, MetricsView, Row, SortSpec } from '../api/types'
 import { formatAge, formatBytes, formatCPU } from '../format'
-import { isShortcut } from '../keyboard'
+import { inTerminal, isShortcut } from '../keyboard'
+import { overlayOpen } from '../shortcuts'
 import { Menu, type MenuItem } from '../actions/Menu'
 import { t } from '../i18n'
 import { useNow } from '../views/useView'
@@ -130,7 +131,7 @@ export function matchesRow(r: Row, f: string): boolean {
   return r.cells.some((c) => (c.text ?? '').toLowerCase().includes(needle)) || (r.health.reason ?? '').toLowerCase().includes(needle)
 }
 
-export function ResourceTable({ renderCell, ariaLabel = 'resources', emptyMessage, columns, rows, hideScope, filter, selected, reveal, onSelect, onOpen, onLogs, onTerminal, metrics, onVisibleRows, rowMenu, onDelete, defaultSort, initialSort, onSort, initialWidths, onWidths, areaFocus, marked, onMarked }: Props) {
+export function ResourceTable({ renderCell, ariaLabel = t('table.resources'), emptyMessage, columns, rows, hideScope, filter, selected, reveal, onSelect, onOpen, onLogs, onTerminal, metrics, onVisibleRows, rowMenu, onDelete, defaultSort, initialSort, onSort, initialWidths, onWidths, areaFocus, marked, onMarked }: Props) {
   const now = useNow(10_000)
   const [widths, setWidths] = useState<Record<string, number>>(initialWidths ?? {})
   const resizeColumn = (id: string, width: number | null) => {
@@ -243,6 +244,8 @@ export function ResourceTable({ renderCell, ariaLabel = 'resources', emptyMessag
     const index = sorted.findIndex((r) => r.id === reveal.id)
     if (index < 0) return
     virt.scrollToIndex(index, { align: 'auto' })
+    // Object navigation hands the selected row its keyboard actions.
+    if (!overlayOpen() && !inTerminal(document.activeElement)) scrollRef.current?.focus({ preventScroll: true })
     revealed.current = reveal
   }, [reveal, sorted, virt])
 

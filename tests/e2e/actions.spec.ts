@@ -1,6 +1,7 @@
 import { connectSelected } from './fixtures'
 import { expect, type Locator, type Page } from '@playwright/test'
-import { test } from './fixtures'
+import { test, scratchRoot } from './fixtures'
+import { join } from 'node:path'
 import { activePanel, expectScreen, reconfigure, token } from './synth'
 
 // Actions on the synthetic Workloads (web: 2 replicas; db: 1 and an
@@ -395,6 +396,8 @@ test('debug: the image and the target are reviewed at once; the debugger’s ter
 
   // The image last run on this target comes first next time.
   await row(grid, 'web').click({ button: 'right' })
+  await expect(page.getByRole('menu', { name: 'Row actions' })).toBeVisible()
+  await page.screenshot({ path: join(scratchRoot, 'row-menu-over-terminal.png') })
   await page.getByRole('menu', { name: 'Row actions' }).getByRole('menuitem', { name: 'Debug…' }).click()
   await expect(dialog.getByRole('textbox', { name: 'Image' })).toHaveValue('alpine:3')
   await expect(dialog).toContainText('debugger-00002')

@@ -6,7 +6,7 @@ package api
 import (
 	"context"
 	"errors"
-	"github.com/spk/spk-ocular/internal/providers/kubernetes"
+	"github.com/spk/spk-ocular/internal/configuration"
 	"time"
 
 	"github.com/spk/spk-ocular/internal/agentgrant"
@@ -24,7 +24,7 @@ type API interface {
 	ClusterGraph(context.Context, GraphRequest) (core.Graph, error)
 	ClusterSecurity(context.Context, SecurityRequest) (core.SecuritySnapshot, error)
 	ClusterTimeline(context.Context, TimelineRequest) (core.Timeline, error)
-	Configurations(context.Context, kubernetes.ConfigRequest) (kubernetes.ConfigState, error)
+	Configurations(context.Context, configuration.ConfigRequest) (configuration.ConfigState, error)
 	Helm(ctx context.Context, req HelmRequest) (HelmResponse, error)
 	AppInfo(ctx context.Context) (AppInfo, error)
 	SetLanguage(ctx context.Context, language string) error

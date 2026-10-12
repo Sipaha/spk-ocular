@@ -54,6 +54,32 @@ describe('ViewSync', () => {
     expect(s.snapshot().rows.map((r) => r.id).sort()).toEqual(['b', 'c'])
   })
 
+  it('preserves rows for no-op and status-only pages, but replaces them on reset', async () => {
+    const status = { state: 'error' as const, class: 'forbidden', message: 'denied' }
+    const getRows = vi.fn()
+      .mockResolvedValueOnce(page({ reset: true, version: 1, upserts: [row('a')] }))
+      .mockResolvedValueOnce(page({ version: 1 }))
+      .mockResolvedValueOnce(page({ version: 2, status }))
+      .mockResolvedValueOnce(page({ reset: true, version: 3 }))
+    const s = new ViewSync(client({ getRows }), 'kubernetes', 't', q)
+    await s.open()
+    await flush()
+    const rows = s.snapshot().rows
+    s.resync()
+    await flush()
+    expect(s.snapshot().rows).toBe(rows)
+    s.onChanged({ version: 2 })
+    await flush()
+    expect(s.snapshot().rows).toBe(rows)
+    expect(s.snapshot().status).toEqual(status)
+    s.onChanged({ version: 3 })
+    await flush()
+    expect(getRows).toHaveBeenLastCalledWith('v1', 2)
+    expect(s.snapshot().rows).not.toBe(rows)
+    expect(s.snapshot().rows).toEqual([])
+    s.dispose()
+  })
+
   it('keeps one pull in flight and re-pulls while behind the announced version', async () => {
     const first = deferred<Page>()
     const getRows = vi.fn()

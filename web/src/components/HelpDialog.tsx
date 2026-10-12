@@ -1,20 +1,17 @@
-import { useEffect, useRef, useState } from 'react'
+import { useRef } from 'react'
 import { isShortcut } from '../keyboard'
 import { t, type MessageKey } from '../i18n'
 import { useScopeWords } from '../scopeNames'
-import { KEYS, type Scope, focusMark, restoreFocus } from '../shortcuts'
+import { KEYS, type Scope } from '../shortcuts'
+import { ModalCloseButton, useModalFocus } from './modal'
 
 const SCOPES: Scope[] = ['global', 'lists', 'table', 'details', 'logs', 'terminal']
 
 /** ?: the keys, from the registry (shortcuts.ts). */
 export function HelpDialog({ onClose }: { onClose: () => void }) {
-  const [mark] = useState(focusMark)
   const words = useScopeWords()
   const box = useRef<HTMLDivElement>(null)
-  useEffect(() => {
-    box.current?.focus()
-    return () => restoreFocus(mark)
-  }, [mark])
+  const modalKey = useModalFocus(box, onClose)
   return (
     <div className="fixed inset-0 z-40 flex items-start justify-center bg-black/40 pt-[8vh]" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
       <div
@@ -24,20 +21,16 @@ export function HelpDialog({ onClose }: { onClose: () => void }) {
         aria-label={t('keys.title')}
         tabIndex={-1}
         onKeyDown={(e) => {
-          if (e.key === 'Escape' || (!e.altKey && isShortcut(e, 'Slash', { ctrl: false, shift: true }))) {
+          if (!e.altKey && isShortcut(e, 'Slash', { ctrl: false, shift: true })) {
             e.preventDefault()
             onClose()
-          } else if (e.key === 'Tab') {
-            e.preventDefault() // nothing else to reach: focus stays
-          }
+          } else modalKey(e)
         }}
         className="max-h-[84vh] w-[min(720px,92%)] overflow-y-auto rounded-lg border border-line bg-panel p-4 shadow-2xl outline-none"
       >
         <div className="mb-3 flex items-center">
           <h2 className="font-semibold">{t('keys.title')}</h2>
-          <button className="ml-auto rounded px-2 text-lg leading-none text-fg-muted hover:bg-hover hover:text-fg" onClick={onClose} aria-label={t('drawer.close')}>
-            ×
-          </button>
+          <ModalCloseButton className="ml-auto" onClick={onClose} label={t('drawer.close')} />
         </div>
         <div className="grid grid-cols-2 gap-x-6 gap-y-4">
           {SCOPES.map((scope) => (

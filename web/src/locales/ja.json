@@ -395,6 +395,8 @@
     "target.menu": "ターゲット",
     "target.close": "切断",
     "palette.empty": "一致するものが見つかりません",
+    "palette.layoutFallback": "キーボード配列を補正：「{query}」を検索",
+    "table.resources": "リソース",
     "logs.phase.opening": "接続中…",
     "fwd.starting": "接続中…",
     "term.connecting": "接続中…",

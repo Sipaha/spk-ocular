@@ -51,15 +51,18 @@ const (
 
 func ownerKey(providerID, target string) string { return providerID + "\x00" + target }
 
-// sessionFor is session() for callers that need the incarnation too.
+// sessionFor captures the admitted incarnation, never a later entry at its key.
 func (s *Service) sessionFor(ctx context.Context, providerID, target string) (*sessionEntry, error) {
-	if _, err := s.session(ctx, providerID, target); err != nil {
+	e, err := s.resolveSession(ctx, providerID, target)
+	if err != nil {
 		return nil, err
+	}
+	if s.afterSessionResolved != nil {
+		s.afterSessionResolved()
 	}
 	s.sessMu.Lock()
 	defer s.sessMu.Unlock()
-	e := s.sessions[ownerKey(providerID, target)]
-	if e == nil {
+	if s.sessions[ownerKey(providerID, target)] != e || fromUI(ctx) && !s.explicitConnectionLocked(ownerKey(providerID, target), e) {
 		return nil, coded(CodeGone, errors.New("session closed"))
 	}
 	return e, nil
@@ -69,6 +72,14 @@ func (s *Service) sessionFor(ctx context.Context, providerID, target string) (*s
 // or when the target's configuration changed since. Sessions never block on
 // the network (Open only builds clients).
 func (s *Service) session(ctx context.Context, providerID, target string) (provider.Session, error) {
+	e, err := s.resolveSession(ctx, providerID, target)
+	if err != nil {
+		return nil, err
+	}
+	return e.sess, nil
+}
+
+func (s *Service) resolveSession(ctx context.Context, providerID, target string) (*sessionEntry, error) {
 	p, ok := s.reg.Get(providerID)
 	if !ok {
 		return nil, coded(CodeNotFound, fmt.Errorf("unknown provider %q", providerID))
@@ -102,12 +113,12 @@ func (s *Service) session(ctx context.Context, providerID, target string) (provi
 			return nil, coded(CodeGone, errors.New("connection is not open; press Connect"))
 		}
 		e.lastUsed = s.now()
-		return e.sess, nil
+		return e, nil
 	}
 	if e := s.sessions[key]; e != nil {
 		if e.hash == hash {
 			e.lastUsed = s.now()
-			return e.sess, nil
+			return e, nil
 		}
 		s.closeSessionLocked(key) // configuration changed under it
 	}
@@ -115,7 +126,7 @@ func (s *Service) session(ctx context.Context, providerID, target string) (provi
 	if err != nil {
 		return nil, fromProvider(err)
 	}
-	return s.registerSessionLocked(sess, providerID, target, current).sess, nil
+	return s.registerSessionLocked(sess, providerID, target, current), nil
 }
 
 func (s *Service) registerSessionLocked(sess provider.Session, providerID, target, current string) *sessionEntry {

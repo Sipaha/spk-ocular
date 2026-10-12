@@ -395,6 +395,8 @@
     "target.menu": "Destino",
     "target.close": "Desconectar",
     "palette.empty": "Nada encontrado",
+    "palette.layoutFallback": "Layout do teclado: pesquisando «{query}»",
+    "table.resources": "recursos",
     "logs.phase.opening": "Conectando…",
     "fwd.starting": "Conectando…",
     "term.connecting": "Conectando…",

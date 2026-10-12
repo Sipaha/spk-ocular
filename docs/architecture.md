@@ -63,6 +63,10 @@ ID and registered source; rename-target checks its own metadata revision and
 never reseals credentials or renames YAML context keys. Removal synchronously revalidates sessions.
 The existing source-loader unit tests can inject unmanaged sources; production
 wiring always enables the explicit registry.
+The UI configuration DTOs and optional `configuration.Source` capability live in
+`internal/configuration`, without importing the concrete Kubernetes adapter.
+Provider decorators retain this capability explicitly; an installed Kubernetes
+provider without it returns Unsupported instead of a successful empty status.
 Credentials never enter target DTOs, events, logs, or SQLite. The UI-only
 `Configurations` inspect command explicitly returns bounded YAML with no-store
 HTTP headers; the frontend keeps it outside configuration metadata and destroys
@@ -135,6 +139,19 @@ Reset replaces only its source; shared rows survive until their last owner is
 removed. Partial failures keep successful sources and expose coverage. Global
 kinds are opened once. The UI's multi-scope selection does not widen agent grants.
 
+Graph, Timeline, RBAC and Security snapshots share the session-bound inventory
+gate and continuation-token cursor. Session cancellation applies before waiting
+for that gate. Each adapter retains its own resource/page/byte budgets, projection
+and coverage classification; metadata-only reads and optional-API absence semantics
+are not generalized into full-object inventory.
+
+Compact resource relationships, Deployment revision history and declared Helm
+resources share semantic detail-table layout and compact action controls. These
+bounded read-only lists retain feature-owned columns, localized labels and guarded
+resource navigation; they do not inherit primary-grid selection, bulk actions or
+persistence. Timeline keeps its time-axis grid and the agent journal keeps its
+server-paginated, variable-height evidence rows.
+
 The cache stores reduced objects, omits Secret/ConfigMap values from list caches,
 and attributes metrics only to matching live UIDs. Background caches use bounded
 retention. View lifecycles are keyed by immutable requests and session ownership.
@@ -158,7 +175,8 @@ an explicit admitted connection. Bounded dynamic reads project workload hardenin
 role declarations, NetworkPolicy selection and Trivy VulnerabilityReport evidence
 without returning manifests, values or server error details. Namespace coverage,
 scanner availability and report timestamps remain explicit. The Security workspace
-uses standard guarded ResourceDrawer navigation and bounded table pages. It runs
+uses standard guarded ResourceDrawer navigation and the shared virtualized
+resource table. It runs
 no scanner and performs no writes; see [Security](security.md).
 
 ## Events timeline
@@ -512,3 +530,38 @@ and admitted connection identity; properties cannot inherit main-editor drafts.
 Bodies, values, logs, commands and screens never enter this snapshot. Existing
 page/scope/filter/column persistence remains independent. See
 [workspace continuity](workspace-continuity.md).
+
+## Shared UI and transport boundaries
+
+HTTP RPC bodies are limited before JSON allocation: 2 MiB for metadata, 40 MiB
+for two escaped edit texts, 10 MiB for value inputs, and the existing 6 MiB Helm
+and 13 MiB file budgets. Token/origin guards run first. A present body contains
+exactly one JSON value; a 10-second body-read deadline is cleared before the provider call.
+Decoded service limits remain authoritative for both HTTP and Wails.
+
+Session resolution captures its exact entry under the local session mutex and
+revalidates that entry before incarnation-sensitive work. Disconnect or a new
+implicit session cannot redirect an admitted UI read/review to another owner.
+This is local lifecycle ownership, not a transaction with the cluster server.
+
+Read-only/setup dialogs share focus restoration, reachable-control tab wrapping
+and fixed SVG close controls. Nested widgets consume their own keys; feature
+owners retain initial focus and close/edit/review decisions. Mutation editors
+retain their specialized keyboard and held-edit rules. Resource grids use a
+localized accessible name without translating machine IDs or resetting state.
+
+Each journal filter incarnation owns both first-page and pagination replies,
+including failures. Changing a filter hides its previous rows immediately;
+same-filter refresh retains older pages. Pagination is single-flight. A selected
+historical target retains its exact reference when the live target list changes;
+it never silently broadens to all targets. Date formatting follows UI language.
+
+The UI is the sole owner of retained regex-search history. A fresh budgeted
+worker matches incremental batches without keeping another text history; monotonic
+entry IDs permit binary suffix lookup, and obsolete worker replies are rejected.
+Compose reverse-network and project indexes exist only inside one immutable
+projection, with ambiguous names and ordering preserved. They trade bounded map
+allocations for fewer repeated scans, not a universal speed/memory guarantee.
+Current view cursors skip row-history scanning; status-only frontend pages retain
+their rows-array identity while still publishing status. Independent cursors,
+resets, coverage and UID replacement semantics remain unchanged.

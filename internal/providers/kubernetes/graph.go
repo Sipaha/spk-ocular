@@ -33,16 +33,11 @@ type graphJob struct {
 // calls Get per node or puts YAML, annotations, environment/Secret values in the
 // response. List concurrency and pages are bounded; partial coverage is explicit.
 func (s *session) Graph(parent context.Context, scope core.ScopeSel) (core.Graph, error) {
-	ctx, cancel := context.WithCancel(parent)
-	defer cancel()
-	select {
-	case s.graphGate <- struct{}{}:
-		defer func() { <-s.graphGate }()
-	case <-ctx.Done():
-		return core.Graph{}, ctx.Err()
+	ctx, release, err := s.inventoryContext(parent)
+	if err != nil {
+		return core.Graph{}, err
 	}
-	stop := context.AfterFunc(s.ctx, cancel)
-	defer stop()
+	defer release()
 	snap := s.cat.snap()
 	out := core.Graph{Nodes: []core.GraphNode{}, Edges: []core.GraphEdge{}, Problems: []core.GraphProblem{}, Discovery: snap.state, CapturedAt: time.Now().UnixMilli()}
 	jobs := make([]graphJob, 0)
@@ -70,8 +65,7 @@ func (s *session) Graph(parent context.Context, scope core.ScopeSel) (core.Graph
 		wg.Go(func() {
 			for job := range queue {
 				jobCtx, done := context.WithTimeout(ctx, 20*time.Second)
-				token := ""
-				seen := map[string]bool{}
+				cursor := inventoryCursor{}
 				for {
 					mu.Lock()
 					full := len(records) >= graphNodeLimit
@@ -86,7 +80,7 @@ func (s *session) Graph(parent context.Context, scope core.ScopeSel) (core.Graph
 					var err error
 					if s.graphMetadata != nil && (job.def == secretsKind || job.def == configMapsKind) {
 						var objects *metav1.PartialObjectMetadataList
-						objects, err = s.graphMetadata.Resource(job.def.gvr).Namespace(job.namespace).List(jobCtx, metav1.ListOptions{Limit: 500, Continue: token})
+						objects, err = s.graphMetadata.Resource(job.def.gvr).Namespace(job.namespace).List(jobCtx, metav1.ListOptions{Limit: 500, Continue: cursor.token})
 						if err == nil {
 							list = &unstructured.UnstructuredList{}
 							list.SetContinue(objects.GetContinue())
@@ -103,9 +97,9 @@ func (s *session) Graph(parent context.Context, scope core.ScopeSel) (core.Graph
 							}
 						}
 					} else if job.def.namespaced {
-						list, err = s.dyn.Resource(job.def.gvr).Namespace(job.namespace).List(jobCtx, metav1.ListOptions{Limit: 500, Continue: token})
+						list, err = s.dyn.Resource(job.def.gvr).Namespace(job.namespace).List(jobCtx, metav1.ListOptions{Limit: 500, Continue: cursor.token})
 					} else {
-						list, err = s.dyn.Resource(job.def.gvr).List(jobCtx, metav1.ListOptions{Limit: 500, Continue: token})
+						list, err = s.dyn.Resource(job.def.gvr).List(jobCtx, metav1.ListOptions{Limit: 500, Continue: cursor.token})
 					}
 					if err != nil {
 						class, _ := classify(err)
@@ -155,17 +149,16 @@ func (s *session) Graph(parent context.Context, scope core.ScopeSel) (core.Graph
 					records = append(records, batch...)
 					mu.Unlock()
 					next := list.GetContinue()
-					if next == "" {
-						break
-					}
-					if seen[next] {
+					more, repeated := cursor.advance(next)
+					if repeated {
 						mu.Lock()
 						out.Truncated = true
 						mu.Unlock()
 						break
 					}
-					seen[next] = true
-					token = next
+					if !more {
+						break
+					}
 				}
 				done()
 			}

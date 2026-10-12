@@ -19,6 +19,25 @@ function setup(exec:Client['execInfo']=vi.fn(async()=>info), log:Client['logInfo
  return {...props,user:userEvent.setup(),...render(<Harness {...props}/>)}
 }
 describe('tool instance selection',()=>{
+ it('opens the running default container directly for terminal and files',async()=>{
+  const only={...instance('only'),defaultChannel:'side',channels:[{id:'app',title:'app',running:true},{id:'side',title:'side',running:true}]}
+  const s=setup(vi.fn(async()=>({...info,aggregate:false,instances:[only]})))
+  await s.user.click(screen.getByRole('button',{name:'Exec'}))
+  await waitFor(()=>expect(s.openExec).toHaveBeenCalledExactlyOnceWith(only))
+  expect(screen.queryByRole('listbox')).not.toBeInTheDocument()
+ })
+ it('falls back from a stopped default to the first running container',async()=>{
+  const only={...instance('only'),channels:[{id:'app',title:'app',running:false},{id:'side',title:'side',running:true},{id:'other',title:'other',running:true}]}
+  const s=setup(vi.fn(async()=>({...info,aggregate:false,instances:[only]})))
+  await s.user.click(screen.getByRole('button',{name:'Exec'}))
+  await waitFor(()=>expect(s.openExec).toHaveBeenCalledExactlyOnceWith({...only,defaultChannel:'side'}))
+ })
+ it('opens multi-container logs directly using the provider default',async()=>{
+  const s=setup(vi.fn(async()=>info),vi.fn(async()=>({channels:[{id:'app',title:'app'},{id:'side',title:'side'}],defaultChannel:'side',aggregate:false,selectChannels:true,previous:true})))
+  await s.user.click(screen.getByRole('button',{name:'Logs'}))
+  await waitFor(()=>expect(s.openLogs).toHaveBeenCalledExactlyOnceWith(ref,'side'))
+  expect(screen.queryByRole('listbox')).not.toBeInTheDocument()
+ })
  it('opens nothing until a Pod is chosen, passes the explicit instance, and supports keyboard selection',async()=>{
   const s=setup();await s.user.click(screen.getByRole('button',{name:'Exec'}))
   const list=await screen.findByRole('listbox',{name:'Pod'})

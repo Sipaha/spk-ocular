@@ -112,6 +112,10 @@ test('opening a palette result selects and reveals its off-screen row', async ({
   const selected = grid.getByRole('row', { selected: true })
   await expect(selected).toContainText('workers')
   await expect(selected).toBeInViewport()
+  await expect(grid.locator('[data-table-scroll]')).toBeFocused()
+  await page.screenshot({path:join(scratchRoot,'table-focus-over-scrolled-rows.png')})
+  await page.keyboard.press('l')
+  await expect(page.getByRole('region', { name: 'Bottom panel' })).toBeVisible()
   if (process.env.E2E_PALETTE_SCREENSHOT) await page.screenshot({ path: process.env.E2E_PALETTE_SCREENSHOT })
 })
 
@@ -224,4 +228,65 @@ test('type and name reads only the selected kind and scope, then closes its temp
  const closed=page.waitForResponse(r=>r.url().endsWith('/api/CloseView')&&r.ok())
  await page.keyboard.press('Escape');await closed
  await expect(page.getByRole('heading',{name:'Services',exact:true})).toBeVisible()
+})
+
+test('wrong keyboard layout recovers one scoped type/name query, keeps input and UID navigation', async ({ page }) => {
+ await openDemo(page)
+ const nav = page.getByRole('navigation', { name: 'resources' })
+ await nav.getByRole('button', { name: 'Crates', exact: true }).click()
+ const zone = page.getByRole('textbox', { name: 'Zone', exact: true })
+ await zone.fill('blue'); await zone.press('Enter')
+ await expect(page.getByRole('grid', { name: 'resources' }).getByRole('gridcell', { name: 'alpha', exact: true })).toBeVisible()
+ await nav.getByRole('button', { name: 'Services', exact: true }).click()
+ await expect(page.getByRole('grid', { name: 'resources' }).getByRole('gridcell', { name: 'workers', exact: true })).toBeVisible()
+ const reads: unknown[] = []
+ page.on('request', request => { if (request.url().endsWith('/api/OpenView')) reads.push(request.postDataJSON().query) })
+ const dlg = await palette(page)
+ const input = dlg.getByRole('combobox')
+ await input.fill('ск фдзрф')
+ await expect(dlg.getByRole('option')).toContainText('Object')
+ await expect(dlg.getByRole('option')).toContainText('alpha')
+ await expect(input).toHaveValue('ск фдзрф')
+ await expect(dlg.getByText('Keyboard layout: searching for “cr alpha”')).toBeVisible()
+ expect(reads).toEqual([{ kind: 'crates', scope: { mode: 'one', name: 'blue' } }])
+ await input.fill('ск иуеф')
+ await expect(dlg.getByRole('option')).toContainText('beta')
+ expect(reads).toHaveLength(1)
+ await input.fill('ск пфььф')
+ await expect(dlg.getByRole('option')).not.toContainText('Object')
+ await input.fill('ск фдзрф')
+ await page.screenshot({ path: join(scratchRoot, 'keyboard-layout-en.png') })
+ await input.press('Enter')
+ await expect(page.getByRole('dialog', { name: 'crates alpha', exact: true })).toBeVisible()
+ await expect(page.getByRole('grid', { name: 'resources' }).getByRole('row', { selected: true })).toContainText('alpha')
+ await expect(zone).toHaveValue('blue')
+})
+
+test('keyboard fallback hint renders in eight languages at normal and narrow widths', async ({ page }) => {
+ await openDemo(page)
+ const languages = [['en', 'English'], ['ru', 'Русский'], ['zh', '简体中文'], ['es', 'Español'], ['de', 'Deutsch'], ['fr', 'Français'], ['pt', 'Português (Brasil)'], ['ja', '日本語']]
+ try {
+  for (const [code, name] of languages) {
+   await page.locator('.language-trigger').click()
+   await page.getByRole('option', { name, exact: true }).click()
+   await expect(page.locator('html')).toHaveAttribute('lang', code)
+   await page.keyboard.press('Control+k')
+   const dlg = page.locator('.palette-dialog')
+   await dlg.getByRole('combobox').fill('ск фдзрф')
+   await expect(dlg.getByRole('option').filter({ hasText: 'alpha' })).toHaveCount(1)
+   const hint = dlg.getByRole('status').filter({ hasText: 'cr alpha' })
+   await expect(hint).toBeVisible()
+   for (const width of [1280, 860]) {
+    await page.setViewportSize({ width, height: 900 })
+    expect(await dlg.evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true)
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true)
+    await page.screenshot({ path: join(scratchRoot, `keyboard-layout-${code}-${width}.png`) })
+   }
+   await page.keyboard.press('Escape')
+  }
+ } finally {
+  await page.keyboard.press('Escape')
+  await page.locator('.language-trigger').click()
+  await page.getByRole('option', { name: 'English', exact: true }).click()
+ }
 })

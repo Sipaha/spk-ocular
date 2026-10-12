@@ -37,6 +37,11 @@ test('Helm release details, history, review and deletion use the embedded SDK', 
 
   await workspace.getByRole('tab', { name: 'Computed values', exact: true }).click()
   await expect(workspace.getByText('replicas: 2', { exact: true })).toBeVisible()
+  await workspace.getByRole('tab', { name: 'Resources', exact: true }).click()
+  const declared = workspace.getByRole('table')
+  await expect(declared).toBeVisible()
+  await expect(declared.getByRole('row').first()).toBeVisible()
+  await page.screenshot({ path: join(scratchRoot, 'helm-declared-resources.png') })
   await workspace.getByRole('tab', { name: 'History', exact: true }).click()
   await expect(workspace.getByRole('button', { name: '#1 · 1.2.0 · deployed' })).toBeVisible()
   await expect(workspace.getByRole('tab', { name: 'History', exact: true })).toHaveAttribute('aria-selected', 'true')
