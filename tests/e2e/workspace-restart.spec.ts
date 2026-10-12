@@ -50,8 +50,16 @@ test('pinned properties, logs, ended terminals and layout survive a real restart
   const targetResize=page.getByRole('separator',{name:'Resize targets panel',exact:true});await targetResize.focus();await targetResize.press('ArrowRight')
   const navResize=page.getByRole('separator',{name:'Resize resource navigation',exact:true});await navResize.focus();await navResize.press('ArrowRight')
   const dockResize=dock(page).getByRole('separator').first();await dockResize.focus();await dockResize.press('ArrowUp')
-  await expect.poll(async()=>{const saved=await state(page,url);return saved?JSON.parse(saved).panels.length:0}).toBe(3)
-  const stored=(await state(page,url))!;expect(stored).not.toContain('DO_NOT_REPLAY');expect(stored).not.toContain('command');expect(stored).not.toContain('PRIVATE_LOG_CONTENT');expect(stored).not.toContain('screen');expect(stored).not.toContain('yaml')
+  // The panels can already be saved while later layout writes are queued.
+  // Wait for the complete expected metadata before stopping the process.
+  let stored=''
+  await expect.poll(async()=>{
+   stored=(await state(page,url))??''
+   if(!stored)return null
+   const saved=JSON.parse(stored)
+   return {panels:saved.panels.length,targets:saved.widths.targets,navigation:saved.widths.navigation,height:saved.height}
+  }).toEqual({panels:3,targets:260,navigation:212,height:340})
+  expect(stored).not.toContain('DO_NOT_REPLAY');expect(stored).not.toContain('command');expect(stored).not.toContain('PRIVATE_LOG_CONTENT');expect(stored).not.toContain('screen');expect(stored).not.toContain('yaml')
   const saved=JSON.parse(stored);expect(saved.widths.targets).toBe(260);expect(saved.widths.navigation).toBe(212);expect(saved.height).toBe(340)
   await stop(app);app=await start(port,e)
   const reads:string[]=[],commands:Record<string,unknown>[]=[]

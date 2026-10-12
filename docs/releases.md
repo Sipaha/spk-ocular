@@ -52,7 +52,7 @@ best-effort on install/removal. They never remove the user's data directory.
 
 | Workflow | Trigger and purpose |
 | --- | --- |
-| `ci.yml` | PRs to master, pushes to master/release branches, manual runs |
+| `ci.yml` | PRs to master, pushes to release branches, manual runs |
 | `test.yml` | Reusable full `make check` gate |
 | `package-linux.yml` | Native Linux matrix and artifact validation |
 | `package-native.yml` | Native Windows/macOS matrices, installer verification and desktop smoke |
@@ -61,6 +61,11 @@ best-effort on install/removal. They never remove the user's data directory.
 CI builds downloadable development packages after tests. Their version is the
 VERSION file plus a development run identifier. These are workflow artifacts,
 not published releases. Failed tests cannot produce release packages.
+
+Pushes to `master` do not start CI automatically. Pull requests and manual CI
+runs remain available. A release tag runs its own complete test and six-platform
+package/native verification gate before publication; a separate branch CI result
+is not a dependency of that release run.
 
 A pushed `vMAJOR.MINOR.PATCH` tag (optionally with a SemVer prerelease suffix)
 starts the release workflow. The tag is the release version, as in the launcher;
