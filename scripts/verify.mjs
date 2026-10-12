@@ -196,7 +196,7 @@ try{
   const buttons=page.locator('[data-download-label]');
   const direct=!!(expectedOS&&expectedArch);
   const extension={linux:'deb',windows:'msi',darwin:'dmg'}[expectedOS];
-  const text=direct?`${lang==='ru'?'Скачать':'Download'} ${extension.toUpperCase()} ${lang==='ru'?'для':'for'} ${name}`:name?`${lang==='ru'?'Выбрать для':'Choose for'} ${name}`:lang==='ru'?'Выбрать пакет':'Choose a download';
+  const text=direct?`${lang==='ru'?'Скачать':'Download'} 0.1.0 ${extension.toUpperCase()} ${lang==='ru'?'для':'for'} ${name}`:name?`${lang==='ru'?'Выбрать для':'Choose for'} ${name}`:lang==='ru'?'Выбрать пакет':'Choose a download';
   for (const label of await page.locator('[data-download-text]').all()) {
    const header=await label.evaluate(el=>!!el.closest('.header'));
    const headerText=(lang==='ru'?'Скачать':'Download')+(name?' '+name:'');

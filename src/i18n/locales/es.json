@@ -10,7 +10,7 @@
     "Gratis para todos"
   ],
   "download": "Descargar",
-  "downloadFormatFor": "Descargar {format} para {os}",
+  "downloadFormatFor": "Descargar {version} ({format}) para {os}",
   "chooseDownload": "Elegir paquete",
   "chooseCompact": "Elegir",
   "chooseDownloadFor": "Elegir para",
@@ -217,7 +217,7 @@
   "issues": "Informar de un error",
   "license": "Apache 2.0",
   "localLabel": "LOCAL / CÓDIGO ABIERTO",
-  "downloadCompactFormat": "Descargar {format}",
+  "downloadCompactVersion": "Descargar {version}",
   "aboutAuthor": "Sobre el autor",
   "freeNav": "Gratis",
   "supportNav": "Apoyar",

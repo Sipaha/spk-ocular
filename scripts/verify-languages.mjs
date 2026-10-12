@@ -40,7 +40,7 @@ try {
   await expect(page.locator(`.${width<=960?'mobile-nav':'desktop-nav'} .header-support`)).toHaveAttribute('href',about+'#support');
   await expect(page.locator('.hero h1')).toHaveText(d.hero.join(''));
   for(const button of await page.locator('[data-download-label]').all()) {
-   await expect(button).toHaveAttribute('aria-label',d.downloadFormatFor.replace('{format}','DEB').replace('{os}','Linux'));
+   await expect(button).toHaveAttribute('aria-label',d.downloadFormatFor.replace('{version}','0.1.0').replace('{format}','DEB').replace('{os}','Linux'));
    await expect(button).toHaveAttribute('href',`${REPO}/releases/download/v0.1.0/spk-ocular_0.1.0_linux_amd64.deb`);
   }
   await expect(page.locator('.screenshot-note')).toHaveText(d.screenshotNote);
@@ -67,7 +67,7 @@ try {
   await page.locator(`.${width<=960?'mobile-nav':'desktop-nav'} a[href="#features"]`).click();
   expect(await page.evaluate(()=>{const el=document.getElementById('features');return Math.abs(el.getBoundingClientRect().top+parseFloat(getComputedStyle(el).paddingTop)-document.querySelector('.header').getBoundingClientRect().bottom-28)})).toBeLessThanOrEqual(2);
   await page.locator('select[name=os]').selectOption('windows');
-  await expect(page.locator('.hero [data-download-label]')).toHaveAttribute('aria-label',d.downloadFormatFor.replace('{format}','MSI').replace('{os}','Windows'));
+  await expect(page.locator('.hero [data-download-label]')).toHaveAttribute('aria-label',d.downloadFormatFor.replace('{version}','0.1.0').replace('{format}','MSI').replace('{os}','Windows'));
   await page.locator('.theme-toggle').click();await page.reload();
   await expect(page.locator('html')).toHaveAttribute('data-theme',theme==='light'?'dark':'light');
   expect(errors).toEqual([]);await context.close();console.log(`PASS language ${lang}/${theme}/${width}: copy, download format, layout, anchors, menu, theme, axe`);
@@ -77,7 +77,8 @@ try {
   const page=await context.newPage();const name='spk-ocular_0.1.0_linux_amd64.tar.gz';
   await page.route(API,r=>r.fulfill({json:{tag_name:'v0.1.0',assets:[{name,browser_download_url:`${REPO}/releases/download/v0.1.0/${name}`,size:1024}]}}));
   await page.goto(origin+pagePath(code,base),{waitUntil:'networkidle'});
-  await expect(page.locator('.compact-download-text')).toContainText('TAR.GZ');
+  await expect(page.locator('.compact-download-text')).toContainText('0.1.0');
+  await expect(page.locator('.header-actions [data-download-label]')).toHaveAttribute('aria-label', /TAR\.GZ/);
   expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
   expect(await page.locator('.header-inner').evaluate(el=>el.scrollWidth<=el.clientWidth)).toBe(true);
   await page.screenshot({path:path.join(out,`i18n-${code}-320-targz.png`)});

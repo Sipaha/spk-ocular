@@ -29,17 +29,17 @@ if (tablist && tabs.length === panels.length) {
 const detectedOS = detectOS(navigator.userAgent, navigator.maxTouchPoints);
 const osNames: Record<string,string> = {linux:'Linux',windows:'Windows',darwin:'macOS'};
 const downloadButtons = [...document.querySelectorAll<HTMLAnchorElement>('[data-download-label]')];
-const updateDownloadButtons = (selectedOS: string, file?: {url: string; name: string; format: string} | null) => {
+const updateDownloadButtons = (selectedOS: string, file?: {url: string; name: string; format: string} | null, version?: string) => {
   for (const button of downloadButtons) {
-    const labels = JSON.parse(button.dataset.downloadLabel!) as {download: string; downloadCompactFormat: string; downloadFormatFor: string; choose: string; chooseCompact: string; chooseFor: string};
+    const labels = JSON.parse(button.dataset.downloadLabel!) as {download: string; downloadCompactVersion: string; downloadFormatFor: string; choose: string; chooseCompact: string; chooseFor: string};
     const format = file?.format.toUpperCase();
-    const text = file ? labels.downloadFormatFor.replace('{format}', format!).replace('{os}', osNames[selectedOS]) : osNames[selectedOS] ? `${labels.chooseFor} ${osNames[selectedOS]}` : labels.choose;
-    button.href = file?.url || '#downloads';
+    const text = file && version ? labels.downloadFormatFor.replace('{version}', version).replace('{format}', format!).replace('{os}', osNames[selectedOS]) : osNames[selectedOS] ? `${labels.chooseFor} ${osNames[selectedOS]}` : labels.choose;
+    button.href = file && version ? file.url : '#downloads';
     button.querySelector<HTMLElement>('[data-download-text]')!.textContent = text;
     const compact = button.querySelector<HTMLElement>('.compact-download-text');
-    if (compact) compact.textContent = file ? labels.downloadCompactFormat.replace('{format}', format!) : labels.chooseCompact;
+    if (compact) compact.textContent = file && version ? labels.downloadCompactVersion.replace('{version}', version) : labels.chooseCompact;
     button.setAttribute('aria-label', text);
-    button.title = file ? `${text}: ${file.name}` : text;
+    button.title = file && version ? `${text}: ${file.name}` : text;
   }
 };
 updateDownloadButtons(detectedOS);
@@ -79,7 +79,7 @@ if (host) {
       controls.hidden = false;
       packages.hidden = false;
       const render = () => {
-        updateDownloadButtons(os.value, selectDownload(release, os.value, arch.value));
+        updateDownloadButtons(os.value, selectDownload(release, os.value, arch.value), release.version);
         const files = release.files.filter(file => !file.browser && (!os.value || file.os === os.value) && (!arch.value || file.arch === arch.value));
         status.textContent = files.length ? `${labels.version} ${release.version}` : labels.noMatch;
         packages.replaceChildren(...files.map(file => {
@@ -89,7 +89,7 @@ if (host) {
           title.textContent = `${({linux:'Linux',windows:'Windows',darwin:'macOS'} as Record<string,string>)[file.os]} · ${file.arch === 'amd64' ? 'x86-64' : 'ARM64'}`;
           const detail = document.createElement('small'); detail.textContent = `${labels.desktopMode} / ${file.format.toUpperCase()}${file.size ? ' / ' + (file.size / 1048576).toFixed(1) + ' MB' : ''}`;
           info.append(title, detail);
-          const link = document.createElement('a'); link.href = file.url; link.textContent = labels.download; link.setAttribute('aria-label', `${labels.download} ${file.name}`);
+          const link = document.createElement('a'); link.href = file.url; link.textContent = labels.downloadVersion.replace('{version}', release.version); link.setAttribute('aria-label', `${labels.download} ${file.name}`);
           item.append(info, link);
           if (file.checksum) { const checksum = document.createElement('a'); checksum.href = file.checksum; checksum.textContent = 'SHA-256'; checksum.setAttribute('aria-label', `${labels.checksum} ${file.name}`); item.append(checksum); }
           return item;

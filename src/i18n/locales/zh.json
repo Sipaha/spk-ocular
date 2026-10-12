@@ -10,7 +10,7 @@
     "人人免费"
   ],
   "download": "下载",
-  "downloadFormatFor": "下载适用于 {os} 的 {format}",
+  "downloadFormatFor": "下载 {version}（适用于 {os} 的 {format}）",
   "chooseDownload": "选择下载包",
   "chooseCompact": "选择",
   "chooseDownloadFor": "选择安装包：",
@@ -217,7 +217,7 @@
   "issues": "报告问题",
   "license": "Apache 2.0",
   "localLabel": "本地运行 / 开源",
-  "downloadCompactFormat": "下载 {format}",
+  "downloadCompactVersion": "下载 {version}",
   "aboutAuthor": "关于作者",
   "freeNav": "免费",
   "supportNav": "支持",

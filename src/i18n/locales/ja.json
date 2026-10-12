@@ -10,7 +10,7 @@
     "すべての人に無料"
   ],
   "download": "ダウンロード",
-  "downloadFormatFor": "{os} 用の {format} をダウンロード",
+  "downloadFormatFor": "{os} 用の {format}（{version}）をダウンロード",
   "chooseDownload": "パッケージを選択",
   "chooseCompact": "選択",
   "chooseDownloadFor": "パッケージを選択：",
@@ -217,7 +217,7 @@
   "issues": "不具合を報告",
   "license": "Apache 2.0",
   "localLabel": "ローカル / オープンソース",
-  "downloadCompactFormat": "{format} を取得",
+  "downloadCompactVersion": "{version} を取得",
   "aboutAuthor": "開発者について",
   "freeNav": "無料",
   "supportNav": "支援",

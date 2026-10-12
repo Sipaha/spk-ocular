@@ -132,9 +132,11 @@ update the buttons.
 When a compatible asset or reliable architecture is missing, main download
 buttons say Choose and navigate to package selection. The header keeps a clear
 Download caption and also opens package selection. Mobile/unknown devices keep the general choice.
-Download buttons name the selected format (DEB, RPM, MSI, DMG, ZIP or TAR.GZ).
+Download buttons name the actual release version and selected format (DEB, RPM,
+MSI, DMG, ZIP or TAR.GZ), using the same validated metadata as their file URL.
+Package-list buttons also show that version.
 Hero and free-use download buttons include an All releases link directly below.
-The narrow-screen header uses a short Download FORMAT/Download caption with a
+The narrow-screen header uses a short Download VERSION/Download caption with a
 complete accessible label. Without JavaScript, Choose links navigate to the download section.
 Without a stable release or an available API, visible GitHub release and development-build
 links remain. Three installation steps explain the installer formats, checksum
