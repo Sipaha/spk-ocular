@@ -1,7 +1,7 @@
 {
   "languageLabel": "言語を選択",
   "projectLinks": "プロジェクトのリンク",
-  "screenshotNote": "スクリーンショットのアプリ画面は英語です。リンク先のドキュメントも英語です。",
+  "screenshotNote": "スクリーンショットのアプリ画面は英語です。",
   "title": "SPK Ocular | 無料の Kubernetes・Docker デスクトップアプリ",
   "description": "Kubernetes と Docker の確認、ログの追跡、Helm リリースの管理を一つのデスクトップアプリで。個人にもあらゆる規模の企業にも、すべての機能を無料で提供します。",
   "nav": [
@@ -9,7 +9,6 @@
     "画面",
     "すべての人に無料"
   ],
-  "docs": "ドキュメント",
   "download": "ダウンロード",
   "downloadFormatFor": "{os} 用の {format} をダウンロード",
   "chooseDownload": "パッケージを選択",
@@ -71,8 +70,7 @@
         "Deployment のリビジョン履歴と読み取り専用 YAML 比較"
       ],
       "image": "health",
-      "alt": "ローカル Kubernetes デモクラスタの問題を表示する SPK Ocular",
-      "link": "リソースの確認について"
+      "alt": "ローカル Kubernetes デモクラスタの問題を表示する SPK Ocular"
     },
     {
       "label": "02 / トラブルシューティング",
@@ -84,8 +82,7 @@
         "ターミナル、コンテナ選択、ローカルポート転送"
       ],
       "image": "logs",
-      "alt": "Kubernetes Pod の詳細とアプリログを表示する SPK Ocular",
-      "link": "ログとツールについて"
+      "alt": "Kubernetes Pod の詳細とアプリログを表示する SPK Ocular"
     },
     {
       "label": "03 / リリースと復旧",
@@ -97,8 +94,7 @@
         "Helm を内蔵。別途 CLI は不要。"
       ],
       "image": "helm",
-      "alt": "Helm リリースの values とリビジョン履歴を表示する SPK Ocular",
-      "link": "Helm 管理について"
+      "alt": "Helm リリースの values とリビジョン履歴を表示する SPK Ocular"
     }
   ],
   "toolsTitle": "必要なツールは、すでにここに。",
@@ -156,7 +152,6 @@
     ]
   ],
   "agentBoundary": "同じ OS ユーザーで動作するローカルエージェントは、これらの権限を共有します。Ocular はエージェントを他のプログラムから隔離しません。単独の Docker コンテナは現在 UI からのみ利用でき、プロジェクトへの許可には含まれません。",
-  "agentDocs": "エージェントのアクセスについて",
   "localTitle": "インフラは、これからも自分の手で。",
   "localText": "Ocular は、お使いのコンピューターから Kubernetes API に直接接続するため、kubectl は不要です。Helm は組み込み SDK で動作するので、別途 Helm CLI をインストールする必要はありません。既存の kubeconfig と Docker コンテキストを使用できます。Ocular アカウント、中央管理サーバー、クラスター内の Ocular コンポーネントは不要です。",
   "localPoints": [
@@ -195,7 +190,6 @@
   "requirements": "インストールと互換性",
   "requirementsText": "Linux：Ubuntu 24.04 以降、または glibc 2.39 以降に対応したシステム、GTK 3、WebKit2GTK 4.1。Windows：WebView2 を備えた Windows 10/11。macOS：12 以降、Intel または Apple Silicon。",
   "signing": "Windows インストーラーは未署名です。macOS ビルドは ad-hoc 署名で、Apple の公証は受けていません。インストール前に入手元とパッケージの SHA-256 チェックサムを確認してください。",
-  "installDocs": "インストールガイド",
   "faqTitle": "使い始める前に。",
   "faqs": [
     [

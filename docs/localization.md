@@ -1,10 +1,10 @@
 # Website localization
 
 The website has complete dictionaries for Russian, English, simplified Chinese,
-Spanish, German, French, Brazilian Portuguese and Japanese. This does not claim
-that the Ocular application or linked application documentation has the same
-coverage. Additional-language pages use actual English screenshots and explicitly
-state that the screenshot UI and linked documentation are in English.
+Spanish, German, French, Brazilian Portuguese and Japanese. Additional-language pages use actual English screenshots and explicitly
+state that the screenshot UI is in English. Public documentation links are
+intentionally omitted until reader-facing documentation is ready. Repository
+documentation remains available for development and maintenance.
 
 ## Quality threshold
 

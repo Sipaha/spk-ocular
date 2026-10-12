@@ -1,7 +1,7 @@
 {
   "languageLabel": "Elegir idioma",
   "projectLinks": "Enlaces del proyecto",
-  "screenshotNote": "La interfaz de las capturas y la documentación enlazada están en inglés.",
+  "screenshotNote": "La interfaz de las capturas está en inglés.",
   "title": "SPK Ocular | Aplicación gratuita para Kubernetes y Docker",
   "description": "Inspecciona Kubernetes y Docker, sigue los logs y gestiona releases de Helm en una sola aplicación de escritorio. Todas las funciones son gratuitas para personas y empresas de cualquier tamaño.",
   "nav": [
@@ -9,7 +9,6 @@
     "Interfaz",
     "Gratis para todos"
   ],
-  "docs": "Documentación",
   "download": "Descargar",
   "downloadFormatFor": "Descargar {format} para {os}",
   "chooseDownload": "Elegir paquete",
@@ -71,8 +70,7 @@
         "Historial de revisiones de Deployment y comparación de YAML de solo lectura"
       ],
       "image": "health",
-      "alt": "Vista Problems de SPK Ocular en un clúster Kubernetes local de demostración",
-      "link": "Más sobre la inspección de recursos"
+      "alt": "Vista Problems de SPK Ocular en un clúster Kubernetes local de demostración"
     },
     {
       "label": "02 / DIAGNÓSTICO",
@@ -84,8 +82,7 @@
         "Terminales, selección de contenedor y reenvío local de puertos"
       ],
       "image": "logs",
-      "alt": "Detalles de un pod Kubernetes y logs de la aplicación en SPK Ocular",
-      "link": "Más sobre logs y herramientas"
+      "alt": "Detalles de un pod Kubernetes y logs de la aplicación en SPK Ocular"
     },
     {
       "label": "03 / RELEASES",
@@ -97,8 +94,7 @@
         "Helm integrado. Sin una CLI aparte."
       ],
       "image": "helm",
-      "alt": "Values e historial de revisiones de un release de Helm en SPK Ocular",
-      "link": "Más sobre la gestión de Helm"
+      "alt": "Values e historial de revisiones de un release de Helm en SPK Ocular"
     }
   ],
   "toolsTitle": "Las herramientas del día a día ya están aquí.",
@@ -156,7 +152,6 @@
     ]
   ],
   "agentBoundary": "Los agentes locales que se ejecutan con tu mismo usuario del sistema operativo comparten estos permisos. Ocular no los aísla de los demás programas del ordenador. Los contenedores Docker independientes solo están disponibles en la interfaz; los permisos de proyectos no los incluyen.",
-  "agentDocs": "Cómo funciona el acceso de los agentes",
   "localTitle": "Tu infraestructura sigue siendo tuya.",
   "localText": "Ocular se conecta directamente a la API de Kubernetes desde tu equipo, sin kubectl. Helm utiliza el SDK integrado, por lo que no hace falta una CLI de Helm independiente. Usa tu kubeconfig y tus contextos de Docker existentes. No se requiere una cuenta de Ocular, un servidor central ni componentes de Ocular en el clúster.",
   "localPoints": [
@@ -195,7 +190,6 @@
   "requirements": "Instalación y compatibilidad",
   "requirementsText": "Linux: Ubuntu 24.04+ o un sistema compatible con glibc 2.39+, GTK 3 y WebKit2GTK 4.1. Windows: Windows 10/11 con WebView2. macOS: versión 12 o posterior, Intel o Apple Silicon.",
   "signing": "Los instaladores de Windows no están firmados; las compilaciones de macOS usan firma ad-hoc y no están notarizadas. Comprueba el origen de la descarga y la suma SHA-256 del paquete antes de instalar.",
-  "installDocs": "Guía de instalación",
   "faqTitle": "Antes de empezar.",
   "faqs": [
     [

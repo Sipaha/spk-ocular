@@ -21,7 +21,10 @@ next to Download. Desktop hero columns align at the top, with a small optical
 offset for the different heading/body font sizes. Task captions explain what each screenshot demonstrates. Investigation,
 logs/terminal/forwarding, Helm and scoped local agent access have dedicated
 sections. Connection retries and low-level persistence mechanics belong in the
-application documentation, not the main marketing message.
+application documentation, not the main marketing message. Public pages omit
+documentation/README guide links until the documentation is suitable for human
+readers; this applies to navigation, feature sections, agent/install guidance
+and the footer. Source, license, support and download links remain available.
 
 The theme control uses a fixed-size Phosphor SVG; its MIT license is in
 `public/licenses/phosphor-icons.txt` (upstream commit
