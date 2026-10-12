@@ -23,7 +23,6 @@
     "一个清晰的工作区。"
   ],
   "lead": "面向开发者和 DevOps 的桌面应用。在同一个工作区中排查 Kubernetes 资源、查看 Docker 日志并管理 Helm 发布。",
-  "localShort": "在你的电脑上运行，无需 Ocular 账号。",
   "galleryCaptions": [
     "在选定的命名空间中找出异常 pod。",
     "查看 pod 详情，同时跟踪它的日志。",
@@ -49,8 +48,8 @@
       "日常操作集中在一处"
     ],
     [
-      "无需账号",
-      "从电脑直接访问"
+      "现有访问配置",
+      "Kubeconfig 和 Docker 上下文"
     ],
     [
       "内置 Helm",
@@ -153,7 +152,7 @@
   ],
   "agentBoundary": "以同一操作系统用户身份运行的本地代理共享这些权限。Ocular 不会将它们与电脑上的其他程序隔离。独立 Docker 容器目前只能通过界面访问，项目授权不包含它们。",
   "localTitle": "基础设施仍由你掌控。",
-  "localText": "Ocular 从您的电脑直接连接 Kubernetes API，无需 kubectl。Helm 通过内置 SDK 运行，无需单独安装 Helm CLI。使用现有的 kubeconfig 和 Docker 上下文即可，无需 Ocular 账号、中央管理服务器或集群内的 Ocular 组件。",
+  "localText": "Ocular 从您的电脑直接连接 Kubernetes API，无需 kubectl。Helm 通过内置 SDK 运行，无需单独安装 Helm CLI。使用现有的 kubeconfig 和 Docker 上下文即可，无需中央管理服务器或集群内的 Ocular 组件。",
   "localPoints": [
     [
       "已有的访问权限",

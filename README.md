@@ -16,8 +16,11 @@ for Chinese/Japanese, a blue accent and matching
 light/dark colors. The SVG eye mark uses a blue optical lens, a restrained rim
 and highlight; it remains legible at favicon and navigation sizes. Its product-led layout leads with Kubernetes + Docker,
 a large real app screen and unrestricted free commercial use. The opening copy
-identifies a desktop app for developers and DevOps, with local/no-account use
-next to Download. Desktop hero columns align at the top, with a small optical
+identifies a desktop app for developers and DevOps beside Download. The hero
+omits the local/no-account note at the owner’s request. Account absence is not
+product positioning: the copy instead names existing kubeconfig/Docker access.
+Future optional accounts or setup synchronization remain possible design choices,
+not advertised or selected implementation work. Desktop hero columns align at the top, with a small optical
 offset for the different heading/body font sizes. Task captions explain what each screenshot demonstrates. Investigation,
 logs/terminal/forwarding, Helm and scoped local agent access have dedicated
 sections. Connection retries and low-level persistence mechanics belong in the
