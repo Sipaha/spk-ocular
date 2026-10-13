@@ -913,7 +913,7 @@
     "agents.group.viewingHint": "Leer recursos y registros. Elija tipos de recursos para cada permiso.",
     "agents.group.changesHint": "Editar YAML de recursos. Los tipos sensibles requieren una selección explícita.",
     "agents.group.execution": "Ejecución",
-    "agents.group.executionHint": "Permitir acciones individuales en recursos. Las acciones destructivas requieren tipos nombrados y confirmación por defecto.",
+    "agents.group.executionHint": "Permitir acciones individuales y comandos en contenedores. Las acciones destructivas y exec requieren tipos concretos y confirmación por defecto.",
     "agents.addScope": "Agregar",
     "agents.scopeName": "Nombre de {scope}",
     "agents.allScopes": "{all} (también los siguientes)",
@@ -1118,7 +1118,13 @@
     "downloads.status.failed": "Error",
     "downloads.status.cancelled": "Cancelada",
     "downloads.status.interrupted": "Interrumpida",
-    "downloads.status.browser": "Enviada a las descargas del navegador"
+    "downloads.status.browser": "Enviada a las descargas del navegador",
+    "agents.verb.exec": "Comandos en contenedores (exec)",
+    "agents.verb.execHint": "Comandos explícitos en el contenedor seleccionado; requieren tipos concretos y confirmación por defecto.",
+    "agents.warn.exec": "Exec puede leer secretos y modificar datos del contenedor o del host con los permisos del contenedor. Al cancelar la conexión, el comando remoto puede seguir ejecutándose.",
+    "agents.confirm.exec": "Ejecutar un comando en el contenedor",
+    "agents.confirm.stdin": "Entrada estándar",
+    "agents.confirm.execLimits": "Límite de salida: {bytes} bytes; duración: {seconds} segundos. Sin reintento automático."
   },
   "provider": {
     "kubernetes.rbac.source": "No se pudo leer la fuente RBAC ({class})",

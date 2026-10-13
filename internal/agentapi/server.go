@@ -70,13 +70,15 @@ type Server struct {
 	closing  bool
 	logMu    sync.Mutex
 	logReads map[*activeLogRead]struct{}
+	execMu   sync.Mutex
+	execs    map[*activeExec]struct{}
 }
 
 var _ api.AgentControl = (*Server)(nil)
 
 // New builds the server (Start serves it).
 func New(o Options) *Server {
-	s := &Server{o: o, mux: http.NewServeMux(), now: time.Now, state: api.AgentFailed, errMsg: "not started", logReads: map[*activeLogRead]struct{}{}}
+	s := &Server{o: o, mux: http.NewServeMux(), now: time.Now, state: api.AgentFailed, errMsg: "not started", logReads: map[*activeLogRead]struct{}{}, execs: map[*activeExec]struct{}{}}
 	s.runCtx, s.runCancel = context.WithCancel(context.Background())
 	s.reqCtx, s.reqCancel = context.WithCancel(context.Background())
 	s.plans = newRegistry[*plan](planTTL, maxPlans)

@@ -548,7 +548,7 @@ func (h *execHandle) Run(ctx context.Context, t provider.Terminal) (provider.Exi
 	if err := channelRunnable(execInstance(p), h.container); err != nil {
 		return provider.ExitStatus{}, err
 	}
-	q := url.Values{"container": {h.container}, "command": h.argv, "stdin": {"true"}, "stdout": {"true"}, "tty": {strconv.FormatBool(!t.Raw)}}
+	q := url.Values{"container": {h.container}, "command": h.argv, "stdin": {strconv.FormatBool(t.Stdin != nil)}, "stdout": {"true"}, "tty": {strconv.FormatBool(!t.Raw)}}
 	if t.Raw {
 		q.Set("stderr", "true")
 	}

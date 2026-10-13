@@ -6,6 +6,7 @@ import { join } from 'node:path'
 import { env, scratchRoot } from './fixtures'
 import { token } from './synth'
 import { mkdirSync } from 'node:fs'
+import { languages } from '../../web/src/languages'
 
 test('journal filter owns pending pages and ignores an older pagination failure', async ({ page }) => {
   const entry = (id: number, agent: string) => ({ id, agent, at: '2026-10-12T12:34:56Z', method: 'ListObjects', phase: 'read', count: 1 })
@@ -90,6 +91,7 @@ const parcel = (name: string, zone: string) => ({ ...target, scope: zone, kind: 
 
 test.afterEach(async ({ page }) => {
   await post(page, '/api/RevokeAllAgentGrants')
+  await post(page, '/api/SetLanguage', { language: '' })
   await post(page, '/api/_test/synthetic/reset')
 })
 
@@ -320,4 +322,76 @@ test('named groups union their access and both switches persist without deleting
   await persist()
   expect((await read('parcels')).status).toBe(200)
   expect((await read('crates')).status).toBe(403)
+})
+
+test('exec is explicitly granted, reviews exact input, runs once and retains its scope', async ({ page }) => {
+  await page.goto('/')
+  await post(page, '/api/_test/synthetic/reset')
+  await page.getByRole('option', { name: /^demo\b/ }).click()
+  await connectSelected(page)
+  const ref = { ...parcel('parcel-1', 'blue'), uid: 'uid-parcel-1' }
+  expect((await agent('GetExecInfo', { ref })).status).toBe(403)
+  await page.getByRole('button', { name: 'Agents', exact: true }).click()
+  const panel = page.getByRole('dialog', { name: 'Agent access' })
+  const editor = panel.getByRole('region', { name: 'demo' })
+  await editor.getByRole('textbox', { name: / name$/ }).fill('blue')
+  await editor.getByRole('button', { name: 'Add', exact: true }).last().click()
+  const blue = editor.getByRole('region', { name: /blue$/ })
+  await blue.getByRole('checkbox', { name: 'Read', exact: true }).uncheck()
+  await blue.getByText('Execution', { exact: true }).click()
+  await blue.getByRole('checkbox', { name: 'Container commands (exec) (destructive)', exact: true }).check()
+  await expect(editor.getByRole('button', { name: 'Save', exact: true })).toBeDisabled()
+  await blue.getByRole('group', { name: 'Kinds', exact: true }).getByRole('checkbox', { name: 'Parcels', exact: true }).check()
+  const captures = join(scratchRoot, 'exec-screenshots')
+  mkdirSync(captures, { recursive: true })
+  await page.screenshot({ path: join(captures, 'exec-grant.png') })
+  await editor.getByRole('button', { name: 'Save', exact: true }).click()
+  await expect(panel.getByText('granted: 1', { exact: true })).toBeVisible()
+  await panel.getByRole('button', { name: 'Close', exact: true }).click()
+  const info = await agent('GetExecInfo', { ref })
+  expect(info.status).toBe(200)
+  const instances = info.body.instances as { id: string }[]
+  expect(instances).toHaveLength(1)
+  const prep = await agent('PrepareExec', { ref, instance: instances[0].id, channel: 'main', command: ['stdin'], stdin: 'finite input: привет\n', maxBytes: 4096, maxSeconds: 10 })
+  expect(prep.status).toBe(200)
+  expect(prep.body.confirmation).toBe('user')
+  const run = await agent('RunExec', { planId: prep.body.planId })
+  expect(run.body.state).toBe('awaiting_confirmation')
+  const dialog = page.getByRole('dialog', { name: 'Agent “e2e-agent” asks you to confirm' })
+  await expect(dialog).toBeVisible()
+  await expect(dialog.getByRole('button', { name: 'No', exact: true })).toBeFocused()
+  await expect(dialog.getByLabel('Command', { exact: true })).toHaveText('[\n  "stdin"\n]')
+  await expect(dialog.getByLabel('Standard input', { exact: true })).toHaveText(JSON.stringify('finite input: привет\n'))
+  await expect(dialog).toContainText('Output limit: 4096 bytes; duration: 10 seconds. No automatic retry.')
+  await page.screenshot({ path: join(captures, 'exec-confirmation.png') })
+  for (const language of languages) {
+    await post(page, '/api/SetLanguage', { language })
+    await page.reload()
+    await expect(page.locator('html')).toHaveAttribute('lang', language)
+    const localized = page.getByRole('dialog')
+    await expect(localized).toHaveCount(1)
+    await expect(localized.locator('pre').first()).toHaveText('[\n  "stdin"\n]')
+    for (const width of [1280, 860]) {
+      await page.setViewportSize({ width, height: 820 })
+      expect(await localized.evaluate(el => el.scrollWidth <= el.clientWidth)).toBeTruthy()
+      await expect(localized.getByRole('button').last()).toBeInViewport({ ratio: 1 })
+      await page.screenshot({ path: join(captures, `exec-confirmation-${language}-${width}.png`) })
+    }
+  }
+  await post(page, '/api/SetLanguage', { language: 'en' })
+  await page.reload()
+  await expect(page.locator('html')).toHaveAttribute('lang', 'en')
+  await dialog.getByRole('button', { name: 'Yes, run it', exact: true }).click()
+  await expect(dialog).toBeHidden()
+  let result: Answer | undefined
+  await expect.poll(async () => { result = await agent('GetRun', { runId: run.body.runId }); return result.body.state }).toBe('done')
+  const output = result!.body.exec as { stdoutBase64: string; complete: boolean; exitCode: number }
+  expect(Buffer.from(output.stdoutBase64, 'base64').toString('utf8')).toBe('finite input: привет\n')
+  expect(output.complete).toBe(true)
+  expect(output.exitCode).toBe(0)
+  expect((await agent('RunExec', { planId: prep.body.planId })).status).toBe(404)
+  expect((await agent('GetObject', { ref })).status).toBe(403)
+  expect((await agent('GetExecInfo', { ref: { ...parcel('parcel-3', 'green'), uid: 'uid-parcel-3' } })).status).toBe(403)
+  await post(page, '/api/RevokeAllAgentGrants')
+  expect((await agent('GetRun', { runId: run.body.runId })).status).toBe(403)
 })

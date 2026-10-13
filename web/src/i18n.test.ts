@@ -18,6 +18,13 @@ describe('i18n', () => {
       }
     }
   })
+  it('keeps agent permission and confirmation text free of UTF-8 mojibake', () => {
+    for (const language of languages) {
+      for (const [key, value] of Object.entries(_dicts[language]!)) {
+        if (key.startsWith('agents.')) expect(value, `${language}:${key}`).not.toMatch(/Ã[\u0080-\u00bf]|Â[\u0080-\u00bf]|â€/)
+      }
+    }
+  })
   it('translates every provider message with its exact placeholders', () => {
     for (const language of languages.filter(l => l !== 'en')) {
       const dictionary = _providerTexts[language]!

@@ -34,6 +34,7 @@ const (
 	VerbRead     = "read"
 	VerbLogs     = "logs"
 	VerbEdit     = "edit"
+	VerbExec     = "exec"
 	ActionPrefix = "action:"
 )
 
@@ -86,13 +87,16 @@ func (g Grant) Validate() error {
 		return fmt.Errorf("unknown scope mode %q", g.Scope.Mode)
 	}
 	switch {
-	case g.Verb == VerbRead, g.Verb == VerbLogs, g.Verb == VerbEdit:
+	case g.Verb == VerbRead, g.Verb == VerbLogs, g.Verb == VerbEdit, g.Verb == VerbExec:
 	case strings.HasPrefix(g.Verb, ActionPrefix) && len(g.Verb) > len(ActionPrefix):
 	default:
 		return fmt.Errorf("unknown verb %q", g.Verb)
 	}
 	if g.Scope.Mode == ScopeCluster && g.Verb != VerbRead {
 		return errors.New("objects outside namespaces can only be read")
+	}
+	if g.Verb == VerbExec && g.Kinds == nil {
+		return errors.New("exec requires explicitly named kinds")
 	}
 	if g.Kinds != nil && len(g.Kinds) == 0 {
 		return errors.New("no kinds: leave the list out for all kinds")

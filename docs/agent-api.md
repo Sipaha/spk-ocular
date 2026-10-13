@@ -79,7 +79,7 @@ Only an empty configuration revokes the target; empty or disabled groups remain
 stored. Group names contain 1–128 characters.
 
 Within each access group, permissions are categorized as **Viewing** (resources and logs), **Changes**
-(YAML), and **Execution** (individual resource actions). Execution details start
+(YAML), and **Execution** (individual resource actions and container commands). Execution details start
 collapsed when no actions are granted. Expanding a category does not grant permissions.
 Kind restrictions, sensitive-kind selection, destructive-action validation and
 confirmation settings remain per permission. The editor uses the workspace's
@@ -101,7 +101,9 @@ The data directory also has a protected inheritable user DACL.
 This is an error-prevention and audit boundary, not a sandbox against another
 process running as the same OS user. Docker access and combinations of workload
 editing and logs can confer broader infrastructure access. The grant UI explains
-these implications. Secret values are never directly exposed by this API.
+these implications. Resource reads and dedicated Secret value operations never expose Secret values.
+An explicit exec grant can read data available inside the container, including
+mounted secrets; it is not a read-only permission.
 
 ## Read operations
 
@@ -249,10 +251,96 @@ The pending count appears in the UI/window title and can produce a desktop
 notification without raising the window. Non-destructive mutations within a
 valid grant execute without that extra confirmation.
 
-Cluster-scoped mutations, Secret value operations, exec, port forwarding, and
+Cluster-scoped mutations, dedicated Secret value operations, port forwarding, and
 streaming events are not available to agents. Plans naming affected objects
 outside the granted scopes are refused. Broad edit-kind grants exclude sensitive
 identity/security kinds unless those kinds are named explicitly.
+
+## Container commands (exec)
+
+A separate `exec` permission grants finite commands in containers. Read, logs,
+edit and action permissions do not imply exec, and exec does not imply those
+permissions. Select **Container commands (exec)** in an access group's Execution
+category, explicitly name the resource kinds, and Save. Namespace/project master
+switches and group switches apply. Confirmation is required for every command by
+default because arbitrary argv cannot be classified as read-only. **Without
+confirmation** applies only to the explicitly named kinds of that exec grant.
+No permission is granted automatically by opening the editor or upgrading.
+
+Commands run with the container's existing permissions, not an invented sandbox.
+They can read mounted credentials, modify files and interact with reachable
+services or the host when the container has that access. Dedicated Secret API
+omissions remain intact; exec output can contain sensitive data. Commands, stdin,
+stdout/stderr and provider error details are not stored in the audit journal.
+The journal records target/object, permission, intent and a bounded stop reason.
+
+1. `GetExecInfo` takes an exact `ref`, including UID, and lists concrete
+   instances and running channels without requiring a separate read grant.
+2. `PrepareExec` takes that ref, an explicit `instance` ID, an explicit running
+   Kubernetes `channel` (empty for Docker), and `command` as argv. It validates
+   membership and captures the opaque connection revision without starting a
+   command. A workload's replica is always selected explicitly, even when only
+   one is offered. No default shell is supplied and no debugger is attached.
+3. `RunExec` consumes its `planId` once. A confirmation-required run returns
+   `awaiting_confirmation` and a `runId` for `GetRun`. The Ocular dialog shows
+   the exact container, argv, finite stdin and limits, starts on No, and rechecks
+   grants before execution. A no-confirm run returns its result directly.
+
+Example `PrepareExec` body, using the IDs actually returned by `GetExecInfo`:
+
+```json
+{
+  "ref": {
+    "provider": "kubernetes",
+    "target": "kubeconfig:dev",
+    "scope": "team-a",
+    "kind": "pods",
+    "name": "web-123",
+    "uid": "actual-pod-uid"
+  },
+  "instance": "web-123/actual-pod-uid",
+  "channel": "app",
+  "command": ["cat", "/app/config.json"],
+  "maxBytes": 65536,
+  "maxSeconds": 30
+}
+```
+
+The command has 1–64 arguments, at most 16 KiB of UTF-8 argv without NUL;
+`stdin` is optional finite UTF-8 text of at most 64 KiB. Shell interpretation
+occurs only when argv explicitly names a shell (for example `sh -c ...`).
+There is no PTY, persistent shell, attach, replay or automatic command retry.
+Finite input sends EOF while output remains attached; no-input commands detach
+stdin. Docker connections that cannot half-close finite stdin refuse before
+starting the command; commands without stdin remain available. Output is byte-preserving `stdoutBase64`/`stderrBase64` in the run's `exec`
+result. `maxBytes` bounds their combined **raw** bytes: default 64 KiB, range
+4 KiB–1 MiB; base64 JSON is larger. `maxSeconds` bounds the actual command:
+default 30 seconds, range 1–120. At most four agent exec operations are admitted
+at once. Preparation/discovery also have bounded lifetimes.
+
+`exitKnown` distinguishes a witnessed exit from an unknown result; `exitCode`
+is omitted when unknown. `complete` means the command's exit was observed and
+its output transport completed, including a nonzero exit; it does not mean exit
+code zero. Inspect `stopReason`: `exit`, `byte_limit`, `time_limit`, `cancelled`,
+`connection_changed`, `error` or `unknown`. Output budget exhaustion marks
+`truncated` and cancels transport. Partial output is not a successful command.
+
+Active operations register before grant admission. Saving/revoking grants,
+identity suspension, session/configuration changes and shutdown cancel active
+transport. Direct no-confirm calls also cancel on client disconnect; after a
+person approves a queued run, it owns its bounded lifetime independently of a
+polling request. Cancelling transport is **best-effort remote termination**:
+Docker cannot kill an exec through the attached connection, and an interrupted
+Kubernetes exec is not proof that the remote process ended. Never replay an
+uncertain command automatically. Kubernetes checks Pod UID immediately before
+exec, but its name-addressed exec endpoint cannot atomically bind that UID.
+
+Plans expire after ten minutes. Queued exec requests/results live only in
+bounded process memory, with at most 20 retained exec runs and ten-minute
+expiry after completion; they disappear on exit. `GetRun` rechecks current exec
+access before returning stored output. The agent name is still self-reported;
+this feature does not add per-agent authentication or isolate local agents from
+each other.
 
 ### Standalone Docker containers
 

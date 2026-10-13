@@ -903,7 +903,7 @@
     "agents.group.changes": "更改",
     "agents.group.changesHint": "编辑资源 YAML。敏感类型需要显式选择。",
     "agents.group.execution": "执行",
-    "agents.group.executionHint": "允许对单个资源执行操作。破坏性操作默认需要指定资源类型并确认。",
+    "agents.group.executionHint": "允许单独的资源操作和容器命令。破坏性操作及 exec 必须指定资源类型，默认需要确认。",
     "agents.addScope": "添加",
     "agents.scopeName": "{scope} 名称",
     "agents.allScopes": "{all}（后续项同样）",
@@ -1118,7 +1118,13 @@
     "downloads.status.failed": "失败",
     "downloads.status.cancelled": "已取消",
     "downloads.status.interrupted": "已中断",
-    "downloads.status.browser": "已交给浏览器下载"
+    "downloads.status.browser": "已交给浏览器下载",
+    "agents.verb.exec": "容器命令（exec）",
+    "agents.verb.execHint": "在选定容器中运行明确指定的命令；必须指定资源类型，默认需要确认。",
+    "agents.warn.exec": "Exec 可使用容器权限读取机密并修改容器或主机数据。取消连接后，远程命令可能继续运行。",
+    "agents.confirm.exec": "在容器中运行命令",
+    "agents.confirm.stdin": "标准输入",
+    "agents.confirm.execLimits": "输出限制：{bytes} 字节；时长：{seconds} 秒。不自动重试。"
   },
   "provider": {
     "kubernetes.rbac.source": "无法读取 RBAC 来源（{class}）",

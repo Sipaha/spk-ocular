@@ -139,6 +139,8 @@ warning. Application exit marks unfinished jobs Interrupted without retry or
 command replay. Clear and per-entry Dismiss remove terminal metadata only, never
 file contents. Native PrepareDelete issues a short-lived one-shot token for a
 completed record's backend-owned path, current item identity and parent directory.
+The delete review focuses enabled Cancel before paint, including when preparation
+initially mounted it busy, without overriding a choice already inside the review.
 DeleteFile requires that token and the same live record, rechecks item/parent
 identity and metadata, and removes through os.Root; recursive folder deletion
 does not follow symlink destinations. Successful deletion removes the record;
@@ -308,6 +310,22 @@ Cancellation and context changes invalidate pending picker responses.
 UI logs and terminal traffic use a token-protected loopback server in both app
 modes. They never stream through the `wails://` asset transport. Stream IDs are
 one-shot and bound to session ownership. Guards run before consuming an ID.
+
+Agent exec uses its own `exec` grant with explicitly named scoped kinds.
+GetExecInfo → PrepareExec → RunExec selects an explicit member/container and
+pins object UID plus opaque configuration revision. Preparation retains only
+bounded request/description data in process memory, not a UI terminal handle.
+Execution prepares a fresh provider handle on the grant-checked AgentCall session,
+rechecks membership and runs once without PTY or replay. Default confirmation
+shares the existing pending-plan UI; argv and stdin are shown but never journaled.
+Active operations register before authorization so grant saves cannot miss them.
+Revocation and session/configuration cancellation close transport; remote process
+termination is best effort. Separate stdout/stderr share a raw byte budget and
+return base64 with observed exit, completion and stop metadata. Docker finite
+input half-closes the write side after EOF while preserving output; interactive
+terminals retain their original input lifetime. Empty input is detached. Retained
+queued results are bounded, expire, and require current exec access to read.
+Standalone Docker containers retain the existing empty-project exclusion.
 
 Agent log history and live streams use the local agent transport directly, with the
 same `logs` grant for channel discovery, snapshots, intervals and following.

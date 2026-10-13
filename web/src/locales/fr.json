@@ -913,7 +913,7 @@
     "agents.group.viewingHint": "Lire les ressources et les journaux. Sélectionnez les types de ressources pour chaque permission.",
     "agents.group.changesHint": "Modifier le YAML des ressources. Les types sensibles nécessitent une sélection explicite.",
     "agents.group.execution": "Exécution",
-    "agents.group.executionHint": "Autoriser les actions individuelles sur les ressources. Les actions destructives nécessitent des types nommés et une confirmation par défaut.",
+    "agents.group.executionHint": "Autoriser des actions individuelles et des commandes dans les conteneurs. Les actions destructives et exec nécessitent des types nommés et une confirmation par défaut.",
     "agents.addScope": "Ajouter",
     "agents.scopeName": "Nom de {scope}",
     "agents.allScopes": "{all} (également les suivants)",
@@ -1118,7 +1118,13 @@
     "downloads.status.failed": "Échec",
     "downloads.status.cancelled": "Annulé",
     "downloads.status.interrupted": "Interrompu",
-    "downloads.status.browser": "Transmis aux téléchargements du navigateur"
+    "downloads.status.browser": "Transmis aux téléchargements du navigateur",
+    "agents.verb.exec": "Commandes dans les conteneurs (exec)",
+    "agents.verb.execHint": "Commandes explicites dans le conteneur choisi ; types nommés et confirmation requis par défaut.",
+    "agents.warn.exec": "Exec peut lire des secrets et modifier les données du conteneur ou de l’hôte avec les droits du conteneur. Le processus distant peut continuer après l’annulation de la connexion.",
+    "agents.confirm.exec": "Exécuter une commande dans le conteneur",
+    "agents.confirm.stdin": "Entrée standard",
+    "agents.confirm.execLimits": "Limite de sortie : {bytes} octets ; durée : {seconds} secondes. Aucun nouvel essai automatique."
   },
   "provider": {
     "kubernetes.rbac.source": "Impossible de lire la source RBAC ({class})",

@@ -3,7 +3,7 @@ import {act,fireEvent,render,screen,waitFor,within} from '@testing-library/react
 const mock=vi.hoisted(()=>({call:vi.fn(),off:vi.fn()}))
 vi.mock('../api/client',()=>({isDesktop:()=>true}))
 vi.mock('@wailsio/runtime',()=>({Call:{ByName:mock.call},Events:{On:()=>mock.off},Clipboard:{SetText:async()=>{throw new Error('fixture uses the browser clipboard')}}}))
-import {DownloadsButton} from './DownloadsButton'
+import {DownloadsButton,DeleteConfirmation} from './DownloadsButton'
 import {deleteDownloadFile,dismissDownload,reloadDownloads,useDownloads,type DownloadRecord} from './store'
 import {setLanguage} from '../i18n'
 import {copyValue,resetCopies} from '../values/copy'
@@ -12,6 +12,17 @@ const record:DownloadRecord={id:'native-owned',name:'saved.log',path:'/fixture/d
 beforeEach(()=>{localStorage.clear();setLanguage('en');resetCopies();mock.call.mockReset();mock.off.mockReset();useDownloads.setState({records:[],storageError:false,error:false,viewed:[]});mock.call.mockImplementation(async(name:string)=>name.endsWith('.List')?{records:[record],storageError:false}:undefined)})
 afterEach(()=>vi.unstubAllGlobals())
 describe('Downloads panel',()=>{
+ it('focuses Cancel when a mounted busy delete review becomes ready and preserves an in-review choice',()=>{
+  const props={preview:{path:record.path!,token:'owned-preview',directory:false},onCancel:vi.fn(),onDelete:vi.fn()}
+  const outside=document.createElement('button');document.body.append(outside);outside.focus()
+  try{
+   const view=render(<DeleteConfirmation {...props} busy/>);expect(outside).toHaveFocus()
+   view.rerender(<DeleteConfirmation {...props} busy={false}/>);expect(screen.getByRole('button',{name:'Cancel'})).toHaveFocus()
+   screen.getByRole('button',{name:'Delete downloaded item'}).focus()
+   view.rerender(<DeleteConfirmation {...props} busy={false}/>);expect(screen.getByRole('button',{name:'Delete downloaded item'})).toHaveFocus()
+  }finally{outside.remove()}
+ })
+
  it('freezes age at opening, hides recent time and refreshes on reopening while records still update',async()=>{
   let current=2_000_000
   const clock=vi.spyOn(Date,'now').mockImplementation(()=>current)

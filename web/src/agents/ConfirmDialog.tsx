@@ -105,8 +105,9 @@ function Dialog({ client, p, more, reload }: { client: Client; p: AgentPending; 
 
   const plan = p.action
   const edit = p.edit
-  const what = plan ? actionLabel(plan.action) : t('agents.confirm.edit')
-  const where = plan?.where ?? edit?.where
+  const exec = p.exec
+  const what = exec ? t('agents.confirm.exec') : plan ? actionLabel(plan.action) : t('agents.confirm.edit')
+  const where = exec?.where ?? plan?.where ?? edit?.where
   const ref = where?.ref ?? p.ref
   const warnings = plan?.warnings ?? edit?.warnings ?? []
 
@@ -176,6 +177,13 @@ function Dialog({ client, p, more, reload }: { client: Client; p: AgentPending; 
             </section>
           )}
           {!!plan?.lists?.length && <ActionLists lists={plan.lists} />}
+          {exec && <section className="flex flex-col gap-2" aria-label={t('agents.confirm.exec')}>
+            <p className="break-all font-mono">{exec.where.instance ?? exec.instance}{exec.channel ? ` / ${exec.channel}` : ''}</p>
+            <pre aria-label={t('term.command')} className="max-h-48 overflow-auto whitespace-pre-wrap break-all rounded-md border border-line bg-app p-2 font-mono">{JSON.stringify(exec.command, null, 2)}</pre>
+            {exec.stdin !== undefined && exec.stdin !== '' && <><h3>{t('agents.confirm.stdin')}</h3><pre aria-label={t('agents.confirm.stdin')} className="max-h-40 overflow-auto whitespace-pre-wrap break-all rounded-md border border-line bg-app p-2 font-mono">{JSON.stringify(exec.stdin)}</pre></>}
+            <p className="text-xs text-fg-muted">{t('agents.confirm.execLimits', { bytes: exec.maxBytes, seconds: exec.maxSeconds })}</p>
+            <p className="text-warning">{t('agents.warn.exec')}</p>
+          </section>}
           {edit && <EditDiff before={edit.before} after={edit.after} />}
           <p className="text-xs text-fg-subtle">{t('agents.confirm.recheck')}</p>
         </div>

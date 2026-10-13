@@ -18,6 +18,7 @@ func TestValidate(t *testing.T) {
 	ok := []Grant{
 		one("a", VerbRead),
 		one("a", VerbLogs, "pods"),
+		one("a", VerbExec, "pods"),
 		one("a", VerbEdit, "configmaps"),
 		one("a", "action:restart", "apps/deployments"),
 		{Scope: Scope{Mode: ScopeAll}, Verb: VerbRead},
@@ -34,7 +35,7 @@ func TestValidate(t *testing.T) {
 		"cluster writes":       {Scope: Scope{Mode: ScopeCluster}, Verb: VerbEdit},
 		"cluster actions":      {Scope: Scope{Mode: ScopeCluster}, Verb: "action:cordon"},
 		"cluster logs":         {Scope: Scope{Mode: ScopeCluster}, Verb: VerbLogs},
-		"unknown verb":         one("a", "exec"),
+		"unknown verb":         one("a", "shell"),
 		"action without an id": one("a", "action:"),
 		"empty kinds list":     {Scope: Scope{Mode: ScopeOne, Name: "a"}, Verb: VerbRead, Kinds: []string{}},
 		"an empty kind":        one("a", VerbRead, ""),

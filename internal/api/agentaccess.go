@@ -75,6 +75,7 @@ type AgentPending struct {
 	// Action or Edit is the plan as the agent was shown it.
 	Action *core.ActionPlan `json:"action,omitempty"`
 	Edit   *core.EditPlan   `json:"edit,omitempty"`
+	Exec   *AgentExecPlan   `json:"exec,omitempty"`
 }
 
 type DecideAgentPendingRequest struct {

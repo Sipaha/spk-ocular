@@ -66,6 +66,7 @@ func (s *Server) SaveGrants(ctx context.Context, req api.SaveAgentGrantsRequest)
 		return badRequest("%v", err)
 	}
 	s.cancelLogReads(req.Provider, req.Target)
+	s.cancelExecs(req.Provider, req.Target)
 	s.o.Service.Emit(api.EventAgentGrantsChanged, "", nil)
 	return nil
 }
@@ -75,6 +76,7 @@ func (s *Server) RevokeAll(ctx context.Context) error {
 		return &api.CodedError{Code: api.CodeInternal, Detail: err.Error()}
 	}
 	s.cancelLogReads("", "")
+	s.cancelExecs("", "")
 	s.o.Service.Emit(api.EventAgentGrantsChanged, "", nil)
 	return nil
 }

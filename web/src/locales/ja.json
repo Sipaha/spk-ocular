@@ -913,7 +913,7 @@
     "agents.group.viewingHint": "リソースとログを読み取ります。各権限ごとにリソース種類を選択します。",
     "agents.group.changesHint": "リソースのYAMLを編集します。セキュアな種類は明示的な選択が必要です。",
     "agents.group.execution": "実行",
-    "agents.group.executionHint": "個々のリソース操作を許可します。破壊的な操作は名前付き種類でデフォルトで確認が必要です。",
+    "agents.group.executionHint": "個別のリソース操作とコンテナ内コマンドを許可します。破壊的な操作と exec は種別の指定が必要で、既定では確認も必要です。",
     "agents.addScope": "追加",
     "agents.scopeName": "{scope} 名",
     "agents.allScopes": "{all}（後のものも含む）",
@@ -1118,7 +1118,13 @@
     "downloads.status.failed": "失敗",
     "downloads.status.cancelled": "キャンセル済み",
     "downloads.status.interrupted": "中断",
-    "downloads.status.browser": "ブラウザーのダウンロードに送信済み"
+    "downloads.status.browser": "ブラウザーのダウンロードに送信済み",
+    "agents.verb.exec": "コンテナ内コマンド（exec）",
+    "agents.verb.execHint": "選択したコンテナで明示的なコマンドを実行します。リソース種別の指定が必要で、既定では確認も必要です。",
+    "agents.warn.exec": "Exec はコンテナの権限で秘密情報を読み取り、コンテナやホストのデータを変更できます。接続を取り消しても、リモートコマンドが動作し続ける場合があります。",
+    "agents.confirm.exec": "コンテナ内でコマンドを実行",
+    "agents.confirm.stdin": "標準入力",
+    "agents.confirm.execLimits": "出力上限：{bytes} バイト、実行時間：{seconds} 秒。自動再試行は行いません。"
   },
   "provider": {
     "kubernetes.rbac.source": "RBACの情報を取得できません（{class}）",

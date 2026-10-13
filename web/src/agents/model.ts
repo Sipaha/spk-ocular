@@ -6,6 +6,7 @@ import type { ActionDescriptor, AgentGrant, AgentScope, KindDescriptor } from '.
 export const VERB_READ = 'read'
 export const VERB_LOGS = 'logs'
 export const VERB_EDIT = 'edit'
+export const VERB_EXEC = 'exec'
 export const ACTION_PREFIX = 'action:'
 
 /** A verb's selection in one scope: kinds null = every kind. */
@@ -93,6 +94,7 @@ export function verbOptions(kinds: KindDescriptor[], mode: AgentScope['mode']): 
     { verb: VERB_READ, destructive: false, kinds: scoped },
     { verb: VERB_LOGS, destructive: false, kinds: scoped.filter((k) => k.logs) },
     { verb: VERB_EDIT, destructive: false, kinds: scoped.filter((k) => k.editable) },
+    { verb: VERB_EXEC, destructive: true, kinds: scoped.filter((k) => k.exec) },
   ]
   const actions = new Map<string, VerbOption>()
   for (const k of scoped) {
@@ -111,7 +113,7 @@ export function verbOptions(kinds: KindDescriptor[], mode: AgentScope['mode']): 
 }
 
 /** Whether a verb can skip the confirmation (it may make destructive plans). */
-export const confirmable = (verb: string) => verb === VERB_EDIT || isAction(verb)
+export const confirmable = (verb: string) => verb === VERB_EDIT || verb === VERB_EXEC || isAction(verb)
 
 /** Why the editor's grants cannot be saved (message key and values). */
 export interface Problem {
@@ -139,13 +141,14 @@ export function problems(scopes: ScopeGrants[], options: (mode: AgentScope['mode
   return out
 }
 
-export type Warning = 'dockerRoot' | 'allScopes' | 'cluster' | 'editLogs' | 'operators' | 'noConfirm' | 'sensitiveByName' | 'undo' | 'forceDelete'
+export type Warning = 'dockerRoot' | 'allScopes' | 'cluster' | 'editLogs' | 'operators' | 'noConfirm' | 'sensitiveByName' | 'undo' | 'forceDelete' | 'exec'
 
 /** The spec's honest warnings for what the editor grants. */
 export function warnings(provider: string, scopes: ScopeGrants[], kinds: KindDescriptor[]): Warning[] {
   const has = (p: (s: ScopeGrants) => boolean) => scopes.some(p)
   const any = scopes.some((s) => Object.keys(s.verbs).length > 0)
   const out: Warning[] = []
+  if (has((s) => !!s.verbs[VERB_EXEC])) out.push('exec')
   if (provider === 'compose' && any) out.push('dockerRoot')
   if (has((s) => s.scope.mode === 'all' && Object.keys(s.verbs).length > 0)) out.push('allScopes')
   if (has((s) => s.scope.mode === 'cluster' && Object.keys(s.verbs).length > 0)) out.push('cluster')

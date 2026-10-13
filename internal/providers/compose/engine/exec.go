@@ -2,8 +2,11 @@ package engine
 
 import (
 	"context"
+	"fmt"
 	"io"
+	"net"
 	"net/http"
+	"net/http/httptrace"
 	"net/url"
 	"strconv"
 	"sync"
@@ -17,10 +20,14 @@ type ConsoleSize struct{ Rows, Cols uint16 }
 
 func (s ConsoleSize) zero() bool { return s.Rows == 0 || s.Cols == 0 }
 
-// ExecConfig of a new exec: stdin, stdout and stderr are always attached.
+// ExecConfig of a new exec: stdout/stderr attach; stdin is optional.
 type ExecConfig struct {
 	Cmd []string
 	Tty bool
+	// NoStdin leaves stdin detached for commands with no input.
+	NoStdin bool
+	// RequireStdinEOF refuses before start if the connection cannot half-close.
+	RequireStdinEOF bool
 	// Size: the initial TTY size (sent on create where the API has it,
 	// and set by StartExec after the attach for every API).
 	Size ConsoleSize
@@ -53,7 +60,11 @@ func (c *Client) speaks(ctx context.Context, v version) (bool, error) {
 // CreateExec creates (does not start) an exec in a running container and
 // returns its id. A paused or stopped container is refused (conflict).
 func (c *Client) CreateExec(ctx context.Context, containerID string, cfg ExecConfig) (string, error) {
-	body := map[string]any{"AttachStdin": true, "AttachStdout": true, "AttachStderr": true, "Tty": cfg.Tty, "Cmd": cfg.Cmd}
+	canCloseWrite := false
+	if cfg.RequireStdinEOF {
+		ctx = httptrace.WithClientTrace(ctx, &httptrace.ClientTrace{GotConn: func(info httptrace.GotConnInfo) { _, canCloseWrite = info.Conn.(interface{ CloseWrite() error }) }})
+	}
+	body := map[string]any{"AttachStdin": !cfg.NoStdin, "AttachStdout": true, "AttachStderr": true, "Tty": cfg.Tty, "Cmd": cfg.Cmd}
 	if ok, err := c.speaks(ctx, consoleSizeVersion); err != nil {
 		return "", err
 	} else if ok && !cfg.Size.zero() {
@@ -64,6 +75,9 @@ func (c *Client) CreateExec(ctx context.Context, containerID string, cfg ExecCon
 	}
 	if _, err := c.change(ctx, http.MethodPost, "/containers/"+url.PathEscape(containerID)+"/exec", nil, body, c.cfg.RequestTimeout, c.lim.ErrorBytes, &v); err != nil {
 		return "", err
+	}
+	if cfg.RequireStdinEOF && !canCloseWrite {
+		return "", &Error{Class: provider.ClassUnsupported, Message: "this Docker connection cannot signal finite standard-input EOF; the command was not started"}
 	}
 	if v.ID == "" {
 		return "", &Error{Class: provider.ClassUnknown, Message: "the Docker Engine created an exec without an id"}
@@ -89,12 +103,21 @@ func (c *Client) ResizeExec(ctx context.Context, execID string, cols, rows uint1
 // the end of the context StartExec was given; Client.Close does not end it.
 type ExecConn struct {
 	rwc   io.ReadWriteCloser
+	conn  net.Conn
 	stop  func() bool // unregisters the lifetime callback
 	close func() error
 }
 
 func (x *ExecConn) Read(p []byte) (int, error)  { return x.rwc.Read(p) }
 func (x *ExecConn) Write(p []byte) (int, error) { return x.rwc.Write(p) }
+
+// CloseWrite signals finite stdin EOF while retaining the output stream.
+func (x *ExecConn) CloseWrite() error {
+	if w, ok := x.conn.(interface{ CloseWrite() error }); ok {
+		return w.CloseWrite()
+	}
+	return fmt.Errorf("this Docker connection cannot signal standard-input EOF")
+}
 
 // Close closes the connection (unblocking Read and Write). The process in
 // the container is not killed by it: a TTY shell gets its hangup, others
@@ -149,6 +172,8 @@ func (c *Client) StartExec(ctx context.Context, execID string, tty bool, size Co
 		cancel()
 		return nil, err
 	}
+	var conn net.Conn
+	req = req.WithContext(httptrace.WithClientTrace(req.Context(), &httptrace.ClientTrace{GotConn: func(info httptrace.GotConnInfo) { conn = info.Conn }}))
 	req.Header.Set("Connection", "Upgrade")
 	req.Header.Set("Upgrade", "tcp")
 	resp, err := c.hc.Do(req)
@@ -188,7 +213,7 @@ func (c *Client) StartExec(ctx context.Context, execID string, tty bool, size Co
 	if testHookSwitched != nil {
 		testHookSwitched()
 	}
-	return &ExecConn{rwc: rwc, close: cl, stop: context.AfterFunc(ctx, func() { _ = cl() })}, nil
+	return &ExecConn{rwc: rwc, conn: conn, close: cl, stop: context.AfterFunc(ctx, func() { _ = cl() })}, nil
 }
 
 // InitialSizeBudget bounds SetInitialSize as a whole.

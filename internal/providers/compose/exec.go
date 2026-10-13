@@ -253,7 +253,7 @@ func (h *execHandle) Run(ctx context.Context, t provider.Terminal) (provider.Exi
 		}
 		size = engine.ConsoleSize{Rows: sz.Rows, Cols: sz.Cols}
 	}
-	xid, err := cl.CreateExec(ctx, h.id, engine.ExecConfig{Cmd: h.argv, Tty: !t.Raw, Size: size})
+	xid, err := cl.CreateExec(ctx, h.id, engine.ExecConfig{Cmd: h.argv, Tty: !t.Raw, Size: size, NoStdin: t.Stdin == nil, RequireStdinEOF: t.CloseStdin && t.Stdin != nil})
 	if err != nil {
 		return provider.ExitStatus{}, h.startError(err)
 	}
@@ -282,14 +282,29 @@ func (h *execHandle) Run(ctx context.Context, t provider.Terminal) (provider.Exi
 			}
 		}()
 	}
+	inputFailure := make(chan error, 1)
 	if t.Stdin != nil {
-		go func() { _, _ = io.Copy(xc, t.Stdin) }()
+		go func() {
+			_, err := io.Copy(xc, t.Stdin)
+			if err == nil && t.CloseStdin {
+				err = xc.CloseWrite()
+			}
+			if t.CloseStdin && err != nil {
+				inputFailure <- err
+				_ = xc.Close()
+			}
+		}()
 	}
 	var copyErr error
 	if t.Raw {
 		copyErr = copyExecOutput(xc, t.Stdout, t.Stderr)
 	} else {
 		_, copyErr = io.Copy(t.Stdout, xc)
+	}
+	select {
+	case <-inputFailure:
+		copyErr = errors.New("finite standard-input transport ended before EOF could be delivered")
+	default:
 	}
 	if ctx.Err() != nil {
 		return provider.ExitStatus{}, ctx.Err()
@@ -301,6 +316,9 @@ func (h *execHandle) Run(ctx context.Context, t provider.Terminal) (provider.Exi
 			return provider.ExitStatus{}, &provider.Error{Class: provider.ClassUnavailable, Message: "the connection to the Docker Engine broke: " + copyErr.Error()}
 		}
 		return provider.ExitStatus{}, nil // ended, the code not observed
+	}
+	if t.Raw && copyErr != nil {
+		return provider.ExitStatus{Code: *st.ExitCode, Known: true}, &provider.Error{Class: provider.ClassUnavailable, Message: "container command transport was incomplete: " + copyErr.Error()}
 	}
 	if st.Pid == 0 && (*st.ExitCode == 126 || *st.ExitCode == 127) {
 		// never started (the runtime said why in the stream); a process

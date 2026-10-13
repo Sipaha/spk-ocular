@@ -51,7 +51,7 @@ type AccessTarget struct {
 	// granted: the user must confirm it again in Ocular).
 	State          string             `json:"state"`
 	DisabledScopes []agentgrant.Scope `json:"disabledScopes,omitempty" jsonschema_description:"Master switches that pause access even when a grant covers all namespaces."`
-	Grants         []agentgrant.Grant `json:"grants" jsonschema_description:"Each grant: a verb (read, logs, edit, action:<id>) in a scope (one namespace, all namespaces, or cluster = objects outside namespaces, read only) for kinds (null: all kinds; editing Secrets, ServiceAccounts and RBAC and anything destructive need the kind named). noConfirm: destructive plans run without the user's confirmation."`
+	Grants         []agentgrant.Grant `json:"grants" jsonschema_description:"Each grant: a verb (read, logs, edit, exec, action:<id>) in a scope (one namespace, all namespaces, or cluster = objects outside namespaces, read only) for kinds (null: all kinds; editing Secrets, ServiceAccounts and RBAC and anything destructive need the kind named). noConfirm: destructive plans run without the user's confirmation."`
 }
 
 func (s *Server) readMethods() {
@@ -72,7 +72,7 @@ func (s *Server) access(ctx context.Context, _ caller, _ *AccessRequest) (*Acces
 	if err != nil {
 		return nil, &api.CodedError{Code: api.CodeInternal, Detail: err.Error()}
 	}
-	out := &AccessView{Targets: []AccessTarget{}, Confirmation: "A destructive plan (delete, scale to 0, a destructive edit) waits for the user's confirmation in the SPK Ocular window unless its grant has noConfirm; ask GetRun for the outcome and tell your user to confirm."}
+	out := &AccessView{Targets: []AccessTarget{}, Confirmation: "A destructive plan (delete, scale to 0, a destructive edit), or any exec command, waits for the user's confirmation in the SPK Ocular window unless its grant has noConfirm; ask GetRun for the outcome and tell your user to confirm."}
 	for _, t := range all {
 		st := "active"
 		if len(t.EffectiveGrants()) == 0 {
@@ -128,6 +128,8 @@ func applies(k core.KindDescriptor, verb string) bool {
 		return k.Logs
 	case agentgrant.VerbEdit:
 		return k.Editable
+	case agentgrant.VerbExec:
+		return k.Exec
 	}
 	id := strings.TrimPrefix(verb, agentgrant.ActionPrefix)
 	return slices.ContainsFunc(k.Actions, func(a core.ActionDescriptor) bool { return a.ID == id })

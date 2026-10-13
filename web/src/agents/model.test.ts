@@ -107,3 +107,12 @@ describe('warnings', () => {
     expect(w('kubernetes', [{ scope: { mode: 'one', name: 'web' }, verb: 'action:forceDelete', kinds: null }])).toEqual(['forceDelete'])
   })
 })
+
+it('exec is separate, scoped, explicitly kind-bound and confirmable', () => {
+  const execKinds = [{ ...kinds[0], exec: true }, ...kinds.slice(1)]
+  const options = (mode: 'one' | 'all' | 'cluster') => verbOptions(execKinds, mode)
+  expect(options('one').find(o => o.verb === 'exec')).toMatchObject({ destructive: true, kinds: [{ id: kinds[0].id }] })
+  expect(options('cluster').some(o => o.verb === 'exec')).toBe(false)
+  expect(problems([{ scope: { mode: 'one', name: 'a' }, verbs: { exec: { kinds: null, noConfirm: false } } }], options)).toEqual([{ scope: 'one:a', verb: 'exec', key: 'agents.problem.destructiveAll' }])
+  expect(warnings('kubernetes', [{ scope: { mode: 'one', name: 'a' }, verbs: { exec: { kinds: [kinds[0].id], noConfirm: false } } }], execKinds)).toEqual(['exec'])
+})

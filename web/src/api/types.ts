@@ -856,6 +856,17 @@ export interface AgentPending {
   ref: Ref
   action?: ActionPlan
   edit?: EditPlan
+  exec?: AgentExecPlan
+}
+
+export interface AgentExecPlan {
+  where: LiveTarget
+  instance: string
+  channel?: string
+  command: string[]
+  stdin?: string
+  maxBytes: number
+  maxSeconds: number
 }
 
 export interface AgentAuditFilter {

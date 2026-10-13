@@ -44,7 +44,8 @@ not collect telemetry. Helm is embedded; a separate Helm CLI is not required.
 - Reviewed Kubernetes changes, Secret value editing, and bulk actions.
 - Helm chart browsing, repositories, release history, install, upgrade, rollback
   and uninstall with review before execution.
-- Explicit local agent access with named permission groups and scope/group switches.
+- Explicit local agent access with named permission groups and scope/group switches,
+  including separately granted, reviewed and bounded container commands.
 
 All features are free for individuals and companies of any size, revenue or
 funding. Development is supported only through voluntary cryptocurrency donations;

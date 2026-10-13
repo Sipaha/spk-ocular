@@ -438,6 +438,13 @@ that were individually switched off.
 
 Each access group contains Viewing, Changes and expandable Execution categories,
 with resource-kind restrictions and confirmation settings per permission.
+**Container commands (exec)** grants finite argv commands separately from
+resource actions. Select its kinds explicitly; every command requires confirmation
+unless that exec permission allows **Without confirmation**. The confirmation
+shows the chosen instance/container, exact argv, finite stdin and output/time
+limits. Exec can read mounted secrets and change container or host data with
+container permissions. Revocation cancels transport; it cannot guarantee that
+an already started remote command ends. Existing grants never acquire exec.
 The connection instruction is under **Connect an agent**; the API status remains
 visible when it is collapsed. The editor scrolls independently from its Save
 and Discard controls. Permission and group hints are available on hover.

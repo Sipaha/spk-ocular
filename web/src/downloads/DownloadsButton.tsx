@@ -1,4 +1,4 @@
-import {useEffect,useId,useRef,useState} from 'react'
+import {useEffect,useId,useLayoutEffect,useRef,useState} from 'react'
 import {createPortal} from 'react-dom'
 import {getLanguage,t} from '../i18n'
 import {isDesktop} from '../api/client'
@@ -117,10 +117,12 @@ function DownloadsPanel({onClose}:{onClose:()=>void}) {
  </div>,document.body)
 }
 
-function DeleteConfirmation({preview,busy,onCancel,onDelete}:{preview:DownloadDeletePreview;busy:boolean;onCancel:()=>void;onDelete:()=>void}) {
- const cancel=useRef<HTMLButtonElement>(null)
- useEffect(()=>{cancel.current?.focus()},[])
- return <div className="min-h-0 overflow-y-auto p-4" data-download-delete-confirmation>
+export function DeleteConfirmation({preview,busy,onCancel,onDelete}:{preview:DownloadDeletePreview;busy:boolean;onCancel:()=>void;onDelete:()=>void}) {
+ const box=useRef<HTMLDivElement>(null),cancel=useRef<HTMLButtonElement>(null)
+ // Preparation can mount this review before its busy flag clears. Focus the
+ // enabled Cancel before paint, without stealing an existing in-review choice.
+ useLayoutEffect(()=>{if(!busy&&!box.current?.contains(document.activeElement))cancel.current?.focus()},[busy])
+ return <div ref={box} className="min-h-0 overflow-y-auto p-4" data-download-delete-confirmation>
   <h3 className="font-semibold">{t('downloads.deleteTitle')}</h3>
   <p className="mt-2 text-fg-muted">{t(preview.directory?'downloads.deleteDirectoryWarning':'downloads.deleteFileWarning')}</p>
   <p className="mt-3 break-all font-mono text-xs">{preview.path}</p>

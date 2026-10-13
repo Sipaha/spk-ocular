@@ -65,6 +65,16 @@ func (ps *pendingSet) add(p *plan) (*pendingRun, error) {
 		return nil, &api.CodedError{Code: api.CodeGone, Detail: "Ocular is closing"}
 	}
 	ps.sweepLocked()
+	execCount := 0
+	for _, r := range ps.runs {
+		if r.p.exec != nil {
+			execCount++
+		}
+	}
+	if p.exec != nil && execCount >= maxPending {
+		ps.mu.Unlock()
+		return nil, &api.CodedError{Code: api.CodeLimit, Detail: "at most 20 exec requests/results are retained; completed results expire after 10 minutes"}
+	}
 	if ps.awaitingLocked() >= maxPending {
 		ps.mu.Unlock()
 		return nil, &api.CodedError{Code: api.CodeLimit, Detail: "too many plans wait for the user's confirmation; ask GetRun about those first"}
@@ -242,7 +252,7 @@ func (ps *pendingSet) list() []api.AgentPending {
 		if r.view.State != stateAwaiting {
 			continue
 		}
-		out = append(out, api.AgentPending{ID: r.id, Agent: r.p.agent, At: r.at, Expires: r.expires, Provider: r.p.provider, Target: r.p.target, TargetTitle: r.p.title, Ref: r.p.ref, Action: r.p.actionPlan, Edit: r.p.editPlan})
+		out = append(out, api.AgentPending{ID: r.id, Agent: r.p.agent, At: r.at, Expires: r.expires, Provider: r.p.provider, Target: r.p.target, TargetTitle: r.p.title, Ref: r.p.ref, Action: r.p.actionPlan, Edit: r.p.editPlan, Exec: r.p.exec})
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].At.Before(out[j].At) })
 	return out
@@ -252,8 +262,24 @@ type GetRunRequest struct {
 	RunID string `json:"runId" jsonschema:"required"`
 }
 
-func (s *Server) getRun(ctx context.Context, _ caller, req *GetRunRequest) (*RunView, error) {
+func (s *Server) getRun(ctx context.Context, c caller, req *GetRunRequest) (*RunView, error) {
 	v := s.pend.wait(ctx, req.RunID)
+	if v.Exec != nil {
+		s.pend.mu.Lock()
+		r := s.pend.runs[req.RunID]
+		s.pend.mu.Unlock()
+		if r == nil {
+			return &RunView{State: stateGone, RunID: req.RunID}, nil
+		}
+		x, err := s.open(ctx, c, "GetRun", r.p.provider, r.p.target)
+		if err != nil {
+			return nil, err
+		}
+		defer x.done()
+		if _, err := s.judge(c, x, "GetRun", r.p); err != nil {
+			return nil, err
+		}
+	}
 	return &v, nil
 }
 

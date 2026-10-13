@@ -30,9 +30,12 @@ type fakeProv struct {
 	runs      []provider.ActionRun
 	edits     []provider.EditRun
 	// runGate, when set, holds RunAction until it is closed or ctx ends.
-	runGate chan struct{}
-	opened  int
-	logs    func(context.Context, core.Ref, provider.LogQuery, provider.LogSink) error
+	runGate      chan struct{}
+	opened       int
+	logs         func(context.Context, core.Ref, provider.LogQuery, provider.LogSink) error
+	execRun      func(context.Context, provider.ExecRequest, provider.Terminal) (provider.ExitStatus, error)
+	execPrepared []provider.ExecRequest
+	execStarted  int
 }
 
 func newFake() *fakeProv { return &fakeProv{identity: "https://a | ca:1 | user:u", hash: "h1"} }
@@ -83,7 +86,7 @@ var (
 )
 
 var fakeKinds = []core.KindDescriptor{
-	{ID: "pods", Title: "Pods", Scoped: true, Logs: true, Actions: []core.ActionDescriptor{actDebug}, Columns: []core.Column{{ID: "name", Title: "Name"}, {ID: "cpu", Title: "CPU", Metric: true}, {ID: "age", Title: "Age", Type: core.ColAge}}},
+	{ID: "pods", Title: "Pods", Scoped: true, Logs: true, Exec: true, Actions: []core.ActionDescriptor{actDebug}, Columns: []core.Column{{ID: "name", Title: "Name"}, {ID: "cpu", Title: "CPU", Metric: true}, {ID: "age", Title: "Age", Type: core.ColAge}}},
 	{ID: "apps/deployments", Title: "Deployments", Scoped: true, Editable: true, Actions: []core.ActionDescriptor{actRestart, actScale, actUndo, actDelete}, Columns: []core.Column{{ID: "name", Title: "Name"}}},
 	{ID: "secrets", Title: "Secrets", Scoped: true, Editable: true, Sensitive: true, Actions: []core.ActionDescriptor{actDelete}, Columns: []core.Column{{ID: "name", Title: "Name"}}},
 	{ID: "events", Title: "Events", Scoped: true, Columns: []core.Column{{ID: "name", Title: "Name"}}},
@@ -266,4 +269,51 @@ func (s *fakeSess) Metrics(_ context.Context, _ provider.Query, ids []string) (p
 		out.Values[id] = provider.Usage{CPU: &cpu}
 	}
 	return out, nil
+}
+
+func (s *fakeSess) ExecInfo(_ context.Context, r core.Ref) (core.ExecInfo, error) {
+	for _, got := range world[r.Kind] {
+		if got.Scope == r.Scope && got.Name == r.Name && got.UID == r.UID {
+			return core.ExecInfo{Instances: []core.ExecInstance{{ID: r.Name + "/" + r.UID, Title: r.Name, Channels: []core.ExecChannel{{ID: "main", Running: true}}}}}, nil
+		}
+	}
+	return core.ExecInfo{}, &provider.Error{Class: provider.ClassGone, Message: "object was replaced"}
+}
+func (s *fakeSess) PrepareExec(ctx context.Context, r core.Ref, req provider.ExecRequest) (provider.ExecHandle, error) {
+	if _, err := s.ExecInfo(ctx, r); err != nil {
+		return nil, err
+	}
+	if req.Instance != r.Name+"/"+r.UID || req.Channel != "main" {
+		return nil, &provider.Error{Class: provider.ClassGone, Message: "not a member"}
+	}
+	s.f.mu.Lock()
+	s.f.execPrepared = append(s.f.execPrepared, req)
+	s.f.mu.Unlock()
+	return &fakeExecHandle{s: s, ref: r, req: req}, nil
+}
+
+type fakeExecHandle struct {
+	s   *fakeSess
+	ref core.Ref
+	req provider.ExecRequest
+}
+
+func (h *fakeExecHandle) Describe() core.LiveTarget {
+	return core.LiveTarget{Provider: "k", Target: "t", TargetTitle: "Target T", ConfigHash: h.s.hash, Ref: h.ref, Instance: h.ref.Name, Channel: h.req.Channel, Command: h.req.Command}
+}
+func (h *fakeExecHandle) Again() (provider.ExecHandle, error) { c := *h; return &c, nil }
+func (h *fakeExecHandle) Close()                              {}
+func (h *fakeExecHandle) Run(ctx context.Context, term provider.Terminal) (provider.ExitStatus, error) {
+	if ctx.Err() != nil {
+		return provider.ExitStatus{}, ctx.Err()
+	}
+	h.s.f.mu.Lock()
+	h.s.f.execStarted++
+	fn := h.s.f.execRun
+	h.s.f.mu.Unlock()
+	if fn != nil {
+		return fn(ctx, h.req, term)
+	}
+	_, err := term.Stdout.Write([]byte("hello\x00\xff"))
+	return provider.ExitStatus{Known: true, Code: 0}, err
 }

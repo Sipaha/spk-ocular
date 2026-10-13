@@ -679,7 +679,7 @@ func TestTheCatalogIsTheMethods(t *testing.T) {
 		assert.Equal(t, "POST "+m.Path, pattern)
 	}
 	assert.ElementsMatch(t, []string{"Access", "ListKinds", "ListObjects", "GetObject", "Problems", "GetMetrics", "GetLogInfo", "GetLogs", "StreamLogs", "ExportLogs",
-		"PrepareAction", "RunAction", "GetEditSource", "PrepareEdit", "RunEdit", "GetRun"}, listed)
+		"PrepareAction", "RunAction", "GetEditSource", "PrepareEdit", "RunEdit", "GetRun", "GetExecInfo", "PrepareExec", "RunExec"}, listed)
 	lo := cat.Methods[2]
 	assert.Equal(t, "ListObjects", lo.Name)
 	assert.Contains(t, lo.Request["required"], "kind")

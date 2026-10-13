@@ -71,6 +71,7 @@ func (s *Server) open(ctx context.Context, c caller, method, provider, target st
 		slog.Warn("agent access: identity not recorded", "err", err)
 	} else if changed {
 		s.cancelLogReads(provider, target)
+		s.cancelExecs(provider, target)
 		s.o.Service.Emit(api.EventAgentGrantsChanged, "", nil)
 	}
 	if id != g.Identity {

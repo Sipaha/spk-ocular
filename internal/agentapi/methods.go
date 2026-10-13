@@ -67,6 +67,7 @@ func (s *Server) routes() {
 	})
 	s.readMethods()
 	s.writeMethods()
+	s.execMethods()
 }
 
 // Intro is GET /v1.
@@ -89,8 +90,9 @@ func (s *Server) intro() Intro {
 			"Start with Access: the targets, namespaces, verbs and kinds granted to agents.",
 			"Send your name in the " + agentHeader + " header: the user sees it (it is not verified).",
 			"Cluster changes are two steps: Prepare* returns the plan and a planId, Run* runs that plan.",
-			"A destructive plan waits for the user's confirmation in the SPK Ocular window unless its grant says otherwise: " +
+			"A destructive plan or exec command waits for the user's confirmation in the SPK Ocular window unless its grant says otherwise: " +
 				"Run* then answers state awaiting_confirmation with a runId; ask GetRun (it waits up to 25 s) and tell your user to confirm in Ocular.",
+			"Container commands use the separate exec grant with named kinds: GetExecInfo, PrepareExec, RunExec. Explicit instance and argv are required; confirmation is the default, output and duration are bounded, and no command is automatically retried.",
 			"Errors are {code, detail}: forbidden says what is not granted.",
 			"GetLogInfo and log reads use the same logs grant. GetLogInfo lists channels; GetLogs returns a bounded snapshot; StreamLogs returns bounded NDJSON frames, including a final end frame. ExportLogs writes retained logs to a private file in Downloads and returns only metadata. Time intervals and streams require an explicit limit. The catalog marks streaming methods and describes each frame's schema.",
 			"A call that needs a cluster login answers unauthorized (a login is done by a person: the user selects the target in Ocular); " +

@@ -62,6 +62,9 @@ func instances(object string) []string {
 }
 
 func (s *session) ExecInfo(_ context.Context, ref core.Ref) (core.ExecInfo, error) {
+	if ref.Kind == ParcelKind {
+		return s.parcelExecInfo(ref)
+	}
 	if ref.Kind == CrateKind {
 		return core.ExecInfo{Instances: []core.ExecInstance{}}, nil // nowhere to run
 	}
@@ -80,6 +83,9 @@ func (s *session) ExecInfo(_ context.Context, ref core.Ref) (core.ExecInfo, erro
 }
 
 func (s *session) PrepareExec(_ context.Context, ref core.Ref, req provider.ExecRequest) (provider.ExecHandle, error) {
+	if ref.Kind == ParcelKind {
+		return s.prepareParcelExec(ref, req)
+	}
 	if ref.Kind == WorkloadKind || req.Attach {
 		return s.prepareAttach(ref, req)
 	}

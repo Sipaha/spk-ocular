@@ -18,7 +18,7 @@ const ParcelKind = "parcels"
 var actStamp = core.ActionDescriptor{ID: "stamp", Title: "Stamp"}
 
 var parcelKind = core.KindDescriptor{
-	ID: ParcelKind, Title: "Parcels", Singular: "Parcel", Group: "Synthetic", Scoped: true,
+	ID: ParcelKind, Title: "Parcels", Singular: "Parcel", Group: "Synthetic", Scoped: true, Exec: true,
 	Columns: []core.Column{
 		{ID: "name", Title: "Name", Type: core.ColText},
 		{ID: "zone", Title: "Zone", Type: core.ColText, ScopeColumn: true},

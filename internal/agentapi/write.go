@@ -33,6 +33,7 @@ type plan struct {
 	actionPlan  *core.ActionPlan
 	edit        *api.EditRunRequest
 	editPlan    *core.EditPlan
+	exec        *api.AgentExecPlan
 }
 
 // editSource is an object's text an agent got for editing.
@@ -251,6 +252,7 @@ type RunView struct {
 	RunID  string          `json:"runId,omitempty"`
 	Result *ResultView     `json:"result,omitempty"`
 	Error  *api.CodedError `json:"error,omitempty"`
+	Exec   *ExecResult     `json:"exec,omitempty"`
 }
 
 type ResultView struct {
@@ -302,7 +304,12 @@ func (s *Server) runPlan(ctx context.Context, c caller, method, id string) (*Run
 		s.audit(store.AuditEntry{Agent: c.agent, Method: method, Provider: p.provider, Target: p.target, Scope: p.ref.Scope, Object: objectOf(p.ref), Verb: p.verb, Destructive: true, ExpectHash: expectHash(p), Phase: store.AuditOutcome, Outcome: "awaiting_confirmation"})
 		return &RunView{State: stateAwaiting, RunID: pr.id}, nil
 	}
-	v := s.execute(p)
+	var v RunView
+	if p.exec != nil {
+		v = s.executeContext(ctx, p)
+	} else {
+		v = s.execute(p)
+	}
 	if v.Error != nil {
 		return nil, v.Error
 	}
@@ -313,13 +320,20 @@ func (s *Server) runPlan(ctx context.Context, c caller, method, id string) (*Run
 // hang-up does not cut a write), bounded by runTimeout: the intent before,
 // the outcome after. The grants and the identity are checked again at the
 // moment of the write.
-func (s *Server) execute(p *plan) RunView {
+func (s *Server) execute(p *plan) RunView { return s.executeContext(s.runCtx, p) }
+
+func (s *Server) executeContext(parent context.Context, p *plan) RunView {
 	if !s.track() {
 		return failed(&api.CodedError{Code: api.CodeGone, Detail: "Ocular is closing"})
 	}
 	defer s.runs.Done()
-	ctx, cancel := context.WithTimeout(s.runCtx, runTimeout)
+	ctx, cancel := context.WithTimeout(parent, runTimeout)
 	defer cancel()
+	stop := context.AfterFunc(s.runCtx, cancel)
+	defer stop()
+	if p.exec != nil {
+		return s.executeExec(ctx, p)
+	}
 	c := caller{agent: p.agent}
 	x, err := s.open(ctx, c, p.method, p.provider, p.target)
 	if err != nil {
@@ -381,6 +395,8 @@ func expectHash(p *plan) string {
 		v = p.action.Expect
 	case p.edit != nil:
 		v = p.edit.Token
+	case p.exec != nil:
+		v = p.exec.Where.ConfigRev
 	}
 	sum := sha256.Sum256([]byte(v))
 	return hex.EncodeToString(sum[:6])
