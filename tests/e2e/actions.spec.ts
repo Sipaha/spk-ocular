@@ -61,6 +61,32 @@ test('menu highlight follows pointer and keyboard without a second highlighted i
   await expect(opener).toBeFocused()
 })
 
+test('a pending action review owns focus and Escape before its plan arrives', async ({ page }) => {
+  const grid = await openWorkloads(page)
+  await row(grid, 'web').click()
+  const opener = page.getByRole('dialog', { name: 'workloads web' }).getByRole('button', { name: /Actions/ })
+  let release!: () => void
+  const pending = new Promise<void>((resolve) => { release = resolve })
+  await page.route('**/api/PrepareAction', async (route) => {
+    await pending
+    await route.continue()
+  })
+  try {
+    await opener.click()
+    await page.getByRole('menu', { name: 'Actions' }).getByRole('menuitem', { name: 'Scale…' }).focus()
+    await page.keyboard.press('Enter')
+    const dialog = page.getByRole('dialog', { name: 'Scale web' })
+    await expect(dialog).toBeVisible()
+    if (process.env.E2E_PENDING_ACTION_SCREENSHOT) await page.screenshot({ path: process.env.E2E_PENDING_ACTION_SCREENSHOT })
+    await expect(dialog.getByRole('button', { name: 'Cancel' })).toBeFocused()
+    await page.keyboard.press('Escape')
+    await expect(dialog).toBeHidden()
+    await expect(opener).toBeFocused()
+  } finally {
+    release()
+  }
+})
+
 test('restart from the details: where, what, rights; the row and the status bar follow', async ({ page }) => {
   const grid = await openWorkloads(page)
   await row(grid, 'web').click()

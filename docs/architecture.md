@@ -603,7 +603,9 @@ This is local lifecycle ownership, not a transaction with the cluster server.
 Read-only/setup dialogs share focus restoration, reachable-control tab wrapping
 and fixed SVG close controls. Nested widgets consume their own keys; feature
 owners retain initial focus and close/edit/review decisions. Mutation editors
-retain their specialized keyboard and held-edit rules. Resource grids use a
+retain their specialized keyboard and held-edit rules. Action reviews focus Cancel
+while the initial plan is pending, so Escape closes the review before the provider
+answers; an opener tooltip cannot take its keyboard input. Resource grids use a
 localized accessible name without translating machine IDs or resetting state.
 
 Each journal filter incarnation owns both first-page and pagination replies,

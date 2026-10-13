@@ -47,6 +47,16 @@ function setup(action: ActionDescriptor, plan: (p: ActionParams) => ActionPlan |
 }
 
 describe('ActionDialog', () => {
+  it('focuses Cancel while the initial plan is pending, so Escape closes the review', async () => {
+    const pending = deferred<ActionPlan>()
+    const { onClose, dialog, f } = setup(scale, () => pending.promise)
+    expect(within(dialog).getByRole('button', { name: 'Cancel' })).toHaveFocus()
+    await userEvent.keyboard('{Escape}')
+    expect(onClose).toHaveBeenCalledOnce()
+    expect(f.client.runAction).not.toHaveBeenCalled()
+    await act(async () => pending.resolve(planOf(scale, { count: 1 })))
+  })
+
   it('names the scope in the words of the object’s own provider, not the selected one', async () => {
     const zone = { singular: { key: 'other.scope.singular', text: 'Zone' }, plural: { key: 'other.scope.plural', text: 'zones' }, all: { key: 'other.scope.all', text: 'All zones' } }
     useStore.setState({

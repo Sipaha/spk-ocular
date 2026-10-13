@@ -163,7 +163,12 @@ export function ActionDialog({ client, req, onClose, onTerminal, runTimeoutMs = 
   // Focus: the count while choosing it; on a reviewed plan the confirmation,
   // or Cancel when it is destructive.
   useLayoutEffect(() => {
-    if (busy) return
+    if (busy) {
+      // A pending initial review already owns keyboard input. Keep Escape
+      // inside the dialog instead of the opener's transient tooltip.
+      if (busy === 'prepare' && !box.current?.contains(document.activeElement)) cancelRef.current?.focus()
+      return
+    }
     // Choosing with the arrows: each choice is reviewed as it is made, the focus stays.
     if (choosing && choicesRef.current?.contains(document.activeElement)) return
     if (choosing && chosen === null) {
