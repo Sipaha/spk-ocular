@@ -131,7 +131,9 @@ notifications are throttled and completion is immediate. A small polling fallbac
 keeps window snapshots current. Private `downloads/history.json` retains up to
 200 recent records while never evicting active transfers. A process-lifetime OS
 lock prevents two desktop instances from overwriting one another's history.
-Writes use owner-only temporary files, sync and atomic replacement. Read/lock
+The startup read handle closes before any rewrite so Windows can replace the
+existing file; the process-lifetime lock stays held. Writes use owner-only
+temporary files, sync and atomic replacement. Read/lock
 failures preserve existing metadata, use process-local state and expose a storage
 warning. Application exit marks unfinished jobs Interrupted without retry or
 command replay. Clear and per-entry Dismiss remove terminal metadata only, never

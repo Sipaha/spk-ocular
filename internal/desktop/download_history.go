@@ -91,8 +91,13 @@ func newDownloadHistory(directory string) *downloadHistory {
 		h.storageError = true
 		return h
 	}
-	defer f.Close()
 	data, err := io.ReadAll(io.LimitReader(f, (16<<20)+1))
+	// Windows cannot replace an existing file while its read handle is open.
+	// Keep the process-lifetime history lock, but close this reader before saving.
+	closeErr := f.Close()
+	if err == nil {
+		err = closeErr
+	}
 	if err != nil || len(data) > 16<<20 {
 		h.storageError = true
 		return h
