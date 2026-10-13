@@ -5,6 +5,7 @@ import { t } from '../i18n'
 import { openPalette } from '../palette/store'
 import { ProviderIcon, SearchIcon } from './icons'
 import { TargetInfoButton } from './TargetDetails'
+import { DownloadsButton } from '../downloads/DownloadsButton'
 
 /** App-wide navigation stays visible while individual panels scroll. */
 export function AppHeader({ target, onHelp, onAbout, client }: { target: Target | null; onHelp: () => void; onAbout: () => void; client: Client }) {
@@ -23,6 +24,7 @@ export function AppHeader({ target, onHelp, onAbout, client }: { target: Target 
         <span className="truncate">{t('shell.search')}</span>
         <kbd>Ctrl K</kbd>
       </button>
+      <DownloadsButton />
       <LanguageMenu client={client} />
       <button type="button" className="about-trigger" onClick={onAbout} aria-label={t('about.title')} title={t('about.title')} aria-haspopup="dialog">{t('about.open')}</button>
       <button className="help-trigger" onClick={onHelp} aria-label={t('keys.title')} title={`${t('keys.title')} (?)`}>?</button>

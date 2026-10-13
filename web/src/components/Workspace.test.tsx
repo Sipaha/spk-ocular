@@ -261,7 +261,7 @@ describe('Workspace details and state', () => {
     const f = fakeClient([k8s('prod')])
     f.client.getTargetState = vi.fn(async () => ({ kind: '"pods"', scope: '{"mode":"one","name":"data"}' }))
     await openProd(f)
-    expect(f.client.openView).toHaveBeenCalledTimes(1)
+    await waitFor(() => expect(f.client.openView).toHaveBeenCalledTimes(1))
     expect(f.client.openView).toHaveBeenCalledWith('kubernetes', 'prod', { kind: 'pods', scope: { mode: 'one', name: 'data' } })
     await pickScope('web')
     expect(f.client.setTargetState).toHaveBeenCalledWith('kubernetes', 'prod', 'scope', '{"mode":"one","name":"web"}')

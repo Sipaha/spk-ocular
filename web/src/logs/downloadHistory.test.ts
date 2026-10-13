@@ -54,7 +54,7 @@ describe('full retained log history download',()=>{
  ] as const)('aborts the staged destination for %s',async(_name,frames)=>{
   const {writer,client}=setup([...frames])
   await expect(downloadLogHistory(client,subject,'',false,new AbortController().signal)).rejects.toThrow()
-  expect(writer.abort).toHaveBeenCalled();expect(writer.close).not.toHaveBeenCalled()
+  expect(writer.abort).toHaveBeenCalledWith('failed',_name==='owner closed'?'source_unavailable':_name==='deleted source'?'source_unavailable':'incomplete');expect(writer.close).not.toHaveBeenCalled()
  })
  it('cancels a pending read and aborts the destination, never committing received prefixes',async()=>{
   const {writer,client}=setup([])
@@ -79,10 +79,12 @@ describe('full retained log history download',()=>{
   const {writer,client}=setup([source,{k:'lines',s:1,l:[['','entry']]},complete])
   writer.write.mockRejectedValue(new Error('disk full'))
   await expect(downloadLogHistory(client,subject,'',false,new AbortController().signal)).rejects.toThrow('disk full')
+  expect(writer.abort).toHaveBeenCalledWith('failed','write')
   expect(writer.close).not.toHaveBeenCalled();expect(writer.abort).toHaveBeenCalled()
   writer.write.mockResolvedValue(undefined)
   vi.stubGlobal('fetch',vi.fn(async()=>response([source,{k:'end',reason:'error',class:'limit'}])))
   await expect(downloadLogHistory(client,subject,'',false,new AbortController().signal)).rejects.toThrow('History export limit')
+  expect(writer.abort).toHaveBeenCalledWith('failed','limit')
   expect(writer.close).not.toHaveBeenCalled()
  })
 })

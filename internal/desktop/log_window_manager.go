@@ -29,6 +29,7 @@ type LogWindows struct {
 	windows       map[string]*application.WebviewWindow
 	exports       map[string]*nativeLogExport
 	exportsClosed bool
+	history       *downloadHistory
 }
 
 func (m *LogWindows) Open(id, title string) error {
@@ -112,8 +113,12 @@ func (m *LogWindows) ExportLogs(id, name, title, button, text string) (string, e
 	if err != nil || destination == "" {
 		return "", err
 	}
+	downloadID := m.history.begin(destination, "logs")
 	if err = writeLogExport(destination, text); err != nil {
+		m.history.finish(downloadID, "", "failed", downloadFailureReason(err, "write"))
 		return "", err
 	}
+	m.history.progress(downloadID, int64(len(text)))
+	m.history.finish(downloadID, destination, "complete")
 	return destination, nil
 }

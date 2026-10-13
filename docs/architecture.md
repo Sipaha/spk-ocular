@@ -112,6 +112,60 @@ and asks the user to select that connection and press Connect again. Foreground 
 bounded and terminate with their parent. Configuration changes invalidate the
 session incarnation; old responses cannot update the replacement session.
 
+## Download history and native file actions
+
+The native desktop runtime owns one download-history manager shared by the main
+window, detached log windows and container transfers. Native destination dialogs
+remain the authority for paths. Transfers register only after a destination is
+chosen; their existing staged writers publish only on successful completion.
+Download-history IDs, not renderer-supplied paths, authorize Open/Reveal actions.
+OS dispatch uses fixed executables and separate arguments, never a shell, and
+requires an existing completed regular file or directory. The Downloads Wails
+service is UI-only and does not expand HTTP or agent grants.
+Copy-path requests use the existing serialized, generation-checked clipboard
+queue, so a later path copy supersedes pending Secret-value reads without letting
+an older clipboard operation overwrite it.
+
+The manager exposes bounded metadata snapshots and change invalidations; progress
+notifications are throttled and completion is immediate. A small polling fallback
+keeps window snapshots current. Private `downloads/history.json` retains up to
+200 recent records while never evicting active transfers. A process-lifetime OS
+lock prevents two desktop instances from overwriting one another's history.
+Writes use owner-only temporary files, sync and atomic replacement. Read/lock
+failures preserve existing metadata, use process-local state and expose a storage
+warning. Application exit marks unfinished jobs Interrupted without retry or
+command replay. Clear and per-entry Dismiss remove terminal metadata only, never
+file contents. Native PrepareDelete issues a short-lived one-shot token for a
+completed record's backend-owned path, current item identity and parent directory.
+DeleteFile requires that token and the same live record, rechecks item/parent
+identity and metadata, and removes through os.Root; recursive folder deletion
+does not follow symlink destinations. Successful deletion removes the record;
+failures retain it. This is an explicit permanent local-file action, not OS Trash
+or a cluster mutation; no filesystem-wide atomicity is claimed.
+
+Download metadata contains only an allowlisted `failureReason` code for failed
+entries. Native sinks classify structured OS/provider/API errors and mark the
+failing stage; browser save writers classify DOM/API codes and history readers
+mark protocol/limit failures separately from destination writes. Native log
+exports accept only a safe reason code on failure cleanup, never renderer error
+text. First terminal failure wins. Persisted/browser-shared records contain no
+raw exception, API detail, remote stderr, credential or downloaded content.
+Unknown/old reasons become `unknown`, and the UI translates the code using the
+current language. Browser records are reconstructed from declared safe metadata
+fields so unknown input properties are not retained or broadcast.
+
+The renderer retains at most 200 viewed successful record IDs in origin-local
+storage, with storage-event/BroadcastChannel synchronization where supported.
+Acknowledgement happens when completed/browser-handoff entries appear in an open
+Downloads panel, never when an active job is merely listed. It changes only the
+button indicator and does not alter native history or authorize file actions.
+
+Browser-mode downloads retain no full local paths or file contents. Origin-local
+terminal metadata and BroadcastChannel invalidations share their history with
+detached log windows; active metadata remains process/window-owned. Blob handoff
+is distinguished from a verified save-picker completion. Native opening and
+folder actions are not fabricated for browser-managed destinations.
+
 ## Live tables and discovery
 
 Events invalidate state; they are not an unbounded event journal. Each subscriber

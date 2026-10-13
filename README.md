@@ -38,6 +38,9 @@ not collect telemetry. Helm is embedded; a separate Helm CLI is not required.
 - Standalone Docker containers and Compose project/service grouping.
 - Logs in the bottom panel or a separate OS window, interactive terminals, and local Kubernetes port forwarding.
 - Container folders and UTF-8 file editing with syntax highlighting (up to 2 MiB).
+- Shared Downloads history for UI file/folder copies and log exports; desktop
+  entries can open the saved item, show its folder or copy its path, dismiss
+  metadata, and confirm permanent deletion of downloaded files or folders.
 - Reviewed Kubernetes changes, Secret value editing, and bulk actions.
 - Helm chart browsing, repositories, release history, install, upgrade, rollback
   and uninstall with review before execution.

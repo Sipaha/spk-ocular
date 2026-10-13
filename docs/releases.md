@@ -74,7 +74,10 @@ it does not need to match the development VERSION file. The description comes fr
 Localized descriptions live alongside it, such as `ru.md`. The same test gate
 runs before all six native package jobs. Architecture, contents, version and checksums are checked before
 upload. Linux jobs install/remove DEB packages; Windows jobs install/remove MSI
-packages; macOS jobs mount and verify the DMG and its sealed app bundle. All six jobs start the native webview with synthetic data and save a screenshot. The publish job verifies the complete expected
+packages; macOS jobs mount and verify the DMG and its sealed app bundle. All six package jobs also run the native Downloads filesystem/lifecycle tests,
+including metadata persistence, failure reasons and confirmed file deletion.
+Linux/macOS run these with the race detector; Windows runs native functional tests.
+All six jobs start the native webview with synthetic data and save a screenshot. The publish job verifies the complete expected
 asset set, uploads everything to a draft, and checks the remote names and sizes
 before publishing. A draft with unexpected assets is refused for manual review.
 Published versions cannot be overwritten; use a new version for corrections.

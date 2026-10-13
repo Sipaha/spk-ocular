@@ -1,3 +1,4 @@
+import {DownloadFailureError,downloadFailureReason,downloadClassReason,type DownloadFailureReason} from '../downloads/failures'
 import {asMessage,type Client} from '../api/client'
 import type {Ref} from '../api/types'
 import {classLabel,messageText,t} from '../i18n'
@@ -18,17 +19,19 @@ export async function downloadLogHistory(client:Client,subject:Ref,channel:strin
  signal.addEventListener('abort',abort,{once:true})
  const check=()=>{if(signal.aborted)throw new DOMException('download cancelled','AbortError')}
  let lines=0,bytes=0,ended=false,lastProgress=0
+ let failurePhase:DownloadFailureReason='source_unavailable'
  const sources=new Map<number,{key:string;label:string}>()
  const decoder=new NdjsonDecoder()
- const incomplete=()=>new Error(t('logs.historyIncomplete'))
+ const incomplete=()=>new DownloadFailureError('incomplete',t('logs.historyIncomplete'))
  try{
   check()
   const opened=await client.openLogHistory(subject,channel,previous,signal)
   check()
   const base=await client.streamBase()
   check()
+  failurePhase='connection'
   const response=await fetch(base+'/logs/'+encodeURIComponent(opened.streamId),{signal})
-  if(!response.ok||!response.body)throw new Error(t('logs.historyIncomplete')+` (HTTP ${response.status})`)
+  if(!response.ok||!response.body)throw new DownloadFailureError(response.status===401||response.status===403?'permission':response.status===404?'source_unavailable':'connection',t('logs.historyIncomplete')+` (HTTP ${response.status})`)
   reader=response.body.getReader()
   const frame=async(value:Frame)=>{
    check()
@@ -38,7 +41,7 @@ export async function downloadLogHistory(client:Client,subject:Ref,channel:strin
      if(!Number.isSafeInteger(value.id)||value.id<1||typeof value.key!=='string'||typeof value.label!=='string'||value.key.length>4096||value.label.length>4096)throw incomplete()
      const old=sources.get(value.id)
      if(old&&old.key!==value.key)throw incomplete()
-     if(!old&&sources.size>=1000)throw new Error(t('logs.historyLimit'))
+     if(!old&&sources.size>=1000)throw new DownloadFailureError('limit',t('logs.historyLimit'))
      sources.set(value.id,{key:value.key,label:plainLogDownload(value.label).replace(/[\r\n]/g,' ')})
      break
     }
@@ -51,25 +54,25 @@ export async function downloadLogHistory(client:Client,subject:Ref,channel:strin
       if(line[0]&&(!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?(?:Z|[+-]\d{2}:\d{2})$/.test(line[0])||Number.isNaN(Date.parse(line[0]))))throw incomplete()
       const entry=`${line[0]?plainLogDownload(line[0])+' ':''}[${source.label}] ${plainLogDownload(line[1])}\n`
       bytes+=utf8.encode(entry).length;lines++
-      if(bytes>MAX_BYTES||lines>MAX_LINES)throw new Error(t('logs.historyLimit'))
+      if(bytes>MAX_BYTES||lines>MAX_LINES)throw new DownloadFailureError('limit',t('logs.historyLimit'))
       text+=entry
-      if(text.length>=64<<10){check();await writer.write(text);text=''}
+      if(text.length>=64<<10){check();failurePhase='write';await writer.write(text);failurePhase='incomplete';text=''}
      }
-     if(text){check();await writer.write(text)}
+     if(text){check();failurePhase='write';await writer.write(text);failurePhase='incomplete'}
      const now=Date.now();if(now-lastProgress>200){lastProgress=now;progress?.({lines,bytes})}
      break
     }
     case 'state':{
      if(!['streaming','ended','gap','truncated','limited','error','waiting'].includes(value.state))throw incomplete()
-     if(['gap','truncated','limited','error','waiting'].includes(value.state)||value.state==='ended'&&(value.class||value.msg))throw new Error(t('logs.historyIncomplete')+(value.msg?': '+value.msg:''))
+     if(['gap','truncated','limited','error','waiting'].includes(value.state)||value.state==='ended'&&(value.class||value.msg))throw new DownloadFailureError(downloadClassReason(value.class,'incomplete'),t('logs.historyIncomplete')+(value.msg?': '+value.msg:''))
      break
     }
     case 'end':{
      if(value.reason!=='done'){
-      if(value.class==='limit')throw new Error(t('logs.historyLimit'))
+      if(value.class==='limit')throw new DownloadFailureError('limit',t('logs.historyLimit'))
       const message=asMessage(value.why)
-      if(message?.key==='logs.historyIncomplete'||message?.key==='logs.historyLimit')throw new Error(messageText(message))
-      throw new Error(t('logs.historyIncomplete')+': '+(message?messageText(message):value.message??classLabel(value.class??'internal')))
+      if(message?.key==='logs.historyIncomplete'||message?.key==='logs.historyLimit')throw new DownloadFailureError(message.key==='logs.historyLimit'?'limit':'incomplete',messageText(message))
+      throw new DownloadFailureError(downloadClassReason(value.class,value.reason==='gone'?'source_unavailable':'incomplete'),t('logs.historyIncomplete')+': '+(message?messageText(message):value.message??classLabel(value.class??'internal')))
      }
      if(!sources.size)throw incomplete()
      ended=true;break
@@ -78,12 +81,13 @@ export async function downloadLogHistory(client:Client,subject:Ref,channel:strin
     default:throw incomplete()
    }
   }
-  for(;;){check();const next=await reader.read();check();if(next.done)break;for(const value of decoder.push(next.value))await frame(value)}
+  for(;;){check();failurePhase='connection';const next=await reader.read();failurePhase='incomplete';check();if(next.done)break;for(const value of decoder.push(next.value))await frame(value)}
   for(const value of decoder.end())await frame(value)
   if(!ended)throw incomplete()
   check();progress?.({lines,bytes})
+  failurePhase='write'
   const path=await writer.close()
   return {path,lines,bytes}
- }catch(error){await writer.abort().catch(()=>{});throw error}
+ }catch(error){await writer.abort(error instanceof DOMException&&error.name==='AbortError'?'cancelled':'failed',downloadFailureReason(error,failurePhase)).catch(()=>{});throw error}
  finally{signal.removeEventListener('abort',abort);await reader?.cancel().catch(()=>{});reader?.releaseLock()}
 }

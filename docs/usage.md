@@ -648,6 +648,71 @@ log window on every resize frame. Width-only changes do not remeasure fixed-heig
 unwrapped rows. Wheel input releases a stale selection drag if WebKit missed
 mouseup, and stops caret correction from pulling the scroll position back.
 
+## Downloads
+
+The download button in the application header opens the Downloads popup, with
+a distinct outline and floating-window shadow separating it from the workspace.
+Detached log windows have the same button and share the list. Downloads stay visible while
+switching targets; opening the popup never connects a target or changes grants.
+While a download is active, a thin track beneath the stationary button icon
+shows a runner moving left to right in a loop, without implying a percentage.
+Reduced-motion preferences keep the runner static. Successful results not yet
+viewed tint the button and add a small dot. Opening Downloads acknowledges successful entries
+shown in the list, including results arriving while it is open. Active, failed,
+cancelled and interrupted jobs do not count as new successful downloads. Viewing
+acknowledgements are retained in origin-local UI storage when available and shared
+with other windows through storage events/BroadcastChannel.
+
+The list covers container file/folder copies and log exports started through the
+Ocular UI. Compact rows show a file-type icon, filename, human-readable transferred
+size and localized relative time measured against the moment the popup opens. Relative
+time is omitted for entries younger than one minute and stays fixed until the
+next opening; transfer status, progress and new entries continue updating. Hover
+the size or visible relative time for the exact date. Full paths are available through Copy path rather than repeated in every row. Active,
+failed, cancelled, interrupted and browser-handoff states remain explicit.
+A cancelled destination chooser starts no download.
+
+Failed entries include a localized reason beneath their compact metadata: for
+example permission denied, insufficient destination space/quota, an existing
+or unavailable destination, an unavailable source, interrupted connection,
+timeout, incomplete log history, a download limit or rejected archive. Only a
+safe reason code is retained, never raw exception text, remote stderr or log
+contents. The first reported failure survives later cleanup. Old entries and
+unclassified errors explicitly say that the reason is unavailable; Ocular does
+not reconstruct missing causes. Native staged-export expiry is a failed timeout,
+while explicit cancellation and application/window closure keep their distinct
+states. No partial output is presented as a completed download.
+
+In desktop mode, completed entries offer **Open downloaded item**, **Show in
+folder** and **Copy path**. File opening uses the OS default application; folder
+opening selects the item on Windows/macOS and opens its parent folder on Linux.
+Moved or deleted items report an error. Nothing opens automatically. Interrupted
+or failed downloads do not expose an actionable destination as a complete file.
+
+The native app retains the latest 200 entries across restarts, keeping active
+transfers while trimming old terminal records. It stores metadata only in its
+private data directory, never downloaded contents, log text or credentials.
+Unfinished native transfers become Interrupted after application exit/restart;
+they are never retried or resumed automatically. **Clear history** removes only
+terminal metadata, leaves active transfers visible and never deletes files. It
+is disabled when there is nothing to clear and stays muted on hover.
+The row's **Remove from history** cross removes only that terminal entry and
+never deletes its file. The **Delete downloaded item** trash button is desktop-only:
+it previews the exact path, starts confirmation on Cancel, and permanently deletes
+the file or the folder and its contents after confirmation, then removes the row.
+Active transfers cannot be dismissed or deleted. Missing/replaced items or failed
+deletions remain in history with an error. Existing log-source cancellation and
+staging/overwrite rules remain unchanged.
+
+Browser mode also lists UI log exports and shares metadata with detached windows.
+Successful save-picker exports are Completed; a Blob download is **Sent to browser
+downloads**, because Ocular cannot verify the browser's final save. Browsers do
+not provide the full destination path or OS folder controls, so these native file
+actions are unavailable. Terminal metadata is retained in origin-local browser
+storage when available. Storage failures remain visible and do not delete files.
+Native history read/lock failures preserve the existing metadata file and use a
+visible in-memory history for the current process instead of overwriting it.
+
 ## Resource comparison
 
 In resource properties, use **Use as comparison baseline**, then open another

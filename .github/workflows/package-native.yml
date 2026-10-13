@@ -53,6 +53,15 @@ jobs:
           else
             go test -race -timeout 180s ./internal/agentapi ./internal/execshim ./internal/paths ./internal/privatefs ./internal/desktop ./internal/providers/compose/engine
           fi
+      - name: Native Downloads filesystem and lifecycle tests
+        env:
+          TARGET_OS: ${{ matrix.os }}
+        run: |
+          if [ "$TARGET_OS" = windows ]; then
+            go test -tags wails -timeout 180s ./internal/desktop -run 'TestDownload|TestSelectedContainer|TestFailedContainer|TestContainerDownload|TestNativeLog|TestNativeOversized|TestLog'
+          else
+            go test -race -tags wails -timeout 180s ./internal/desktop -run 'TestDownload|TestSelectedContainer|TestFailedContainer|TestContainerDownload|TestNativeLog|TestNativeOversized|TestLog'
+          fi
       - name: Build production application and installers
         env:
           REQUESTED_VERSION: ${{ inputs.version }}

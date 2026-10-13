@@ -27,6 +27,8 @@ jobs:
       - uses: ./.github/actions/setup
       - name: Install package builder
         run: go install github.com/goreleaser/nfpm/v2/cmd/nfpm@v2.41.0
+      - name: Native Downloads filesystem and lifecycle tests
+        run: go test -race -tags "wails gtk3" -timeout 180s ./internal/desktop -run 'TestDownload|TestSelectedContainer|TestFailedContainer|TestContainerDownload|TestNativeLog|TestNativeOversized|TestLog'
       - name: Build production application and packages
         env:
           REQUESTED_VERSION: ${{ inputs.version }}

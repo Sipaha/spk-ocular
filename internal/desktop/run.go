@@ -47,8 +47,11 @@ func Run(ctx context.Context, o Options) error {
 	if !ok {
 		return errors.New("container download service is unavailable")
 	}
-	fileDownloads := &FileDownloads{ctx: ctx, source: downloadSource}
-	logWindows := &LogWindows{windows: map[string]*application.WebviewWindow{}}
+	history := newDownloadHistory(o.DataDir)
+	defer history.close()
+	downloads := &Downloads{history: history, ctx: ctx}
+	fileDownloads := &FileDownloads{ctx: ctx, source: downloadSource, history: history}
+	logWindows := &LogWindows{windows: map[string]*application.WebviewWindow{}, history: history}
 	app := application.New(application.Options{
 		// Warn: Info logs every asset request. Never Debug in a build that
 		// ships: Wails logs binding results there.
@@ -57,7 +60,7 @@ func Run(ctx context.Context, o Options) error {
 		Description: "Lightweight local infrastructure viewer",
 		Icon:        o.IconPNG,
 		Windows:     application.WindowsOptions{WebviewUserDataPath: filepath.Join(o.DataDir, "webview")},
-		Services:    []application.Service{application.NewService(transport.NewAPI(o.Service)), application.NewService(logWindows), application.NewService(fileDownloads)},
+		Services:    []application.Service{application.NewService(transport.NewAPI(o.Service)), application.NewService(logWindows), application.NewService(fileDownloads), application.NewService(downloads)},
 		Assets:      application.AssetOptions{Handler: application.AssetFileServerFS(o.FrontendFS)},
 		OnShutdown: func() { // on the GTK main thread
 			shutDown.Store(true)
@@ -68,6 +71,7 @@ func Run(ctx context.Context, o Options) error {
 
 	logWindows.app = app
 	fileDownloads.app = app
+	history.changed = func() { app.Event.Emit("ocular_downloads_changed", nil) }
 
 	// Relay core events to the page (Wails events; payload is the one arg);
 	// agents' waiting plans also wake the window's own watch.

@@ -15,13 +15,19 @@ import (
 
 // copyContainerDownload stages a complete export privately. Stream errors or
 // unsafe entries discard the staging tree and leave existing destinations alone.
-func copyContainerDownload(ctx context.Context, directory, name string, stream func(context.Context, io.Writer) error) (string, error) {
+func copyContainerDownload(ctx context.Context, directory, name string, stream func(context.Context, io.Writer) error) (destination string, result error) {
+	phase := "destination_unavailable"
+	defer func() {
+		if result != nil {
+			result = withDownloadFailure(phase, result)
+		}
+	}()
 	rootSource := name == "/" || name == "."
 	if rootSource {
 		name = "root"
 	}
 	if !safeDownloadPath(name) || strings.Contains(name, "/") {
-		return "", errors.New("source name cannot be represented safely on this computer")
+		return "", withDownloadFailure("unsafe_archive", errors.New("source name cannot be represented safely on this computer"))
 	}
 	parent, err := os.OpenRoot(directory)
 	if err != nil {
@@ -30,7 +36,7 @@ func copyContainerDownload(ctx context.Context, directory, name string, stream f
 	defer parent.Close()
 	if _, err = parent.Lstat(name); !errors.Is(err, fs.ErrNotExist) {
 		if err == nil {
-			err = fmt.Errorf("destination already exists: %s", name)
+			err = withDownloadFailure("destination_exists", fmt.Errorf("destination already exists: %s", name))
 		}
 		return "", err
 	}
@@ -50,8 +56,13 @@ func copyContainerDownload(ctx context.Context, directory, name string, stream f
 	reader, writer := io.Pipe()
 	child, cancel := context.WithCancel(ctx)
 	defer cancel()
-	result := make(chan error, 1)
-	go func() { e := stream(child, writer); _ = writer.CloseWithError(e); result <- e }()
+	streamResult := make(chan error, 1)
+	go func() {
+		e := withDownloadFailure("source_unavailable", stream(child, writer))
+		_ = writer.CloseWithError(e)
+		streamResult <- e
+	}()
+	phase = "invalid_archive"
 	err = extractContainerDownload(root, reader, name, rootSource)
 	if err != nil {
 		cancel()
@@ -60,7 +71,7 @@ func copyContainerDownload(ctx context.Context, directory, name string, stream f
 		_, err = io.Copy(io.Discard, reader)
 	}
 	_ = reader.Close()
-	remoteErr := <-result
+	remoteErr := <-streamResult
 	if err != nil {
 		return "", err
 	}
@@ -74,6 +85,7 @@ func copyContainerDownload(ctx context.Context, directory, name string, stream f
 	if !info.IsDir() && !info.Mode().IsRegular() {
 		return "", errors.New("source is not a regular file or directory")
 	}
+	phase = "write"
 	if err = publishDownload(parent, directory, filepath.Join(filepath.Base(stage), name), name); err != nil {
 		return "", err
 	}
@@ -97,7 +109,17 @@ func safeDownloadPath(p string) bool {
 	return true
 }
 
-func extractContainerDownload(root *os.Root, input io.Reader, name string, rootSource bool) error {
+func extractContainerDownload(root *os.Root, input io.Reader, name string, rootSource bool) (result error) {
+	defer func() {
+		if result != nil {
+			var local *os.PathError
+			if errors.As(result, &local) {
+				result = withDownloadFailure("write", result)
+			} else {
+				result = withDownloadFailure("invalid_archive", result)
+			}
+		}
+	}()
 	tr := tar.NewReader(input)
 	seen := map[string]byte{}
 	type link struct {
@@ -121,17 +143,17 @@ func extractContainerDownload(root *os.Root, input io.Reader, name string, rootS
 			p = name + "/" + p
 		}
 		if !safeDownloadPath(p) || (p != name && !strings.HasPrefix(p, name+"/")) {
-			return fmt.Errorf("unsafe archive path: %q", h.Name)
+			return withDownloadFailure("unsafe_archive", fmt.Errorf("unsafe archive path: %q", h.Name))
 		}
 		if len(seen) >= 100000 {
-			return errors.New("download exceeds 100000 entries")
+			return withDownloadFailure("limit", errors.New("download exceeds 100000 entries"))
 		}
 		if _, exists := seen[p]; exists {
-			return fmt.Errorf("duplicate archive path: %q", p)
+			return withDownloadFailure("unsafe_archive", fmt.Errorf("duplicate archive path: %q", p))
 		}
 		for ancestor := path.Dir(p); ancestor != "."; ancestor = path.Dir(ancestor) {
 			if kind, exists := seen[ancestor]; exists && kind != tar.TypeDir {
-				return fmt.Errorf("non-directory archive parent: %q", ancestor)
+				return withDownloadFailure("unsafe_archive", fmt.Errorf("non-directory archive parent: %q", ancestor))
 			}
 		}
 		seen[p] = h.Typeflag
@@ -163,7 +185,7 @@ func extractContainerDownload(root *os.Root, input io.Reader, name string, rootS
 			target := h.Linkname
 			if h.Typeflag == tar.TypeSymlink {
 				if strings.HasPrefix(target, "/") || strings.ContainsAny(target, "\\:\x00") {
-					return fmt.Errorf("unsafe symbolic link: %q", p)
+					return withDownloadFailure("unsafe_archive", fmt.Errorf("unsafe symbolic link: %q", p))
 				}
 				target = path.Clean(path.Join(path.Dir(p), target))
 			} else {
@@ -173,11 +195,11 @@ func extractContainerDownload(root *os.Root, input io.Reader, name string, rootS
 				}
 			}
 			if !safeDownloadPath(target) || (target != name && !strings.HasPrefix(target, name+"/")) {
-				return fmt.Errorf("link leaves downloaded folder: %q", p)
+				return withDownloadFailure("unsafe_archive", fmt.Errorf("link leaves downloaded folder: %q", p))
 			}
 			links = append(links, link{p, target, h.Typeflag == tar.TypeSymlink})
 		default:
-			return fmt.Errorf("unsupported archive entry (devices, sockets and FIFOs are not copied): %q", p)
+			return withDownloadFailure("unsafe_archive", fmt.Errorf("unsupported archive entry (devices, sockets and FIFOs are not copied): %q", p))
 		}
 	}
 	// Links are created last: no archive write can follow a symlink.
@@ -193,7 +215,7 @@ func extractContainerDownload(root *os.Root, input io.Reader, name string, rootS
 		} else {
 			kind, exists := seen[l.target]
 			if !exists || kind != tar.TypeReg {
-				return fmt.Errorf("hard link target is not a downloaded regular file: %q", l.target)
+				return withDownloadFailure("unsafe_archive", fmt.Errorf("hard link target is not a downloaded regular file: %q", l.target))
 			}
 			if err := root.Link(filepath.FromSlash(l.target), filepath.FromSlash(l.name)); err != nil {
 				return err

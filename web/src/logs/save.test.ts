@@ -2,12 +2,20 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 const mocks=vi.hoisted(()=>({desktop:false,call:vi.fn()}))
 vi.mock('../api/client',()=>({isDesktop:()=>mocks.desktop}))
 vi.mock('@wailsio/runtime',()=>({Call:{ByName:mocks.call}}))
+import {useDownloads} from '../downloads/store'
 import { downloadLogs, logFileName, openLogDownload, plainLogDownload } from './save'
 
 beforeEach(()=>{mocks.desktop=false;mocks.call.mockReset()})
 afterEach(()=>vi.unstubAllGlobals())
 
 describe('log downloads',()=>{
+ it('records permission/quota failures without retaining sensitive exception text',async()=>{
+  const writable={write:vi.fn(async()=>{throw new DOMException('credential=DO-NOT-RETAIN','QuotaExceededError')}),close:vi.fn(async()=>{}),abort:vi.fn(async()=>{})}
+  vi.stubGlobal('showSaveFilePicker',vi.fn(async()=>({name:'quota.log',createWritable:async()=>writable})))
+  await expect(downloadLogs('quota.log','x')).rejects.toThrow('DO-NOT-RETAIN')
+  expect(useDownloads.getState().records[0]).toMatchObject({status:'failed',failureReason:'no_space'})
+  expect(localStorage.getItem('ocular-download-history-v1')).not.toContain('DO-NOT-RETAIN')
+ })
  it('removes ANSI colors, emphasis and OSC hyperlinks from downloads',()=>{
   expect(plainLogDownload('\x1b[1;31mERROR\x1b[0m привет\r\n\x1b]8;;https://example.test\x07link\x1b]8;;\x07')).toBe('ERROR привет\r\nlink')
   expect(plainLogDownload('\u009b32mgreen\u009b0m')).toBe('green')
@@ -28,7 +36,7 @@ describe('log downloads',()=>{
  it('aborts a failed browser write',async()=>{
   const writable={write:vi.fn(async()=>{throw new Error('disk full')}),close:vi.fn(async()=>{}),abort:vi.fn(async()=>{})}
   vi.stubGlobal('showSaveFilePicker',vi.fn(async()=>({name:'logs.log',createWritable:async()=>writable})))
-  await expect(downloadLogs('logs.log','x')).rejects.toThrow('disk full');expect(writable.abort).toHaveBeenCalledOnce();expect(writable.close).not.toHaveBeenCalled()
+  await expect(downloadLogs('logs.log','x')).rejects.toThrow('disk full');expect(writable.abort).toHaveBeenCalledOnce();expect(writable.close).not.toHaveBeenCalled();expect(useDownloads.getState().records[0]).toMatchObject({status:'failed',failureReason:'write'})
  })
  it('uses the requesting native window and preserves cancellation',async()=>{
   mocks.desktop=true;mocks.call.mockResolvedValue('')

@@ -5,6 +5,7 @@ import { loadLanguage, setLanguage, t } from '../i18n'
 import { useStore } from '../store'
 import { LogWindowBridge, type LogViewState } from './windowBridge'
 const LogViewer = lazy(() => import('./LogViewer'))
+import {DownloadsButton} from '../downloads/DownloadsButton'
 
 export function LogWindow({client,id}:{client:Client;id:string}) {
  const [bridge]=useState(()=>new LogWindowBridge(id,'guest'))
@@ -23,6 +24,7 @@ export function LogWindow({client,id}:{client:Client;id:string}) {
  },[client,bridge])
  const restore=async()=>{try{if(bridge.captureView)await bridge.post('view',bridge.captureView());await bridge.post('return');await bridge.close()}catch(e){setError(String(e))}}
  return <main className="flex h-screen min-h-0 flex-col bg-app text-fg">
+  <header className="flex shrink-0 justify-end border-b border-line px-2 py-1"><DownloadsButton/></header>
   {error && <p role="alert" className="p-2 text-danger">{error}</p>}
   {boot?<Suspense fallback={<p>{t('app.loading')}</p>}><LogViewer client={client} subject={boot.subject} active bridge={bridge} initial={boot.view} onWindowAction={()=>void restore()}/></Suspense>:<p className="p-3">{t('app.loading')}</p>}
  </main>

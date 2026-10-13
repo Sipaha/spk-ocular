@@ -38,7 +38,7 @@ func (s *stagedLogExport) Write(text string) error {
 	}
 	if int64(len(text)) > s.limit-s.bytes {
 		s.abortLocked()
-		return errors.New("log export exceeds its byte limit")
+		return withDownloadFailure("limit", errors.New("log export exceeds its byte limit"))
 	}
 	n, err := io.Copy(s.file, strings.NewReader(text))
 	s.bytes += n
