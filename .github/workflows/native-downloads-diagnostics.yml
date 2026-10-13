@@ -1,0 +1,45 @@
+name: Native Downloads diagnostics
+on:
+  push:
+    branches: ['diagnostics/windows-downloads-1.5.0-115186203561']
+permissions:
+  contents: read
+jobs:
+  windows:
+    runs-on: windows-2025
+    timeout-minutes: 15
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup
+      - name: Same native Downloads tests with visible failure annotations
+        run: |
+          mkdir -p .agents/tmp/windows-downloads
+          set +e
+          go test -json -tags wails -timeout 180s ./internal/desktop -run 'TestDownload|TestSelectedContainer|TestFailedContainer|TestContainerDownload|TestNativeLog|TestNativeOversized|TestLog' > .agents/tmp/windows-downloads/tests.jsonl 2> .agents/tmp/windows-downloads/stderr.log
+          result=$?
+          python - <<'PYDIAG'
+          import json,re
+          from pathlib import Path
+          root=Path('.agents/tmp/windows-downloads')
+          records={};failed=[]
+          for line in (root/'tests.jsonl').read_text(encoding='utf-8',errors='replace').splitlines():
+              try:event=json.loads(line)
+              except ValueError:continue
+              name=event.get('Test','package')
+              if event.get('Output'):records.setdefault(name,[]).append(event['Output'])
+              if event.get('Action')=='fail' and name not in failed:failed.append(name)
+          def escape(value):return value.replace('%','%25').replace('\r','%0D').replace('\n','%0A')
+          for name in failed[:10]:
+              text=''.join(records.get(name,[]))[-6000:]
+              text=re.sub(r'[A-Z]:[^\n]*?\.agents[^\n]*?go[\\/]', '<fixture>/',text)
+              print('::error title='+escape(name)+'::'+escape(text))
+          if not failed:
+              text=(root/'stderr.log').read_text(encoding='utf-8',errors='replace')[-6000:]
+              if text:print('::error title=Native Downloads test invocation::'+escape(text))
+          PYDIAG
+          exit "$result"
