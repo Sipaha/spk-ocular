@@ -129,7 +129,9 @@ identify Ocular's modifications.
 
 ## Prepare a version
 
-1. Add `changelog/<version>/en.md` and `ru.md`. Notes describe the user-visible
+1. Add `changelog/<version>/<locale>.md` for all eight supported locales
+   (`en`, `ru`, `zh`, `es`, `de`, `fr`, `pt`, `ja`); GitHub uses `en.md`.
+   Notes describe the user-visible
    result compared with the previous published version, not intermediate fixes
    or the sequence of development commits. VERSION is the default development
    base; tagged builds take their version directly from the tag.
