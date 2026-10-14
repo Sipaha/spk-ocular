@@ -10,6 +10,7 @@ import struct
 import subprocess
 import tarfile
 import tempfile
+from linux_abi import MIN_GLIBC, verify_glibc_floor
 from browser_smoke import verify_browser
 from release import ROOT, document_paths, elf_arch, version
 
@@ -55,6 +56,8 @@ def rpm_header(data, start):
         at = store + offset
         if typ in (6, 8, 9):
             values[tag] = data[at:store + size].split(b'\0', length)[:length]
+        elif typ == 4:
+            values[tag] = list(struct.unpack_from('>' + 'I' * length, data, at))
     return values, store + size
 
 
@@ -77,7 +80,7 @@ def rpm_contents(path):
             break
         files[name.removeprefix('./').lstrip('/')] = (payload[offset:offset + size], mode & 0o777)
         offset = (offset + size + 3) & ~3
-    return {tag: [value.decode() for value in values] for tag, values in tags.items()}, files
+    return {tag: [value.decode() if isinstance(value, bytes) else value for value in values] for tag, values in tags.items()}, files
 
 
 def tar_contents(data):
@@ -99,7 +102,7 @@ def verify_native(directory, release_version, arch, bin_dir=None):
         if subprocess.check_output(['dpkg-deb', '--field', str(deb), field], text=True).strip() != expected_value:
             raise ValueError(f'wrong DEB {field}')
     depends = subprocess.check_output(['dpkg-deb', '--field', str(deb), 'Depends'], text=True)
-    for dependency in ['libc6 (>= 2.39)', 'libgtk-3-0', 'libwebkit2gtk-4.1-0']:
+    for dependency in [f'libc6 (>= {MIN_GLIBC})', 'libgtk-3-0', 'libwebkit2gtk-4.1-0']:
         if dependency not in depends:
             raise ValueError(f'DEB dependency missing: {dependency}')
     deb_version = subprocess.check_output(['dpkg-deb', '--field', str(deb), 'Version'], text=True).strip()
@@ -117,6 +120,10 @@ def verify_native(directory, release_version, arch, bin_dir=None):
     for dependency in ['glibc', 'gtk3', 'webkit2gtk4.1']:
         if dependency not in tags[1049]:
             raise ValueError(f'RPM dependency missing: {dependency}')
+    glibc_index = tags[1049].index('glibc')
+    if tags[1050][glibc_index] != MIN_GLIBC or tags[1048][glibc_index] & 14 != 12:
+        raise ValueError('RPM glibc dependency must use the exact verified minimum with >=')
+    verify_glibc_floor(bin_dir / 'spk-ocular-release')
     expected = {
         'usr/bin/spk-ocular': (bin_dir / 'spk-ocular-release', 0o755),
         'usr/share/applications/spk-ocular.desktop': (ROOT / 'packaging/linux/spk-ocular.desktop', 0o644),

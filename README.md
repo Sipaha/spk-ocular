@@ -70,8 +70,11 @@ Download a package matching your architecture from
 Desktop packages cover **Linux, Windows and macOS**, each for `amd64` (x86-64)
 and `arm64` (AArch64 / Apple Silicon). Windows requires Windows 10/11 and
 Microsoft Edge WebView2 Runtime; macOS requires 12 or newer.
-Linux desktop packages target **Ubuntu 24.04 or newer**, or a compatible
-Linux distribution with glibc 2.39+, GTK 3, and WebKit2GTK 4.1.
+Linux desktop packages require **glibc 2.35 or newer**, GTK 3 and WebKit2GTK 4.1.
+From 1.6.1, both Linux architectures are checked natively for normal DEB
+installation and browser/GTK startup in Ubuntu 22.04 userspace before publication.
+The build runners remain Ubuntu 24.04. See [Linux compatibility](docs/linux-compatibility.md)
+for the package baseline, distribution checks and their limits.
 
 ```sh
 # Debian / Ubuntu; replace VERSION and ARCH with the downloaded filename.

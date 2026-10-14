@@ -28,14 +28,22 @@ class NativeEvidence(unittest.TestCase):
                 data = b'\x89PNG\r\n\x1a\n' + struct.pack('>I', 13) + b'IHDR' + struct.pack('>II', 1024, 768) + bytes(4096)
                 (directory / f'{platform}-{arch}.png').write_bytes(data)
                 (directory / 'app.log').write_text('private data excluded')
+                if platform == 'linux':
+                    compatibility = dict(report, baseline='ubuntu-22.04', glibc='2.35',
+                                         maximumGLIBCSymbol='2.34', packageInstalled=True,
+                                         browserNoDisplay=True, mode='native', kernelShared=True,
+                                         rootfsSHA256='0' * 64, binarySHA256='1' * 64)
+                    (directory / 'linux-compat-report.json').write_text(json.dumps(compatibility))
+                    (directory / f'linux-compat-{arch}.png').write_bytes(data)
         self.output = self.root / 'NATIVE-VERIFICATION.zip'
 
     def test_complete_evidence_excludes_logs_and_has_six_matching_reports(self):
         evidence.package(self.root, self.output, '1.0.1')
         with zipfile.ZipFile(self.output) as archive:
-            self.assertEqual(len(archive.namelist()), 13)
+            self.assertEqual(len(archive.namelist()), 17)
             manifest = json.loads(archive.read('manifest.json'))
             self.assertEqual(len(manifest['reports']), 6)
+            self.assertEqual(len(manifest['linuxCompatibility']), 2)
             self.assertFalse(any(name.endswith('.log') for name in archive.namelist()))
 
     def test_wrong_source_version_platform_or_production_is_refused(self):
@@ -64,4 +72,17 @@ class NativeEvidence(unittest.TestCase):
         image.write_bytes(original)
         (directory / 'report.json').unlink()
         with self.assertRaisesRegex(ValueError, 'Missing actual native report'):
+            evidence.package(self.root, self.output, '1.0.1')
+
+    def test_missing_or_emulated_linux_baseline_cannot_be_published(self):
+        path = self.root / 'native-diagnostics-linux-arm64/linux-compat-report.json'
+        original = json.loads(path.read_text())
+        for key, value in [('glibc', '2.39'), ('mode', 'emulated'), ('packageInstalled', False),
+                           ('browserNoDisplay', False), ('maximumGLIBCSymbol', '2.38')]:
+            with self.subTest(key=key):
+                path.write_text(json.dumps(dict(original, **{key: value})))
+                with self.assertRaises(ValueError):
+                    evidence.package(self.root, self.output, '1.0.1')
+        path.unlink()
+        with self.assertRaisesRegex(ValueError, 'Missing native Linux compatibility report'):
             evidence.package(self.root, self.output, '1.0.1')

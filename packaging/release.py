@@ -13,6 +13,8 @@ import sys
 import tarfile
 import tempfile
 
+from linux_abi import verify_glibc_floor
+
 ROOT = Path(__file__).resolve().parent.parent
 
 
@@ -63,6 +65,7 @@ def package(release_version, arch, bin_dir=None):
     for binary in (desktop,):
         if elf_arch(binary) != arch:
             raise ValueError(f'wrong architecture: {binary}')
+        verify_glibc_floor(binary)
         with tempfile.TemporaryDirectory() as scratch:
             profile = Path(scratch)
             isolated = {**os.environ, 'HOME': str(profile / 'home'), 'DOCKER_CONFIG': str(profile / 'docker'), 'SPK_OCULAR_HOME': str(profile / 'data'), 'KUBECONFIG': str(profile / 'no-kubeconfig')}

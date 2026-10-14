@@ -54,11 +54,11 @@ rpm:
 overrides:
   deb:
     depends:
-      - libc6 (>= 2.39)
+      - libc6 (>= 2.35)
       - libgtk-3-0t64 | libgtk-3-0
       - libwebkit2gtk-4.1-0
   rpm:
     depends:
-      - glibc >= 2.39
+      - glibc >= 2.35
       - gtk3
       - webkit2gtk4.1

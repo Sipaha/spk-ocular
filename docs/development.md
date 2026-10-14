@@ -327,3 +327,20 @@ ownership; independent view cursors and no-row array identity; and stateless
 regex batches/obsolete replies. Compose projections are compared against the
 previous implementation across randomized worlds and scopes. Operation counts
 and small microbenchmarks are not native RSS or universal latency claims.
+
+## Older Linux userspace verification
+
+`packaging/linux-compat.py --arch ARCH --version VERSION --artifacts DIRECTORY`
+checks the installed native DEB in a SHA256-pinned official Ubuntu 22.04 rootfs.
+It requires bubblewrap, a matching native architecture and scratch inside the
+project or Solution `.tmp`. Local non-root preparation uses already configured
+subordinate UID/GID ranges; CI runs it on the disposable native runner with sudo.
+No host package installation, binfmt registration, user display or daemon socket
+is used by the checker. The rootfs installs ordinary signed runtime packages and
+the actual DEB, then checks browser mode and the GTK synthetic view through private
+PID/IPC/UTS/network namespaces and Xvfb. The runtime kernel is shared.
+
+The package builder and verifier both enforce `packaging/linux_abi.py`'s glibc
+2.35 symbol ceiling. This static guard complements, rather than replaces, the
+older-userspace native runtime gate. The compatibility evidence is published
+inside the existing native verification bundle without profiles, logs or tokens.

@@ -3,6 +3,7 @@
 import argparse,hashlib,json,struct,subprocess,zipfile
 from pathlib import Path
 from release import ROOT
+from linux_abi import MIN_GLIBC, version_tuple
 
 def package(source,output,version):
     commit=subprocess.check_output(['git','rev-parse','HEAD'],cwd=ROOT,text=True).strip()
@@ -22,10 +23,31 @@ def package(source,output,version):
             if width<800 or height<600:raise ValueError('Native screenshot is too small: '+name)
             report['sha256']=hashlib.sha256(data).hexdigest();reports.append(report)
             entries += [(name,data),(f'{platform}-{arch}.json',(json.dumps(report,indent=2)+'\n').encode())]
-    entries.append(('manifest.json',(json.dumps({'version':version,'commit':commit,'reports':reports},indent=2)+'\n').encode()))
+    compatibility=[]
+    for arch in ('amd64','arm64'):
+        directory=source/f'native-diagnostics-linux-{arch}'
+        report_file=next(iter(directory.rglob('linux-compat-report.json')),None)
+        if report_file is None:raise ValueError('Missing native Linux compatibility report: '+arch)
+        report=json.loads(report_file.read_text())
+        expected={'platform':'linux','arch':arch,'version':version,'commit':commit,'production':True,'fixtureSynthetic':True,'ownedWindow':True,'baseline':'ubuntu-22.04','glibc':MIN_GLIBC,'packageInstalled':True,'browserNoDisplay':True,'mode':'native','kernelShared':True}
+        if any(report.get(k)!=v for k,v in expected.items()):raise ValueError('Linux compatibility report metadata mismatch: '+arch)
+        required=report.get('maximumGLIBCSymbol','')
+        if not required or version_tuple(required)>version_tuple(MIN_GLIBC):raise ValueError('Invalid Linux compatibility glibc requirement: '+arch)
+        for field in ('rootfsSHA256','binarySHA256'):
+            value=report.get(field,'')
+            if len(value)!=64 or any(c not in '0123456789abcdef' for c in value):raise ValueError('Invalid Linux compatibility digest: '+arch)
+        name=f'linux-compat-{arch}.png';image=next(iter(directory.rglob(name)),None)
+        if image is None:raise ValueError('Missing Linux compatibility screenshot: '+arch)
+        data=image.read_bytes()
+        if len(data)<4096 or data[:8]!=b'\x89PNG\r\n\x1a\n' or data[12:16]!=b'IHDR':raise ValueError('Invalid Linux compatibility PNG: '+arch)
+        width,height=struct.unpack('>II',data[16:24])
+        if width<800 or height<600:raise ValueError('Linux compatibility screenshot is too small: '+arch)
+        report['sha256']=hashlib.sha256(data).hexdigest();compatibility.append(report)
+        entries += [(name,data),(f'linux-compat-{arch}.json',(json.dumps(report,indent=2)+'\n').encode())]
+    entries.append(('manifest.json',(json.dumps({'version':version,'commit':commit,'reports':reports,'linuxCompatibility':compatibility},indent=2)+'\n').encode()))
     with zipfile.ZipFile(output,'w',compression=zipfile.ZIP_DEFLATED) as package:
         for name,data in sorted(entries):package.writestr(name,data)
     output.with_name(output.name+'.sha256').write_text(hashlib.sha256(output.read_bytes()).hexdigest()+'  '+output.name+'\n')
-    print('PASS six actual production screenshots and reports for',version,commit)
+    print('PASS six native and two Ubuntu22.04 production screenshots and reports for',version,commit)
 if __name__=='__main__':
     p=argparse.ArgumentParser();p.add_argument('--source',type=Path,required=True);p.add_argument('--output',type=Path,required=True);p.add_argument('--version',required=True);a=p.parse_args();package(a.source,a.output,a.version)

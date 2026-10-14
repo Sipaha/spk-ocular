@@ -1,6 +1,6 @@
 # Builds and releases
 
-Published stable versions and their release notes are available in [GitHub Releases](https://github.com/Sipaha/spk-ocular/releases/latest). The release workflow checks the complete native matrix, package contents and checksums before publication. Its native evidence archive contains owned-window screenshots for all six targets. Published release assets remain immutable.
+Published stable versions and their release notes are available in [GitHub Releases](https://github.com/Sipaha/spk-ocular/releases/latest). The release workflow checks the complete native matrix, package contents and checksums before publication. Its native evidence archive contains owned-window screenshots for all six targets plus native Ubuntu 22.04 compatibility screenshots for both Linux architectures. Published release assets remain immutable.
 
 ## Distribution contract
 
@@ -8,10 +8,13 @@ SPK Ocular builds Linux, Windows and macOS for both amd64 and arm64. Each job
 runs on a matching native host. Production desktop builds disable DevTools;
 the same native executable supports `--browser` for a loopback HTTP UI.
 Distribution builds do not produce separate browser executables.
+See [Linux compatibility](linux-compatibility.md) for the distinction between
+declared package dependencies and observed runtime compatibility on other
+distribution userspaces.
 
 | Platform | Native runners | Runtime | Artifacts per architecture |
 | --- | --- | --- | --- |
-| Linux | Ubuntu 24.04, Ubuntu 24.04 arm64 | glibc 2.39+, GTK 3, WebKit2GTK 4.1 | DEB, RPM, desktop tar.gz |
+| Linux | Ubuntu 24.04, Ubuntu 24.04 arm64 | glibc 2.35+, GTK 3, WebKit2GTK 4.1 | DEB, RPM, desktop tar.gz |
 | Windows | Windows 2025 x64, Windows 11 arm64 | Windows 10/11, WebView2 Runtime | MSI, desktop ZIP |
 | macOS | macOS 15 Intel and Apple Silicon | macOS 12+ | DMG, desktop app tar.gz |
 
@@ -39,7 +42,7 @@ executable with `--browser` in an isolated profile and without a display, checks
 the embedded HTTP interface and stops only that owned process. Linux browser mode
 retains the native build’s GTK/WebKit runtime requirements.
 
-Each file has a `.sha256` sidecar. `NATIVE-VERIFICATION.zip` contains all six owned production-window screenshots and matching source/version reports with synthetic test data, excluding app logs and credentials. The complete GitHub Release also includes
+Each file has a `.sha256` sidecar. `NATIVE-VERIFICATION.zip` contains all six owned production-window screenshots and matching source/version reports, plus two native Ubuntu 22.04 Linux package/runtime reports and screenshots with synthetic test data, excluding app logs and credentials. The complete GitHub Release also includes
 `SHA256SUMS`. Archives carry BUILD-INFO and the project license. Checksums detect
 corrupt downloads; they are not independent publisher signatures.
 
@@ -77,7 +80,7 @@ upload. Linux jobs install/remove DEB packages; Windows jobs install/remove MSI
 packages; macOS jobs mount and verify the DMG and its sealed app bundle. All six package jobs also run the native Downloads filesystem/lifecycle tests,
 including metadata persistence, failure reasons and confirmed file deletion.
 Linux/macOS run these with the race detector; Windows runs native functional tests.
-All six jobs start the native webview with synthetic data and save a screenshot. The publish job verifies the complete expected
+All six jobs start the native webview with synthetic data and save a screenshot. Linux jobs additionally install the DEB and run the installed executable in a pinned, isolated Ubuntu 22.04 userspace with glibc 2.35, without dependency bypass. Browser and native GTK startup must both pass on the native architecture. The ELF guard rejects any required glibc symbol above the declared floor. The publish job verifies the complete expected
 asset set, uploads everything to a draft, and checks the remote names and sizes
 before publishing. A draft with unexpected assets is refused for manual review.
 Published versions cannot be overwritten; use a new version for corrections.

@@ -46,10 +46,12 @@ class ReleaseInputs(unittest.TestCase):
                     patch.object(release.subprocess, 'check_output', side_effect=checked), \
                     patch.object(release.subprocess, 'run', side_effect=run), \
                     patch.object(release, 'elf_arch', return_value='amd64') as elf, \
+                    patch.object(release, 'verify_glibc_floor', return_value='2.34') as abi, \
                     patch.object(release, 'document_paths', return_value=[]), \
                     patch.object(release, 'archive', side_effect=archive):
                 release.package('1.2.0', 'amd64', binaries)
             self.assertIn(f'BIN_DIR={binaries}', calls[0][0])
+            abi.assert_called_once_with(binaries / 'spk-ocular-release')
             self.assertEqual([call.args[0] for call in elf.call_args_list],
                              [binaries / 'spk-ocular-release'])
             for command, kwargs in calls[1:]:

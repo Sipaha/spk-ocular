@@ -39,7 +39,7 @@ def capture(platform, pid, png):
         raise RuntimeError('native screenshot is empty')
 
 
-def smoke(platform, arch, version):
+def smoke(platform, arch, version, binary_override=None, commit_override=None):
     scratch = Path(os.environ['OCULAR_SCRATCH_DIR']) / 'native-smoke'
     scratch.mkdir(parents=True, exist_ok=True)
     profile = Path(tempfile.mkdtemp(prefix='p-', dir=scratch.parent))
@@ -61,6 +61,8 @@ def smoke(platform, arch, version):
     registry.chmod(0o600)
     stage = ROOT / 'build' / f'package-{platform}-{arch}'
     binary = ROOT / 'build/bin/spk-ocular-release' if platform == 'linux' else stage / ('spk-ocular.exe' if platform == 'windows' else 'SPK Ocular.app/Contents/MacOS/spk-ocular')
+    if binary_override is not None:
+        binary = Path(binary_override).resolve()
     assert subprocess.check_output([str(binary), 'version'], env=env, text=True).strip() == 'spk-ocular ' + version
     opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
     info_file = profile / 'data/test-api.json'
@@ -104,7 +106,7 @@ def smoke(platform, arch, version):
             time.sleep(3)
             png = scratch / f'{platform}-{arch}.png'
             capture(platform, child.pid, png)
-            report = {'platform': platform, 'arch': arch, 'version': version, 'commit': subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=ROOT, text=True).strip(), 'production': True, 'fixtureSynthetic': True, 'ownedWindow': True, 'pid': child.pid, 'screenshot': png.name}
+            report = {'platform': platform, 'arch': arch, 'version': version, 'commit': commit_override or subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=ROOT, text=True).strip(), 'production': True, 'fixtureSynthetic': True, 'ownedWindow': True, 'pid': child.pid, 'screenshot': png.name}
             (scratch / 'report.json').write_text(json.dumps(report, indent=2))
             print('Native webview opened a synthetic view; screenshot:', png)
         except Exception:
@@ -137,9 +139,11 @@ if __name__ == '__main__':
     parser.add_argument('--os', choices=['windows', 'darwin', 'linux'], required=True)
     parser.add_argument('--arch', choices=['amd64', 'arm64'], required=True)
     parser.add_argument('--version', required=True)
+    parser.add_argument('--binary', type=Path, help='installed executable in an isolated compatibility rootfs')
+    parser.add_argument('--commit', help='source revision inspected by the compatibility controller')
     args = parser.parse_args()
     try:
-        smoke(args.os, args.arch, args.version)
+        smoke(args.os, args.arch, args.version, args.binary, args.commit)
     except Exception as error:
         report_failure(error)
         raise
