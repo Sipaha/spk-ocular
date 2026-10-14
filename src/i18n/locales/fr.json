@@ -23,6 +23,8 @@
     "Un seul espace de travail."
   ],
   "lead": "Une application de bureau pour les développeurs et les équipes DevOps. Inspectez les ressources Kubernetes, suivez les logs Docker et gérez les releases Helm au même endroit.",
+  "setupTitle": "Sans installer kubectl ni la CLI Helm",
+  "setupText": "Connexion directe à l’API Kubernetes. Helm est intégré.",
   "galleryCaptions": [
     "Repérez les pods en échec dans les espaces de noms sélectionnés.",
     "Inspectez un pod et suivez ses logs à côté des détails.",
@@ -151,8 +153,8 @@
     ]
   ],
   "agentBoundary": "Les agents locaux exécutés sous le même utilisateur du système d’exploitation partagent ces permissions. Ocular ne les isole pas des autres programmes de votre ordinateur. Les conteneurs Docker autonomes sont actuellement disponibles uniquement dans l’interface ; les autorisations de projets ne les incluent pas.",
-  "localTitle": "Votre infrastructure reste entre vos mains.",
-  "localText": "Ocular se connecte directement à l’API Kubernetes depuis votre ordinateur, sans kubectl. Helm utilise le SDK intégré : aucune CLI Helm distincte n’est nécessaire. Utilisez votre kubeconfig et vos contextes Docker existants. Aucun serveur central ou composant Ocular dans le cluster n’est requis.",
+  "localTitle": "Aucun composant Ocular à installer dans votre cluster.",
+  "localText": "Ocular se connecte depuis votre ordinateur avec votre kubeconfig et vos contextes Docker existants. Aucun serveur central ou composant Ocular dans le cluster n’est requis.",
   "localPoints": [
     [
       "Votre accès existant",

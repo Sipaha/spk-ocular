@@ -16,7 +16,11 @@ for Chinese/Japanese, a blue accent and matching
 light/dark colors. The SVG eye mark uses a blue optical lens, a restrained rim
 and highlight; it remains legible at favicon and navigation sizes. Its product-led layout leads with Kubernetes + Docker,
 a large real app screen and unrestricted free commercial use. The opening copy
-identifies a desktop app for developers and DevOps beside Download. The hero
+identifies a desktop app for developers and DevOps beside Download. The hero also
+states that kubectl and a separate Helm CLI are unnecessary: Kubernetes access
+is direct and Helm is embedded. The infrastructure section explicitly names
+that no Ocular components need installation in the cluster; it does not promise
+that all cluster services, authentication helpers or desktop runtimes are unnecessary. The hero
 omits the local/no-account note at the owner’s request. Account absence is not
 product positioning: the copy instead names existing kubeconfig/Docker access.
 Future optional accounts or setup synchronization remain possible design choices,
@@ -172,6 +176,15 @@ screenshot set and disclose that UI language explicitly.
 Screenshots use demonstration data and are labeled accordingly. Product facts
 must match `README.md` and `docs/usage.md` on `master`. When the product changes,
 recapture screenshots from an isolated app profile, never from a user's cluster.
+
+## Repository About
+
+The GitHub repository description is:
+
+> Free Kubernetes and Docker desktop app for Windows, macOS, and Linux. Built-in Helm, logs, terminals, and file transfers. No kubectl or Helm CLI required.
+
+Changing this metadata requires an authenticated GitHub session or API credential
+with repository administration access. An SSH push alone does not update About.
 
 ## Publish
 

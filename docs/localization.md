@@ -66,9 +66,11 @@ to both content and tests; do not advertise incomplete dictionaries.
 
 ## Released capability copy
 
-The local-access section describes direct Kubernetes API access without kubectl,
-the embedded Helm SDK without a separate Helm CLI, and the continuing need for
-external authentication helpers configured in kubeconfig. The tools section
+The hero describes direct Kubernetes API access without kubectl and embedded
+Helm without a separate Helm CLI beside the download action. The infrastructure
+section separately states that no central management server or in-cluster Ocular
+components are required. It retains the continuing need for external
+authentication helpers configured in kubeconfig. The tools section
 explains Ctrl+K/Command+K navigation to views, environments and namespaces, and
 type/name resource queries such as `dep model` within selected namespaces.
 The query capability is available in the released 1.3.0 and 1.4.0 application;

@@ -23,6 +23,8 @@
     "一つのワークスペースに。"
   ],
   "lead": "開発者と DevOps のためのデスクトップアプリ。Kubernetes リソースの調査、Docker ログの確認、Helm リリースの管理を一つの画面で行えます。",
+  "setupTitle": "kubectl・Helm CLI のインストール不要",
+  "setupText": "Kubernetes API に直接接続。Helm は組み込み済みです。",
   "galleryCaptions": [
     "選択した名前空間で問題のある Pod を見つけます。",
     "Pod の詳細とログを同じ画面で確認します。",
@@ -151,8 +153,8 @@
     ]
   ],
   "agentBoundary": "同じ OS ユーザーで動作するローカルエージェントは、これらの権限を共有します。Ocular はエージェントを他のプログラムから隔離しません。単独の Docker コンテナは現在 UI からのみ利用でき、プロジェクトへの許可には含まれません。",
-  "localTitle": "インフラは、これからも自分の手で。",
-  "localText": "Ocular は、お使いのコンピューターから Kubernetes API に直接接続するため、kubectl は不要です。Helm は組み込み SDK で動作するので、別途 Helm CLI をインストールする必要はありません。既存の kubeconfig と Docker コンテキストを使用できます。中央管理サーバーやクラスター内の Ocular コンポーネントは不要です。",
+  "localTitle": "クラスターへの Ocular コンポーネントのインストールは不要。",
+  "localText": "Ocular は、お使いのコンピューターから既存の kubeconfig と Docker コンテキストで接続します。中央管理サーバーやクラスター内の Ocular コンポーネントは不要です。",
   "localPoints": [
     [
       "既存のアクセスを利用",

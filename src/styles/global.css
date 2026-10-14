@@ -71,6 +71,10 @@ p { color: var(--muted); text-wrap: pretty; }
   .hero-side { padding-top: 6px; }
 }
 .lead { font-size: 16px; line-height: 1.65; max-width: 460px; }
+.hero-setup { display: block; margin-top: 14px; font-size: 13px; line-height: 1.6; }
+.hero-setup strong, .hero-setup>span { display: block; }
+.hero-setup strong { font-weight: 600; }
+.hero-setup>span { color: var(--muted); }
 .download-action { display: inline-flex; flex-direction: column; align-items: flex-start; gap: 10px; }
 .all-releases { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; color: var(--accent); }
 .all-releases:hover { text-decoration: underline; text-underline-offset: 3px; }
