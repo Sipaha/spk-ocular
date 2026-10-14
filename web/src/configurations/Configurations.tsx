@@ -1,5 +1,5 @@
 import { createPortal } from 'react-dom'
-import { lazy, Suspense, useEffect, useImperativeHandle, useId, useRef, useState, type Ref } from 'react'
+import { lazy, Suspense, useEffect, useLayoutEffect, useImperativeHandle, useId, useRef, useState, type Ref } from 'react'
 import type { Target } from '../api/types'
 import type { Client } from '../api/client'
 import type { ConfigRequest, ConfigState, ConfigEntry } from './types'
@@ -41,7 +41,7 @@ export function Configurations({ client, onChanged, ref }: { client: Client; onC
  const box=useRef<HTMLDivElement>(null)
  const mark=useRef<ReturnType<typeof focusMark>|null>(null)
  useEffect(()=>{let live=true;void client.configurations({command:'status'}).then(s=>{if(live){setState(s);if(!s.initialized)setMode('scan')}},e=>{if(live)setError(String(e))});return()=>{live=false}},[client])
- useEffect(()=>{
+ useLayoutEffect(()=>{
   if(!mode)return
   if(!mark.current)mark.current=focusMark()
   if(busy){box.current?.focus();return}
@@ -108,6 +108,8 @@ export function Configurations({ client, onChanged, ref }: { client: Client; onC
    <div ref={box} role="dialog" aria-modal="true" aria-labelledby={titleId} tabIndex={-1}
     className={yamlDialog?"flex h-[calc(100dvh-32px)] w-[calc(100vw-32px)] flex-col rounded border border-line bg-panel p-3 text-fg shadow-2xl outline-none":"max-h-[88vh] w-[min(760px,96vw)] overflow-auto rounded-lg border border-line bg-panel p-5 text-fg shadow-2xl outline-none"}
     onKeyDown={e=>{
+     // Portals still bubble through React's target-list ancestors.
+     e.stopPropagation()
      if(e.defaultPrevented)return
      if(e.key==='Escape'){e.preventDefault();e.stopPropagation();cancel()}
      if(e.key==='Tab'){

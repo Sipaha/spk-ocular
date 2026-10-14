@@ -67,7 +67,7 @@ jobs:
         env:
           ARCH: ${{ matrix.arch }}
         run: |
-          sudo env OCULAR_SCRATCH_DIR="$OCULAR_SCRATCH_DIR" TMPDIR="$TMPDIR" python3 packaging/linux-compat.py --arch "$ARCH" --version "$RELEASE_VERSION" --artifacts "$PWD/dist/$RELEASE_VERSION/linux-$ARCH"
+          sudo env GITHUB_ACTIONS=true OCULAR_SCRATCH_DIR="$OCULAR_SCRATCH_DIR" TMPDIR="$TMPDIR" python3 packaging/linux-compat.py --arch "$ARCH" --version "$RELEASE_VERSION" --artifacts "$PWD/dist/$RELEASE_VERSION/linux-$ARCH"
       - name: Upload native screenshots and reports
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a

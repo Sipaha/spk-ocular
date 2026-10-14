@@ -339,6 +339,11 @@ No host package installation, binfmt registration, user display or daemon socket
 is used by the checker. The rootfs installs ordinary signed runtime packages and
 the actual DEB, then checks browser mode and the GTK synthetic view through private
 PID/IPC/UTS/network namespaces and Xvfb. The runtime kernel is shared.
+On sudo runners, mounts are prepared before dropping to UID/GID 1000 so private
+checkout parents remain accessible during setup. The application has no effective
+or bounding capabilities and cannot gain privileges; the rootfs is read-only at
+runtime and writable output stays in owned scratch. The checker verifies this
+identity before launching Ocular and emits bounded fixture logs on CI failure.
 
 The package builder and verifier both enforce `packaging/linux_abi.py`'s glibc
 2.35 symbol ceiling. This static guard complements, rather than replaces, the

@@ -1,4 +1,5 @@
 import importlib.util
+import io
 import json
 from pathlib import Path
 import tempfile
@@ -11,6 +12,21 @@ spec.loader.exec_module(compat)
 
 
 class LinuxCompatibilitySafety(unittest.TestCase):
+    def test_failure_diagnostics_are_bounded_and_escape_ci_annotation_content(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            work = Path(temporary) / 'linux-compatibility/amd64/work'
+            work.mkdir(parents=True)
+            (work / 'install.log').write_text('x' * 5000 + '\n100% complete\n::warning::fixture')
+            output = io.StringIO()
+            with patch.dict(compat.os.environ, OCULAR_SCRATCH_DIR=temporary, GITHUB_ACTIONS='true'), \
+                    patch('sys.stdout', output), patch('sys.stderr', io.StringIO()):
+                compat.failure_diagnostics('amd64', RuntimeError('installation failed'))
+            annotation = output.getvalue()
+            self.assertIn('installation failed', annotation)
+            self.assertIn('100%25 complete%0A::warning::fixture', annotation)
+            self.assertEqual(annotation.count('\n'), 1)
+            self.assertLess(len(annotation), 4400)
+
     def test_wrong_native_architecture_is_rejected_before_installing_any_package(self):
         with patch.object(compat, 'native_arch', return_value='amd64'):
             with self.assertRaisesRegex(ValueError, 'must run natively'):
@@ -44,8 +60,21 @@ class LinuxCompatibilitySafety(unittest.TestCase):
         self.assertNotIn('--unshare-user', args)
 
     def test_runtime_always_uses_private_network_and_non_root_identity(self):
-        args = compat.sandbox(Path('/owned-rootfs'), Path('/owned-work'), Path('/artifacts'), False)
+        with patch.object(compat.os, 'geteuid', return_value=1000):
+            args = compat.sandbox(Path('/owned-rootfs'), Path('/owned-work'), Path('/artifacts'), False)
         self.assertIn('--unshare-net', args)
         self.assertIn('--unshare-user', args)
         self.assertEqual(args[args.index('--uid') + 1], '1000')
         self.assertNotIn('--cap-add', args)
+
+    def test_root_runtime_mounts_before_dropping_identity_and_all_capabilities(self):
+        with patch.object(compat.os, 'geteuid', return_value=0):
+            args = compat.sandbox(Path('/owned-rootfs'), Path('/owned-work'), Path('/artifacts'), False)
+        self.assertIn('--unshare-net', args)
+        self.assertNotIn('--unshare-user', args)
+        self.assertNotIn('CAP_SYS_ADMIN', args)
+        self.assertEqual(args[args.index('--ro-bind') + 1], '/owned-rootfs')
+        self.assertIn('--reuid=1000', args)
+        self.assertIn('--clear-groups', args)
+        self.assertIn('--bounding-set=-all', args)
+        self.assertIn('--no-new-privs', args)

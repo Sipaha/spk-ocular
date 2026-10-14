@@ -74,6 +74,21 @@ it('unlocks only on Connect, resumes once, and Cancel never starts a connection'
 })
 
 
+it('configuration dialogs own keyboard events instead of the ancestor target list',async()=>{
+ setLanguage('en');const {client}=fakeClient([]),parentKeys=vi.fn()
+ vi.mocked(client.configurations).mockResolvedValue({initialized:true,encrypted:true,locked:true,resetRevision:'reviewed',candidates:[],entries:[]})
+ render(<div onKeyDown={parentKeys}><Configurations client={client} onChanged={()=>{}}/></div>)
+ await waitFor(()=>expect(client.configurations).toHaveBeenCalled())
+ fireEvent.click(screen.getByRole('button',{name:'Add kubeconfig'}))
+ fireEvent.click(await screen.findByRole('menuitem',{name:'Reset master password'}))
+ const cancel=await screen.findByRole('button',{name:'Cancel'})
+ fireEvent.keyDown(cancel,{key:'Enter'})
+ fireEvent.keyDown(cancel,{key:'ArrowDown'})
+ expect(parentKeys).not.toHaveBeenCalled()
+ expect(client.configurations).not.toHaveBeenCalledWith(expect.objectContaining({command:'reset'}))
+ fireEvent.click(cancel)
+})
+
 it('reviews reset with deletion warning and supports cancellation',async()=>{
  setLanguage('en');const {client}=fakeClient([])
  const state={initialized:true,encrypted:true,locked:true,resetRevision:'reviewed',candidates:[],entries:[{id:'private',name:'Private cluster',kind:'stored' as const,revision:'r'}]}

@@ -9,6 +9,7 @@ from pathlib import Path
 import platform
 import shutil
 import subprocess
+import sys
 import tarfile
 import urllib.request
 
@@ -20,6 +21,21 @@ ROOTFS_SHA256 = {
     'amd64': 'bf77f4dbc4b9bdca141695de07c6cf67f962d18a948fae58af3bce02c35f7b96',
     'arm64': '1488ed73cd8917044116953d7c0f860009c6d9d241dcadd43a7c61fca450fb07',
 }
+
+
+def failure_diagnostics(arch, error):
+    """Expose bounded, fixture-only errors even when CI log downloads need auth."""
+    details = [str(error)]
+    scratch = Path(os.environ['OCULAR_SCRATCH_DIR']).resolve() / 'linux-compatibility' / arch
+    for name in ('install.log', 'runtime.log'):
+        path = scratch / 'work' / name
+        if path.is_file():
+            details.append(name + ':\n' + path.read_bytes()[-4096:].decode('utf-8', errors='replace'))
+    message = '\n'.join(details)
+    print(message, file=sys.stderr)
+    if os.environ.get('GITHUB_ACTIONS') == 'true':
+        escaped = message.replace('%', '%25').replace('\r', '%0D').replace('\n', '%0A')
+        print('::error title=Owned Ubuntu 22.04 compatibility fixture::' + escaped, flush=True)
 
 
 def rootfs_url(arch):
@@ -64,11 +80,12 @@ def prepare_rootfs(scratch, arch):
 def sandbox(rootfs, work, artifacts, setup):
     # Only this owned rootfs and scratch are writable. No host home, daemon
     # socket, display, runtime directory or source tree is writable/mounted.
-    args = ['bwrap', '--bind', str(rootfs), '/', '--bind', str(work), '/verify',
-            '--ro-bind', str(artifacts), '/artifacts', '--ro-bind', str(ROOT / 'packaging'), '/src/packaging',
+    args = ['bwrap', '--bind' if setup else '--ro-bind', str(rootfs), '/', '--bind', str(work), '/verify',
+            '--bind', str(work / 'tmp'), '/tmp',
+            '--ro-bind', str(artifacts), '/artifacts', '--ro-bind', str(ROOT / 'packaging'), '/packaging',
             '--proc', '/proc', '--dev', '/dev', '--unshare-pid', '--unshare-ipc', '--unshare-uts',
             '--hostname', 'ocular-linux-compat', '--die-with-parent', '--new-session', '--clearenv',
-            '--chdir', '/src/packaging']
+            '--chdir', '/packaging']
     env = {'PATH': '/usr/sbin:/usr/bin:/sbin:/bin', 'HOME': '/verify/home',
            'TMPDIR': '/verify/tmp', 'OCULAR_SCRATCH_DIR': '/verify', 'PYTHONDONTWRITEBYTECODE': '1',
            'DEBIAN_FRONTEND': 'noninteractive', 'LANG': 'C.UTF-8', 'LC_ALL': 'C.UTF-8',
@@ -87,6 +104,16 @@ def sandbox(rootfs, work, artifacts, setup):
         # Do not ask newuidmap to remap root's IDs through absent subuid rules.
         prefix = [] if os.geteuid() == 0 else ['unshare', '--user', '--map-auto', '--map-root-user']
         return prefix + args
+    if os.geteuid() == 0:
+        # Resolve/mount the runner's private checkout as root first. Changing
+        # bwrap's UID before mount setup cannot traverse a runner-owned 0700
+        # parent. Drop identity and every capability inside the owned mount
+        # namespace instead; the application never runs as root.
+        return args + ['--unshare-net', '--cap-drop', 'ALL',
+                       '--cap-add', 'CAP_SETUID', '--cap-add', 'CAP_SETGID',
+                       '--cap-add', 'CAP_SETPCAP', 'setpriv', '--reuid=1000',
+                       '--regid=1000', '--clear-groups', '--bounding-set=-all',
+                       '--no-new-privs', '--']
     return args + ['--unshare-user', '--uid', '1000', '--gid', '1000', '--unshare-net']
 
 
@@ -108,6 +135,8 @@ def verify(arch, release_version, artifacts):
         work = scratch / 'work'
         for name in ('', 'home', 'tmp'):
             (work / name).mkdir(exist_ok=True)
+            if os.geteuid() == 0:
+                os.chown(work / name, 1000, 1000)
         setup = sandbox(rootfs, work, artifacts, True)
         packages = ['libgtk-3-0', 'libwebkit2gtk-4.1-0', 'python3', 'binutils', 'xvfb', 'xauth',
                     'x11-utils', 'imagemagick', 'fonts-dejavu-core']
@@ -124,6 +153,14 @@ def verify(arch, release_version, artifacts):
             with (rootfs / 'etc/group').open('a') as output:
                 output.write('ocular:x:1000:\n')
         run = sandbox(rootfs, work, artifacts, False)
+        identity = json.loads(subprocess.check_output(run + ['python3', '-c',
+            'import json,os; s=dict(line.split(":",1) for line in open("/proc/self/status") if ":" in line); '
+            'print(json.dumps({"uid":os.geteuid(),"gid":os.getegid(),"capEff":s["CapEff"].strip(),'
+            '"capBnd":s["CapBnd"].strip(),"noNewPrivs":s["NoNewPrivs"].strip()}))'], text=True))
+        if (identity['uid'] != 1000 or identity['gid'] != 1000 or int(identity['capEff'], 16) != 0
+                or identity['noNewPrivs'] != '1'
+                or (os.geteuid() == 0 and int(identity['capBnd'], 16) != 0)):
+            raise ValueError('compatibility application runtime retained a privileged identity or capability')
         glibc = subprocess.check_output(run + ['getconf', 'GNU_LIBC_VERSION'], text=True).strip()
         if glibc != 'glibc ' + MIN_GLIBC:
             raise ValueError('compatibility environment did not retain the exact tested glibc baseline')
@@ -138,7 +175,7 @@ def verify(arch, release_version, artifacts):
             subprocess.run(run + ['python3', '-c', 'from browser_smoke import verify_browser; verify_browser("/usr/bin/spk-ocular")'],
                            stdout=log, stderr=log, check=True)
             commit = subprocess.check_output(['git', '-c', 'safe.directory=' + str(ROOT), 'rev-parse', 'HEAD'], cwd=ROOT, text=True).strip()
-            subprocess.run(run + ['xvfb-run', '-a', 'python3', '/src/packaging/smoke-native.py',
+            subprocess.run(run + ['xvfb-run', '-a', 'python3', '/packaging/smoke-native.py',
                                     '--os', 'linux', '--arch', arch, '--version', release_version,
                                     '--binary', '/usr/bin/spk-ocular', '--commit', commit],
                            stdout=log, stderr=log, check=True)
@@ -161,4 +198,8 @@ if __name__ == '__main__':
     parser.add_argument('--version', required=True)
     parser.add_argument('--artifacts', type=Path, required=True)
     args = parser.parse_args()
-    verify(args.arch, args.version, args.artifacts)
+    try:
+        verify(args.arch, args.version, args.artifacts)
+    except Exception as error:
+        failure_diagnostics(args.arch, error)
+        raise

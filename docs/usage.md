@@ -148,7 +148,9 @@ and continues that connection; linked files remain available without unlocking. 
 recovery or OS-keychain integration. Cancel closes the password dialog without
 connecting or unlocking. **Reset master password** is available in that dialog
 and the Add menu; its separate review lists all encrypted configurations and
-warns that they will be permanently deleted. Cancel preserves them. Confirming
+warns that they will be permanently deleted. Cancel receives initial focus;
+Enter on Cancel closes the review and preserves the encrypted configurations.
+The dialog owns keyboard input without selecting a target behind it. Confirming
 removes the encrypted records and master key, closes their sessions, preserves
 linked external files, and allows creating a new master password. Keep an independent copy of your configs:
 losing the password makes the stored YAML inaccessible.
