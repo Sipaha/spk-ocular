@@ -96,11 +96,11 @@ Operator reports without claiming live scans, exploitability or compliance.
 Security neither installs the operator nor runs scans. New feature copy must
 describe a verified published release; the complete 1.4.0 assets are verified.
 
-Linux installation copy distinguishes the glibc 2.39 package floor from verified
-1.6.0 x86-64 archive runtime on Ubuntu 22.04 (glibc 2.35) and Debian 12
-(glibc 2.36). Debian 13 DEB and Fedora 44 RPM installation are verified. All
-eight locales retain GTK 3/WebKit2GTK 4.1 requirements in browser mode, the
-isolated userspace/shared-kernel/X11 scope and the Ubuntu 24.04 ARM64 baseline.
-These checks do not certify other kernels, Wayland or GPU drivers. Preserve the
-package/archive and architecture distinction in translations; do not generalize
-the matrix into universal Linux compatibility.
+Linux installation copy describes the released 1.6.1 DEB/RPM glibc 2.35 floor.
+Ubuntu 24.04 remains the native build baseline. Normal package installation and
+desktop/browser startup are verified on Ubuntu 22.04 and Debian 12/13 (DEB),
+and Fedora 44 (RPM) on x86-64; Ubuntu 22.04 also has native ARM64 verification.
+All eight locales retain GTK 3/WebKit2GTK 4.1 requirements in browser mode and
+the isolated userspace/shared-kernel/X11 scope. These checks do not certify stock
+kernels, Wayland or GPU drivers. Do not generalize the matrix into universal
+Linux compatibility.
