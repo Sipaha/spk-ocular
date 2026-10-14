@@ -100,6 +100,14 @@ Log-stream fixtures capture the drop/EOF generation before delivering bytes and
 prioritize a pending drop over appended records. A metrics scheduling budget
 starts after inventory readiness so it measures sampling rather than discovery.
 
+Log geometry regressions sample ResizeObserver deliveries and animation frames,
+not only the final layout. They cover fixed/wrapped rows, Follow/history,
+fractional resize with incoming data, and both Wrap directions retaining the
+same logical history entry. Follow checks compare the painted tail gap through
+variable-height measurements. Format changes and resize rounding must not
+silently resume Follow or move the reader's anchor; explicit End and user scroll
+input must still work after the temporary layout guard clears.
+
 Fake Engine event emission queues a server-side message; it does not acknowledge
 the client's reader. Tests for initial reconciliation hold the list response
 until the feed has recorded the event, so a late live event cannot be mistaken

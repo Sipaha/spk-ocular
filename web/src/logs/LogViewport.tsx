@@ -2,7 +2,7 @@ import {ActionIconButton} from '../components/ActionIconButton'
 import {ActionIcon} from '../components/icons'
 // Virtualized log rows share stable selection and follow state. Rows show
 // time/source prefixes and ANSI spans; copying uses the same visible rowText.
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import type { RefObject } from 'react'
 import { observeElementRect, useVirtualizer } from '@tanstack/react-virtual'
 import { t } from '../i18n'
@@ -12,6 +12,8 @@ import type { DragSelection } from './logSelection'
 import { buildDragSelectionText, pickRowIndexAtY, resolveRowEndpoint } from './logSelection'
 import type { Range } from './match'
 import { fmtTime, renderMessage, rowText, type RowOpts } from './row'
+
+interface HistoryAnchor { id: number; index: number; inset: number; top: number }
 
 export interface LogViewportProps {
   /** Filtered entries; ids are the stable virtualizer row keys. */
@@ -80,6 +82,12 @@ export function LogViewport({
   const programmaticScrollRef = useRef(false)
   const followRef = useRef(follow)
   followRef.current = follow
+  const committedWrapRef = useRef(wordWrap)
+  const historyAnchorRef = useRef<HistoryAnchor | null>(null)
+  const wrappingHistoryRef = useRef<HistoryAnchor | null>(null)
+  const wrapFrameRef = useRef<number | null>(null)
+  const wrapOffsetRef = useRef<number | null>(null)
+  const resizeResidualRef = useRef(0)
 
   // Fixed-row fast path: with wrap OFF every row is exactly one text line
   // high, so per-row dynamic measurement is skipped entirely — no
@@ -130,14 +138,37 @@ export function LogViewport({
     // don't — React nodes and the measurement cache follow the LINE, so the
     // content under the viewport doesn't jump and text selection survives.
     getItemKey,
+    onChange: instance => {
+      // Measurements can notify React asynchronously. Commit the matching
+      // size and positions now, before paint, so overflow from a newly wrapped
+      // row cannot temporarily replace the content's real bottom. Fixed rows
+      // retain their unobserved fast path; their positions do not change.
+      const content = parentRef.current?.querySelector<HTMLElement>('[data-log-content]')
+      if (!content) return
+      content.style.height = `${instance.getTotalSize()}px`
+      for (const item of instance.getVirtualItems()) {
+        const node = instance.elementsCache.get(item.key)
+        if (node) node.style.top = `${item.start}px`
+      }
+    },
   })
   // When a row above the viewport is (re)measured to a different size while
   // the user is reading (not following), compensate the scroll offset so the
   // visible content doesn't shift — kills the upward-scroll jitter of lazy
   // dynamic measurement. (Instance property, not a constructor option, in
   // this virtual-core version.)
-  virtualizer.shouldAdjustScrollPositionOnItemSizeChange = (item, _delta, instance) =>
-    !followRef.current && item.start < (instance.scrollOffset ?? 0)
+  virtualizer.shouldAdjustScrollPositionOnItemSizeChange = (item, _delta, instance) => {
+    if (followRef.current) return false
+    const anchor = wrappingHistoryRef.current ??
+      (wordWrap !== committedWrapRef.current ? historyAnchorRef.current : null)
+    // During a format change, use the logical fold rather than an offset that
+    // advances after every correction. Otherwise rows below the fold can be
+    // mistaken for rows above it and push history all the way to the tail.
+    if (anchor) return item.index < anchor.index
+    instance.getVirtualItems()
+    const current = instance.measurementsCache[item.index]
+    return current.end <= (instance.scrollOffset ?? 0)
+  }
 
   // While Ctrl+A "select all" is active, re-apply the full-container selection
   // whenever the virtualized range changes (scroll / new lines) so every
@@ -269,6 +300,73 @@ export function LogViewport({
   // had scrolled up to read older lines.
   const virtualizerRef = useRef(virtualizer)
   virtualizerRef.current = virtualizer
+  const clearResizeResidual = useCallback(() => {
+    const content = parentRef.current?.querySelector<HTMLElement>('[data-log-content]')
+    if (content && resizeResidualRef.current) content.style.top = '0px'
+    resizeResidualRef.current = 0
+  }, [parentRef])
+  const captureHistory = useCallback(() => {
+    const el = parentRef.current
+    if (!el?.clientHeight || followRef.current || wrappingHistoryRef.current) return
+    const offset = el.scrollTop - resizeResidualRef.current
+    const item = virtualizerRef.current.getVirtualItemForOffset(offset)
+    const entry = item && entriesRef.current[item.index]
+    if (item && entry) historyAnchorRef.current = {
+      id: entry.id, index: item.index, inset: Math.max(0, offset - item.start),
+      top: el.getBoundingClientRect().top,
+    }
+  }, [parentRef])
+  const cancelWrapAnchor = useCallback(() => {
+    if (wrapFrameRef.current !== null) cancelAnimationFrame(wrapFrameRef.current)
+    wrapFrameRef.current = null
+    wrapOffsetRef.current = null
+    wrappingHistoryRef.current = null
+  }, [])
+  const restoreWrapAnchor = useCallback(() => {
+    const anchor = wrappingHistoryRef.current, el = parentRef.current
+    if (!anchor || !el?.clientHeight) return
+    if (followRef.current) { cancelWrapAnchor(); return }
+    if (entriesRef.current[anchor.index]?.id !== anchor.id) {
+      anchor.index = entriesRef.current.findIndex(e => e.id === anchor.id)
+    }
+    if (anchor.index < 0) { cancelWrapAnchor(); return }
+    virtualizerRef.current.getVirtualItems()
+    const item = virtualizerRef.current.measurementsCache[anchor.index]
+    const offset = item.start + Math.min(anchor.inset, Math.max(0, item.size - 1)) +
+      el.getBoundingClientRect().top - anchor.top
+    const changed = wrapOffsetRef.current === null || Math.abs(offset - wrapOffsetRef.current) > 0.5
+    const displaced = Math.abs(el.scrollTop - offset) > 0.5
+    if (displaced) virtualizerRef.current.scrollToOffset(offset, { align: 'start' })
+    // Appends below the anchor must not keep restarting the guard. Only an
+    // actual anchor/geometry correction extends its settling interval.
+    if (!changed && !displaced && wrapFrameRef.current !== null) return
+    wrapOffsetRef.current = offset
+    if (wrapFrameRef.current !== null) cancelAnimationFrame(wrapFrameRef.current)
+    // Keep layout-driven scroll events out of Follow until the committed row
+    // measurements have had two quiet frames, just like resize correction.
+    wrapFrameRef.current = requestAnimationFrame(() => {
+      wrapFrameRef.current = requestAnimationFrame(() => {
+        wrapFrameRef.current = null
+        wrapOffsetRef.current = null
+        wrappingHistoryRef.current = null
+        captureHistory()
+      })
+    })
+  }, [parentRef, captureHistory, cancelWrapAnchor])
+  useLayoutEffect(() => {
+    if (wordWrap !== committedWrapRef.current) {
+      if (!followRef.current && historyAnchorRef.current) {
+        wrappingHistoryRef.current = { ...historyAnchorRef.current }
+        wrapOffsetRef.current = null
+      }
+      committedWrapRef.current = wordWrap
+      clearResizeResidual()
+    }
+    if (followRef.current) clearResizeResidual()
+    if (wrappingHistoryRef.current) restoreWrapAnchor()
+    else captureHistory()
+  })
+  useEffect(() => cancelWrapAnchor, [cancelWrapAnchor])
 
   // If the viewport unmounts mid-drag (tab close, window switch), the
   // select-none guard must not linger on <body>.
@@ -351,9 +449,10 @@ export function LogViewport({
   // Wrap toggle / probe arrival invalidate every cached measurement: wrap-on
   // heights are meaningless after wrap-off (and vice versa), and the probed
   // height replaces the initial 20px estimate for all unmeasured rows.
-  useEffect(() => {
+  useLayoutEffect(() => {
     virtualizerRef.current.measure()
-  }, [wordWrap, probedRowHeight])
+    restoreWrapAnchor()
+  }, [wordWrap, probedRowHeight, restoreWrapAnchor])
   const matchIndicesRef = useRef(matchIndices)
   matchIndicesRef.current = matchIndices
   // safeMatchIndexRef mirrors safeMatchIndex so the scroll effect can read it
@@ -362,7 +461,9 @@ export function LogViewport({
   const safeMatchIndexRef = useRef(safeMatchIndex)
   safeMatchIndexRef.current = safeMatchIndex
 
-  function programmaticScrollTo(idx: number, align: 'start' | 'center' | 'end') {
+  const programmaticScrollTo = useCallback((idx: number, align: 'start' | 'center' | 'end') => {
+    cancelWrapAnchor()
+    clearResizeResidual()
     programmaticScrollRef.current = true
     virtualizerRef.current.scrollToIndex(idx, { align })
     // Second pass one frame later: rows measured after the first scroll can
@@ -374,7 +475,7 @@ export function LogViewport({
       virtualizerRef.current.scrollToIndex(idx, { align })
       requestAnimationFrame(() => { programmaticScrollRef.current = false })
     })
-  }
+  }, [cancelWrapAnchor, clearResizeResidual])
 
   // Resume following: jump to the newest line and re-arm follow. Fired by the
   // floating button.
@@ -391,12 +492,12 @@ export function LogViewport({
   // in view) don't trigger a scroll.
   const lastEntryId = entries.length > 0 ? entries[entries.length - 1].id : -1
   const prevFollowedIdRef = useRef(lastEntryId)
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (follow && lastEntryId >= 0 && lastEntryId !== prevFollowedIdRef.current) {
       programmaticScrollTo(entriesRef.current.length - 1, 'end')
     }
     prevFollowedIdRef.current = lastEntryId
-  }, [lastEntryId, follow])
+  }, [lastEntryId, follow, programmaticScrollTo])
 
   // ResizeObserver runs after layout and before paint. Correct the offset in
   // that same delivery, not a later animation frame: a dock height change moves
@@ -411,6 +512,8 @@ export function LogViewport({
     let lastWidth = el.clientWidth
     let lastHeight = el.clientHeight
     let lastScrollHeight = el.scrollHeight
+    let historyOffset = el.scrollTop - resizeResidualRef.current
+    let appliedOffset = el.scrollTop
     let gateFrame: number | null = null
     const ro = new ResizeObserver(() => {
       const top = el.getBoundingClientRect().top
@@ -423,16 +526,27 @@ export function LogViewport({
       lastScrollHeight = scrollHeight
       // Hidden tabs have no meaningful geometry. Do not carry their zero rect
       // into a restored viewport or move the user's saved history position.
-      if (!height || !changed || entriesRef.current.length === 0) return
+      if (!height || entriesRef.current.length === 0) return
+      if (wrappingHistoryRef.current) { restoreWrapAnchor(); return }
+      if (el.scrollTop !== appliedOffset) historyOffset = el.scrollTop - resizeResidualRef.current
+      if (!changed) return
       programmaticScrollRef.current = true
-      el.scrollTop = followRef.current
-        ? Math.max(0, el.scrollHeight - height)
-        : el.scrollTop + moved
+      const maximum = Math.max(0, el.scrollHeight - height)
+      historyOffset = followRef.current ? maximum : Math.max(0, Math.min(maximum, historyOffset + moved))
+      el.scrollTop = historyOffset
+      appliedOffset = el.scrollTop
+      // scrollTop may round to device pixels. Carry the intended offset, not
+      // its rounded readback, and keep that subpixel remainder in the content
+      // position. Incremental rounding must not accumulate into a line jump.
+      resizeResidualRef.current = followRef.current ? 0 : appliedOffset - historyOffset
+      const inner = el.querySelector<HTMLElement>('[data-log-content]')
+      if (inner) inner.style.top = `${resizeResidualRef.current}px`
       if (gateFrame !== null) cancelAnimationFrame(gateFrame)
       gateFrame = requestAnimationFrame(() => {
         gateFrame = requestAnimationFrame(() => {
           gateFrame = null
           programmaticScrollRef.current = false
+          captureHistory()
         })
       })
     })
@@ -444,12 +558,13 @@ export function LogViewport({
     if (content) ro.observe(content)
     return () => {
       ro.disconnect()
+      clearResizeResidual()
       if (gateFrame !== null) {
         cancelAnimationFrame(gateFrame)
         programmaticScrollRef.current = false
       }
     }
-  }, [parentRef, wordWrap, hasEntries])
+  }, [parentRef, wordWrap, hasEntries, restoreWrapAnchor, captureHistory, clearResizeResidual])
 
   // Search target: scroll only when the user explicitly navigated (the tick
   // bumps on a fresh query or F3 / Enter / ↑↓ button presses). Listening to
@@ -463,7 +578,7 @@ export function LogViewport({
     const targetIdx = idxs[safeMatchIndexRef.current]
     if (targetIdx === undefined) return
     programmaticScrollTo(targetIdx, 'center')
-  }, [searchNavTick])
+  }, [searchNavTick, programmaticScrollTo])
 
   return (
     <div className="relative min-h-0 flex-1" onKeyDown={event=>{
@@ -484,6 +599,8 @@ export function LogViewport({
         // gate, which on a bursty stream is high a large fraction of the time
         // (every chunk pulses it) — the old "can't unstick from the bottom" bug.
         onWheel={(e) => {
+          cancelWrapAnchor()
+          clearResizeResidual()
           if (e.deltaY < 0 && followRef.current) setFollow(false)
           // WebKit can miss mouseup outside its window. A released wheel
           // must not keep running the selection clamp or freezing ingestion.
@@ -500,7 +617,7 @@ export function LogViewport({
           // would flip follow off the moment the viewport sat at scrollTop=0
           // with a tall total size, leaving the new window pinned at the
           // start instead of at the live tail.
-          if (programmaticScrollRef.current) return
+          if (programmaticScrollRef.current || wrappingHistoryRef.current) return
           const { scrollTop, scrollHeight, clientHeight } = parentRef.current
           // Stick-to-bottom: drop follow when the user scrolls up past
           // ~50px (scrollbar drag / keyboard — wheel is handled above),
@@ -510,6 +627,12 @@ export function LogViewport({
             if (followRef.current) setFollow(false)
           } else {
             if (!followRef.current) setFollow(true)
+          }
+          captureHistory()
+        }}
+        onKeyDownCapture={e => {
+          if (['ArrowUp', 'ArrowDown', 'PageUp', 'PageDown', 'Home', 'End'].includes(e.key)) {
+            cancelWrapAnchor(); clearResizeResidual()
           }
         }}
       >

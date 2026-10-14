@@ -668,6 +668,11 @@ unwrapped rows. Resizing the bottom panel preserves the screen position of log
 rows before paint: Follow stays at the tail, including when toggling line
 wrapping, while reading history keeps its position without enabling Follow. At the start/end of available history the
 scroll offset is clamped. Hidden tabs retain their history position when restored.
+Changing Wrap while reading history keeps the first visible logical log entry
+and its position within the line, clamped when the line becomes shorter. It does
+not resume Follow. New incoming lines remain below that reading position.
+Fractional panel sizes retain the precise scroll offset and its subpixel
+remainder, so repeated rounding cannot accumulate into a visible history drift.
 Wheel input releases a stale selection drag if WebKit missed
 mouseup, and stops caret correction from pulling the scroll position back.
 

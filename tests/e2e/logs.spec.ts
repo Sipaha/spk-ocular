@@ -570,3 +570,113 @@ test('changing wrap retains the live tail before the next dock resize',async({pa
  await expect(panel.getByText(tail,{exact:true})).toBeInViewport()
  expect(await vp.evaluate(el=>el.scrollHeight-el.scrollTop-el.clientHeight)).toBeLessThanOrEqual(1)
 })
+
+for (const initiallyWrapped of [false, true]) {
+ test(`wrap toggles preserve paused history and its logical row (${initiallyWrapped?'wrapped':'fixed'} first)`,async({page})=>{
+  await page.setViewportSize({width:1400,height:1000})
+  const panel=await openLogs(page,'api'),vp=panel.locator('[data-log-viewport]')
+  const wrap=panel.getByRole('button',{name:'Wrap',exact:true}),follow=panel.getByRole('button',{name:'Follow',exact:true})
+  if(initiallyWrapped)await wrap.click()
+  await emit(page,'api',{lines:Array.from({length:400},(_,i)=>`wrap history ${i} ${'message '.repeat(50)}`)})
+  await expect(panel.getByText(`wrap history 399 ${'message '.repeat(50)}`,{exact:true})).toBeInViewport()
+  await vp.hover();await page.mouse.wheel(0,-3000)
+  await expect(follow).toBeVisible()
+  const anchor=async()=>vp.evaluate(el=>{
+   const top=el.getBoundingClientRect().top+parseFloat(getComputedStyle(el).paddingTop)
+   const row=Array.from(el.querySelectorAll<HTMLElement>('[data-index]')).find(r=>r.getBoundingClientRect().bottom>top)!
+   return {index:row.dataset.index!,inset:Math.max(0,top-row.getBoundingClientRect().top),height:row.getBoundingClientRect().height}
+  })
+  for(let toggle=0;toggle<2;toggle++){
+   const before=await anchor()
+   await wrap.click()
+   await expect(follow).toBeVisible()
+   await expect.poll(async()=>(await anchor()).index).toBe(before.index)
+   const after=await anchor()
+   expect(after.inset).toBeLessThanOrEqual(Math.min(before.inset,after.height-1)+1)
+   await emit(page,'api',{lines:[`history stays paused ${toggle}`]})
+   await expect(follow).toBeVisible()
+   expect((await anchor()).index).toBe(before.index)
+   await page.screenshot({path:join(scratchRoot,`wrap-history-${initiallyWrapped?'wrapped':'fixed'}-${toggle}.png`)})
+  }
+  await page.getByRole('separator',{name:'Resize the bottom panel',exact:true}).press('ArrowDown')
+  await expect(follow).toBeVisible()
+  await vp.focus();await page.keyboard.press('End')
+  await expect(follow).toHaveCount(0)
+  await expect(panel.getByText('history stays paused 1',{exact:true})).toBeInViewport()
+ })
+}
+
+for(const wrapped of [false,true]){
+ test(`live Follow keeps one painted tail gap (${wrapped?'wrapped':'fixed'})`,async({page})=>{
+  await page.setViewportSize({width:1400,height:1000})
+  const panel=await openLogs(page,'api'),vp=panel.locator('[data-log-viewport]')
+  if(wrapped)await panel.getByRole('button',{name:'Wrap',exact:true}).click()
+  const line=(i:number)=>`painted live tail ${i} ${'content '.repeat(wrapped?40:2)}`
+  await emit(page,'api',{lines:Array.from({length:400},(_,i)=>line(i))})
+  await expect(panel.getByText(line(399),{exact:true})).toBeInViewport()
+  await page.evaluate(()=>new Promise<void>(r=>requestAnimationFrame(()=>requestAnimationFrame(()=>r()))))
+  await vp.evaluate(el=>{
+   const probe={gaps:[] as number[],frame:0,observer:null as ResizeObserver|null}
+   const sample=()=>{
+    const row=el.querySelector('[data-log-content]')?.lastElementChild
+    if(row)probe.gaps.push(el.getBoundingClientRect().bottom-row.getBoundingClientRect().bottom)
+   }
+   const frame=()=>{sample();probe.frame=requestAnimationFrame(frame)}
+   probe.frame=requestAnimationFrame(frame)
+   probe.observer=new ResizeObserver(sample);probe.observer.observe(el.querySelector('[data-log-content]')!)
+   Object.assign(window,{liveTailPaintProbe:probe})
+  })
+  for(let i=400;i<412;i++){
+   await emit(page,'api',{lines:[line(i)]})
+   await expect(panel.getByText(line(i),{exact:true})).toBeInViewport()
+   await page.evaluate(()=>new Promise<void>(r=>requestAnimationFrame(()=>requestAnimationFrame(()=>r()))))
+  }
+  const gaps=await page.evaluate(()=>{
+   const p=(window as unknown as {liveTailPaintProbe:{gaps:number[];frame:number;observer:ResizeObserver}}).liveTailPaintProbe
+   cancelAnimationFrame(p.frame);p.observer.disconnect();return p.gaps
+  })
+  console.log('painted live tail gaps',JSON.stringify({wrapped,gaps}))
+  expect(gaps.length).toBeGreaterThan(20)
+  expect(Math.max(...gaps)-Math.min(...gaps)).toBeLessThanOrEqual(1)
+  await expect(panel.getByRole('button',{name:'Follow',exact:true})).toHaveCount(0)
+ })
+}
+
+for(const following of [true,false]){
+ test(`unwrapped streaming resize keeps every painted row at fractional steps (${following?'Follow':'history'})`,async({page})=>{
+  await page.setViewportSize({width:1280,height:820})
+  const panel=await openLogs(page,'api'),vp=panel.locator('[data-log-viewport]')
+  await emit(page,'api',{lines:Array.from({length:400},(_,i)=>`fractional resize ${i} ${'content '.repeat(20)}`)})
+  await expect(rows(panel).last()).toContainText('fractional resize 399')
+  if(!following){await vp.hover();await page.mouse.wheel(0,-2000);await expect(panel.getByRole('button',{name:'Follow',exact:true})).toBeVisible()}
+  const anchor=await vp.evaluate(el=>{
+   const b=el.getBoundingClientRect(),rs=Array.from(el.querySelectorAll<HTMLElement>('[data-index]'))
+   const row=rs.filter(r=>r.getBoundingClientRect().top>b.top+50&&r.getBoundingClientRect().bottom<b.bottom-35).at(-1)!
+   return {index:row.dataset.index!,y:row.getBoundingClientRect().top}
+  })
+  await vp.evaluate((el,a)=>{
+   const probe={samples:[] as (number|null)[],frame:0,observer:null as ResizeObserver|null}
+   const sample=()=>probe.samples.push(el.querySelector(`[data-index="${a.index}"]`)?.getBoundingClientRect().top??null)
+   const frame=()=>{sample();probe.frame=requestAnimationFrame(frame)}
+   probe.frame=requestAnimationFrame(frame);probe.observer=new ResizeObserver(sample);probe.observer.observe(el)
+   Object.assign(window,{fractionalResizeProbe:probe})
+  },anchor)
+  const sep=page.getByRole('separator',{name:'Resize the bottom panel',exact:true}),b=(await sep.boundingBox())!
+  await page.mouse.move(b.x+60,b.y+2);await page.mouse.down()
+  for(let i=1;i<=24;i++){
+   await page.mouse.move(b.x+60,b.y+2+i*1.25)
+   await emit(page,'api',{lines:[`pending during fractional drag ${i}`]})
+   await page.evaluate(()=>new Promise<void>(r=>requestAnimationFrame(()=>requestAnimationFrame(()=>r()))))
+  }
+  const samples=await page.evaluate(()=>{
+   const p=(window as unknown as {fractionalResizeProbe:{samples:(number|null)[];frame:number;observer:ResizeObserver}}).fractionalResizeProbe
+   cancelAnimationFrame(p.frame);p.observer.disconnect();return p.samples
+  })
+  await page.mouse.up()
+  console.log('fractional streaming resize',JSON.stringify({following,anchor,samples}))
+  expect(samples.length).toBeGreaterThan(40)
+  expect(samples.every(y=>y!==null)).toBe(true)
+  expect(Math.max(...samples.map(y=>Math.abs(y!-anchor.y)))).toBeLessThanOrEqual(1)
+  await expect(panel.getByRole('button',{name:'Follow',exact:true})).toHaveCount(following?0:1)
+ })
+}
