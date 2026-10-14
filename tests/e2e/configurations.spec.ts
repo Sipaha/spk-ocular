@@ -321,3 +321,52 @@ test('locked rows, Connect-only global unlock, Cancel and reviewed master reset'
   await expect(page.getByRole('button',{name:'Create master password',exact:true})).toBeVisible()
  }finally{await page.close();if(app)await stop(app)}
 })
+
+test('adding custom YAML unlocks an empty vault without connecting',async({browser})=>{
+ const root=mkdtempSync(join(scratch,'config-empty-vault-')),e=env(root),port=await freePort(),url=`http://127.0.0.1:${port}/`
+ writeAtomic(e.one,ONE)
+ let app:ChildProcess|undefined
+ const page=await browser.newPage(),connects:string[]=[]
+ page.on('request',r=>{if(new URL(r.url()).pathname==='/api/ConnectTarget')connects.push(r.url())})
+ try{
+  app=await start(port,e);await page.goto(url)
+  await page.getByRole('button',{name:'Skip for now',exact:true}).click()
+  await page.getByRole('button',{name:'Add kubeconfig',exact:true}).click()
+  await page.getByRole('menuitem',{name:'New configuration',exact:true}).click()
+  await page.getByLabel('Master password',{exact:true}).fill('local-test-master')
+  await page.getByLabel('Repeat master password',{exact:true}).fill('local-test-master')
+  await page.getByRole('button',{name:'Create master password',exact:true}).click()
+  await expect(page.getByRole('textbox',{name:'Kubeconfig YAML',exact:true})).toBeVisible()
+  await page.getByRole('dialog').getByRole('button',{name:'Cancel',exact:true}).click()
+  await stop(app);app=await start(port,e);await page.goto(url)
+  const registry=join(e.dataDir,'configurations/kubeconfigs.json'),before=readFileSync(registry)
+  await expect(page.locator('[data-encrypted-lock]')).toHaveCount(0)
+  await page.getByRole('button',{name:'Add kubeconfig',exact:true}).click()
+  await page.getByRole('menuitem',{name:'New configuration',exact:true}).click()
+  await expect(page.getByLabel('Master password',{exact:true})).toBeFocused()
+  await expect(page.getByRole('dialog')).toContainText('does not connect to a cluster')
+  await page.screenshot({path:join(scratch,'empty-vault-unlock-add.png')})
+  await page.getByLabel('Master password',{exact:true}).fill('wrong')
+  await page.getByRole('button',{name:'Unlock',exact:true}).click()
+  await expect(page.getByRole('alert')).toContainText('incorrect master password')
+  await page.getByRole('dialog').getByRole('button',{name:'Cancel',exact:true}).click()
+  expect(readFileSync(registry).equals(before)).toBe(true)
+  // The same creation action is also reachable from the file scan dialog.
+  await page.getByRole('button',{name:'Add kubeconfig',exact:true}).click()
+  await page.getByRole('menuitem',{name:'From system files',exact:true}).click()
+  await page.getByRole('dialog').getByRole('button',{name:'New configuration',exact:true}).click()
+  await page.getByLabel('Master password',{exact:true}).fill('local-test-master')
+  await page.getByRole('button',{name:'Unlock',exact:true}).click()
+  await expect(page.getByRole('textbox',{name:'Kubeconfig YAML',exact:true})).toBeVisible()
+  await page.getByRole('textbox',{name:'Configuration name',exact:true}).fill('New local config')
+  await page.getByRole('textbox',{name:'Kubeconfig YAML',exact:true}).fill(kubeconfig('','new-local').replace(/https:\/\/[^"\s]+/g,'http://127.0.0.1:1'))
+  await page.getByRole('button',{name:'Save configuration',exact:true}).click()
+  await expect(page.getByRole('dialog')).toHaveCount(0)
+  await expect(page.getByRole('option',{name:/^New local config\b/})).toBeVisible()
+  expect(connects).toEqual([])
+  const token=await page.locator('meta[name=spk-ocular-api-token]').getAttribute('content')
+  const stats=await page.request.get(url+'api/_test/stats',{headers:{Authorization:`Bearer ${token}`}})
+  expect((await stats.json()).sessions).toBe(0)
+  await page.screenshot({path:join(scratch,'empty-vault-created-no-connect.png')})
+ }finally{await page.close();if(app)await stop(app)}
+})

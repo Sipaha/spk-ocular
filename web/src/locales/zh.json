@@ -263,6 +263,7 @@
     "configs.chooseAfterUnlock": "配置已解锁。选择您想要的连接并按“连接”。",
     "configs.unlockTitle": "解锁配置",
     "configs.unlockText": "输入主密码。加密密钥将保留在内存中，直到您关闭 Ocular。已链接的外部文件无需解锁即可访问。",
+    "configs.unlockToAddText": "输入主密码以添加配置。这只会解锁本地存储，不会连接到集群。",
     "configs.unlock": "解锁",
     "configs.connectToUnlock": "在受保护的连接上点击“连接”以解锁配置。",
     "configs.locked": "已存储的配置已锁定",

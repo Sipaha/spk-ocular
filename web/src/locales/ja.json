@@ -277,6 +277,7 @@
     "configs.chooseAfterUnlock": "構成がロック解除されました。接続したい接続を選択し、Connectを押してください。",
     "configs.unlockTitle": "構成をロック解除",
     "configs.unlockText": "マスターパスワードを入力してください。暗号化キーはOcularを閉じるまでメモリに保持されます。リンクされた外部ファイルはロック解除なしで利用可能です。",
+    "configs.unlockToAddText": "構成を追加するにはマスターパスワードを入力してください。ローカルストレージのロックを解除するだけで、クラスターには接続しません。",
     "configs.unlock": "ロック解除",
     "configs.connectToUnlock": "保護された接続で「接続」を押して、構成のロックを解除してください。",
     "configs.locked": "格納された構成はロックされています",

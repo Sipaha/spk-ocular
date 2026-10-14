@@ -62,7 +62,7 @@ export function Configurations({ client, onChanged, ref }: { client: Client; onC
   finally{setBusy(false)}
  }
  const cancel=()=>{if(busy)return;if(addMenu){setAddMenu(null);return}if(reviewEdit){setReviewEdit(false);return}if(mode==='inspect'||(mode==='edit'&&yaml===content)){close();return}if(mode==='rename'||mode==='remove'||mode==='reset'){close();return}if(yaml||name){setDiscard(true);return}if(state&&!state.initialized){void request({command:'dismiss'},null)}else close()}
- const custom=()=>{setError('');setAfterUnlock('editor');if(state?.locked)setError(t('configs.connectToUnlock'));else setMode(!state?.encrypted?'setup':'editor')}
+ const custom=(s=state)=>{resumeConnect.current=null;setError('');setAfterUnlock('editor');setMode(s?.locked?'unlock':!s?.encrypted?'setup':'editor')}
  const inspect=async(e:ConfigEntry,editing=false)=>{
   setEntry(e);setContent(null);setYaml('');setReviewEdit(false);setError('');setMode(editing?'edit':'inspect');setBusy(true)
   try{const result=await client.configurations({command:'inspect',id:e.id,expect:e.revision});if(alive.current){setContent(result.yaml??'');setContentRevision(result.contentRevision??'');if(editing)setYaml(result.yaml??'')}}
@@ -101,7 +101,7 @@ export function Configurations({ client, onChanged, ref }: { client: Client; onC
   </div>
   {addMenu&&createPortal(<Menu at={addMenu} label={t('configs.add')} onClose={()=>setAddMenu(null)} items={[
    {id:'scan',label:t('configs.scan'),onSelect:()=>{setPaths([]);void request({command:'scan'},'scan')}},
-   {id:'custom',label:t('configs.custom'),onSelect:()=>{void client.configurations({command:'status'}).then(s=>{setState(s);setAfterUnlock('editor');if(s.locked)setError(t('configs.connectToUnlock'));else setMode(!s.encrypted?'setup':'editor')},err=>setError(err instanceof Error?err.message:t('configs.error')))}},
+   {id:'custom',label:t('configs.custom'),onSelect:()=>{void client.configurations({command:'status'}).then(s=>{setState(s);custom(s)},err=>setError(err instanceof Error?err.message:t('configs.error')))}},
    ...(state?.encrypted?[{id:'reset',label:t('configs.reset'),danger:true,separator:true,onSelect:()=>{resumeConnect.current=null;setPassword('');void request({command:'status'},'reset')}}]:[]),
   ]}/>,document.body)}
   {mode&&createPortal(<div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onMouseDown={e=>{if(e.target===e.currentTarget)cancel()}}>
@@ -149,7 +149,7 @@ export function Configurations({ client, onChanged, ref }: { client: Client; onC
       </label>)}</div>
      </>}
      {(mode==='setup'||mode==='unlock')&&<>
-      <p className="text-sm text-fg-muted">{t(mode==='setup'?'configs.setupText':'configs.unlockText')}</p>
+      <p className="text-sm text-fg-muted">{t(mode==='setup'?'configs.setupText':afterUnlock==='editor'?'configs.unlockToAddText':'configs.unlockText')}</p>
       <label className="block text-sm"><span className="mb-1 block px-2 text-xs text-fg-muted">{t('configs.password')}</span><input className={field} type="password" autoComplete={mode==='setup'?'new-password':'current-password'} value={password} maxLength={1024} onChange={e=>setPassword(e.target.value)}/></label>
       {mode==='setup'&&<><label className="block text-sm"><span className="mb-1 block px-2 text-xs text-fg-muted">{t('configs.confirm')}</span><input className={field} type="password" autoComplete="new-password" value={repeat} maxLength={1024} onChange={e=>setRepeat(e.target.value)}/></label></>}
      </>}
@@ -173,7 +173,7 @@ export function Configurations({ client, onChanged, ref }: { client: Client; onC
        {mode==='unlock'&&<button disabled={busy} className={button} onClick={()=>{resumeConnect.current=null;setPassword('');void request({command:'status'},'reset')}}>{t('configs.reset')}</button>}
        {mode==='reset'&&<button disabled={busy||!state?.resetRevision} className={danger} onClick={()=>{if(editsHeld()){setError(t('configs.unsaved'));return}void request({command:'reset',expect:state?.resetRevision},null)}}>{t('configs.resetConfirm')}</button>}
        {mode==='scan'&&<>
-        <button disabled={busy} className={button} onClick={custom}>{t('configs.custom')}</button>
+        <button disabled={busy} className={button} onClick={()=>custom()}>{t('configs.custom')}</button>
         <button className={primary} disabled={busy||!paths.length} onClick={()=>void request({command:'import',paths},null)}>{t('configs.import')}</button>
        </>}
        {(mode==='setup'||mode==='unlock')&&<button className={primary} disabled={busy||!password||(mode==='setup'&&password!==repeat)} onClick={()=>{const resume=resumeConnect.current;void request({command:mode,password},mode==='setup'?'editor':afterUnlock).then(ok=>{if(ok&&resume)void resume()})}}>{t(mode==='setup'?'configs.setup':'configs.unlock')}</button>}

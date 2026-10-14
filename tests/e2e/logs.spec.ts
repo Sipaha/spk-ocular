@@ -458,3 +458,115 @@ test('Cancelling a pending history download aborts its destination and ignores a
  expect(await page.evaluate(()=>(window as unknown as {committed?:boolean}).committed)).not.toBe(true)
  await expect(panel.getByRole('button',{name:'Download',exact:true})).toBeEnabled()
 })
+
+for (const wrap of [false, true]) for (const following of [true, false]) {
+ test(`bottom dock resize preserves painted log rows (${wrap?'wrapped':'fixed'}, ${following?'following':'history'})`, async ({page})=>{
+  await page.setViewportSize({width:1400,height:1000})
+  const panel=await openLogs(page,'api'),vp=panel.locator('[data-log-viewport]')
+  if(wrap) await panel.getByRole('button',{name:'Wrap',exact:true}).click()
+  await emit(page,'api',{lines:Array.from({length:400},(_,i)=>`resize row ${i} ${'content '.repeat(wrap?30:2)}`)})
+  await expect(rows(panel).last()).toContainText('resize row 399')
+  if(!following){await vp.hover();await page.mouse.wheel(0,-3000);await expect(panel.getByRole('button',{name:'Follow',exact:true})).toBeVisible()}
+  // Pick a row near the fixed bottom, which remains inside the shrinking panel.
+  const anchor=await vp.evaluate(el=>{
+   const b=el.getBoundingClientRect();const rs=Array.from(el.querySelectorAll<HTMLElement>('[data-index]'))
+   const row=rs.filter(r=>{const p=r.getBoundingClientRect();return p.top>b.top+50&&p.bottom<b.bottom-35}).at(-1)!
+   return {index:row.dataset.index!,y:row.getBoundingClientRect().top}
+  })
+  await vp.evaluate((el,a)=>{
+   const samples:{y:number|null;top:number;height:number;scroll:number}[]=[]
+   const probe={samples,observer:null as ResizeObserver|null};Object.assign(window,{logResizeProbe:probe})
+   const sample=()=>{const r=el.querySelector<HTMLElement>(`[data-index="${a.index}"]`);samples.push({y:r?.getBoundingClientRect().top??null,top:el.getBoundingClientRect().top,height:el.clientHeight,scroll:el.scrollTop});}
+   probe.observer=new ResizeObserver(sample);probe.observer.observe(el)
+  },anchor)
+  const sep=page.getByRole('separator',{name:'Resize the bottom panel',exact:true}),b=(await sep.boundingBox())!
+  await page.mouse.move(b.x+80,b.y+2);await page.mouse.down()
+  for(let i=1;i<=12;i++){
+   await page.mouse.move(b.x+80,b.y+2+i*7)
+   await page.evaluate(()=>new Promise<void>(r=>requestAnimationFrame(()=>requestAnimationFrame(()=>r()))))
+  }
+  // Grow back through the same geometry, then cancel a second drag. Both
+  // directions and Escape must preserve the row, not only the settled size.
+  for(let i=11;i>=0;i--){
+   await page.mouse.move(b.x+80,b.y+2+i*7)
+   await page.evaluate(()=>new Promise<void>(r=>requestAnimationFrame(()=>requestAnimationFrame(()=>r()))))
+  }
+  await page.mouse.up()
+  await page.mouse.down();await page.mouse.move(b.x+80,b.y+44)
+  await page.evaluate(()=>new Promise<void>(r=>requestAnimationFrame(()=>requestAnimationFrame(()=>r()))))
+  await page.keyboard.press('Escape');await page.mouse.up()
+  expect((await sep.boundingBox())!.y).toBeCloseTo(b.y,0)
+  await page.evaluate(()=>new Promise<void>(r=>requestAnimationFrame(()=>requestAnimationFrame(()=>r()))))
+  const samples=await page.evaluate(()=>{const p=(window as unknown as {logResizeProbe:{samples:{y:number|null;top:number;height:number;scroll:number}[];observer:ResizeObserver}}).logResizeProbe;p.observer.disconnect();return p.samples})
+  console.log('painted resize geometry',JSON.stringify({wrap,following,anchor,samples}))
+  await page.screenshot({path:join(scratchRoot,`resize-${wrap?'wrap':'fixed'}-${following?'follow':'history'}.png`)})
+  expect(samples.length).toBeGreaterThanOrEqual(13)
+  expect(samples.every(s=>s.y!==null)).toBe(true)
+  expect(Math.max(...samples.map(s=>Math.abs(s.y!-anchor.y)))).toBeLessThanOrEqual(1)
+  await expect(panel.getByRole('button',{name:'Follow',exact:true})).toHaveCount(following?0:1)
+ })
+}
+
+test('hidden history tab keeps its offset across dock resizing and clamps at history bounds',async({page})=>{
+ await page.setViewportSize({width:1400,height:1000})
+ const panel=await openLogs(page,'api'),vp=panel.locator('[data-log-viewport]')
+ await emit(page,'api',{lines:Array.from({length:400},(_,i)=>`history boundary ${i}`)})
+ await expect(rows(panel).last()).toHaveText('history boundary 399')
+ await vp.hover();await page.mouse.wheel(0,-2000)
+ await expect(panel.getByRole('button',{name:'Follow',exact:true})).toBeVisible()
+ const before=await vp.evaluate(el=>el.scrollTop)
+ await page.getByRole('grid',{name:'resources',exact:true}).getByRole('gridcell',{name:'workers',exact:true}).click()
+ await page.keyboard.press('l')
+ await expect(page.getByRole('tab',{name:/services\/workers/})).toHaveAttribute('aria-selected','true')
+ const sep=page.getByRole('separator',{name:'Resize the bottom panel',exact:true})
+ await sep.press('ArrowDown')
+ await page.getByRole('tab',{name:/services\/api/}).click()
+ const restored=page.locator('[role=tabpanel]:not([hidden])'),restoredVP=restored.locator('[data-log-viewport]')
+ await expect(restoredVP).toBeVisible()
+ await expect.poll(()=>restoredVP.evaluate(el=>el.scrollTop)).toBe(before)
+ await expect(restored.getByRole('button',{name:'Follow',exact:true})).toBeVisible()
+ // At the beginning there is no older content to expose when growing.
+ await restoredVP.hover();await page.mouse.wheel(0,-20000)
+ await expect.poll(()=>restoredVP.evaluate(el=>el.scrollTop)).toBe(0)
+ await sep.press('ArrowUp')
+ await expect.poll(()=>restoredVP.evaluate(el=>el.scrollTop)).toBe(0)
+ await expect(restored.getByRole('button',{name:'Follow',exact:true})).toBeVisible()
+ await restoredVP.focus();await page.keyboard.press('End')
+ await expect(restored.getByRole('button',{name:'Follow',exact:true})).toHaveCount(0)
+ await expect(rows(restored).last()).toHaveText('history boundary 399')
+})
+
+test('wrap changes during resize do not leave scrollbar scrolling ignored',async({page})=>{
+ const panel=await openLogs(page,'api'),vp=panel.locator('[data-log-viewport]')
+ await emit(page,'api',{lines:Array.from({length:400},(_,i)=>`wrap gate ${i}`)})
+ await expect(rows(panel).last()).toHaveText('wrap gate 399')
+ // Switch wrap in the same observer delivery as the resize correction, before
+ // its two-frame programmatic-scroll guard has had a chance to clear.
+ await vp.evaluate(el=>{
+  const height=el.clientHeight
+  const observer=new ResizeObserver(()=>{
+   if(el.clientHeight===height)return
+   observer.disconnect()
+   const panel=el.closest('[role=tabpanel]')!
+   ;(panel.querySelector('[aria-label="Wrap"]') as HTMLButtonElement).click()
+  })
+  observer.observe(el)
+ })
+ await page.getByRole('separator',{name:'Resize the bottom panel',exact:true}).press('ArrowDown')
+ await expect(panel.getByRole('button',{name:'Wrap',exact:true})).toHaveAttribute('aria-pressed','true')
+ await vp.focus();await page.keyboard.press('PageUp')
+ await expect(panel.getByRole('button',{name:'Follow',exact:true})).toBeVisible()
+})
+
+test('changing wrap retains the live tail before the next dock resize',async({page})=>{
+ const panel=await openLogs(page,'api'),vp=panel.locator('[data-log-viewport]')
+ const tail=`wrap tail 399 ${'message '.repeat(50)}`
+ await emit(page,'api',{lines:Array.from({length:400},(_,i)=>`wrap tail ${i} ${'message '.repeat(50)}`)})
+ await expect(panel.getByText(tail,{exact:true})).toBeInViewport()
+ await panel.getByRole('button',{name:'Wrap',exact:true}).click()
+ await expect(panel.getByText(tail,{exact:true})).toBeInViewport()
+ await expect(panel.getByRole('button',{name:'Follow',exact:true})).toHaveCount(0)
+ await panel.getByRole('button',{name:'Wrap',exact:true}).click()
+ await expect(panel.getByText(tail,{exact:true})).toBeInViewport()
+ expect(await vp.evaluate(el=>el.scrollHeight-el.scrollTop-el.clientHeight)).toBeLessThanOrEqual(1)
+})

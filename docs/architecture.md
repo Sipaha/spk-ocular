@@ -45,9 +45,11 @@ files preserve first-wins order, and selected standalone files remain independen
 Target IDs remain stable when other configuration files change. App-owned targets
 use a separate stored-config ID domain. Stored YAML resolves directly in memory,
 never through a plaintext temporary file. Locked rows contain only stored context
-names and display names; session creation rejects locked records. Connect alone
-opens the unlock prompt; a successful master entry unlocks every encrypted record
-for the process lifetime. Reset uses a reviewed registry revision, deletes only
+names and display names; session creation rejects locked records. Connect on a
+protected target opens the unlock prompt and resumes only that explicit connection. New configuration can also unlock the local vault directly,
+then continue to its YAML editor without creating a session, even with no stored
+records. A successful master entry unlocks every encrypted record for the process
+lifetime. Reset uses a reviewed registry revision, deletes only
 encrypted records and their aliases/key material, and revalidates sessions.
 
 The version-1 configuration envelope uses Argon2id (64 MiB, 3 passes, 4 lanes,

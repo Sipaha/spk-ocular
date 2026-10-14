@@ -277,6 +277,7 @@
     "configs.chooseAfterUnlock": "Konfigurationen entsperrt. Wählen Sie die Verbindung aus, die Sie verwenden möchten, und drücken Sie Verbinden.",
     "configs.unlockTitle": "Konfigurationen entsperren",
     "configs.unlockText": "Geben Sie Ihr Masterpasswort ein. Der Verschlüsselungsschlüssel bleibt im Speicher, bis Sie Ocular schließen. Verknüpfte externe Dateien bleiben ohne Entsperrung verfügbar.",
+    "configs.unlockToAddText": "Geben Sie Ihr Master-Passwort ein, um eine Konfiguration hinzuzufügen. Dadurch wird nur der lokale Speicher entsperrt; es wird keine Verbindung zu einem Cluster hergestellt.",
     "configs.unlock": "Entsperren",
     "configs.connectToUnlock": "Drücken Sie Verbinden bei einer geschützten Verbindung, um Konfigurationen zu entsperren.",
     "configs.locked": "Gespeicherte Konfigurationen sind gesperrt",

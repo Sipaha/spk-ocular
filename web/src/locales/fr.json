@@ -277,6 +277,7 @@
     "configs.chooseAfterUnlock": "Configurations déverrouillées. Sélectionnez la connexion souhaitée et appuyez sur Connecter.",
     "configs.unlockTitle": "Déverrouiller les configurations",
     "configs.unlockText": "Entrez votre mot de passe maître. La clé de chiffrement reste en mémoire jusqu'à ce que vous fermiez Ocular. Les fichiers externes liés restent disponibles sans déverrouillage.",
+    "configs.unlockToAddText": "Saisissez votre mot de passe principal pour ajouter une configuration. Cela déverrouille uniquement le stockage local, sans connexion à un cluster.",
     "configs.unlock": "Déverrouiller",
     "configs.connectToUnlock": "Appuyez sur Connecter sur une connexion protégée pour déverrouiller les configurations.",
     "configs.locked": "Les configurations stockées sont verrouillées",

@@ -142,9 +142,15 @@ associated with the same targets. The `current` badge is no longer displayed.
 Before creating a custom configuration, create a non-empty master password
 and confirm it. Its length and strength are your choice. Ocular encrypts the YAML with AES-256-GCM and a key
 derived using Argon2id. It does not store the password. After restarting, click
-**Connect** on a protected connection to enter the master password. Selecting
-a row never asks for it. One successful entry unlocks all encrypted configurations
-and continues that connection; linked files remain available without unlocking. The key is kept in memory until Ocular closes. There is no password
+**Connect** on a protected connection to enter the master password. When adding
+custom YAML, **New configuration** asks for that password directly and continues
+to the editor without connecting. This also works when a master password exists
+but no encrypted configuration has been saved yet, or the last one was removed.
+Cancelling password entry leaves the registry unchanged. Selecting a row never
+asks for it. One successful password entry unlocks all encrypted configurations.
+Connect then continues its selected connection; New configuration only opens its
+editor. Linked files remain available without unlocking. The key is kept in
+memory until Ocular closes. There is no password
 recovery or OS-keychain integration. Cancel closes the password dialog without
 connecting or unlocking. **Reset master password** is available in that dialog
 and the Add menu; its separate review lists all encrypted configurations and
@@ -658,7 +664,11 @@ main application exits all its windows. Up to eight log windows can be detached.
 While dragging a layout separator, incoming log lines stay in the existing
 bounded pending buffer and are applied on release. This avoids rebuilding a large
 log window on every resize frame. Width-only changes do not remeasure fixed-height
-unwrapped rows. Wheel input releases a stale selection drag if WebKit missed
+unwrapped rows. Resizing the bottom panel preserves the screen position of log
+rows before paint: Follow stays at the tail, including when toggling line
+wrapping, while reading history keeps its position without enabling Follow. At the start/end of available history the
+scroll offset is clamped. Hidden tabs retain their history position when restored.
+Wheel input releases a stale selection drag if WebKit missed
 mouseup, and stops caret correction from pulling the scroll position back.
 
 ## Downloads

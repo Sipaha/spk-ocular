@@ -117,7 +117,9 @@ export function LogViewport({
   const virtualizer = useVirtualizer({
     count: entries.length,
     observeElementRect: observeRect,
-    useAnimationFrameWithResizeObserver: true,
+    // Deliver geometry before paint; deferring a resize by one frame lets
+    // rows follow the moving top edge before the scroll offset catches up.
+    useAnimationFrameWithResizeObserver: false,
     getScrollElement: () => parentRef.current,
     estimateSize: () => probedRowHeight ?? 20,
     overscan: 30,
@@ -396,37 +398,58 @@ export function LogViewport({
     prevFollowedIdRef.current = lastEntryId
   }, [lastEntryId, follow])
 
-  // Keep the newest line pinned to the bottom while following when the viewport
-  // resizes (window resize, panel drag, wrap toggle changing row heights).
-  // A size change moves the scroll bottom without firing onScroll, so without
-  // this the view would drift off the tail.
+  // ResizeObserver runs after layout and before paint. Correct the offset in
+  // that same delivery, not a later animation frame: a dock height change moves
+  // its top edge, and a delayed correction paints the rows in two positions.
+  // While reading history, retain their screen position instead of resuming
+  // follow. At the scroll bounds the browser clamps to the available history.
+  const hasEntries = entries.length > 0
   useEffect(() => {
     const el = parentRef.current
     if (!el || typeof ResizeObserver === 'undefined') return
+    let lastTop: number | null = el.clientHeight ? el.getBoundingClientRect().top : null
     let lastWidth = el.clientWidth
     let lastHeight = el.clientHeight
-    let frame: number | null = null
+    let lastScrollHeight = el.scrollHeight
+    let gateFrame: number | null = null
     const ro = new ResizeObserver(() => {
+      const top = el.getBoundingClientRect().top
       const width = el.clientWidth, height = el.clientHeight
-      const changed = height !== lastHeight || (wordWrap && width !== lastWidth)
-      lastWidth = width; lastHeight = height
-      if (!changed || !followRef.current || frame !== null) return
-      frame = requestAnimationFrame(() => {
-      frame = null
-      if (!followRef.current) return
-      if (entriesRef.current.length === 0) return
+      const moved = lastTop === null ? 0 : top - lastTop
+      const scrollHeight = el.scrollHeight
+      const changed = height !== lastHeight || (wordWrap && width !== lastWidth) ||
+        (followRef.current && scrollHeight !== lastScrollHeight)
+      lastTop = height ? top : null; lastWidth = width; lastHeight = height
+      lastScrollHeight = scrollHeight
+      // Hidden tabs have no meaningful geometry. Do not carry their zero rect
+      // into a restored viewport or move the user's saved history position.
+      if (!height || !changed || entriesRef.current.length === 0) return
       programmaticScrollRef.current = true
-      // Keep the tail in view through a resize without a virtualizer index
-      // lookup for every observer notification.
-      el.scrollTop = Math.max(0, el.scrollHeight - el.clientHeight)
-      requestAnimationFrame(() => {
-        requestAnimationFrame(() => { programmaticScrollRef.current = false })
-      })
+      el.scrollTop = followRef.current
+        ? Math.max(0, el.scrollHeight - height)
+        : el.scrollTop + moved
+      if (gateFrame !== null) cancelAnimationFrame(gateFrame)
+      gateFrame = requestAnimationFrame(() => {
+        gateFrame = requestAnimationFrame(() => {
+          gateFrame = null
+          programmaticScrollRef.current = false
+        })
       })
     })
     ro.observe(el)
-    return () => { ro.disconnect(); if (frame !== null) cancelAnimationFrame(frame) }
-  }, [parentRef, wordWrap])
+    // Wrapping changes the measured content height without resizing the
+    // viewport. Keep following through those measurements as well, so the
+    // next dock resize cannot expose a stale tail position as a jump.
+    const content = el.querySelector('[data-log-content]')
+    if (content) ro.observe(content)
+    return () => {
+      ro.disconnect()
+      if (gateFrame !== null) {
+        cancelAnimationFrame(gateFrame)
+        programmaticScrollRef.current = false
+      }
+    }
+  }, [parentRef, wordWrap, hasEntries])
 
   // Search target: scroll only when the user explicitly navigated (the tick
   // bumps on a fresh query or F3 / Enter / ↑↓ button presses). Listening to
@@ -494,6 +517,7 @@ export function LogViewport({
           <span className="text-fg-subtle">{t('logs.empty')}</span>
         ) : (
           <div
+            data-log-content
             style={{
               height: `${virtualizer.getTotalSize()}px`,
               width: '100%',

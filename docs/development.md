@@ -263,8 +263,10 @@ opt into integration suites and must not leak from a fixture shell.
 
 `configurations.spec.ts` uses its own disposable process and profile to exercise
 unchecked first-run imports, selective file registration, encrypted YAML creation,
-restart/locked state, incorrect-password refusal and unlock. The other browser
-resource suites explicitly import their fixture files through the UI API before
+restart/locked state, incorrect-password refusal and unlock. Creation also covers
+an encrypted vault with no stored records after restart, direct Add/scan unlock,
+Cancel byte preservation and no Connect request or admitted session. The other
+browser resource suites explicitly import their fixture files through the UI API before
 running; they do not bypass the production registry. Provider tests verify
 persistent links, fresh nonces, record-bound ciphertext, absence of plaintext
 credentials/passwords and stale-writer refusal. No real kubeconfig is a test input.

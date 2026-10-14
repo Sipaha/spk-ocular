@@ -277,6 +277,7 @@
     "configs.chooseAfterUnlock": "Configuraciones desbloqueadas. Seleccione la conexión que desee y presione Conectar.",
     "configs.unlockTitle": "Desbloquear configuraciones",
     "configs.unlockText": "Ingrese su contraseña maestra. La clave de cifrado permanecerá en memoria hasta que cierre Ocular. Los archivos externos vinculados seguirán disponibles sin desbloquear.",
+    "configs.unlockToAddText": "Introduzca su contraseña maestra para añadir una configuración. Esto solo desbloquea el almacenamiento local; no se conecta a ningún clúster.",
     "configs.unlock": "Desbloquear",
     "configs.connectToUnlock": "Presione Conectar en una conexión protegida para desbloquear configuraciones.",
     "configs.locked": "Las configuraciones almacenadas están bloqueadas",
