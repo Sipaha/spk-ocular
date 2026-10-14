@@ -61,6 +61,12 @@ export function Menu({ items, at, label, onClose }: Props) {
     const i = list.indexOf(document.activeElement as HTMLElement)
     const go = (n: number) => list[(n + list.length) % list.length]?.focus()
     switch (e.key) {
+      case 'Enter':
+      case ' ':
+        // Preserve the button's native activation, but keep React portal
+        // events out of ancestor target/resource keyboard handlers.
+        e.stopPropagation()
+        return
       case 'ArrowDown':
         go(i + 1)
         break

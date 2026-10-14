@@ -161,9 +161,13 @@ are rejected because pasted YAML has no source directory. Credential-helper
 commands must be on PATH or use absolute paths, and execute only on Connect.
 External files and helper-managed caches are outside Ocular's encryption.
 
-**Add kubeconfig** opens a two-item menu: **From system files** scans import
+**Add kubeconfig** opens a menu: **From system files** scans import
 candidates; **New configuration** opens master-password setup/unlock and then
-the YAML editor. There is no separate configuration-management list.
+the YAML editor. **Reset master password** also appears when encrypted
+configurations are configured. There is no separate configuration-management list.
+Use arrows or Home/End to focus a menu item, then Enter or Space to activate it.
+Menu activation does not select a target behind the popup. Held Enter repeats
+and unavailable items cannot execute an action.
 
 Right-click a Kubernetes connection, including the selected one, to inspect or
 edit its source YAML, rename the configuration or remove it. With the targets

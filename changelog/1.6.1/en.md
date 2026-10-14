@@ -4,3 +4,4 @@
 - Both Linux architectures receive native Ubuntu 22.04 installation, browser-mode and GTK-window checks before publication. Packaging also rejects executable symbols above the declared glibc floor.
 - The native verification bundle adds both Ubuntu 22.04 reports and screenshots alongside the existing six-platform evidence. These are X11/userspace checks on the runner kernel; they do not certify every kernel, GPU driver or Wayland session.
 - Configuration confirmations reliably focus Cancel and keep keyboard input inside the dialog. Enter on Cancel closes the review without deleting encrypted configurations.
+- Add kubeconfig menus now activate the focused item with Enter or Space without triggering target-list shortcuts; held Enter and disabled items remain blocked.

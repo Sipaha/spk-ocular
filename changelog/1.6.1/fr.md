@@ -4,3 +4,4 @@
 - Les deux architectures Linux passent des vérifications natives d’installation, de mode navigateur et de fenêtre GTK sous Ubuntu 22.04 avant publication. Le contrôle des paquets refuse aussi les exécutables exigeant des symboles glibc supérieurs au minimum déclaré.
 - L’archive de vérification native ajoute deux rapports et captures Ubuntu 22.04 aux preuves des six plateformes existantes. Ces tests couvrent X11 et l’espace utilisateur avec le noyau du système de test ; ils ne certifient pas tous les noyaux, pilotes GPU ou sessions Wayland.
 - Les confirmations de configuration placent correctement le focus sur Annuler et gardent les événements clavier dans le dialogue. Entrée sur Annuler ferme la confirmation sans supprimer les configurations chiffrées.
+- Dans le menu Add kubeconfig, Entrée et Espace activent l’élément sélectionné sans déclencher les raccourcis de la liste des cibles. Entrée maintenue et les éléments désactivés restent bloqués.
