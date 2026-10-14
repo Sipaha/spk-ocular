@@ -104,7 +104,16 @@ const navIDs = ['features', 'interface', 'free'];
         </div><div data-packages class="packages" hidden></div>
       </div>
       <ol class="install-steps">{d.installSteps.map(step=><li>{step}</li>)}</ol>
-      <div class="requirements"><h3>{d.requirements}</h3><p>{d.requirementsText}</p><p>{d.signing}</p></div>
+      <div class="requirements">
+        <h3>{d.requirements}</h3>
+        <p>{d.linuxRequirements}</p>
+        <dl class="linux-compatibility">
+          <div><dt>{d.linuxPackagesTitle}</dt><dd>{d.linuxPackagesText}</dd></div>
+          <div><dt>{d.linuxArchiveTitle}</dt><dd>{d.linuxArchiveText}</dd></div>
+        </dl>
+        <p class="compatibility-scope">{d.linuxVerification}</p>
+        <p>{d.requirementsText}</p><p>{d.signing}</p>
+      </div>
     </div></section>
     <section class="container section faq-section"><h2>{d.faqTitle}</h2><div class="faq">{d.faqs.map(([q,a])=><article><h3>{q}</h3><p>{a}</p></article>)}</div></section>
   </main>

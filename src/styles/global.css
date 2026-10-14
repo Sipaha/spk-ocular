@@ -172,6 +172,10 @@ select { padding: 10px 36px 10px 12px; border: 1px solid var(--line); border-rad
 .requirements { margin-top: 30px; max-width: 900px; }
 .requirements h3 { font-size: 18px; }
 .requirements p { font-size: 13px; margin-top: 12px; }
+.linux-compatibility { margin: 16px 0; font-size: 13px; }
+.linux-compatibility>div+div { margin-top: 16px; }
+.linux-compatibility dt { font-weight: 600; }
+.linux-compatibility dd { margin: 4px 0 0; color: var(--muted); }
 .requirements .text-link { font-size: 13px; margin-top: 16px; }
 .faq-section { display: grid; grid-template-columns: .8fr 1.2fr; gap: 100px; border-top: 1px solid var(--line); }
 .faq article { border-bottom: 1px solid var(--line); padding: 28px 0; }

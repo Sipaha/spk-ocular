@@ -154,7 +154,14 @@ The narrow-screen header uses a short Download VERSION/Download caption with a
 complete accessible label. Without JavaScript, Choose links navigate to the download section.
 Without a stable release or an available API, visible GitHub release and development-build
 links remain. Three installation steps explain the installer formats, checksum
-verification and existing Kubernetes/Docker configuration. Public release packages
+verification and existing Kubernetes/Docker configuration. The compatibility block
+separates the published DEB/RPM glibc 2.39 floor from verified 1.6.0 amd64
+archive runtime on Ubuntu 22.04 and Debian 12. It names normal Debian 13 DEB
+and Fedora 44 RPM installation, requires GTK 3/WebKit2GTK 4.1 in both launch
+modes, and preserves the amd64/X11/shared-kernel limits. ARM64 testing remains
+on the Ubuntu 24.04 native baseline; other kernels, Wayland and GPU drivers
+are not certified by these additional checks. Windows/macOS requirements and
+installer signing status remain visible. Public release packages
 do not require a GitHub account; CI development artifacts remain a separate path.
 The website lists only native desktop packages; local browser-only builds are
 not shown. Desktop installers appear before native portable archives,
