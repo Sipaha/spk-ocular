@@ -11,7 +11,7 @@ const d = copy(lang);
 const base = '/spk-ocular/';
 const about = 'https://sipaha.github.io/about/';
 const shots = ['workloads', 'logs', 'helm', 'docker'];
-const shotURL = (name: string) => `${base}media/${name}-${lang === 'ru' ? 'ru' : 'en'}.webp?v=${name === 'security' ? '1.4.0' : '1.2.0'}`;
+const shotURL = (name: string) => `${base}media/${name}-${lang === 'ru' ? 'ru' : 'en'}.webp?v=1.7.0`;
 const navIDs = ['features', 'interface', 'free'];
 ---
 <Base lang={lang} title={d.title} description={d.description}>
@@ -54,6 +54,10 @@ const navIDs = ['features', 'interface', 'free'];
       </figure>
     </section>
     <div class="container facts">{d.facts.map(([title,text]) => <div><strong>{title}</strong><span>{text}</span></div>)}</div>
+    <section class="container section local-section" aria-labelledby="cluster-care">
+      <div><h2 id="cluster-care">{d.clusterTitle}</h2><p>{d.clusterText}</p></div>
+      <div class="local-points">{d.clusterPoints.map(([title,text])=><article><h3>{title}</h3><p>{text}</p></article>)}</div>
+    </section>
     <section id="features" class="container section">
       <div class="section-head"><h2>{d.overview}</h2><p>{d.overviewText}</p></div>
       <div class="workflows">
@@ -82,7 +86,7 @@ const navIDs = ['features', 'interface', 'free'];
       <div class="gallery-tabs" role="tablist" aria-label={d.nav[1]} hidden>{d.galleryTabs.map((title,i)=><button type="button" role="tab" id={'tab-'+i} aria-controls={'shot-'+i} aria-selected={i===0?'true':'false'} tabindex={i===0?0:-1}>{title}</button>)}</div>
       <div class="gallery">{shots.map((shot,i)=><figure id={'shot-'+i} class="gallery-panel" data-gallery-panel>
         <a data-image-preview href={shotURL(shot)} aria-label={d.fullImage}><img src={shotURL(shot)} width="1440" height="900" alt={d.galleryAlts[i]} loading="lazy" decoding="async" /></a>
-        <figcaption><span>{d.galleryCaptions[i]} · {shot==='helm'?d.syntheticDemo:d.demo}</span><a data-image-preview href={shotURL(shot)}>{d.fullImage} ↗</a></figcaption>
+        <figcaption><span>{d.galleryCaptions[i]} · {shot==='helm'?d.syntheticDemo:shot==='docker'?d.filesCaption:d.demo}</span><a data-image-preview href={shotURL(shot)}>{d.fullImage} ↗</a></figcaption>
       </figure>)}</div>
     </div></section>
     <section class="container section local-section">

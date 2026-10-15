@@ -73,11 +73,11 @@ components are required. It retains the continuing need for external
 authentication helpers configured in kubeconfig. The tools section
 explains Ctrl+K/Command+K navigation to views, environments and namespaces, and
 type/name resource queries such as `dep model` within selected namespaces.
-The query capability is available in the released 1.3.0 and 1.4.0 application;
+The query capability is available in the published application;
 it reads one requested kind, rather than searching every kind in the cluster.
 Keep these descriptions factual, with no competitor or exclusivity claims.
 
-The 1.2.0 copy describes the cluster graph as declared relationships/routes,
+Investigation copy describes the cluster graph as declared relationships/routes,
 Timeline as bounded Events snapshots rather than audit history, and RBAC
 provenance separately from self-only server decisions. Saved-resource comparison
 excludes Secret payloads and drafts. Workspace continuity restores metadata with
@@ -88,13 +88,13 @@ behavior. Provider retention, export caps and incomplete reads are explicit.
 Both RU/EN screenshot sets use actual app captures; the other six locales retain
 the explicit English-UI notice. Preserve sh/readlink/tar requirements, the UTF-8
 editor limit of 2 MiB, desktop-only file downloads and refusal to overwrite existing
-names. Existing screenshot and social-image URLs carry the 1.2.0 version query.
-Security uses separately versioned 1.4.0 RU/EN captures and a localized caption
+names. All screenshot and social-image URLs carry the 1.7.0 version query.
+Security uses current 1.7.0 RU/EN captures and a localized caption
 identifying simulated security findings. All eight locales describe workload
 configuration, declared RBAC rules, NetworkPolicy selection and existing Trivy
 Operator reports without claiming live scans, exploitability or compliance.
 Security neither installs the operator nor runs scans. New feature copy must
-describe a verified published release; the complete 1.4.0 assets are verified.
+describe a verified published release; release asset verification is required before publication.
 
 Linux installation copy describes the released 1.6.1 DEB/RPM glibc 2.35 floor.
 Ubuntu 24.04 remains the native build baseline. Normal package installation and
@@ -104,3 +104,10 @@ All eight locales retain GTK 3/WebKit2GTK 4.1 requirements in browser mode and
 the isolated userspace/shared-kernel/X11 scope. These checks do not certify stock
 kernels, Wayland or GPU drivers. Do not generalize the matrix into universal
 Linux compatibility.
+
+The cluster-care section is complete in all eight languages. It describes
+selected-kind/namespace loading, compact shared caches and watches, request/idle
+retention limits, All Namespaces admission and user refresh/cancel controls. It
+contains no unmeasured performance statistic or no-impact guarantee. Kubernetes
+and Docker captions explicitly identify simulated API data from isolated HTTP
+fixtures; Helm and Security remain explicitly synthetic.

@@ -72,8 +72,7 @@ Ctrl+K/Command+K navigation includes type/name queries such as `dep model`
 within selected namespaces. Security describes read-only workload configuration,
 declared RBAC rules, NetworkPolicy selection and existing Trivy Operator reports.
 It does not advertise live scanning, operator installation, exploitability or
-compliance verification. These capabilities are present in the published 1.4.0
-application. kubectl and a
+compliance verification. These capabilities are present in the published application. kubectl and a
 separate Helm CLI are unnecessary; kubeconfig-configured external authentication
 helpers still need to be installed. New product copy describes released features
 without announcements or competitor comparisons. Docker includes standalone containers and Compose project/service
@@ -87,16 +86,15 @@ No vendor claims, customer logos, testimonials or performance statistics are reu
 
 ## Screenshot source
 
-The twenty-two existing RU/EN product screenshots show SPK Ocular 1.2.0 on isolated fixtures.
-The two Security screenshots show the released 1.4.0 application with its
-isolated synthetic provider. Their captions explicitly identify simulated
-security findings; they do not demonstrate a live scanner or real vulnerabilities.
-Kubernetes captures use the owned ocular-dev demo cluster; Docker captures use the
-verified ocular-dind engine, and Helm uses the explicitly labeled synthetic
-release. The file screen shows an actual /app project with config, scripts, src,
-public, tests, hidden files and a symlink, with application.yaml open.
-Versioned image URLs identify each screenshot set: 1.2.0 for the existing screens
-and 1.4.0 for Security.
+All twenty-four RU/EN product screenshots show the actual SPK Ocular 1.7.0
+production application in isolated profiles. Kubernetes and Docker use owned
+synthetic HTTP API fixtures, without a real cluster, daemon or containers. Helm
+and Security use the built-in synthetic provider; simulated findings do not
+represent a live scan or real vulnerabilities. File browsing executes only the
+fixture's bounded read-only scripts against its scratch demonstration tree.
+The captures are real application UI, not interface mockups. Captions identify
+simulated data. All product and social-image URLs use the 1.7.0 version query.
+The other six website locales use the English screenshots with an explicit notice.
 
 ## Develop and verify
 
@@ -169,16 +167,12 @@ regardless of GitHub upload order. No unmeasured memory or comparative size clai
 are published. The site neither uploads user data nor starts any app connection.
 
 `workloads`, `logs`, `health`, `graph`, `timeline`, `rbac`, `compare` and
-`workspace` RU/EN screenshots show read-only inspection of the verified disposable
-`kind-ocular-dev` / `ocular-demo` fixture. `helm` shows the built-in synthetic
-Helm release, labeled separately. `docker` and `files` show an owned standalone
-container alongside Compose containers on the verified `ocular-dind` engine.
-Product screenshots use isolated profiles, with no user environment or credentials.
-Security shows configuration findings and missing-report setup guidance from
-the synthetic provider, not a Trivy scan. WebP conversion preserves the
-actual app image. Social cards are rendered by `scripts/social.mjs` from the
-current page copy, font and screenshot. Other website locales use the English
-screenshot set and disclose that UI language explicitly.
+`workspace` show the isolated Kubernetes HTTP fixture. `docker` and `files` show
+standalone and Compose resources from the isolated Engine HTTP fixture. `helm`
+and `security` use explicitly simulated built-in provider data. All captures
+use isolated profiles without user credentials or configuration. WebP conversion
+preserves the captured application image. Social cards are rendered by
+`scripts/social.mjs` from the current page copy, font and product screenshot.
 
 Screenshots use demonstration data and are labeled accordingly. Product facts
 must match `README.md` and `docs/usage.md` on `master`. When the product changes,
@@ -221,3 +215,14 @@ limits and the running Linux container/tool requirements. File browsing does not
 Ocular's own behavior without competitor comparisons or exclusivity claims.
 Public product copy must not name competing products to compare features or
 claim that they lack a capability; this is the owner's publishing preference.
+
+## Bounded inventory copy
+
+All eight locales describe the released 1.7.0 demand-kind/selected-namespace
+inventory, automatic small pages, shared compact caches/watch, bounded request
+concurrency/rate and idle retention. The All Namespaces safeguard asks for a
+narrower selection instead of presenting partial results as complete. Refresh,
+elapsed time, consumed response-body data and cancellation describe live resource
+lists; graph admission is explicit. This copy does not claim zero cluster impact,
+universal memory use or completed production-scale certification. Long-soak
+plateau acceptance remains incomplete in the application measurement report.

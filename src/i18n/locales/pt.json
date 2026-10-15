@@ -40,7 +40,7 @@
   "freeShort": "Todos os recursos gratuitos. Para você e sua empresa.",
   "platforms": "Linux, Windows e macOS · x86-64 e ARM64",
   "heroCaption": "Detalhes do pod e logs lado a lado.",
-  "demo": "Aplicativo real · cluster local de demonstração",
+  "demo": "Aplicativo real · dados simulados da API Kubernetes",
   "syntheticDemo": "Aplicativo real · release Helm simulado",
   "closeImage": "Fechar captura",
   "fullImage": "Abrir captura em tamanho original",
@@ -122,7 +122,7 @@
     ]
   ],
   "gallery": "Veja como funciona.",
-  "galleryText": "Telas reais do SPK Ocular 1.2.0. Dados de demonstração, não mockups.",
+  "galleryText": "Telas reais do SPK Ocular 1.7.0. Dados de demonstração, não mockups.",
   "galleryTabs": [
     "Workloads",
     "Logs e detalhes",
@@ -241,7 +241,7 @@
   ],
   "filesBoundary": "Exige um contêiner Linux em execução: sh para explorar, readlink para links e tar para downloads. Arquivos e pastas são transferidos sem o limite de 2 MiB do editor; nomes existentes não são sobrescritos. Downloads no modo navegador exigem o aplicativo desktop.",
   "filesAlt": "SPK Ocular com árvore de pastas da aplicação expandida e configuração YAML destacada",
-  "filesCaption": "Aplicativo real · ambiente de demonstração Docker local",
+  "filesCaption": "Aplicativo real · dados simulados do Docker Engine",
   "investigationTitle": "Investigue com as evidências conectadas.",
   "investigation": [
     {
@@ -282,5 +282,21 @@
     }
   ],
   "logHistoryText": "Baixe todo o histórico de logs retido pela origem, independentemente dos filtros ou limites do visualizador. A gravação em streaming oferece progresso e cancelamento; retenção, limites de exportação e leituras incompletas são informados. Copiar continua usando o buffer filtrado do visualizador.",
-  "securityDemo": "Aplicativo real · resultados de segurança simulados"
+  "securityDemo": "Aplicativo real · resultados de segurança simulados",
+  "clusterTitle": "Feito para respeitar os recursos do seu cluster.",
+  "clusterText": "O Ocular carrega o tipo de recurso e os namespaces escolhidos. Ele não coleta todos os recursos e suas descrições completas em segundo plano.",
+  "clusterPoints": [
+    [
+      "Requisições pequenas, resultados compartilhados",
+      "Páginas pequenas formam automaticamente uma lista completa. Caches compactos são reutilizados e mantidos atualizados por watches."
+    ],
+    [
+      "Trabalho limitado",
+      "A concorrência, a frequência das requisições e a retenção de caches ociosos têm limites. Uma consulta All Namespaces muito grande pede que você escolha namespaces em vez de exibir uma lista parcial sem aviso."
+    ],
+    [
+      "Você controla o carregamento",
+      "Atualize uma lista, acompanhe o tempo e os dados recebidos ou cancele a requisição. O grafo do cluster só carrega quando você solicita."
+    ]
+  ]
 }

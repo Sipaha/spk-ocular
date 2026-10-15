@@ -40,7 +40,7 @@
   "freeShort": "Toutes les fonctions gratuites. Pour vous et votre entreprise.",
   "platforms": "Linux, Windows et macOS · x86-64 et ARM64",
   "heroCaption": "L’état du pod et ses logs, côte à côte.",
-  "demo": "Application réelle · cluster local de démonstration",
+  "demo": "Application réelle · données Kubernetes API simulées",
   "syntheticDemo": "Application réelle · release Helm simulé",
   "closeImage": "Fermer la capture",
   "fullImage": "Ouvrir la capture en taille réelle",
@@ -122,7 +122,7 @@
     ]
   ],
   "gallery": "Découvrez l’interface.",
-  "galleryText": "Écrans réels de SPK Ocular 1.2.0. Données de démonstration, sans maquettes.",
+  "galleryText": "Écrans réels de SPK Ocular 1.7.0. Données de démonstration, sans maquettes.",
   "galleryTabs": [
     "Workloads",
     "Logs et détails",
@@ -241,7 +241,7 @@
   ],
   "filesBoundary": "Nécessite un conteneur Linux actif : sh pour parcourir, readlink pour les liens et tar pour télécharger. Les fichiers et dossiers sont transférés sans la limite de 2 MiB de l’éditeur ; les noms existants ne sont pas écrasés. Les téléchargements en mode navigateur nécessitent l’application de bureau.",
   "filesAlt": "SPK Ocular avec une arborescence d’application développée et une configuration YAML colorée",
-  "filesCaption": "Application réelle · environnement de démonstration Docker local",
+  "filesCaption": "Application réelle · données Docker Engine simulées",
   "investigationTitle": "Reliez les éléments de votre investigation.",
   "investigation": [
     {
@@ -282,5 +282,21 @@
     }
   ],
   "logHistoryText": "Téléchargez tout l’historique des logs conservé par la source, indépendamment des filtres ou des limites du visualiseur. L’écriture en flux affiche la progression et permet l’annulation ; rétention, limites d’export et lectures incomplètes sont signalées. La copie utilise toujours le tampon filtré du visualiseur.",
-  "securityDemo": "Application réelle · résultats de sécurité simulés"
+  "securityDemo": "Application réelle · résultats de sécurité simulés",
+  "clusterTitle": "Pensé pour ménager votre cluster.",
+  "clusterText": "Ocular charge le type de ressource et les namespaces choisis. Il ne collecte pas en arrière-plan toutes les ressources et leurs descriptions complètes.",
+  "clusterPoints": [
+    [
+      "Petites requêtes, résultats partagés",
+      "De petites pages constituent automatiquement une liste complète. Les caches compacts sont réutilisés et maintenus à jour par des watches."
+    ],
+    [
+      "Une charge encadrée",
+      "La concurrence, la fréquence des requêtes et la conservation des caches inutilisés sont limitées. Une requête All Namespaces trop volumineuse invite à choisir des namespaces plutôt que de présenter discrètement une liste partielle."
+    ],
+    [
+      "Vous contrôlez le chargement",
+      "Actualisez une liste, suivez la durée et les données reçues, ou annulez la requête. Le graphe du cluster ne se charge qu’à votre demande."
+    ]
+  ]
 }

@@ -40,7 +40,7 @@
   "freeShort": "Alle Funktionen kostenlos. Für Sie und Ihr Unternehmen.",
   "platforms": "Linux, Windows und macOS · x86-64 und ARM64",
   "heroCaption": "Pod-Status und Logs nebeneinander.",
-  "demo": "Echte App · lokaler Demo-Cluster",
+  "demo": "Echte Anwendung · simulierte Kubernetes-API-Daten",
   "syntheticDemo": "Echte App · simuliertes Helm-Release",
   "closeImage": "Screenshot schließen",
   "fullImage": "Screenshot in voller Größe öffnen",
@@ -122,7 +122,7 @@
     ]
   ],
   "gallery": "So sieht die Arbeit damit aus.",
-  "galleryText": "Echte Ansichten von SPK Ocular 1.2.0. Demodaten statt Produkt-Mockups.",
+  "galleryText": "Echte Ansichten von SPK Ocular 1.7.0. Demodaten statt Produkt-Mockups.",
   "galleryTabs": [
     "Workloads",
     "Logs und Details",
@@ -241,7 +241,7 @@
   ],
   "filesBoundary": "Erfordert einen laufenden Linux-Container: sh zum Durchsuchen, readlink für symbolische Links und tar für Downloads. Dateien und Ordner werden ohne die Editorgrenze von 2 MiB gestreamt; vorhandene Zielnamen werden nicht überschrieben. Downloads im Browsermodus benötigen die Desktop-App.",
   "filesAlt": "SPK Ocular mit aufgeklapptem Anwendungsordnerbaum und hervorgehobener YAML-Konfiguration",
-  "filesCaption": "Echte Anwendung · lokale Docker-Demoumgebung",
+  "filesCaption": "Echte Anwendung · simulierte Docker-Engine-Daten",
   "investigationTitle": "Untersuchen Sie zusammenhängende Hinweise.",
   "investigation": [
     {
@@ -282,5 +282,21 @@
     }
   ],
   "logHistoryText": "Laden Sie die gesamte von der Quelle aufbewahrte Loghistorie unabhängig von Filtern oder Zeilenlimits der Anzeige herunter. Streaming unterstützt Fortschritt und Abbruch; Aufbewahrung, Exportlimits und unvollständige Lesevorgänge werden ausdrücklich angezeigt. Kopieren nutzt weiterhin den gefilterten Anzeigepuffer.",
-  "securityDemo": "Echte Anwendung · simulierte Sicherheitsbefunde"
+  "securityDemo": "Echte Anwendung · simulierte Sicherheitsbefunde",
+  "clusterTitle": "Mit Rücksicht auf Ihren Cluster.",
+  "clusterText": "Ocular lädt den gewählten Ressourcentyp und die gewählten Namespaces. Es sammelt nicht im Hintergrund sämtliche Ressourcen und deren vollständige Beschreibungen.",
+  "clusterPoints": [
+    [
+      "Kleine Anfragen, gemeinsame Ergebnisse",
+      "Kleine Seiten ergeben automatisch eine vollständige Liste. Kompakte Caches werden wiederverwendet und über Watches aktuell gehalten."
+    ],
+    [
+      "Begrenzter Aufwand",
+      "Parallelität, Anfragerate und Aufbewahrung ungenutzter Caches sind begrenzt. Bei zu großen Abfragen über All Namespaces werden Sie zur Auswahl von Namespaces aufgefordert, statt unbemerkt eine Teilliste zu erhalten."
+    ],
+    [
+      "Sie steuern das Laden",
+      "Aktualisieren Sie Listen gezielt, verfolgen Sie Dauer und empfangene Daten oder brechen Sie eine Listenabfrage ab. Der Clustergraph lädt erst auf Ihre Anforderung."
+    ]
+  ]
 }

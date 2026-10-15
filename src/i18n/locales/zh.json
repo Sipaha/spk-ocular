@@ -40,7 +40,7 @@
   "freeShort": "所有功能免费，对你和你的公司都一样。",
   "platforms": "Linux、Windows 与 macOS · x86-64 与 ARM64",
   "heroCaption": "pod 状态和日志并排显示。",
-  "demo": "真实应用 · 本地演示集群",
+  "demo": "真实应用 · 模拟 Kubernetes API 数据",
   "syntheticDemo": "真实应用 · 模拟 Helm 发布",
   "closeImage": "关闭截图",
   "fullImage": "打开完整尺寸截图",
@@ -122,7 +122,7 @@
     ]
   ],
   "gallery": "看看它如何工作。",
-  "galleryText": "SPK Ocular 1.2.0 的真实界面。使用演示数据，而非产品模型图。",
+  "galleryText": "SPK Ocular 1.7.0 的真实界面。使用演示数据，而非产品模型图。",
   "galleryTabs": [
     "工作负载",
     "日志与详情",
@@ -241,7 +241,7 @@
   ],
   "filesBoundary": "需要运行中的 Linux 容器：sh 用于浏览，readlink 用于符号链接，tar 用于下载。文件和文件夹以流式方式传输，不受编辑器 2 MiB 限制，且不会覆盖已有名称。浏览器模式下载需要桌面应用。",
   "filesAlt": "SPK Ocular 展开的应用目录树和语法高亮的 YAML 配置",
-  "filesCaption": "真实应用 · 本地 Docker 演示环境",
+  "filesCaption": "真实应用 · 模拟 Docker Engine 数据",
   "investigationTitle": "关联证据，开展调查。",
   "investigation": [
     {
@@ -282,5 +282,21 @@
     }
   ],
   "logHistoryText": "下载源仍保留的全部日志历史，不受查看器筛选或行数限制影响。流式写入支持进度和取消，并明确报告保留期限、导出上限和不完整读取。复制仍使用筛选后的查看器缓冲区。",
-  "securityDemo": "实际应用 · 模拟的安全检查数据"
+  "securityDemo": "实际应用 · 模拟的安全检查数据",
+  "clusterTitle": "关注集群资源开销。",
+  "clusterText": "Ocular 只加载您选择的资源类型和命名空间，不会在后台收集所有资源及其完整描述。",
+  "clusterPoints": [
+    [
+      "小请求，共享结果",
+      "自动通过小分页构建完整列表，复用紧凑缓存，并通过 watch 保持更新。"
+    ],
+    [
+      "有界的工作量",
+      "限制请求并发数、请求频率和闲置缓存的保留。All Namespaces 查询过大时，会提示选择具体命名空间，而不会悄悄将部分列表当作完整结果展示。"
+    ],
+    [
+      "由您控制加载",
+      "手动刷新列表、查看已用时间和接收的数据，或取消请求。集群关系图仅在您明确要求时加载。"
+    ]
+  ]
 }
