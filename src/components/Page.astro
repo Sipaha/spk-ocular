@@ -5,6 +5,7 @@ import GitHubIcon from '../assets/github.svg';
 import { copy, type Lang } from '../i18n/copy';
 import { languages, pagePath } from '../lib/languages.mjs';
 import { REPO, RELEASES } from '../lib/releases.mjs';
+import m from '../data/measurements.json';
 interface Props { lang: Lang; }
 const { lang } = Astro.props;
 const d = copy(lang);
@@ -13,6 +14,8 @@ const about = 'https://sipaha.github.io/about/';
 const shots = ['workloads', 'logs', 'helm', 'docker'];
 const shotURL = (name: string) => `${base}media/${name}-${lang === 'ru' ? 'ru' : 'en'}.webp?v=1.7.0`;
 const navIDs = ['features', 'interface', 'free'];
+const fmt = (value: number, digits = 0) => new Intl.NumberFormat(lang, {maximumFractionDigits:digits, minimumFractionDigits:digits}).format(value);
+const fill = (text: string, values: Record<string,string>) => text.replace(/\{(\w+)\}/g, (match,key) => values[key] ?? match);
 ---
 <Base lang={lang} title={d.title} description={d.description}>
   <a href="#main" class="skip">{d.skip}</a>
@@ -57,6 +60,22 @@ const navIDs = ['features', 'interface', 'free'];
     <section class="container section local-section" aria-labelledby="cluster-care">
       <div><h2 id="cluster-care">{d.clusterTitle}</h2><p>{d.clusterText}</p></div>
       <div class="local-points">{d.clusterPoints.map(([title,text])=><article><h3>{title}</h3><p>{text}</p></article>)}</div>
+    </section>
+    <section id="measurements" class="container section measurement-section" aria-labelledby="measurement-title">
+      <div class="section-head"><h2 id="measurement-title">{fill(d.measurementTitle,{resources:fmt(m.resources,0)})}</h2><p>{fill(d.measurementText,{version:m.version})}</p></div>
+      <dl class="measurement-metrics">
+        <div><dt>{d.measurementLoad}</dt><dd>{fmt(m.coldMedianSeconds,1)} <span>{d.measurementSeconds}</span></dd></div>
+        <div><dt>{d.measurementPages}</dt><dd>{fmt(m.pagesPerLoad,0)}</dd></div>
+        <div><dt>{d.measurementCPU}</dt><dd>−{fmt(m.cpuReductionPercent,0)}<span>%</span></dd></div>
+        <div><dt>{d.measurementPeak}</dt><dd>{fmt(m.sampledPeakPSSMiB,0)} <span>{d.measurementMiB}</span></dd></div>
+      </dl>
+      <p class="measurement-note">{fill(d.measurementCPUDelta,{before:fmt(m.beforeCPUSeconds,2),after:fmt(m.afterCPUSeconds,2)})} {d.measurementWarm}</p>
+      <p class="measurement-note">{fill(d.measurementStability,{rebound:fmt(m.memoryReboundMiB,2),limit:fmt(m.memoryReboundLimitMiB,0)})}</p>
+      <details class="measurement-conditions"><summary>{d.measurementConditions}</summary><div>
+        <p>{d.measurementCPUContext}</p><p>{fill(d.measurementBoundary,{runs:fmt(m.validCurrentSessions,0)})}</p>
+        <p>{fill(d.measurementMethod,{peakInterval:fmt(m.peakSamplingSeconds,1),warmup:fmt(m.warmupMinutes,0),loaded:fmt(m.loadedObservationMinutes,0),confirmation:fmt(m.confirmationSeconds,0),control:fmt(m.controlMinutes,0)})}</p>
+        <p><time datetime={m.dateISO}>{m.dateDisplay}</time> · <a href={REPO+'/blob/master/docs/performance.md'}>{d.measurementSummary} ↗</a> · <a href={REPO+'/blob/master/docs/performance-data/2026-10-16-memory.csv'}>{d.measurementRaw} ↗</a></p>
+      </div></details>
     </section>
     <section id="features" class="container section">
       <div class="section-head"><h2>{d.overview}</h2><p>{d.overviewText}</p></div>

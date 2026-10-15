@@ -298,5 +298,22 @@
       "Vous contrôlez le chargement",
       "Actualisez une liste, suivez la durée et les données reçues, ou annulez la requête. Le graphe du cluster ne se charge qu’à votre demande."
     ]
-  ]
+  ],
+  "measurementTitle": "Une liste complète de {resources} Pods.",
+  "measurementText": "Mesuré avec une API Kubernetes HTTP simulée localement et une version de production de SPK Ocular {version}. Le temps de chargement est la médiane de trois nouvelles sessions de l’application.",
+  "measurementLoad": "Connexion → liste complète des ressources",
+  "measurementPages": "Réponses Pod LIST paginées par chargement",
+  "measurementPeak": "Pic PSS observé · application + Chromium",
+  "measurementSeconds": "s",
+  "measurementMiB": "MiB",
+  "measurementWarm": "Revenir à la liste de Pods en cache n’a déclenché aucune requête Pod LIST supplémentaire.",
+  "measurementConditions": "Conditions et mesures brutes",
+  "measurementBoundary": "Mode navigateur avec une instance dédiée de Chromium sans interface sous Linux, sans garantie de performances pour une fenêtre native ou un cluster réel. Le PSS comprend les deux arbres de processus ; l’API HTTP simulée et l’outil de mesure sont exclus. Le pic PSS est le maximum de {runs} sessions valides de la version actuelle.",
+  "measurementMethod": "Les pics mémoire ont été échantillonnés environ toutes les {peakInterval} secondes. Le test de stabilité comprend {warmup} minutes de préchauffage, {loaded} minutes d’observation avec la liste chargée, puis un changement normal de type de ressource. La validation exige {confirmation} secondes de confirmation du plateau, puis {control} minutes de contrôle distinctes. Sans récupération mémoire forcée ni vidage des caches.",
+  "measurementRaw": "Échantillons mémoire bruts",
+  "measurementSummary": "Résumé des mesures",
+  "measurementCPU": "Moins de temps CPU côté Go",
+  "measurementCPUDelta": "{before} → {after} secondes CPU au premier chargement.",
+  "measurementCPUContext": "Comparaison de trois paires alternées de nouvelles sessions, avant et après le changement du décodeur JSON dans deux versions de production locales. Données et limites de requêtes identiques ; ce n’est ni une comparaison avec une version publiée antérieure ni une promesse de réduction équivalente du temps d’attente.",
+  "measurementStability": "Le test distinct de stabilité mémoire n’a pas réussi : une remontée de {rebound} MiB a dépassé la limite de {limit} MiB. Les résultats complets sont accessibles ci-dessous."
 }

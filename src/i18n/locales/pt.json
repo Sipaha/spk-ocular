@@ -298,5 +298,22 @@
       "Você controla o carregamento",
       "Atualize uma lista, acompanhe o tempo e os dados recebidos ou cancele a requisição. O grafo do cluster só carrega quando você solicita."
     ]
-  ]
+  ],
+  "measurementTitle": "Uma lista completa com {resources} Pods.",
+  "measurementText": "Medido com uma API HTTP Kubernetes simulada localmente e uma compilação de produção do SPK Ocular {version}. O tempo de carregamento é a mediana de três novas sessões do aplicativo.",
+  "measurementLoad": "Conexão → lista completa de recursos",
+  "measurementPages": "Respostas Pod LIST paginadas por carregamento",
+  "measurementPeak": "Pico de PSS observado · aplicativo + Chromium",
+  "measurementSeconds": "s",
+  "measurementMiB": "MiB",
+  "measurementWarm": "Voltar à lista de Pods em cache não gerou requisições Pod LIST adicionais.",
+  "measurementConditions": "Condições e medições originais",
+  "measurementBoundary": "Modo navegador com Chromium headless próprio no Linux; não é uma garantia de desempenho para janelas nativas ou clusters reais. O PSS inclui as duas árvores de processos; a API HTTP simulada e a ferramenta de medição ficam de fora. O pico de PSS é o máximo de {runs} sessões válidas da compilação atual.",
+  "measurementMethod": "Os picos de memória foram amostrados aproximadamente a cada {peakInterval} segundos. O teste de estabilidade inclui {warmup} minutos de aquecimento, {loaded} minutos de observação com a lista carregada e depois uma troca normal de tipo de recurso. Para passar no teste, são necessários {confirmation} segundos de confirmação do platô e depois {control} minutos separados de controle. Sem coleta de lixo forçada nem limpeza de caches.",
+  "measurementRaw": "Amostras originais de memória",
+  "measurementSummary": "Resumo da medição",
+  "measurementCPU": "Menos tempo de CPU no servidor Go",
+  "measurementCPUDelta": "{before} → {after} segundos de CPU no primeiro carregamento.",
+  "measurementCPUContext": "Comparação de três pares alternados de sessões novas, antes e depois da mudança do decodificador JSON em duas compilações de produção locais. Mesmos dados e limites de requisições; não é uma comparação com uma versão publicada anterior nem uma promessa de redução equivalente no tempo de espera.",
+  "measurementStability": "O teste separado de estabilidade de memória não passou: uma alta de {rebound} MiB excedeu o limite de {limit} MiB. Os resultados completos estão no link abaixo."
 }

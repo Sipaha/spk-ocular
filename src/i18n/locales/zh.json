@@ -298,5 +298,22 @@
       "由您控制加载",
       "手动刷新列表、查看已用时间和接收的数据，或取消请求。集群关系图仅在您明确要求时加载。"
     ]
-  ]
+  ],
+  "measurementTitle": "完整显示 {resources} 个 Pod。",
+  "measurementText": "使用 SPK Ocular {version} 的生产构建，在本地模拟 Kubernetes HTTP API 上测量。加载时间为三个全新应用会话的中位数。",
+  "measurementLoad": "连接 → 完整资源列表",
+  "measurementPages": "每次加载的 Pod LIST 分页响应数",
+  "measurementPeak": "观测到的 PSS 峰值 · 应用 + Chromium",
+  "measurementSeconds": "秒",
+  "measurementMiB": "MiB",
+  "measurementWarm": "返回缓存中的 Pod 列表时，没有发出额外的 Pod LIST 请求。",
+  "measurementConditions": "测试条件与原始测量数据",
+  "measurementBoundary": "测试在 Linux 的浏览器模式下使用专用无界面 Chromium，不保证原生窗口或真实集群具有相同性能。PSS 包含两棵进程树，不包含模拟 HTTP API 和测量工具。PSS 峰值取自当前构建的 {runs} 个有效会话中的最大值。",
+  "measurementMethod": "约每 {peakInterval} 秒采样一次内存峰值。稳定性测试先预热 {warmup} 分钟，再观察已加载的列表 {loaded} 分钟，然后正常切换到其他资源类型。要通过测试，需要确认平台期 {confirmation} 秒，然后另行进行 {control} 分钟的控制观察。不强制垃圾回收，也不清空缓存。",
+  "measurementRaw": "原始内存采样",
+  "measurementSummary": "测量摘要",
+  "measurementCPU": "Go 后端使用更少 CPU 时间",
+  "measurementCPUDelta": "首次加载的 CPU 时间：{before} → {after} 秒。",
+  "measurementCPUContext": "在两个本地生产构建中，对 JSON 解码器改动前后进行了三组交替的全新会话比较。输入数据和请求限制相同；这不是与上一已发布版本的比较，也不保证等待时间按相同比例缩短。",
+  "measurementStability": "单独的内存稳定性测试未通过：内存回升 {rebound} MiB，超过 {limit} MiB 的限制。完整结果见下方链接。"
 }

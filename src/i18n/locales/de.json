@@ -298,5 +298,22 @@
       "Sie steuern das Laden",
       "Aktualisieren Sie Listen gezielt, verfolgen Sie Dauer und empfangene Daten oder brechen Sie eine Listenabfrage ab. Der Clustergraph lädt erst auf Ihre Anforderung."
     ]
-  ]
+  ],
+  "measurementTitle": "Eine vollständige Liste mit {resources} Pods.",
+  "measurementText": "Gemessen mit einer lokalen Kubernetes-HTTP-Testumgebung und einem Produktionsbuild von SPK Ocular {version}. Die Ladezeit ist der Median aus drei neuen Anwendungssitzungen.",
+  "measurementLoad": "Verbinden → vollständige Ressourcenliste",
+  "measurementPages": "Paginierte Pod-LIST-Antworten je Ladevorgang",
+  "measurementPeak": "Gemessene PSS-Spitze · App + Chromium",
+  "measurementSeconds": "s",
+  "measurementMiB": "MiB",
+  "measurementWarm": "Die Rückkehr zur warmen Pod-Liste löste keine weiteren Pod-LIST-Anfragen aus.",
+  "measurementConditions": "Bedingungen und Rohdaten",
+  "measurementBoundary": "Browsermodus mit eigenem Headless-Chromium unter Linux; keine Leistungsgarantie für native Fenster oder reale Cluster. PSS umfasst beide Prozessbäume; HTTP-Testumgebung und Messwerkzeug sind ausgeschlossen. Die PSS-Spitze ist das Maximum aus {runs} gültigen Sitzungen des aktuellen Builds.",
+  "measurementMethod": "Speicherspitzen wurden ungefähr alle {peakInterval} Sekunden erfasst. Der Stabilitätstest umfasste {warmup} Minuten Aufwärmen, {loaded} Minuten Beobachtung mit geladener Liste und anschließend einen normalen Wechsel zu einem anderen Ressourcentyp. Für eine erfolgreiche Prüfung sind {confirmation} Sekunden Plateau-Bestätigung und danach separate {control} Minuten Kontrolle erforderlich. Ohne erzwungene Garbage Collection oder Cache-Leerung.",
+  "measurementRaw": "Rohe Speichermesswerte",
+  "measurementSummary": "Messübersicht",
+  "measurementCPU": "Weniger CPU-Zeit im Go-Backend",
+  "measurementCPUDelta": "{before} → {after} CPU-Sekunden beim ersten Laden.",
+  "measurementCPUContext": "Verglichen wurden drei abwechselnde Paare neuer Sitzungen vor und nach der JSON-Decoder-Änderung in zwei lokalen Produktionsbuilds. Gleiche Daten und Anfragegrenzen; kein Vergleich mit einer früheren veröffentlichten Version und kein Versprechen gleicher Einsparungen bei der Wartezeit.",
+  "measurementStability": "Der separate Speicherstabilitätstest wurde nicht bestanden: ein erneuter Anstieg um {rebound} MiB überschritt die Grenze von {limit} MiB. Die vollständigen Ergebnisse sind unten verlinkt."
 }

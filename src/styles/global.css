@@ -347,3 +347,18 @@ select { padding: 10px 36px 10px 12px; border: 1px solid var(--line); border-rad
 .image-preview-close:hover { background: rgb(0 0 0 / 80%); color: white; }
 .image-preview-close:focus-visible { outline: none; }
 .image-preview[data-keyboard-focus=true] .image-preview-close:focus-visible { outline: 2px solid #b8d1ff; outline-offset: 3px; }
+
+.measurement-section { border-top: 1px solid var(--line); }
+.measurement-section .section-head { margin-bottom: 36px; }
+.measurement-metrics { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap: 30px; margin: 0; }
+.measurement-metrics div { display: flex; flex-direction: column; justify-content: space-between; gap: 18px; border-top: 1px solid var(--line); padding-top: 18px; }
+.measurement-metrics dt { color: var(--muted); font-size: 13px; line-height: 1.5; }
+.measurement-metrics dd { margin: 0; font-size: clamp(30px,3.3vw,46px); line-height: 1.2; font-variant-numeric: tabular-nums; letter-spacing: -.04em; }
+.measurement-metrics dd span { font-size: 18px; letter-spacing: 0; }
+.measurement-note { margin-top: 28px; font-size: 14px; }
+.measurement-conditions { margin-top: 22px; color: var(--muted); font-size: 13px; }
+.measurement-conditions summary { cursor: pointer; color: var(--fg); width: fit-content; }
+.measurement-conditions summary:focus-visible { outline: 3px solid var(--accent); outline-offset: 5px; }
+.measurement-conditions p { margin-top: 14px; max-width: 900px; }
+.measurement-conditions a { text-decoration: underline; text-underline-offset: 3px; }
+@media(max-width:768px) { .measurement-metrics { grid-template-columns: repeat(2,minmax(0,1fr)); gap: 28px 20px; } }

@@ -5,6 +5,24 @@ import fr from './locales/fr.json';
 import pt from './locales/pt.json';
 import ja from './locales/ja.json';
 export const en = {
+  measurementStability: "The separate memory-stability test did not pass: a {rebound} MiB rebound exceeded the {limit} MiB limit. Full results are linked below.",
+  measurementTitle: "A complete list of {resources} Pods.",
+  measurementText: "Measured on a local Kubernetes HTTP fixture, using a production build of SPK Ocular {version}. Median loading times come from three fresh application sessions.",
+  measurementLoad: "Connect → complete resource list",
+  measurementPages: "Paginated Pod LIST responses per load",
+  measurementPeak: "Sampled peak PSS · app + Chromium",
+  measurementSeconds: "s",
+  measurementMiB: "MiB",
+  measurementWarm: "Returning to the warm Pod list issued no additional Pod LIST requests.",
+  measurementConditions: "Conditions and raw measurements",
+  measurementBoundary: "Browser mode with owned headless Chromium on Linux, not a native-window or live-cluster performance guarantee. The PSS figure includes both process trees; the HTTP fixture and measurement harness are excluded. The PSS peak is the maximum across {runs} valid current-build sessions.",
+  measurementMethod: "Memory peaks were sampled approximately every {peakInterval} seconds. The stability run used {warmup} minutes of warm-up, {loaded} minutes of loaded observation, then normal navigation away from the list. Acceptance requires {confirmation} seconds of plateau confirmation and then a separate {control} minutes of control. No forced garbage collection or cache purge.",
+  measurementRaw: "Raw memory samples",
+  measurementSummary: "Measurement summary",
+  measurementCPU: "Less Go backend CPU time",
+  measurementCPUDelta: "{before} → {after} CPU seconds during initial loading.",
+  measurementCPUContext: "Comparison of three alternating fresh-session pairs, before and after the JSON decoder change in two local production builds. Same input and request limits; this is not a comparison with a previous published release or a promise of equal wall-time savings.",
+
   clusterTitle: "Built to respect your cluster.", clusterText: "Ocular loads the resource type and namespaces you choose. It avoids collecting every resource and full description in the background.",
   clusterPoints: [["Small requests, shared results", "Automatic small pages build a complete list. Compact caches are reused and kept current through watches."], ["Bounded work", "Request concurrency, request rates and idle cache retention are limited. Large All Namespaces reads ask you to choose namespaces instead of silently showing a partial list."], ["You control the load", "Refresh explicitly, follow elapsed time and received data, or cancel a list request. The cluster graph loads only when you ask."]],
 
@@ -74,6 +92,24 @@ export const en = {
 };
 export type Copy = typeof en;
 export const ru: Copy = {
+  measurementStability: "Отдельная проверка стабильности памяти не пройдена: подъём на {rebound} МиБ превысил лимит {limit} МиБ. Полные результаты доступны по ссылке ниже.",
+  measurementTitle: "Полный список из {resources} Pods.",
+  measurementText: "Замер на локальной HTTP-фикстуре Kubernetes в production-сборке SPK Ocular {version}. Время загрузки: медиана трёх запусков с новым профилем приложения.",
+  measurementLoad: "Подключение → полный список ресурсов",
+  measurementPages: "Страниц Pod LIST на одну загрузку",
+  measurementPeak: "Наблюдаемый пик PSS · приложение + Chromium",
+  measurementSeconds: "с",
+  measurementMiB: "МиБ",
+  measurementWarm: "Возврат к тёплому списку Pods не вызвал дополнительных запросов Pod LIST.",
+  measurementConditions: "Условия и исходные замеры",
+  measurementBoundary: "Браузерный режим с отдельным headless Chromium на Linux, не гарантия производительности нативного окна или живого кластера. PSS включает оба дерева процессов; HTTP-фикстура и инструмент замера в сумму не входят. Пик PSS взят по {runs} валидным запускам текущей сборки.",
+  measurementMethod: "Пик памяти снимался примерно каждые {peakInterval} секунды. Для проверки стабильности: {warmup} минут разогрева, {loaded} минут наблюдения с загруженным списком, затем обычный переход к другому типу ресурсов. Для успешной проверки нужны {confirmation} секунд подтверждения плато и ещё {control} минут отдельного контроля. Без принудительной сборки мусора и очистки кэшей.",
+  measurementRaw: "Исходные отсчёты памяти",
+  measurementSummary: "Сводка замера",
+  measurementCPU: "Меньше CPU-времени Go-сервера",
+  measurementCPUDelta: "{before} → {after} секунды CPU при первой загрузке.",
+  measurementCPUContext: "Сравнение трёх чередующихся пар новых сессий до и после изменения JSON-декодера в двух локальных production-сборках. Входные данные и лимиты запросов одинаковы; это не сравнение с предыдущим опубликованным релизом и не обещание такого же сокращения времени ожидания.",
+
   clusterTitle: "Бережно к ресурсам кластера.", clusterText: "Ocular загружает выбранный тип ресурсов и выбранные пространства имён. Приложение не собирает все ресурсы и их полные описания в фоне.",
   clusterPoints: [["Небольшие запросы, общий кэш", "Небольшие страницы автоматически складываются в полный список. Компактный кэш переиспользуется и поддерживается через watch."], ["Ограниченная нагрузка", "Параллелизм, частота запросов и хранение неиспользуемых кэшей ограничены. Слишком большой запрос All Namespaces предложит выбрать пространства имён вместо незаметного показа частичного списка."], ["Загрузка под вашим контролем", "Обновите список вручную, следите за временем и полученными данными или отмените запрос. Граф кластера загружается только по вашему нажатию."]],
 

@@ -224,5 +224,22 @@ concurrency/rate and idle retention. The All Namespaces safeguard asks for a
 narrower selection instead of presenting partial results as complete. Refresh,
 elapsed time, consumed response-body data and cancellation describe live resource
 lists; graph admission is explicit. This copy does not claim zero cluster impact,
-universal memory use or completed production-scale certification. Long-soak
-plateau acceptance remains incomplete in the application measurement report.
+universal memory use or completed production-scale certification. The current long-soak
+stability result is NOT ACCEPTED in the application measurement report.
+
+## Measured inventory section
+
+All eight locales render verified values from `src/data/measurements.json`.
+The 16.10.2026 local synthetic fixture contains 10,000 selected Pods: 100
+100-object LIST pages and a median 9.8-second initial load. Three alternating
+fresh-session pairs measured about 46% less Go backend CPU after the JSON
+decoder change in two local production 1.7.0 builds. This is not a comparison
+with a previous published release or an equivalent wall-time speedup.
+The sampled peak PSS, rounded to 558 MiB, is the maximum across six valid
+current-build sessions and includes application plus headless Chromium trees;
+the HTTP fixture and harness are excluded. The separate long memory test's
+NOT ACCEPTED result (+10.08 MiB rebound against 10 MiB) is visible beside the
+metrics, rather than hidden in expanded conditions. Conditions disclose browser
+mode, synthetic data, sampling and the plateau-first protocol. Links to the
+measurement report and raw CSV are benchmark evidence, not product-guide links.
+Do not relabel the failed criterion or claim universal/native-window memory use.
