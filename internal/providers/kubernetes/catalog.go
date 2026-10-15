@@ -54,6 +54,7 @@ type catalog struct {
 	last     discovered
 	have     bool // a discovery answered at least once
 	running  bool
+	finished chan struct{}
 	again    bool
 	onChange func(rev uint64)
 }
@@ -99,13 +100,15 @@ func (c *catalog) refresh() {
 	}
 	c.running = true
 	c.wg.Add(1)
-	go c.run()
+	c.finished = make(chan struct{})
+	go c.run(c.finished)
 }
 
 // run discovers until no refresh is pending. It stays the only runner
 // while it tells a revision, so revisions are told one at a time, in
 // order (a listener asking for a refresh only marks another round).
-func (c *catalog) run() {
+func (c *catalog) run(finished chan struct{}) {
+	defer close(finished)
 	defer c.wg.Done()
 	for {
 		c.mu.Lock()
@@ -440,5 +443,31 @@ func projectGeneric(namespaced bool) func(u *unstructured.Unstructured, now time
 			h = core.HealthFrom([]core.Issue{{State: core.HealthTerminating, Reason: "Terminating"}})
 		}
 		return cells, h, time.Time{}
+	}
+}
+
+// refreshWait coalesces explicit requests and waits even when discovery finds
+// no catalog changes (and therefore emits no new revision).
+func (c *catalog) refreshWait(ctx context.Context) error {
+	c.mu.Lock()
+	if c.get == nil {
+		c.mu.Unlock()
+		return nil
+	}
+	if !c.running && c.ctx.Err() == nil {
+		c.running = true
+		c.finished = make(chan struct{})
+		c.wg.Add(1)
+		go c.run(c.finished)
+	}
+	done := c.finished
+	c.mu.Unlock()
+	select {
+	case <-done:
+		return c.ctx.Err()
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-c.ctx.Done():
+		return c.ctx.Err()
 	}
 }

@@ -44,6 +44,12 @@ type Session interface {
 	Close()
 }
 
+// RefreshPreparer prepares a fresh observation before the view reattaches.
+// Shared providers wait for the requested read, not merely queue acceptance.
+type RefreshPreparer interface {
+	PrepareRefresh(context.Context, Query) error
+}
+
 // Resyncer is implemented by sessions whose observation is best effort
 // (Docker: events can be lost without a break): the user can ask to read a
 // view's sources again. Resync starts a new observation of what q depends
@@ -81,6 +87,13 @@ type Cataloger interface {
 	// KindRemoved: the kind was offered by this session and is not served
 	// any more (a view of it ends ClassRemoved, and is not reopened).
 	KindRemoved(id string) bool
+}
+
+// ScopeChecker can validate scope-list access without reading the inventory.
+// A session with a nonempty ScopeKind supplies the inventory through that live
+// view; the UI bootstrap need not copy the same collection in another response.
+type ScopeChecker interface {
+	CheckScopes(context.Context) error
 }
 
 // ViewDescriber is implemented by sessions whose kinds' columns are known
@@ -148,6 +161,7 @@ const (
 	ClassUnauthorized ErrorClass = "unauthorized"
 	ClassUnavailable  ErrorClass = "unavailable"
 	ClassGone         ErrorClass = "gone"
+	ClassScopeLimit   ErrorClass = "scope_limit"
 	// ClassRemoved: the kind is no longer served (a CRD deleted); unlike
 	// gone, reopening the view cannot help.
 	ClassRemoved ErrorClass = "removed"
@@ -167,9 +181,13 @@ const (
 )
 
 type ViewStatus struct {
-	State   StatusState `json:"state"`
-	Class   ErrorClass  `json:"class,omitempty"`
-	Message string      `json:"message,omitempty"`
+	Refresh uint64 `json:"refresh,omitempty"`
+	// DownloadedBytes is consumed response payload for the initial inventory.
+	// Nil means the provider cannot measure it; it is never an estimated size.
+	DownloadedBytes *int64      `json:"downloadedBytes,omitempty"`
+	State           StatusState `json:"state"`
+	Class           ErrorClass  `json:"class,omitempty"`
+	Message         string      `json:"message,omitempty"`
 	// Coverage: a view built from several sources says how each one is
 	// (in the provider's fixed order), so an empty result with a source
 	// not seen is not "all is well". Compare with Equal, copy with Clone.
@@ -196,7 +214,7 @@ const (
 
 // Equal compares statuses, coverage included.
 func (s ViewStatus) Equal(o ViewStatus) bool {
-	if s.State != o.State || s.Class != o.Class || s.Message != o.Message || len(s.Coverage) != len(o.Coverage) {
+	if (s.DownloadedBytes == nil) != (o.DownloadedBytes == nil) || (s.DownloadedBytes != nil && o.DownloadedBytes != nil && *s.DownloadedBytes != *o.DownloadedBytes) || s.Refresh != o.Refresh || s.State != o.State || s.Class != o.Class || s.Message != o.Message || len(s.Coverage) != len(o.Coverage) {
 		return false
 	}
 	for i := range s.Coverage {
@@ -209,6 +227,10 @@ func (s ViewStatus) Equal(o ViewStatus) bool {
 
 // Clone copies the status so the copy shares nothing with it.
 func (s ViewStatus) Clone() ViewStatus {
+	if s.DownloadedBytes != nil {
+		n := *s.DownloadedBytes
+		s.DownloadedBytes = &n
+	}
 	if s.Coverage != nil {
 		s.Coverage = append([]SourceCoverage(nil), s.Coverage...)
 	}

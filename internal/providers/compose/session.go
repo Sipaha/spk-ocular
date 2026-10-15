@@ -207,11 +207,12 @@ func (s *session) evictLocked() {
 		}
 		f.mu.Lock()
 		idle, at := f.leases == 0, f.idleAt
+		unfinished := !f.published || f.freshTarget > f.completedEpoch
 		f.mu.Unlock()
 		if !idle {
 			continue
 		}
-		if now.Sub(at) >= s.grace {
+		if unfinished || now.Sub(at) >= s.grace {
 			f.stop()
 			s.feeds[i] = nil
 			continue
@@ -497,4 +498,66 @@ func (s *session) Identity(ctx context.Context) (string, error) {
 	s.daemon = id
 	s.mu.Unlock()
 	return id, nil
+}
+
+// PrepareRefresh waits for the explicitly requested shared feed epochs before
+// the view attaches its replacement observation. It never disconnects a target.
+func (s *session) PrepareRefresh(ctx context.Context, q provider.Query) error {
+	kinds, ok := feedsOf(q.Kind)
+	if !ok {
+		return &provider.Error{Class: provider.ClassUnsupported, Message: "unknown kind " + q.Kind}
+	}
+	s.mu.Lock()
+	if s.closed {
+		s.mu.Unlock()
+		return &provider.Error{Class: provider.ClassGone, Message: "session closed"}
+	}
+	feeds := make([]*feed, 0, len(kinds))
+	for _, k := range kinds {
+		if f := s.feeds[k]; f != nil {
+			f.mu.Lock()
+			f.leases++
+			f.idleAt = time.Time{}
+			f.mu.Unlock()
+			feeds = append(feeds, f)
+		}
+	}
+	s.mu.Unlock()
+	defer s.release(feeds)
+	targets := make([]uint64, len(feeds))
+	for i, f := range feeds {
+		targets[i] = f.queueFresh()
+	}
+	for i, f := range feeds {
+		if err := f.waitFresh(ctx, targets[i]); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// LoadingProgress sums only this query's shared feed transfers. A snapshot
+// completed before the operation began is a warm hit, not a new download.
+func (s *session) LoadingProgress(q provider.Query, start time.Time) *int64 {
+	kinds, ok := feedsOf(q.Kind)
+	if !ok {
+		return nil
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	var bytes int64
+	for _, kind := range kinds {
+		f := s.feeds[kind]
+		if f == nil {
+			return nil
+		}
+		f.mu.Lock()
+		progress := f.progress
+		f.mu.Unlock()
+		if progress == nil {
+			return nil
+		}
+		bytes += progress.Since(start)
+	}
+	return &bytes
 }

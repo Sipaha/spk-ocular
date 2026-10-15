@@ -157,6 +157,7 @@ package-macos:
 
 # These checks run without building packages or publishing a release.
 test-packaging:
+	python3 -m unittest discover -s scripts/tests -v
 	python3 -m unittest discover -s packaging/tests -v
 	python3 scripts/check-docs.py
 	desktop-file-validate packaging/linux/spk-ocular.desktop

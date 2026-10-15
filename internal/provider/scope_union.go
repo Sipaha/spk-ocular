@@ -128,6 +128,13 @@ func (u *scopeUnion) status() ViewStatus {
 		if terminalClass(st.Class) {
 			return st.Clone()
 		}
+		if st.DownloadedBytes != nil {
+			if out.DownloadedBytes == nil {
+				n := int64(0)
+				out.DownloadedBytes = &n
+			}
+			*out.DownloadedBytes += *st.DownloadedBytes
+		}
 		cov := SourceCoverage{Source: u.names[i], Class: st.Class, Message: st.Message}
 		switch st.State {
 		case StatusLoading:

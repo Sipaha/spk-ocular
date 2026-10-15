@@ -486,6 +486,7 @@ func (c *Client) get(parent context.Context, ver, path string, q url.Values, lim
 	if err != nil {
 		return nil, nil, transportError(parent, ctx, err, c.cfg.RequestTimeout)
 	}
+	resp.Body = provider.TrackDownloadBody(ctx, resp.Body)
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode/100 != 2 {
 		body, _ := io.ReadAll(io.LimitReader(resp.Body, c.lim.ErrorBytes))

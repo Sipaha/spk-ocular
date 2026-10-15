@@ -545,6 +545,9 @@ export interface ViewInfo {
 export type StatusState = 'loading' | 'ready' | 'stale' | 'error'
 
 export interface ViewStatus {
+  refresh?: number
+  /** Consumed upstream initial-inventory payload bytes; absent if unavailable. */
+  downloadedBytes?: number
   state: StatusState
   class?: string
   message?: string

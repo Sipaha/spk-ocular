@@ -314,6 +314,40 @@ rows. Space toggles a checkbox when the list has focus; it types a space in the
 search field. Removing the last checkbox selects an empty set, not all namespaces.
 Choose **All** explicitly to view all namespaces.
 
+A table keeps the complete inventory of the requested kind and chosen namespace
+set, so row filtering and sorting by inventory fields cover the whole list. Loading is
+automatic; there are no user-facing pages or Load more controls. Opening a table
+does not open the full description of every Kubernetes row. Resource details are read when
+an object is opened. CPU/RAM are separately sampled metrics: their existing
+sort uses the samples available when sorting is selected, with unknown values
+last; it is not a complete cluster-wide CPU/RAM ranking.
+
+For a large namespaced collection, **All** can stop with a request to select
+specific namespaces. The table then shows no partial successful inventory.
+Choose one or more namespaces above to load their complete lists. This protects
+against accidentally loading a very large cluster-wide collection; it does not
+automatically change your selection. The current admission budgets are described
+in [Architecture](architecture.md#live-tables-and-discovery).
+
+Live updates normally keep lists current. Use the circular-arrow icon to force
+an update; it spins until that update finishes. F5 refreshes the resource view;
+F5 in navigation refreshes the resource-kind catalog. The namespace popup has
+the same action beside its search field and preserves the query and selected
+names. During a live-table refresh, old rows remain until the new snapshot is
+ready. A failed read keeps them visibly stale; an All admission failure clears
+them and asks for a narrower scope. Refresh preserves filters, sorting and held
+editor drafts.
+
+While a resource list or an object's Events list loads, **Cancel** stops that
+observation. The loader shows total elapsed time and consumed inventory response
+bytes when the provider can measure them; an em dash means unavailable, not zero.
+After cancellation, **Request cancelled** and **Retry** replace the list. The
+placeholder survives navigation, warm target switching and frontend reloads
+until an explicit Retry or a new connection. Cancelling one observation does not
+stop other consumers of the same cache. When none remain, an unfinished inventory
+and its HTTP reads stop immediately. A pending discovered-type schema probe can
+also be cancelled. Retry preserves the page's filters and held editor drafts.
+
 If permission to list namespaces is unavailable, type names separated by commas.
 Submitting an empty input explicitly selects All. Namespace selections belong
 to each connection and survive switching connections and restarting the app.

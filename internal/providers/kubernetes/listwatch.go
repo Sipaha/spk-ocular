@@ -12,6 +12,7 @@ import (
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/dynamic"
@@ -40,6 +41,10 @@ type transportReport func(err error)
 // wraps each watch stream to see watch.Error events. ListOptions pass
 // through untouched (resourceVersion, timeouts, bookmarks, sendInitialEvents).
 type statusListWatch struct {
+	progress  *loadTransfer
+	guard     *scopeBudget
+	pre       func(*unstructured.Unstructured)
+	compact   func(*unstructured.Unstructured) (runtime.Object, error)
 	res       dynamic.ResourceInterface
 	selector  string // field selector, "" = none
 	report    transportReport
@@ -62,7 +67,31 @@ func (lw *statusListWatch) opts(o metav1.ListOptions) metav1.ListOptions {
 }
 
 func (lw *statusListWatch) ListWithContext(ctx context.Context, o metav1.ListOptions) (runtime.Object, error) {
-	ctx, cancel := context.WithTimeout(ctx, listTimeout)
+	read := func(parent context.Context, options metav1.ListOptions) (collectionPage, error) {
+		pageCtx, cancel := context.WithTimeout(lw.progress.context(parent), listTimeout)
+		defer cancel()
+		if lw.guard != nil {
+			pageCtx = lw.guard.context(pageCtx)
+		}
+		lw.counts.lists.Add(1)
+		obj, err := lw.res.List(pageCtx, lw.opts(options))
+		if err != nil {
+			return collectionPage{}, err
+		}
+		return collectionPage{items: obj.Items, rv: obj.GetResourceVersion(), next: obj.GetContinue(), remaining: obj.GetRemainingItemCount()}, nil
+	}
+	if lw.compact != nil {
+		obj, err := collectPages(ctx, o, read, lw.compact, lw.guard)
+		if lw.guard != nil {
+			if blocked := lw.guard.failure(); blocked != nil {
+				err = blocked
+				obj = nil
+			}
+		}
+		lw.report(err)
+		return obj, err
+	}
+	ctx, cancel := context.WithTimeout(lw.progress.context(ctx), listTimeout)
 	defer cancel()
 	lw.counts.lists.Add(1)
 	obj, err := lw.res.List(ctx, lw.opts(o))
@@ -75,6 +104,16 @@ func (lw *statusListWatch) WatchWithContext(ctx context.Context, o metav1.ListOp
 	// context lives until the stream ends or is stopped.
 	ctx, cancel := context.WithCancel(ctx)
 	initial := o.SendInitialEvents != nil && *o.SendInitialEvents
+	if initial {
+		ctx = lw.progress.context(ctx)
+	}
+	if initial && lw.guard != nil {
+		if err := lw.guard.begin(); err != nil {
+			cancel()
+			lw.report(err)
+			return nil, err
+		}
+	}
 	if initial && lw.refused != nil && lw.refused.Load() {
 		// The server refused WatchList already: the reflector falls back
 		// to LIST without asking again.
@@ -110,7 +149,11 @@ func (lw *statusListWatch) WatchWithContext(ctx context.Context, o metav1.ListOp
 		return nil, err
 	}
 	lw.report(nil)
-	return newReportingWatch(w, lw.report, lw.ended, cancel), nil
+	var check func(watch.Event) error
+	if lw.guard != nil {
+		check = func(ev watch.Event) error { return lw.guard.event(ev, lw.pre) }
+	}
+	return newReportingWatch(w, lw.report, lw.ended, cancel, check), nil
 }
 
 func (lw *statusListWatch) List(o metav1.ListOptions) (runtime.Object, error) {
@@ -136,6 +179,7 @@ var errWatchListRefused = errors.New("the server does not serve WatchList")
 // reports watch.Error events. Stop is idempotent; forwarding never blocks
 // after Stop.
 type reportingWatch struct {
+	check  func(watch.Event) error
 	inner  watch.Interface
 	out    chan watch.Event
 	stop   chan struct{}
@@ -145,8 +189,11 @@ type reportingWatch struct {
 	cancel context.CancelFunc
 }
 
-func newReportingWatch(inner watch.Interface, report transportReport, ended func(), cancel context.CancelFunc) *reportingWatch {
+func newReportingWatch(inner watch.Interface, report transportReport, ended func(), cancel context.CancelFunc, checks ...func(watch.Event) error) *reportingWatch {
 	w := &reportingWatch{inner: inner, out: make(chan watch.Event), stop: make(chan struct{}), report: report, ended: ended, cancel: cancel}
+	if len(checks) > 0 {
+		w.check = checks[0]
+	}
 	go w.run()
 	return w
 }
@@ -168,6 +215,13 @@ func (w *reportingWatch) run() {
 					w.ended()
 				}
 				return
+			}
+			if w.check != nil {
+				if err := w.check(ev); err != nil {
+					w.report(err)
+					w.inner.Stop()
+					return
+				}
 			}
 			if ev.Type == watch.Error {
 				w.report(apierrors.FromObject(ev.Object))
@@ -193,6 +247,10 @@ func (w *reportingWatch) Stop() {
 
 // classify maps a client error to a UI error class and a short message.
 func classify(err error) (provider.ErrorClass, string) {
+	var pe *provider.Error
+	if errors.As(err, &pe) {
+		return pe.Class, pe.Message
+	}
 	var se apierrors.APIStatus
 	switch {
 	case err == nil:

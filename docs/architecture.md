@@ -174,12 +174,104 @@ folder actions are not fabricated for browser-managed destinations.
 
 ## Live tables and discovery
 
+Kubernetes LIST supports field/label selectors and continuation pages, but no
+arbitrary substring search or column sort. A request limit controls chunk size;
+it does not establish a globally sorted or searched result from an unseen
+collection. Complete local filtering/sorting requires the relevant inventory
+(or a separately built index). See the
+[Kubernetes API contract](https://kubernetes.io/docs/reference/using-api/api-concepts/).
+
+
+A resource table loads only its demanded kind and selected namespace routes.
+The initial collection drains automatic 100-object LIST pages, reducing each
+page to compact projected cache objects before fetching the next. The complete
+snapshot's resourceVersion starts the watch; failed/expired/repeated continuation
+candidates never become a partial successful list. WatchList-capable servers
+stream an initial snapshot instead. Full local search and sorting need no
+user-facing pagination. Opening a table does not fetch each object's detail;
+YAML/facts use a selected-object read. Ordinary LIST can still carry full wire
+objects where the required columns cannot be served as metadata; trimming is
+not server-side projection.
+
+All Namespaces for a namespaced live collection has admission limits: 2,000
+objects, 16 MiB of raw encoded current objects, and 8 MiB per finite LIST response
+when using the session HTTP transport. A remainingItemCount estimate can reject
+on the first page; without it, actual observations enforce the same inventory
+budget. Watch growth is checked too. Exceeding a limit stops that broad cache,
+clears its rows and asks for explicit namespaces. It never presents a truncated
+list as complete or automatically widens a namespace choice. A fresh explicit
+namespace route remains a complete collection. These are admission/payload
+limits, not a total process-memory bound. Explicit snapshot tools retain their
+own feature budgets and coverage reporting.
+
+All list-refresh controls share an icon action and spin until their operation
+finishes. A live-view refresh keeps old rows while a replacement snapshot loads,
+then replaces them atomically; old callbacks cannot mutate the new observation.
+Failed refresh keeps old rows visibly stale, except a broad-scope admission
+failure clears them. Another consumer can retain the old shared cache until its
+last lease ends. Catalog refresh waits for discovery even when no revision
+changes. Filters, sort, selection and editor guards remain owned by the UI.
+
+Each admitted Kubernetes session shares a read transport budget across dynamic,
+metadata, server-side Table and discovery clients: 10 request starts per second,
+a burst of 20, and at most four finite response bodies in flight. Finite slots
+are released on body completion, error or close. Watches, followed logs and
+upgraded connections pay for establishment but do not hold a finite-response
+slot for their stream lifetime. Cancellation applies while waiting for either
+budget. Existing stricter client-go throttles and mutation behavior remain;
+this budget adds no retry and does not bound watch event rate or collection size.
+For a provider with a live scope-kind view and a lightweight scope checker,
+the UI scope bootstrap checks access without copying the whole scope inventory.
+Kubernetes checks with limit=1; its live namespace view owns the complete list.
+Direct scope readers lease that same informer when retained. Known observation
+errors remain errors rather than successful stale scope results.
+Idle informer retention has three session-wide limits: eight caches, 25,000
+objects, and 32 MiB of encoded object payload plus identity/label/owner strings.
+The last measure is a payload budget, not a Go heap or process-memory guarantee.
+Oldest idle caches are evicted first; active leases are preserved. The limits
+apply in background sessions too. A local five-second sweep also catches caches
+that grow through watch updates after their last view closes; it issues no API
+read. Completed foreground idle caches retain their existing 60-second grace expiry.
+An unfinished inventory loses its last lease immediately: its outstanding reads
+are cancelled instead of draining an unused collection during the grace period.
+A latched broad-scope admission failure remains reusable until normal eviction.
+
+
 Events invalidate state; they are not an unbounded event journal. Each subscriber
 keeps the latest event per key. Overflow and reconnection cause `resync`.
 `OpenView` returns a unique, never-reused view ID. `GetRows(since)` returns an
 atomic versioned delta or a complete reset, including an explicitly empty reset.
 The frontend advances its cursor after applying data, keeps one pull in flight
 per view, and ignores responses from closed or replaced views.
+
+`CancelViewLoading` latches a query under its session owner and explicit UI
+connection token, cancels its pending `OpenView` operation by unique request ID,
+and closes its observation. `OpenView` refuses that query with `cancelled` until
+an explicit `retry` or a different connection incarnation. Cancellation is app
+memory state, not a saved target preference; it survives frontend reconstruction.
+The request-to-view association covers cancellation racing with result delivery;
+ordinary Close/owner cleanup and lazy lease-expiry pruning release that metadata.
+Other existing consumers and pending opens have independent request IDs and keep
+running. Epoch checks and frontend generations reject late deliveries. Both HTTP
+and native bindings support the operation; the native OpenView forwards its context.
+
+Kubernetes inventory contexts carry a response-body counter shared with their
+cache. It measures bytes actually read (including failed attempts and initial
+WatchList data), before admission wrappers, excluding headers/TLS and discovery
+or schema probes. HTTP decompression may have occurred before counting, so this
+is payload consumed by the client rather than on-the-wire network traffic.
+Counters stop after initial cache sync; subsequent watch traffic is not included.
+A warm-cache replay reports zero newly downloaded bytes rather than the cached
+snapshot's historical transfer size.
+Namespace/source unions sum source counters. Loading observations publish changed
+status at most every 250 ms through the existing coalesced cursor protocol, without
+extra upstream requests. The UI's elapsed timer covers the whole loading operation,
+including waits for the budget and initial view/schema setup. Docker Engine feed epochs also count their finite initialization/list/inspect
+responses through the same status contract. A local-only progress reporter keeps
+bytes visible while refresh preparation waits for the complete shared snapshot;
+it adds no Engine calls. An unfinished Docker feed loses its last lease immediately
+instead of continuing through the warm-cache grace period. Synthetic or other
+providers without body instrumentation report no value rather than a fabricated zero.
 
 UID is row identity. A same-name replacement removes the old row and adds a new
 one; a late deletion of the old UID cannot remove its replacement. A view is

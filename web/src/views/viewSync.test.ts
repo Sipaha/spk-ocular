@@ -20,6 +20,7 @@ function client(over: Partial<Client> = {}): Client {
     openView: vi.fn(async () => ({ viewId: 'v1', kind: { id: 'pods', title: 'Pods', group: 'W', columns: [], scoped: true } })),
     getRows: vi.fn(async () => page({ reset: true, version: 1 })),
     closeView: vi.fn(async () => {}),
+    cancelViewLoading: vi.fn(async () => {}),
     touchViews: vi.fn(async () => []),
     subscribeEvents: vi.fn(() => () => {}),
     ...over,
@@ -438,4 +439,85 @@ describe('ViewHub catalog events', () => {
     hub.onKindsChanged({ provider: 'kubernetes', target: 't', session: 1, rev: 4 })
     expect(seen).toEqual([{ provider: 'kubernetes', target: 't', session: 1, rev: 3 }, 'resync'])
   })
+})
+
+it('cancel closes the observation, aborts opening and rejects late pages without retrying', async () => {
+  const pending = deferred<Page>()
+  const c = client({ getRows: vi.fn(() => pending.p) })
+  const hub = new ViewHub(c)
+  const s = hub.prepare('kubernetes', 't', q, 11)
+  hub.attach(s)
+  await flush()
+  s.cancelLoading()
+  expect(c.closeView).toHaveBeenCalledWith('v1')
+  expect((vi.mocked(c.openView).mock.calls[0][3] as AbortSignal).aborted).toBe(true)
+  pending.resolve(page({ reset: true, upserts: [row('late')] }))
+  await flush()
+  expect(s.snapshot().cancelled).toBe(true)
+  expect(s.snapshot().rows).toEqual([])
+  hub.resyncAll()
+  await hub.touch()
+  await flush()
+  expect(c.openView).toHaveBeenCalledTimes(1)
+  hub.release(s)
+})
+
+it('cancel remains latched on navigation and warm return; retry or reconnect clears it', async () => {
+  const c = client({ getRows: vi.fn(async () => page({ status: { state: 'loading', downloadedBytes: 12 } })) })
+  const hub = new ViewHub(c)
+  const first = hub.prepare('kubernetes', 't', q, 11)
+  hub.attach(first)
+  await flush()
+  first.cancelLoading()
+  hub.release(first)
+  const again = hub.prepare('kubernetes', 't', q, 11)
+  hub.attach(again)
+  await flush()
+  expect(again.snapshot().cancelled).toBe(true)
+  expect(c.openView).toHaveBeenCalledTimes(1)
+  again.retry()
+  await flush()
+  expect(again.snapshot().cancelled).toBe(false)
+  expect(c.openView).toHaveBeenCalledTimes(2)
+  again.cancelLoading()
+  hub.release(again)
+  const reconnected = hub.prepare('kubernetes', 't', q, 12)
+  hub.attach(reconnected)
+  await flush()
+  expect(reconnected.snapshot().cancelled).toBe(false)
+  expect(c.openView).toHaveBeenCalledTimes(3)
+  hub.release(reconnected)
+})
+
+it('cancel before OpenView finishes closes a late backend view and keeps the placeholder', async () => {
+  const opened = deferred<Awaited<ReturnType<Client['openView']>>>()
+  const c = client({ openView: vi.fn(() => opened.p) })
+  const hub = new ViewHub(c)
+  const sync = hub.create('kubernetes', 't', q)
+  sync.cancelLoading()
+  opened.resolve({viewId: 'late', kind: {id: 'pods', title: 'Pods', group: 'W', columns: [], scoped: true}})
+  await flush()
+  expect(c.closeView).toHaveBeenCalledWith('late')
+  expect(c.getRows).not.toHaveBeenCalled()
+  expect(sync.snapshot().cancelled).toBe(true)
+  hub.release(sync)
+})
+
+it('progress updates keep the same loading start; a fresh refresh starts a new timer', async () => {
+  vi.useFakeTimers()
+  const c = client({getRows: vi.fn(async () => page({ status: {state: 'loading', downloadedBytes: 100}}))})
+  const sync = new ViewSync(c, 'kubernetes', 't', q)
+  await sync.open()
+  await vi.advanceTimersByTimeAsync(0)
+  const started = sync.snapshot().loadingStartedAt
+  await vi.advanceTimersByTimeAsync(1000)
+  vi.mocked(c.getRows).mockResolvedValue(page({version: 2, status: {state: 'loading', downloadedBytes: 200}}))
+  sync.onChanged({version: 2})
+  await vi.advanceTimersByTimeAsync(0)
+  expect(sync.snapshot().loadingStartedAt).toBe(started)
+  vi.mocked(c.getRows).mockResolvedValue(page({version: 3, status: {state: 'loading', refresh: 1, downloadedBytes: 0}}))
+  sync.onChanged({version: 3})
+  await vi.advanceTimersByTimeAsync(0)
+  expect(sync.snapshot().loadingStartedAt).toBe((started ?? 0) + 1000)
+  sync.dispose()
 })

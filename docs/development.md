@@ -182,9 +182,37 @@ Native selects are not used because GTK popup styling differs from the app.
 
 ## Performance verification
 
+See [inventory and memory measurements](performance.md) for the dated environment,
+HTTP counts, both memory verdicts, raw CSV samples and limits on interpretation.
+
+The opt-in wire-level selected-namespace check generates 10,000 realistic Pods behind a local
+HTTP API and records actual LIST count, returned object count, response bytes
+and watch starts. It exercises the complete-inventory contract with production client settings
+and the shared read budget, without user-facing pagination:
+
+```sh
+OCULAR_LOAD_AUDIT=1 go test -run TestProductionLoadCompleteSelectedNamespace -count=1 -v ./internal/providers/kubernetes
+```
+
+Read-budget tests also exercise real dynamic, Table and discovery HTTP client
+constructors sharing one session budget. Scope bootstrap tests check limit=1,
+reused namespace inventory, cancellation and visible permission failures. Idle
+cache tests cover object/payload eviction, active leases and post-release watch
+growth in background sessions. These fake-server tests do not certify deployed
+API-server performance or total desktop/webview memory.
+
+
 Use `scripts/kind-load.sh`, `scripts/kind-churn.sh`, and `scripts/soak-sample.sh`
 only with the disposable fixture. `scripts/soak-verdict.py` evaluates bounded
-growth after warm-up and settling after load. Samples include app/webview child
+growth after warm-up, then a separately measured plateau after unloading. Compare
+adjacent time-weighted one-minute means: within ±0.5 MiB and a 1 MiB band for
+one minute confirms a candidate. Start the ten-minute control only afterward;
+renewed decline resets it, and sampling gaps over one minute invalidate it.
+Retain the 10 MiB rebound, 5 MiB net control-growth and 100 MiB phase/return
+budgets. Growth violations cannot be hidden by resetting the timer. Insufficient
+post-plateau evidence is INCOMPLETE; do not extend a run's predefined timeout
+automatically or count settling time as control time. Regression checks run with
+`python3 -m unittest discover -s scripts/tests -v`. Samples include app/webview child
 processes and available host memory; do not compare samples under eviction.
 Use the existing performance limits and timeouts. Fix a regression rather than
 loosening assertions. Keep xterm and CodeMirror lazy, virtual row IDs stable,

@@ -4,10 +4,14 @@ import type { KindDescriptor, Page, Query, Row, ViewStatus } from '../api/types'
 /** How often open views renew their leases (backend closes after 60 s). */
 export const TOUCH_INTERVAL_MS = 20_000
 const MAX_RETRIES = 5
+let openSequence = 0
 
 export interface ViewState {
   /** The backend view id (for metrics); null while (re)opening. */
   viewId: string | null
+  cancelling?: boolean
+  cancelled?: boolean
+  loadingStartedAt?: number
   kind: KindDescriptor | null
   /** The session reads the view's sources again on request (ViewInfo.resync). */
   resync: boolean
@@ -40,6 +44,10 @@ export class ViewSync {
   private pulling = false
   private retries = 0
   private retryTimer: ReturnType<typeof setTimeout> | null = null
+  private requestId = ''
+  private active = true
+  private cancellationDone: Promise<void> | null = null
+  private opening: AbortController | null = null
   private disposed = false
   /** The kind is no longer served: the view is over. */
   private ended = false
@@ -57,6 +65,7 @@ export class ViewSync {
     readonly target: string,
     readonly query: Query,
     private timers: Timers = { setTimeout, clearTimeout },
+    private cancellation?: { connection: string; pending: () => Promise<void> | undefined; setPending: (p: Promise<void>) => void; has: () => boolean; remember: () => void; forget: () => void },
   ) {}
 
   get id(): string | null {
@@ -75,9 +84,13 @@ export class ViewSync {
     this.listeners.forEach((fn) => fn())
   }
 
-  async open(): Promise<void> {
+  async open(retry = false): Promise<void> {
     // A new generation: in-flight pulls and retries of the previous view are
     // stale and must not block this one (their finally checks generation).
+    this.opening?.abort()
+    const opening = new AbortController()
+    this.opening = opening
+    this.requestId = globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${++openSequence}-${Math.random()}`
     const gen = ++this.generation
     this.pulling = false
     if (this.retryTimer) this.timers.clearTimeout(this.retryTimer)
@@ -90,8 +103,9 @@ export class ViewSync {
     this.ended = false
     // No id while reopening: metrics must not poll the previous view.
     if (this.state.viewId !== null || this.state.halted) this.emit({ viewId: null, halted: false })
+    this.emit({ status: { state: 'loading' }, cancelled: false, loadingStartedAt: !retry && this.state.status.state === 'loading' ? this.state.loadingStartedAt ?? Date.now() : Date.now() })
     try {
-      const info = await this.client.openView(this.provider, this.target, this.query)
+      const info = await this.client.openView(this.provider, this.target, this.query, opening.signal, this.cancellation?.connection ?? '', retry, this.requestId)
       if (this.disposed || gen !== this.generation) {
         void this.client.closeView(info.viewId).catch(() => {})
         return
@@ -110,6 +124,11 @@ export class ViewSync {
       void this.pull()
     } catch (e) {
       if (this.disposed || gen !== this.generation) return
+      if (codeOf(e) === 'cancelled') {
+        this.cancellation?.remember()
+        this.emit({ cancelled: true, viewId: null, status: { state: 'error', class: 'cancelled' }, halted: false })
+        return
+      }
       if (codeOf(e) === 'schema_changed') {
         this.reopenForSchema(e)
         return
@@ -231,19 +250,49 @@ export class ViewSync {
     if (p.reset) this.pendingKind = null
     // Status-only pages publish status without invalidating table projections.
     const rows = p.reset || p.upserts.length || p.deleted.length ? Array.from(this.rows.values()) : this.state.rows
-    this.emit({ rows, status: p.status, halted: false, ...kind })
+    const started = p.status.state === 'loading' && (this.state.status.state !== 'loading' || p.status.refresh !== this.state.status.refresh) ? { loadingStartedAt: Date.now() } : {}
+    this.emit({ rows, status: p.status, halted: false, ...kind, ...started })
   }
 
   /** Starts (or restarts after dispose — React StrictMode remounts). */
-  start() {
+  start(retry = false) {
+    this.active = true
+    if (this.cancellation?.has()) {
+      this.emit({ cancelled: true, viewId: null, status: { state: 'error', class: 'cancelled' }, halted: false })
+      return
+    }
     this.disposed = false
-    void this.open()
+    void this.open(retry)
+  }
+
+  cancelLoading = () => {
+    if (this.state.status.state !== 'loading') return
+    this.cancellation?.remember()
+    const id = this.viewId
+    this.dispose(true)
+    this.emit({ cancelled: true, cancelling: true, viewId: null, status: { state: 'error', class: 'cancelled' }, halted: false })
+    this.cancellationDone = this.client.cancelViewLoading(this.provider, this.target, this.query, this.cancellation?.connection ?? '', id, this.requestId).finally(() => {
+      this.emit({cancelling: false})
+    })
+    this.cancellation?.setPending(this.cancellationDone)
+    void this.cancellationDone.catch(() => {})
+  }
+
+  retry = () => {
+    void (this.cancellationDone ?? this.cancellation?.pending() ?? Promise.resolve()).catch(() => {}).then(() => {
+      if (!this.active) return
+      this.cancellation?.forget()
+      this.start(true)
+    })
   }
 
   /** Closes the backend view; late responses are ignored. Restartable. */
-  dispose() {
+  dispose(keepMounted = false) {
+    if (!keepMounted) this.active = false
     if (this.disposed) return
     this.disposed = true
+    this.opening?.abort()
+    this.opening = null
     this.generation++ // in-flight opens/pulls become stale
     this.pulling = false
     if (this.retryTimer) this.timers.clearTimeout(this.retryTimer)
@@ -259,14 +308,19 @@ export class ViewSync {
  */
 export class ViewHub {
   private syncs = new Set<ViewSync>()
+  private cancelled = new Set<string>()
+  private cancelPending = new Map<string, Promise<void>>()
   private touchTimer: ReturnType<typeof setInterval> | null = null
   private kindsListeners = new Set<(payload?: Record<string, unknown>) => void>()
 
   constructor(private client: Client) {}
 
   /** A view object without side effects; attach() starts it. */
-  prepare(provider: string, target: string, query: Query): ViewSync {
-    return new ViewSync(this.client, provider, target, query)
+  prepare(provider: string, target: string, query: Query, connection: string | number = 0): ViewSync {
+    const key = JSON.stringify([provider, target, connection, query])
+    return new ViewSync(this.client, provider, target, query, undefined, {
+      connection: String(connection), pending: () => this.cancelPending.get(key), setPending: p => { this.cancelPending.set(key, p); void p.finally(() => { if (this.cancelPending.get(key) === p) this.cancelPending.delete(key) }).catch(() => {}) }, has: () => this.cancelled.has(key), remember: () => { this.cancelled.add(key) }, forget: () => { this.cancelled.delete(key) },
+    })
   }
 
   attach(s: ViewSync) {

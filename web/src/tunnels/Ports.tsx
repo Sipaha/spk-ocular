@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import type { Client } from '../api/client'
 import { ApiError } from '../api/client'
 import type { ForwardInfo, ForwardPort, Ref } from '../api/types'
@@ -10,20 +10,23 @@ import { errorDetail } from '../errors'
 const errText = (e: unknown) => (e instanceof ApiError ? `${classLabel(e.code)}: ${errorDetail(e)}` : errorDetail(e))
 
 /** The details' "Ports" section: what can be forwarded, with "Forward". */
-export function PortsSection({ client, subject }: { client: Client; subject: Ref }) {
+export function PortsSection({ client, subject, revision }: { client: Client; subject: Ref; revision?: string }) {
+  const { provider, target, kind, scope, name, uid } = subject
+  // Parent renders may allocate Ref again; only identity/revision requires a read.
+  const readSubject = useMemo(() => ({ provider, target, kind, scope, name, uid }), [provider, target, kind, scope, name, uid])
   const [info, setInfo] = useState<ForwardInfo | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [dialog, setDialog] = useState<{ port: ForwardPort | null } | null>(null)
   useEffect(() => {
     let live = true
-    client.forwardInfo(subject).then(
-      (i) => live && setInfo(i),
+    client.forwardInfo(readSubject).then(
+      (i) => { if (live) { setInfo(i); setError(null) } },
       (e) => live && setError(errText(e)),
     )
     return () => {
       live = false
     }
-  }, [client, subject])
+  }, [client, readSubject, revision])
 
   return (
     <section aria-label={t('fwd.ports')}>

@@ -1,3 +1,4 @@
+import { RefreshButton } from '../components/RefreshButton'
 import { useEffect, useRef, useState, type ComponentProps, type ReactNode } from 'react'
 import type { Client } from '../api/client'
 import type { ClusterGraph, Ref } from '../api/types'
@@ -100,7 +101,7 @@ function LoadedGraph({client,target,scope,scopePicker,drawer}:Props) {
   <header className="flex min-h-10 shrink-0 flex-wrap items-center gap-2 border-b border-line bg-panel px-3 py-1">
    <h2 className="mr-1 text-sm font-semibold">{t('graph.title')}</h2>
    {scopePicker}
-   <button className={button} disabled={busy} onClick={()=>{setBusy(true);setRevision(r=>r+1)}}>{busy?t('app.loading'):t('graph.refresh')}</button>
+   <RefreshButton busy={busy} onClick={()=>{setBusy(true);setRevision(r=>r+1)}} />
    <label className="ml-auto flex items-center gap-2 text-xs text-fg-muted"><input type="checkbox" checked={routes} onChange={e=>setRoutes(e.target.checked)}/>{t('graph.routes')}</label>
   </header>
   <div className="relative flex min-h-0 flex-1">

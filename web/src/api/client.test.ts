@@ -185,3 +185,32 @@ describe('values', () => {
     ])
   })
 })
+
+describe('openView cancellation', () => {
+  it('desktop cancellation also closes a view whose result arrives after abort', async () => {
+    let finish!: (value: unknown) => void
+    const cancel=vi.fn()
+    vi.mocked(Call.ByName).mockImplementation(((method: string) => {
+      if(method.endsWith('.OpenView')) {
+        const p = new Promise(resolve => {finish=resolve}) as Promise<unknown> & {cancel: () => void}
+        p.cancel=cancel
+        return p
+      }
+      return Promise.resolve(undefined)
+    }) as unknown as typeof Call.ByName)
+    const controller=new AbortController()
+    const result=wailsClient.openView('k','a',{kind:'pods',scope:{mode:'all'}},controller.signal,'connection-1',false).catch(e=>e)
+    controller.abort()
+    expect((await result).name).toBe('AbortError')
+    expect(cancel).toHaveBeenCalled()
+    finish({viewId:'late',kind:{}})
+    await Promise.resolve();await Promise.resolve()
+    expect(Call.ByName).toHaveBeenCalledWith(expect.stringMatching(/\.CloseView$/),'late')
+  })
+  it('a pre-aborted native open never starts a backend call', async () => {
+    vi.mocked(Call.ByName).mockClear()
+    const controller=new AbortController();controller.abort()
+    await expect(wailsClient.openView('k','a',{kind:'pods',scope:{mode:'all'}},controller.signal)).rejects.toMatchObject({name:'AbortError'})
+    expect(Call.ByName).not.toHaveBeenCalled()
+  })
+})

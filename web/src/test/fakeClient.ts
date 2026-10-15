@@ -104,6 +104,7 @@ export function fakeClient(targets: Target[], connected = false) {
       return { viewId, version: ++state.version, reset: true, upserts: rows, deleted: [], status: state.statusByKind[kind] ?? { state: 'ready' as const } }
     }),
     closeView: vi.fn(async () => {}),
+    cancelViewLoading: vi.fn(async () => {}),
     resyncView: vi.fn(async () => {}),
     touchViews: vi.fn(async () => []),
     getResource: vi.fn(async (ref: Ref) => ({

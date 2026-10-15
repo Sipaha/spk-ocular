@@ -1,3 +1,4 @@
+import { RefreshButton } from '../components/RefreshButton'
 import { useEffect, useMemo, useRef, useState, type ComponentProps, type ReactNode } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import type { Client } from '../api/client'
@@ -51,7 +52,7 @@ export default function TimelineWorkspace({client,target,scope,scopePicker,drawe
  return <section className="timeline-workspace flex min-h-0 flex-1 flex-col" aria-label={t('timeline.title')}>
   <header className="flex min-h-10 shrink-0 flex-wrap items-center gap-2 border-b border-line bg-panel px-3 py-1">
    <h2 className="text-sm font-semibold">{t('timeline.title')}</h2>{scopePicker}
-   <button data-resync className={button} disabled={busy} onClick={refresh}>{busy?t('app.loading'):t('graph.refresh')}</button>
+   <RefreshButton data-resync busy={busy} onClick={refresh} />
    <span className="ml-auto text-xs text-fg-muted">{snapshot?t('timeline.snapshot',{time:date(snapshot.capturedAt,true)}):''}</span>
   </header>
   <div className="relative flex min-h-0 flex-1">

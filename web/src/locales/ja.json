@@ -1,5 +1,10 @@
 {
   "ui": {
+    "view.loadCancel": "キャンセル",
+    "view.loadCancelled": "リクエストをキャンセルしました",
+    "view.loadRetry": "再試行",
+    "view.loadElapsed": "{seconds} 秒",
+    "view.loadReceived": "受信済み: {size}",
     "security.incompleteEmpty": "利用可能な部分データでは検出結果を確定できませんでした。調査範囲のエラーを確認してください。",
     "security.title": "セキュリティ",
     "security.scan": "再チェック",
@@ -169,8 +174,8 @@
     "graph.title": "クラスタグラフ",
     "graph.clusterResources": "クラスタリソース",
     "graph.load": "グラフを読み込む",
-  "graph.loadHint": "必要なときにリソース間の関係を読み込みます。この接続で読み込みを選択するまで、グラフのデータは取得しません。",
-  "graph.refresh": "更新",
+    "graph.loadHint": "必要なときにリソース間の関係を読み込みます。この接続で読み込みを選択するまで、グラフのデータは取得しません。",
+    "graph.refresh": "更新",
     "graph.routes": "ルートレイヤー",
     "graph.canvas": "クラスタリソースのグラフ",
     "graph.search": "リソースを検索",
@@ -544,8 +549,8 @@
     "class.internal": "内部エラー",
     "class.removed": "API によって提供されなくなりました",
     "class.schema_changed": "カラムが変更されました",
-    "view.resync": "再読み込み",
-    "view.resyncHint": "対象からこのビューを再読み込みします (F5): ライブ更新はベストエフォートです",
+    "view.resync": "更新",
+    "view.resyncHint": "接続先から完全な一覧を更新 (F5)",
     "view.resyncFailed": "再読み込みできませんでした: {error}",
     "drawer.back": "戻る",
     "drawer.path": "パス",
@@ -1142,7 +1147,9 @@
     "appearance.paletteNumber": "色 {n}",
     "appearance.failed": "接続の外観を読み込み、または保存できませんでした。再起動後も保持するには再試行してください。",
     "appearance.save": "保存",
-    "appearance.retry": "再試行"
+    "appearance.retry": "再試行",
+    "view.scopeLimit": "All Namespaces の一覧が大きすぎます。上で特定の namespace を選択して、完全な一覧を読み込んでください。",
+    "class.scope_limit": "namespace を選択"
   },
   "provider": {
     "kubernetes.rbac.source": "RBACの情報を取得できません（{class}）",

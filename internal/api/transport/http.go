@@ -197,6 +197,9 @@ func (h *HTTP) routes() {
 	}) (any, error) {
 		return h.api.GetRows(ctx, r.ViewID, r.Since)
 	}))
+	h.mux.HandleFunc("POST /api/CancelViewLoading", handle(func(ctx context.Context, r *api.CancelViewLoadingRequest) (any, error) {
+		return nil, h.api.CancelViewLoading(ctx, *r)
+	}))
 	h.mux.HandleFunc("POST /api/CloseView", handle(func(ctx context.Context, r *struct {
 		ViewID string `json:"viewId"`
 	}) (any, error) {

@@ -1,5 +1,10 @@
 {
   "ui": {
+    "view.loadCancel": "Annuler",
+    "view.loadCancelled": "Requête annulée",
+    "view.loadRetry": "Réessayer",
+    "view.loadElapsed": "{seconds} s",
+    "view.loadReceived": "Reçu : {size}",
     "security.incompleteEmpty": "Aucun résultat établi dans les données partielles disponibles. Consultez les erreurs de couverture.",
     "security.title": "Sécurité",
     "security.scan": "Vérifier à nouveau",
@@ -169,8 +174,8 @@
     "graph.title": "Graphe du cluster",
     "graph.clusterResources": "Ressources du cluster",
     "graph.load": "Charger le graphe",
-  "graph.loadHint": "Chargez les relations entre ressources lorsque vous en avez besoin. Les données du graphe ne sont demandées qu’après votre choix pour cette connexion.",
-  "graph.refresh": "Actualiser",
+    "graph.loadHint": "Chargez les relations entre ressources lorsque vous en avez besoin. Les données du graphe ne sont demandées qu’après votre choix pour cette connexion.",
+    "graph.refresh": "Actualiser",
     "graph.routes": "Couche de routes",
     "graph.canvas": "Graphe des ressources du cluster",
     "graph.search": "Rechercher une ressource",
@@ -544,8 +549,8 @@
     "class.internal": "erreur interne",
     "class.removed": "plus jamais fourni par l'API",
     "class.schema_changed": "les colonnes ont changé",
-    "view.resync": "Relire",
-    "view.resyncHint": "Relire cette vue à partir de la cible (F5) : ses mises à jour en temps réel sont optimistes",
+    "view.resync": "Actualiser",
+    "view.resyncHint": "Actualiser la liste complète depuis la cible (F5)",
     "view.resyncFailed": "Impossible de relire : {error}",
     "drawer.back": "Retour",
     "drawer.path": "Chemin",
@@ -1142,7 +1147,9 @@
     "appearance.paletteNumber": "Couleur {n}",
     "appearance.failed": "Impossible de charger ou d’enregistrer l’apparence. Réessayez pour la conserver après le redémarrage.",
     "appearance.save": "Enregistrer",
-    "appearance.retry": "Réessayer"
+    "appearance.retry": "Réessayer",
+    "view.scopeLimit": "All Namespaces est trop volumineux. Sélectionnez des namespaces précis ci-dessus pour charger une liste complète.",
+    "class.scope_limit": "sélectionnez des namespaces"
   },
   "provider": {
     "kubernetes.rbac.source": "Impossible de lire la source RBAC ({class})",

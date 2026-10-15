@@ -123,6 +123,7 @@ func sessionFor(cfg *rest.Config, target, title, hash string) (*session, error) 
 }
 
 func sessionWithLifetime(cfg *rest.Config, target, title, hash, lifetime string) (*session, error) {
+	cfg = budgetConfig(cfg)
 	dyn, err := dynamic.NewForConfig(cfg)
 	if err != nil {
 		return nil, err
@@ -322,17 +323,63 @@ func (s *session) Close() {
 func (s *session) Scopes(ctx context.Context) ([]core.Scope, error) {
 	ctx, cancel := context.WithTimeout(ctx, scopesTimeout)
 	defer cancel()
-	list, err := s.dyn.Resource(namespacesGVR).List(ctx, metav1.ListOptions{})
-	if err != nil {
-		class, msg := classify(err)
-		return nil, &provider.Error{Class: class, Message: msg}
+	fail := func(err error) ([]core.Scope, error) {
+		class, message := classify(err)
+		return nil, &provider.Error{Class: class, Message: message}
 	}
-	out := make([]core.Scope, 0, len(list.Items))
-	for _, ns := range list.Items {
-		out = append(out, core.Scope{Name: ns.GetName()})
+	if err := ctx.Err(); err != nil {
+		return fail(err)
+	}
+	c, ok := s.caches.acquire(cacheKey{gvr: namespacesGVR}, namespacesKind)
+	if !ok {
+		return nil, &provider.Error{Class: provider.ClassGone, Message: "session closed"}
+	}
+	defer s.caches.release(c)
+	// The scope picker attaches to this same informer immediately afterwards.
+	// A separate one-shot LIST here would read every namespace twice.
+	tick := time.NewTicker(10 * time.Millisecond)
+	defer tick.Stop()
+	for {
+		if tr := c.transport(); tr.failing {
+			return nil, &provider.Error{Class: tr.class, Message: tr.message}
+		}
+		if c.inf.HasSynced() {
+			break
+		}
+		select {
+		case <-ctx.Done():
+			return fail(ctx.Err())
+		case <-s.ctx.Done():
+			return nil, &provider.Error{Class: provider.ClassGone, Message: "session closed"}
+		case <-tick.C:
+		}
+	}
+	objects := c.inf.GetStore().List()
+	out := make([]core.Scope, 0, len(objects))
+	for _, obj := range objects {
+		if ns, ok := obj.(metav1.Object); ok {
+			out = append(out, core.Scope{Name: ns.GetName()})
+		}
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
 	return out, nil
+}
+
+// CheckScopes validates the UI bootstrap without copying all namespaces.
+// The live scope-kind view owns the one complete namespace inventory.
+func (s *session) CheckScopes(parent context.Context) error {
+	if s.ctx.Err() != nil {
+		return &provider.Error{Class: provider.ClassGone, Message: "session closed"}
+	}
+	ctx, cancel := context.WithTimeout(parent, scopesTimeout)
+	stop := context.AfterFunc(s.ctx, cancel)
+	defer func() { stop(); cancel() }()
+	_, err := s.dyn.Resource(namespacesGVR).List(ctx, metav1.ListOptions{Limit: 1})
+	if err == nil {
+		return nil
+	}
+	class, message := classify(err)
+	return &provider.Error{Class: class, Message: message}
 }
 
 func (s *session) CheckConnection(ctx context.Context) error {
@@ -408,6 +455,12 @@ func (s *session) watchDef(def *kindDef, q provider.Query, selector string, sink
 	}
 	w := &viewWatch{c: c, def: def, sink: sink, target: s.target, now: s.now, done: make(chan struct{}), deadlines: map[string]deadline{}}
 	c.mu.Lock()
+	if c.observed && c.inf.HasSynced() {
+		if n := c.progress.snapshot(); n != nil {
+			w.progressBase = *n
+		}
+	}
+	c.observed = true
 	c.watchers[w] = struct{}{}
 	c.mu.Unlock()
 	// Removed, or its schema epoch ended, while opening (the walks may not
@@ -423,8 +476,19 @@ func (s *session) watchDef(def *kindDef, q provider.Query, selector string, sink
 		return func() {}, nil
 	}
 	w.pushStatus() // loading, or an error the cache already knows
+	if c.transport().class == provider.ClassScopeLimit {
+		w.stop()
+		s.detach(c, w)
+		return func() {}, nil
+	}
 	reg, err := c.inf.AddEventHandler(w.handlers())
 	if err != nil {
+		if c.transport().class == provider.ClassScopeLimit {
+			w.pushStatus()
+			w.stop()
+			s.detach(c, w)
+			return func() {}, nil
+		}
 		s.detach(c, w)
 		return nil, &provider.Error{Class: provider.ClassGone, Message: err.Error()}
 	}
@@ -459,3 +523,5 @@ func (s *session) Stats() map[string]int {
 		"cache_lists": int(s.caches.counts.lists.Load()), "cache_watch_starts": int(s.caches.counts.watchStarts.Load()),
 		"cache_initial_syncs": int(s.caches.counts.initialSyncs.Load())}
 }
+
+func (s *session) RefreshKindsWait(ctx context.Context) error { return s.cat.refreshWait(ctx) }

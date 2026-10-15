@@ -120,3 +120,19 @@ func TestScopeUnionConcurrentDeliveriesAndTerminalStatus(t *testing.T) {
 	stop()
 	wg.Wait()
 }
+
+func TestScopeUnionSumsImmutableDownloadProgress(t *testing.T) {
+	first, second := int64(10), int64(20)
+	u := scopeUnion{names: []string{"one", "two"}, states: []ViewStatus{{State: StatusLoading, DownloadedBytes: &first}, {State: StatusReady, DownloadedBytes: &second}}}
+	st := u.status()
+	require.NotNil(t, st.DownloadedBytes)
+	assert.EqualValues(t, 30, *st.DownloadedBytes)
+	cloned := st.Clone()
+	*cloned.DownloadedBytes = 31
+	assert.EqualValues(t, 30, *st.DownloadedBytes)
+	assert.False(t, cloned.Equal(st))
+	first = 50
+	assert.EqualValues(t, 30, *st.DownloadedBytes, "previous status deliveries must not change")
+	next := u.status()
+	assert.EqualValues(t, 70, *next.DownloadedBytes)
+}

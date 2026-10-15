@@ -59,8 +59,8 @@ describe('a provider without Kubernetes knowledge', () => {
     render(<App client={f.client} />)
     const grid = await screen.findByRole('grid', { name: 'resources' })
     expect(await within(grid).findByText('c1')).toBeInTheDocument()
-    expect(f.client.openView).toHaveBeenCalledWith('other', 'site', { kind: 'crates', scope: { mode: 'one', name: 'blue' } })
-    expect(f.client.openView).not.toHaveBeenCalledWith('other', 'site', expect.objectContaining({ kind: 'pods' }))
+    expect(f.client.openView).toHaveBeenCalledWith('other', 'site', { kind: 'crates', scope: { mode: 'one', name: 'blue' } }, expect.any(AbortSignal), expect.any(String), false, expect.any(String))
+    expect(f.client.openView).not.toHaveBeenCalledWith('other', 'site', expect.objectContaining({ kind: 'pods' }), expect.any(AbortSignal), expect.any(String), false, expect.any(String))
     await userEvent.click(screen.getByRole('button', { name: 'Zone' }))
     expect(within(screen.getByRole('listbox', { name: 'Zone' })).getByRole('option', { name: 'All zones' })).toBeInTheDocument()
   })
@@ -71,7 +71,7 @@ describe('a provider without Kubernetes knowledge', () => {
     render(<App client={f.client} />)
     await screen.findByRole('grid', { name: 'resources' })
     // The grid is there a moment before the page's effect opens its view.
-    await waitFor(() => expect(f.client.openView).toHaveBeenCalledWith('other', 'site', { kind: 'boxes', scope: { mode: 'all' } }))
+    await waitFor(() => expect(f.client.openView).toHaveBeenCalledWith('other', 'site', { kind: 'boxes', scope: { mode: 'all' } }, expect.any(AbortSignal), expect.any(String), false, expect.any(String)))
     expect(screen.getByRole('button', { name: 'Scope' })).toHaveTextContent('All scopes')
   })
 
@@ -83,7 +83,7 @@ describe('a provider without Kubernetes knowledge', () => {
     expect(input).toHaveAttribute('placeholder', 'Type a zone')
     expect(input).toHaveAttribute('title', 'Cannot list zones: no list. Separate multiple names with commas')
     await userEvent.type(input, 'green{Enter}')
-    expect(f.client.openView).toHaveBeenLastCalledWith('other', 'site', { kind: 'crates', scope: { mode: 'one', name: 'green' } })
+    expect(f.client.openView).toHaveBeenLastCalledWith('other', 'site', { kind: 'crates', scope: { mode: 'one', name: 'green' } }, expect.any(AbortSignal), expect.any(String), false, expect.any(String))
   })
 
   it('details have no events section when the kind names no events kind', async () => {
@@ -95,7 +95,7 @@ describe('a provider without Kubernetes knowledge', () => {
     await screen.findByRole('dialog', { name: /crates/ })
     await waitFor(() => expect(f.client.getResource).toHaveBeenCalled())
     expect(screen.queryByRole('region', { name: 'Events' })).not.toBeInTheDocument()
-    expect(f.client.openView).not.toHaveBeenCalledWith('other', 'site', expect.objectContaining({ kind: 'events' }))
+    expect(f.client.openView).not.toHaveBeenCalledWith('other', 'site', expect.objectContaining({ kind: 'events' }), expect.any(AbortSignal), expect.any(String), false, expect.any(String))
   })
 
   it('an object is shown by its title, opened by its key', async () => {
@@ -114,7 +114,7 @@ describe('a provider without Kubernetes knowledge', () => {
     const f = otherProvider({ resync: true })
     render(<App client={f.client} />)
     await screen.findByRole('grid', { name: 'resources' })
-    const button = await screen.findByRole('button', { name: /Read again/ })
+    const button = await screen.findByRole('button', { name: /^Refresh$/ })
     await userEvent.click(button)
     expect(f.client.resyncView).toHaveBeenCalledWith('v-crates')
     await waitFor(() => expect(button).toBeEnabled())
@@ -128,7 +128,7 @@ describe('a provider without Kubernetes knowledge', () => {
     const f = otherProvider()
     render(<App client={f.client} />)
     await screen.findByRole('grid', { name: 'resources' })
-    expect(screen.queryByRole('button', { name: /Read again/ })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /^Refresh$/ })).not.toBeInTheDocument()
     const ev = new KeyboardEvent('keydown', { key: 'F5', bubbles: true, cancelable: true })
     await act(async () => void window.dispatchEvent(ev))
     expect(ev.defaultPrevented).toBe(false)
@@ -142,7 +142,7 @@ describe('a provider without Kubernetes knowledge', () => {
     })
     render(<App client={f.client} />)
     await screen.findByRole('grid', { name: 'resources' })
-    await screen.findByRole('button', { name: /Read again/ })
+    await screen.findByRole('button', { name: /^Refresh$/ })
     const filter = screen.getByRole('textbox', { name: 'Filter rows' })
     filter.focus()
     fireEvent.keyDown(filter, { key: 'F5' })

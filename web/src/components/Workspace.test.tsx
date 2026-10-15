@@ -28,7 +28,7 @@ describe('Workspace', () => {
     else vi.mocked(f.client.getTargetState).mockResolvedValue({ kind: JSON.stringify(ui.kind), scope: JSON.stringify(ui.scope) })
     await openProd(f)
     expect(await screen.findByRole('heading', { name: 'Pods' })).toBeInTheDocument()
-    expect(f.client.openView).toHaveBeenCalledWith('kubernetes', 'prod', { kind: 'pods', scope: ui.scope })
+    expect(f.client.openView).toHaveBeenCalledWith('kubernetes', 'prod', { kind: 'pods', scope: ui.scope }, expect.any(AbortSignal), expect.any(String), false, expect.any(String))
     expect(screen.queryByRole('button', { name: 'Overview' })).not.toBeInTheDocument()
     expect(screen.queryByRole('dialog', { name: 'Connection information' })).not.toBeInTheDocument()
   })
@@ -63,7 +63,7 @@ describe('Workspace', () => {
     const grid = await openProd(f)
     expect(await within(grid).findByText('api-1')).toBeInTheDocument()
     expect(within(grid).getByText('CrashLoopBackOff')).toHaveClass('text-danger')
-    expect(f.client.openView).toHaveBeenCalledWith('kubernetes', 'prod', { kind: 'pods', scope: { mode: 'one', name: 'web' } })
+    expect(f.client.openView).toHaveBeenCalledWith('kubernetes', 'prod', { kind: 'pods', scope: { mode: 'one', name: 'web' } }, expect.any(AbortSignal), expect.any(String), false, expect.any(String))
     expect(within(grid).queryByText('Namespace')).not.toBeInTheDocument() // one namespace: no namespace column
     expect(screen.getByRole('button', { name: 'Namespace' })).toHaveTextContent('web')
   })
@@ -94,7 +94,7 @@ describe('Workspace', () => {
     await openProd(f)
     await userEvent.click(screen.getByRole('button', { name: 'Namespace' }))
     await userEvent.click(screen.getByRole('option', { name: 'All namespaces' }))
-    expect(f.client.openView).toHaveBeenLastCalledWith('kubernetes', 'prod', { kind: 'pods', scope: { mode: 'all' } })
+    expect(f.client.openView).toHaveBeenLastCalledWith('kubernetes', 'prod', { kind: 'pods', scope: { mode: 'all' } }, expect.any(AbortSignal), expect.any(String), false, expect.any(String))
     expect(f.client.closeView).toHaveBeenCalled()
     // a new scope is a new page (and a new grid)
     expect(within(await screen.findByRole('grid', { name: 'resources' })).getByText('Namespace')).toBeInTheDocument()
@@ -151,7 +151,7 @@ describe('Workspace', () => {
     await userEvent.keyboard('{ArrowDown}') // wraps
     expect(document.getElementById(search.getAttribute('aria-activedescendant')!)).toHaveTextContent('team-a')
     await userEvent.keyboard('{ArrowUp}{Enter}')
-    expect(f.client.openView).toHaveBeenLastCalledWith('kubernetes', 'prod', { kind: 'pods', scope: { mode: 'one', name: 'team-b' } })
+    expect(f.client.openView).toHaveBeenLastCalledWith('kubernetes', 'prod', { kind: 'pods', scope: { mode: 'one', name: 'team-b' } }, expect.any(AbortSignal), expect.any(String), false, expect.any(String))
     expect(screen.queryByRole('listbox', { name: 'Namespace' })).not.toBeInTheDocument()
     // The page is new: the keyboard goes on in its table.
     await waitFor(() => expect(document.querySelector('[data-table-scroll]')).toHaveFocus())
@@ -162,7 +162,7 @@ describe('Workspace', () => {
     await userEvent.keyboard('kube{Escape}')
     expect(screen.queryByRole('listbox', { name: 'Namespace' })).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Namespace' })).toHaveFocus()
-    expect(f.client.openView).toHaveBeenLastCalledWith('kubernetes', 'prod', { kind: 'pods', scope: { mode: 'one', name: 'team-b' } })
+    expect(f.client.openView).toHaveBeenLastCalledWith('kubernetes', 'prod', { kind: 'pods', scope: { mode: 'one', name: 'team-b' } }, expect.any(AbortSignal), expect.any(String), false, expect.any(String))
     // Nothing found: Enter does nothing.
     await userEvent.click(screen.getByRole('button', { name: 'Namespace' }))
     await userEvent.keyboard('zzz')
@@ -180,7 +180,7 @@ describe('Workspace', () => {
     await openProd(f)
     const input = await screen.findByRole('textbox', { name: 'Namespace' })
     await userEvent.type(input, 'team-a{Enter}')
-    expect(f.client.openView).toHaveBeenLastCalledWith('kubernetes', 'prod', { kind: 'pods', scope: { mode: 'one', name: 'team-a' } })
+    expect(f.client.openView).toHaveBeenLastCalledWith('kubernetes', 'prod', { kind: 'pods', scope: { mode: 'one', name: 'team-a' } }, expect.any(AbortSignal), expect.any(String), false, expect.any(String))
   })
 })
 
@@ -263,7 +263,7 @@ describe('Workspace details and state', () => {
     f.client.getTargetState = vi.fn(async () => ({ kind: '"pods"', scope: '{"mode":"one","name":"data"}' }))
     await openProd(f)
     await waitFor(() => expect(f.client.openView).toHaveBeenCalledTimes(1))
-    expect(f.client.openView).toHaveBeenCalledWith('kubernetes', 'prod', { kind: 'pods', scope: { mode: 'one', name: 'data' } })
+    expect(f.client.openView).toHaveBeenCalledWith('kubernetes', 'prod', { kind: 'pods', scope: { mode: 'one', name: 'data' } }, expect.any(AbortSignal), expect.any(String), false, expect.any(String))
     await pickScope('web')
     expect(f.client.setTargetState).toHaveBeenCalledWith('kubernetes', 'prod', 'scope', '{"mode":"one","name":"web"}')
   })
@@ -287,6 +287,22 @@ const podsKindWithMetrics = {
 }
 
 describe('live scopes', () => {
+  it('exposes a failed live scope inventory after a successful lightweight bootstrap and recovers without widening selection', async () => {
+    const f = fakeClient([k8s('prod')])
+    f.client.listScopes = vi.fn(async () => ({ scopes: [], kind: 'namespaces' }))
+    f.state.statusByKind.namespaces = { state: 'error', class: 'forbidden', message: 'scope inventory is forbidden' }
+    await openProd(f)
+    const input = await screen.findByRole('textbox', { name: 'Namespace' })
+    expect(input).toHaveAttribute('title', expect.stringContaining('scope inventory is forbidden'))
+    fireEvent.change(input, { target: { value: 'web' } })
+    fireEvent.submit(input.closest('form')!)
+    await waitFor(() => expect(f.client.openView).toHaveBeenCalledWith('kubernetes', 'prod', { kind: 'pods', scope: { mode: 'one', name: 'web' } }, expect.any(AbortSignal), expect.any(String), false, expect.any(String)))
+    f.state.rowsByKind.namespaces = [scopeRow('default'), scopeRow('web')]
+    f.state.statusByKind.namespaces = { state: 'ready' }
+    await act(async () => f.emit({ type: 'view_changed', payload: { viewId: 'v-namespaces', version: 99 } }))
+    expect(await screen.findByRole('button', { name: 'Namespace' })).toHaveTextContent('web')
+  })
+
   it('keeps the namespace list live through the provider scope kind', async () => {
     const f = fakeClient([k8s('prod')])
     f.client.listScopes = vi.fn(async () => ({ scopes: [{ name: 'default' }], kind: 'namespaces' }))
@@ -298,7 +314,7 @@ describe('live scopes', () => {
     f.state.rowsByKind.namespaces = [scopeRow('default'), scopeRow('web'), scopeRow('new-team')]
     await act(async () => f.emit({ type: 'view_changed', payload: { viewId: 'v-namespaces', version: 99 } }))
     expect(await within(list).findByRole('option', { name: 'new-team' })).toBeInTheDocument()
-    expect(f.client.openView).toHaveBeenCalledWith('kubernetes', 'prod', { kind: 'namespaces', scope: { mode: 'none' } })
+    expect(f.client.openView).toHaveBeenCalledWith('kubernetes', 'prod', { kind: 'namespaces', scope: { mode: 'none' } }, expect.any(AbortSignal), expect.any(String), false, expect.any(String))
   })
 })
 
@@ -317,7 +333,7 @@ describe('drawer follows its object', () => {
     f.state.rows = f.state.rowsByKind.pods
     await act(async () => f.emit({ type: 'view_changed', payload: { viewId: 'v-pods', version: 999 } }))
     await vi.waitFor(() => expect((f.client.getResource as ReturnType<typeof vi.fn>).mock.calls.length).toBeGreaterThan(calls), { timeout: 2000 })
-    expect(f.client.openView).toHaveBeenCalledWith('kubernetes', 'prod', expect.objectContaining({ kind: 'pods', name: 'api-1' }))
+    expect(f.client.openView).toHaveBeenCalledWith('kubernetes', 'prod', expect.objectContaining({ kind: 'pods', name: 'api-1' }), expect.any(AbortSignal), expect.any(String), false, expect.any(String))
   })
 })
 

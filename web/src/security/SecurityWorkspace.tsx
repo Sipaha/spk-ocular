@@ -1,3 +1,4 @@
+import { RefreshButton } from '../components/RefreshButton'
 import { useEffect, useState, type ComponentProps, type MouseEvent, type ReactNode } from 'react'
 import type { Client } from '../api/client'
 import type { Column, Row, Ref, ScopeSel, SecurityFinding, SecuritySnapshot } from '../api/types'
@@ -90,7 +91,7 @@ export default function SecurityWorkspace({client,target,scope,scopePicker,drawe
  return <section className="security-workspace flex min-h-0 flex-1 flex-col" aria-label={t('security.title')}>
   <header className="flex min-h-10 shrink-0 flex-wrap items-center gap-2 border-b border-line bg-panel px-3 py-1">
    <h2 className="text-sm font-semibold">{t('security.title')}</h2>{scopePicker}
-   <button data-resync className={button} disabled={busy} onClick={()=>{setBusy(true);setRevision(r=>r+1)}}>{busy?t('app.loading'):t('security.scan')}</button>
+   <RefreshButton data-resync busy={busy} onClick={()=>{setBusy(true);setRevision(r=>r+1)}} />
    <span className="ml-auto text-xs text-fg-muted">{snapshot?t('security.snapshot',{time:date(snapshot.capturedAt)}):''}</span>
   </header>
   <div className="relative flex min-h-0 flex-1">

@@ -1,5 +1,10 @@
 {
   "ui": {
+    "view.loadCancel": "Cancelar",
+    "view.loadCancelled": "Solicitud cancelada",
+    "view.loadRetry": "Reintentar",
+    "view.loadElapsed": "{seconds} s",
+    "view.loadReceived": "Recibido: {size}",
     "security.incompleteEmpty": "No se pudieron establecer resultados con los datos parciales disponibles. Revise los errores de cobertura.",
     "security.title": "Seguridad",
     "security.scan": "Revisar de nuevo",
@@ -169,8 +174,8 @@
     "graph.title": "Grafo del clúster",
     "graph.clusterResources": "Recursos del clúster",
     "graph.load": "Cargar grafo",
-  "graph.loadHint": "Cargue las relaciones entre recursos cuando las necesite. Los datos del grafo solo se solicitan cuando decide cargarlos para esta conexión.",
-  "graph.refresh": "Actualizar",
+    "graph.loadHint": "Cargue las relaciones entre recursos cuando las necesite. Los datos del grafo solo se solicitan cuando decide cargarlos para esta conexión.",
+    "graph.refresh": "Actualizar",
     "graph.routes": "Capa de rutas",
     "graph.canvas": "Grafo de recursos del clúster",
     "graph.search": "Buscar un recurso",
@@ -544,8 +549,8 @@
     "class.internal": "error interno",
     "class.removed": "ya no se sirve por la API",
     "class.schema_changed": "los campos cambiaron",
-    "view.resync": "Leer de nuevo",
-    "view.resyncHint": "Leer esta vista del objetivo de nuevo (F5): sus actualizaciones en tiempo real son de mejor esfuerzo",
+    "view.resync": "Actualizar",
+    "view.resyncHint": "Actualizar la lista completa desde el destino (F5)",
     "view.resyncFailed": "No se pudo leer de nuevo: {error}",
     "drawer.back": "Atrás",
     "drawer.path": "Ruta",
@@ -1142,7 +1147,9 @@
     "appearance.paletteNumber": "Color {n}",
     "appearance.failed": "No se pudo cargar o guardar la apariencia. Reinténtelo para conservarla después de reiniciar.",
     "appearance.save": "Guardar",
-    "appearance.retry": "Reintentar"
+    "appearance.retry": "Reintentar",
+    "view.scopeLimit": "All Namespaces es demasiado grande. Selecciona namespaces concretos arriba para cargar una lista completa.",
+    "class.scope_limit": "selecciona namespaces"
   },
   "provider": {
     "kubernetes.rbac.source": "No se pudo leer la fuente RBAC ({class})",

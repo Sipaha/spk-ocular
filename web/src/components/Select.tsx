@@ -49,6 +49,7 @@ interface Props {
   /** A search field on top; by default for long lists. Its name. */
   search?: boolean
   searchLabel?: string
+ searchAction?: ReactNode
   /** The button's look (size): the field it stands in. */
   className?: string
   leadingIcon?: ReactNode
@@ -66,7 +67,7 @@ const BUTTON = 'select-look max-w-full truncate rounded-md border border-line bg
  * elsewhere closes; a letter jumps to the next option starting with it; with
  * search, typing filters and marks the first found.
  */
-export function Select({ value, options, label, onChange, onReselect, search, searchLabel, className, leadingIcon, disabled, memory, multiple }: Props) {
+export function Select({ value, options, label, onChange, onReselect, search, searchLabel, searchAction, className, leadingIcon, disabled, memory, multiple }: Props) {
   const [open, setOpenNow] = useState(memory?.read().open ?? false)
   const setOpen = (next: boolean) => {
     memory?.update(next ? { open: true } : { open: false, query: '', index: null, scroll: 0, focus: 'search' })
@@ -105,6 +106,7 @@ export function Select({ value, options, label, onChange, onReselect, search, se
           value={value}
           options={options}
           label={label}
+          searchAction={searchAction}
           search={withSearch ? (searchLabel ?? t('select.search')) : null}
           anchor={button}
           onClose={(back) => {
@@ -122,6 +124,7 @@ export function Select({ value, options, label, onChange, onReselect, search, se
 }
 
 interface ListProps {
+ searchAction?: ReactNode
   value: string
   options: SelectOption[]
   label: string
@@ -135,7 +138,7 @@ interface ListProps {
   multiple?: Multiple
 }
 
-export function SelectList({ value, options, label, search, anchor, onClose, onChange, onReselect, memory, multiple }: ListProps) {
+export function SelectList({ value, options, label, search, searchAction, anchor, onClose, onChange, onReselect, memory, multiple }: ListProps) {
   const id = useId()
   const [query, setQueryNow] = useState(memory?.read().query ?? '')
   const [index, setIndexNow] = useState<number | null>(memory?.read().index ?? null)
@@ -228,6 +231,12 @@ export function SelectList({ value, options, label, search, anchor, onClose, onC
     multiple.onToggle(o.value)
   }
   const onKey = (e: React.KeyboardEvent) => {
+    if (searchAction) {
+      const action = (e.target as HTMLElement).closest('[data-select-search-action]')
+      if (action && e.key !== 'Escape' && (e.key !== 'Tab' || e.shiftKey)) return
+      if (e.key === 'Tab' && !e.shiftKey && e.target === input.current) return
+    }
+
     if (e.nativeEvent.isComposing) return
     const n = items.length
     const at = (i: number) => {
@@ -287,7 +296,7 @@ export function SelectList({ value, options, label, search, anchor, onClose, onC
       className={['z-50 flex max-w-[min(90vw,32rem)] flex-col overflow-hidden rounded-md border border-line bg-panel text-[14px] text-fg shadow-xl', search ? 'w-72' : ''].join(' ')}
     >
       {search && (
-        <label className="flex items-center gap-2 border-b border-line px-2 py-1.5">
+        <div className="flex items-center gap-2 border-b border-line px-2 py-1.5">
           <SearchIcon className="h-3.5 w-3.5 shrink-0 text-fg-subtle" />
           <input
             ref={input}
@@ -307,7 +316,8 @@ export function SelectList({ value, options, label, search, anchor, onClose, onC
             autoComplete="off"
             className="w-full bg-transparent outline-none placeholder:text-fg-subtle focus-visible:outline-none"
           />
-        </label>
+          {searchAction && <span data-select-search-action>{searchAction}</span>}
+        </div>
       )}
       <div
         ref={list}

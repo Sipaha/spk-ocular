@@ -180,7 +180,7 @@ describe('editing an object in the details', () => {
     expect(prompt).not.toBeInTheDocument()
     expect((await editorView(drawer)).state.doc.toString()).toContain('x: 9')
     await waitFor(() => expect(drawer.querySelector('.cm-content')).toHaveFocus())
-    expect(f.client.openView).not.toHaveBeenCalledWith('kubernetes', 'prod', expect.objectContaining({ kind: 'nodes' }))
+    expect(f.client.openView).not.toHaveBeenCalledWith('kubernetes', 'prod', expect.objectContaining({ kind: 'nodes' }), expect.any(AbortSignal), expect.any(String), false, expect.any(String))
   })
 
   it('explicit type-and-name navigation changes the selected section only after discarding edits', async () => {
@@ -319,7 +319,7 @@ describe('editing an object in the details', () => {
     // Dropped by the user: the page of the kind as served now.
     await userEvent.keyboard('{Escape}')
     await userEvent.click(await screen.findByRole('button', { name: 'Discard' }))
-    await waitFor(() => expect(f.client.openView).toHaveBeenLastCalledWith('kubernetes', 'prod', { kind: 'pods', scope: { mode: 'none' } }))
+    await waitFor(() => expect(f.client.openView).toHaveBeenLastCalledWith('kubernetes', 'prod', { kind: 'pods', scope: { mode: 'none' } }, expect.any(AbortSignal), expect.any(String), false, expect.any(String)))
   })
 
   it('says when the object changed on the server while its text is edited', async () => {

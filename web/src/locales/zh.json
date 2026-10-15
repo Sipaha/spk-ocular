@@ -1,5 +1,10 @@
 {
   "ui": {
+    "view.loadCancel": "取消",
+    "view.loadCancelled": "请求已取消",
+    "view.loadRetry": "重试",
+    "view.loadElapsed": "{seconds} 秒",
+    "view.loadReceived": "已接收 {size}",
     "security.incompleteEmpty": "无法在可用的部分数据中确定发现。请查看覆盖范围错误。",
     "security.title": "安全",
     "security.scan": "重新检查",
@@ -169,8 +174,8 @@
     "graph.title": "集群图",
     "graph.clusterResources": "集群资源",
     "graph.load": "加载关系图",
-  "graph.loadHint": "需要时再加载资源关系。只有您选择为此连接加载关系图后，才会请求关系图数据。",
-  "graph.refresh": "刷新",
+    "graph.loadHint": "需要时再加载资源关系。只有您选择为此连接加载关系图后，才会请求关系图数据。",
+    "graph.refresh": "刷新",
     "graph.routes": "路由图层",
     "graph.canvas": "集群资源图",
     "graph.search": "查找资源",
@@ -510,8 +515,8 @@
     "class.internal": "内部错误",
     "class.removed": "不再由 API 提供服务",
     "class.schema_changed": "列已更改",
-    "view.resync": "重新读取",
-    "view.resyncHint": "从目标重新读取此视图（F5）：其实时更新为尽力而为",
+    "view.resync": "刷新",
+    "view.resyncHint": "从目标刷新完整列表（F5）",
     "view.resyncFailed": "无法重新读取：{error}",
     "drawer.back": "返回",
     "drawer.path": "路径",
@@ -1142,7 +1147,9 @@
     "appearance.paletteNumber": "颜色 {n}",
     "appearance.failed": "无法加载或保存连接外观。请重试，以便在重启后保留。",
     "appearance.save": "保存",
-    "appearance.retry": "重试"
+    "appearance.retry": "重试",
+    "view.scopeLimit": "All Namespaces 的列表过大。请在上方选择具体的 namespace，以加载完整列表。",
+    "class.scope_limit": "请选择 namespace"
   },
   "provider": {
     "kubernetes.rbac.source": "无法读取 RBAC 来源（{class}）",

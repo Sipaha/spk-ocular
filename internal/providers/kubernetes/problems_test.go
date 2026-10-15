@@ -25,7 +25,7 @@ func healthRow(id string, state core.HealthState) core.Row {
 // feeds builds a Problems merge of n sources over a recording sink.
 func feeds(n int) (*problemsView, []*problemsFeed, *recordingSink) {
 	rec := &recordingSink{}
-	v := &problemsView{sink: rec, cov: make([]provider.SourceCoverage, n), emitted: make([]map[string]bool, n)}
+	v := &problemsView{sink: rec, cov: make([]provider.SourceCoverage, n), bytes: make([]*int64, n), emitted: make([]map[string]bool, n)}
 	out := make([]*problemsFeed, n)
 	for i := range out {
 		v.cov[i] = provider.SourceCoverage{Source: string(rune('A' + i)), State: provider.CoverageLoading}

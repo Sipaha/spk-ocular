@@ -55,11 +55,14 @@ func (w *API) RefreshKinds(provider, target string) error {
 func (w *API) ListScopes(provider, target string) (api.ScopesView, error) {
 	return w.a.ListScopes(api.UIContext(context.Background()), provider, target)
 }
-func (w *API) OpenView(req api.OpenViewRequest) (api.ViewInfo, error) {
-	return w.a.OpenView(api.UIContext(context.Background()), req)
+func (w *API) OpenView(ctx context.Context, req api.OpenViewRequest) (api.ViewInfo, error) {
+	return w.a.OpenView(api.UIContext(ctx), req)
 }
 func (w *API) GetRows(viewID string, since uint64) (views.Page, error) {
 	return w.a.GetRows(api.UIContext(context.Background()), viewID, since)
+}
+func (w *API) CancelViewLoading(req api.CancelViewLoadingRequest) error {
+	return w.a.CancelViewLoading(api.UIContext(context.Background()), req)
 }
 func (w *API) CloseView(viewID string) error {
 	return w.a.CloseView(api.UIContext(context.Background()), viewID)

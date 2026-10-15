@@ -23,11 +23,12 @@ import (
 // lock). Ready is pushed only after the registration reports HasSynced,
 // i.e. after every initial object reached this handler — an empty list too.
 type viewWatch struct {
-	c      *informerCache
-	def    *kindDef
-	sink   provider.Sink
-	target string
-	now    func() time.Time
+	c            *informerCache
+	def          *kindDef
+	sink         provider.Sink
+	target       string
+	now          func() time.Time
+	progressBase int64
 
 	reg  cache.ResourceEventHandlerRegistration
 	done chan struct{}
@@ -78,7 +79,7 @@ func (w *viewWatch) handlers() cache.ResourceEventHandlerFuncs {
 		AddFunc: func(obj any) {
 			w.order.Lock()
 			defer w.order.Unlock()
-			if w.isStopped() {
+			if w.dataStopped() {
 				return
 			}
 			if u, ok := asUnstructured(obj); ok {
@@ -90,7 +91,7 @@ func (w *viewWatch) handlers() cache.ResourceEventHandlerFuncs {
 		UpdateFunc: func(oldObj, newObj any) {
 			w.order.Lock()
 			defer w.order.Unlock()
-			if w.isStopped() {
+			if w.dataStopped() {
 				return
 			}
 			u, ok := asUnstructured(newObj)
@@ -110,7 +111,7 @@ func (w *viewWatch) handlers() cache.ResourceEventHandlerFuncs {
 		DeleteFunc: func(obj any) {
 			w.order.Lock()
 			defer w.order.Unlock()
-			if w.isStopped() {
+			if w.dataStopped() {
 				return
 			}
 			if tomb, ok := obj.(cache.DeletedFinalStateUnknown); ok {
@@ -134,6 +135,10 @@ func (w *viewWatch) isStopped() bool {
 	return w.stopped
 }
 
+func (w *viewWatch) dataStopped() bool {
+	return w.isStopped() || (w.c != nil && w.c.transport().class == provider.ClassScopeLimit)
+}
+
 func objKey(u *unstructured.Unstructured) string { return metaKey(u) }
 
 func metaKey(u metav1.Object) string {
@@ -144,7 +149,14 @@ func metaKey(u metav1.Object) string {
 }
 
 // status combines this view's initial-sync state with the cache transport.
-func (w *viewWatch) status() provider.ViewStatus {
+func (w *viewWatch) status() (status provider.ViewStatus) {
+	defer func() {
+		status.DownloadedBytes = w.c.progress.snapshot()
+		if status.DownloadedBytes != nil {
+			n := max(int64(0), *status.DownloadedBytes-w.progressBase)
+			status.DownloadedBytes = &n
+		}
+	}()
 	tr := w.c.transport()
 	w.mu.Lock()
 	synced, endClass, endMsg := w.synced, w.endClass, w.endMsg
@@ -152,6 +164,8 @@ func (w *viewWatch) status() provider.ViewStatus {
 	switch {
 	case endClass != "":
 		return provider.ViewStatus{State: provider.StatusError, Class: endClass, Message: endMsg}
+	case tr.class == provider.ClassScopeLimit:
+		return provider.ViewStatus{State: provider.StatusError, Class: tr.class, Message: tr.message}
 	case !synced && tr.failing:
 		return provider.ViewStatus{State: provider.StatusError, Class: tr.class, Message: tr.message}
 	case !synced:
@@ -168,11 +182,14 @@ func (w *viewWatch) status() provider.ViewStatus {
 func (w *viewWatch) pushStatus() {
 	w.order.Lock()
 	defer w.order.Unlock()
-	if w.isStopped() {
+	w.mu.Lock()
+	stopped := w.stopped
+	w.mu.Unlock()
+	if stopped {
 		return
 	}
 	st := w.status()
-	w.sink.Apply(provider.Delta{Status: &st}) // the view drops an unchanged status
+	w.sink.Apply(provider.Delta{Reset: st.Class == provider.ClassScopeLimit, Status: &st}) // the view drops an unchanged status
 }
 
 // markRemoved ends the view: its kind is not served any more.
@@ -220,21 +237,26 @@ func (w *viewWatch) setRelease(f func()) {
 
 // waitSynced pushes Ready once every initial object reached the handler.
 func (w *viewWatch) waitSynced() {
-	stop := make(chan struct{})
-	go func() {
+	tick := time.NewTicker(250 * time.Millisecond)
+	defer tick.Stop()
+	for {
+		if w.reg.HasSynced() {
+			w.mu.Lock()
+			w.synced = true
+			w.mu.Unlock()
+			w.pushStatus()
+			return
+		}
 		select {
 		case <-w.done:
+			return
 		case <-w.c.stop:
+			return
+		case <-tick.C:
+			w.pushStatus()
 		}
-		close(stop)
-	}()
-	if !cache.WaitForCacheSync(stop, w.reg.HasSynced) {
-		return
 	}
-	w.mu.Lock()
-	w.synced = true
-	w.mu.Unlock()
-	w.pushStatus()
+
 }
 
 // schedule re-projects the object at next (time-based health: "Pending for
@@ -314,7 +336,7 @@ func (w *viewWatch) fire(gen uint64) {
 func (w *viewWatch) reevaluate(key, uid string) {
 	w.order.Lock()
 	defer w.order.Unlock()
-	if w.isStopped() {
+	if w.dataStopped() {
 		return
 	}
 	obj, ok, _ := w.c.inf.GetStore().GetByKey(key)

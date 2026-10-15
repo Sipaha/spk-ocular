@@ -1,3 +1,4 @@
+import { RefreshButton } from './RefreshButton'
 import { lazy, Suspense } from 'react'
 const RbacWorkspace = lazy(() => import('../rbac/RbacWorkspace'))
 const SecurityWorkspace = lazy(() => import('../security/SecurityWorkspace'))
@@ -8,7 +9,7 @@ import { HelmWorkspace } from '../helm/HelmWorkspace'
 import { agents } from '../agents/store'
 import { useInstancePicker, runningChannel } from './useInstancePicker'
 import { PanelResize, usePanelWidths } from './PanelResize'
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import type { Client } from '../api/client'
 import type { ActionDescriptor, KindDescriptor, KindsView, MetricsView, Ref, Row, ScopeSel, ScopesView, SourceCoverage, Target } from '../api/types'
 import { ApiError } from '../api/client'
@@ -28,7 +29,8 @@ import { ScopeSelect } from './ScopeSelect'
 import { createSelectMemory, type SelectMemory } from './Select'
 import { parseScope, scopeSet, selectedScopes } from '../scopes'
 import { metricsState, useMetrics } from '../views/useMetrics'
-import { useView } from '../views/useView'
+import { useView, ViewConnectionContext } from '../views/useView'
+import { CancelledList, ListLoading } from './ListLoading'
 import { useKinds } from '../views/useKinds'
 import type { ViewHub } from '../views/viewSync'
 import { ResourceDrawer } from './ResourceDrawer'
@@ -309,6 +311,7 @@ export function Workspace({ client, hub, target, onFavorite, onMoveFavorite, onN
   )
 
   return (
+    <ViewConnectionContext value={`${target.connection?.id ?? 0}:${catalog.view?.session ?? 0}`}>
     <div className="flex min-h-0 flex-1">
       <div className="relative shrink-0" style={{ width: navigationWidth, maxWidth: '25vw' }}>
       <nav aria-label="resources" data-area="nav" onKeyDown={onNavKey} className="resource-nav">
@@ -402,15 +405,14 @@ export function Workspace({ client, hub, target, onFavorite, onMoveFavorite, onN
         })}
         <CatalogNote view={catalog.view} />
         {kindsError && <p className="mt-3 px-2 text-xs text-danger">{kindsError}</p>}
-        <button
+        <RefreshButton
           data-refresh-kinds
           tabIndex={-1}
           onClick={catalog.refresh}
-          title={t('nav.refreshHint')}
-          className="mt-3 w-full truncate rounded-md px-2 py-1 text-left text-xs text-fg-subtle hover:bg-hover hover:text-fg"
-        >
-          {t('nav.refresh')} <span className="opacity-70">F5</span>
-        </button>
+          label={t('nav.refresh')} description={t('nav.refreshHint')}
+          busy={catalog.refreshing}
+          className="mt-3"
+        />
         </div>
       </nav>
       <PanelResize label={t('panels.navigation')} value={navigationWidth} min={140} max={() => Math.min(360, window.innerWidth * 0.25)} onDone={(navigation) => usePanelWidths.setState({ navigation })} />
@@ -425,26 +427,26 @@ export function Workspace({ client, hub, target, onFavorite, onMoveFavorite, onN
           </div>
         ) : page.kind.workspace === 'rbac' ? (
           <Suspense fallback={<LoadingState />}><RbacWorkspace key={page.key} client={client} target={target} scope={scope}
-            scopePicker={<ScopePicker scope={scope} scopes={scopes} scopeMenu={scopeMenu} onScope={setScope} />}
+            scopePicker={<WorkspaceScopePicker client={client} hub={hub} target={target} scope={scope} scopes={scopes} scopeMenu={scopeMenu} onScope={setScope} />}
             drawer={{client,hub,target,hasLogs,onLogs:openLogs,hasExec,onTerminal:openTerminal,hasForward,actionsOf,onAction:openAction,eventsKindOf,editableOf,valuesOf,kindTitleOf}}
           /></Suspense>
         ) : page.kind.workspace === 'security' ? (
           <Suspense fallback={<LoadingState />}><SecurityWorkspace key={page.key} client={client} target={target} scope={scope}
-            scopePicker={<ScopePicker scope={scope} scopes={scopes} scopeMenu={scopeMenu} onScope={setScope} />}
+            scopePicker={<WorkspaceScopePicker client={client} hub={hub} target={target} scope={scope} scopes={scopes} scopeMenu={scopeMenu} onScope={setScope} />}
             drawer={{client,hub,target,hasLogs,onLogs:openLogs,hasExec,onTerminal:openTerminal,hasForward,actionsOf,onAction:openAction,eventsKindOf,editableOf,valuesOf,kindTitleOf}}
           /></Suspense>
         ) : page.kind.workspace === 'timeline' ? (
           <Suspense fallback={<LoadingState />}><TimelineWorkspace key={page.key} client={client} target={target} scope={scope}
-            scopePicker={<ScopePicker scope={scope} scopes={scopes} scopeMenu={scopeMenu} onScope={setScope} />}
+            scopePicker={<WorkspaceScopePicker client={client} hub={hub} target={target} scope={scope} scopes={scopes} scopeMenu={scopeMenu} onScope={setScope} />}
             drawer={{client,hub,target,hasLogs,onLogs:openLogs,hasExec,onTerminal:openTerminal,hasForward,actionsOf,onAction:openAction,eventsKindOf,editableOf,valuesOf,kindTitleOf}}
           /></Suspense>
         ) : page.kind.workspace === 'graph' ? (
           <Suspense fallback={<LoadingState />}><GraphWorkspace key={page.key} client={client} target={target} session={catalog.view?.session ?? 0} connection={target.connection?.id ?? 0} scope={scope}
-            scopePicker={<ScopePicker scope={scope} scopes={scopes} scopeMenu={scopeMenu} onScope={setScope} />}
+            scopePicker={<WorkspaceScopePicker client={client} hub={hub} target={target} scope={scope} scopes={scopes} scopeMenu={scopeMenu} onScope={setScope} />}
             drawer={{client,hub,target,hasLogs,onLogs:openLogs,hasExec,onTerminal:openTerminal,hasForward,actionsOf,onAction:openAction,eventsKindOf,editableOf,valuesOf,kindTitleOf}}
           /></Suspense>
         ) : page.kind.workspace?.startsWith('helm-') ? (
-          <HelmWorkspace key={page.key} client={client} target={target} scope={scope} onResource={ref => paletteActs.current?.openObject(ref)} onSection={tab => setKind(`ocular.helm.${tab}`)} initialTab={page.kind.workspace === 'helm-charts' ? 'charts' : 'releases'} scopePicker={<ScopePicker scope={scope} scopes={scopes} scopeMenu={scopeMenu} onScope={setScope} />} />
+          <HelmWorkspace key={page.key} client={client} target={target} scope={scope} onResource={ref => paletteActs.current?.openObject(ref)} onSection={tab => setKind(`ocular.helm.${tab}`)} initialTab={page.kind.workspace === 'helm-charts' ? 'charts' : 'releases'} scopePicker={<WorkspaceScopePicker client={client} hub={hub} target={target} scope={scope} scopes={scopes} scopeMenu={scopeMenu} onScope={setScope} />} />
         ) : (
           <ResourcePage
             key={page.key}
@@ -512,6 +514,7 @@ export function Workspace({ client, hub, target, onFavorite, onMoveFavorite, onN
         )}
       </main>
     </div>
+    </ViewConnectionContext>
   )
 }
 
@@ -744,7 +747,7 @@ function ResourcePage(props: {
   const [contentShown, setContentShown] = useState(false)
   const initialLoading = !contentShown && view.status.state === 'loading' && view.rows.length === 0
   // Keep the mounted table's sort, widths and focus on subsequent refreshes.
-  if (!contentShown && !initialLoading) setContentShown(true)
+  if (!contentShown && !initialLoading && !view.cancelled) setContentShown(true)
   useEffect(() => {
     onHalted(pageKey, view.halted)
     return () => onHalted(pageKey, false)
@@ -851,9 +854,9 @@ function ResourcePage(props: {
       <header className="resource-toolbar">
         <h1 className="sr-only">{kindLabel(target.provider, kind)}</h1>
         <span className="sr-only" aria-label="count">
-          {view.status.state === 'loading' && !view.rows.length ? '…' : view.rows.length}
+          {view.cancelled ? '—' : view.status.state === 'loading' && !view.rows.length ? '…' : view.rows.length}
         </span>
-        {!initialLoading && view.status.state === 'loading' && <LoadingState title={kindLabel(target.provider, kind)} inline />}
+        {!initialLoading && view.status.state === 'loading' && <ListLoading view={view} inline />}
         {marked.size > 0 && (
           <div role="toolbar" aria-label={t('bulk.bar')} className="flex shrink-0 items-center gap-2 whitespace-nowrap rounded-md bg-marked px-2 py-0.5 text-xs">
             <span>{t('bulk.marked', { n: marked.size, total: shownRows.length })}</span>
@@ -875,7 +878,7 @@ function ResourcePage(props: {
         )}
         {barMenu && marked.size > 0 && <Menu items={markedMenu()} at={barMenu} label={t('bulk.menu')} onClose={() => setBarMenu(null)} />}
         {kind.scoped && (scopes?.kind && !scopes.error ? (
-          <LiveScopePicker hub={hub} target={target} scopeKind={scopes.kind} scope={scope} scopes={scopes} scopeMenu={scopeMenu} onScope={onScope} />
+          <LiveScopePicker client={client} hub={hub} target={target} scopeKind={scopes.kind} scope={scope} scopes={scopes} scopeMenu={scopeMenu} onScope={onScope} />
         ) : (
           <ScopePicker scope={scope} scopes={scopes} scopeMenu={scopeMenu} onScope={onScope} />
         ))}
@@ -891,7 +894,7 @@ function ResourcePage(props: {
             {t('agents.scopeAccess')}
           </button>
         )}
-        {view.resync && <ResyncButton client={client} viewId={view.viewId} />}
+        {view.resync && !view.cancelled && <ResyncButton client={client} viewId={view.viewId} />}
         <label className="resource-filter field-shell">
           <SearchIcon className="h-3.5 w-3.5 text-fg-subtle" />
           <input
@@ -915,14 +918,15 @@ function ResourcePage(props: {
           />
         </label>
       </header>
-      {!initialLoading && view.status.state !== 'ready' && <StatusBanner state={view.status.state} cls={view.status.class} message={view.status.message} />}
-      {!initialLoading && view.status.coverage && <CoverageNote coverage={view.status.coverage} notCovered={view.kind?.notCovered ?? kind.notCovered} compact={scope.mode === 'some'} loading={view.status.state === 'loading'} />}
-      {!initialLoading && metrics && <MetricsNote metrics={metrics} />}
+      {!view.cancelled && !initialLoading && view.status.state !== 'ready' && <StatusBanner state={view.status.state} cls={view.status.class} message={view.status.message} />}
+      {!view.cancelled && !initialLoading && view.status.coverage && <CoverageNote coverage={view.status.coverage} notCovered={view.kind?.notCovered ?? kind.notCovered} compact={scope.mode === 'some'} loading={view.status.state === 'loading'} />}
+      {!view.cancelled && !initialLoading && metrics && <MetricsNote metrics={metrics} />}
       <div className="relative flex min-h-0 flex-1 flex-col">
-        <div data-area="table" aria-busy={view.status.state === 'loading'} className="flex min-h-0 flex-1 flex-col">
+        {view.cancelled && <div className="absolute inset-0 z-10 flex flex-col"><CancelledList retry={view.retry} pending={view.cancelling} /></div>}
+        <div inert={!!view.cancelled} aria-hidden={view.cancelled || undefined} style={view.cancelled ? { visibility: 'hidden' } : undefined} data-area="table" aria-busy={view.status.state === 'loading'} className="flex min-h-0 flex-1 flex-col">
         <ResourceTable
           areaFocus
-          emptyMessage={initialLoading ? <LoadingState title={kindLabel(target.provider, kind)} /> : view.status.state === 'ready' ? view.rows.length === 0 ? emptyTableText(view.status.coverage) : t('nav.noMatches') : null}
+          emptyMessage={initialLoading ? <ListLoading view={view} label={t('table.loading', {kind: kindLabel(target.provider, kind)})} /> : view.status.state === 'ready' ? view.rows.length === 0 ? emptyTableText(view.status.coverage) : t('nav.noMatches') : null}
           columns={columns}
           rows={view.rows}
           hideScope={scope.mode === 'one'}
@@ -961,6 +965,7 @@ function ResourcePage(props: {
         </div>
         {open && (
           <ResourceDrawer
+            hidden={view.cancelled}
             client={client}
             hub={hub}
             target={{ provider: target.provider, id: target.id }}
@@ -986,36 +991,26 @@ function ResourcePage(props: {
   )
 }
 
-/** Reads the view again (ViewInfo.resync: the target's live updates are best
- * effort); F5 clicks it. One request at a time; the backend coalesces. */
-function ResyncButton({ client, viewId }: { client: Client; viewId: string | null }) {
+/** F5 refreshes the complete observation while preserving the current rows. */
+function ResyncButton({ client, viewId, shortcut = true }: { client: Client; viewId: string | null; shortcut?: boolean }) {
   const [busy, setBusy] = useState(false)
-  return (
-    <button
-      data-resync
-      disabled={!viewId || busy}
-      title={t('view.resyncHint')}
-      onClick={() => {
-        if (!viewId || busy) return
-        setBusy(true)
-        client.resyncView(viewId).then(
-          () => setBusy(false),
-          (e) => {
-            setBusy(false)
-            // A view that went away is reopened by its page: nothing to say.
-            if (!(e instanceof ApiError && e.code === 'gone')) showNotice(t('view.resyncFailed', { error: e instanceof ApiError ? classLabel(e.code) : String(e) }))
-          },
-        )
-      }}
-      className="rounded-md border border-line px-2 py-0.5 text-xs text-fg-muted hover:bg-hover hover:text-fg disabled:opacity-50"
-    >
-      {t('view.resync')} <span className="text-fg-subtle">F5</span>
-    </button>
-  )
+  const pending = useRef(false)
+  return <RefreshButton data-resync={shortcut || undefined} busy={busy} disabled={!viewId} description={t(shortcut ? 'view.resyncHint' : 'graph.refresh')} onClick={() => {
+    if (!viewId || pending.current) return
+    pending.current = true; setBusy(true)
+    client.resyncView(viewId).catch(e => {
+      if (!(e instanceof ApiError && e.code === 'gone')) showNotice(t('view.resyncFailed', { error: e instanceof ApiError ? classLabel(e.code) : String(e) }))
+    }).finally(() => { pending.current = false; setBusy(false) })
+  }} />
+}
+
+function WorkspaceScopePicker(props: { client: Client; hub: ViewHub; target: Target; scope: ScopeSel; scopes: ScopesView | null; scopeMenu: SelectMemory; onScope: (s: ScopeSel) => void }) {
+  return props.scopes?.kind && !props.scopes.error ? <LiveScopePicker {...props} scopes={props.scopes} scopeKind={props.scopes.kind} /> : <ScopePicker {...props} />
 }
 
 /** The scope list kept live by a view of the provider's scope kind. */
 function LiveScopePicker(props: {
+ client: Client
   hub: ViewHub
   target: Target
   scopeKind: string
@@ -1024,19 +1019,19 @@ function LiveScopePicker(props: {
   scopeMenu: SelectMemory
   onScope: (s: ScopeSel) => void
 }) {
-  const { hub, target, scopeKind, scope, scopes, scopeMenu, onScope } = props
+  const { client, hub, target, scopeKind, scope, scopes, scopeMenu, onScope } = props
   const query = useMemo(() => ({ kind: scopeKind, scope: { mode: 'none' as const } }), [scopeKind])
   const view = useView(hub, target.provider, target.id, query)
-  const live = useMemo(
-    () => (view.status.state === 'ready' || view.status.state === 'stale' ? { scopes: view.rows.map((r) => ({ name: r.ref.name })).sort((a, b) => a.name.localeCompare(b.name)) } : scopes),
-    [view.rows, view.status.state, scopes],
-  )
+  const live = useMemo<ScopesView>(() => {
+    if (view.status.state === 'error') return { scopes: [], error: { code: view.status.class ?? 'unavailable', detail: view.status.message ?? '' } }
+    return view.status.state === 'ready' || view.status.state === 'stale' ? { scopes: view.rows.map((r) => ({ name: r.ref.name })).sort((a, b) => a.name.localeCompare(b.name)) } : scopes
+  }, [view.rows, view.status.state, view.status.class, view.status.message, scopes])
   const liveNames = useMemo(() => (live === scopes ? null : live?.scopes.map((s) => s.name)) ?? null, [live, scopes])
   useEffect(() => (liveNames ? lend('liveScopes', liveNames) : undefined), [liveNames])
-  return <ScopePicker scope={scope} scopes={live} scopeMenu={scopeMenu} onScope={onScope} />
+  return <ScopePicker scope={scope} scopes={live} scopeMenu={scopeMenu} onScope={onScope} refreshAction={view.resync && <ResyncButton client={client} viewId={view.viewId} shortcut={false} />} />
 }
 
-function ScopePicker({ scope, scopes, onScope, scopeMenu }: { scope: ScopeSel; scopes: ScopesView | null; scopeMenu: SelectMemory; onScope: (s: ScopeSel) => void }) {
+function ScopePicker({ scope, scopes, onScope, scopeMenu, refreshAction }: { refreshAction?: ReactNode; scope: ScopeSel; scopes: ScopesView | null; scopeMenu: SelectMemory; onScope: (s: ScopeSel) => void }) {
   const [typed, setTyped] = useState(selectedScopes(scope).join(', '))
   const words = useScopeWords()
   if (scopes?.error) {
@@ -1068,7 +1063,7 @@ function ScopePicker({ scope, scopes, onScope, scopeMenu }: { scope: ScopeSel; s
       if (document.activeElement === document.body || !document.activeElement) document.querySelector<HTMLElement>('[data-table-scroll]')?.focus()
     })
   }
-  return <ScopeSelect value={scope} names={names} label={words.singular} allLabel={words.all} onChange={choose} memory={scopeMenu} />
+  return <ScopeSelect searchAction={refreshAction} value={scope} names={names} label={words.singular} allLabel={words.all} onChange={choose} memory={scopeMenu} />
 }
 
 function LoadingState({ title, inline = false }: { title?: string; inline?: boolean }) {
@@ -1093,7 +1088,7 @@ function StatusBanner({ state, cls, message }: { state: string; cls?: string; me
       <span>
         <b>{t(isErr ? 'status.error' : 'status.stale')}</b>
         {cls && ` · ${classLabel(cls)}`}
-        {message && <span className="block opacity-90">{message}</span>}
+        {(message || cls === 'scope_limit') && <span className="block opacity-90">{cls === 'scope_limit' ? t('view.scopeLimit') : message}</span>}
       </span>
     </div>
   )

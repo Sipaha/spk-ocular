@@ -1,0 +1,163 @@
+{
+  "date": "2026-10-15",
+  "base_commit": "3704cf7d643573e8a8c1888139b1189b061358e2",
+  "app_version": "1.6.3 development candidate; no release made",
+  "system": {
+    "os": "Linux Mint22.3",
+    "kernel": "6.17.0-20-generic",
+    "architecture": "amd64",
+    "cpu": "AMD Ryzen7 260;8cores/16threads",
+    "ram_MiB": 62065,
+    "go": "1.26.9",
+    "node": "22.22.2",
+    "pnpm": "10.33.0",
+    "playwright": "1.63.0",
+    "chrome_headless_shell": "153.0.8010.12",
+    "gtk": "3.24.41",
+    "webkitgtk": "2.52.3"
+  },
+  "fixture": "Synthetic local read-only HTTP Kubernetes;10000Pods in one selected namespace,40namespace names;metrics absent;WatchList rejected to exercise LIST/WATCH fallback",
+  "memory_scope": "application plus owned Chromium process tree;not Python fixture,harness,or unrelated browsers",
+  "full_soak_artifact_sha256": "afac8c317094b4c8903bf0f01a063dc18c3003a551882c38bf67a754501b28bd",
+  "after_load_artifact_sha256": "2f63e97891635d77996c9d80902b2728f413d8542d8570c9ee9719828af8a629",
+  "original_full_soak_verdict": "NOT ACCEPTED",
+  "original_full_soak": {
+    "sample_count": 253,
+    "span_minutes": 42.238483333333335,
+    "growth_phase": {
+      "baseline_Private_MiB": 166.85546875,
+      "max_Private_MiB": 169.2578125,
+      "min_Private_MiB": 166.37890625,
+      "PSS_MiB_range": [
+        304.6240234375,
+        368.8798828125
+      ]
+    },
+    "after_load": {
+      "span_minutes": 10.066666666666666,
+      "first_Private_MiB": 135.25390625,
+      "last_Private_MiB": 124.375,
+      "range_MiB": 11.78125,
+      "max_Private_MiB": 135.25390625,
+      "min_Private_MiB": 123.47265625
+    },
+    "max_swap_KiB": 0,
+    "all_sampled_processes_exited": true
+  },
+  "targeted_after_load": {
+    "case": "targeted after-load stability; not a 20-minute-warmup growth soak",
+    "protocol": "5 minutes loaded, 5 minutes settling, 10 minutes idle; no forced GC; original limits retained",
+    "sample_count": 121,
+    "span_minutes": 20.107733333333332,
+    "loaded_baseline_Private_MiB": 172.19140625,
+    "after_load": {
+      "span_seconds": 603,
+      "sample_count": 61,
+      "first_Private_MiB": 127.15234375,
+      "last_Private_MiB": 127.88671875,
+      "min_Private_MiB": 127.00390625,
+      "max_Private_MiB": 129.17578125,
+      "range_MiB": 2.171875,
+      "drift_MiB": 0.734375,
+      "PSS_MiB_range": [
+        264.1416015625,
+        326.0439453125
+      ]
+    },
+    "checks": {
+      "after_load_at_least_600_seconds": true,
+      "range_at_most_10_MiB": true,
+      "last_minus_first_at_most_5_MiB": true,
+      "back_within_100_MiB_of_loaded_baseline": true,
+      "zero_process_tree_swap": true,
+      "no_extra_Pod_LIST_during_observation": true,
+      "released_idle_caches": true,
+      "only_current_empty_Node_view_remains": true,
+      "all_sampled_processes_exited": true
+    },
+    "verdict": "PASS",
+    "original_strict_full_soak_verdict": "NOT ACCEPTED; preserved separately"
+  },
+  "snapshot_note": "Later selected-drawer,catalog-owner and guard-byte-count fixes were verified separately; do not claim earlier artifacts contain those later fixes.",
+  "final_verified_artifacts": [
+    {
+      "name": "spk-ocular",
+      "sha256": "af7eb8ca95a1dcc11d368b7d210b7a6424221b3b8b8a4ce7c55ba6ad29197650",
+      "embedded_frontend_file_count": 168,
+      "all_frontend_files_byte_identical": true
+    },
+    {
+      "name": "spk-ocular-desktop",
+      "sha256": "9055269db2fec8ebc2a710899d6c07947c5f3401d15dd486046be91c9cd9ceed",
+      "embedded_frontend_file_count": 168,
+      "all_frontend_files_byte_identical": true
+    }
+  ],
+  "selected_object_final_native": {
+    "fixture_rows": 100,
+    "individual_Pod_GET_before_details": 0,
+    "individual_Pod_GET_after_open_and_tools": 6,
+    "individual_Pod_GET_after_unrelated_parent_rerenders": 6,
+    "distinct_Pods_read_individually": 1,
+    "named_observer_objects": 1
+  },
+  "full_soak_changed_code_files_fingerprint_sha256": "98ed186a915b642ef033c96957caf47b2661b7d92a9205b5321451c65aa4b6e6",
+  "after_load_changed_code_files_fingerprint_sha256": "0af2e909e50254590281a70b9b5a8fdf458df451b50b2849c580d822db4e5c98",
+  "final_verified_changed_code_files_fingerprint_sha256": "ecfdce6355cfb2e68c1f5e970ce65b36c2018fb4622b924c23e7583994b3589b",
+  "owner_corrected_criterion": {
+    "date": "2026-10-15",
+    "reason": "Continued memory decreases are unloading, not post-load growth. Evaluate ordered upward excursions instead of the absolute range.",
+    "max_upward_excursion_MiB": 10,
+    "max_net_growth_MiB": 5,
+    "minimum_after_load_minutes": 10,
+    "phase_and_return_budget_MiB": 100,
+    "results": {
+      "full-soak": {
+        "max_upward_excursion_MiB": 1.96875,
+        "net_growth_MiB": -10.87890625,
+        "observation_seconds": 603.3310000000001,
+        "after_load_growth_pass": true
+      },
+      "after-load": {
+        "max_upward_excursion_MiB": 2.171875,
+        "net_growth_MiB": 0.734375,
+        "observation_seconds": 603.1439999999999,
+        "after_load_growth_pass": true
+      }
+    },
+    "reassessed_full_soak_verdict": "ACCEPTED",
+    "original_verdict_preserved": "NOT ACCEPTED",
+    "superseded_by": "plateau_before_control_criterion; ordered growth alone did not implement the clarified timing requirement"
+  },
+  "plateau_before_control_criterion": {
+    "date": "2026-10-15",
+    "status": "current",
+    "reason": "Owner clarified that the ten-minute control starts only after unloading stops, as determined by rolling averages over time.",
+    "mean_window_seconds": 60,
+    "mean_step_tolerance_MiB": 0.5,
+    "stable_confirmation_seconds": 60,
+    "mean_band_and_renewed_drop_tolerance_MiB": 1.0,
+    "maximum_sampling_gap_seconds": 60,
+    "subsequent_control_seconds": 600,
+    "post_load_rebound_limit_MiB": 10,
+    "control_net_growth_limit_MiB": 5,
+    "phase_and_return_budget_MiB": 100.0,
+    "results": {
+      "full-soak": {
+        "status": "INCOMPLETE",
+        "control_start_seconds": null,
+        "control_seconds": 0.0,
+        "reason": "need confirmed plateau and ten subsequent minutes",
+        "max_upward_excursion_MB": 1.96875
+      },
+      "after-load": {
+        "status": "INCOMPLETE",
+        "control_start_seconds": null,
+        "control_seconds": 0.0,
+        "reason": "need confirmed plateau and ten subsequent minutes",
+        "max_upward_excursion_MB": 2.171875
+      }
+    },
+    "interpretation": "Neither preserved run confirms a plateau followed by a complete control window. INCOMPLETE is not an observed growth-budget failure. No new measurement, application change or automatic timeout extension."
+  }
+}

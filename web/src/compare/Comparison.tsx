@@ -1,3 +1,4 @@
+import { RefreshButton } from '../components/RefreshButton'
 import {lazy,Suspense,useEffect,useRef,useState} from 'react'
 import {createPortal} from 'react-dom'
 import type {Client} from '../api/client'
@@ -49,7 +50,7 @@ function Dialog({client,request}:{client:Client;request:CompareRequest}){
  const omitted=validResult?[...new Set([...validResult.left.omitted,...validResult.right.omitted])]:[]
  return createPortal(<div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-3" onMouseDown={e=>{if(e.target===e.currentTarget)closeComparison()}}>
   <section ref={box} role="dialog" aria-modal="true" aria-label={t('compare.title')} tabIndex={-1} className="flex h-[min(900px,calc(100dvh-24px))] w-[min(1400px,calc(100vw-24px))] flex-col border border-line bg-panel outline-none" onKeyDown={modalKey}>
-   <header className="flex h-10 shrink-0 items-center gap-2 border-b border-line px-3"><strong className="text-sm">{t('compare.title')}</strong><span className="flex-1"/><button className={button} disabled={!available} onClick={()=>{setResult(null);setError('');setRefresh(n=>n+1)}}>{t('graph.refresh')}</button><ModalCloseButton label={t('drawer.close')} onClick={closeComparison}/></header>
+   <header className="flex h-10 shrink-0 items-center gap-2 border-b border-line px-3"><strong className="text-sm">{t('compare.title')}</strong><span className="flex-1"/><RefreshButton disableWhileBusy={false} disabled={!available} busy={available&&!result&&!error} onClick={()=>{setResult(null);setError('');setRefresh(n=>n+1)}} /><ModalCloseButton label={t('drawer.close')} onClick={closeComparison}/></header>
    <div className="grid shrink-0 grid-cols-2 gap-3 border-b border-line px-3 py-2 text-xs">
     <Side label={t('compare.left')} selection={left} side={validResult?.left}/><Side label={t('compare.right')} selection={right} side={validResult?.right}/>
    </div>

@@ -1,5 +1,10 @@
 {
   "ui": {
+    "view.loadCancel": "Abbrechen",
+    "view.loadCancelled": "Anfrage abgebrochen",
+    "view.loadRetry": "Erneut versuchen",
+    "view.loadElapsed": "{seconds} s",
+    "view.loadReceived": "Empfangen: {size}",
     "security.incompleteEmpty": "In den verfügbaren Teildaten konnten keine Funde festgestellt werden. Abdeckungsfehler prüfen.",
     "security.title": "Sicherheit",
     "security.scan": "Erneut prüfen",
@@ -169,8 +174,8 @@
     "graph.title": "Clustergraph",
     "graph.clusterResources": "Clusterressourcen",
     "graph.load": "Graph laden",
-  "graph.loadHint": "Laden Sie Ressourcenbeziehungen bei Bedarf. Graphdaten werden erst geladen, wenn Sie dies für diese Verbindung auswählen.",
-  "graph.refresh": "Aktualisieren",
+    "graph.loadHint": "Laden Sie Ressourcenbeziehungen bei Bedarf. Graphdaten werden erst geladen, wenn Sie dies für diese Verbindung auswählen.",
+    "graph.refresh": "Aktualisieren",
     "graph.routes": "Routenebene",
     "graph.canvas": "Graph der Clusterressourcen",
     "graph.search": "Ressource suchen",
@@ -544,8 +549,8 @@
     "class.internal": "Interner Fehler",
     "class.removed": "nicht mehr über die API bereitgestellt",
     "class.schema_changed": "die Spalten haben sich geändert",
-    "view.resync": "Erneut lesen",
-    "view.resyncHint": "Lese diese Ansicht erneut aus dem Ziel (F5): ihre Live-Updates sind Best-Effort",
+    "view.resync": "Aktualisieren",
+    "view.resyncHint": "Vollständige Liste vom Ziel aktualisieren (F5)",
     "view.resyncFailed": "Konnte nicht erneut gelesen werden: {error}",
     "drawer.back": "Zurück",
     "drawer.path": "Pfad",
@@ -1142,7 +1147,9 @@
     "appearance.paletteNumber": "Farbe {n}",
     "appearance.failed": "Die Darstellung konnte nicht geladen oder gespeichert werden. Erneut versuchen, um sie nach einem Neustart beizubehalten.",
     "appearance.save": "Speichern",
-    "appearance.retry": "Erneut versuchen"
+    "appearance.retry": "Erneut versuchen",
+    "view.scopeLimit": "All Namespaces ist zu groß. Wählen Sie oben bestimmte Namespaces, um eine vollständige Liste zu laden.",
+    "class.scope_limit": "Namespaces auswählen"
   },
   "provider": {
     "kubernetes.rbac.source": "RBAC-Quelle konnte nicht gelesen werden ({class})",

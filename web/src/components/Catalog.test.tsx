@@ -53,7 +53,7 @@ describe('navigation of discovered kinds', () => {
     expect(sub).toHaveAttribute('aria-expanded', 'true')
     await userEvent.click(within(section).getByRole('button', { name: 'Widgets' }))
     expect(f.client.setNavSection).toHaveBeenCalledWith('API groups/ocular.dev', true)
-    expect(f.client.openView).toHaveBeenLastCalledWith('kubernetes', 'prod', expect.objectContaining({ kind: 'ocular.dev/widgets' }))
+    expect(f.client.openView).toHaveBeenLastCalledWith('kubernetes', 'prod', expect.objectContaining({ kind: 'ocular.dev/widgets' }), expect.any(AbortSignal), expect.any(String), false, expect.any(String))
     // Folded again, the open kind stays in sight.
     await userEvent.click(head)
     expect(within(section).getByRole('button', { name: 'Widgets' })).toHaveAttribute('aria-current', 'page')
@@ -191,7 +191,7 @@ describe('the catalog in an open target', () => {
     listKinds.mockResolvedValue(catalog([podsKind, widgets], { rev: 2 }))
     await act(async () => f.emit({ type: 'kinds_changed', payload: { provider: 'kubernetes', target: 'prod', session: 1, rev: 2 } }))
     expect(await screen.findByRole('heading', { name: 'Widgets' })).toBeInTheDocument()
-    expect(f.client.openView).toHaveBeenLastCalledWith('kubernetes', 'prod', expect.objectContaining({ kind: 'ocular.dev/widgets' }))
+    expect(f.client.openView).toHaveBeenLastCalledWith('kubernetes', 'prod', expect.objectContaining({ kind: 'ocular.dev/widgets' }), expect.any(AbortSignal), expect.any(String), false, expect.any(String))
   })
 })
 

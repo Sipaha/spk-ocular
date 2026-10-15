@@ -361,6 +361,10 @@ func (w *tableWatch) Stop() {
 // checked against the schema. WatchList is never advertised: the initial
 // state comes by List.
 type tableListWatch struct {
+	progress  *loadTransfer
+	guard     *scopeBudget
+	pre       func(*unstructured.Unstructured)
+	compact   func(*unstructured.Unstructured) (runtime.Object, error)
 	c         *tableClient
 	gvr       schema.GroupVersionResource
 	namespace string
@@ -393,7 +397,35 @@ func (lw *tableListWatch) opts(o metav1.ListOptions) metav1.ListOptions {
 }
 
 func (lw *tableListWatch) ListWithContext(ctx context.Context, o metav1.ListOptions) (runtime.Object, error) {
-	ctx, cancel := context.WithTimeout(ctx, listTimeout)
+	if lw.compact != nil {
+		obj, err := collectPages(ctx, o, func(parent context.Context, options metav1.ListOptions) (collectionPage, error) {
+			pageCtx, cancel := context.WithTimeout(lw.progress.context(parent), listTimeout)
+			defer cancel()
+			if lw.guard != nil {
+				pageCtx = lw.guard.context(pageCtx)
+			}
+			lw.counts.lists.Add(1)
+			p, err := lw.c.list(pageCtx, lw.gvr, lw.namespace, lw.opts(options))
+			if err == nil {
+				err = lw.check(p.cols)
+			}
+			if err != nil {
+				return collectionPage{}, err
+			}
+			return collectionPage{items: p.items, rv: p.rv, next: p.cont, remaining: p.remaining}, nil
+		}, lw.compact, lw.guard)
+		lw.tell(err)
+		if lw.guard != nil {
+			if blocked := lw.guard.failure(); blocked != nil {
+				err = blocked
+				obj = nil
+			}
+		}
+		lw.report(err)
+		return obj, err
+	}
+
+	ctx, cancel := context.WithTimeout(lw.progress.context(ctx), listTimeout)
 	defer cancel()
 	lw.counts.lists.Add(1)
 	p, err := lw.c.list(ctx, lw.gvr, lw.namespace, lw.opts(o))
@@ -431,7 +463,11 @@ func (lw *tableListWatch) WatchWithContext(ctx context.Context, o metav1.ListOpt
 		return nil, err
 	}
 	lw.report(nil)
-	return newReportingWatch(w, lw.report, lw.ended, cancel), nil
+	var check func(watch.Event) error
+	if lw.guard != nil {
+		check = func(ev watch.Event) error { return lw.guard.event(ev, lw.pre) }
+	}
+	return newReportingWatch(w, lw.report, lw.ended, cancel, check), nil
 }
 
 func (lw *tableListWatch) List(o metav1.ListOptions) (runtime.Object, error) {

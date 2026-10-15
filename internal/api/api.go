@@ -56,6 +56,7 @@ type API interface {
 	// closed/unknown view is CodeGone: reopen it.
 	GetRows(ctx context.Context, viewID string, since uint64) (views.Page, error)
 	CloseView(ctx context.Context, viewID string) error
+	CancelViewLoading(ctx context.Context, req CancelViewLoadingRequest) error
 	// ResyncView asks the view's own session (not the current target's) to
 	// read its sources again (ViewInfo.Resync); a closed view or one of a
 	// retired session is CodeGone.
@@ -212,9 +213,17 @@ type MetricsRequest struct {
 }
 
 type OpenViewRequest struct {
-	Provider string         `json:"provider"`
-	Target   string         `json:"target"`
-	Query    provider.Query `json:"query"`
+	RequestID  string         `json:"requestId,omitempty"`
+	Connection string         `json:"connection,omitempty"`
+	Retry      bool           `json:"retry,omitempty"`
+	Provider   string         `json:"provider"`
+	Target     string         `json:"target"`
+	Query      provider.Query `json:"query"`
+}
+
+type CancelViewLoadingRequest struct {
+	OpenViewRequest
+	ViewID string `json:"viewId,omitempty"`
 }
 
 type ViewInfo struct {
@@ -292,6 +301,7 @@ const (
 	CodeBadRequest = "bad_request"
 	CodeNotFound   = "not_found"
 	CodeGone       = "gone"
+	CodeCancelled  = "cancelled"
 	// CodeRemoved: the kind is no longer served; reopening cannot help.
 	CodeRemoved     = "removed"
 	CodeUnsupported = "unsupported"

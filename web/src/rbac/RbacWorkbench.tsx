@@ -1,3 +1,4 @@
+import { RefreshButton } from '../components/RefreshButton'
 import {useEffect,useMemo,useRef,useState} from 'react'
 import {useVirtualizer} from '@tanstack/react-virtual'
 import type {Client} from '../api/client'
@@ -65,7 +66,7 @@ export default function RbacWorkbench({client,target,scope,initialSubject,failed
  return <div className="flex min-h-0 min-w-0 flex-1 flex-col" data-rbac-workbench>
   <div className="shrink-0 space-y-2 border-b border-line px-3 py-2 text-xs">
    {!initialSubject&&<div className="flex flex-wrap items-center gap-2"><Select label={t('rbac.subject')} value={selectedKey} options={options} onChange={value=>choose(value==='self'?undefined:JSON.parse(value))}/><span className="text-fg-muted">{t('rbac.subjectHint')}</span></div>}
-   <div className="flex flex-wrap items-center gap-2"><strong className="break-all">{snapshot?.principal||t('rbac.identityUnknown')}</strong><button className={button} disabled={busy} onClick={()=>{setBusy(true);setRevision(r=>r+1)}}>{busy?t('app.loading'):t('graph.refresh')}</button><span className="ml-auto text-fg-muted">{snapshot?t('timeline.snapshot',{time:date(snapshot.capturedAt)}):''}</span></div>
+   <div className="flex flex-wrap items-center gap-2"><strong className="break-all">{snapshot?.principal||t('rbac.identityUnknown')}</strong><RefreshButton busy={busy} onClick={()=>{setBusy(true);setRevision(r=>r+1)}} /><span className="ml-auto text-fg-muted">{snapshot?t('timeline.snapshot',{time:date(snapshot.capturedAt)}):''}</span></div>
    {!!snapshot?.groups.length&&<p className="break-all text-fg-muted">{t('rbac.groups')}: {snapshot.groups.join(', ')}</p>}
    <p className="text-fg-muted">{t('rbac.declarations')}</p>
    {error!==null&&<p role="alert" className="text-danger">{errorDetail(error)}{snapshot?' · '+t('timeline.stale'):''}</p>}

@@ -1,6 +1,7 @@
 package views
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"errors"
@@ -37,6 +38,7 @@ type entry struct {
 	owner   string
 	query   provider.Query
 	stop    func()
+	control *watchControl
 	touched time.Time
 }
 
@@ -84,17 +86,18 @@ func (m *Manager) Open(owner string, src Source, q provider.Query) (string, erro
 	m.mu.Unlock()
 
 	v := newView(id, func() { m.notify(id) })
-	stop, err := src.Watch(q, v)
+	control := newWatchControl(v, src, q)
+	err := control.start()
 	if err != nil {
 		return "", err
 	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if m.closed || m.revoked[owner] != gen {
-		stop() // the owner went away while this view was being set up
+		control.close() // the owner went away while this view was being set up
 		return "", ErrGone
 	}
-	m.views[id] = &entry{view: v, owner: owner, query: q, stop: stop, touched: m.now()}
+	m.views[id] = &entry{view: v, owner: owner, query: q, stop: control.close, control: control, touched: m.now()}
 	m.armSweepLocked()
 	return id, nil
 }
@@ -190,6 +193,16 @@ func (m *Manager) Info(id string) (owner string, q provider.Query, rows []core.R
 	return e.owner, e.query, e.view.Since(0).Upserts, nil
 }
 
+// Owner resolves an observation without copying or sorting its resource rows.
+func (m *Manager) Owner(id string) (string, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if e := m.views[id]; e != nil {
+		return e.owner, nil
+	}
+	return "", ErrGone
+}
+
 // Exists: the view is open (a lookup, no rows copied).
 func (m *Manager) Exists(id string) bool {
 	m.mu.Lock()
@@ -260,4 +273,19 @@ func (m *Manager) CloseAll() {
 		e.stop()
 	}
 	m.coal.Close()
+}
+
+// Refresh retains the view ID, source owner and current rows while replacing
+// only this observation. Concurrent callers share one bounded refresh job.
+func (m *Manager) Refresh(ctx context.Context, id string) error {
+	m.mu.Lock()
+	e := m.views[id]
+	if e != nil {
+		e.touched = m.now()
+	}
+	m.mu.Unlock()
+	if e == nil {
+		return ErrGone
+	}
+	return e.control.request(ctx)
 }

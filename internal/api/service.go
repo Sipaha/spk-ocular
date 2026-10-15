@@ -44,6 +44,7 @@ type Service struct {
 	favoritesMu   sync.Mutex
 	navSectionsMu sync.Mutex
 
+	loading    viewLoading
 	views      *views.Manager
 	streams    *streams.Registry
 	streamBase func() (string, error)

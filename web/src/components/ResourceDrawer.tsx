@@ -1,3 +1,5 @@
+import { RefreshButton } from './RefreshButton'
+import { CancelledList, ListLoading } from './ListLoading'
 import {dock} from '../dock/store'
 import {useWorkspaceStatus} from '../workspace/persistence'
 import {ComparisonTools} from '../compare/ComparisonTools'
@@ -33,6 +35,8 @@ const FileBrowser = lazy(() => import('../files/FileBrowser'))
 const YamlView = lazy(() => import('./YamlView'))
 
 interface Props {
+  /** Retain guarded edits while a cancelled list displays its placeholder. */
+  hidden?: boolean
   embedded?: boolean
   client: Client
   hub: ViewHub
@@ -73,7 +77,7 @@ const toolBtn = 'rounded-md border border-line px-2 py-0.5 text-xs text-fg-muted
 
 type Tab = 'details' | 'yaml'
 
-export function ResourceDrawer({ embedded = false, client, hub, target, subject, initialTab, onTab, onClose, hasLogs, onLogs, hasExec, onTerminal, hasForward, actionsOf, onAction, eventsKindOf, editableOf, valuesOf, kindTitleOf }: Props) {
+export function ResourceDrawer({ hidden = false, embedded = false, client, hub, target, subject, initialTab, onTab, onClose, hasLogs, onLogs, hasExec, onTerminal, hasForward, actionsOf, onAction, eventsKindOf, editableOf, valuesOf, kindTitleOf }: Props) {
   const leave=(run:()=>void)=>embedded?run():mayLeave(run)
   const workspaceReady=useWorkspaceStatus(s=>s.ready)
   const [access,setAccess]=useState<{subject?:Ref;failedRef?:Ref}|null>(null)
@@ -190,7 +194,7 @@ export function ResourceDrawer({ embedded = false, client, hub, target, subject,
   })
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (consumed(e) || inTerminal(e.target) || overlayOpen()) return
+      if (panelRef.current?.hasAttribute('inert') || consumed(e) || inTerminal(e.target) || overlayOpen()) return
       const node=e.target instanceof HTMLElement?e.target:null
       const focusedDrawer=node?.closest('[data-resource-drawer]')
       if(focusedDrawer&&focusedDrawer!==panelRef.current)return
@@ -243,7 +247,7 @@ export function ResourceDrawer({ embedded = false, client, hub, target, subject,
   const moved = !!editing?.doc.version && !!revision && revision !== editing.doc.version
 
   return (
-    <DetailsPanel embedded={embedded} panelRef={panelRef} label={embedded?`${t('workspace.propertiesLabel')} · ${title}`:`${current.kind} ${title}`}>
+    <DetailsPanel hidden={hidden} embedded={embedded} panelRef={panelRef} label={embedded?`${t('workspace.propertiesLabel')} · ${title}`:`${current.kind} ${title}`}>
       {/* Name first, whole; the object's tools on a line of their own. */}
       <header className="drawer-heading">
         {stack.length > 1 && (
@@ -425,7 +429,7 @@ export function ResourceDrawer({ embedded = false, client, hub, target, subject,
               r.ref.uid && <ValuesSection key={key} client={client} subject={{ ...r.ref, provider: target.provider, target: target.id }} revision={revision} gone={shown?.gone} kindTitle={kindTitleOf?.(current.kind) ?? current.kind} />
             }
             // Right under the facts: the events list below is a fixed-height box.
-            ports={shown && hasForward?.(current.kind) && <PortsSection key={key} client={client} subject={{ ...r.ref, provider: target.provider, target: target.id }} />}
+            ports={shown && hasForward?.(current.kind) && <PortsSection key={key} client={client} revision={revision} subject={{ ...r.ref, provider: target.provider, target: target.id }} />}
           />
         )}
       </div>
@@ -530,7 +534,7 @@ function Details(props: { client: Client; hub: ViewHub; target: { provider: stri
           {r.relationsTruncated && <p className="text-xs text-fg-subtle">{t('drawer.relationsTruncated')}</p>}
         </section>
       )}
-      <RetainedSection pending={pending}>{r.ref.uid && eventsKind && <ObjectEvents hub={hub} kind={eventsKind} subject={r.ref} />}</RetainedSection>
+      <RetainedSection pending={pending}>{r.ref.uid && eventsKind && <ObjectEvents client={client} hub={hub} kind={eventsKind} subject={r.ref} />}</RetainedSection>
     </div>
   )
 }
@@ -558,24 +562,33 @@ function useObjectRevision(hub: ViewHub, target: { provider: string; id: string 
 }
 
 /** Events about one object: a normal live view narrowed by Subject. */
-function ObjectEvents({ hub, kind, subject }: { hub: ViewHub; kind: string; subject: Ref }) {
+function ObjectEvents({ client, hub, kind, subject }: { client: Client; hub: ViewHub; kind: string; subject: Ref }) {
   const query = useMemo(
     () => ({ kind, scope: subject.scope ? { mode: 'one' as const, name: subject.scope } : { mode: 'all' as const }, subject }),
     [kind, subject],
   )
   const view = useView(hub, subject.provider, subject.target, query)
   const cols = view.kind?.columns ?? []
+  const [refreshing, setRefreshing] = useState(false)
+  const refreshingRef = useRef(false)
   return (
     <section aria-label={t('drawer.events')} className="flex h-72 flex-col">
       <h3 className="mb-1.5 text-[12px] font-semibold uppercase tracking-wider text-fg-subtle">
         {t('drawer.events')} <span className="font-normal">{view.rows.length}</span>
+        {view.resync && !view.cancelled && <RefreshButton className="ml-2" busy={refreshing} disabled={!view.viewId} onClick={() => {
+          if (!view.viewId || refreshingRef.current) return
+          refreshingRef.current = true; setRefreshing(true)
+          client.resyncView(view.viewId).catch(e => { if (!(e instanceof ApiError && e.code === 'gone')) showNotice(t('view.resyncFailed', {error: String(e)})) }).finally(() => { refreshingRef.current = false; setRefreshing(false) })
+        }} />}
       </h3>
-      {view.status.state === 'error' ? (
+      {view.status.state === 'loading' && view.rows.length > 0 && <ListLoading view={view} inline />}
+      {!view.cancelled && view.status.state === 'stale' && <p role="alert" className="mb-1 text-xs text-warning">{classLabel(view.status.class ?? '')} {view.status.message}</p>}
+      {view.cancelled ? <CancelledList retry={view.retry} pending={view.cancelling} /> : view.status.state === 'error' ? (
         <p className="text-xs text-danger">
           {classLabel(view.status.class ?? '')} {view.status.message}
         </p>
       ) : view.rows.length === 0 ? (
-        <p className="text-xs text-fg-subtle">{view.status.state === 'loading' ? t('app.loading') : t('drawer.noEvents')}</p>
+        view.status.state === 'loading' ? <ListLoading view={view} /> : <p className="text-xs text-fg-subtle">{t('drawer.noEvents')}</p>
       ) : (
         <div className="flex min-h-0 flex-1 flex-col rounded-md border border-line">
           <ResourceTable columns={cols} rows={view.rows} hideScope filter="" selected={null} onSelect={() => {}} />

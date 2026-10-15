@@ -15,6 +15,7 @@ export interface Kinds {
   appeared: ReadonlyMap<string, number>
   /** F5 in the navigation: the target reads its kinds again. */
   refresh: () => void
+  refreshing: boolean
 }
 
 interface State {
@@ -32,12 +33,16 @@ interface State {
  */
 export function useKinds(client: Client, hub: ViewHub, provider: string, target: string): Kinds {
   const [st, setSt] = useState<State>({ view: null, error: null, removed: new Map(), appeared: new Map() })
+  const refreshKey = JSON.stringify([provider,target])
+  const [refreshTarget, setRefreshTarget] = useState<string | null>(null)
+  const refreshing = refreshTarget === refreshKey
+  const refreshOwner = useRef<object | null>(null)
   const seq = useRef(0)
   const known = useRef<{ session: number; rev: number } | null>(null)
 
   const load = useCallback(() => {
     const n = ++seq.current
-    client.listKinds(provider, target).then(
+    return client.listKinds(provider, target).then(
       (v) => {
         if (n !== seq.current) return
         known.current = { session: v.session, rev: v.rev }
@@ -81,10 +86,16 @@ export function useKinds(client: Client, hub: ViewHub, provider: string, target:
     }
   }, [hub, load, provider, target])
 
+  useEffect(() => () => { refreshOwner.current = null }, [client, provider, target])
   const refresh = useCallback(() => {
-    void client.refreshKinds(provider, target).catch(() => {})
-    load()
-  }, [client, load, provider, target])
+    if (refreshOwner.current) return
+    const owner = {}; refreshOwner.current = owner; setRefreshTarget(refreshKey)
+    const session = known.current?.session
+    const current = () => refreshOwner.current === owner && known.current?.session === session
+    client.refreshKinds(provider, target).then(() => { if (current()) return load() }).catch(e => {
+      if (current()) setSt(old => ({ ...old, error: e instanceof Error ? e.message : String(e) }))
+    }).finally(() => { if (refreshOwner.current === owner) { refreshOwner.current = null; setRefreshTarget(null) } })
+  }, [client, load, provider, target, refreshKey])
 
-  return { view: st.view, error: st.error, removed: st.removed, appeared: st.appeared, refresh }
+  return { view: st.view, error: st.error, removed: st.removed, appeared: st.appeared, refresh, refreshing }
 }

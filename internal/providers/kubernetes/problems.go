@@ -120,7 +120,9 @@ type problemsView struct {
 	sink    provider.Sink
 	stopped bool
 	cov     []provider.SourceCoverage
+	bytes   []*int64
 	emitted []map[string]bool // per source: the problem rows it has in the view
+	blocked bool
 	last    provider.ViewStatus
 }
 
@@ -138,8 +140,15 @@ func (f *problemsFeed) Apply(d provider.Delta) {
 	v := f.v
 	v.mu.Lock()
 	defer v.mu.Unlock()
-	if v.stopped {
+	if v.stopped || v.blocked {
 		return // a late delivery after close
+	}
+	if d.Status != nil && d.Status.Class == provider.ClassScopeLimit {
+		v.blocked = true
+		st := d.Status.Clone()
+		v.last = st
+		v.sink.Apply(provider.Delta{Reset: true, Status: &st})
+		return
 	}
 	mine := v.emitted[f.i]
 	var out provider.Delta
@@ -177,8 +186,19 @@ func (f *problemsFeed) Apply(d provider.Delta) {
 		}
 	}
 	if d.Status != nil {
+		v.bytes[f.i] = d.Status.Clone().DownloadedBytes
 		v.cov[f.i] = coverageOf(v.cov[f.i].Source, *d.Status)
-		if st := aggregateStatus(v.cov); !st.Equal(v.last) {
+		st := aggregateStatus(v.cov)
+		for _, n := range v.bytes {
+			if n != nil {
+				if st.DownloadedBytes == nil {
+					zero := int64(0)
+					st.DownloadedBytes = &zero
+				}
+				*st.DownloadedBytes += *n
+			}
+		}
+		if !st.Equal(v.last) {
 			v.last = st
 			c := st.Clone()
 			out.Status = &c
@@ -249,7 +269,7 @@ func (s *session) watchProblems(q provider.Query, sink provider.Sink) (func(), e
 		// alone): no namespaced source is opened, so none is listed.
 		srcs = slices.DeleteFunc(slices.Clone(srcs), func(src problemSource) bool { return src.def.namespaced })
 	}
-	v := &problemsView{sink: sink, cov: make([]provider.SourceCoverage, len(srcs)), emitted: make([]map[string]bool, len(srcs))}
+	v := &problemsView{sink: sink, cov: make([]provider.SourceCoverage, len(srcs)), bytes: make([]*int64, len(srcs)), emitted: make([]map[string]bool, len(srcs))}
 	for i, src := range srcs {
 		title := src.title
 		if !src.def.namespaced && q.Scope.Mode == core.ScopeOne {

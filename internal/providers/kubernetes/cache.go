@@ -8,6 +8,7 @@ import (
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/tools/cache"
@@ -17,10 +18,14 @@ import (
 
 // Cache retention (docs/architecture.md): a cache no
 // view uses is kept for cacheGrace (switching back is instant), but at most
-// maxIdleCaches such caches exist; the oldest idle one goes first.
+// maxIdleCaches such caches exist, subject to object and encoded-payload
+// budgets; the oldest idle one goes first.
 const (
-	cacheGrace    = 60 * time.Second
-	maxIdleCaches = 8
+	cacheGrace          = 60 * time.Second
+	maxIdleCaches       = 8
+	maxIdleObjects      = 25000
+	maxIdlePayloadBytes = 32 << 20
+	cacheBudgetSweep    = 5 * time.Second
 )
 
 type cacheKey struct {
@@ -40,13 +45,17 @@ type transport struct {
 
 // informerCache is one informer plus the views (watchers) that lease it.
 type informerCache struct {
-	key  cacheKey
-	def  *kindDef
-	inf  cache.SharedIndexInformer
-	stop chan struct{}
+	key      cacheKey
+	def      *kindDef
+	inf      cache.SharedIndexInformer
+	stop     chan struct{}
+	stopOnce sync.Once
+	guard    *scopeBudget
+	progress loadTransfer
 
 	mu       sync.Mutex
 	leases   int
+	observed bool
 	idleAt   time.Time
 	tr       transport
 	okGen    uint64 // bumped by every successful request
@@ -75,7 +84,14 @@ func (c *informerCache) streamEnded() {
 	})
 }
 
+func (c *informerCache) close() { c.stopOnce.Do(func() { close(c.stop) }) }
+
 func (c *informerCache) setTransport(err error) {
+	if c.guard != nil {
+		if blocked := c.guard.failure(); blocked != nil {
+			err = blocked
+		}
+	}
 	class, msg := classify(err)
 	if class == provider.ClassGone {
 		return // expired resourceVersion: the reflector relists, not a failure
@@ -95,6 +111,9 @@ func (c *informerCache) setTransport(err error) {
 		ws = append(ws, w)
 	}
 	c.mu.Unlock()
+	if class == provider.ClassScopeLimit {
+		c.close()
+	}
 	for _, w := range ws {
 		w.pushStatus()
 	}
@@ -123,18 +142,22 @@ type cacheManager struct {
 	onNotTable func(old *tableSchema)
 	// onFailed is told the class of every failed list or watch (the
 	// session's background: an unauthorized one is lost).
-	onFailed func(provider.ErrorClass)
-	now      func() time.Time
-	grace    time.Duration
-	maxIdle  int
-	// background: idle caches are kept past grace (only maxIdle bounds
-	// them); set by the session (P18).
+	onFailed       func(provider.ErrorClass)
+	now            func() time.Time
+	grace          time.Duration
+	maxIdle        int
+	maxIdleObjects int
+	maxIdleBytes   int64
+	budgetSweep    time.Duration
+	// background: idle caches are kept past grace; all idle retention
+	// budgets still apply. Set by the session (P18).
 	background bool
 
-	mu     sync.Mutex
-	caches map[cacheKey]*informerCache
-	timer  *time.Timer
-	closed bool
+	mu      sync.Mutex
+	caches  map[cacheKey]*informerCache
+	retired map[*informerCache]struct{}
+	timer   *time.Timer
+	closed  bool
 
 	counts requestCounts
 }
@@ -146,7 +169,7 @@ type requestCounts struct {
 }
 
 func newCacheManager(dyn dynamic.Interface, watchList bool) *cacheManager {
-	return &cacheManager{dyn: dyn, watchList: watchList, now: time.Now, grace: cacheGrace, maxIdle: maxIdleCaches, caches: map[cacheKey]*informerCache{}}
+	return &cacheManager{dyn: dyn, watchList: watchList, now: time.Now, grace: cacheGrace, maxIdle: maxIdleCaches, maxIdleObjects: maxIdleObjects, maxIdleBytes: maxIdlePayloadBytes, budgetSweep: cacheBudgetSweep, caches: map[cacheKey]*informerCache{}, retired: map[*informerCache]struct{}{}}
 }
 
 // acquire leases the cache for key, creating and starting it if needed.
@@ -182,9 +205,24 @@ func (m *cacheManager) start(key cacheKey, def *kindDef) *informerCache {
 			m.onFailed(class)
 		}
 	}
-	var lw cache.ListerWatcher = &statusListWatch{res: ri, selector: key.selector, report: report, ended: c.streamEnded, watchList: m.watchList, refused: &m.noWatchList, counts: &m.counts}
+	if def.namespaced && key.namespace == "" {
+		c.guard = newScopeBudget()
+	}
+	pre := func(u *unstructured.Unstructured) {
+		if def.pre != nil {
+			def.pre(u)
+		}
+		*u = *trim(u, def.keep)
+	}
+	compact := func(u *unstructured.Unstructured) (runtime.Object, error) {
+		if def.pre != nil {
+			def.pre(u)
+		}
+		return slim(trim(u, def.keep))
+	}
+	var lw cache.ListerWatcher = &statusListWatch{progress: &c.progress, guard: c.guard, pre: pre, compact: compact, res: ri, selector: key.selector, report: report, ended: c.streamEnded, watchList: m.watchList, refused: &m.noWatchList, counts: &m.counts}
 	if sch := key.sch; sch != nil && sch.table && m.tables != nil {
-		lw = &tableListWatch{c: m.tables, gvr: key.gvr, namespace: key.namespace, selector: key.selector, report: report, ended: c.streamEnded, counts: &m.counts,
+		lw = &tableListWatch{progress: &c.progress, guard: c.guard, pre: pre, compact: compact, c: m.tables, gvr: key.gvr, namespace: key.namespace, selector: key.selector, report: report, ended: c.streamEnded, counts: &m.counts,
 			check: func(cols []metav1.TableColumnDefinition) error {
 				if sch.retired.Load() || !sch.matches(cols) {
 					if m.onSchema != nil {
@@ -203,17 +241,18 @@ func (m *cacheManager) start(key cacheKey, def *kindDef) *informerCache {
 	c.inf = cache.NewSharedIndexInformerWithOptions(lw, &unstructured.Unstructured{}, cache.SharedIndexInformerOptions{
 		ObjectDescription: key.gvr.String(),
 	})
-	keep, pre := def.keep, def.pre
 	_ = c.inf.SetTransform(func(obj any) (any, error) {
 		if u, ok := obj.(*unstructured.Unstructured); ok {
-			if pre != nil {
-				pre(u)
-			}
-			return slim(trim(u, keep))
+			return compact(u)
 		}
-		return obj, nil // already slim, or DeletedFinalStateUnknown of a slim object
+		return obj, nil // LIST pages are already compact; watches use the same projection.
 	})
 	go c.inf.Run(c.stop)
+	go func() {
+		if cache.WaitForCacheSync(c.stop, c.inf.HasSynced) {
+			c.progress.finished.Store(true)
+		}
+	}()
 	return c
 }
 
@@ -227,12 +266,21 @@ func (m *cacheManager) release(c *informerCache) {
 	if c.leases == 0 {
 		c.idleAt = m.now()
 	}
+	remaining := c.leases
 	c.mu.Unlock()
+	if _, detached := m.retired[c]; detached && remaining == 0 {
+		delete(m.retired, c)
+		c.close()
+	}
+	if remaining == 0 && !c.inf.HasSynced() && c.transport().class != provider.ClassScopeLimit && m.caches[c.key] == c {
+		delete(m.caches, c.key)
+		c.close() // no completed snapshot to keep warm
+	}
 	m.evictLocked()
 }
 
-// evictLocked stops caches idle past grace and the oldest beyond maxIdle,
-// then arms a timer for the next grace expiry.
+// evictLocked stops caches idle past grace and the oldest beyond count,
+// object or encoded-payload budgets, then arms the next local sweep.
 func (m *cacheManager) evictLocked() {
 	now := m.now()
 	var idle []*informerCache
@@ -249,17 +297,38 @@ func (m *cacheManager) evictLocked() {
 			idle[j], idle[j-1] = idle[j-1], idle[j]
 		}
 	}
+	costs := make(map[*informerCache]cacheCost, len(idle))
+	var objects int
+	var payload int64
+	for _, c := range idle {
+		cost := idleCacheCost(c)
+		costs[c] = cost
+		objects += cost.objects
+		payload += cost.payload
+	}
+	overBudget := func() bool {
+		return (m.maxIdleObjects > 0 && objects > m.maxIdleObjects) || (m.maxIdleBytes > 0 && payload > m.maxIdleBytes)
+	}
 	var soonest time.Time
+	var retained int
 	for i, c := range idle {
 		expired := !m.background && now.Sub(c.idleAt) >= m.grace
-		if expired || len(idle)-i > m.maxIdle {
+		if expired || len(idle)-i > m.maxIdle || overBudget() {
+			objects -= costs[c].objects
+			payload -= costs[c].payload
 			delete(m.caches, c.key)
-			close(c.stop)
+			c.close()
 			continue
 		}
+		retained++
 		if !m.background {
 			soonest = earliest(soonest, c.idleAt.Add(m.grace))
 		}
+	}
+	// Idle watches can grow after release, including in background sessions.
+	// Periodically enforce local retention without issuing any API request.
+	if retained > 0 && m.budgetSweep > 0 && (m.maxIdleObjects > 0 || m.maxIdleBytes > 0) {
+		soonest = earliest(soonest, now.Add(m.budgetSweep))
 	}
 	if m.timer != nil {
 		m.timer.Stop()
@@ -325,7 +394,7 @@ func (m *cacheManager) lookup(gvr schema.GroupVersionResource, ns, name string) 
 func (m *cacheManager) stats() (active, idle int) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	for _, c := range m.caches {
+	for _, c := range m.allCachesLocked() {
 		c.mu.Lock()
 		if c.leases > 0 {
 			active++
@@ -345,7 +414,13 @@ func (m *cacheManager) retire(sch *tableSchema) {
 	for k, c := range m.caches {
 		if k.sch == sch {
 			delete(m.caches, k)
-			close(c.stop)
+			c.close()
+		}
+	}
+	for c := range m.retired {
+		if c.key.sch == sch {
+			delete(m.retired, c)
+			c.close()
 		}
 	}
 }
@@ -355,7 +430,8 @@ func (m *cacheManager) retire(sch *tableSchema) {
 func (m *cacheManager) routeOf(sch *tableSchema) (ns, selector string, ok bool) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	for k, c := range m.caches {
+	for _, c := range m.allCachesLocked() {
+		k := c.key
 		c.mu.Lock()
 		leased := c.leases > 0
 		c.mu.Unlock()
@@ -371,7 +447,7 @@ func (m *cacheManager) allWatchers() []*viewWatch {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	var out []*viewWatch
-	for _, c := range m.caches {
+	for _, c := range m.allCachesLocked() {
 		c.mu.Lock()
 		for w := range c.watchers {
 			out = append(out, w)
@@ -385,7 +461,7 @@ func (m *cacheManager) allWatchers() []*viewWatch {
 func (m *cacheManager) watchStats() (watchers, deadlines int) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	for _, c := range m.caches {
+	for _, c := range m.allCachesLocked() {
 		c.mu.Lock()
 		for w := range c.watchers {
 			watchers++
@@ -406,7 +482,77 @@ func (m *cacheManager) closeAll() {
 		m.timer.Stop()
 	}
 	for k, c := range m.caches {
-		close(c.stop)
+		c.close()
 		delete(m.caches, k)
 	}
+	for c := range m.retired {
+		c.close()
+		delete(m.retired, c)
+	}
+}
+
+// cacheCost counts retained objects and encoded payload, not Go heap bytes.
+// Both limits matter: many tiny objects have overhead and one large CR can
+// carry a large body. Active leases are never evicted by an idle budget.
+type cacheCost struct {
+	objects int
+	payload int64
+}
+
+func idleCacheCost(c *informerCache) cacheCost {
+	objects := c.inf.GetStore().List()
+	cost := cacheCost{objects: len(objects)}
+	for _, obj := range objects {
+		if slim, ok := obj.(*slimObject); ok {
+			cost.payload += int64(len(slim.body))
+		}
+		if meta, ok := obj.(metav1.Object); ok {
+			cost.payload += int64(len(meta.GetName()) + len(meta.GetNamespace()) + len(meta.GetUID()) + len(meta.GetResourceVersion()))
+			for k, v := range meta.GetLabels() {
+				cost.payload += int64(len(k) + len(v))
+			}
+			for _, owner := range meta.GetOwnerReferences() {
+				cost.payload += int64(len(owner.APIVersion) + len(owner.Kind) + len(owner.Name) + len(owner.UID))
+			}
+		}
+	}
+	return cost
+}
+
+func (m *cacheManager) allCachesLocked() []*informerCache {
+	out := make([]*informerCache, 0, len(m.caches)+len(m.retired))
+	for _, c := range m.caches {
+		out = append(out, c)
+	}
+	for c := range m.retired {
+		out = append(out, c)
+	}
+	return out
+}
+
+// invalidate detaches only matching routes. Existing consumers (for example
+// logs) keep their admitted watch; the refreshed view acquires a fresh cache.
+// Detached caches stop immediately after their last lease, never become idle.
+func (m *cacheManager) invalidate(matches func(cacheKey) bool) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.closed {
+		return &provider.Error{Class: provider.ClassGone, Message: "session closed"}
+	}
+	for key, c := range m.caches {
+		if !matches(key) {
+			continue
+		}
+		delete(m.caches, key)
+		c.mu.Lock()
+		leased := c.leases > 0
+		c.mu.Unlock()
+		if leased {
+			m.retired[c] = struct{}{}
+		} else {
+			c.close()
+		}
+	}
+	m.evictLocked()
+	return nil
 }

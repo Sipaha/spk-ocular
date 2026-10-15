@@ -11,12 +11,21 @@ import { token } from './synth'
 // listed (typed), objects are keyed apart from their titles, there are no
 // events, a terminal has nowhere to run, and views can be read again (F5).
 
-// Other specs leave demo's last view and scope remembered: forget them
+// Start this owned synthetic target with a fresh connection, view and scope.
+// Cancellation intentionally survives frontend reloads, so resetting page state
+// alone cannot isolate a test from a previous cancelled observation.
+// Forget the view and scope
 // (from the page: the API wants its Origin).
 async function forgetDemo(page: Page) {
   await page.goto('/')
   const tok = await token(page)
   const ok = await page.evaluate(async (tok) => {
+    const closed = await fetch('/api/CloseTarget', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${tok}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ provider: 'synthetic', id: 'demo' }),
+    })
+    if (!closed.ok) return false
     for (const key of ['kind', 'scope']) {
       const res = await fetch('/api/SetTargetState', {
         method: 'POST',
@@ -86,7 +95,7 @@ test('Read again: the button and F5 (also from a field) go to the open view', as
   const grid = await openDemo(page)
   const reads = () => grid.getByRole('row').filter({ hasText: 'alpha' }).getByRole('gridcell').last() // Zone is hidden: one zone shown
   const before = Number(await reads().textContent())
-  await page.getByRole('button', { name: /Read again/ }).click()
+  await page.getByRole('button', { name: /^Refresh$/ }).click()
   await expect(reads()).toHaveText(String(before + 1))
   await page.getByRole('textbox', { name: 'Filter rows' }).focus()
   await page.keyboard.press('F5')
@@ -449,4 +458,110 @@ test('object Events Message has one themed hint without an inherited native row 
  await expect(page.getByRole('tooltip')).toHaveText('Failed: '+message)
  await page.mouse.move(0,0);await expect(page.getByRole('tooltip')).toHaveCount(0)
  await expect(dot).toHaveAttribute('title','Failed: '+message)
+})
+
+test('inventory cancellation shows a latched placeholder until explicit retry or reconnect', async ({ page }) => {
+  let viewId = ''
+  let loading = true
+  let successfulOpens = 0
+  await page.route('**/api/OpenView', async route => {
+    const req = route.request().postDataJSON()
+    const response = await route.fetch()
+    const body = await response.json()
+    if (req.provider === 'synthetic' && req.query.kind === 'crates' && !req.query.name && response.ok()) {
+      viewId = body.viewId
+      successfulOpens++
+    }
+    await route.fulfill({response, json: body})
+  })
+  await page.route('**/api/GetRows', async route => {
+    const req = route.request().postDataJSON()
+    const response = await route.fetch()
+    const body = await response.json()
+    if (req.viewId === viewId && loading && response.ok()) {
+      body.status = {state: 'loading', downloadedBytes: 65536}
+      body.upserts = []
+      body.deleted = []
+    }
+    await route.fulfill({response, json: body})
+  })
+  await openDemo(page)
+  const progress = page.locator('[data-list-loading]')
+  await expect(progress).toContainText('Received 64KiB')
+  await expect(progress).toContainText(/[1-9]\d* s/)
+  await page.screenshot({path: join(scratchRoot, 'inventory-loading-progress.png')})
+  await progress.getByRole('button', {name: 'Cancel', exact: true}).click()
+  const cancelled = page.locator('[data-load-cancelled]')
+  await expect(cancelled).toContainText('Request cancelled')
+  await expect(cancelled.getByRole('button', {name: 'Retry', exact: true})).toBeEnabled()
+  const before = successfulOpens
+  const nav = page.getByRole('navigation', {name: 'resources'})
+  await nav.getByRole('button', {name: 'Services', exact: true}).click()
+  await nav.getByRole('button', {name: 'Crates', exact: true}).click()
+  await expect(cancelled).toBeVisible()
+  expect(successfulOpens).toBe(before)
+  // The app owns the latch too: reconstructing the entire frontend keeps it.
+  await page.reload()
+  await expect(cancelled).toBeVisible()
+  expect(successfulOpens).toBe(before)
+  await page.screenshot({path: join(scratchRoot, 'inventory-cancelled-placeholder.png')})
+  loading = false
+  await cancelled.getByRole('button', {name: 'Retry', exact: true}).click()
+  await expect(cancelled).toHaveCount(0)
+  await expect(page.getByRole('grid', {name: 'resources'}).getByRole('row')).not.toHaveCount(1)
+  expect(successfulOpens).toBe(before + 1)
+  loading = true
+  await page.locator('[data-resync]').click()
+  await expect(progress).toBeVisible()
+  await progress.getByRole('button', {name: 'Cancel', exact: true}).click()
+  await expect(cancelled.getByRole('button', {name: 'Retry', exact: true})).toBeEnabled()
+  await page.getByRole('button', {name: 'Connections', exact: true}).click()
+  await page.getByRole('button', {name: /^demo\b/}).and(page.locator('.connection-choice')).click({button: 'right'})
+  await page.getByRole('menuitem', {name: 'Disconnect', exact: true}).click()
+  await expect(page.getByRole('button', {name: 'Connect', exact: true})).toBeVisible()
+  loading = false
+  await connectSelected(page)
+  await expect(cancelled).toHaveCount(0)
+  await expect(page.getByRole('grid', {name: 'resources'}).getByRole('row')).not.toHaveCount(1)
+})
+
+test('cancelling a refresh conceals and retains the details panel without changing its resize parent', async ({page}) => {
+  const grid = await openDemo(page)
+  await grid.getByRole('gridcell', {name: 'alpha', exact: true}).dblclick()
+  const drawer = page.locator('[data-resource-drawer]')
+  await expect(drawer).toBeVisible()
+  const element = await drawer.elementHandle()
+  const width = (await drawer.boundingBox())!.width
+  let refreshId = ''
+  let loading = true
+  await page.route('**/api/ResyncView', async route => {
+    refreshId = route.request().postDataJSON().viewId
+    await route.continue()
+  })
+  await page.route('**/api/GetRows', async route => {
+    const response = await route.fetch()
+    const body = await response.json()
+    if (route.request().postDataJSON().viewId === refreshId && loading && response.ok()) {
+      body.status = {...body.status, state: 'loading', downloadedBytes: 131072}
+    }
+    await route.fulfill({response, json: body})
+  })
+  await page.locator('[data-resync]').click()
+  const progress = page.locator('[data-list-loading]')
+  await expect(progress).toContainText('Received 128KiB')
+  await progress.getByRole('button', {name: 'Cancel', exact: true}).click()
+  const placeholder = page.locator('[data-load-cancelled]')
+  await expect(placeholder.getByRole('button', {name: 'Retry', exact: true})).toBeEnabled()
+  await expect(drawer).toHaveAttribute('inert', '')
+  await expect(drawer).toBeHidden()
+  await page.keyboard.press('Escape')
+  expect(await element!.evaluate(el => el.isConnected)).toBe(true)
+  expect(await drawer.evaluate(el => el.getBoundingClientRect().width)).toBeCloseTo(width, 0)
+  expect(await drawer.evaluate(el => el.parentElement!.clientWidth)).toBeGreaterThan(width)
+  loading = false
+  await placeholder.getByRole('button', {name: 'Retry', exact: true}).click()
+  await expect(placeholder).toHaveCount(0)
+  await expect(drawer).toBeVisible()
+  expect(await element!.evaluate(el => el.isConnected)).toBe(true)
+  expect((await drawer.boundingBox())!.width).toBeCloseTo(width, 0)
 })

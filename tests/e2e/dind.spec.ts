@@ -119,7 +119,7 @@ test('a stop and a start on the daemon show live; Read again keeps the rows', as
   // Read again reaches the provider and reads the containers anew (a list)
   const lists = (await stats(page)).feed_lists
   const resync = page.waitForResponse((r) => r.url().endsWith('/api/ResyncView'))
-  await page.getByRole('button', { name: /Read again/ }).click()
+  await page.getByRole('button', { name: /^Refresh$/ }).click()
   expect((await resync).status()).toBe(200)
   await expect.poll(async () => (await stats(page)).feed_lists).toBeGreaterThan(lists)
   await expect(idle).toContainText('running')

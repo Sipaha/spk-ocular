@@ -1,7 +1,7 @@
 import { act, fireEvent, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { useState } from 'react'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import type { ScopeSel } from '../api/types'
 import { holdEdits, keepEditing, leaveAsked, mayLeave } from '../edit/guard'
 import { parseScope } from '../scopes'
@@ -97,4 +97,20 @@ describe('multiple scopes', () => {
     expect(parseScope({ mode: 'some', names: [''] })).toBeNull()
     expect(parseScope({ mode: 'unexpected' })).toBeNull()
   })
+})
+
+it('refresh in the scope search keeps the query, selected namespace and popup', async () => {
+  const change = vi.fn(), refresh = vi.fn()
+  render(<ScopeSelect value={{mode:'one',name:'team-a'}} names={['team-a','team-b']} memory={createSelectMemory()} label="Namespace" allLabel="All namespaces" onChange={change} searchAction={<button onClick={refresh}>Refresh namespaces</button>} />)
+  await userEvent.click(button())
+  await userEvent.type(screen.getByRole('combobox'),'team-')
+  await userEvent.tab()
+  expect(screen.getByRole('button',{name:'Refresh namespaces'})).toHaveFocus()
+  await userEvent.keyboard('{Enter}')
+  expect(refresh).toHaveBeenCalledTimes(1)
+  expect(change).not.toHaveBeenCalled()
+  expect(screen.getByRole('combobox')).toHaveValue('team-')
+  expect(screen.getByRole('listbox')).toBeVisible()
+  await userEvent.tab({shift:true})
+  expect(screen.getByRole('combobox')).toHaveFocus()
 })

@@ -20,7 +20,7 @@ import (
 )
 
 // In the background the idle caches are kept (switching back is instant,
-// no LIST); only maxIdle bounds them. Back in the foreground, the grace
+// no LIST); idle retention budgets still apply. Back in the foreground, the grace
 // counts from the return.
 func TestBackgroundKeepsIdleCaches(t *testing.T) {
 	client := fakeClient(pod("a", "p", "u1"))

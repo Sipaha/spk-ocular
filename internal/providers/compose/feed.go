@@ -197,13 +197,17 @@ type feed struct {
 	// published: a first snapshot was reconciled with the events read
 	// during it and the stream was alive (the first Ready); later epochs
 	// replace objs without unpublishing them.
-	published  bool
-	live       bool      // reconciled and the events stream is alive
-	failed     error     // the last failure while not live
-	broken     bool      // failed after a snapshot, for staleAfter or longer
-	staleArmed bool      // the staleAfter timer of this outage runs
-	liveGen    uint64    // bumped on every transition to live
-	dirtyNow   *dirtySet // the running epoch's dirty set (touch)
+	published      bool
+	live           bool  // reconciled and the events stream is alive
+	failed         error // the last failure while not live
+	broken         bool  // failed after a snapshot, for staleAfter or longer
+	staleArmed     bool  // the staleAfter timer of this outage runs
+	progress       *provider.DownloadCounter
+	freshTarget    uint64
+	completedEpoch uint64
+	failedEpoch    uint64
+	liveGen        uint64    // bumped on every transition to live
+	dirtyNow       *dirtySet // the running epoch's dirty set (touch)
 	// unresolved: keys whose last inspect failed (not 404); their last
 	// known objects stay, the feed is stale until they are read.
 	unresolved map[string]error
@@ -347,6 +351,8 @@ func (f *feed) fail(err error) {
 	defer f.mu.Unlock()
 	f.live = false
 	f.failed = err
+	f.failedEpoch = uint64(f.epochs.Load())
+	f.notifyLocked()
 	if !f.published || f.broken {
 		f.notifyLocked() // the error or its message changed
 		return
@@ -371,6 +377,13 @@ func (f *feed) epoch() error {
 	f.epochs.Add(1)
 	ctx, cancel := context.WithCancel(f.ctx)
 	defer cancel()
+	f.mu.Lock()
+	if f.progress == nil || f.published {
+		f.progress = &provider.DownloadCounter{}
+	}
+	progress := f.progress
+	f.mu.Unlock()
+	ctx = progress.Context(ctx)
 	info, err := f.s.cl.Info(ctx)
 	if err != nil {
 		return err
@@ -622,10 +635,14 @@ func (f *feed) applyResults(rs []inspectResult) (tooMany bool) {
 
 func (f *feed) setLive() {
 	f.mu.Lock()
+	if f.progress != nil {
+		f.progress.Complete()
+	}
 	defer f.mu.Unlock()
 	f.live, f.failed, f.broken, f.staleArmed = true, nil, false, false
 	f.published = true
 	f.liveGen++
+	f.completedEpoch = uint64(f.epochs.Load())
 	f.notifyLocked()
 }
 
@@ -750,4 +767,40 @@ func firstErr(m map[string]error) error {
 		return err
 	}
 	return nil
+}
+
+// queueFresh coalesces refreshes of the same shared feed, including requests
+// arriving while the new snapshot is still being reconciled.
+func (f *feed) queueFresh() uint64 {
+	f.mu.Lock()
+	if f.freshTarget > f.completedEpoch && f.freshTarget > f.failedEpoch {
+		target := f.freshTarget
+		f.mu.Unlock()
+		return target
+	}
+	target := uint64(f.epochs.Load()) + 1
+	f.freshTarget = target
+	f.mu.Unlock()
+	f.requestResync()
+	return target
+}
+func (f *feed) waitFresh(ctx context.Context, target uint64) error {
+	for {
+		f.mu.Lock()
+		completed, failed, err, ch := f.completedEpoch, f.failedEpoch, f.failed, f.changed
+		f.mu.Unlock()
+		if failed >= target && err != nil {
+			return err
+		}
+		if completed >= target {
+			return nil
+		}
+		select {
+		case <-ch:
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-f.done:
+			return &provider.Error{Class: provider.ClassGone, Message: "session closed"}
+		}
+	}
 }

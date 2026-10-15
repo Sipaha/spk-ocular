@@ -13,7 +13,7 @@ async function openSecurity(page:Page) {
  await nav.getByRole('textbox',{name:'Filter resources'}).fill('')
  const workspace=page.locator('.security-workspace')
  const zone=workspace.getByRole('textbox',{name:'Zone',exact:true});await zone.fill('blue');await zone.press('Enter')
- await expect(workspace.getByRole('button',{name:'Check again',exact:true})).toBeEnabled()
+ await expect(workspace.getByRole('button',{name:'Refresh',exact:true})).toBeEnabled()
  return workspace
 }
 
@@ -47,7 +47,7 @@ test('security configuration, missing scanner guidance, filters and guarded reso
  expect(box.width).toBe(28);expect(box.height).toBe(28);expect(svg.width).toBe(20);expect(svg.height).toBe(20)
  expect(Math.abs(svg.x+svg.width/2-box.x-box.width/2)).toBeLessThanOrEqual(0.5)
  expect(Math.abs(svg.y+svg.height/2-box.y-box.height/2)).toBeLessThanOrEqual(0.5)
- await workspace.getByRole('button',{name:'Check again',exact:true}).click();await expect(workspace.getByRole('button',{name:'Check again',exact:true})).toBeEnabled()
+ await workspace.getByRole('button',{name:'Refresh',exact:true}).click();await expect(workspace.getByRole('button',{name:'Refresh',exact:true})).toBeEnabled()
  await expect(drawer.locator('.cm-content')).toContainText('held security draft')
  await page.screenshot({path:join(scratchRoot,'security-held-draft.png')})
 })
@@ -66,14 +66,14 @@ test('security CVE evidence, source date, access states and error recovery',asyn
  await page.screenshot({path:join(scratchRoot,'security-cve-evidence.png')})
  for(const [state,text] of [['missing','Install Trivy Operator'],['empty','No reports'],['denied','get/list access'],['error','could not be read'],['partial','coverage is incomplete'],['not-requested','Select at least one namespace']]) {
   value={...snapshot(state),findings:[],reports:0}
-  await workspace.getByRole('button',{name:'Check again',exact:true}).click()
-  await expect(workspace.getByRole('button',{name:'Check again',exact:true})).toBeEnabled()
+  await workspace.getByRole('button',{name:'Refresh',exact:true}).click()
+  await expect(workspace.getByRole('button',{name:'Refresh',exact:true})).toBeEnabled()
   await expect(workspace.locator('[data-security-cve-status]')).toContainText(text)
   if(state==='denied') await expect(workspace.getByRole('link',{name:'Trivy Operator installation'})).toHaveCount(0)
  }
- fail=true;await workspace.getByRole('button',{name:'Check again',exact:true}).click()
+ fail=true;await workspace.getByRole('button',{name:'Refresh',exact:true}).click()
  await expect(workspace.getByRole('alert')).toContainText('Previous snapshot; refresh failed')
- fail=false;value=snapshot();await workspace.getByRole('button',{name:'Check again',exact:true}).click()
+ fail=false;value=snapshot();await workspace.getByRole('button',{name:'Refresh',exact:true}).click()
  await expect(workspace.getByRole('alert')).toHaveCount(0)
  await expect(workspace.locator('[data-row-id]')).toHaveCount(1)
  await page.unrouteAll({behavior:'wait'})

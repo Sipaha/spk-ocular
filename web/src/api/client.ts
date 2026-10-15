@@ -48,10 +48,11 @@ export interface Client {
   refreshKinds(provider: string, target: string): Promise<void>
   /** Permission problems come back in ScopesView.error, not as a rejection. */
   listScopes(provider: string, target: string): Promise<ScopesView>
-  openView(provider: string, target: string, query: Query): Promise<ViewInfo>
+  openView(provider: string, target: string, query: Query, signal?: AbortSignal, connection?: string, retry?: boolean, requestId?: string): Promise<ViewInfo>
   /** Changes after cursor `since` (0: full snapshot); rejects with code "gone" for a closed view. */
   getRows(viewId: string, since: number): Promise<Page>
   closeView(viewId: string): Promise<void>
+  cancelViewLoading(provider: string, target: string, query: Query, connection: string, viewId: string | null, requestId: string): Promise<void>
   /** Asks the view's own session to read its sources again (ViewInfo.resync); "gone" for a closed view. */
   resyncView(viewId: string): Promise<void>
   /** Renews leases; returns the ids that are gone. */
@@ -191,9 +192,10 @@ export const httpClient: Client = {
   listKinds: (provider, target) => post('ListKinds', { provider, target }),
   refreshKinds: (provider, target) => done(post('RefreshKinds', { provider, target })),
   listScopes: (provider, target) => post('ListScopes', { provider, target }),
-  openView: (provider, target, query) => post('OpenView', { provider, target, query }),
+  openView: (provider, target, query, signal, connection, retry, requestId) => post('OpenView', { provider, target, query, connection, retry, requestId }, signal),
   getRows: (viewId, since) => post('GetRows', { viewId, since }),
   closeView: (viewId) => done(post('CloseView', { viewId })),
+  cancelViewLoading: (provider, target, query, connection, viewId, requestId) => done(post('CancelViewLoading', {provider, target, query, connection, viewId, requestId})),
   resyncView: (viewId) => done(post('ResyncView', { viewId })),
   touchViews: (viewIds) => post('TouchViews', { viewIds }),
   compareResources: (req,signal) => post('CompareResources',req,signal),
@@ -287,7 +289,10 @@ async function wcall<T>(method: string, ...args: unknown[]): Promise<T> {
 /** A call the page may abandon: an abort cancels it in Go (the method's context). */
 async function wcallAbortable<T>(signal: AbortSignal | undefined, method: string, ...args: unknown[]): Promise<T> {
   if (signal?.aborted) throw new DOMException('aborted', 'AbortError')
-  const p = Call.ByName(FQN + method, ...args)
+  return awaitWailsCall<T>(signal, Call.ByName(FQN + method, ...args))
+}
+
+async function awaitWailsCall<T>(signal: AbortSignal | undefined, p: ReturnType<typeof Call.ByName>): Promise<T> {
   // An abort answers at once, whenever the runtime settles the call.
   let onAbort = () => {}
   const aborted = new Promise<never>((_, reject) => {
@@ -327,9 +332,15 @@ export const wailsClient: Client = {
   listKinds: (provider, target) => wcall('ListKinds', provider, target),
   refreshKinds: (provider, target) => wcall('RefreshKinds', provider, target),
   listScopes: (provider, target) => wcall('ListScopes', provider, target),
-  openView: (provider, target, query) => wcall('OpenView', { provider, target, query }),
+  openView: (provider, target, query, signal, connection, retry, requestId) => {
+    if (signal?.aborted) return Promise.reject(new DOMException('aborted', 'AbortError'))
+    const call = Call.ByName(FQN + 'OpenView', { provider, target, query, connection, retry, requestId })
+    void call.then(info => { if (signal?.aborted) void wcall('CloseView', (info as ViewInfo).viewId).catch(() => {}) }).catch(() => {})
+    return awaitWailsCall<ViewInfo>(signal, call)
+  },
   getRows: (viewId, since) => wcall('GetRows', viewId, since),
   closeView: (viewId) => wcall('CloseView', viewId),
+  cancelViewLoading: (provider, target, query, connection, viewId, requestId) => wcall('CancelViewLoading', {provider, target, query, connection, viewId, requestId}),
   resyncView: (viewId) => wcall('ResyncView', viewId),
   touchViews: (viewIds) => wcall('TouchViews', viewIds),
   compareResources: (req,signal) => wcallAbortable(signal,'CompareResources',req),

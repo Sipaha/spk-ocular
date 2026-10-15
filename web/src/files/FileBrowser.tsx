@@ -1,3 +1,4 @@
+import { RefreshButton } from '../components/RefreshButton'
 import { lazy, Suspense, useEffect, useRef, useState, useCallback } from 'react'
 import { createPortal } from 'react-dom'
 import { LanguageDescription } from '@codemirror/language'
@@ -228,7 +229,7 @@ export default function FileBrowser({ client, subject, selectedInstance, onClose
               value={address} onChange={event => setAddress(event.target.value)} />
             <button className={button} disabled={initializing || writing}>{t('files.go')}</button>
           </form>
-          <button className={button} disabled={initializing || writing || !!directories[directory]?.loading} onClick={() => refreshDirectory(directory)}>{t('files.refresh')}</button>
+          <RefreshButton className="h-[26px] w-[26px]" busy={!!directories[directory]?.refreshing} disabled={initializing || writing || !!directories[directory]?.loading} onClick={() => refreshDirectory(directory)} />
         </div>
         {error && <div role="alert" data-file-error className="absolute right-3 bottom-[39px] z-30 flex max-w-[min(600px,calc(100%-24px))] items-start gap-3 border border-danger/50 bg-panel px-3 py-2 text-sm text-danger shadow-lg">
           <p className="max-h-40 min-w-0 overflow-auto whitespace-pre-wrap break-words">{error}</p>

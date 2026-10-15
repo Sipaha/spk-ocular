@@ -118,6 +118,13 @@ func (v *View) del(id string, at uint64) {
 	v.tombs[id] = at
 }
 
+// Status copies only observation status, without projecting resource rows.
+func (v *View) Status() provider.ViewStatus {
+	v.mu.Lock()
+	defer v.mu.Unlock()
+	return v.status.Clone()
+}
+
 // Since returns everything that changed after cursor since, or a full
 // snapshot (Reset) when since is 0, older than retained history, or not
 // from this view's history at all (ahead of its version).

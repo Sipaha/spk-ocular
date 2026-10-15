@@ -184,6 +184,7 @@ func (s *Service) closeSessionWhyLocked(key string, why *core.Message) {
 		c.cancel() // their work ends: gone
 	}
 	s.views.CloseOwner(e.owner)
+	s.loading.forgetOwner(e.owner)
 	s.streams.CloseOwnerWhy(e.owner, why)
 	e.sess.Close()
 	s.emitTargetsChanged(e.provider)
@@ -404,6 +405,9 @@ func (s *Service) RefreshKinds(ctx context.Context, providerID, target string) e
 	if err != nil {
 		return err
 	}
+	if c, ok := sess.(interface{ RefreshKindsWait(context.Context) error }); ok {
+		return c.RefreshKindsWait(ctx)
+	}
 	if c, ok := sess.(provider.Cataloger); ok {
 		c.RefreshKinds()
 	}
@@ -415,7 +419,12 @@ func (s *Service) ListScopes(ctx context.Context, providerID, target string) (Sc
 	if err != nil {
 		return ScopesView{}, err
 	}
-	scopes, err := sess.Scopes(ctx)
+	var scopes []core.Scope
+	if check, ok := sess.(provider.ScopeChecker); ok && sess.ScopeKind() != "" {
+		err = check.CheckScopes(ctx)
+	} else {
+		scopes, err = sess.Scopes(ctx)
+	}
 	if err != nil {
 		return ScopesView{Scopes: []core.Scope{}, Error: fromProvider(err)}, nil
 	}
@@ -433,6 +442,13 @@ func (s *Service) OpenView(ctx context.Context, req OpenViewRequest) (ViewInfo, 
 	if err != nil {
 		return ViewInfo{}, err
 	}
+	s.loading.prune(s.views.Exists)
+	key := viewLoadingKey(e.owner, req)
+	ctx, finish, err := s.loading.begin(ctx, key, req.Retry, req.RequestID)
+	if err != nil {
+		return ViewInfo{}, err
+	}
+	defer finish()
 	var kind *core.KindDescriptor
 	for _, k := range e.sess.Kinds() {
 		if k.ID == req.Query.Kind {
@@ -454,12 +470,20 @@ func (s *Service) OpenView(ctx context.Context, req OpenViewRequest) (ViewInfo, 
 		}
 		kind, q = &desc, bound
 	}
+	if ctx.Err() != nil {
+		return ViewInfo{}, ctx.Err()
+	}
 	id, err := s.views.Open(e.owner, e.sess, q)
 	if errors.Is(err, views.ErrGone) {
 		return ViewInfo{}, coded(CodeGone, errors.New("the session was replaced while opening; retry"))
 	}
 	if err != nil {
 		return ViewInfo{}, fromProvider(err)
+	}
+	s.loading.bind(ctx, id)
+	if ctx.Err() != nil {
+		_ = s.CloseView(ctx, id)
+		return ViewInfo{}, ctx.Err()
 	}
 	_, resync := e.sess.(provider.Resyncer)
 	return ViewInfo{ViewID: id, Kind: *kind, Resync: resync}, nil
@@ -475,6 +499,7 @@ func (s *Service) GetRows(_ context.Context, viewID string, since uint64) (views
 
 func (s *Service) CloseView(_ context.Context, viewID string) error {
 	s.views.Close(viewID)
+	s.loading.closeView(viewID)
 	s.dropMetricGate(viewID)
 	return nil
 }
@@ -482,8 +507,8 @@ func (s *Service) CloseView(_ context.Context, viewID string) error {
 // ResyncView resolves the view through its owner — the session incarnation
 // that opened it — so a view of a retired session never reaches the
 // current one.
-func (s *Service) ResyncView(_ context.Context, viewID string) error {
-	owner, q, _, err := s.views.Info(viewID)
+func (s *Service) ResyncView(ctx context.Context, viewID string) error {
+	owner, err := s.views.Owner(viewID)
 	if errors.Is(err, views.ErrGone) {
 		return coded(CodeGone, err)
 	}
@@ -491,11 +516,14 @@ func (s *Service) ResyncView(_ context.Context, viewID string) error {
 	if e == nil {
 		return coded(CodeGone, errors.New("session closed"))
 	}
-	r, ok := e.sess.(provider.Resyncer)
+	_, ok := e.sess.(provider.Resyncer)
 	if !ok {
 		return coded(CodeUnsupported, errors.New("this target's views are not read again on request"))
 	}
-	if err := r.Resync(q); err != nil {
+	if err := s.views.Refresh(ctx, viewID); err != nil {
+		if errors.Is(err, views.ErrGone) || !s.views.Exists(viewID) {
+			return coded(CodeGone, err)
+		}
 		return fromProvider(err)
 	}
 	return nil

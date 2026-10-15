@@ -1,3 +1,4 @@
+import { RefreshButton } from '../components/RefreshButton'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import type { Client } from '../api/client'
@@ -123,7 +124,8 @@ export function HelmWorkspace({ client, target, scope, scopePicker, initialTab, 
       {tab !== 'settings' && <span className="resource-count" aria-label="count">{busy && !tableRows.length ? '…' : tableRows.length}</span>}
       <Select label={t('helm.section')} value={tab} options={(['releases', 'charts', 'settings'] as const).map(v => ({ value: v, label: t(`helm.${v}`) }))} onChange={v => navigate(v as typeof tab)} disabled={busy} className="min-w-0 max-w-56" />
       {tab !== 'settings' && !operation && (tab === 'releases' ? scopePicker : <Select value={repository} options={[{ value: '', label: t('helm.allRepositories') }, ...settings.repositories.map(r => ({ value: r.name, label: r.name }))]} label={t('helm.repository')} onChange={v => { setRepository(v); setChart(null); setCharts([]); setBusy(true); setError('') }} disabled={busy} />)}
-      {busy ? <button className={button} onClick={() => controller.current?.abort()}>{t('helm.stop')}</button> : <button className={button} onClick={() => { setBusy(tab !== 'settings'); setError(''); setRefresh(v => v + 1) }} disabled={!!operation || dirtySettings}>{t('helm.refresh')}</button>}
+      <RefreshButton busy={busy} onClick={() => { setBusy(tab !== 'settings'); setError(''); setRefresh(v => v + 1) }} disabled={!!operation || dirtySettings} />
+      {busy && <button className={button} onClick={() => controller.current?.abort()}>{t('helm.stop')}</button>}
       {tab !== 'settings' && !operation && <label className="resource-filter field-shell"><SearchIcon className="h-3.5 w-3.5 text-fg-subtle" /><input data-primary-filter className="w-full bg-transparent outline-none placeholder:text-fg-subtle" aria-label={t('helm.search')} placeholder={t('table.filter')} value={filter} onChange={e => setFilter(e.target.value)} spellCheck={false} /></label>}
     </header>
     {error && <div role="alert" className="border-b border-line px-3 py-2 text-danger">{error}</div>}
