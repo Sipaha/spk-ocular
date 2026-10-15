@@ -410,7 +410,16 @@ test('table value hints appear only on overflow and use neutral theme colors',as
 })
 
 test('resource navigation aligns section and subgroup text with children and centers chevrons',async({page})=>{
- await page.route('**/api/ListKinds',async route=>{const response=await route.fetch(),body=await response.json();for(const kind of body.kinds)if(['services','workloads'].includes(kind.id))kind.subgroup='Nested example';await route.fulfill({response,json:body})})
+  await page.route('**/api/ListKinds',async route=>{
+    const response=await route.fetch()
+    // Setup closes the previous session: its in-flight request may fail.
+    // Keep that response intact; only successful catalogs get fixture groups.
+    if(!response.ok()){await route.fulfill({response});return}
+    const body=await response.json()
+    expect(Array.isArray(body.kinds)).toBe(true)
+    for(const kind of body.kinds)if(['services','workloads'].includes(kind.id))kind.subgroup='Nested example'
+    await route.fulfill({response,json:body})
+  })
  await openDemo(page)
  const nav=page.getByRole('navigation',{name:'resources'}),section=nav.getByRole('region',{name:'Synthetic',exact:true}),heading=section.locator('.nav-group-heading'),group=section.getByRole('group',{name:'Nested example',exact:true}),subheading=group.locator('button[aria-expanded]')
  const align=async(title:import('@playwright/test').Locator,child:import('@playwright/test').Locator)=>{
