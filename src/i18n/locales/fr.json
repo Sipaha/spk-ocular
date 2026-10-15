@@ -283,7 +283,7 @@
   ],
   "logHistoryText": "Téléchargez tout l’historique des logs conservé par la source, indépendamment des filtres ou des limites du visualiseur. L’écriture en flux affiche la progression et permet l’annulation ; rétention, limites d’export et lectures incomplètes sont signalées. La copie utilise toujours le tampon filtré du visualiseur.",
   "securityDemo": "Application réelle · résultats de sécurité simulés",
-  "clusterTitle": "Pensé pour ménager votre cluster.",
+  "clusterTitle": "Préserve les ressources de votre cluster et de votre ordinateur.",
   "clusterText": "Ocular charge le type de ressource et les namespaces choisis. Il ne collecte pas en arrière-plan toutes les ressources et leurs descriptions complètes.",
   "clusterPoints": [
     [
@@ -299,21 +299,21 @@
       "Actualisez une liste, suivez la durée et les données reçues, ou annulez la requête. Le graphe du cluster ne se charge qu’à votre demande."
     ]
   ],
-  "measurementTitle": "Une liste complète de {resources} Pods.",
-  "measurementText": "Mesuré avec une API Kubernetes HTTP simulée localement et une version de production de SPK Ocular {version}. Le temps de chargement est la médiane de trois nouvelles sessions de l’application.",
+  "measurementTitle": "De grandes listes. Une charge maîtrisée.",
+  "measurementText": "Une liste complète de {resources} Pods, avec recherche et tri locaux. Des requêtes limitées, un cache partagé et un chargement explicite vous permettent de maîtriser la charge.",
   "measurementLoad": "Connexion → liste complète des ressources",
-  "measurementPages": "Réponses Pod LIST paginées par chargement",
-  "measurementPeak": "Pic PSS observé · application + Chromium",
   "measurementSeconds": "s",
   "measurementMiB": "MiB",
   "measurementWarm": "Revenir à la liste de Pods en cache n’a déclenché aucune requête Pod LIST supplémentaire.",
   "measurementConditions": "Conditions et mesures brutes",
-  "measurementBoundary": "Mode navigateur avec une instance dédiée de Chromium sans interface sous Linux, sans garantie de performances pour une fenêtre native ou un cluster réel. Le PSS comprend les deux arbres de processus ; l’API HTTP simulée et l’outil de mesure sont exclus. Le pic PSS est le maximum de {runs} sessions valides de la version actuelle.",
+  "measurementBoundary": "Mode navigateur sous Linux avec une instance dédiée de Chromium sans interface. Le PSS inclut les processus de l’application et de Chromium ; l’API HTTP de test et l’outil de mesure sont exclus. Le pic observé sur {runs} sessions valides était de 558 MiB.",
   "measurementMethod": "Les pics mémoire ont été échantillonnés environ toutes les {peakInterval} secondes. Le test de stabilité comprend {warmup} minutes de préchauffage, {loaded} minutes d’observation avec la liste chargée, puis un changement normal de type de ressource. La validation exige {confirmation} secondes de confirmation du plateau, puis {control} minutes de contrôle distinctes. Sans récupération mémoire forcée ni vidage des caches.",
   "measurementRaw": "Échantillons mémoire bruts",
   "measurementSummary": "Résumé des mesures",
-  "measurementCPU": "Moins de temps CPU côté Go",
-  "measurementCPUDelta": "{before} → {after} secondes CPU au premier chargement.",
-  "measurementCPUContext": "Comparaison de trois paires alternées de nouvelles sessions, avant et après le changement du décodeur JSON dans deux versions de production locales. Données et limites de requêtes identiques ; ce n’est ni une comparaison avec une version publiée antérieure ni une promesse de réduction équivalente du temps d’attente.",
-  "measurementStability": "Le test distinct de stabilité mémoire n’a pas réussi : une remontée de {rebound} MiB a dépassé la limite de {limit} MiB. Les résultats complets sont accessibles ci-dessous."
+  "measurementStability": "Le test distinct de stabilité mémoire n’a pas réussi : une remontée de {rebound} MiB a dépassé la limite de {limit} MiB. Les résultats complets sont accessibles ci-dessous.",
+  "measurementResources": "Ressources dans la liste complète",
+  "measurementRate": "Budget de lecture · requêtes/s",
+  "measurementWarmRequests": "Requêtes Pod LIST supplémentaires au retour",
+  "measurementSetup": "Mesuré avec SPK Ocular {version} sur une API HTTP Kubernetes de test locale. Le premier chargement est la médiane de 3 nouvelles sessions ; 100 pages de 100 Pods constituent la liste complète.",
+  "measurementBudget": "Par connexion : 10 requêtes de lecture/s avec une rafale de 20, et au plus 4 réponses de durée limitée en cours."
 }

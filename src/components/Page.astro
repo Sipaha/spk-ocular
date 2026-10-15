@@ -62,17 +62,17 @@ const fill = (text: string, values: Record<string,string>) => text.replace(/\{(\
       <div class="local-points">{d.clusterPoints.map(([title,text])=><article><h3>{title}</h3><p>{text}</p></article>)}</div>
     </section>
     <section id="measurements" class="container section measurement-section" aria-labelledby="measurement-title">
-      <div class="section-head"><h2 id="measurement-title">{fill(d.measurementTitle,{resources:fmt(m.resources,0)})}</h2><p>{fill(d.measurementText,{version:m.version})}</p></div>
+      <div class="section-head"><h2 id="measurement-title">{d.measurementTitle}</h2><p>{fill(d.measurementText,{resources:fmt(m.resources,0)})}</p></div>
       <dl class="measurement-metrics">
         <div><dt>{d.measurementLoad}</dt><dd>{fmt(m.coldMedianSeconds,1)} <span>{d.measurementSeconds}</span></dd></div>
-        <div><dt>{d.measurementPages}</dt><dd>{fmt(m.pagesPerLoad,0)}</dd></div>
-        <div><dt>{d.measurementCPU}</dt><dd>−{fmt(m.cpuReductionPercent,0)}<span>%</span></dd></div>
-        <div><dt>{d.measurementPeak}</dt><dd>{fmt(m.sampledPeakPSSMiB,0)} <span>{d.measurementMiB}</span></dd></div>
+        <div><dt>{d.measurementResources}</dt><dd>{fmt(m.resources,0)}</dd></div>
+        <div><dt>{d.measurementRate}</dt><dd>{fmt(m.readQPS,0)}</dd></div>
+        <div><dt>{d.measurementWarmRequests}</dt><dd>{fmt(m.warmAdditionalLists,0)}</dd></div>
       </dl>
-      <p class="measurement-note">{fill(d.measurementCPUDelta,{before:fmt(m.beforeCPUSeconds,2),after:fmt(m.afterCPUSeconds,2)})} {d.measurementWarm}</p>
-      <p class="measurement-note">{fill(d.measurementStability,{rebound:fmt(m.memoryReboundMiB,2),limit:fmt(m.memoryReboundLimitMiB,0)})}</p>
+      <p class="measurement-note">{d.measurementWarm}</p>
       <details class="measurement-conditions"><summary>{d.measurementConditions}</summary><div>
-        <p>{d.measurementCPUContext}</p><p>{fill(d.measurementBoundary,{runs:fmt(m.validCurrentSessions,0)})}</p>
+        <p>{d.measurementBudget}</p><p>{fill(d.measurementSetup,{version:m.version})}</p><p>{fill(d.measurementBoundary,{runs:fmt(m.validCurrentSessions,0)})}</p>
+        <p>{fill(d.measurementStability,{rebound:fmt(m.memoryReboundMiB,2),limit:fmt(m.memoryReboundLimitMiB,0)})}</p>
         <p>{fill(d.measurementMethod,{peakInterval:fmt(m.peakSamplingSeconds,1),warmup:fmt(m.warmupMinutes,0),loaded:fmt(m.loadedObservationMinutes,0),confirmation:fmt(m.confirmationSeconds,0),control:fmt(m.controlMinutes,0)})}</p>
         <p><time datetime={m.dateISO}>{m.dateDisplay}</time> · <a href={REPO+'/blob/master/docs/performance.md'}>{d.measurementSummary} ↗</a> · <a href={REPO+'/blob/master/docs/performance-data/2026-10-16-memory.csv'}>{d.measurementRaw} ↗</a></p>
       </div></details>

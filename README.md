@@ -227,19 +227,20 @@ lists; graph admission is explicit. This copy does not claim zero cluster impact
 universal memory use or completed production-scale certification. The current long-soak
 stability result is NOT ACCEPTED in the application measurement report.
 
-## Measured inventory section
+## Large-inventory evidence
 
-All eight locales render verified values from `src/data/measurements.json`.
-The 16.10.2026 local synthetic fixture contains 10,000 selected Pods: 100
-100-object LIST pages and a median 9.8-second initial load. Three alternating
-fresh-session pairs measured about 46% less Go backend CPU after the JSON
-decoder change in two local production 1.7.0 builds. This is not a comparison
-with a previous published release or an equivalent wall-time speedup.
-The sampled peak PSS, rounded to 558 MiB, is the maximum across six valid
-current-build sessions and includes application plus headless Chromium trees;
-the HTTP fixture and harness are excluded. The separate long memory test's
-NOT ACCEPTED result (+10.08 MiB rebound against 10 MiB) is visible beside the
-metrics, rather than hidden in expanded conditions. Conditions disclose browser
-mode, synthetic data, sampling and the plateau-first protocol. Links to the
-measurement report and raw CSV are benchmark evidence, not product-guide links.
-Do not relabel the failed criterion or claim universal/native-window memory use.
+All eight locales emphasize care for cluster and computer resources through
+selected-scope reads, shared compact caches, bounded requests and explicit graph
+loading. The evidence section shows a complete 10,000-Pod list, a median 9.8-second
+initial load, the 10 QPS read limit and zero additional Pod LIST requests when
+returning to the warm list. The rate is a configured read budget, not measured
+throughput. It is not a whole-process memory cap.
+
+The internal CPU comparison against an unpublished build is intentionally absent
+from product copy. Existing application benchmark reports remain unchanged.
+Expanded conditions retain the local HTTP fixture, browser-mode scope, memory
+sampling method and failed stability criterion (NOT ACCEPTED, 10.08 MiB rebound
+against 10 MiB). The site does not promise stable total memory or universal
+performance. Public wording describes the verified mechanisms and scale without
+statements about absence of production testing. Measurement inputs live in
+`src/data/measurements.json`; source reports and raw evidence remain linked.

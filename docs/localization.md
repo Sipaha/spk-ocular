@@ -111,3 +111,10 @@ retention limits, All Namespaces admission and user refresh/cancel controls. It
 contains no unmeasured performance statistic or no-impact guarantee. Kubernetes
 and Docker captions explicitly identify simulated API data from isolated HTTP
 fixtures; Helm and Security remain explicitly synthetic.
+
+The large-inventory section emphasizes the released resource controls and the
+complete 10,000-Pod fixture result. It does not compare unpublished builds or
+state that production testing is absent. The 10 requests/s value is a per-session
+read budget with burst 20 and four finite-response slots, not observed throughput
+or a cluster-wide cap. Expanded conditions retain the failed memory-stability
+criterion and original technical evidence. Keep these distinctions in all locales.

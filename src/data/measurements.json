@@ -5,9 +5,6 @@
   "resources": 10000,
   "pagesPerLoad": 100,
   "coldMedianSeconds": 9.757693949,
-  "beforeCPUSeconds": 5.18,
-  "afterCPUSeconds": 2.81,
-  "cpuReductionPercent": 45.75289575289575,
   "sampledPeakPSSMiB": 557.947265625,
   "peakSamplingSeconds": 0.5,
   "warmupMinutes": 20,
@@ -17,5 +14,7 @@
   "memoryReboundMiB": 10.082032,
   "memoryReboundLimitMiB": 10,
   "memoryVerdict": "NOT ACCEPTED",
-  "validCurrentSessions": 6
+  "validCurrentSessions": 6,
+  "readQPS": 10,
+  "warmAdditionalLists": 0
 }
