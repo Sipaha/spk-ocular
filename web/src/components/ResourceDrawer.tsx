@@ -277,11 +277,12 @@ export function ResourceDrawer({ embedded = false, client, hub, target, subject,
               ←
             </button>
           )}
+          <div className="flex min-w-0 flex-1 items-baseline gap-2">
           <h2 className="drawer-title min-w-0 truncate" title={title}>
             {title}
           </h2>
-          <span className="drawer-kind min-w-0 max-w-[40%] truncate" title={displayKind}>{displayKind}</span>
-          <span className="flex-1" />
+          <span className="drawer-kind min-w-0 max-w-[40%] truncate" title={displayKind}>{kindTitleOf?.(displayKind) ?? displayKind}</span>
+          </div>
           <button data-drawer-close className="action-icon-button" onClick={close} aria-label={t('drawer.close')} title={t('drawer.close')}>
             <CloseIcon className="h-[20px] w-[20px]"/>
           </button>

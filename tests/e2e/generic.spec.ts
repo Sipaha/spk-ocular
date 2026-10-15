@@ -70,6 +70,8 @@ test('details: the title shown, the key followed; no events; a terminal with now
   await grid.getByRole('gridcell', { name: 'alpha', exact: true }).dblclick()
   const drawer = page.getByRole('dialog', { name: 'crates alpha' })
   await expect(drawer.getByRole('heading', { name: 'alpha' })).toBeVisible()
+  await expect(drawer.locator('.drawer-kind')).toHaveText('Crate')
+  await expect(drawer.locator('.drawer-kind')).toHaveAttribute('title','crates')
   await drawer.getByRole('tab', { name: 'YAML' }).click()
   await expect(drawer.getByText('key: crate-7f3a')).toBeVisible()
   await drawer.getByRole('tab', { name: 'Details' }).click()
@@ -405,7 +407,9 @@ test('resource navigation aligns section and subgroup text with children and cen
  const align=async(title:import('@playwright/test').Locator,child:import('@playwright/test').Locator)=>{
   const label=(await title.locator('span').first().boundingBox())!,chevron=(await title.locator('svg').boundingBox())!
   const text=await child.evaluate(el=>{const range=document.createRange();range.selectNodeContents(el);const b=range.getBoundingClientRect();return{x:b.x}})
-  expect(Math.abs(label.x-text.x)).toBeLessThanOrEqual(.5);expect(Math.abs(chevron.y+chevron.height/2-label.y-label.height/2)).toBeLessThanOrEqual(.5)
+  expect(Math.abs(label.x-text.x)).toBeLessThanOrEqual(.5)
+  const chevronOffset=await title.locator('svg').evaluate(el=>({position:getComputedStyle(el).position,left:getComputedStyle(el).left}))
+  expect(chevronOffset).toEqual({position:'relative',left:'-1px'});expect(Math.abs(chevron.y+chevron.height/2-label.y-label.height/2)).toBeLessThanOrEqual(.5)
  }
  await align(heading,section.getByRole('button',{name:'Crates',exact:true}))
  await subheading.click();await align(subheading,group.getByRole('button',{name:'Services',exact:true}))
@@ -413,4 +417,36 @@ test('resource navigation aligns section and subgroup text with children and cen
  await subheading.click();await expect(subheading).toHaveAttribute('aria-expanded','false')
  await heading.click();await expect(heading).toHaveAttribute('aria-expanded','false');await align(heading,section.getByRole('button',{name:'Crates',exact:true}))
  await heading.click();await expect(heading).toHaveAttribute('aria-expanded','true')
+})
+
+test('object Events Message has one themed hint without an inherited native row title',async({page})=>{
+ const message='Failed to pull image "registry.example.invalid/team/application:missing": manifest unknown; retrying after back-off'
+ const eventKind={id:'test-events',title:'Events',singular:'Event',group:'Synthetic',scoped:true,columns:[{id:'reason',title:'Reason',type:'text',width:140},{id:'message',title:'Message',type:'text',width:180}]}
+ await page.route('**/api/ListKinds',async route=>{
+  const response=await route.fetch(),body=await response.json()
+  for(const kind of body.kinds)if(kind.id==='crates')kind.eventsKind=eventKind.id
+  await route.fulfill({response,json:body})
+ })
+ await page.route('**/api/OpenView',async route=>{
+  if(route.request().postDataJSON().query.kind===eventKind.id)await route.fulfill({json:{viewId:'fixture-events',kind:eventKind}})
+  else await route.continue()
+ })
+ await page.route('**/api/GetRows',async route=>{
+  if(route.request().postDataJSON().viewId==='fixture-events')await route.fulfill({json:{viewId:'fixture-events',version:1,reset:true,upserts:[{id:'event-1',ref:{provider:'synthetic',target:'demo',kind:eventKind.id,name:'pull-failed',uid:'event-1'},cells:[{text:'Failed'},{text:message}],health:{state:'warning',reason:'Failed',message}}],deleted:[],status:{state:'ready'}}})
+  else await route.continue()
+ })
+ const grid=await openDemo(page);await grid.getByRole('gridcell',{name:'alpha',exact:true}).click()
+ const events=page.getByRole('region',{name:'Events',exact:true}),cell=events.getByRole('gridcell',{name:message,exact:true})
+ const handle=events.getByRole('separator',{name:'Resize column Message',exact:true})
+ await handle.focus();await handle.press('Home')
+ expect(await cell.evaluate(el=>el.scrollWidth>el.clientWidth)).toBe(true)
+ await cell.hover();await expect(page.getByRole('tooltip')).toHaveText(message)
+ expect(await cell.evaluate(el=>el.closest('[title]'))).toBeNull()
+ await expect(page.getByRole('tooltip')).toHaveCount(1)
+ await expect(page.getByRole('tooltip')).toHaveCSS('font-size','14px')
+ await page.screenshot({path:join(scratchRoot,'object-events-message-tooltip.png')})
+ const dot=events.locator('[data-health]');await dot.hover()
+ await expect(page.getByRole('tooltip')).toHaveText('Failed: '+message)
+ await page.mouse.move(0,0);await expect(page.getByRole('tooltip')).toHaveCount(0)
+ await expect(dot).toHaveAttribute('title','Failed: '+message)
 })

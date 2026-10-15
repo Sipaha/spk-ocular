@@ -278,8 +278,8 @@ test('restart a deployment from its details: it rolls out and settles', async ({
     await dialog.getByRole('button', { name: 'Restart' }).click()
     await expect(page.getByRole('status')).toHaveText('deployment act-restart: restart requested')
     // The row goes through the rollout and comes back healthy.
-    await expect(row(grid, 'act-restart')).toHaveAttribute('title', /^RollingOut/, { timeout: 30_000 })
-    await expect(row(grid, 'act-restart')).not.toHaveAttribute('title', /^RollingOut/, { timeout: 90_000 })
+    await expect(row(grid, 'act-restart').locator('[data-health]')).toHaveAttribute('title', /^RollingOut/, { timeout: 30_000 })
+    await expect(row(grid, 'act-restart').locator('[data-health]')).not.toHaveAttribute('title', /^RollingOut/, { timeout: 90_000 })
     expect(kubectl('-n', 'ocular-demo', 'get', 'deployment', 'act-restart', '-o', 'jsonpath={.spec.template.metadata.annotations}')).toContain('kubectl.kubernetes.io/restartedAt')
   } finally {
     cleanup()
@@ -471,7 +471,7 @@ test('custom resources: API groups in the navigation, the CRD columns, live chan
   await expect(row(grid, 'beta')).toContainText('Failing')
   // health from the conditions: a dot by the name, the reason on hover
   await expect(row(grid, 'beta').locator('[data-health]')).toHaveAttribute('data-health', 'error')
-  await expect(row(grid, 'beta')).toHaveAttribute('title', 'Broken: the widget is broken')
+  await expect(row(grid, 'beta').locator('[data-health]')).toHaveAttribute('title', 'Broken: the widget is broken')
   await expect(row(grid, 'alpha').locator('[data-health]')).toHaveAttribute('data-health', 'ok')
   await expect(row(grid, 'alpha').getByRole('gridcell').last()).toHaveText(/^\d+(s|m|h|d)/)
   kubectl('-n', 'ocular-crd', 'patch', 'widget', 'gamma', '--type=merge', '-p', '{"spec":{"size":11}}')
@@ -535,7 +535,7 @@ test('deleting a custom resource with a finalizer: the review says so, deletion 
     await dialog.getByRole('button', { name: 'Delete' }).click()
     await expect(page.getByRole('status')).toHaveText('widget delta: deletion requested')
     await expect(row(grid, 'delta').locator('[data-health]')).toHaveAttribute('data-health', 'terminating')
-    await expect(row(grid, 'delta')).toHaveAttribute('title', 'Terminating')
+    await expect(row(grid, 'delta').locator('[data-health]')).toHaveAttribute('title', 'Terminating')
     kubectl('-n', 'ocular-crd', 'patch', 'widget', 'delta', '--type=merge', '-p', '{"metadata":{"finalizers":null}}')
     await expect(row(grid, 'delta')).toHaveCount(0)
   } finally {

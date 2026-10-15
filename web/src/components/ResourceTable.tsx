@@ -415,7 +415,6 @@ export function ResourceTable({ renderCell, ariaLabel = t('table.resources'), em
                     openMenu(r, { x: e.clientX, y: e.clientY })
                   })
                 }
-                title={r.health.message ? `${r.health.reason}: ${r.health.message}` : r.health.reason}
                 className={['resource-row absolute left-0 grid w-full cursor-default items-center border-b border-line/40', isSel ? 'bg-active' : isMarked ? 'bg-marked' : 'hover:bg-hover'].join(' ')}
                 style={{ top: vi.start, height: ROW_H, gridTemplateColumns: template, minWidth }}
               >
@@ -444,7 +443,7 @@ export function ResourceTable({ renderCell, ariaLabel = t('table.resources'), em
                         i === 0 ? 'font-medium' : '',
                       ].join(' ')}
                     >
-                      {content === undefined ? <>{dotHere && <HealthDot state={r.health.state} muted={c.type === 'status' && cell?.muted} />}{text}</> : content}
+                      {content === undefined ? <>{dotHere && <HealthDot state={r.health.state} muted={c.type === 'status' && cell?.muted} title={[r.health.reason, r.health.message].filter(Boolean).join(': ') || undefined} />}{text}</> : content}
                     </span>
                   )
                 })}
@@ -500,11 +499,12 @@ const dotColor: Record<HealthState, string> = {
 }
 
 /** muted: a ring, not a dot — evidence rather than a current state. */
-export function HealthDot({ state, muted }: { state: HealthState; muted?: boolean }) {
+export function HealthDot({ state, muted, title }: { state: HealthState; muted?: boolean; title?: string }) {
   return (
     <span
       aria-hidden
       data-health={state}
+      title={title}
       className={['mr-1.5 inline-block h-2 w-2 rounded-full align-middle', muted ? 'border border-fg-subtle' : dotColor[state]].join(' ')}
     />
   )

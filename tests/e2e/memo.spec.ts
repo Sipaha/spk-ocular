@@ -257,7 +257,12 @@ test('resource sections fold globally and keep their state after restart, while 
       expect(n).toBeTruthy()
       expect(k).toBeTruthy()
       expect(n!.x + n!.width).toBeLessThanOrEqual(k!.x)
-      expect(Math.abs(n!.y - k!.y)).toBeLessThan(10)
+      const baselines=await drawer.evaluate(el=>['.drawer-title','.drawer-kind'].map(selector=>{
+        const text=el.querySelector(selector)!,marker=document.createElement('span')
+        marker.style.cssText='display:inline-block;width:0;height:0;padding:0;margin:0;border:0;vertical-align:baseline'
+        text.append(marker);const y=marker.getBoundingClientRect().y;marker.remove();return y
+      }))
+      expect(Math.abs(baselines[0]-baselines[1])).toBeLessThanOrEqual(.5)
     }
     await verifyTitleOrder()
     const tok = await page.locator('meta[name="spk-ocular-api-token"]').getAttribute('content')

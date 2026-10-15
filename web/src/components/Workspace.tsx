@@ -583,7 +583,7 @@ function NavSectionHeading({ label, open, count, disabled, onToggle }: {
       }
     }}
     className="nav-group-heading w-full items-center gap-[2px] rounded-md text-left hover:text-fg">
-    <svg aria-hidden viewBox="0 0 8 8" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className={['h-[8px] w-[8px] shrink-0 transition-transform',open?'rotate-90':''].join(' ')}><path d="m2 1 4 3-4 3"/></svg>
+    <svg aria-hidden viewBox="0 0 8 8" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className={['h-[8px] w-[8px] shrink-0 relative left-[-1px] transition-transform',open?'rotate-90':''].join(' ')}><path d="m2 1 4 3-4 3"/></svg>
     <span className="min-w-0 flex-1 truncate">{label}</span>
     <span className="font-normal" title={t('nav.kinds', { count })}>{count}</span>
   </button>
@@ -679,7 +679,7 @@ function NavSubgroup(props: {
         }}
         className="flex w-full items-center gap-[4px] rounded-md px-[8px] py-1 text-left text-fg-muted hover:bg-hover hover:text-fg"
       >
-        <svg aria-hidden viewBox="0 0 8 8" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className={['h-[10px] w-[10px] shrink-0 transition-transform',open?'rotate-90':''].join(' ')}><path d="m2 1 4 3-4 3"/></svg>
+        <svg aria-hidden viewBox="0 0 8 8" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className={['h-[10px] w-[10px] shrink-0 relative left-[-1px] transition-transform',open?'rotate-90':''].join(' ')}><path d="m2 1 4 3-4 3"/></svg>
         <span className="min-w-0 flex-1 truncate">{label}</span>
         <span className="shrink-0 text-[12px] text-fg-subtle">{kinds.length}</span>
       </button>

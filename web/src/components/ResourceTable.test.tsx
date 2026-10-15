@@ -158,7 +158,9 @@ describe('ResourceTable health without a status column', () => {
     const r = (name: string) => screen.getByText(name).closest('[role="row"]') as HTMLElement
     const first = (name: string) => within(r(name)).getAllByRole('gridcell')[0]
     expect(first('beta').querySelector('[data-health]')).toHaveAttribute('data-health', 'error')
-    expect(r('beta')).toHaveAttribute('title', 'Broken: the widget is broken')
+    expect(r('beta')).not.toHaveAttribute('title')
+    expect(first('beta').querySelector('[data-health]')).toHaveAttribute('title', 'Broken: the widget is broken')
+    expect(within(r('beta')).getAllByRole('gridcell')[1].closest('[title]')).toBeNull()
     expect(first('alpha').querySelector('[data-health]')).toHaveAttribute('data-health', 'ok')
     expect(first('delta').querySelector('[data-health]')).toHaveAttribute('data-health', 'terminating')
     expect(first('delta')).toHaveClass('text-fg-subtle')

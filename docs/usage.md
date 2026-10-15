@@ -57,10 +57,16 @@ or section titles. Header controls retain hints, rendered
 with the application panel colors rather than platform tooltip colors, using
 14 px text and a shared 800 ms delay for text hints and icon actions. Resource
 table cell values have a hint only when the hovered cell actually clips its text.
+Health reasons belong to the status dot, never the whole row, so native inherited
+row hints cannot overlap cell hints (including Message in object Events).
+The resource header shows the provider’s singular kind label beside the object
+name on the same text baseline, retaining the technical kind ID in its hover hint.
 Overflow is measured only for that cell before showing the hint; resizing does
 not scan the table or install per-cell observers. The resource toolbar omits the
 repeated section title and count; the selected navigation entry identifies the
 section. Its heading and count remain available to assistive technology.
+Resource navigation disclosure chevrons sit 1 px left of their layout position;
+labels and click targets retain their alignment.
 
 ## Start and connect
 
