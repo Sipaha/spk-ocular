@@ -3,3 +3,5 @@
 *.png binary
 *.ico binary
 *.icns binary
+# Preserve raw benchmark samples and their recorded SHA256 identities.
+docs/performance-data/*.csv -text
