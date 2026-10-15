@@ -124,7 +124,7 @@ func sessionFor(cfg *rest.Config, target, title, hash string) (*session, error) 
 
 func sessionWithLifetime(cfg *rest.Config, target, title, hash, lifetime string) (*session, error) {
 	cfg = budgetConfig(cfg)
-	dyn, err := dynamic.NewForConfig(cfg)
+	dyn, err := inventoryClient(cfg)
 	if err != nil {
 		return nil, err
 	}

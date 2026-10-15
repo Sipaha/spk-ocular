@@ -55,6 +55,16 @@ has only been configured. Keep local links valid (`scripts/check-docs.py`).
   save a bundle and preserve the working tree inside solution scratch; compare
   tree contents afterward. A requested remote replacement uses an exact
   force-with-lease expectation, never an unconditional force push.
+- Within an authorized release, a failed build or workflow before publication
+  does not require a new version or tag name. Keep that release version and all
+  eight complete changelogs relative to the previous published release; include
+  the fixes rather than replacing the notes with only the latest CI repair.
+  Verify that the release is still unpublished before updating its existing tag
+  to the corrected, fully verified commit. Preserve the failed tag identity and
+  evidence, and use an exact remote tag force-with-lease expectation. Published
+  releases, their tags and their assets remain immutable; corrections after
+  publication require a new version. Never mix draft assets from different source
+  commits or treat a failed CI attempt as a published release.
 - Quality is more important than speed. Run real checks, inspect actual UI
   screenshots for visible changes, and report concrete evidence and limits.
   Do not relax assertions, budgets or timeouts to make a check pass.

@@ -146,9 +146,17 @@ identify Ocular's modifications.
 4. Create and push the matching version tag. Wait for Release to finish and
    verify the published asset set and checksums before announcing availability.
 
-To reproduce a failed draft build, rerun the failed workflow jobs. An existing
-draft can receive corrected uploads only for that same tagged source. If the
-source must change, prepare a new tag/version rather than moving a published tag.
+To reproduce a failed build without source changes, rerun the failed workflow
+jobs. A failure before publication does not consume the release version. Within
+an authorized release, keep its version, tag name and complete eight-locale notes
+relative to the previous published release. Include the fixes without losing the
+original feature list. If source changes are needed, first verify that the release
+is still unpublished, preserve the failed tag identity and evidence, then update
+only that unpublished tag to the corrected, fully verified commit using an exact
+remote tag force-with-lease expectation. A tag update starts a fresh release gate.
+An existing draft can receive uploads only for the same tagged source; never mix
+assets from different commits. Published releases, tags and assets cannot be
+replaced: fixes after publication require a new version.
 
 The versioned `changelog/<version>/<locale>.md` files are the release-note source,
 matching the launcher. Published notes remain in their version directory; current

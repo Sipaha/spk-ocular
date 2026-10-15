@@ -94,7 +94,7 @@ func loadSession(t *testing.T, total int) (*session, *loadAPI) {
 	a := &loadAPI{total: total}
 	server := httptest.NewServer(http.HandlerFunc(a.serve))
 	t.Cleanup(server.Close)
-	dyn, err := dynamic.NewForConfig(budgetConfig(&rest.Config{Host: server.URL, QPS: 50, Burst: 100}))
+	dyn, err := inventoryClient(budgetConfig(&rest.Config{Host: server.URL, QPS: 50, Burst: 100}))
 	require.NoError(t, err)
 	s := newSession("load-fixture", "hash", dyn, false)
 	t.Cleanup(s.Close)

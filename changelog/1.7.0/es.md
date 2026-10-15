@@ -6,3 +6,4 @@
 - El grafo del clúster solo se carga tras un clic explícito en cada conexión. La selección, la búsqueda y la apertura de detalles conservan la cámara.
 - Se han mejorado la selección de conexiones, las etiquetas de tipos, las ayudas de tablas, la navegación de la paleta de comandos dentro del ámbito elegido y la selección de logs. Volver a renderizar los puertos de un recurso ya no repite la misma consulta de información.
 - Las mediciones locales de inventario y memoria, sus datos, metodología y límites están en `docs/performance.md`; no son garantías generales de rendimiento en producción.
+- Las listas evitan decodificar JSON repetidamente y reducen el trabajo de CPU al cargar inventarios grandes de Kubernetes.

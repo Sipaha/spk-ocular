@@ -6,3 +6,4 @@
 - The cluster graph loads only after an explicit click for each connection. Selection, search and opening details preserve the camera.
 - Connection navigation, resource-kind labels, table tooltips, scoped command-palette navigation and log selection have been refined. Re-rendering selected-resource ports no longer repeats the same information request.
 - Local inventory and memory measurements, raw samples, methodology and their limits are documented in `docs/performance.md`; they are not universal production-performance guarantees.
+- Resource lists avoid repeated JSON decoding, reducing CPU work while loading large Kubernetes inventories.

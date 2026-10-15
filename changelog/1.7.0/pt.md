@@ -6,3 +6,4 @@
 - O grafo do cluster só é carregado após um clique explícito em cada conexão. Selecionar, pesquisar e abrir detalhes preserva a câmera.
 - Foram aprimorados a seleção de conexões, os rótulos de tipos, as dicas das tabelas, a navegação da paleta de comandos no escopo escolhido e a seleção de logs. Renderizar novamente as portas de um recurso não repete mais a mesma consulta de informações.
 - As medições locais de inventário e memória, os dados brutos, a metodologia e os limites estão em `docs/performance.md`; não são garantias gerais de desempenho em produção.
+- As listas evitam decodificações JSON repetidas, reduzindo o trabalho de CPU ao carregar grandes inventários Kubernetes.

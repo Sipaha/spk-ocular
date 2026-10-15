@@ -6,3 +6,4 @@
 - Der Clustergraph wird pro Verbindung erst nach einem ausdrücklichen Klick geladen. Auswahl, Suche und Detailansicht behalten die Kameraposition bei.
 - Verbindungsauswahl, Ressourcentypen, Tabellenhinweise, bereichsbezogene Suche in der Befehlspalette und Logauswahl wurden verbessert. Das erneute Rendern der Ports einer ausgewählten Ressource wiederholt nicht mehr dieselbe Informationsabfrage.
 - Lokale Inventar- und Speichermessungen mit Rohdaten, Methodik und Einschränkungen stehen in `docs/performance.md`. Sie sind keine allgemeine Leistungsgarantie für Produktionscluster.
+- Ressourcenlisten vermeiden wiederholtes JSON-Dekodieren und reduzieren damit den CPU-Aufwand beim Laden großer Kubernetes-Bestände.

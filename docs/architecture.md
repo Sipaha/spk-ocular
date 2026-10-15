@@ -764,3 +764,14 @@ allocations for fewer repeated scans, not a universal speed/memory guarantee.
 Current view cursors skip row-history scanning; status-only frontend pages retain
 their rows-array identity while still publishing status. Independent cursors,
 resets, coverage and UID replacement semantics remain unchanged.
+
+### Inventory JSON decoding
+
+The dynamic client retains client-go request construction, authentication, rate
+limits, retries, error handling and content negotiation. JSON LIST responses use
+one integer-preserving, case-sensitive map decode instead of repeatedly parsing
+the envelope and each item. Typed-list item kind/version inference and pagination
+metadata are retained. Noncanonical envelope field aliases fall back to the
+upstream serializer. GETs, mutations, watch framing and non-JSON serializers keep
+the upstream path. This reduces decoding work; it does not omit object fields
+from the received response or replace cache projection/admission checks.

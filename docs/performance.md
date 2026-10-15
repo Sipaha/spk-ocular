@@ -323,3 +323,26 @@ memory cap, universal production safety or competitor superiority are unsupporte
   [shared informer factory](https://github.com/derailed/k9s/blob/6450b4055e923e2a1d52552ac140cc9683e4fb6c/internal/watch/factory.go)
   and [local table filtering/sorting](https://github.com/derailed/k9s/blob/6450b4055e923e2a1d52552ac140cc9683e4fb6c/internal/ui/table.go).
   K9s was inspected as source, not executed as a performance comparator.
+
+## JSON decoding cost in the inventory gate
+
+The unchanged wire-level regression scenarios were compared locally with Go
+1.26.9, the race detector, `GOMAXPROCS=2` and no concurrent owned build or graph
+fixture. The server dynamically generated the selected-namespace responses; the
+no-estimate admission fixture used its existing identical prepared HTTP bodies.
+The baseline used client-go v0.37.1's repeated LIST decoding; the candidate uses
+one integer-preserving JSON map decode with the same objects and response bytes.
+
+| Scenario | Baseline | Single-pass candidate | Unchanged deadline |
+| --- | ---: | ---: | ---: |
+| All admission followed by complete 10,000-object selected namespace | 25.23 s | 12.11 s | 30 s for selected readiness |
+| All admission without a remaining-count estimate, 2,001 objects / 21 LISTs | 4.76 s | 2.33 s | 5 s for admission error |
+
+These are single local test observations under race instrumentation, not API
+server latency or universal production speed guarantees. The first scenario's
+reported test duration includes its initial broad rejection and setup, while its
+30-second assertion applies to subsequent selected readiness. The separate failed
+GitHub run exceeded both assertions; it published no release. Profiling identified
+the upstream envelope/item reparsing, and decoder compatibility tests cover typed
+item inference, pagination, large integers, malformed envelopes and API errors.
+This timing comparison does not replace or complete the memory plateau protocol.
