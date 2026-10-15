@@ -139,3 +139,21 @@ export function resolveRowEndpoint(container: HTMLElement, node: Node, offset: n
   if (!Number.isFinite(index)) return null
   return { index, offset: absOffsetInRow(row, node, offset) }
 }
+
+/** Intersect an escaped native selection with its owning log viewport.
+ * Native virtual-row reanchoring can move either endpoint into the document.
+ * Preserve backward selections; do nothing for an already contained range. */
+export function confineLogSelection(container: HTMLElement, selection: Selection): boolean {
+  if (!selection.rangeCount || (container.contains(selection.anchorNode) && container.contains(selection.focusNode))) return false
+  const range = selection.getRangeAt(0).cloneRange()
+  if (!range.intersectsNode(container)) {
+    selection.removeAllRanges()
+    return true
+  }
+  const backward = !range.collapsed && selection.anchorNode === range.endContainer && selection.anchorOffset === range.endOffset
+  if (!container.contains(range.startContainer)) range.setStart(container, 0)
+  if (!container.contains(range.endContainer)) range.setEnd(container, container.childNodes.length)
+  selection.collapse(backward ? range.endContainer : range.startContainer, backward ? range.endOffset : range.startOffset)
+  if (!range.collapsed) selection.extend(backward ? range.startContainer : range.endContainer, backward ? range.startOffset : range.endOffset)
+  return true
+}

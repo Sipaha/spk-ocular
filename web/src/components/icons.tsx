@@ -1,4 +1,5 @@
-// Inline SVG icons (currentColor): no icon font, no emoji glyphs.
+// Source SVG icons; the Docker provider uses the unmodified official white mark.
+import dockerMark from '../assets/docker-mark-white.svg'
 
 type P = { className?: string }
 
@@ -54,7 +55,7 @@ export const LayersIcon = ({ className }: P) => (
 
 /** The icon of a provider's group (by provider id; presentation only). */
 export const ProviderIcon = ({ provider, className }: P & { provider: string }) =>
-  provider === 'kubernetes' ? <HelmWheelIcon className={className} /> : <LayersIcon className={className} />
+  provider === 'kubernetes' ? <HelmWheelIcon className={className} /> : provider==='docker'||provider==='compose' ? <img src={dockerMark} alt="" aria-hidden="true" draggable={false} className={className} style={{minWidth:24,minHeight:24}}/> : <LayersIcon className={className} />
 
 export const WarningIcon = ({ className }: P) => (
   <svg viewBox="0 0 24 24" className={className} aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="2">
@@ -125,3 +126,6 @@ export type ActionIconName = keyof typeof actionPaths
 export const ActionIcon = ({name,className}:P & {name:ActionIconName}) => (
   <svg viewBox="0 0 24 24" className={className??'h-4 w-4'} aria-hidden="true" fill="none" stroke="currentColor" strokeWidth={name==='actions'?3:1.8} strokeLinecap="round" strokeLinejoin="round"><path d={actionPaths[name]}/></svg>
 )
+
+export const ImportConfigIcon = ({className}:P) => <svg viewBox="0 0 24 24" className={className} aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M8 7V3h8l5 5v13H8v-3M16 3v5h5M2 13h12m-4-4 4 4-4 4"/></svg>
+export const NewConfigIcon = ({className}:P) => <svg viewBox="0 0 24 24" className={className} aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round"><path d="M4 21V3h11l5 5v13H4ZM15 3v5h5M8 14h8m-4-4v8"/></svg>

@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type ComponentProps, type ReactNode } from
 import type { Client } from '../api/client'
 import type { ClusterGraph, Ref } from '../api/types'
 import { t } from '../i18n'
-import { mayLeave } from '../edit/guard'
+import { editsHeld, mayLeave, useEditHolder } from '../edit/guard'
 import { ResourceDrawer } from '../components/ResourceDrawer'
 import { GraphCanvas } from './canvas'
 import type { Layout, PlacedNode } from './model'
@@ -11,13 +11,45 @@ type Drawer = Omit<ComponentProps<typeof ResourceDrawer>, 'subject' | 'onClose'>
 interface Props {
  client: Client
  target: {provider:string;id:string}
+ session: number
+ connection: number
  scope: import('../api/types').ScopeSel
  scopePicker: ReactNode
  drawer: Drawer
 }
 const button = 'rounded-md border border-line px-2 py-1 text-xs text-fg-muted hover:bg-hover hover:text-fg disabled:opacity-40'
 
-export default function GraphWorkspace({client,target,scope,scopePicker,drawer}:Props) {
+// Opt-in is deliberately memory-only and tied to the backend incarnation,
+// not the saved target or catalog revision. Navigation can remount this page.
+const admitted = new WeakMap<Client, Map<string, string>>()
+export default function GraphWorkspace(props:Props) {
+ const {client,target,session,connection,scopePicker}=props
+ useEditHolder()
+ const key=JSON.stringify([target.provider,target.id])
+ const incarnation=JSON.stringify([session,connection])
+ const identity=JSON.stringify([key,incarnation])
+ const cached=session>0&&connection>0&&admitted.get(client)?.get(key)===incarnation
+ const [requested,setRequested]=useState<string|null>(()=>cached?identity:null)
+ // Automatic recovery cannot drop an editor that still owns unsaved work.
+ // Once it releases its guard, the replacement connection needs fresh consent.
+ const retained=requested!==null&&requested!==identity&&editsHeld()
+ if(requested!==null&&requested!==identity&&!retained)setRequested(null)
+ const enabled=session>0&&connection>0&&(requested===identity||cached)
+ if(!enabled&&!retained)return <section className="graph-workspace flex min-h-0 flex-1 flex-col" aria-label={t('graph.title')}>
+  <header className="flex min-h-10 shrink-0 flex-wrap items-center gap-2 border-b border-line bg-panel px-3 py-1"><h2 className="mr-1 text-sm font-semibold">{t('graph.title')}</h2>{scopePicker}</header>
+  <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-4 p-6 text-center">
+   <p className="max-w-md text-sm text-fg-muted">{t('graph.loadHint')}</p>
+   <button className={button} disabled={session<=0||connection<=0} onClick={()=>{
+    let targets=admitted.get(client)
+    if(!targets){targets=new Map();admitted.set(client,targets)}
+    targets.set(key,incarnation);setRequested(identity)
+   }}>{t('graph.load')}</button>
+  </div>
+ </section>
+ return <LoadedGraph key={retained?requested!:identity} {...props}/>
+}
+
+function LoadedGraph({client,target,scope,scopePicker,drawer}:Props) {
  const [state,setState]=useState<{graph:ClusterGraph;layout:Layout}|null>(null)
  const [error,setError]=useState('')
  const [busy,setBusy]=useState(true)
@@ -33,9 +65,9 @@ export default function GraphWorkspace({client,target,scope,scopePicker,drawer}:
  const selectedID=selected?.uid??null
  const select=useRef<(node:PlacedNode|null)=>void>(()=>{})
  useEffect(()=>{select.current=node=>{
-  if(node?.id===selected?.uid && node){engine.current?.focus(node.id);return}
+  if(node?.id===selected?.uid && node)return
   if(!node&&!selected)return
-  mayLeave(()=>{setSelected(node?.ref??null);if(node)engine.current?.focus(node.id)})
+  mayLeave(()=>setSelected(node?.ref??null))
  }})
  useEffect(()=>{
   const el=canvas.current

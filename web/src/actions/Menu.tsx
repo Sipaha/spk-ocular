@@ -30,6 +30,7 @@ export function Menu({ items, at, label, onClose }: Props) {
   const ref = useRef<HTMLDivElement>(null)
   const [opener] = useState(() => document.activeElement as HTMLElement | null)
   const [pos, setPos] = useState(at)
+  const [active, setActive] = useState<string|null>(()=>items[0]?.id??null)
 
   const close = () => {
     onClose()
@@ -97,6 +98,7 @@ export function Menu({ items, at, label, onClose }: Props) {
       aria-label={label}
       onKeyDown={onKey}
       onContextMenu={(e) => e.preventDefault()}
+      onPointerLeave={()=>setActive(null)}
       className="popup-menu fixed z-50 min-w-44 rounded-md border border-line bg-panel"
       style={{ left: pos.x, top: pos.y }}
     >
@@ -108,16 +110,18 @@ export function Menu({ items, at, label, onClose }: Props) {
             title={it.hint}
             // Enter held from what opened the menu: the repeats must not choose.
             onKeyDown={(e) => e.key === 'Enter' && e.repeat && e.preventDefault()}
-            // Pointer and keyboard share one active item. CSS hover alone
-            // would leave the previous keyboard item highlighted as well.
-            onPointerMove={(e) => e.currentTarget.focus({ preventScroll: true })}
+            // Pointer and keyboard share one explicit highlight, independent
+            // of pointer-focus painting in the host webview.
+            onFocus={()=>setActive(it.id)}
+            onPointerMove={(e) => {setActive(it.id);e.currentTarget.focus({ preventScroll: true })}}
+            data-active={active===it.id||undefined}
             aria-disabled={it.disabled || undefined}
             onClick={() => {
               if (it.disabled) return
               close()
               it.onSelect()
             }}
-            className={['block w-full px-3 py-1 text-left outline-none focus:bg-active', it.disabled ? 'text-fg-subtle' : it.danger ? 'text-danger' : 'text-fg'].join(' ')}
+            className={['block w-full px-3 py-1 text-left outline-none', it.disabled ? 'text-fg-subtle' : it.danger ? 'text-danger' : 'text-fg'].join(' ')}
           >
             {it.label}
           </button>

@@ -11,10 +11,10 @@ export interface PaletteHost {
   /** The target's selected scopes, even on an unscoped table; null until loaded. */
   selectedScope: ScopeSel | null
   /** Opens a view; filter replaces the table filter ('' clears it). */
-  openKind(kind: string, filter: string): void
+  openKind(kind: string, filter: string, scope?:ScopeSel): void
   setScope(scope: ScopeSel): void
-  /** Opens the object's kind and details, preserving the selected scopes. */
-  openObject(ref: Ref): void
+  /** Opens details with current scopes, or an explicit query's scope atomically. */
+  openObject(ref: Ref, scope?:ScopeSel): void
 }
 
 interface State {

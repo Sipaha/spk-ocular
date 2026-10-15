@@ -435,7 +435,7 @@ export function ResourceTable({ renderCell, ariaLabel = t('table.resources'), em
                     <span
                       key={c.id}
                       role="gridcell"
-                      title={(dotHere && r.health.message ? `${text}\n${r.health.message}` : text) || undefined}
+                      data-cell-tooltip={text || undefined}
                       className={[
                         'truncate px-3',
                         isNumeric(c) ? 'text-right font-mono text-[13px]' : '',

@@ -44,9 +44,12 @@ function RevisionDialog({client,resource,revision,initialCompare,onClose}:{clien
   // The revision and comparison snapshot belong to this opening, not background updates.
   const [source]=useState(resource)
   const [compare,setCompare]=useState(initialCompare)
-  const [baseline,setBaseline]=useState('current')
+  const [baseline,setBaseline]=useState(()=>{
+    const previous=(source.revisions??[]).reduce<ResourceRevision|undefined>((best,item)=>item.number<revision.number&&(!best||item.number>best.number)?item:best,undefined)
+    return previous?.ref.uid||previous?.ref.name||'current'
+  })
   const [text,setText]=useState<string|null>(null)
-  const [before,setBefore]=useState<string|null>(source.templateYAML ?? null)
+  const [before,setBefore]=useState<string|null>(baseline==='current'?source.templateYAML??null:null)
   const [error,setError]=useState('')
   const [baselineError,setBaselineError]=useState('')
   const box=useRef<HTMLElement>(null)
@@ -58,13 +61,13 @@ function RevisionDialog({client,resource,revision,initialCompare,onClose}:{clien
     return()=>{live=false}
   },[client,revision.ref])
   useEffect(()=>{
-    if(baseline === 'current') return
+    if(!compare||baseline === 'current') return
     const selected=source.revisions?.find(item=>(item.ref.uid || item.ref.name) === baseline)
     if(!selected) return
     let live=true
     void client.getResource(selected.ref).then(result=>{if(live){if(result.templateYAML === undefined)setBaselineError(t('revisions.unavailable'));else setBefore(result.templateYAML)}},failure=>{if(live)setBaselineError(failure instanceof Error?failure.message:String(failure))})
     return()=>{live=false}
-  },[client,source,baseline])
+  },[client,source,baseline,compare])
   return createPortal(<div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-3" onMouseDown={event=>{if(event.target === event.currentTarget)onClose()}}>
     <section ref={box} role="dialog" aria-modal="true" aria-label={t('revisions.title')} tabIndex={-1} className="flex h-[min(850px,calc(100dvh-24px))] w-[min(1400px,calc(100vw-24px))] flex-col border border-line bg-panel outline-none" onKeyDown={event=>{
       if(event.key==='Escape'){event.stopPropagation();onClose()}

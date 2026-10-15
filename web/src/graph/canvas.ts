@@ -28,6 +28,7 @@ export class GraphCanvas {
  private reduced = false
 
  constructor(private canvas: HTMLCanvasElement, private select: (node: PlacedNode|null) => void, private announce: (node: PlacedNode|null) => void, private clusterLabel: string) {
+  canvas.removeAttribute('title');canvas.dataset.tooltip=''
   const style = getComputedStyle(canvas)
   const color = (key:string, fallback:string) => style.getPropertyValue('--color-'+key).trim() || fallback
   this.palette = {bg:color('app','#10161f'),panel:color('navigation','#171e29'),fg:color('fg','#e8edf4'),muted:color('fg-muted','#a6b4c6'),line:color('line','#303c4c'),accent:color('accent','#9ebfeb'),route:'#5bc5c1'}
@@ -60,7 +61,7 @@ export class GraphCanvas {
     this.draw()
    } else {
     const node=this.hit(p.x,p.y),id=node?.id??null
-    if(id!==this.hover){this.hover=id;canvas.style.cursor=node?'pointer':'grab';canvas.title=node?node.kindTitle+' · '+(node.ref.title??node.ref.name):'';this.announce(node);this.draw()}
+    if(id!==this.hover){this.hover=id;canvas.style.cursor=node?'pointer':'grab';canvas.dataset.tooltip=node?node.kindTitle+' · '+(node.ref.title??node.ref.name):'';this.announce(node);this.draw()}
    }
   })
   const release=(e:PointerEvent,cancel=false)=>{
@@ -76,7 +77,7 @@ export class GraphCanvas {
   listen('pointerup',e=>release(e))
   listen('pointercancel',e=>release(e,true))
   listen('lostpointercapture',e=>{if(this.points.has(e.pointerId)){this.points.delete(e.pointerId);this.down=null}})
-  listen('pointerleave',()=>{if(!this.down){this.hover=null;this.announce(null);this.draw()}})
+  listen('pointerleave',()=>{if(!this.down){this.hover=null;canvas.dataset.tooltip='';this.announce(null);this.draw()}})
   listen('keydown',e=>{
    if(['+','=','-','0','Home','ArrowRight','ArrowLeft','ArrowUp','ArrowDown','Enter','Escape'].includes(e.key)){
     e.preventDefault();e.stopPropagation()
@@ -87,7 +88,7 @@ export class GraphCanvas {
     else if(e.key==='Enter' && this.keyboard>=0)this.select(this.layout.nodes[this.keyboard])
     else if(e.key.startsWith('Arrow') && this.layout.nodes.length) {
      this.keyboard=(this.keyboard+(e.key==='ArrowLeft'||e.key==='ArrowUp'?-1:1)+this.layout.nodes.length)%this.layout.nodes.length
-     const node=this.layout.nodes[this.keyboard];this.hover=node.id;this.focus(node.id);this.announce(node)
+     const node=this.layout.nodes[this.keyboard];this.hover=node.id;canvas.dataset.tooltip='';this.announce(node);this.draw()
     }
    }
   })
@@ -95,9 +96,7 @@ export class GraphCanvas {
  private point(e:PointerEvent){const r=this.canvas.getBoundingClientRect();return{x:e.clientX-r.left,y:e.clientY-r.top}}
  private resize(){
   const r=this.canvas.getBoundingClientRect();const first=this.width===1
-  const oldWidth=this.width,oldHeight=this.height
   this.width=Math.max(1,r.width);this.height=Math.max(1,r.height)
-  if(!first){this.camera.x+=(this.width-oldWidth)/2;this.camera.y+=(this.height-oldHeight)/2}
   const dpr=Math.min(2,devicePixelRatio||1)
   this.canvas.width=Math.round(this.width*dpr);this.canvas.height=Math.round(this.height*dpr)
   if(first&&this.layout.nodes.length)this.fit();else this.draw()
@@ -111,7 +110,6 @@ export class GraphCanvas {
  setOptions(selected:string|null,routes:boolean,filter:string){this.selected=selected;this.routes=routes;this.filter=filter.toLocaleLowerCase();this.draw()}
  fit(){this.camera=fitCamera(this.layout,this.width,this.height);this.draw()}
  zoom(factor:number){this.camera=zoomAt(this.camera,factor,this.width/2,this.height/2);this.draw()}
- focus(id:string){const n=this.nodes.get(id);if(n){this.camera={zoom:Math.max(0.9,this.camera.zoom),x:0,y:0};this.camera.x=this.width/2-(n.x+NODE_W/2)*this.camera.zoom;this.camera.y=this.height/2-(n.y+NODE_H/2)*this.camera.zoom;this.draw()}}
  hit(x:number,y:number):PlacedNode|null{
   x=(x-this.camera.x)/this.camera.zoom;y=(y-this.camera.y)/this.camera.zoom
   const gx=Math.floor(x/GRID),gy=Math.floor(y/GRID)

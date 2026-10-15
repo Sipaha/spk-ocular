@@ -22,7 +22,7 @@ export function AppearanceDialog({client,target,onClose}:{client:Client;target:T
   const buttons=Array.from(e.currentTarget.querySelectorAll<HTMLButtonElement>('button')),current=buttons.indexOf(e.target as HTMLButtonElement)
   if(current<0)return
   e.preventDefault();e.stopPropagation()
-  const step=e.key==='ArrowUp'?-(kind==='icon'?8:1):e.key==='ArrowDown'?(kind==='icon'?8:1):e.key==='ArrowLeft'?-1:1
+  const step=e.key==='ArrowUp'?-8:e.key==='ArrowDown'?8:e.key==='ArrowLeft'?-1:1
   const next=e.key==='Home'?0:e.key==='End'?buttons.length-1:(current+step+buttons.length)%buttons.length
   setDraft(kind==='icon'?{...draft,icon:iconIds[next]}:{...draft,palette:paletteIds[next]});buttons[next].focus()
  }

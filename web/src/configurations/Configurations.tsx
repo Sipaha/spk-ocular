@@ -7,18 +7,16 @@ import { t } from '../i18n'
 import { editsHeld } from '../edit/guard'
 import { focusMark, restoreFocus } from '../shortcuts'
 
-import { Menu } from '../actions/Menu'
 const YamlView = lazy(() => import('../components/YamlView'))
 
 export type ConfigurationAction = 'inspect' | 'edit' | 'rename' | 'remove' | 'reveal'
-export interface ConfigurationActions { openAdd: (at: {x:number;y:number}) => void; unlockTarget: (target: Target, resume: () => Promise<void>) => void; openTarget: (target: Target, action: ConfigurationAction) => void }
+export interface ConfigurationActions { openImport: () => void; openNew: () => void; unlockTarget: (target: Target, resume: () => Promise<void>) => void; openTarget: (target: Target, action: ConfigurationAction) => void }
 
 type Mode = 'reset' | 'edit' | 'inspect' | 'scan' | 'setup' | 'unlock' | 'editor' | 'rename' | 'remove'
 export function Configurations({ client, onChanged, ref, hideTrigger=false }: { client: Client; onChanged: () => unknown; ref?: Ref<ConfigurationActions>; hideTrigger?: boolean }) {
  const [state,setState]=useState<ConfigState|null>(null)
  const [mode,setMode]=useState<Mode|null>(null)
  const [entry,setEntry]=useState<ConfigEntry|null>(null)
- const [addMenu,setAddMenu]=useState<{x:number;y:number}|null>(null)
  const [content,setContent]=useState<string|null>(null)
  const [contentRevision,setContentRevision]=useState('')
  const [reviewEdit,setReviewEdit]=useState(false)
@@ -54,15 +52,34 @@ export function Configurations({ client, onChanged, ref, hideTrigger=false }: { 
   if(first){first.focus();if(mode==='rename'&&first instanceof HTMLInputElement)first.select()}
   else box.current?.focus()
  },[mode,busy,content])
- const close=()=>{resumeConnect.current=null;setRenameTarget('');setRenameRevision('');setOriginalName('');setReviewEdit(false);setContentRevision('');setContent(null);setAddMenu(null);setAfterUnlock(null);setMode(null);setEntry(null);setPassword('');setRepeat('');setName('');setYaml('');setError('');setDiscard(false);if(mark.current){restoreFocus(mark.current);mark.current=null}}
+ const close=()=>{resumeConnect.current=null;setRenameTarget('');setRenameRevision('');setOriginalName('');setReviewEdit(false);setContentRevision('');setContent(null);setAfterUnlock(null);setMode(null);setEntry(null);setPassword('');setRepeat('');setName('');setYaml('');setError('');setDiscard(false);if(mark.current){restoreFocus(mark.current);mark.current=null}}
  const request=async(req:ConfigRequest,next:Mode|null)=>{
   setBusy(true);setError('')
   try{const s=await client.configurations(req);setState(s);setPassword('');setRepeat('');await onChanged();if(next===null)close();else setMode(next);return true}
   catch(e){setError(e instanceof Error?e.message:t('configs.error'));return false}
   finally{setBusy(false)}
  }
- const cancel=()=>{if(busy)return;if(addMenu){setAddMenu(null);return}if(reviewEdit){setReviewEdit(false);return}if(mode==='inspect'||(mode==='edit'&&yaml===content)){close();return}if(mode==='rename'||mode==='remove'||mode==='reset'){close();return}if(yaml||name){setDiscard(true);return}if(state&&!state.initialized){void request({command:'dismiss'},null)}else close()}
+ const cancel=()=>{if(busy)return;if(reviewEdit){setReviewEdit(false);return}if(mode==='inspect'||(mode==='edit'&&yaml===content)){close();return}if(mode==='rename'||mode==='remove'||mode==='reset'){close();return}if(yaml||name){setDiscard(true);return}if(state&&!state.initialized){void request({command:'dismiss'},null)}else close()}
  const custom=(s=state)=>{resumeConnect.current=null;setError('');setAfterUnlock('editor');setMode(s?.locked?'unlock':!s?.encrypted?'setup':'editor')}
+ const openImport=()=>{if(busy||mode)return;setPaths([]);void request({command:'scan'},'scan')}
+ const openNew=()=>{if(busy||mode)return;setBusy(true);setError('');void client.configurations({command:'status'}).then(s=>{if(alive.current){setState(s);custom(s)}},err=>{if(alive.current)setError(err instanceof Error?err.message:t('configs.error'))}).finally(()=>{if(alive.current)setBusy(false)})}
+ const openReset=async()=>{
+  if(busy)return
+  resumeConnect.current=null;setPassword('');setBusy(true);setError('')
+  try{
+   const fresh=await client.configurations({command:'status'})
+   if(!alive.current)return
+   setState(fresh)
+   if(fresh.entries.some(entry=>entry.kind==='stored')){setMode('reset');return}
+   if(editsHeld()){setError(t('configs.unsaved'));return}
+   if(!fresh.resetRevision){setError(t('configs.error'));return}
+   // The exact fresh revision also protects the empty case from concurrent additions.
+   const next=await client.configurations({command:'reset',expect:fresh.resetRevision})
+   if(!alive.current)return
+   setState(next);await onChanged();close()
+  }catch(err){if(alive.current)setError(err instanceof Error?err.message:t('configs.error'))}
+  finally{if(alive.current)setBusy(false)}
+ }
  const inspect=async(e:ConfigEntry,editing=false)=>{
   setEntry(e);setContent(null);setYaml('');setReviewEdit(false);setError('');setMode(editing?'edit':'inspect');setBusy(true)
   try{const result=await client.configurations({command:'inspect',id:e.id,expect:e.revision});if(alive.current){setContent(result.yaml??'');setContentRevision(result.contentRevision??'');if(editing)setYaml(result.yaml??'')}}
@@ -73,7 +90,7 @@ export function Configurations({ client, onChanged, ref, hideTrigger=false }: { 
   setEntry(e)
   if(e.kind==='stored'&&locked){setError(t('configs.connectToUnlock'))}else return inspect(e,editing)
  }
- useImperativeHandle(ref,()=>({openAdd:at=>{setError('');setAddMenu(at)},unlockTarget:(_target,resume)=>{if(busy||mode)return;resumeConnect.current=resume;setAfterUnlock(null);setError('');setMode('unlock')},openTarget:(target,action)=>{
+ useImperativeHandle(ref,()=>({openImport,openNew,unlockTarget:(_target,resume)=>{if(busy||mode)return;resumeConnect.current=resume;setAfterUnlock(null);setError('');setMode('unlock')},openTarget:(target,action)=>{
   if(busy||mode)return
   setBusy(true);setError('')
   void client.configurations({command:'resolve',target:target.id}).then(async s=>{
@@ -96,14 +113,9 @@ export function Configurations({ client, onChanged, ref, hideTrigger=false }: { 
  const danger=buttonBase+' border-danger/50 bg-danger/10 text-danger hover:bg-danger/20'
  return <>
   <div className={hideTrigger?"connection-config-host":"px-2 pb-2 text-sm"} onKeyDown={e=>e.stopPropagation()}>
-   <button style={hideTrigger?{display:'none'}:undefined} hidden={hideTrigger} disabled={busy} className="inline-flex min-h-6 items-center gap-1 text-[12px] text-fg-muted hover:text-accent focus-visible:outline focus-visible:outline-accent" aria-haspopup="menu" aria-expanded={!!addMenu} onClick={event=>{setError('');const r=event.currentTarget.getBoundingClientRect();setAddMenu({x:r.left,y:r.bottom})}}>{t('configs.add')}<svg aria-hidden viewBox="0 0 12 12" className="h-3 w-3" fill="none" stroke="currentColor" strokeWidth="1.3"><path d="m3 4.5 3 3 3-3"/></svg></button>
+   {!hideTrigger&&!mode&&<div className="flex gap-2"><button className="text-fg-muted hover:text-accent" disabled={busy} onClick={openImport} aria-haspopup="dialog">{t('configs.scan')}</button><button className="text-fg-muted hover:text-accent" disabled={busy} onClick={openNew} aria-haspopup="dialog">{t('configs.custom')}</button></div>}
    {!mode&&error&&<p role="alert" className="text-danger">{error}</p>}
   </div>
-  {addMenu&&createPortal(<Menu at={addMenu} label={t('configs.add')} onClose={()=>setAddMenu(null)} items={[
-   {id:'scan',label:t('configs.scan'),onSelect:()=>{setPaths([]);void request({command:'scan'},'scan')}},
-   {id:'custom',label:t('configs.custom'),onSelect:()=>{void client.configurations({command:'status'}).then(s=>{setState(s);custom(s)},err=>setError(err instanceof Error?err.message:t('configs.error')))}},
-   ...(state?.encrypted?[{id:'reset',label:t('configs.reset'),danger:true,separator:true,onSelect:()=>{resumeConnect.current=null;setPassword('');void request({command:'status'},'reset')}}]:[]),
-  ]}/>,document.body)}
   {mode&&createPortal(<div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4" onMouseDown={e=>{if(e.target===e.currentTarget)cancel()}}>
    <div ref={box} role="dialog" aria-modal="true" aria-labelledby={titleId} tabIndex={-1}
     className={yamlDialog?"flex h-[calc(100dvh-32px)] w-[calc(100vw-32px)] flex-col rounded border border-line bg-panel p-3 text-fg shadow-2xl outline-none":"max-h-[88vh] w-[min(760px,96vw)] overflow-auto rounded-lg border border-line bg-panel p-5 text-fg shadow-2xl outline-none"}
@@ -170,7 +182,7 @@ export function Configurations({ client, onChanged, ref, hideTrigger=false }: { 
      </>:<>
       <button ref={cancelRef} disabled={busy} className={button} onClick={cancel}>{t(reviewEdit?'configs.keep':mode==='inspect'?'configs.back':state&&!state.initialized?'configs.skip':'configs.cancel')}</button>
       <div className="config-dialog-primary flex items-center justify-end gap-2">
-       {mode==='unlock'&&<button disabled={busy} className={button} onClick={()=>{resumeConnect.current=null;setPassword('');void request({command:'status'},'reset')}}>{t('configs.reset')}</button>}
+       {mode==='unlock'&&<button disabled={busy} className={button} onClick={openReset}>{t('configs.reset')}</button>}
        {mode==='reset'&&<button disabled={busy||!state?.resetRevision} className={danger} onClick={()=>{if(editsHeld()){setError(t('configs.unsaved'));return}void request({command:'reset',expect:state?.resetRevision},null)}}>{t('configs.resetConfirm')}</button>}
        {mode==='scan'&&<>
         <button disabled={busy} className={button} onClick={()=>custom()}>{t('configs.custom')}</button>

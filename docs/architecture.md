@@ -199,6 +199,13 @@ Reset replaces only its source; shared rows survive until their last owner is
 removed. Partial failures keep successful sources and expose coverage. Global
 kinds are opened once. The UI's multi-scope selection does not widen agent grants.
 
+Graph inventory loading requires an explicit Load graph click once per backend
+connection session. Opening the graph before that click creates neither an inventory
+request nor a layout worker. Navigation and warm target switching retain this choice;
+Disconnect/Connect, a replacement session and application restart require a fresh click.
+The choice is memory-only, never a saved target preference. Automatic replacement retains
+a guarded unsaved editor until its edits are released, then requests fresh graph admission.
+
 Graph, Timeline, RBAC and Security snapshots share the session-bound inventory
 gate and continuation-token cursor. Session cancellation applies before waiting
 for that gate. Each adapter retains its own resource/page/byte budgets, projection
@@ -421,10 +428,12 @@ mounted during the first row read; later schema refinements preserve sorting by
 column ID. Security uses this same virtual grid, with custom evidence/action
 cells and no separate pagination or table styling.
 
-The palette filters eligible live rows by the target's selected scopes, including
+The palette normally filters eligible live rows by the target's selected scopes, including
 on unscoped tables. History influences ranking only, with exact Ref/UID matches;
 it cannot create candidates. Explicit type-and-name queries may attach one
 temporary view to the shared ViewHub, preserving scope and normal session guards.
+An explicit scope/type/name query narrows that view to the named scope and only
+commits its scope when a result is selected, atomically with guarded navigation.
 No parallel inventory sweep or implicit connection is performed. The view
 lifetime follows the query/target/scope and palette, so late responses are
 discarded and late opens closed. It opens the object's kind and selects a row by
@@ -440,9 +449,21 @@ cannot destroy an unlock continuation or an open source editor. Appearance uses
 stable catalogue IDs in the existing per-target UI-state queue; initialization
 reads saved data before random assignment, and Save waits for initialization.
 Failures are visible and retries retain the assigned value. No appearance action
-opens a provider session or changes source/configuration revisions.
+opens a provider session or changes source/configuration revisions. The catalogue
+contains 32 icons and 16 curated foreground/background presets. Resource section
+headings and counts are screen-reader-only in the toolbar; the visible navigation
+identifies the current section. Value hints measure only the hovered table cell
+once before display, without table-wide resize work or per-cell observers. Shared
+14 px hints wait 800 ms; pointer leave cancels pending display before measurement.
+Explicit palette `scope type name` queries use one scope/type view and commit
+scope together with the chosen result behind the navigation edit guard. Log
+selection remains inside its owning viewport even if native range endpoints
+escape to the document. Detached log windows expose log export, while Downloads
+history belongs to the main window only. Resource switches keep inert toolbar
+controls and section geometry until the new object settles; privileged children
+are unmounted immediately and their layout space is retained.
 Use graphite surfaces, system fonts, 14 px text, a 17 px root rem, 32 px table
-rows, 40 px headers/toolbars, 14 px semibold resource-page titles, and mostly
+rows, 40 px headers/toolbars, 14 px semibold titles, and mostly
 2/4 px radii. Command-palette rows have a 38 px minimum height and vertically
 center the section, object name and hint despite their different font sizes.
 The SVG app icon embeds as

@@ -9,7 +9,7 @@ import { t } from '../i18n'
 import type { LogEntry } from './buffer'
 import { LEVEL_CLASS } from './levels'
 import type { DragSelection } from './logSelection'
-import { buildDragSelectionText, pickRowIndexAtY, resolveRowEndpoint } from './logSelection'
+import { buildDragSelectionText, pickRowIndexAtY, resolveRowEndpoint, confineLogSelection } from './logSelection'
 import type { Range } from './match'
 import { fmtTime, renderMessage, rowText, type RowOpts } from './row'
 
@@ -218,6 +218,8 @@ export function LogViewport({
   useEffect(() => {
     const onSelectionChange = () => {
       const sel = window.getSelection()
+      const owner=parentRef.current
+      if(sel&&owner&&(draggingRef.current||(dragSelRef.current&&document.activeElement===owner))&&confineLogSelection(owner,sel))return
       const lost = !sel || sel.rangeCount === 0 || sel.isCollapsed || !parentRef.current?.contains(sel.anchorNode)
       if (selectAllRef.current && lost) {
         selectAllRef.current = false
@@ -664,6 +666,7 @@ export function LogViewport({
               // scrolling crawl. The click also must not touch the existing
               // selection state (context-menu Copy needs it intact).
               if (e.button !== 0) return
+              parentRef.current?.focus({preventScroll:true})
               const content = e.currentTarget
               const pointerId = e.pointerId
               // Virtual rows can unmount during a wheel gesture. Capture on

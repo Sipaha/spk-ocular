@@ -165,7 +165,7 @@ and at most three total automatic attempts. Granted agent sessions remain
 independent. Preserve held edits when a connection becomes unavailable.
 
 Connection switching lives in the header picker; opening/searching it never connects.
-Appearance uses 32 stable SVG IDs and 8 curated pairs in per-target UI state; no arbitrary colours.
+Appearance uses 32 stable SVG IDs and 16 curated pairs in per-target UI state; no arbitrary colours.
 The app logo/name is absent from the workspace header. Native window chrome remains unchanged.
 
 Only Workloads defaults to expanded; saved global section choices take priority.
@@ -182,8 +182,9 @@ keyboard equivalent. Empty original sections disappear and counts reflect their
 remaining kinds. Keep one active nav row and F6 entry point.
 
 Collapsed groups retain their current kind. Search expands matches temporarily
-without persisting that expansion. Palette object results use the selected
-scope even on unscoped tables; opening a result changes the kind and reveals the
+without persisting that expansion. Ordinary palette object results use the selected
+scope even on unscoped tables; explicit scope/type/name queries read only that
+scope and commit it atomically with the chosen result behind mayLeave; opening a result changes the kind and reveals the
 exact Ref+UID row once. Scope selection and unsaved-editor protection survive it.
 
 Target writes share a serialized queue across remounts and await failures as well
@@ -202,6 +203,13 @@ resource-list right inset: invisible GTK overlay scrollbar hit regions cover sta
 buttons without it. `@theme static` retains runtime ANSI/xterm colors. Modal
 connection information preserves the table/editor, traps focus and restores it
 on close, Escape and backdrop. No Overview page.
+
+Graph inventory loading requires an explicit Load graph click once per backend
+connection session. Opening the graph before that click creates neither an inventory
+request nor a layout worker. Navigation and warm target switching retain this choice;
+Disconnect/Connect, a replacement session and application restart require a fresh click.
+The choice is memory-only, never a saved target preference. Automatic replacement retains
+a guarded unsaved editor until its edits are released, then requests fresh graph admission.
 
 ### Mutations and secrets
 

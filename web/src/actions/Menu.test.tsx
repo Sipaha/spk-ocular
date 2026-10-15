@@ -28,6 +28,8 @@ it('pointer navigation moves keyboard focus to the hovered item', () => {
   const item = screen.getByRole('menuitem', { name: 'Roll back' })
   fireEvent.pointerMove(item)
   expect(item).toHaveFocus()
+  expect(item).toHaveAttribute('data-active','true')
+  fireEvent.pointerLeave(screen.getByRole('menu'));expect(item).not.toHaveAttribute('data-active')
 })
 
 it('a parent update does not reset the active menu item', () => {

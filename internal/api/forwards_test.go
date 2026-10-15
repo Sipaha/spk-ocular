@@ -135,8 +135,15 @@ func TestTunnelsOutliveTheirSessionAndEndWithTheApp(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "http", info.Ports[0].Scheme)
 
-	f, err := s.StartForward(ctx, StartForwardRequest{Ref: podRef, Port: 8080, Scheme: "http"})
+	// Other packages also prefer 8080. This lifetime test owns an ephemeral
+	// local port so its post-Close rebind cannot race those unrelated fixtures.
+	reserved, err := net.Listen("tcp4", "127.0.0.1:0")
 	require.NoError(t, err)
+	localPort := reserved.Addr().(*net.TCPAddr).Port
+	require.NoError(t, reserved.Close())
+	f, err := s.StartForward(ctx, StartForwardRequest{Ref: podRef, Port: 8080, LocalPort: localPort, Scheme: "http"})
+	require.NoError(t, err)
+	assert.Equal(t, localPort, f.LocalPort)
 	assert.Equal(t, forwards.StateReady, f.State)
 	assert.Equal(t, 8080, f.Target.Port)
 	assert.Equal(t, "http", f.Scheme)

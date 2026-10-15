@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useId, useRef, useState, type ComponentProps } from 'react'
 import { createPortal } from 'react-dom'
+import { TOOLTIP_DELAY } from '../tooltips'
 
 let visibleTooltip:{id:string;dismiss:()=>void}|null=null
 
@@ -8,21 +9,27 @@ export function ActionIconButton({label,description,children,className='',...pro
   const anchor=useRef<HTMLSpanElement>(null)
   const tooltip=useRef<HTMLSpanElement>(null)
   const id=useId()
+  const showTimer=useRef<ReturnType<typeof setTimeout>|null>(null)
+  const cancelShow=useCallback(()=>{if(showTimer.current!==null){clearTimeout(showTimer.current);showTimer.current=null}},[])
   const hideTimer=useRef<ReturnType<typeof setTimeout>|null>(null)
   const [tip,setTip]=useState<{left:number;top:number;above:boolean}|null>(null)
   const cancelHide=useCallback(()=>{if(hideTimer.current!==null){clearTimeout(hideTimer.current);hideTimer.current=null}},[])
-  const hide=useCallback(()=>{cancelHide();setTip(null);if(visibleTooltip?.id===id)visibleTooltip=null},[cancelHide,id])
-  const leave=()=>{cancelHide();if(anchor.current?.contains(document.activeElement))return;hideTimer.current=setTimeout(hide,100)}
-  useEffect(()=>()=>{cancelHide();if(visibleTooltip?.id===id)visibleTooltip=null},[cancelHide,id])
+  const hide=useCallback(()=>{cancelShow();cancelHide();setTip(null);if(visibleTooltip?.id===id)visibleTooltip=null},[cancelHide,cancelShow,id])
+  const leave=()=>{cancelShow();cancelHide();if(anchor.current?.contains(document.activeElement))return;hideTimer.current=setTimeout(hide,100)}
+  useEffect(()=>()=>{cancelShow();cancelHide();if(visibleTooltip?.id===id)visibleTooltip=null},[cancelHide,cancelShow,id])
   const show=()=>{
     cancelHide()
+    if(showTimer.current!==null||tip)return
     visibleTooltip?.dismiss()
     visibleTooltip={id,dismiss:hide}
+    showTimer.current=setTimeout(()=>{
+    showTimer.current=null
     const rect=anchor.current?.getBoundingClientRect()
     if(!rect)return
     const width=Math.min(320,window.innerWidth-16)
     const above=window.innerHeight-rect.bottom<100
     setTip({left:Math.max(8,Math.min(rect.left,window.innerWidth-width-8)),top:above?rect.top-6:rect.bottom+6,above})
+    },TOOLTIP_DELAY)
   }
   useLayoutEffect(()=>{
     if(!tip||!tooltip.current||!anchor.current)return

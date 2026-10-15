@@ -51,6 +51,7 @@ describe('connection appearance persistence',()=>{
 
 it('provides32 distinct vector icons and readable foreground/background pairs in both tones',()=>{
  expect(iconIds).toHaveLength(32)
+ expect(Object.keys(palette)).toHaveLength(16)
  expect(new Set(Object.values(iconPaths)).size).toBe(32)
  const luminance=(hex:string)=>hex.slice(1).match(/../g)!.map(c=>parseInt(c,16)/255).map(c=>c<=.04045?c/12.92:((c+.055)/1.055)**2.4).reduce((a,c,i)=>a+c*[.2126,.7152,.0722][i],0)
  for(const colors of Object.values(palette))for(const offset of [0,2]){

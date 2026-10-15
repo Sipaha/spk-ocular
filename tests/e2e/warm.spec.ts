@@ -76,10 +76,14 @@ test('two warm targets: A → B → A keeps everything; Disconnect ends A', asyn
   // Disconnect is available for a warm non-selected target too.
   await selectConnection(page,/^demo2\b/)
   await connectSelected(page)
-  await (await connectionChoice(page,/^demo\b/)).click({button:'right'})
+  const connectedA=await connectionChoice(page,/^demo\b/)
+  await expect(connectedA.locator('[data-connection-state]')).toHaveAttribute('data-connection-state','connected')
+  await connectedA.click({button:'right'})
   await page.getByRole('menuitem', { name: 'Disconnect' }).click()
-  // The dot is gone (no tooltip), the tab ended with the reason.
-  await expect(await connectionChoice(page,/^demo\b/)).toHaveAttribute('title',/Not connected/)
+  // The state marker changes; connection text has no hover hint. The tab ends with its reason.
+  const disconnectedA=await connectionChoice(page,/^demo\b/)
+  await expect(disconnectedA.locator('[data-connection-state]')).toHaveAttribute('data-connection-state','disconnected')
+  await expect(disconnectedA).not.toHaveAttribute('title')
   await page.keyboard.press('Escape')
   await tabAOnB.click()
   await expect(state()).toContainText('the connection to the target was closed')

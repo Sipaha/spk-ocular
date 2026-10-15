@@ -10,7 +10,7 @@ import { prefetchToolInfo } from './toolInfo'
 import { useInstancePicker } from './useInstancePicker'
 import { LoadingOverlay } from './LoadingOverlay'
 import { DetailsPanel } from './DetailsPanel'
-import { lazy, Suspense, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { lazy, Suspense, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { ApiError, type Client } from '../api/client'
 import type { ActionDescriptor, EditDoc, ExecInstance, Relation, Ref, Resource } from '../api/types'
 import { Menu } from '../actions/Menu'
@@ -224,10 +224,12 @@ export function ResourceDrawer({ embedded = false, client, hub, target, subject,
   // Keep the previous static layout while loading another object. Privileged
   // value/port children below are removed immediately; stale controls are inert.
   const r = shown?.r ?? (loading ? res?.r : undefined)
-  const actions = actionsOf?.(current.kind) ?? []
+  const displayKind = r?.ref.kind ?? current.kind
+  const presentation = loading ? res : shown
+  const actions = actionsOf?.(displayKind) ?? []
   // The object shown now (after relation navigation: that one), with the UID read.
   // A deleted object has nothing to open or act on.
-  const hasTools = !shown?.gone && (!!r?.ref.uid || !!r?.rbacSubject || (!!onLogs && !!hasLogs?.(current.kind)) || (!!onTerminal && !!hasExec?.(current.kind)) || (!!onAction && actions.length > 0) || !!editableOf?.(current.kind))
+  const hasTools = !presentation?.gone && (!!r?.ref.uid || !!r?.rbacSubject || (!!onLogs && !!hasLogs?.(displayKind)) || (!!onTerminal && !!hasExec?.(displayKind)) || (!!onAction && actions.length > 0) || !!editableOf?.(displayKind))
   // Shown by its title (a container's name) once read; the key stays the name.
   const title = refTitle(r?.ref ?? current)
   const shownRef = (): Ref => ({ ...(r?.ref ?? current), provider: target.provider, target: target.id })
@@ -278,7 +280,7 @@ export function ResourceDrawer({ embedded = false, client, hub, target, subject,
           <h2 className="drawer-title min-w-0 truncate" title={title}>
             {title}
           </h2>
-          <span className="drawer-kind min-w-0 max-w-[40%] truncate" title={current.kind}>{current.kind}</span>
+          <span className="drawer-kind min-w-0 max-w-[40%] truncate" title={displayKind}>{displayKind}</span>
           <span className="flex-1" />
           <button data-drawer-close className="action-icon-button" onClick={close} aria-label={t('drawer.close')} title={t('drawer.close')}>
             <CloseIcon className="h-[20px] w-[20px]"/>
@@ -286,10 +288,10 @@ export function ResourceDrawer({ embedded = false, client, hub, target, subject,
         </div>
         {hasTools && (
           <div className="drawer-tools" inert={loading}>
-            {!embedded&&shown?.r?.ref.uid&&!shown.error&&<ActionIconButton label={t('workspace.pinProperties')} description={t('workspace.pinPropertiesHint')} disabled={!workspaceReady} onClick={()=>{const targetInfo=useStore.getState().view?.groups.flatMap(g=>g.targets).find(item=>item.provider===target.provider&&item.id===target.id);if(!dock.openProperties(target,targetInfo?.title??target.id,shownRef(),tab))showNotice(t('workspace.limit'))}}><ActionIcon name="pin"/></ActionIconButton>}
-            {shown?.r?.ref.uid&&!shown.error&&<ComparisonTools subject={shownRef()}/>}
+            {!embedded&&r?.ref.uid&&!presentation?.error&&<ActionIconButton label={t('workspace.pinProperties')} description={t('workspace.pinPropertiesHint')} disabled={!workspaceReady} onClick={()=>{const targetInfo=useStore.getState().view?.groups.flatMap(g=>g.targets).find(item=>item.provider===target.provider&&item.id===target.id);if(!dock.openProperties(target,targetInfo?.title??target.id,shownRef(),tab))showNotice(t('workspace.limit'))}}><ActionIcon name="pin"/></ActionIconButton>}
+            {r?.ref.uid&&!presentation?.error&&<ComparisonTools subject={shownRef()}/>}
             {r?.rbacSubject && <ActionIconButton label={t('rbac.permissions')} description={t('rbac.permissionsHint')} onClick={()=>setAccess({subject:r.rbacSubject})}><ActionIcon name="permissions"/></ActionIconButton>}
-            {onLogs && hasLogs?.(current.kind) && (
+            {onLogs && hasLogs?.(displayKind) && (
               <ActionIconButton
                 onClick={() => onLogs({ ...(r?.ref ?? current), provider: target.provider, target: target.id })}
                 onContextMenu={event=>{event.preventDefault();event.stopPropagation();event.currentTarget.focus();onLogs(shownRef(),true)}}
@@ -298,17 +300,17 @@ export function ResourceDrawer({ embedded = false, client, hub, target, subject,
                 <ActionIcon name="logs"/>
               </ActionIconButton>
             )}
-            {onTerminal && hasExec?.(current.kind) && (
+            {onTerminal && hasExec?.(displayKind) && (
               <ActionIconButton onClick={()=>onTerminal(shownRef(),false)}
                 onContextMenu={event=>{event.preventDefault();event.stopPropagation();event.currentTarget.focus();onTerminal(shownRef(),true)}} label={t('term.open')} description={t('tools.terminalHint')}>
                 <ActionIcon name="terminal"/>
               </ActionIconButton>
             )}
-            {!embedded&&hasExec?.(current.kind) && <ActionIconButton label={t('files.title')} description={t('tools.filesHint')}
+            {!embedded&&hasExec?.(displayKind) && <ActionIconButton label={t('files.title')} description={t('tools.filesHint')}
               onContextMenu={event=>{event.preventDefault();event.stopPropagation();event.currentTarget.focus();cancelFilesPicker(false);leave(()=>setFilesDialog(filesSubject))}}
               onClick={() => leave(() => pickExec(filesSubject, instance => leave(() => setFilesOpen({subject:filesSubject,instance}))))}><ActionIcon name="files"/></ActionIconButton>}
-            {editableOf?.(current.kind) && (
-              <ActionIconButton disabled={!canEdit || !!editing || loadingEdit} onClick={startEdit} label={t('edit.open')} description={t('edit.openHint')}>
+            {editableOf?.(displayKind) && (
+              <ActionIconButton disabled={!(loading ? !!editableOf?.(displayKind)&&!!r?.ref.uid&&!presentation?.gone : canEdit) || !!editing || loadingEdit} onClick={startEdit} label={t('edit.open')} description={t('edit.openHint')}>
                 <ActionIcon name="edit"/>
               </ActionIconButton>
             )}
@@ -412,6 +414,7 @@ export function ResourceDrawer({ embedded = false, client, hub, target, subject,
             hub={hub}
             target={target}
             r={r}
+            pending={loading}
             onGo={go}
             kindTitleOf={kindTitleOf}
             eventsKind={shown ? eventsKindOf?.(current.kind) : undefined}
@@ -449,8 +452,23 @@ export function ResourceDrawer({ embedded = false, client, hub, target, subject,
   )
 }
 
-function Details(props: { client: Client; hub: ViewHub; target: { provider: string; id: string }; r: Resource; onGo: (ref: Ref) => void; kindTitleOf?: (kind: string) => string; eventsKind?: string; ports?: ReactNode; values?: ReactNode }) {
-  const { client, hub, target, r, onGo, kindTitleOf, eventsKind, ports, values } = props
+/** Keep section geometry while privileged children stop immediately on object change. */
+function RetainedSection({pending,children}:{pending:boolean;children:ReactNode}) {
+ const box=useRef<HTMLDivElement>(null),[height,setHeight]=useState(0)
+ useLayoutEffect(()=>{
+  if(pending)return
+  const el=box.current
+  setHeight(el?.getBoundingClientRect().height??0)
+  if(!el||typeof ResizeObserver==='undefined')return
+  const observer=new ResizeObserver(()=>{setHeight(el.getBoundingClientRect().height)})
+  observer.observe(el);return()=>observer.disconnect()
+ },[pending,children])
+ if(!children&&(!pending||height===0))return null
+ return <div ref={box} data-retained-section style={pending?{height}:undefined}>{pending?null:children}</div>
+}
+
+function Details(props: { client: Client; hub: ViewHub; target: { provider: string; id: string }; r: Resource; onGo: (ref: Ref) => void; kindTitleOf?: (kind: string) => string; eventsKind?: string; ports?: ReactNode; values?: ReactNode; pending?:boolean }) {
+  const { client, hub, target, r, onGo, kindTitleOf, eventsKind, ports, values, pending=false } = props
   const groups = useMemo(() => {
     const m = new Map<string, Relation[]>()
     for (const rel of r.relations ?? []) m.set(rel.type, [...(m.get(rel.type) ?? []), rel])
@@ -477,8 +495,8 @@ function Details(props: { client: Client; hub: ViewHub; target: { provider: stri
           </div>
         ))}
       </dl>
-      {values}
-      {ports}
+      <RetainedSection pending={pending}>{values}</RetainedSection>
+      <RetainedSection pending={pending}>{ports}</RetainedSection>
       <DeploymentRevisions key={`${r.ref.uid}/${r.ref.name}`} client={client} resource={r}/>
       {(groups.length > 0 || r.relationsError) && (
         <section aria-label={t('drawer.related')}>
@@ -511,7 +529,7 @@ function Details(props: { client: Client; hub: ViewHub; target: { provider: stri
           {r.relationsTruncated && <p className="text-xs text-fg-subtle">{t('drawer.relationsTruncated')}</p>}
         </section>
       )}
-      {r.ref.uid && eventsKind && <ObjectEvents hub={hub} kind={eventsKind} subject={r.ref} />}
+      <RetainedSection pending={pending}>{r.ref.uid && eventsKind && <ObjectEvents hub={hub} kind={eventsKind} subject={r.ref} />}</RetainedSection>
     </div>
   )
 }

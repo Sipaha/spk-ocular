@@ -76,14 +76,14 @@ function PaletteDialog({ client, act, hub }: { client: Client; act: Actions; hub
   }, [view, host, hostProvider, liveScopes, recents])
   const currentSources: Sources = useMemo(() => ({ ...baseSources, rows: host ? rows : EMPTY_ROWS }), [baseSources, host, rows])
   const originalTyped = typedKindQuery(query, baseSources.kinds)
-  const originalNeedsRead = originalTyped?.kinds.length === 1 && originalTyped.kinds[0].id !== host?.currentKind
+  const originalNeedsRead = originalTyped?.kinds.length === 1 && (originalTyped.kinds[0].id !== host?.currentKind || !!originalTyped.scope)
   const originalSources = originalNeedsRead ? baseSources : currentSources
   const baseSearch = useMemo(() => buildKeyboardItems(query, originalSources, !originalNeedsRead), [query, originalSources, originalNeedsRead])
   const lookupQuery = originalTyped ? query : baseSearch.query
   const typed=typedKindQuery(lookupQuery,host?.kinds??[])
   const searchedKind=typed?.kinds.length===1?typed.kinds[0]:null
-  const lookupScope=searchedKind?.scoped?host?.selectedScope:{mode:'none' as const}
-  const searchKey=host&&searchedKind&&searchedKind.id!==host.currentKind&&lookupScope ? JSON.stringify({provider:host.target.provider,target:host.target.id,kind:searchedKind.id,scope:lookupScope}) : ''
+  const lookupScope=typed?.scope??(searchedKind?.scoped?host?.selectedScope:{mode:'none' as const})
+  const searchKey=host&&searchedKind&&(searchedKind.id!==host.currentKind||!!typed?.scope)&&lookupScope ? JSON.stringify({provider:host.target.provider,target:host.target.id,kind:searchedKind.id,scope:lookupScope}) : ''
   const lookupSync=useMemo(()=>{
    if(!searchKey)return null
    const request=JSON.parse(searchKey) as {provider:string;target:string;kind:string;scope:NonNullable<Sources['selectedScope']>}
@@ -100,7 +100,7 @@ function PaletteDialog({ client, act, hub }: { client: Client; act: Actions; hub
   const searchError=searchKey&&lookup?.status.state==='error' ? lookup.openError||lookup.status.message||t('status.error') : ''
   const failures=lookup?.status.coverage?.filter(source=>source.state!=='ready'&&source.state!=='loading')??[]
   const searchWarning=lookup?.status.state==='stale' ? lookup.status.message||t('coverage.stale') : failures.length ? t('coverage.notObserved')+': '+failures.map(source=>source.source+' · '+classLabel(source.class??source.state)).join(', ') : ''
-  const sources: Sources = useMemo(() => ({ ...baseSources, rows: host ? searchRows : [] }), [baseSources, host, searchRows])
+  const sources: Sources = useMemo(() => ({ ...baseSources,selectedScope:typed?.scope??baseSources.selectedScope, rows: host ? searchRows : [] }), [baseSources, host, searchRows,typed?.scope])
   const search = useMemo(() => searchKey ? buildKeyboardItems(lookupQuery, sources, !searching && !searchError) : baseSearch, [searchKey, lookupQuery, sources, searching, searchError, baseSearch])
   const built = search.built
   const correctedQuery = search.query !== query ? search.query : null
@@ -122,10 +122,10 @@ function PaletteDialog({ client, act, hub }: { client: Client; act: Actions; hub
     closePalette()
     const a = item.action
     if (a.type === 'target') void act.select(a.ref)
-    else if (a.type === 'kind') host?.openKind(a.kind, a.filter ?? '')
+    else if (a.type === 'kind') host?.openKind(a.kind, a.filter ?? '',a.scope)
     else if (a.type === 'scope') host?.setScope(a.scope)
     else if (a.type === 'command') agents.showPanel('grants')
-    else host?.openObject(a.ref)
+    else host?.openObject(a.ref,a.scope)
   }
 
   const move = (to: number) => {

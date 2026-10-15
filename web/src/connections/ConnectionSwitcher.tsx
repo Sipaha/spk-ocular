@@ -8,20 +8,23 @@ import { providerText, t } from '../i18n'
 import { Configurations, type ConfigurationActions } from '../configurations/Configurations'
 import { Menu, type MenuItem } from '../actions/Menu'
 import { targetMenuItems } from './targetMenu'
-import { ProviderIcon, WarningIcon } from '../components/icons'
+import { ProviderIcon, WarningIcon, ImportConfigIcon, NewConfigIcon } from '../components/icons'
 import { agents, pendingOf, useAgents } from '../agents/store'
 import { TargetInfoButton } from '../components/TargetDetails'
 import { appearanceModel } from './appearance'
 import { ConnectionIcon } from './ConnectionIcon'
 import { AppearanceDialog } from './AppearanceDialog'
+import { englishKeyboardQuery } from '../palette/keyboardLayout'
 
 export function ConnectionSwitcher({client,act,configRef,target}:{client:Client;act:Actions;configRef:RefObject<ConfigurationActions|null>;target:Target|null}){
  const view=useStore(s=>s.view),actions=useStore(s=>s.connectionActions),pending=useAgents(s=>s.pending)
  const model=appearanceModel(client),errors=useModel(model.store,s=>s.errors)
  const [open,setOpen]=useState(false),[query,setQuery]=useState(''),[cursor,setCursor]=useState(0),[keyboardCursor,setKeyboardCursor]=useState(false)
  const [menu,setMenu]=useState<{target:Target;at:{x:number;y:number};configs:ConfigurationActions|null}|null>(null),[editing,setEditing]=useState<Target|null>(null)
- const trigger=useRef<HTMLButtonElement>(null),box=useRef<HTMLElement>(null),input=useRef<HTMLInputElement>(null),id=useId()
- const all=view?.groups.flatMap(g=>g.targets)??[],filtered=all.filter(x=>matchesFilter(x,query)),active=filtered[Math.min(cursor,Math.max(0,filtered.length-1))]
+ const trigger=useRef<HTMLButtonElement>(null),iconTrigger=useRef<HTMLButtonElement>(null),box=useRef<HTMLElement>(null),input=useRef<HTMLInputElement>(null),id=useId()
+ const all=view?.groups.flatMap(g=>g.targets)??[],original=all.filter(x=>matchesFilter(x,query))
+ const corrected=original.length?null:englishKeyboardQuery(query),effectiveQuery=corrected??query
+ const filtered=corrected?all.filter(x=>matchesFilter(x,effectiveQuery)):original,active=filtered[Math.min(cursor,Math.max(0,filtered.length-1))]
  const failedTargets=all.filter(x=>errors[JSON.stringify([x.provider,x.id])])
  const issueCount=(view?.groups.reduce((n,g)=>n+g.problems.length+(g.error?1:0),0)??0)+failedTargets.length
  useEffect(()=>{for(const g of view?.groups??[])for(const x of g.targets)void model.ensure(x)},[view,model])
@@ -29,7 +32,8 @@ export function ConnectionSwitcher({client,act,configRef,target}:{client:Client;
  const close=(back=true)=>{setOpen(false);setQuery('');setCursor(0);if(back)trigger.current?.focus()}
  useEffect(()=>{if(open)input.current?.focus()},[open])
  useEffect(()=>{if(open&&active&&(keyboardCursor||document.activeElement===input.current))box.current?.querySelector<HTMLElement>(`[id="${id}-${filtered.indexOf(active)}"]`)?.scrollIntoView({block:'nearest'})},[open,keyboardCursor,cursor,id,active,filtered])
- const addConfig=(at:{x:number;y:number})=>{close();configRef.current?.openAdd(at)}
+ const addConfig=(action:'import'|'new')=>{close();if(action==='import')configRef.current?.openImport();else configRef.current?.openNew()}
+ const editAppearance=(x:Target,header=false,keepPicker=false)=>{if(!keepPicker)close(!header);if(header)iconTrigger.current?.focus();setEditing(x)}
  const choose=(x:Target)=>{close();void act.select(x)}
  const showMenu=(x:Target,at:{x:number;y:number})=>{setMenu({target:x,at,configs:configRef.current})}
  const rowKey=(e:KeyboardEvent<HTMLButtonElement>,x:Target)=>{
@@ -41,27 +45,29 @@ export function ConnectionSwitcher({client,act,configRef,target}:{client:Client;
  }
  const actual=menu?all.find(x=>targetKey(x)===targetKey(menu.target)):undefined
  const menuItems:MenuItem[]=actual?[
-  {id:'appearance',label:t('appearance.title'),onSelect:()=>{close();setEditing(actual)}},
+  {id:'appearance',label:t('appearance.title'),onSelect:()=>editAppearance(actual)},
   ...targetMenuItems(actual,act,menu?.configs??null).map(item=>({...item,onSelect:()=>{close();item.onSelect()}})),
  ]:[]
  const status=(x:Target)=>x.connection?.state==='connecting'||actions[targetKey(x)]?'connecting':x.open?'connected':'disconnected'
  const statusLabel=(x:Target)=>t(status(x)==='connecting'?'connection.connecting':status(x)==='connected'?'connections.connected':'connection.disconnected')
  return <>
   <div className="connection-context" data-area="targets">
+   <div className="connection-identity">
+   {target&&<button ref={iconTrigger} type="button" data-connection-appearance="header" className="connection-icon-edit" aria-label={`${t('appearance.title')}: ${target.title}`} title={t('appearance.title')} aria-haspopup="dialog" onClick={()=>editAppearance(target,true)}><ConnectionIcon client={client} target={target}/></button>}
    <button ref={trigger} data-area-focus data-connection-switcher type="button" aria-label={t('connections.title')} aria-haspopup="dialog" aria-expanded={open} aria-describedby={`${id}-context`} className="connection-trigger" title={target?.title??t('connections.choose')} onClick={()=>{if(open)close();else show()}} onKeyDown={e=>{if(target&&(e.key==='ContextMenu'||(e.shiftKey&&e.key==='F10'))){rowKey(e,target);return}if(e.key==='ArrowDown'||e.key==='ArrowUp'){e.preventDefault();show()}}}>
-    {target&&<ConnectionIcon client={client} target={target}/>}
-    <span className="min-w-0 truncate">{target?.title??t('connections.choose')}</span>
+    <span className="min-w-0 flex-1 truncate text-left">{target?.title??t('connections.choose')}</span>
     {target&&<span data-connection-state={status(target)} aria-label={statusLabel(target)} className="connection-state"/>}
     {issueCount>0&&<span className="text-warning" title={t('connections.problems',{n:issueCount})}><WarningIcon className="h-3.5 w-3.5"/></span>}
     <svg aria-hidden="true" className="h-3 w-3 shrink-0 text-fg-muted" viewBox="0 0 12 12" fill="none" stroke="currentColor"><path d="m3 4.5 3 3 3-3"/></svg>
    </button>
+   </div>
    {pending.length>0&&<button type="button" className="rounded px-1 text-xs text-warning" aria-label={`${t('agents.waitingHint')}: ${pending.length}`} onClick={()=>agents.bringBack()}>{pending.length}</button>}
    <span id={`${id}-context`} className="sr-only">{target?`${target.title}. ${statusLabel(target)}`:t('connections.choose')}{issueCount>0?`. ${t('connections.problems',{n:issueCount})}`:''}</span>
    {target&&<TargetInfoButton key={targetKey(target)} target={target} client={client}/>}
   </div>
   <Configurations client={client} ref={configRef} hideTrigger onChanged={()=>act.reload()}/>
-  {open&&createPortal(<div className="fixed inset-0 z-40" onMouseDown={e=>{if(e.target===e.currentTarget)close()}}>
-   <section ref={box} role="dialog" aria-modal="true" aria-label={t('connections.title')} data-connection-picker data-keyboard={keyboardCursor||undefined} className="connection-picker" onFocusCapture={e=>{if(e.target!==input.current&&!(e.target as HTMLElement).closest('[data-connection-row]'))setKeyboardCursor(false)}} onPointerMove={()=>{if(keyboardCursor)setKeyboardCursor(false)}} onKeyDown={e=>{
+  {open&&createPortal(<div className="fixed inset-0 z-40" inert={!!editing} onMouseDown={e=>{if(e.target===e.currentTarget)close()}}>
+   <section ref={box} role="dialog" aria-modal={editing?undefined:true} aria-hidden={editing?true:undefined} aria-label={t('connections.title')} data-connection-picker data-keyboard={keyboardCursor||undefined} className="connection-picker" onFocusCapture={e=>{if(e.target!==input.current&&!(e.target as HTMLElement).closest('[data-connection-row]'))setKeyboardCursor(false)}} onPointerMove={()=>{if(keyboardCursor)setKeyboardCursor(false)}} onKeyDown={e=>{
     if(menu)return
     if(e.key==='Escape'){e.preventDefault();e.stopPropagation();if(query){setQuery('');setCursor(0);input.current?.focus()}else close();return}
     if(e.target===input.current){
@@ -81,20 +87,21 @@ export function ConnectionSwitcher({client,act,configRef,target}:{client:Client;
     <div className="connection-search"><input ref={input} data-target-filter role="combobox" aria-expanded="true" aria-controls={id} aria-activedescendant={active?`${id}-${filtered.indexOf(active)}`:undefined} aria-haspopup="grid" aria-label={t('connections.search')} placeholder={t('connections.search')} value={query} onChange={e=>{setQuery(e.target.value);setCursor(0)}} spellCheck={false} className="w-full min-w-0 bg-transparent outline-none"/></div>
     <div id={id} role="grid" aria-label={t('connections.title')} className="connection-picker-list">
      {view?.groups.map(g=>{
-      const items=g.targets.filter(x=>matchesFilter(x,query));if(query.trim()&&!items.length&&!g.error&&!g.problems.length)return null;return <div role="rowgroup" aria-label={g.title} key={g.provider}>
-       <div role="row"><div role="columnheader" className="connection-group"><ProviderIcon provider={g.provider} className="h-4 w-4"/><span>{g.title}</span><span className="connection-group-count">{items.length}</span>{g.provider==='kubernetes'&&<button type="button" className="connection-add" aria-label={t('configs.add')} title={t('configs.add')} aria-haspopup="menu" onClick={e=>{const r=e.currentTarget.getBoundingClientRect();addConfig({x:r.left,y:r.bottom+4})}}>＋</button>}</div></div>
+      const items=g.targets.filter(x=>matchesFilter(x,effectiveQuery));if(query.trim()&&!items.length&&!g.error&&!g.problems.length)return null;return <div role="rowgroup" aria-label={g.title} key={g.provider}>
+       <div role="row"><div role="columnheader" className="connection-group"><ProviderIcon provider={g.provider} className="h-6 w-6 shrink-0"/><span className="min-w-0 truncate">{g.title}</span><span className="connection-group-count">{items.length}</span>{g.provider==='kubernetes'&&<div className="connection-group-actions"><button type="button" className="connection-add" aria-label={t('configs.scan')} title={t('configs.scan')} aria-haspopup="dialog" onClick={()=>addConfig('import')}><ImportConfigIcon className="h-4 w-4"/></button><button type="button" className="connection-add" aria-label={t('configs.custom')} title={t('configs.custom')} aria-haspopup="dialog" onClick={()=>addConfig('new')}><NewConfigIcon className="h-4 w-4"/></button></div>}</div></div>
        {(g.error||g.problems.length>0)&&<div role="row"><div role="gridcell" className="connection-problem"><div role="alert" aria-live="polite">{g.error?t('sidebar.providerError',{error:g.error}):t('sidebar.problems',{count:g.problems.length})}{g.problems.map(p=><p key={p.source} className="break-all text-xs">{p.source.split('/').pop()}: {p.message}</p>)}</div></div></div>}
        {!g.targets.length&&<div role="row"><div role="gridcell" className="px-3 py-2 text-xs text-fg-subtle">{providerText('sidebar.noTargets',g.provider)}</div></div>}
        {items.map(x=>{
         const selected=!!target&&targetKey(x)===targetKey(target),index=filtered.indexOf(x),waiting=pendingOf(pending,x.provider,x.id)
-        return <div key={targetKey(x)} role="row" id={`${id}-${index}`} aria-selected={selected} data-connection-row data-cursor={keyboardCursor&&active===x||undefined} onPointerMove={()=>{if(cursor!==index)setCursor(index)}} onFocusCapture={()=>{if(cursor!==index)setCursor(index)}} className="connection-picker-row" onContextMenu={e=>{e.preventDefault();showMenu(x,{x:e.clientX,y:e.clientY})}}>
-         <div role="gridcell" className="min-w-0"><button type="button" className="connection-choice" onKeyDown={e=>rowKey(e,x)} aria-label={[x.title,x.subtitle||g.title].join(' ')} aria-pressed={selected} title={[x.title,x.subtitle,statusLabel(x)].filter(Boolean).join('\n')} onClick={()=>choose(x)}>
-          <ConnectionIcon client={client} target={x}/><span className="min-w-0 flex-1 text-left"><span className="flex items-center gap-1"><span className="truncate">{x.title}</span>{x.locked&&<svg aria-hidden="true" data-encrypted-lock className="h-3.5 w-3.5 shrink-0 text-fg-muted" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4"><rect x="3.5" y="7" width="9" height="7" rx="1.5"/><path d="M5.5 7V4.5a2.5 2.5 0 0 1 5 0V7M8 10v2"/></svg>}</span><span className="block truncate text-xs text-fg-subtle">{x.subtitle||g.title}</span></span>
-          <span aria-hidden="true" className="text-accent">{selected?'✓':''}</span><span aria-hidden="true" data-connection-state={status(x)} className="connection-state"/>
+        return <div key={targetKey(x)} role="row" id={`${id}-${index}`} aria-selected={selected} data-connection-row data-cursor={(keyboardCursor||query.trim().length>0)&&active===x||undefined} onPointerMove={()=>{if(cursor!==index)setCursor(index)}} onFocusCapture={()=>{if(cursor!==index)setCursor(index)}} className="connection-picker-row" onContextMenu={e=>{e.preventDefault();showMenu(x,{x:e.clientX,y:e.clientY})}}>
+         <div role="gridcell" className="flex items-center pl-2"><button type="button" className="connection-icon-edit connection-row-appearance" aria-label={`${t('appearance.title')}: ${x.title}`} title={t('appearance.title')} aria-haspopup="dialog" onKeyDown={e=>rowKey(e,x)} onClick={e=>{e.currentTarget.focus({preventScroll:true});editAppearance(x,false,true)}}><ConnectionIcon client={client} target={x}/></button></div>
+         <div role="gridcell" className="min-w-0"><button type="button" className="connection-choice" onKeyDown={e=>rowKey(e,x)} aria-label={[x.title,x.subtitle||g.title].join(' ')} aria-pressed={selected} onClick={()=>choose(x)}>
+          <span className="min-w-0 flex-1 text-left"><span className="flex items-center gap-1"><span className="truncate">{x.title}</span>{x.locked&&<svg aria-hidden="true" data-encrypted-lock className="h-3.5 w-3.5 shrink-0 text-fg-muted" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4"><rect x="3.5" y="7" width="9" height="7" rx="1.5"/><path d="M5.5 7V4.5a2.5 2.5 0 0 1 5 0V7M8 10v2"/></svg>}</span><span className="block truncate text-xs text-fg-subtle">{x.subtitle||g.title}</span></span>
+          <span aria-hidden="true" data-connection-state={status(x)} className="connection-state"/>
          </button></div>
          <div role="gridcell" className="flex items-center pr-1">
           {waiting>0&&<button type="button" className="rounded px-1 text-xs text-warning" aria-label={`${t('agents.waitingHint')}: ${waiting}`} onClick={()=>{close();agents.bringBack()}}>{waiting}</button>}
-          <button type="button" className="connection-more" aria-label={t('connections.actions',{name:x.title})} aria-haspopup="menu" onClick={e=>{const r=e.currentTarget.getBoundingClientRect();showMenu(x,{x:r.left,y:r.bottom})}}>⋯</button>
+          <button type="button" className="connection-more" aria-label={t('connections.actions',{name:x.title})} title={t('connections.actions',{name:x.title})} aria-haspopup="menu" onClick={e=>{const r=e.currentTarget.getBoundingClientRect();showMenu(x,{x:r.left,y:r.bottom})}}>⋯</button>
          </div>
         </div>
        })}
@@ -102,6 +109,7 @@ export function ConnectionSwitcher({client,act,configRef,target}:{client:Client;
      })}
      {query&&!filtered.length&&<div role="row"><div role="gridcell" className="px-3 py-4 text-sm text-fg-muted">{t('sidebar.empty')}</div></div>}
     </div>
+    {corrected&&filtered.length>0&&<div role="status" className="break-words border-t border-line px-3 py-1.5 text-xs text-fg-muted">{t('palette.layoutFallback',{query:corrected})}</div>}
     {failedTargets.length>0&&<div role="alert" className="connection-problem">{t('appearance.failed')}<button type="button" className="ml-2 underline" onClick={()=>{for(const x of failedTargets)void model.ensure(x,true)}}>{t('appearance.retry')}</button></div>}
    </section>
   </div>,document.body)}

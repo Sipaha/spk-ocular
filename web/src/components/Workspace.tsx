@@ -273,23 +273,20 @@ export function Workspace({ client, hub, target, onFavorite, onMoveFavorite, onN
   const paletteActs = useRef<Pick<PaletteHost, 'openKind' | 'setScope' | 'openObject'> | null>(null)
   useEffect(() => {
     paletteActs.current = {
-      openKind: (k, filter) =>
-        leaveFor(k, () => {
-          if (k !== kind) {
-            again(k)
-            remember({ kind: k, scope })
-          } else again(k)
-          setFilterReq({ value: filter, seq: ++reqSeq.current })
-        }),
+      openKind: (k, filter, explicitScope) => {
+        const nextScope=explicitScope??scope
+        const go=()=>{again(k);if(k!==kind||explicitScope)remember({kind:k,scope:nextScope});setFilterReq({value:filter,seq:++reqSeq.current})}
+        if(newPage(k)||JSON.stringify(nextScope)!==JSON.stringify(scope))mayLeave(go);else go()
+      },
       setScope,
-      openObject: (ref) =>
+      openObject: (ref, explicitScope) =>
         mayLeave(() => {
           // Open the object's own table and keep the target's scope selection.
           // A vanished kind can still show its recent object's details in the
           // current table; without one, use the first available host.
           const k = kinds?.some((d) => d.id === ref.kind) ? ref.kind : current ? kind : (kinds?.find((d) => !d.hidden)?.id ?? kind)
           again(k)
-          if (k !== kind || !current) remember({ kind: k, scope })
+          if (k !== kind || !current || explicitScope) remember({ kind: k, scope:explicitScope??scope })
           setOpenReq({ value: ref, seq: ++reqSeq.current })
         }),
     }
@@ -304,9 +301,9 @@ export function Workspace({ client, hub, target, onFavorite, onMoveFavorite, onN
         currentKind: current?.id,
         scopes: scopeNames,
         selectedScope,
-        openKind: (k, f) => paletteActs.current?.openKind(k, f),
+        openKind: (k, f, s) => paletteActs.current?.openKind(k, f,s),
         setScope: (s) => paletteActs.current?.setScope(s),
-        openObject: (r) => paletteActs.current?.openObject(r),
+        openObject: (r,s) => paletteActs.current?.openObject(r,s),
       }),
     [targetRef, kinds, current?.id, scopeNames, selectedScope],
   )
@@ -442,7 +439,7 @@ export function Workspace({ client, hub, target, onFavorite, onMoveFavorite, onN
             drawer={{client,hub,target,hasLogs,onLogs:openLogs,hasExec,onTerminal:openTerminal,hasForward,actionsOf,onAction:openAction,eventsKindOf,editableOf,valuesOf,kindTitleOf}}
           /></Suspense>
         ) : page.kind.workspace === 'graph' ? (
-          <Suspense fallback={<LoadingState />}><GraphWorkspace key={page.key} client={client} target={target} scope={scope}
+          <Suspense fallback={<LoadingState />}><GraphWorkspace key={page.key} client={client} target={target} session={catalog.view?.session ?? 0} connection={target.connection?.id ?? 0} scope={scope}
             scopePicker={<ScopePicker scope={scope} scopes={scopes} scopeMenu={scopeMenu} onScope={setScope} />}
             drawer={{client,hub,target,hasLogs,onLogs:openLogs,hasExec,onTerminal:openTerminal,hasForward,actionsOf,onAction:openAction,eventsKindOf,editableOf,valuesOf,kindTitleOf}}
           /></Suspense>
@@ -572,7 +569,8 @@ export function navGroups(kinds: KindDescriptor[]): NavGroup[] {
   return out
 }
 
-/** Every section, including Favorites, has the same keyboard/mouse control. */
+/** Every section, including Favorites, has the same keyboard/mouse control.
+ * Physical icon/gap pixels match child text insets despite the 17 px root rem. */
 function NavSectionHeading({ label, open, count, disabled, onToggle }: {
   label: string; open: boolean; count: number; disabled: boolean; onToggle: (open: boolean) => void
 }) {
@@ -584,8 +582,8 @@ function NavSectionHeading({ label, open, count, disabled, onToggle }: {
         onToggle(!open)
       }
     }}
-    className="nav-group-heading w-full items-center gap-0.5 rounded-md text-left hover:text-fg">
-    <span aria-hidden className={['inline-block w-2 shrink-0 text-[9px] transition-transform', open ? 'rotate-90' : ''].join(' ')}>▶</span>
+    className="nav-group-heading w-full items-center gap-[2px] rounded-md text-left hover:text-fg">
+    <svg aria-hidden viewBox="0 0 8 8" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className={['h-[8px] w-[8px] shrink-0 transition-transform',open?'rotate-90':''].join(' ')}><path d="m2 1 4 3-4 3"/></svg>
     <span className="min-w-0 flex-1 truncate">{label}</span>
     <span className="font-normal" title={t('nav.kinds', { count })}>{count}</span>
   </button>
@@ -629,7 +627,7 @@ function NavItem({ active, onClick, label, hint, nested, favorite, onFavorite, f
       data-area-focus={active ? '' : undefined}
       aria-current={active ? 'page' : undefined}
       title={hint ? `${label} · ${hint}` : label}
-      className={['nav-item block w-full truncate rounded-md py-1 text-left', nested ? 'pr-2 pl-5' : 'px-2', active ? 'text-fg' : 'text-fg-muted hover:bg-hover hover:text-fg', onFavorite ? 'pr-8' : ''].join(' ')}
+      className={['nav-item block w-full truncate rounded-md py-1 text-left', nested ? 'pr-2 pl-[22px]' : 'pr-2 pl-[10px]', active ? 'text-fg' : 'text-fg-muted hover:bg-hover hover:text-fg', onFavorite ? 'pr-8' : ''].join(' ')}
     >
       {label}
     </button>
@@ -679,11 +677,9 @@ function NavSubgroup(props: {
             onToggle(!open)
           }
         }}
-        className="flex w-full items-center gap-1 rounded-md px-2 py-1 text-left text-fg-muted hover:bg-hover hover:text-fg"
+        className="flex w-full items-center gap-[4px] rounded-md px-[8px] py-1 text-left text-fg-muted hover:bg-hover hover:text-fg"
       >
-        <span aria-hidden className={['inline-block w-2.5 shrink-0 text-[10px] transition-transform', open ? 'rotate-90' : ''].join(' ')}>
-          ▶
-        </span>
+        <svg aria-hidden viewBox="0 0 8 8" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className={['h-[10px] w-[10px] shrink-0 transition-transform',open?'rotate-90':''].join(' ')}><path d="m2 1 4 3-4 3"/></svg>
         <span className="min-w-0 flex-1 truncate">{label}</span>
         <span className="shrink-0 text-[12px] text-fg-subtle">{kinds.length}</span>
       </button>
@@ -853,8 +849,8 @@ function ResourcePage(props: {
   return (
     <>
       <header className="resource-toolbar">
-        <h1 className="resource-title">{kindLabel(target.provider, kind)}</h1>
-        <span className="resource-count" aria-label="count">
+        <h1 className="sr-only">{kindLabel(target.provider, kind)}</h1>
+        <span className="sr-only" aria-label="count">
           {view.status.state === 'loading' && !view.rows.length ? '…' : view.rows.length}
         </span>
         {!initialLoading && view.status.state === 'loading' && <LoadingState title={kindLabel(target.provider, kind)} inline />}

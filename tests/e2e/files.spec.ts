@@ -436,7 +436,11 @@ test('deployment revisions show retained history, read-only YAML and normalized 
  await assertRelatedAlignment()
  await page.screenshot({path:join(scratchRoot,'related-and-deploy-revisions.png')})
  await revisions.locator('[data-deploy-revision]').filter({hasText:'Revision 2'}).getByRole('button',{name:'Compare',exact:true}).click()
- await expect(page.getByRole('dialog',{name:'Deployment revisions',exact:true})).toContainText('Pod templates are identical.')
+ const latestComparison=page.getByRole('dialog',{name:'Deployment revisions',exact:true})
+ await expect(latestComparison.getByRole('button',{name:'Compare against',exact:true})).toContainText('Revision 1')
+ await expect(latestComparison.locator('[data-op="-"]')).toContainText('app:v1');await expect(latestComparison.locator('[data-op="+"]')).toContainText('app:v2')
+ await latestComparison.getByRole('button',{name:'Compare against',exact:true}).click();await page.getByRole('option',{name:'Current Deployment',exact:true}).click()
+ await expect(latestComparison).toContainText('Pod templates are identical.')
  await page.getByRole('dialog',{name:'Deployment revisions',exact:true}).getByRole('button',{name:'Close',exact:true}).click()
  const old=revisions.locator('[data-deploy-revision]').filter({hasText:'Revision 1'})
  await old.getByRole('button',{name:'View YAML',exact:true}).click()
@@ -525,5 +529,27 @@ test('right-click setup cancels an earlier pending left-click without starting a
   expect(starts).toBe(0)
   await expect(setup).toBeVisible()
   await setup.getByRole('button',{name:'Cancel',exact:true}).click()
+ }
+})
+
+test('revision Compare defaults to the nearest lower retained number independent of order',async({page})=>{
+ const templateReads:string[]=[]
+ await page.route('**/api/GetResource',async route=>{
+  const ref=route.request().postDataJSON()
+  if(ref.kind==='apps/replicasets'){templateReads.push(ref.uid);const number=Number(String(ref.uid).replace('default-rs-',''));await route.fulfill({json:{ref,facts:[],health:{state:'ok'},yaml:'',templateYAML:`spec:\n  image: app:v${number}\n`}});return}
+  const response=await route.fetch(),resource=await response.json();resource.revisionsAvailable=true;resource.templateYAML='spec:\n  image: app:v3\n'
+  resource.revisions=[3,1,2].map(number=>({number,current:number===3,ref:{...resource.ref,kind:'apps/replicasets',name:`default-rs-${number}`,uid:`default-rs-${number}`},created:'2026-10-01T10:00:00Z',ready:0,replicas:0,images:[`app:v${number}`]}))
+  await route.fulfill({response,json:resource})
+ })
+ await selectObject(page,'api');const revisions=page.getByRole('region',{name:'Deployment revisions',exact:true})
+ for(const number of [3,2,1]){
+  const row=revisions.locator('[data-deploy-revision]').filter({hasText:`Revision ${number}`})
+  await row.getByRole('button',{name:number===3?'View YAML':'Compare',exact:true}).click()
+  const dialog=page.getByRole('dialog',{name:'Deployment revisions',exact:true})
+  if(number===3){await expect(dialog.locator('.cm-content')).toContainText('app:v3');expect(templateReads).toEqual(['default-rs-3']);await dialog.getByRole('button',{name:'Compare',exact:true}).click()}
+  await expect(dialog.getByRole('button',{name:'Compare against',exact:true})).toContainText(number===1?'Current Deployment':`Revision ${number-1}`)
+  await expect(dialog.locator('[data-op="-"]')).toContainText(`app:v${number===1?3:number-1}`);await expect(dialog.locator('[data-op="+"]')).toContainText(`app:v${number}`)
+  if(number===3)await page.screenshot({path:join(scratchRoot,'deployment-revision-previous-default.png')})
+  await dialog.getByRole('button',{name:'Close',exact:true}).click()
  }
 })

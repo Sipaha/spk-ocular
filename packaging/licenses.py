@@ -119,6 +119,11 @@ def collect():
              'Windows and macOS on amd64 and arm64; some components are target-specific.\n'
              'Full upstream legal texts are reproduced, including inherited notices.\n'
              'Upstream files may describe optional components not linked by Ocular.\n']
+    texts.append('Docker provider symbol\n\n'
+                 'Docker and the Docker logo are trademarks or registered trademarks of Docker, Inc.\n'
+                 'The unmodified white Docker mark identifies the Docker provider; no endorsement is implied.\n'
+                 'Source: https://www.docker.com/static/Docker-Logos-1.zip (SVG/docker-mark-white.svg).\n'
+                 'Brand reference: https://www.docker.com/company/newsroom/media-resources/\n')
     goroot = Path(subprocess.check_output(['go', 'env', 'GOROOT'], cwd=ROOT, text=True, encoding='utf-8').strip())
     goversion = subprocess.check_output(['go', 'env', 'GOVERSION'], cwd=ROOT, text=True, encoding='utf-8').strip()
     texts.append(render_component(f'Go runtime and standard library ({goversion})', component_files(goroot, standard_dirs)))

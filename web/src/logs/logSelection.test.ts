@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { buildDragSelectionText, absOffsetInRow, resolveRowEndpoint, pickRowIndexAtY } from './logSelection'
+import { buildDragSelectionText, absOffsetInRow, resolveRowEndpoint, pickRowIndexAtY, confineLogSelection } from './logSelection'
 
 interface E { id: number; text: string }
 const E = (id: number, text: string): E => ({ id, text })
@@ -94,4 +94,24 @@ describe('resolveRowEndpoint (selection endpoint → row index + offset)', () =>
     container.innerHTML = '<span>toolbar</span>'
     expect(resolveRowEndpoint(container, container.firstElementChild!.firstChild as Text, 1)).toBeNull()
   })
+})
+
+
+describe('native selection containment',()=>{
+ it.each([false,true])('clips document-wide selections and preserves backward=%s',backward=>{
+  document.body.innerHTML='<span>UI before</span><div id="logs"><span>log only</span></div><span>UI after</span>'
+  const container=document.getElementById('logs')!,s=window.getSelection()!
+  s.selectAllChildren(document.body)
+  if(backward){s.collapse(document.body,document.body.childNodes.length);s.extend(document.body,0)}
+  expect(confineLogSelection(container,s)).toBe(true)
+  expect(s.toString()).toBe('log only');expect(container.contains(s.anchorNode)).toBe(true);expect(container.contains(s.focusNode)).toBe(true)
+  expect(s.anchorOffset).toBe(backward?container.childNodes.length:0)
+  expect(confineLogSelection(container,s)).toBe(false)
+  s.removeAllRanges();document.body.replaceChildren()
+ })
+ it('clears an unrelated escaped range instead of selecting interface text',()=>{
+  document.body.innerHTML='<span id="outside">UI</span><div id="logs">logs</div>'
+  const s=window.getSelection()!;s.selectAllChildren(document.getElementById('outside')!)
+  expect(confineLogSelection(document.getElementById('logs')!,s)).toBe(true);expect(s.rangeCount).toBe(0);document.body.replaceChildren()
+ })
 })

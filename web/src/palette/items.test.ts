@@ -276,3 +276,18 @@ describe('keyboard fallback after no original matches', () => {
   expect(result.built.items.map(item => item.action)).toEqual([{ type: 'kind', kind: 'pods', filter: 'model' }, { type: 'kind', kind: 'other/pods', filter: 'model' }])
  })
 })
+
+it('scope type name limits live results to the explicitly typed scope',()=>{
+ const result=buildItems('demo-2 po api',sources({selectedScope:{mode:'one',name:'demo'},rows:[row('api-one','demo'),row('api-two','demo-2')]}))
+ expect(result.items).toHaveLength(1);expect(result.items[0].label).toBe('api-two')
+ expect(result.items[0].action).toMatchObject({type:'object',scope:{mode:'one',name:'demo-2'},ref:{scope:'demo-2',name:'api-two'}})
+})
+it('scope type name retains a filtered-view fallback without widening to all scopes',()=>{
+ const result=buildItems('unlisted deploy absent',sources({selectedScope:{mode:'all'}}))
+ expect(result.items[0].action).toEqual({type:'kind',kind:'apps/deployments',filter:'absent',scope:{mode:'one',name:'unlisted'}})
+ expect(buildItems('po api server',sources()).items[0].action).toEqual({type:'kind',kind:'pods',filter:'api server'})
+})
+it('scope type name layout recovery preserves the scope and type prefixes',()=>{
+ const result=buildKeyboardItems('demo-2 po фзш',sources({selectedScope:{mode:'one',name:'demo'},rows:[row('api-one','demo'),row('api-two','demo-2')]}))
+ expect(result.query).toBe('demo-2 po api');expect(result.built.items[0].action).toMatchObject({type:'object',scope:{mode:'one',name:'demo-2'},ref:{scope:'demo-2'}})
+})

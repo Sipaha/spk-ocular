@@ -292,3 +292,22 @@ test('keyboard fallback hint renders in eight languages at normal and narrow wid
   await page.getByRole('option', { name: 'English', exact: true }).click()
  }
 })
+
+test('scope type name searches one explicit scope and commits it only when a result is chosen',async({page})=>{
+ await openDemo(page)
+ const nav=page.getByRole('navigation',{name:'resources'}),zone=page.getByRole('textbox',{name:'Zone',exact:true})
+ await nav.getByRole('button',{name:'Crates',exact:true}).click();await zone.fill('blue');await zone.press('Enter')
+ await expect(page.getByRole('grid',{name:'resources'}).getByRole('gridcell',{name:'alpha',exact:true})).toBeVisible()
+ const requests:unknown[]=[];page.on('request',r=>{if(r.url().endsWith('/api/OpenView'))requests.push(r.postDataJSON().query)})
+ let dialog=await palette(page);await dialog.getByRole('combobox').fill('green cr gamma')
+ await expect(dialog.getByRole('option')).toContainText('gamma');await expect(dialog.getByRole('option')).toContainText('Object')
+ expect(requests).toEqual([{kind:'crates',scope:{mode:'one',name:'green'}}]);await expect(zone).toHaveValue('blue')
+ const closed=page.waitForResponse(r=>r.url().endsWith('/api/CloseView')&&r.ok());await page.keyboard.press('Escape');await closed;await expect(zone).toHaveValue('blue')
+ dialog=await palette(page);await dialog.getByRole('combobox').fill('green cr пфььф')
+ await expect(dialog.getByRole('option')).toContainText('gamma');await expect(dialog.getByText('Keyboard layout: searching for “green cr gamma”')).toBeVisible()
+ await page.screenshot({path:join(scratchRoot,'palette-scope-type-name.png')})
+ await page.keyboard.press('Enter');await expect(zone).toHaveValue('green')
+ await expect(page.getByRole('grid',{name:'resources'}).getByRole('row',{selected:true})).toContainText('gamma')
+ await expect(page.getByRole('dialog',{name:/crates gamma/})).toBeVisible()
+ expect(requests.every(q=>{const v=q as {kind:string;scope:{mode:string;name:string}};return v.kind==='crates'&&v.scope.mode==='one'&&v.scope.name==='green'})).toBe(true)
+})

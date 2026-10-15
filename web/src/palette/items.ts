@@ -12,10 +12,10 @@ import { selectedScopes } from '../scopes'
 import { englishKeyboardQuery } from './keyboardLayout'
 
 export type PaletteAction =
-  | { type: 'kind'; kind: string; filter?: string }
+  | { type: 'kind'; kind: string; filter?: string; scope?:ScopeSel }
   | { type: 'target'; ref: TargetRef }
   | { type: 'scope'; scope: ScopeSel }
-  | { type: 'object'; ref: Ref }
+  | { type: 'object'; ref: Ref; scope?:ScopeSel }
   | { type: 'command'; id: 'agents' }
 
 export type Section = 'kind' | 'target' | 'scope' | 'object' | 'command'
@@ -64,12 +64,12 @@ function kindTitle(kinds: KindDescriptor[], id: string) {
 
 const objectHint = (kinds: KindDescriptor[], r: Ref) => (r.scope ? `${kindTitle(kinds, r.kind)} · ${r.scope}` : kindTitle(kinds, r.kind))
 
-const kindItem = (k: KindDescriptor, filter?: string): PaletteItem => ({
+const kindItem = (k: KindDescriptor, filter?: string,scope?:ScopeSel): PaletteItem => ({
   key: `kind:${k.id}${filter ? `:${filter}` : ''}`,
   section: 'kind',
   label: k.title,
   hint: filter ? t('palette.filtered', { text: filter }) : k.subgroup ? `${k.group} · ${k.subgroup}` : k.group,
-  action: filter ? { type: 'kind', kind: k.id, filter } : { type: 'kind', kind: k.id },
+  action: { type:'kind',kind:k.id,...(filter?{filter}:{}),...(scope?{scope}:{}) },
 })
 
 const targetItem = ({ target, groupTitle }: Sources['targets'][number]): PaletteItem => ({
@@ -206,11 +206,11 @@ function command(input: string, src: Sources): Built {
   return { items: [], cursor: null, unknown: true }
 }
 
-export interface TypedKindQuery { kinds: KindDescriptor[]; filter: string }
+export interface TypedKindQuery { kinds: KindDescriptor[]; filter: string; scope?:ScopeSel }
 
 /** Exact provider aliases win; an unambiguous prefix also supports "dep model".
  * Ambiguity offers views to choose from and must not start multiple reads. */
-export function typedKindQuery(input:string,kinds:KindDescriptor[]):TypedKindQuery|null {
+function kindQuery(input:string,kinds:KindDescriptor[]):TypedKindQuery|null {
  if(input.trimStart().startsWith(':'))return null
  const text=input.trim(),space=text.search(/\s/)
  if(space<0||!text.slice(space).trim())return null
@@ -224,16 +224,25 @@ export function typedKindQuery(input:string,kinds:KindDescriptor[]):TypedKindQue
  const matches=own.length?own:exact.length?exact:ownPrefix.length?ownPrefix:prefix
  return matches.length?{kinds:matches,filter}:null
 }
+/** Explicit scope + kind + name, after the existing kind-first grammar. */
+export function typedKindQuery(input:string,kinds:KindDescriptor[]):TypedKindQuery|null {
+ const regular=kindQuery(input,kinds)
+ if(regular||input.trimStart().startsWith(':')||kinds.some(k=>lower(k.title)===lower(input.trim())))return regular
+ const match=input.trim().match(/^(\S+)\s+(\S+)\s+(.+)$/)
+ if(!match)return null
+ const scoped=kindQuery(match[2]+' '+match[3],kinds.filter(k=>k.scoped))
+ return scoped?{...scoped,scope:{mode:'one',name:match[1]}}:null
+}
 function typedItems(query:TypedKindQuery,src:Sources):Built {
- if(query.kinds.length!==1)return choose(query.kinds.map(k=>kindItem(k,query.filter)),[])
+ if(query.kinds.length!==1)return choose(query.kinds.map(k=>kindItem(k,query.filter,query.scope)),[])
  const kind=query.kinds[0]
- const found=objects(src).filter(item=>item.action.type==='object'&&item.action.ref.kind===kind.id)
+ const found=objects(query.scope?{...src,selectedScope:query.scope}:src).filter(item=>item.action.type==='object'&&item.action.ref.kind===kind.id).map(item=>item.action.type==='object'&&query.scope?{...item,action:{...item.action,scope:query.scope}}:item)
  const words=query.filter.split(/\s+/).filter(Boolean)
  const matches=found.map((item,order)=>({item,order,scores:words.map(word=>fuzzyScore(word,item.label))})).filter(entry=>entry.scores.every(score=>score!==null))
  const priority=recentPriority(src)
  matches.sort((a,b)=>(b.scores.reduce<number>((sum,score)=>sum+(score??0),0)+priority(b.item))-(a.scores.reduce<number>((sum,score)=>sum+(score??0),0)+priority(a.item))||a.order-b.order)
  const items=matches.map(entry=>entry.item).slice(0,MAX_ITEMS)
- if(!items.length)items.push(kindItem(kind,query.filter))
+ if(!items.length)items.push(kindItem(kind,query.filter,query.scope))
  return {items,cursor:items[0]?.key??null}
 }
 export function buildItems(input: string, src: Sources): Built {
@@ -253,6 +262,6 @@ export function buildKeyboardItems(input: string, src: Sources, allowFallback = 
  if (matched) return { query: input, built }
  const mapped = englishKeyboardQuery(typed ? typed.filter : input)
  if (mapped === null) return { query: input, built }
- const query = typed ? input.trim().split(/\s/, 1)[0] + ' ' + mapped : mapped
+ const query = typed ? input.trim().slice(0,input.trim().length-typed.filter.length) + mapped : mapped
  return { query, built: buildItems(query, src) }
 }

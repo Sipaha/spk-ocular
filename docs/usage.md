@@ -8,20 +8,35 @@ indicator. The connections button opens a searchable list grouped by provider;
 there is no permanent connections column. Search receives focus on opening;
 arrows move the cursor, Enter selects, and Escape first clears a query, then
 closes the picker and returns focus. Selection closes the picker before any
-unsaved-edit question. It never connects an unopened target. A check marks the
-selected row independently of its green/yellow/gray connection-state indicator.
+unsaved-edit question. It never connects an unopened target. The selected row uses a filled background
+and left accent independently of its green/yellow/gray 10 px connection-state indicator.
 Source/discovery problems are available in the picker and flagged on its trigger;
-pending agent requests also remain visible in the header.
+pending agent requests also remain visible in the header. If the original search
+has no matches, the picker also tries the existing Russian/Ukrainian physical-key
+recovery to English and shows the corrected query. Real original-layout matches
+take priority; searching does not connect or fetch resource data. A nonempty
+query immediately highlights the Enter candidate, without requiring an arrow
+key; the actual selected connection retains its left accent. There is no
+redundant check mark. Provider
+headings use muted text rather than competing with connection names.
 
-Each row's **⋯** menu offers connection appearance and the existing source or
-connection actions. The **＋** button on the right of the **Kubernetes** heading
-opens **Add kubeconfig** and remains reachable by Tab in long connection lists. Connection
+Click a connection icon in the header or picker to change its appearance without
+selecting or connecting it. Clicking a row icon keeps the picker open beneath the
+appearance dialog, preserving its search and scroll. Save or Cancel returns focus
+to that icon. The background picker is inert while the dialog is open. The picker
+uses 36 px icons beside its two text lines.
+Each row's **⋯** menu retains appearance, source and connection actions. Counts
+sit beside provider names. The **Kubernetes** heading has two direct buttons on
+the right: a file with an arrow for **Import kubeconfig files**, and a file with a plus
+for **New configuration**. Both remain reachable by Tab in long lists. Disconnect
+precedes the final, separately grouped Remove action. Context-menu pointer and
+keyboard navigation share one active highlight. Connection
 information remains available through the separate header info button. A neutral
 application menu on the right contains language, About and keyboard help; the
 workspace header does not display the application logo or name. Native window
 and taskbar identity are unchanged.
 
-**Connection appearance** offers 32 vector icons and eight curated icon/background
+**Connection appearance** offers 32 vector icons and sixteen curated icon/background
 pairs. There are no arbitrary colour inputs. Each preset defines readable light
 and dark variants; the current application uses the dark variant. New and existing
 connections without valid saved appearance receive a random initial combination,
@@ -33,7 +48,19 @@ persistence errors are shown with a retry action. The appearance dialog waits fo
 the stored choice before enabling Save, so a slow read cannot overwrite it with
 a placeholder. Arrow keys move within each
 appearance choice grid, Home/End choose its first/last option, and Tab moves
-between the selected icon, selected colour pair and dialog actions.
+between the selected icon, selected color and dialog actions. The Color grid has
+two rows of eight presets; up/down arrows move one row. Icon choices fill their
+tiles while retaining the narrow-window layout.
+
+The connection picker has hover hints only for icon actions, not connection text
+or section titles. Header controls retain hints, rendered
+with the application panel colors rather than platform tooltip colors, using
+14 px text and a shared 800 ms delay for text hints and icon actions. Resource
+table cell values have a hint only when the hovered cell actually clips its text.
+Overflow is measured only for that cell before showing the hint; resizing does
+not scan the table or install per-cell observers. The resource toolbar omits the
+repeated section title and count; the selected navigation entry identifies the
+section. Its heading and count remain available to assistive technology.
 
 ## Start and connect
 
@@ -110,6 +137,13 @@ for coverage, limits and evidence semantics. Available from 1.2.0.
 
 ## Cluster graph
 
+Graph inventory loading requires an explicit Load graph click once per backend
+connection session. Opening the graph before that click creates neither an inventory
+request nor a layout worker. Navigation and warm target switching retain this choice;
+Disconnect/Connect, a replacement session and application restart require a fresh click.
+The choice is memory-only, never a saved target preference. Automatic replacement retains
+a guarded unsaved editor until its edits are released, then requests fresh graph admission.
+
 On a connected Kubernetes target, open **Cluster → Cluster graph**. The same
 namespace picker can select one, several or all namespaces. The canvas includes
 discovered readable resources (including custom resources and retained objects);
@@ -167,7 +201,7 @@ on the left and the primary action on the right; narrow windows stack actions. S
 persistently. Neither scanning nor importing contacts clusters or runs credential
 helpers. Docker discovery is unchanged.
 
-**Add kubeconfig** offers local file selection or a YAML editor. Local imports
+**Import kubeconfig files** imports local files; **New configuration** opens a YAML editor. Local imports
 are links, not copies: external edits are observed, new unselected files remain
 excluded, and originals are never modified. Selected KUBECONFIG files retain
 first-wins merge order; standalone files stay independent. Context IDs preserve
@@ -202,36 +236,37 @@ are rejected because pasted YAML has no source directory. Credential-helper
 commands must be on PATH or use absolute paths, and execute only on Connect.
 External files and helper-managed caches are outside Ocular's encryption.
 
-**Add kubeconfig** opens a menu: **From system files** scans import
+The two heading actions open dialogs directly. **Import kubeconfig files** scans import
 candidates; **New configuration** opens master-password setup/unlock and then
-the YAML editor. **Reset master password** also appears when encrypted
-configurations are configured. There is no separate configuration-management list.
-Use arrows or Home/End to focus a menu item, then Enter or Space to activate it.
-Menu activation does not select a target behind the popup. Held Enter repeats
-and unavailable items cannot execute an action.
+the editor. **Reset master password** belongs only to the locked-vault unlock
+dialog, next to password entry; it is absent from file import. If a fresh
+status contains no stored configurations, Reset skips the deletion review and
+resets the empty vault directly. The exact fresh registry revision still guards
+against concurrent additions; failures are shown without retry. When stored
+configurations exist, their names and deletion confirmation remain required. There is no
+separate configuration-management list. Tab moves between the direct actions;
+Enter or Space activates one without selecting a connection behind the dialog.
 
-Right-click a Kubernetes connection, including the selected one, to inspect or
-edit its source YAML, rename the configuration or remove it. With a connection row focused, Shift+F10 opens its menu. The header
+Right-click a Kubernetes connection, including the selected one, to **Edit kubeconfig**, rename the configuration or remove it. With a connection row focused, Shift+F10 opens its menu. The header
 switcher also offers Shift+F10 for the selected connection. Linked files also offer
 **Open in file manager**: Linux opens the parent folder; macOS and Windows select
 the source file. This action runs on the computer hosting Ocular, including
 browser mode, and reports launcher failures beside the add action.
 
-Inspection is read-only with syntax highlighting and search. The inspector and
-source editor use nearly the full window; a compact header shows the source
+The source editor provides syntax highlighting and search and uses nearly the full window; a compact header shows the source
 name, path and mode, leaving the remaining area to YAML. Editing starts
-from that same source; saving requires explicit confirmation naming the external
+from the selected source; saving requires explicit confirmation naming the external
 file or encrypted configuration. Changes affect all contexts using the source.
 External file updates are atomic, preserve the file's permissions and symlink,
 and reject changed content. Encrypted updates keep the entry ID and use a fresh
 nonce. Stale source or registry revisions refuse the write. Credential helpers
-are not run by inspection or editing. YAML is held only in the open dialog's
+are not run by opening or editing a source. YAML is held only in the open dialog's
 memory, never in preferences or SQLite. Cancelling an unchanged editor closes it;
 cancelling a changed draft asks before discarding it. A save review can be
 cancelled without losing the draft.
 
 Rename opens with the current name focused and selected. Password and creation
-dialogs focus their first input; the source inspector/editor focuses YAML.
+dialogs focus their first input; the source editor focuses YAML.
 Rename changes the exact visible name of that connection, preserving context
 IDs, source file names, YAML context keys and grants. Other connections from the
 same source retain their names. Display names persist across app restarts. Remove requires confirmation; it unlinks
@@ -294,6 +329,8 @@ continue to take precedence. The current kind remains visible
 inside a collapsed section. Search temporarily expands matching sections and
 restores the saved state when cleared.
 Resource navigation rows use the standard arrow cursor, including draggable favorites.
+Section chevrons are centered SVGs rather than font glyphs; direct child labels
+align with their section title, and nested children align with the subgroup title.
 
 ## Favorites and saved layout
 
@@ -319,12 +356,21 @@ commands do not. See [workspace continuity](workspace-continuity.md).
 Ctrl+K opens the command palette. It searches kinds, connections, scope names,
 and current table rows. History only raises the priority of matching live results;
 it never introduces absent, deleted, replaced or out-of-context resources. Object
-results remain in the selected namespaces, even while the current table is
-unscoped. Global objects such as Nodes remain available.
+results normally remain in the selected namespaces, even while the current table is
+unscoped. Global objects such as Nodes remain available. An explicit three-part
+query, `namespace type name` (for example `kube-system pods coredns`), searches
+only that one namespace and resource type. Other providers use their own scope
+names, for example `green cr gamma`. The selected namespace changes only after
+choosing a result, atomically with its view/object and behind the unsaved-edit
+guard. Existing type-first queries and colon commands keep their meaning; the
+name part can contain several words. Keyboard-layout recovery preserves the
+explicit namespace/type prefix. Ambiguous types offer a choice without fan-out.
 
 Opening an object selects its kind, opens details, and selects/reveals its exact
 row when available. The revealed row's table receives keyboard focus, so `L`
-opens its logs immediately for kinds supporting logs. The namespace selection remains unchanged. A different UID is a different object, even if its name is identical.
+opens its logs immediately for kinds supporting logs. Ordinary queries preserve
+the namespace selection; an explicit namespace prefix applies that selection
+when the result is chosen. A different UID is a different object, even if its name is identical.
 
 Commands use aliases supplied by the provider, for example `:po`, `:deploy web`,
 `:ns team-a`, `:ns *`, and `:ctx staging`. Ambiguous commands require an explicit
@@ -410,8 +456,11 @@ creation date (full timestamp in a tooltip), ready/total replicas, container ima
 and change cause. Long images and causes are truncated with full-value tooltips;
 narrow inspectors scroll the table horizontally. The row icon buttons retain
 accessible labels and tooltips for YAML and comparison. **View YAML** reads the selected
-revision's Pod template; **Compare** compares it with the current Deployment or
-another retained revision. Comparisons omit the controller's pod-template-hash
+revision's Pod template. **Compare** defaults to the nearest retained lower
+revision number, independent of display order. If no earlier revision remains,
+it uses the current Deployment template. The baseline selector still offers the
+current Deployment and other retained revisions; YAML-only mode does not fetch
+a comparison baseline until Compare is requested. Comparisons omit the controller's pod-template-hash
 label. These views are read-only and UID-pinned; permission failures and truncated
 history are explicit. Kubernetes may already have removed older revisions under
 revisionHistoryLimit. This section adds no rollback control.
@@ -692,12 +741,20 @@ save picker for larger exports. Ctrl+S/Command+S invokes the same action. Histor
 is limited to what Kubernetes/Docker still retain: expired/rotated logs and deleted
 Pods are not recovered, and several sources are read separately, not atomically.
 
+Log drag selection is confined to its viewport, including native selection
+reanchoring and dragging outside its edges. Clicking log text explicitly focuses
+the viewport so Ctrl+A selects logs rather than the surrounding interface.
+Releasing/cancelling the drag, losing the window or closing the tab removes the
+temporary selection guard; input fields retain their own selection behavior.
+
 The log toolbar's **Open in window** opens a separate OS window in desktop mode
 (or a popup in browser mode). It uses the existing tab's log stream and buffered
 lines. Sources, history options, search and display preferences stay synchronized.
 Use **Return to bottom panel**, or close the secondary window, to restore the
 original tab. Closing its main tab also closes the secondary window; closing the
 main application exits all its windows. Up to eight log windows can be detached.
+Detached windows have no Downloads history button or extra header; their log
+export action remains available and records exports in the main window history.
 
 While dragging a layout separator, incoming log lines stay in the existing
 bounded pending buffer and are applied on release. This avoids rebuilding a large

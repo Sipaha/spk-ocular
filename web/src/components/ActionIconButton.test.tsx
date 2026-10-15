@@ -1,9 +1,14 @@
 import {act,fireEvent,render,screen} from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import {createRef} from 'react'
-import {describe,expect,it,vi} from 'vitest'
+import {beforeEach,afterEach,describe,expect,it,vi} from 'vitest'
 import {ActionIconButton} from './ActionIconButton'
 import {ActionIcon} from './icons'
+import {TOOLTIP_DELAY} from '../tooltips'
+beforeEach(()=>vi.useFakeTimers())
+afterEach(()=>vi.useRealTimers())
+const user=()=>userEvent.setup({advanceTimers:vi.advanceTimersByTime})
+const show=()=>act(()=>{vi.advanceTimersByTime(TOOLTIP_DELAY)})
 
 describe('ActionIconButton',()=>{
  it('keeps a concise accessible name and description before and during a focus tooltip',async()=>{
@@ -11,22 +16,25 @@ describe('ActionIconButton',()=>{
   const button=screen.getByRole('button',{name:'Logs'})
   expect(button).toHaveAccessibleDescription('Open logs; right-click to choose a container.')
   expect(button).toHaveTextContent('')
-  await userEvent.hover(button)
-  expect(screen.getByRole('tooltip')).toBeVisible()
-  await userEvent.keyboard('{Escape}')
+  await user().hover(button)
   expect(screen.queryByRole('tooltip')).not.toBeInTheDocument()
-  await userEvent.tab()
+  act(()=>vi.advanceTimersByTime(TOOLTIP_DELAY-1));expect(screen.queryByRole('tooltip')).not.toBeInTheDocument()
+  act(()=>vi.advanceTimersByTime(1));expect(screen.getByRole('tooltip')).toBeVisible()
+  await user().keyboard('{Escape}')
+  expect(screen.queryByRole('tooltip')).not.toBeInTheDocument()
+  await user().tab()
   expect(button).toHaveFocus()
+  show()
   expect(screen.getByRole('tooltip')).toHaveTextContent('right-click')
   expect(button).toHaveAccessibleDescription('Open logs; right-click to choose a container.')
  })
  it('dismisses the tooltip with Escape without closing the containing panel; a later Escape reaches the panel',async()=>{
   const close=vi.fn()
   render(<section onKeyDown={e=>{if(e.key==='Escape')close()}}><ActionIconButton label="Edit" description="Edit saved YAML"><ActionIcon name="edit"/></ActionIconButton></section>)
-  await userEvent.tab();await userEvent.keyboard('{Escape}')
+  await user().tab();show();await user().keyboard('{Escape}')
   expect(screen.queryByRole('tooltip')).not.toBeInTheDocument()
   expect(close).not.toHaveBeenCalled()
-  await userEvent.keyboard('{Escape}')
+  await user().keyboard('{Escape}')
   expect(close).toHaveBeenCalledOnce()
  })
  it('forwards button refs, click and context-menu setup; clicking clears the tooltip',async()=>{
@@ -34,9 +42,11 @@ describe('ActionIconButton',()=>{
   render(<ActionIconButton ref={ref} label="Files" description="Right-click for setup" onClick={click} onContextMenu={context}><ActionIcon name="files"/></ActionIconButton>)
   const button=screen.getByRole('button',{name:'Files'})
   expect(ref.current).toBe(button)
-  await userEvent.hover(button)
-  expect(screen.getByRole('tooltip')).toBeVisible()
-  await userEvent.click(button)
+  await user().hover(button)
+  expect(screen.queryByRole('tooltip')).not.toBeInTheDocument()
+  act(()=>vi.advanceTimersByTime(TOOLTIP_DELAY-1));expect(screen.queryByRole('tooltip')).not.toBeInTheDocument()
+  act(()=>vi.advanceTimersByTime(1));expect(screen.getByRole('tooltip')).toBeVisible()
+  await user().click(button)
   expect(click).toHaveBeenCalledOnce()
   expect(screen.queryByRole('tooltip')).not.toBeInTheDocument()
   fireEvent.contextMenu(button)
@@ -44,10 +54,10 @@ describe('ActionIconButton',()=>{
  })
  it('shows only the most recently hovered or focused tooltip',async()=>{
   render(<><ActionIconButton label="Files" description="File setup"><ActionIcon name="files"/></ActionIconButton><ActionIconButton label="Copy" description="Copy visible logs"><ActionIcon name="copy"/></ActionIconButton></>)
-  await userEvent.hover(screen.getByRole('button',{name:'Files'}))
-  expect(screen.getByRole('tooltip')).toHaveTextContent('File setup')
+  await user().hover(screen.getByRole('button',{name:'Files'}))
+  show();expect(screen.getByRole('tooltip')).toHaveTextContent('File setup')
   act(()=>screen.getByRole('button',{name:'Copy'}).focus())
-  await screen.findByRole('tooltip',{name:'Copy visible logs'})
+  show();expect(screen.getByRole('tooltip')).toHaveTextContent('Copy visible logs')
   expect(screen.getAllByRole('tooltip')).toHaveLength(1)
  })
  it('retains disabled and pressed semantics and removes portal content on unmount',async()=>{
@@ -55,9 +65,11 @@ describe('ActionIconButton',()=>{
   const {unmount}=render(<ActionIconButton disabled aria-pressed label="Previous" description="Previous instance logs" onClick={click}><ActionIcon name="previous"/></ActionIconButton>)
   const button=screen.getByRole('button',{name:'Previous'})
   expect(button).toBeDisabled();expect(button).toHaveAttribute('aria-pressed','true')
-  await userEvent.click(button);expect(click).not.toHaveBeenCalled()
-  await userEvent.hover(button.parentElement!)
-  expect(screen.getByRole('tooltip')).toBeVisible()
+  await user().click(button);expect(click).not.toHaveBeenCalled()
+  await user().hover(button.parentElement!)
+  expect(screen.queryByRole('tooltip')).not.toBeInTheDocument()
+  act(()=>vi.advanceTimersByTime(TOOLTIP_DELAY-1));expect(screen.queryByRole('tooltip')).not.toBeInTheDocument()
+  act(()=>vi.advanceTimersByTime(1));expect(screen.getByRole('tooltip')).toBeVisible()
   unmount();expect(screen.queryByRole('tooltip')).not.toBeInTheDocument()
  })
 })

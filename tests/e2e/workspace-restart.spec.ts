@@ -30,7 +30,7 @@ test('pinned properties, logs, ended terminals and layout survive a real restart
  try{
   app=await start(port,e);await page.goto(url)
   const details=await selectWorkloads(page)
-  const connectionIcon=page.locator('[data-connection-switcher] [data-connection-icon]')
+  const connectionIcon=page.locator('[data-connection-appearance=header] [data-connection-icon]')
   await expect(connectionIcon).toHaveAttribute('data-connection-icon',/./)
   const appearance={icon:await connectionIcon.getAttribute('data-connection-icon'),palette:await connectionIcon.getAttribute('data-connection-palette')}
   await details.getByRole('button',{name:'Pin properties',exact:true}).click()
@@ -109,5 +109,33 @@ test('cross-target pins remain dormant and reject a same-name replacement after 
   await dock(page).locator('[data-tab-kind=properties]').first().getByRole('button').first().click();await selectConnection(page,/^demo\b/);await connectSelected(page);await dock(page).getByRole('button',{name:'Open pinned properties',exact:true}).click()
   const pinned=dock(page).getByRole('dialog',{name:'Pinned properties · api',exact:true});await expect(pinned).toContainText('This object no longer exists.');await expect(pinned.locator('.cm-editor')).toHaveCount(0)
   await page.screenshot({path:join(scratchRoot,'workspace-replaced-object.png')})
+ }finally{await page.close();if(app)await stop(app)}
+})
+
+
+test('graph opt-in is not persisted across a real application restart',async({browser})=>{
+ mkdirSync(scratchRoot,{recursive:true});const root=mkdtempSync(join(scratchRoot,'graph-restart-')),e=env(root);writeAtomic(e.one,ONE)
+ const port=await freePort(),url=`http://127.0.0.1:${port}`
+ let app:ChildProcess|undefined;const page=await browser.newPage({viewport:{width:1280,height:800}})
+ let calls=0;page.on('request',r=>{if(r.url().endsWith('/api/ClusterGraph'))calls++})
+ try{
+  app=await start(port,e);await page.goto(url);await selectConnection(page,/^demo\b/);await connectSelected(page)
+  const nav=page.getByRole('navigation',{name:'resources'})
+  await nav.getByRole('textbox',{name:'Filter resources'}).fill('Cluster graph');await nav.getByRole('button',{name:'Cluster graph',exact:true}).click()
+  const graph=page.locator('.graph-workspace'),load=graph.getByRole('button',{name:'Load graph',exact:true})
+  await expect(load).toBeVisible();expect(calls).toBe(0)
+  await load.click();await expect(graph).toContainText('4 resources');expect(calls).toBe(1)
+  // Saved navigation is allowed; graph admission is deliberately not saved.
+  await expect.poll(async()=>{
+   const token=await page.locator('meta[name="spk-ocular-api-token"]').getAttribute('content')
+   const r=await page.request.post(url+'/api/GetTargetState',{headers:{Authorization:'Bearer '+token,Origin:url},data:{provider:'synthetic',target:'demo'}})
+   return JSON.parse((await r.json()).kind)
+  }).toBe('ocular.graph')
+  await stop(app);app=await start(port,e);await page.goto(url)
+  await expect(page.getByRole('button',{name:'Connect',exact:true})).toBeVisible();expect(calls).toBe(1)
+  await connectSelected(page);await expect(load).toBeVisible();expect(calls).toBe(1)
+  await expect(graph.locator('canvas')).toHaveCount(0)
+  await page.screenshot({path:join(scratchRoot,'graph-after-app-restart.png')})
+  await load.click();await expect(graph).toContainText('4 resources');expect(calls).toBe(2)
  }finally{await page.close();if(app)await stop(app)}
 })

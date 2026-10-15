@@ -69,6 +69,14 @@ GTK supplies the 16/24/32/48/64/128 px family; the 256 px PNG remains the
 application and packaging fallback. The renderer needs e2e Chromium and uses
 Catmull-Rom for the final native sizes.
 
+The Docker provider uses the unmodified white symbol from the official
+[Docker logo kit](https://www.docker.com/static/Docker-Logos-1.zip), stored in
+`web/src/assets/docker-mark-white.svg`. Keep its proportions and a minimum 24 px
+box; do not recolour or redraw the asset. Provider headings mute its display
+with opacity. The [brand guide](https://www.docker.com/company/newsroom/media-resources/)
+provides the symbol and approved colours. Docker trademark attribution is included
+in the generated third-party notices. This identifies the provider, not endorsement.
+
 The pure-Go `build-go` executable is a development/test harness, not a separate
 release product. Distribution packages use the native production executable for
 both the default window and `--browser`. The package verifiers run that actual

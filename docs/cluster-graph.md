@@ -16,8 +16,19 @@ The implementation uses compact value-free inventory snapshots, indexed
 relationship resolution, worker-based layout and a canvas with semantic zoom.
 Pan/zoom changes only the camera, never recomputes the graph or React node trees.
 Selection uses Ref + UID and the standard drawer, including unsaved-edit guards.
+Selecting or reselecting nodes, search results and keyboard traversal keep the
+camera offset and zoom unchanged. Only explicit pan, zoom and Fit controls move
+the camera after the initial fit. Node hover hints use the application
+panel colors, 14 px text and an 800 ms delay rather than platform tooltips.
 
 ## Inventory and rendering
+
+Graph inventory loading requires an explicit Load graph click once per backend
+connection session. Opening the graph before that click creates neither an inventory
+request nor a layout worker. Navigation and warm target switching retain this choice;
+Disconnect/Connect, a replacement session and application restart require a fresh click.
+The choice is memory-only, never a saved target preference. Automatic replacement retains
+a guarded unsaved editor until its edits are released, then requests fresh graph admission.
 
 `ClusterGraph` is UI-only in both browser and native transports. It requires an
 explicit admitted connection and is absent from the agent method registry and
@@ -48,8 +59,8 @@ culls out-of-viewport objects, uses semantic zoom for text and has indexed
 hit-testing. Camera updates use requestAnimationFrame with no React node tree
 or force-layout recalculation. The animated route layer respects reduced motion.
 Keyboard traversal (including F6 workspace entry), resource search and the ordinary details panel complement
-pointer pan/zoom. Canvas resizing retains the viewed world center when the
-details panel opens or resizes.
+pointer pan/zoom. Canvas resizing preserves the camera offset and zoom when the
+details panel opens or resizes; it never recenters the selected node.
 
 ## Reference research
 

@@ -50,6 +50,14 @@ export const palette = {
  rose:['#8c355b','#f9e2ed','#efa8ca','#472b3b'],
  violet:['#63409a','#eee5fb','#cfb3f5','#362a49'],
  slate:['#405167','#e5eaf0','#becddd','#2e3845'],
+ cyan:['#075c70','#def4fa','#8cdaec','#173b45'],
+ mint:['#1f654e','#e0f4e9','#9de0bf','#233e33'],
+ lime:['#52611c','#edf2d8','#d0dd93','#384021'],
+ orange:['#874714','#fff0df','#f4bd8b','#493121'],
+ ruby:['#963b48','#fce5e9','#f4a9b8','#492b33'],
+ plum:['#773e80','#f4e5f7','#ddb1e7','#402b46'],
+ indigo:['#454b96','#e9eafb','#b9bdf4','#2e304c'],
+ sand:['#66543c','#f3ecdf','#dcccaf','#3d362b'],
 } as const
 export type PaletteId = keyof typeof palette
 export const paletteIds = Object.keys(palette) as PaletteId[]

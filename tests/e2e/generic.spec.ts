@@ -345,6 +345,8 @@ test('object switching retains the details layout under an inert overlay and rej
   await expect(drawer.getByRole('heading', { name: 'alpha', exact: true })).toBeVisible()
   const original = await drawer.elementHandle()
   const before = await drawer.boundingBox()
+  const toolsBefore=await drawer.locator('.drawer-tools button').evaluateAll(elements=>elements.map(el=>({label:el.getAttribute('aria-label'),x:el.getBoundingClientRect().x,y:el.getBoundingClientRect().y,width:el.getBoundingClientRect().width,height:el.getBoundingClientRect().height})))
+  const scrollHeightBefore=await drawer.locator('[aria-busy] > .overflow-y-auto').evaluate(el=>el.scrollHeight)
   let release!: () => void
   const delayed = new Promise<void>(resolve => { release = resolve })
   await page.route('**/api/GetResource', async route => {
@@ -359,6 +361,8 @@ test('object switching retains the details layout under an inert overlay and rej
     // Static facts remain; they cannot launch operations on the previous object.
     await expect(drawer.getByRole('heading', { name: 'alpha', exact: true })).toBeVisible()
     await expect(drawer.locator('.drawer-tools')).toHaveAttribute('inert', '')
+    expect(await drawer.locator('.drawer-tools button').evaluateAll(elements=>elements.map(el=>({label:el.getAttribute('aria-label'),x:el.getBoundingClientRect().x,y:el.getBoundingClientRect().y,width:el.getBoundingClientRect().width,height:el.getBoundingClientRect().height})))).toEqual(toolsBefore)
+    expect(await drawer.locator('[aria-busy] > .overflow-y-auto').evaluate(el=>el.scrollHeight)).toBe(scrollHeightBefore)
     await page.screenshot({ path: join(scratchRoot, 'details-loading-overlay.png') })
     await grid.getByRole('gridcell', { name: 'alpha', exact: true }).click()
     await expect(drawer.locator('[data-loading-overlay]')).toHaveCount(0)
@@ -371,4 +375,42 @@ test('object switching retains the details layout under an inert overlay and rej
     await expect(drawer.locator('.drawer-tools')).not.toHaveAttribute('inert')
     await page.screenshot({ path: join(scratchRoot, 'details-loading-finished.png') })
   } finally { release() }
+})
+
+
+test('table value hints appear only on overflow and use neutral theme colors',async({page})=>{
+ const grid=await openDemo(page),cell=grid.getByRole('gridcell',{name:'alpha',exact:true}),handle=grid.getByRole('separator',{name:'Resize column Name',exact:true})
+ try{
+  await handle.focus();await handle.press('End')
+  await cell.hover();await page.waitForTimeout(900)
+  await expect(page.locator('.app-tooltip')).toHaveCount(0)
+  await handle.focus();await handle.press('Home')
+  expect(await cell.evaluate(el=>el.scrollWidth>el.clientWidth)).toBe(true)
+  await cell.hover();await expect(page.locator('.app-tooltip')).toHaveText('alpha')
+  const colors=await page.locator('.app-tooltip').evaluate(el=>{const s=getComputedStyle(el),probe=document.createElement('span');probe.style.background='var(--color-panel)';document.body.append(probe);const panel=getComputedStyle(probe).backgroundColor;probe.remove();return {bg:s.backgroundColor,fg:s.color,panel,font:s.fontSize}})
+  expect(colors.font).toBe('14px');expect(colors.bg).toBe(colors.panel);expect(colors.bg).not.toBe(colors.fg)
+  await page.screenshot({path:join(scratchRoot,'resource-overflow-tooltip.png')})
+  await page.keyboard.press('Escape');await expect(page.locator('.app-tooltip')).toHaveCount(0)
+  await handle.focus();await handle.press('End');await cell.hover();await page.waitForTimeout(900)
+  await expect(page.locator('.app-tooltip')).toHaveCount(0)
+  const heading=page.locator('.resource-toolbar h1');await expect(heading).toHaveClass('sr-only')
+  const trigger=page.locator('[data-connection-switcher]');await trigger.hover();await expect(page.locator('.app-tooltip')).toHaveText('demo')
+ }finally{await handle.dblclick()}
+})
+
+test('resource navigation aligns section and subgroup text with children and centers chevrons',async({page})=>{
+ await page.route('**/api/ListKinds',async route=>{const response=await route.fetch(),body=await response.json();for(const kind of body.kinds)if(['services','workloads'].includes(kind.id))kind.subgroup='Nested example';await route.fulfill({response,json:body})})
+ await openDemo(page)
+ const nav=page.getByRole('navigation',{name:'resources'}),section=nav.getByRole('region',{name:'Synthetic',exact:true}),heading=section.locator('.nav-group-heading'),group=section.getByRole('group',{name:'Nested example',exact:true}),subheading=group.locator('button[aria-expanded]')
+ const align=async(title:import('@playwright/test').Locator,child:import('@playwright/test').Locator)=>{
+  const label=(await title.locator('span').first().boundingBox())!,chevron=(await title.locator('svg').boundingBox())!
+  const text=await child.evaluate(el=>{const range=document.createRange();range.selectNodeContents(el);const b=range.getBoundingClientRect();return{x:b.x}})
+  expect(Math.abs(label.x-text.x)).toBeLessThanOrEqual(.5);expect(Math.abs(chevron.y+chevron.height/2-label.y-label.height/2)).toBeLessThanOrEqual(.5)
+ }
+ await align(heading,section.getByRole('button',{name:'Crates',exact:true}))
+ await subheading.click();await align(subheading,group.getByRole('button',{name:'Services',exact:true}))
+ await page.screenshot({path:join(scratchRoot,'resource-nav-alignment.png')})
+ await subheading.click();await expect(subheading).toHaveAttribute('aria-expanded','false')
+ await heading.click();await expect(heading).toHaveAttribute('aria-expanded','false');await align(heading,section.getByRole('button',{name:'Crates',exact:true}))
+ await heading.click();await expect(heading).toHaveAttribute('aria-expanded','true')
 })

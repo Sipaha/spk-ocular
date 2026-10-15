@@ -16,7 +16,7 @@ it('waits for stored appearance rather than saving a placeholder during a slow r
  expect(screen.queryByRole('button',{name:/^Icon 1$/})).not.toBeInTheDocument()
  await act(async()=>resolve({appearance:JSON.stringify({icon:'cat',palette:'amber'})}))
  expect(await screen.findByRole('button',{name:/^Icon 32$/})).toHaveAttribute('aria-pressed','true')
- expect(screen.getByRole('button',{name:/^Colour pair 4$/})).toHaveAttribute('aria-pressed','true')
+ expect(screen.getByRole('button',{name:/^Color 4$/})).toHaveAttribute('aria-pressed','true')
  await userEvent.click(screen.getByRole('button',{name:'Save'}))
  await waitFor(()=>expect(close).toHaveBeenCalled())
  expect(client.setTargetState).toHaveBeenCalledExactlyOnceWith('kubernetes','stable','appearance',JSON.stringify({icon:'cat',palette:'amber'}))

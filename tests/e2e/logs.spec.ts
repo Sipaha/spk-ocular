@@ -674,3 +674,29 @@ for(const following of [true,false]){
   await expect(panel.getByRole('button',{name:'Follow',exact:true})).toHaveCount(following?0:1)
  })
 }
+
+test('log selection cannot escape into surrounding UI and cleanup restores normal selection',async({page})=>{
+ const panel=await openLogs(page,'api'),vp=panel.locator('[data-log-viewport]')
+ await emit(page,'api',{lines:Array.from({length:30},(_,i)=>`confined-log-${i} text for selection`)})
+ await expect(panel.getByText('confined-log-29 text for selection',{exact:true})).toBeVisible()
+ const b=(await vp.boundingBox())!
+ try{
+  await page.mouse.move(b.x+100,b.y+40);await page.mouse.down();await page.mouse.move(b.x+180,b.y+80,{steps:5})
+  await expect(page.locator('body')).toHaveClass(/log-select-drag/)
+  // Exercise the browser's escaped-range path, including a document-wide anchor.
+  await page.evaluate(()=>window.getSelection()!.selectAllChildren(document.body))
+  await expect.poll(()=>vp.evaluate(el=>{const s=window.getSelection();return !!s?.rangeCount&&el.contains(s.anchorNode)&&el.contains(s.focusNode)})).toBe(true)
+  await page.mouse.move(b.x+120,b.y-100,{steps:5});await page.mouse.up()
+  await expect(page.locator('body')).not.toHaveClass(/log-select-drag/)
+  await expect(vp).toBeFocused();await page.keyboard.press('Control+a')
+  expect(await vp.evaluate(el=>{const s=window.getSelection();return el.contains(s?.anchorNode??null)&&el.contains(s?.focusNode??null)})).toBe(true)
+  const copied=await page.evaluate(()=>{const data=new DataTransfer();document.activeElement!.dispatchEvent(new ClipboardEvent('copy',{bubbles:true,cancelable:true,clipboardData:data}));return data.getData('text/plain')})
+  expect(copied).toContain('confined-log-29');expect(copied).not.toContain('Filter resources');expect(copied).not.toContain('SPK Ocular')
+  await page.screenshot({path:join(scratchRoot,'log-selection-confined.png')})
+  const search=panel.getByLabel('Search (Ctrl+F)');await search.fill('confined');await search.press('Control+a')
+  expect(await search.evaluate(el=>{const input=el as HTMLInputElement;return input.selectionEnd!-input.selectionStart!})).toBe(8)
+  await search.press('Escape');await vp.focus();await page.mouse.move(b.x+100,b.y+40);await page.mouse.down()
+  await page.getByRole('button',{name:'Close tab',exact:true}).dispatchEvent('click')
+  await expect(vp).toHaveCount(0);await expect(page.locator('body')).not.toHaveClass(/log-select-drag/)
+ }finally{await page.mouse.up()}
+})
