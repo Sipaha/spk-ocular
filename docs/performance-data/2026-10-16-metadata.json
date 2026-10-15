@@ -2,7 +2,6 @@
   "date": "2026-10-16",
   "version": "1.7.0",
   "runtime_source": "a01cee524fb40ce94170e230fc5cf7a3a43b2bb2",
-  "release_source": "6bafa1cadfe0f346856f475458b3c8ccc76f8eae",
   "runtime_inputs_identical": true,
   "artifact_sha256": "2e22b65b36dd654815209863569f31a55b1c16301b87a5b33b7876dc322d517b",
   "environment": "Linux Mint 22.3, kernel 6.17.0-20-generic amd64; Ryzen 7 260, 8 cores/16 threads; Go 1.26.9 production GTK build --browser, owned headless Chromium 153.0.8010.12",
@@ -135,5 +134,6 @@
       "docs/images/inventory-memory-2026-10-16.png": "9135f7c21707214e076f784ca3affbee57bf7346de00c4457da074c10e831584",
       "docs/images/inventory-memory-2026-10-16.svg": "acb59783addf26046f911091de422fa6ee2e426ae566417f31adaf98e8ea377b"
     }
-  }
+  },
+  "verified_runtime_equivalent_candidate": "6bafa1cadfe0f346856f475458b3c8ccc76f8eae"
 }

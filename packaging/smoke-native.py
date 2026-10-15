@@ -7,6 +7,7 @@ import re
 import shutil
 from pathlib import Path
 import subprocess
+import sys
 import time
 import tempfile
 import urllib.request
@@ -20,7 +21,7 @@ def capture(platform, pid, png):
         # Keep stage output even when Windows composition/capture blocks. An
         # inherited CI console is not included in the diagnostic artifact.
         with png.with_suffix('.capture.log').open('wb') as output:
-            subprocess.run(['pwsh.exe', '-NoLogo', '-NoProfile', '-NonInteractive', '-File', str(ROOT / 'packaging/windows/screenshot.ps1'), '-ProcessId', str(pid), '-OutputPath', str(png)], check=True, timeout=30, stdout=output, stderr=subprocess.STDOUT)
+            subprocess.run([sys.executable, str(ROOT / 'packaging/windows/screenshot.py'), '--pid', str(pid), '--output', str(png)], check=True, timeout=30, stdout=output, stderr=subprocess.STDOUT)
     elif platform == 'linux':
         tree = subprocess.check_output(['xwininfo', '-root', '-tree'], text=True)
         owned = None

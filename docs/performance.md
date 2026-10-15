@@ -394,9 +394,11 @@ the selected-object observer's named LIST returned exactly that one Pod.
 
 The measured single-pass executable has SHA-256
 `2e22b65b36dd654815209863569f31a55b1c16301b87a5b33b7876dc322d517b`
-and source `a01cee524fb40ce94170e230fc5cf7a3a43b2bb2`. The release source
-`6bafa1cadfe0f346856f475458b3c8ccc76f8eae` differs in the browser test
-interceptor and native capture diagnostics; application runtime inputs are identical. The earlier executable's
+and source `a01cee524fb40ce94170e230fc5cf7a3a43b2bb2`. The independently checked candidate
+`6bafa1cadfe0f346856f475458b3c8ccc76f8eae` has identical application runtime
+inputs. Subsequent test, documentation and native capture-helper corrections are
+not new CPU measurements. Published platform binaries are rebuilt and verified
+separately; they are not claimed byte-identical to this measured local artifact. The earlier executable's
 SHA-256 is
 `0392b178ea0089120006cb3568be4f9ca74429462984f0574ba3d65762475119`.
 [Raw CPU observations and summary](performance-data/2026-10-16-cpu.json) retain
