@@ -17,7 +17,10 @@ from diagnostics import report_failure
 
 def capture(platform, pid, png):
     if platform == 'windows':
-        subprocess.run(['pwsh.exe', '-NoLogo', '-NoProfile', '-NonInteractive', '-File', str(ROOT / 'packaging/windows/screenshot.ps1'), '-ProcessId', str(pid), '-OutputPath', str(png)], check=True, timeout=30)
+        # Keep stage output even when Windows composition/capture blocks. An
+        # inherited CI console is not included in the diagnostic artifact.
+        with png.with_suffix('.capture.log').open('wb') as output:
+            subprocess.run(['pwsh.exe', '-NoLogo', '-NoProfile', '-NonInteractive', '-File', str(ROOT / 'packaging/windows/screenshot.ps1'), '-ProcessId', str(pid), '-OutputPath', str(png)], check=True, timeout=30, stdout=output, stderr=subprocess.STDOUT)
     elif platform == 'linux':
         tree = subprocess.check_output(['xwininfo', '-root', '-tree'], text=True)
         owned = None
@@ -37,6 +40,16 @@ def capture(platform, pid, png):
         subprocess.run([str(Path(os.environ['GOBIN']) / 'native-macos-smoke'), str(pid), str(png)], check=True, timeout=60)
     if png.stat().st_size < 4096:
         raise RuntimeError('native screenshot is empty')
+
+
+def capture_failure(platform, child, scratch, error):
+    """Keep primary failure evidence even when the secondary capture fails."""
+    (scratch / 'failure.txt').write_text(repr(error), encoding='utf-8')
+    if child.poll() is None:
+        try:
+            capture(platform, child.pid, scratch / 'failure.png')
+        except Exception as capture_error:
+            (scratch / 'failure-capture.txt').write_text(repr(capture_error), encoding='utf-8')
 
 
 def smoke(platform, arch, version, binary_override=None, commit_override=None):
@@ -109,9 +122,8 @@ def smoke(platform, arch, version, binary_override=None, commit_override=None):
             report = {'platform': platform, 'arch': arch, 'version': version, 'commit': commit_override or subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=ROOT, text=True).strip(), 'production': True, 'fixtureSynthetic': True, 'ownedWindow': True, 'pid': child.pid, 'screenshot': png.name}
             (scratch / 'report.json').write_text(json.dumps(report, indent=2))
             print('Native webview opened a synthetic view; screenshot:', png)
-        except Exception:
-            if child.poll() is None:
-                capture(platform, child.pid, scratch / 'failure.png')
+        except Exception as error:
+            capture_failure(platform, child, scratch, error)
             raise
         finally:
             if child.poll() is None:
