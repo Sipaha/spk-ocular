@@ -1,3 +1,4 @@
+import { openAppMenu } from './fixtures'
 import { expect } from '@playwright/test'
 import { test, scratchRoot } from './fixtures'
 import { selectObject } from './synth'
@@ -62,7 +63,7 @@ test('file tree: compact icons, read-only location, double-click, footer type an
   await route.fulfill({json:{path:request.path,configRev:'fixture',entries:request.command==='list'?entries:undefined,text:request.command==='read'?'port: 8080\n':'',version:'original'}})
  })
  await selectObject(page,'api')
- const divider=(await page.getByRole('separator',{name:'Resize targets panel',exact:true}).boundingBox())!
+ const divider=(await page.getByRole('separator',{name:'Resize resource navigation',exact:true}).boundingBox())!
  await page.getByRole('button',{name:'Files',exact:true}).click()
  const dialog=page.getByRole('dialog',{name:'Files',exact:true})
  await expect(dialog.locator('[data-file-context]')).toContainText('api / api-pod / app')
@@ -456,7 +457,7 @@ test('deployment revisions show retained history, read-only YAML and normalized 
  await dialog.getByRole('button',{name:'Close',exact:true}).click()
  try {
  for(const language of languages) {
-  await page.locator('.language-menu button').click()
+  await openAppMenu(page);await page.locator('.language-menu button').click()
   await page.getByRole('option',{name:languageNames[language],exact:true}).click()
   await expect(page.locator('html')).toHaveAttribute('lang',language)
   const translatedTable=page.locator('table').filter({has:page.locator('[data-deploy-revision]')})
@@ -478,7 +479,8 @@ test('deployment revisions show retained history, read-only YAML and normalized 
 
   await expect(translatedTable.locator('[data-deploy-revision]').first().getByRole('button')).toHaveCount(2)
   if(language==='ru') {
-   await page.setViewportSize({width:1000,height:900})
+   // Removing the240px targets column gives this table more room; still exercise real overflow.
+   await page.setViewportSize({width:760,height:900})
    await page.screenshot({path:join(scratchRoot,'deploy-revisions-ru-compact.png')})
    expect(await translatedTable.evaluate(el=>el.parentElement!.scrollWidth>el.parentElement!.clientWidth)).toBeTruthy()
    await translatedTable.evaluate(el=>{el.parentElement!.scrollLeft=el.parentElement!.scrollWidth})
@@ -486,7 +488,7 @@ test('deployment revisions show retained history, read-only YAML and normalized 
   }
  }
  } finally {
- await page.locator('.language-menu button').click()
+ await openAppMenu(page);await page.locator('.language-menu button').click()
  await page.getByRole('option',{name:languageNames.en,exact:true}).click()
  await page.setViewportSize({width:1280,height:900})
  }

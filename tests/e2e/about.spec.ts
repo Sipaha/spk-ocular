@@ -1,3 +1,4 @@
+import { selectConnection, openAppMenu } from './fixtures'
 import { expect } from '@playwright/test'
 import { test, connectSelected, scratchRoot } from './fixtures'
 import { token } from './synth'
@@ -12,7 +13,7 @@ test.afterEach(async ({ page }) => {
 
 test('About preserves the workspace, shows the running build and opens the author profile in another tab', async ({ page, context }) => {
   await page.goto('/')
-  await page.getByRole('option', { name: /^demo\b/ }).click()
+  await selectConnection(page,/^demo\b/)
   await connectSelected(page)
   const grid = page.getByRole('grid', { name: 'resources' })
   await expect(grid).toBeVisible()
@@ -20,6 +21,7 @@ test('About preserves the workspace, shows the running build and opens the autho
   const info = await page.request.post('/api/AppInfo', { headers: { Authorization: `Bearer ${await token(page)}`, Origin: new URL(page.url()).origin }, data: {} })
   const build = await info.json()
   const trigger = page.getByRole('button', { name: 'About SPK Ocular' })
+  await openAppMenu(page)
   await trigger.click()
   const dialog = page.getByRole('dialog', { name: 'About SPK Ocular' })
   await expect(dialog).toContainText(build.version)
@@ -39,7 +41,7 @@ test('About preserves the workspace, shows the running build and opens the autho
   await profile.close()
   await page.keyboard.press('Escape')
   await expect(dialog).toHaveCount(0)
-  await expect(trigger).toBeFocused()
+  await expect(page.locator('[data-app-menu]')).toBeFocused()
   expect(await grid.evaluate((current, before) => current === before, original)).toBe(true)
 })
 
@@ -48,10 +50,10 @@ test('About has complete native-language text and neutral website URLs at both w
   const errors: string[] = []
   page.on('pageerror', e => errors.push(e.message))
   for (const language of languages) {
-    await page.locator('.language-menu button').click()
+    await openAppMenu(page);await page.locator('.language-menu button').click()
     await page.getByRole('option', { name: languageNames[language], exact: true }).click()
     await expect(page.locator('html')).toHaveAttribute('lang', language)
-    await page.locator('button.about-trigger').click()
+    await openAppMenu(page);await page.locator('button.about-trigger').click()
     const dialog = page.getByRole('dialog', { name: /SPK Ocular/ })
     await expect(dialog).not.toContainText('Citeck')
     const profile = dialog.locator('a[href*="/about/"]')

@@ -1,3 +1,4 @@
+import {selectConnection} from './fixtures'
 import { expect, type Page } from '@playwright/test'
 import { test } from './fixtures'
 import { activePanel, expectScreen, focusTerminal, screen, selectObject, since, stats } from './synth'
@@ -105,7 +106,7 @@ test('a terminal survives selecting another target and says whose it is', async 
   await page.goto('/')
   const base = await stats(page)
   await openShell(page)
-  await page.getByRole('option', { name: /^prod\b/ }).click()
+  await selectConnection(page,/^prod\b/)
   const tab = page.getByRole('tab', { name: /main · api/ })
   await expect(tab).toBeVisible()
   await expect(tab.getByText('demo', { exact: true })).toBeVisible() // the foreign-target badge

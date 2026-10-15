@@ -1,3 +1,5 @@
+import {layoutGraph,NODE_W,NODE_H} from '../../web/src/graph/model'
+import { selectConnection, openAppMenu } from './fixtures'
 import { expect } from '@playwright/test'
 import { test, connectSelected, scratchRoot } from './fixtures'
 import { join } from 'node:path'
@@ -5,7 +7,7 @@ import { token } from './synth'
 
 async function graphPage(page:import('@playwright/test').Page){
  await page.goto('/')
- await page.getByRole('option',{name:/^demo\b/}).click()
+ await selectConnection(page,/^demo\b/)
  await connectSelected(page)
  const nav=page.getByRole('navigation',{name:'resources'})
  await nav.getByRole('textbox',{name:'Filter resources'}).fill('Cluster graph')
@@ -47,11 +49,30 @@ test('graph selects standard details, preserves camera when route layer changes,
  const empty=await reply.json();expect(empty.nodes.filter((n:{ref:{scope?:string}})=>n.ref.scope)).toEqual([])
 })
 for(const count of [10000,30000]) test(`canvas handles ${count} resources without a DOM node per resource or layout work on zoom`,async({page})=>{
- const nodes=Array.from({length:count},(_,i)=>({id:'uid-'+i,ref:{provider:'synthetic',target:'demo',kind:'services',scope:'ns-'+i%20,name:'service-'+i,uid:'uid-'+i},kindTitle:'Service',health:i%29===0?'warning':'ok'}))
- await page.route('**/api/ClusterGraph',route=>route.fulfill({json:{nodes,edges:nodes.slice(20).map((n,i)=>({source:nodes[i].id,target:n.id,type:i%4===0?'selects':'owns'})),problems:[],truncated:false,discovery:'ready',capturedAt:Date.now()}}))
+ const nodes=Array.from({length:count},(_,i)=>({id:'uid-'+i,ref:{provider:'synthetic',target:'demo',kind:'services',scope:'ns-'+i%20,name:'service-'+i,uid:'uid-'+i},kindTitle:'Service',health:i%29===0?'warning' as const:'ok' as const}))
+ const snapshot={nodes,edges:nodes.slice(20).map((n,i)=>({source:nodes[i].id,target:n.id,type:i%4===0?'selects':'owns'})),problems:[],truncated:false,discovery:'ready',capturedAt:Date.now()}
+ const layout=layoutGraph(snapshot)
+ await page.route('**/api/ClusterGraph',route=>route.fulfill({json:snapshot}))
  const graph=await graphPage(page),canvas=graph.locator('canvas')
  await expect(graph).toContainText(count+' resources')
  expect(await graph.locator('*').count()).toBeLessThan(150)
+ // Observe actual drawing primitives, not a renderer-maintained node counter.
+ // The independent layout supplies the geometry that must remain on screen.
+ await canvas.evaluate((el,{nodeW,nodeH})=>{
+  const ctx=el.getContext('2d')!,trace={strips:[] as [number,number][],matrix:null as {a:number;d:number;e:number;f:number}|null,width:el.width,height:el.height}
+  for(const method of ['rect','fillRect'] as const){
+   const original=ctx[method].bind(ctx)
+   ctx[method]=(x:number,y:number,w:number,h:number)=>{
+    if(method==='fillRect'&&x===0&&y===0&&h>nodeH){trace.strips=[];trace.matrix=null;const bounds=el.getBoundingClientRect(),dpr=Math.min(2,devicePixelRatio||1);trace.width=bounds.width*dpr;trace.height=bounds.height*dpr}
+    if(h===nodeH&&w<nodeW){
+     if(!trace.matrix){const m=ctx.getTransform();trace.matrix={a:m.a,d:m.d,e:m.e,f:m.f}}
+     trace.strips.push([x,y])
+    }
+    return original(x,y,w,h)
+   }
+  }
+  Object.assign(window,{graphPaintTrace:trace})
+ },{nodeW:NODE_W,nodeH:NODE_H})
  const samples=[]
  for(let i=0;i<12;i++){
   const before=await canvas.getAttribute('data-zoom')
@@ -59,8 +80,17 @@ for(const count of [10000,30000]) test(`canvas handles ${count} resources withou
   await expect.poll(()=>canvas.getAttribute('data-zoom')).not.toBe(before)
   await expect(canvas).toHaveAttribute('data-frame-ms',/.+/)
   samples.push(Number(await canvas.getAttribute('data-frame-ms')))
+  const painted=await canvas.evaluate(()=>{
+   const p=(window as unknown as {graphPaintTrace:{strips:[number,number][];matrix:{a:number;d:number;e:number;f:number};width:number;height:number}}).graphPaintTrace
+   return {strips:p.strips,matrix:p.matrix,width:p.width,height:p.height}
+  })
+  const {a,d,e,f}=painted.matrix,left=-e/a,top=-f/d,right=(painted.width-e)/a,bottom=(painted.height-f)/d
+  const expected=layout.nodes.filter(n=>n.x+NODE_W>=left&&n.x<=right&&n.y+NODE_H>=top&&n.y<=bottom).map(n=>`${n.x},${n.y}`).sort()
+  expect(painted.strips.map(([x,y])=>`${x},${y}`).sort()).toEqual(expected)
+
  }
  samples.sort((a,b)=>a-b)
+ console.log('graph zoom frame ms',JSON.stringify({count,samples,p90:samples[Math.floor(samples.length*.9)]}))
  expect(samples[Math.floor(samples.length*.9)]).toBeLessThan(32)
  await page.screenshot({path:join(scratchRoot,`graph-${count}.png`)})
  await graph.getByRole('checkbox',{name:'Route layer'}).check()
@@ -81,7 +111,7 @@ test('graph language changes preserve canvas, route layer and selection in all e
  const marker=await canvas.evaluate(el=>{el.dataset.identity='graph-identity';return el.dataset.identity})
  const names={en:'English',ru:'Русский',zh:'简体中文',es:'Español',de:'Deutsch',fr:'Français',pt:'Português (Brasil)',ja:'日本語'}
  for(const [code,name] of Object.entries(names)){
-  await page.locator('.language-menu button').click()
+  await openAppMenu(page);await page.locator('.language-menu button').click()
   await page.getByRole('option',{name,exact:true}).click()
   await expect(page.locator('html')).toHaveAttribute('lang',code)
   await expect(canvas).toHaveAttribute('data-identity',marker)
@@ -89,6 +119,6 @@ test('graph language changes preserve canvas, route layer and selection in all e
   await expect(graph.locator('[data-area=details]').getByText('alpha',{exact:true}).first()).toBeVisible()
   await page.screenshot({path:join(scratchRoot,'graph-language-'+code+'.png')})
  }
- await page.locator('.language-menu button').click()
+ await openAppMenu(page);await page.locator('.language-menu button').click()
  await page.getByRole('option',{name:'English',exact:true}).click()
 })

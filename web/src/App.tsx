@@ -9,7 +9,6 @@ import { ViewHub } from './views/viewSync'
 import { Workspace } from './components/Workspace'
 import { ConnectionWorkspace } from './components/ConnectionWorkspace'
 import type { ConfigurationActions } from './configurations/Configurations'
-import { Sidebar } from './components/Sidebar'
 import { AppHeader } from './components/AppHeader'
 import { StatusBar } from './components/StatusBar'
 import { EmptyWorkspace } from './components/TargetDetails'
@@ -105,6 +104,7 @@ export function App({ client }: { client: Client }) {
       else {
         // The open table's filter wins over the contexts filter.
         const el = document.querySelector<HTMLInputElement>('[data-primary-filter]') ?? document.querySelector<HTMLInputElement>('[data-target-filter]')
+        if(!el)document.querySelector<HTMLButtonElement>('[data-connection-switcher]')?.click()
         el?.focus()
         el?.select()
       }
@@ -136,10 +136,9 @@ export function App({ client }: { client: Client }) {
 
   return (
     <div className="relative flex h-full flex-col">
-      <AppHeader client={client} target={target} onHelp={() => setHelp(true)} onAbout={() => setAbout(true)} />
+      <AppHeader act={act} configRef={configRef} client={client} target={target} onHelp={() => setHelp(true)} onAbout={() => setAbout(true)} />
       {workspaceStatus.error&&<div role="alert" className="flex shrink-0 flex-wrap items-center gap-2 border-b border-line px-3 py-1 text-xs text-warning" data-workspace-error>{t(`workspace.error.${workspaceStatus.error}`)}<button className="text-accent" onClick={workspaceStatus.retry}>{t('workspace.retry')}</button>{!workspaceStatus.ready&&<button className="text-accent" onClick={workspaceStatus.reset}>{t('workspace.reset')}</button>}</div>}
       <div className="relative isolate z-0 flex min-h-0 flex-1" data-workspace-surface>
-        <Sidebar act={act} client={client} configRef={configRef} />
         <div className="flex min-w-0 flex-1 flex-col">
           {reconnecting && <div role="status" className="border-b border-line px-3 py-2 text-sm text-fg-muted">{t('connection.connecting')}</div>}
           {held && target && <div role="status" className="border-b border-line px-3 py-2 text-sm text-fg-muted">

@@ -1,3 +1,4 @@
+import {selectConnection} from '../test/connections'
 import { act, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, expect, it, vi } from 'vitest'
@@ -43,7 +44,7 @@ it('all sections fold globally across targets; search expands temporarily and En
   await userEvent.keyboard('{ArrowRight}')
   await userEvent.keyboard('{ArrowLeft}')
   expect(section('Favorites').queryByRole('button', { name: 'Services' })).toBeNull()
-  await userEvent.click(screen.getByRole('option', { name: 'bb-cluster' }))
+  await selectConnection(/^b\b/,userEvent)
   await waitFor(() => expect(f.client.listKinds).toHaveBeenCalledWith('kubernetes', 'b'))
   expect(head('Workloads')).toHaveAttribute('aria-expanded', 'false')
   expect(head('Favorites')).toHaveAttribute('aria-expanded', 'false')

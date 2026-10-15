@@ -1,3 +1,4 @@
+import { selectConnection, openAppMenu } from './fixtures'
 import { connectSelected } from './fixtures'
 import { expect, test, type Page } from '@playwright/test'
 import { spawn, type ChildProcess } from 'node:child_process'
@@ -81,7 +82,7 @@ test('the page snapshot survives an app restart', async ({ browser }) => {
   try {
     app = await start(port, e)
     await page.goto(url)
-    await page.getByRole('option', { name: /^demo\b/ }).click()
+    await selectConnection(page,/^demo\b/)
     await connectSelected(page)
     await page.getByRole('navigation', { name: 'resources' }).getByRole('button', { name: /^Synthetic/ }).click()
     await page.getByRole('navigation', { name: 'resources' }).getByRole('button', { name: 'Services', exact: true }).click()
@@ -106,9 +107,9 @@ test('the page snapshot survives an app restart', async ({ browser }) => {
     // A -> B -> A in one debounce window must not persist B over A.
     await page.locator('[data-primary-filter]').fill('workers')
     await page.locator('[data-primary-filter]').fill('api')
-    await page.getByRole('option', { name: /^demo2\b/ }).click() // flush A's pending writer
+    await selectConnection(page,/^demo2\b/) // flush A's pending writer
     await connectSelected(page)
-    await page.getByRole('option', { name: /^demo\b/ }).click()
+    await selectConnection(page,/^demo\b/)
     await connectSelected(page)
     await expect(page.locator('[data-primary-filter]')).toHaveValue('api')
     await stop(app)
@@ -139,7 +140,7 @@ test('scope set, global favorites and column widths survive an app restart', asy
   try {
     app = await start(port, e)
     await page.goto(url)
-    await page.getByRole('option', { name: /^demo\b/ }).click()
+    await selectConnection(page,/^demo\b/)
     await connectSelected(page)
     await page.getByRole('navigation', { name: 'resources' }).getByRole('button', { name: /^Synthetic/ }).click()
     const input = page.getByRole('textbox', { name: 'Zone', exact: true })
@@ -158,10 +159,10 @@ test('scope set, global favorites and column widths survive an app restart', asy
     await page.getByRole('button', { name: 'Add Parcels to favorites', exact: true }).click()
     await favorites.getByRole('button', { name: 'Parcels', exact: true }).dragTo(favorites.getByRole('button', { name: 'Crates', exact: true }), { targetPosition: { x: 20, y: 2 } })
     await expect(favorites.locator('.nav-item')).toHaveText(['Parcels', 'Crates'])
-    await page.getByRole('option', { name: /^demo2\b/ }).click()
+    await selectConnection(page,/^demo2\b/)
     await connectSelected(page)
     await expect(favorites.getByRole('button', { name: 'Crates', exact: true })).toBeVisible()
-    await page.getByRole('option', { name: /^demo\b/ }).click()
+    await selectConnection(page,/^demo\b/)
     await connectSelected(page)
     await expect(input).toHaveValue('blue, green')
     const tok = await page.locator('meta[name="spk-ocular-api-token"]').getAttribute('content')
@@ -212,7 +213,7 @@ test('resource sections fold globally and keep their state after restart, while 
   try {
     app = await start(port, e)
     await page.goto(url)
-    await page.getByRole('option', { name: /^demo\b/ }).click()
+    await selectConnection(page,/^demo\b/)
     await connectSelected(page)
     const nav = page.getByRole('navigation', { name: 'resources' })
     const synthetic = nav.getByRole('button', { name: /^Synthetic/ })
@@ -233,7 +234,7 @@ test('resource sections fold globally and keep their state after restart, while 
     await expect(nav.getByRole('button', { name: 'Parcels', exact: true })).toHaveCount(0)
     await expect(nav.getByRole('button', { name: 'Services', exact: true })).toHaveCount(0)
     await expect(nav.getByRole('button', { name: 'Crates', exact: true })).toHaveAttribute('aria-current', 'page')
-    await page.getByRole('option', { name: /^demo2\b/ }).click()
+    await selectConnection(page,/^demo2\b/)
     await connectSelected(page)
     for (const header of [synthetic, favorites, health]) await expect(header).toHaveAttribute('aria-expanded', 'false')
     const filter = page.getByRole('textbox', { name: 'Filter resources', exact: true })
@@ -243,7 +244,7 @@ test('resource sections fold globally and keep their state after restart, while 
     await expect(page.getByRole('heading', { name: 'Services', exact: true, level: 1 })).toBeVisible()
     await filter.fill('')
     await expect(favorites).toHaveAttribute('aria-expanded', 'false')
-    await page.getByRole('option', { name: /^demo\b/ }).click()
+    await selectConnection(page,/^demo\b/)
     await connectSelected(page)
     await page.getByRole('grid', { name: 'resources' }).getByRole('gridcell', { name: 'alpha', exact: true }).click()
     const drawer = page.getByRole('dialog', { name: 'crates alpha' })
@@ -304,14 +305,16 @@ test('manual language survives a process restart and a different browser languag
     app = await start(port, e)
     await page.goto(url)
     await expect(page.locator('html')).toHaveAttribute('lang', 'fr')
-    await page.locator('.language-menu button').click()
+    await openAppMenu(page);await page.locator('.language-menu button').click()
     await page.getByRole('option', { name: '日本語', exact: true }).click()
     await expect(page.locator('html')).toHaveAttribute('lang', 'ja')
     await stop(app)
     app = await start(port, e)
     await page.goto(url)
     await expect(page.locator('html')).toHaveAttribute('lang', 'ja')
+    await openAppMenu(page)
     await expect(page.locator('.language-menu button')).toHaveText('日本語')
+    await page.keyboard.press('Escape')
   } finally {
     await context.close()
     if (app) await stop(app)

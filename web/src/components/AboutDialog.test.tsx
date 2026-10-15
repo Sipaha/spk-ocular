@@ -1,3 +1,4 @@
+import {openAppMenu} from '../test/connections'
 import { act, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
@@ -16,6 +17,7 @@ it('keeps the active workspace, displays the real version, traps focus and resto
   const f = fakeClient([target], true); f.state.view.selected = target
   render(<App client={f.client} />)
   const grid = await screen.findByRole('grid', { name: 'resources' })
+  await openAppMenu()
   const trigger = screen.getByRole('button', { name: 'About SPK Ocular' })
   await userEvent.click(trigger)
   const dialog = screen.getByRole('dialog', { name: 'About SPK Ocular' })
@@ -30,7 +32,7 @@ it('keeps the active workspace, displays the real version, traps focus and resto
   expect(screen.getByRole('button', { name: 'Close' })).toHaveFocus()
   await userEvent.keyboard('{Escape}')
   expect(screen.queryByRole('dialog', { name: 'About SPK Ocular' })).not.toBeInTheDocument()
-  expect(trigger).toHaveFocus()
+  expect(screen.getByRole('button',{name:'Application menu'})).toHaveFocus()
   expect(screen.getByRole('grid', { name: 'resources' })).toBe(grid)
 })
 

@@ -1,10 +1,44 @@
 # Using SPK Ocular
 
+
+## Connection switcher and appearance
+
+The header starts with the selected connection's icon, name and connection-state
+indicator. The connections button opens a searchable list grouped by provider;
+there is no permanent connections column. Search receives focus on opening;
+arrows move the cursor, Enter selects, and Escape first clears a query, then
+closes the picker and returns focus. Selection closes the picker before any
+unsaved-edit question. It never connects an unopened target. A check marks the
+selected row independently of its green/yellow/gray connection-state indicator.
+Source/discovery problems are available in the picker and flagged on its trigger;
+pending agent requests also remain visible in the header.
+
+Each row's **⋯** menu offers connection appearance and the existing source or
+connection actions. **Add kubeconfig** is at the bottom of the picker. Connection
+information remains available through the separate header info button. A neutral
+application menu on the right contains language, About and keyboard help; the
+workspace header does not display the application logo or name. Native window
+and taskbar identity are unchanged.
+
+**Connection appearance** offers 32 vector icons and eight curated icon/background
+pairs. There are no arbitrary colour inputs. Each preset defines readable light
+and dark variants; the current application uses the dark variant. New and existing
+connections without valid saved appearance receive a random initial combination,
+avoiding combinations already loaded in the same profile where possible. The
+choice is saved once in local per-target UI state, independently of kubeconfig,
+credentials and connection sessions. Renaming a connection does not change its
+identity or appearance. Closing without Save discards the appearance draft;
+persistence errors are shown with a retry action. The appearance dialog waits for
+the stored choice before enabling Save, so a slow read cannot overwrite it with
+a placeholder. Arrow keys move within each
+appearance choice grid, Home/End choose its first/last option, and Tab moves
+between the selected icon, selected colour pair and dialog actions.
+
 ## Start and connect
 
 The desktop application opens one window and exits when that window closes.
 It has no tray process. Choose a Kubernetes context or Docker connection in the
-left sidebar, then press **Connect** in the resource-list area. Selecting a target
+header connection switcher, then press **Connect** in the resource-list area. Selecting a target
 or restoring the previous selection never starts a connection. Discovery reads
 local configuration without contacting servers. Explicit connections remain
 open while switching targets, reading Helm charts, editing values, or minimizing
@@ -176,8 +210,8 @@ Menu activation does not select a target behind the popup. Held Enter repeats
 and unavailable items cannot execute an action.
 
 Right-click a Kubernetes connection, including the selected one, to inspect or
-edit its source YAML, rename the configuration or remove it. With the targets
-list focused, Shift+F10 opens the keyboard cursor's menu. Linked files also offer
+edit its source YAML, rename the configuration or remove it. With a connection row focused, Shift+F10 opens its menu. The header
+switcher also offers Shift+F10 for the selected connection. Linked files also offer
 **Open in file manager**: Linux opens the parent folder; macOS and Windows select
 the source file. This action runs on the computer hosting Ocular, including
 browser mode, and reports launcher failures beside the add action.
@@ -202,7 +236,7 @@ IDs, source file names, YAML context keys and grants. Other connections from the
 same source retain their names. Display names persist across app restarts. Remove requires confirmation; it unlinks
 an external file without deleting or editing it, or deletes the encrypted copy.
 Affected sessions close after source edits or removal, and resource edits must
-be saved or discarded before these operations. Encrypted connections remain visible in the sidebar with a lock until unlocked
+be saved or discarded before these operations. Encrypted connections remain visible in the connection picker with a lock until unlocked
 through **Connect**. Inspection/editing becomes available after unlocking.
 
 **Disconnect** is offered in a connected target’s menu, including the selected
@@ -494,7 +528,7 @@ agent project grants do not cover it; see [agent access](agent-api.md).
 
 The divider between the release/chart list and its details can be dragged or
 resized with arrow keys. The target list in agent permissions uses the same
-resize controls as the main sidebar, resource navigation, resource details and
+resize controls as the resource navigation, resource details and
 bottom dock. Escape during a drag restores the previous size; panel widths
 survive navigation and, from 1.2.0, application restarts through the
 [workspace metadata](workspace-continuity.md).

@@ -1,3 +1,4 @@
+import {selectConnection} from '../test/connections'
 import { act, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, expect, it, vi } from 'vitest'
@@ -20,7 +21,7 @@ it('favorites are shared across connections, preserve the current page, and can 
   expect(within(nav).getAllByRole('button', { name: 'Pods' })).toHaveLength(1)
   expect(within(nav).queryByRole('region', { name: 'Workloads' })).toBeNull()
   expect(f.client.setKindFavorite).toHaveBeenCalledWith('kubernetes', 'pods', true)
-  await userEvent.click(screen.getByRole('option', { name: 'bb-cluster' }))
+  await selectConnection(/^b\b/,userEvent)
   await waitFor(() => expect(f.client.listKinds).toHaveBeenCalledWith('kubernetes', 'b'))
   const otherFavorites = screen.getByRole('region', { name: 'Favorites' })
   expect(within(screen.getByRole('navigation', { name: 'resources' })).getAllByRole('button', { name: 'Pods' })).toHaveLength(1)

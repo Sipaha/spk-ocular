@@ -1,3 +1,4 @@
+import {selectConnection} from '../test/connections'
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { EditorView } from '@codemirror/view'
@@ -247,11 +248,11 @@ describe('editing an object in the details', () => {
     expect(screen.getByRole('dialog', { name: 'pods api-1' })).toBeInTheDocument()
     await userEvent.click(screen.getByRole('button', { name: /^Cluster \(/ }))
     await asks(() => userEvent.click(screen.getByRole('button', { name: 'Nodes' })))
-    await asks(() => userEvent.click(screen.getByText('stage')))
+    await asks(() => selectConnection('stage'))
     expect(f.client.selectTarget).not.toHaveBeenCalled()
 
     // Discard: the request goes on.
-    await userEvent.click(screen.getByText('stage'))
+    await selectConnection('stage')
     await userEvent.click(await screen.findByRole('button', { name: 'Discard' }))
     await waitFor(() => expect(f.client.selectTarget).toHaveBeenCalledWith('kubernetes', 'stage'))
   })

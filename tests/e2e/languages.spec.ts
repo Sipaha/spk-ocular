@@ -1,3 +1,4 @@
+import { selectConnection, openAppMenu } from './fixtures'
 import { expect, type Page } from '@playwright/test'
 import { connectSelected, scratchRoot, test } from './fixtures'
 import { stats, token } from './synth'
@@ -6,7 +7,7 @@ import { mkdirSync } from 'node:fs'
 import { join } from 'node:path'
 
 async function choose(page: Page, language: Language) {
-  await page.locator('.language-menu button').click()
+  await openAppMenu(page);await page.locator('.language-menu button').click()
   await page.getByRole('option', { name: languageNames[language], exact: true }).click()
   await expect(page.locator('html')).toHaveAttribute('lang', language)
 }
@@ -25,7 +26,7 @@ test('all eight language menus, persistent choices and live workspace state', as
   let openedViews = 0
   page.on('request', request => { if (new URL(request.url()).pathname === '/api/OpenView') openedViews++ })
   await page.goto('/')
-  await page.getByRole('option', { name: /^demo\b/ }).click()
+  await selectConnection(page,/^demo\b/)
   await connectSelected(page)
   const grid = page.getByRole('grid')
   const gridNames: Record<Language, string> = { en: 'resources', ru: 'ресурсы', de: 'Ressourcen', es: 'recursos', fr: 'ressources', pt: 'recursos', zh: '资源', ja: 'リソース' }
@@ -47,12 +48,13 @@ test('all eight language menus, persistent choices and live workspace state', as
     await expect(grid).toHaveAttribute('data-language-identity', identity)
     for (const width of [1280, 860]) {
       await page.setViewportSize({ width, height: 820 })
+      await openAppMenu(page)
       const header = page.locator('.app-header')
       expect(await header.evaluate(el => el.scrollWidth <= el.clientWidth)).toBeTruthy()
       await expect(page.locator('.language-menu button')).toContainText(languageNames[language])
       expect(await page.locator('.language-menu button').evaluate(el => getComputedStyle(el).fontSize)).toBe('14px')
       await expect(page.locator('button.about-trigger')).toBeInViewport({ ratio: 1 })
-      await page.locator('.language-menu button').click()
+      await openAppMenu(page);await page.locator('.language-menu button').click()
       const menuLabel = await page.locator('.language-menu button').getAttribute('aria-label')
       await expect(page.getByRole('listbox', { name: menuLabel!, exact: true }).getByRole('option')).toHaveCount(8)
       for (const name of Object.values(languageNames)) {
@@ -63,6 +65,7 @@ test('all eight language menus, persistent choices and live workspace state', as
         expect(bounds!.x + bounds!.width).toBeLessThanOrEqual(width)
       }
       await page.screenshot({ path: join(captures, `${language}-${width}-menu.png`) })
+      await page.keyboard.press('Escape')
       await page.keyboard.press('Escape')
       await page.screenshot({ path: join(captures, `${language}-${width}.png`) })
     }

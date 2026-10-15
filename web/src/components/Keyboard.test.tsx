@@ -33,7 +33,7 @@ describe('keyboard', () => {
   it('F6 goes round contexts, views, the table and details; Shift+F6 goes back', async () => {
     const { scroll } = await openProd()
     await userEvent.keyboard('{F6}')
-    expect(screen.getByRole('listbox', { name: 'targets' })).toHaveFocus()
+    expect(screen.getByRole('button', { name: 'Connections' })).toHaveFocus()
     await userEvent.keyboard('{F6}')
     expect(screen.getByRole('button', { name: 'Pods' })).toHaveFocus() // the current view
     await userEvent.keyboard('{F6}')
@@ -43,7 +43,7 @@ describe('keyboard', () => {
     await userEvent.keyboard('{F6}')
     expect(drawer).toHaveFocus()
     await userEvent.keyboard('{F6}')
-    expect(screen.getByRole('listbox', { name: 'targets' })).toHaveFocus()
+    expect(screen.getByRole('button', { name: 'Connections' })).toHaveFocus()
     await userEvent.keyboard('{Shift>}{F6}{/Shift}')
     expect(drawer).toHaveFocus()
   })
@@ -182,7 +182,7 @@ describe('keyboard', () => {
     await userEvent.keyboard('{Escape}')
     expect(screen.queryByRole('menu')).not.toBeInTheDocument()
     await userEvent.keyboard('{F6}')
-    expect(screen.getByRole('listbox', { name: 'targets' })).toHaveFocus()
+    expect(screen.getByRole('button', { name: 'Connections' })).toHaveFocus()
   })
 
   it('the palette button stays in the app header without a duplicate in the dock', async () => {

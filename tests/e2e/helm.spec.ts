@@ -1,3 +1,5 @@
+import {connectionChoice} from './fixtures'
+import { selectConnection } from './fixtures'
 import { expect } from '@playwright/test'
 import { test, connectSelected, scratchRoot } from './fixtures'
 import { token } from './synth'
@@ -5,7 +7,7 @@ import { join } from 'node:path'
 
 test('Helm release details, history, review and deletion use the embedded SDK', async ({ page }) => {
   await page.goto('/')
-  await page.getByRole('option', { name: /^demo\b/ }).click()
+  await selectConnection(page,/^demo\b/)
   await connectSelected(page)
   const nav = page.getByRole('navigation', { name: 'resources' })
   await nav.getByRole('button', { name: /^Helm \(2\)$/ }).click()
@@ -62,7 +64,7 @@ test('Helm release details, history, review and deletion use the embedded SDK', 
 
 test('Helm repositories use application controls and private settings', async ({ page }) => {
   await page.goto('/')
-  await page.getByRole('option', { name: /^demo\b/ }).click()
+  await selectConnection(page,/^demo\b/)
   await connectSelected(page)
   const nav = page.getByRole('navigation', { name: 'resources' })
   const releases = nav.getByRole('button', { name: 'Releases', exact: true })
@@ -115,7 +117,7 @@ test('chart catalogue drives install, values upgrade and rollback', async ({ pag
   const address = server.address() as { port: number }
   try {
     await page.goto('/')
-    await page.getByRole('option', { name: /^demo\b/ }).click()
+    await selectConnection(page,/^demo\b/)
     await connectSelected(page)
     const headers = { Authorization: `Bearer ${await token(page)}`, Origin: new URL(page.url()).origin }
     const save = await page.request.post('/api/Helm', { headers, data: { command: 'save-settings', settings: { repositories: [{ name: 'fixture', url: `http://127.0.0.1:${address.port}` }], storage: { driver: 'secret' } } } })
@@ -174,8 +176,7 @@ test('Helm values and connection survive an inactive renderer until Disconnect',
   const scopeSaved = await page.request.post('/api/SetTargetState', { headers: { Authorization: `Bearer ${await token(page)}`, Origin: new URL(page.url()).origin }, data: { provider: 'synthetic', target: 'demo', key: 'scope', value: JSON.stringify({ mode: 'one', name: 'blue' }) } })
   expect(scopeSaved.ok()).toBeTruthy()
   await page.reload()
-  const demo = page.getByRole('option', { name: /^demo\b/ })
-  await demo.click()
+  await selectConnection(page,/^demo\b/)
   await connectSelected(page)
   const nav = page.getByRole('navigation', { name: 'resources' })
   const releases = nav.getByRole('button', { name: 'Releases', exact: true })
@@ -206,7 +207,7 @@ test('Helm values and connection survive an inactive renderer until Disconnect',
   // Retention never bypasses the normal unsaved-edit guard or executes a write.
   await workspace.getByRole('button', { name: 'Cancel', exact: true }).click()
   await page.getByRole('button', { name: 'Discard', exact: true }).click()
-  await demo.click({ button: 'right' })
+  await (await connectionChoice(page,/^demo\b/)).click({button:'right'})
   await page.getByRole('menuitem', { name: 'Disconnect', exact: true }).click()
   await expect(page.getByRole('button', { name: 'Connect', exact: true })).toBeVisible()
   await expect(page.getByText(/Attempt .*of.*elapsed/)).toHaveCount(0)

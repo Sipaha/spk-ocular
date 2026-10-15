@@ -1,3 +1,5 @@
+import {openAppMenu} from './fixtures'
+import { selectConnection } from './fixtures'
 import { connectSelected } from './fixtures'
 import { expect } from '@playwright/test'
 import { test } from './fixtures'
@@ -6,6 +8,8 @@ import { join } from 'node:path'
 import { scratchRoot } from './fixtures'
 
 test('modal palette covers overflowing navigation and resize handles',async({page})=>{
+ // At this width the navigation grip lies underneath the centred palette.
+ await page.setViewportSize({width:960,height:900})
  await page.route('**/api/ListKinds',async route=>{
   const response=await route.fetch(),body=await response.json()
   const kind=body.kinds.find((item:{id:string})=>item.id==='services')
@@ -13,7 +17,7 @@ test('modal palette covers overflowing navigation and resize handles',async({pag
   await route.fulfill({response,json:body})
  })
  await page.goto('/')
- await page.getByRole('option',{name:/^demo\b/}).click();await connectSelected(page)
+ await selectConnection(page,/^demo\b/);await connectSelected(page)
  const nav=page.locator('[data-resource-nav-list]')
  await expect.poll(()=>nav.evaluate(el=>el.scrollHeight-el.clientHeight)).toBeGreaterThan(500)
  await nav.hover();await page.mouse.wheel(0,300)
@@ -22,6 +26,7 @@ test('modal palette covers overflowing navigation and resize handles',async({pag
  await expect(dialog).toBeVisible()
  expect(await nav.evaluate(el=>getComputedStyle(el).scrollbarWidth)).toBe('auto')
  const rect=(await dialog.boundingBox())!,handle=(await page.getByRole('separator',{name:'Resize resource navigation',exact:true}).boundingBox())!
+ expect(handle.x).toBeGreaterThan(rect.x);expect(handle.x).toBeLessThan(rect.x+rect.width)
  const point={x:handle.x+handle.width/2,y:rect.y+Math.min(100,rect.height/2)}
  expect(await page.evaluate(({x,y})=>!!document.elementFromPoint(x,y)?.closest('.palette-dialog'),point)).toBe(true)
  await page.screenshot({path:join(scratchRoot,'palette-overflow-divider.png')})
@@ -30,7 +35,8 @@ test('modal palette covers overflowing navigation and resize handles',async({pag
 
 test('help close is reachable by Tab and Shift+Tab and restores its opener', async ({ page }) => {
   await page.goto('/')
-  const opener = page.getByRole('button', { name: 'Keyboard', exact: true })
+  await openAppMenu(page)
+  const opener = page.getByRole('button', { name: 'Keyboard ?', exact: true })
   await opener.click()
   const dialog = page.getByRole('dialog', { name: 'Keyboard' })
   const close = dialog.getByRole('button', { name: 'Close', exact: true })
@@ -44,7 +50,7 @@ test('help close is reachable by Tab and Shift+Tab and restores its opener', asy
   await page.screenshot({ path: join(captures, 'help-focused-close.png') })
   await page.keyboard.press('Enter')
   await expect(dialog).toBeHidden()
-  await expect(opener).toBeFocused()
+  await expect(page.locator('[data-app-menu]')).toBeFocused()
 })
 
 // The keyboard against the synthetic provider: areas (F6), views by arrows,
@@ -52,7 +58,7 @@ test('help close is reachable by Tab and Shift+Tab and restores its opener', asy
 
 test('F6 goes round the areas; views by arrows; ? shows the keys', async ({ page }) => {
   await page.goto('/')
-  await page.getByRole('option', { name: /^demo\b/ }).click()
+  await selectConnection(page,/^demo\b/)
   await connectSelected(page)
   const nav = page.getByRole('navigation', { name: 'resources' })
   await nav.getByRole('button', { name: 'Services', exact: true }).click()
@@ -60,7 +66,7 @@ test('F6 goes round the areas; views by arrows; ? shows the keys', async ({ page
 
   await page.locator('body').click({ position: { x: 5, y: 5 } })
   await page.keyboard.press('F6')
-  await expect(page.getByRole('listbox', { name: 'targets' })).toBeFocused()
+  await expect(page.locator('[data-connection-switcher]')).toBeFocused()
   await page.keyboard.press('F6')
   await expect(nav.getByRole('button', { name: 'Services', exact: true })).toBeFocused()
   await page.keyboard.press('ArrowDown')
@@ -83,7 +89,7 @@ test('F6 goes round the areas; views by arrows; ? shows the keys', async ({ page
 
 test('the app header opens the palette while a terminal keeps Ctrl+K', async ({ page }) => {
   await page.goto('/')
-  await page.getByRole('option', { name: /^demo\b/ }).click()
+  await selectConnection(page,/^demo\b/)
   await connectSelected(page)
   await page.getByRole('navigation', { name: 'resources' }).getByRole('button', { name: 'Services', exact: true }).click()
   const grid = page.getByRole('grid', { name: 'resources' })
@@ -102,20 +108,21 @@ test('the app header opens the palette while a terminal keeps Ctrl+K', async ({ 
 test('workspace header and grouped log controls stay reachable in a narrow window', async ({ page }) => {
   await page.setViewportSize({ width: 960, height: 720 })
   await page.goto('/')
-  await page.getByRole('option', { name: /^demo\b/ }).click()
+  await selectConnection(page,/^demo\b/)
   await connectSelected(page)
-  await expect(page.getByLabel('Current target', { exact: true })).toHaveText('demo')
+  await expect(page.locator('[data-connection-switcher]')).toContainText('demo')
 
   const go = page.getByRole('button', { name: 'Go to (Ctrl+K)' })
   await go.click()
   await expect(page.getByRole('dialog', { name: 'Go to' })).toBeVisible()
   await page.keyboard.press('Escape')
   await expect(go).toBeFocused()
-  const help = page.getByRole('button', { name: 'Keyboard', exact: true })
+  await openAppMenu(page)
+  const help = page.getByRole('button', { name: 'Keyboard ?', exact: true })
   await help.click()
   await expect(page.getByRole('dialog', { name: 'Keyboard' })).toBeVisible()
   await page.keyboard.press('Escape')
-  await expect(help).toBeFocused()
+  await expect(page.locator('[data-app-menu]')).toBeFocused()
 
   await page.getByRole('navigation', { name: 'resources' }).getByRole('button', { name: 'Services', exact: true }).click()
   await page.getByRole('gridcell', { name: 'api', exact: true }).click()

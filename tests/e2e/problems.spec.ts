@@ -1,3 +1,4 @@
+import { selectConnection } from './fixtures'
 import { connectSelected } from './fixtures'
 import { expect } from '@playwright/test'
 import { test } from './fixtures'
@@ -10,7 +11,7 @@ import type { Page as ResourcePage } from '../../web/src/api/types'
 async function openProblems(page: import('@playwright/test').Page) {
   await page.goto('/')
   await page.request.post('/api/_test/synthetic/reset', { headers: { Authorization: `Bearer ${await token(page)}` } })
-  await page.getByRole('option', { name: /^demo\b/ }).click()
+  await selectConnection(page,/^demo\b/)
   await connectSelected(page)
   await page.getByRole('navigation', { name: 'resources' }).getByRole('button', { name: 'Problems', exact: true }).click()
   const grid = page.getByRole('grid', { name: 'resources' })
@@ -44,7 +45,7 @@ test('first opening retains known table headers while rows and coverage load', a
   })
   await page.goto('/')
   await page.request.post('/api/_test/synthetic/reset', { headers: { Authorization: `Bearer ${await token(page)}` } })
-  await page.getByRole('option', { name: /^demo\b/ }).click()
+  await selectConnection(page,/^demo\b/)
   await connectSelected(page)
   const nav = page.getByRole('navigation', { name: 'resources' })
   await nav.getByRole('button', { name: 'Services', exact: true }).click()

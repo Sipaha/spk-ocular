@@ -1,3 +1,5 @@
+import {openAppMenu} from './fixtures'
+import { selectConnection } from './fixtures'
 import { connectSelected } from './fixtures'
 import { expect, type Page } from '@playwright/test'
 import { test, scratchRoot } from './fixtures'
@@ -11,7 +13,7 @@ test.afterEach(async ({ page }) => { await page.unrouteAll({ behavior: 'wait' })
 
 async function openDemo(page: Page) {
   await page.goto('/')
-  await page.getByRole('option', { name: /^demo\b/ }).click()
+  await selectConnection(page,/^demo\b/)
   await connectSelected(page)
   await page.getByRole('navigation', { name: 'resources' }).getByRole('button', { name: 'Services', exact: true }).click()
   await expect(page.getByRole('grid', { name: 'resources' }).getByRole('gridcell', { name: 'workers', exact: true })).toBeVisible()
@@ -99,7 +101,7 @@ test('opening a palette result selects and reveals its off-screen row', async ({
     await route.fulfill({ response, json: body })
   })
   await page.goto('/')
-  await page.getByRole('option', { name: /^demo\b/ }).click()
+  await selectConnection(page,/^demo\b/)
   await connectSelected(page)
   await page.getByRole('navigation', { name: 'resources' }).getByRole('button', { name: 'Services', exact: true }).click()
   const grid = page.getByRole('grid', { name: 'resources' })
@@ -146,7 +148,7 @@ test('a slow resource list shows loading until its rows arrive', async ({ page }
 
 test('object search stays inside selected scopes across views and opens the matching kind', async ({ page }) => {
   await page.goto('/')
-  await page.getByRole('option', { name: /^demo\b/ }).click()
+  await selectConnection(page,/^demo\b/)
   await connectSelected(page)
   const nav = page.getByRole('navigation', { name: 'resources' })
   await nav.getByRole('button', { name: 'Crates', exact: true }).click()
@@ -267,7 +269,7 @@ test('keyboard fallback hint renders in eight languages at normal and narrow wid
  const languages = [['en', 'English'], ['ru', 'Русский'], ['zh', '简体中文'], ['es', 'Español'], ['de', 'Deutsch'], ['fr', 'Français'], ['pt', 'Português (Brasil)'], ['ja', '日本語']]
  try {
   for (const [code, name] of languages) {
-   await page.locator('.language-trigger').click()
+   await openAppMenu(page);await page.locator('.language-trigger').click()
    await page.getByRole('option', { name, exact: true }).click()
    await expect(page.locator('html')).toHaveAttribute('lang', code)
    await page.keyboard.press('Control+k')
@@ -286,7 +288,7 @@ test('keyboard fallback hint renders in eight languages at normal and narrow wid
   }
  } finally {
   await page.keyboard.press('Escape')
-  await page.locator('.language-trigger').click()
+  await openAppMenu(page);await page.locator('.language-trigger').click()
   await page.getByRole('option', { name: 'English', exact: true }).click()
  }
 })

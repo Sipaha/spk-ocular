@@ -1,3 +1,4 @@
+import {selectConnection} from '../test/connections'
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -367,10 +368,10 @@ describe('switching targets (P18)', () => {
     const drawer = await screen.findByRole('dialog', { name: 'pods api-2' })
     await userEvent.click(within(drawer).getByRole('tab', { name: 'YAML' }))
 
-    await userEvent.click(screen.getByRole('option', { name: /stage/ }))
+    await selectConnection(/stage/,userEvent)
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'pods api-2' })).toBeNull())
     expect(screen.getByRole('textbox', { name: 'Filter rows' })).toHaveValue('')
-    await userEvent.click(screen.getByRole('option', { name: /prod/ }))
+    await selectConnection(/prod/,userEvent)
 
     grid = await screen.findByRole('grid', { name: 'resources' })
     await within(grid).findByText('api-2')
@@ -409,9 +410,9 @@ describe('switching targets (P18)', () => {
     await userEvent.click(screen.getByRole('button', { name: /^Other \(/ }))
     await userEvent.click(await screen.findByRole('button', { name: 'Widgets' }))
     await screen.findByRole('heading', { name: 'Widgets' })
-    await userEvent.click(screen.getByRole('option', { name: /stage/ }))
+    await selectConnection(/stage/,userEvent)
     f.client.listKinds = vi.fn(async () => kindsView([podsKind])) // the CRD went meanwhile
-    await userEvent.click(screen.getByRole('option', { name: /prod/ }))
+    await selectConnection(/prod/,userEvent)
     expect(await screen.findByRole('heading', { name: 'Pods' })).toBeInTheDocument()
   })
 })

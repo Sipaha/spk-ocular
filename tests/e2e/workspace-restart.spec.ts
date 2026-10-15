@@ -1,3 +1,4 @@
+import { selectConnection } from './fixtures'
 import {expect,test,type Page} from '@playwright/test'
 import type {ChildProcess} from 'node:child_process'
 import {mkdirSync,mkdtempSync} from 'node:fs'
@@ -7,7 +8,7 @@ import {freePort,start,stop} from './restartApp'
 
 const dock=(page:Page)=>page.locator('[data-area=dock]')
 async function selectWorkloads(page:Page){
- await page.getByRole('option',{name:/^demo\b/}).click();await connectSelected(page)
+ await selectConnection(page,/^demo\b/);await connectSelected(page)
  const nav=page.getByRole('navigation',{name:'resources'})
  await nav.getByRole('button',{name:/^Synthetic/}).click()
  await nav.getByRole('button',{name:'Services',exact:true}).click()
@@ -29,6 +30,9 @@ test('pinned properties, logs, ended terminals and layout survive a real restart
  try{
   app=await start(port,e);await page.goto(url)
   const details=await selectWorkloads(page)
+  const connectionIcon=page.locator('[data-connection-switcher] [data-connection-icon]')
+  await expect(connectionIcon).toHaveAttribute('data-connection-icon',/./)
+  const appearance={icon:await connectionIcon.getAttribute('data-connection-icon'),palette:await connectionIcon.getAttribute('data-connection-palette')}
   await details.getByRole('button',{name:'Pin properties',exact:true}).click()
   await expect(dock(page).getByRole('dialog',{name:'Pinned properties · api',exact:true})).toBeVisible();await expect(dock(page).getByRole('dialog',{name:'Pinned properties · api',exact:true}).getByRole('button',{name:'Files',exact:true})).toHaveCount(0)
   await details.getByRole('button',{name:'Logs',exact:true}).click()
@@ -47,7 +51,6 @@ test('pinned properties, logs, ended terminals and layout survive a real restart
   await setup.getByRole('button',{name:'Open',exact:true}).click()
   await expect(dock(page).locator('[data-tab-kind=term]')).toBeVisible()
   await dock(page).locator('[data-tab-kind=term]').getByRole('button',{name:'Keep after restart',exact:true}).click()
-  const targetResize=page.getByRole('separator',{name:'Resize targets panel',exact:true});await targetResize.focus();await targetResize.press('ArrowRight')
   const navResize=page.getByRole('separator',{name:'Resize resource navigation',exact:true});await navResize.focus();await navResize.press('ArrowRight')
   const dockResize=dock(page).getByRole('separator').first();await dockResize.focus();await dockResize.press('ArrowUp')
   // The panels can already be saved while later layout writes are queued.
@@ -57,15 +60,19 @@ test('pinned properties, logs, ended terminals and layout survive a real restart
    stored=(await state(page,url))??''
    if(!stored)return null
    const saved=JSON.parse(stored)
-   return {panels:saved.panels.length,targets:saved.widths.targets,navigation:saved.widths.navigation,height:saved.height}
-  }).toEqual({panels:3,targets:260,navigation:212,height:340})
+   return {panels:saved.panels.length,navigation:saved.widths.navigation,height:saved.height}
+  }).toEqual({panels:3,navigation:212,height:340})
   expect(stored).not.toContain('DO_NOT_REPLAY');expect(stored).not.toContain('command');expect(stored).not.toContain('PRIVATE_LOG_CONTENT');expect(stored).not.toContain('screen');expect(stored).not.toContain('yaml')
-  const saved=JSON.parse(stored);expect(saved.widths.targets).toBe(260);expect(saved.widths.navigation).toBe(212);expect(saved.height).toBe(340)
+  const saved=JSON.parse(stored);expect(saved.widths.navigation).toBe(212);expect(saved.height).toBe(340)
   await stop(app);app=await start(port,e)
-  const reads:string[]=[],commands:Record<string,unknown>[]=[]
+  const reads:string[]=[],commands:Record<string,unknown>[]=[],appearanceWrites:string[]=[]
+  page.on('request',r=>{if(r.url().endsWith('/api/SetTargetState')&&r.postDataJSON()?.key==='appearance')appearanceWrites.push(r.postDataJSON().target)})
   page.on('request',r=>{if(/\/api\/(ConnectTarget|OpenLogStream|OpenTerminal)$/.test(r.url()))reads.push(r.url());if(r.url().endsWith('/api/OpenTerminal'))commands.push(r.postDataJSON())})
   await page.goto(url)
   await expect(dock(page)).toContainText('The previous terminal session ended')
+  await expect(connectionIcon).toHaveAttribute('data-connection-icon',appearance.icon!)
+  await expect(connectionIcon).toHaveAttribute('data-connection-palette',appearance.palette!)
+  expect(appearanceWrites).toEqual([])
   await expect(page.getByRole('button',{name:'Connect',exact:true})).toBeVisible();expect(reads).toEqual([])
   await dock(page).locator('[data-tab-kind=logs]').getByRole('button').first().click()
   await expect(dock(page).getByRole('button',{name:'Resume logs',exact:true})).toBeDisabled()
@@ -76,7 +83,7 @@ test('pinned properties, logs, ended terminals and layout survive a real restart
   await dock(page).locator('[data-tab-kind=term-restored]').getByRole('button').first().click();await dock(page).getByRole('button',{name:'Set up a new terminal',exact:true}).click();await expect(setup).toBeVisible();await expect(setup.getByRole('textbox',{name:'Command',exact:true})).toHaveValue('');expect(commands).toEqual([])
   await setup.getByRole('button',{name:'Open',exact:true}).click();await expect.poll(()=>commands.length).toBe(1);expect(JSON.stringify(commands)).not.toContain('DO_NOT_REPLAY')
   await page.screenshot({path:join(scratchRoot,'workspace-new-terminal.png')})
-  await expect(page.locator('[data-area=targets]')).toHaveCSS('width','260px')
+  await expect(page.locator('[data-connection-switcher]')).toBeVisible()
   expect(errors).toEqual([])
  }finally{await page.close();if(app)await stop(app)}
 })
@@ -87,7 +94,7 @@ test('cross-target pins remain dormant and reject a same-name replacement after 
  let app:ChildProcess|undefined;const page=await browser.newPage({viewport:{width:1500,height:950}})
  try{
   app=await start(port,e);await page.goto(url);const details=await selectWorkloads(page);await details.getByRole('button',{name:'Pin properties',exact:true}).click()
-  await page.getByRole('option',{name:/^demo2\b/}).click();await connectSelected(page)
+  await selectConnection(page,/^demo2\b/);await connectSelected(page)
   const nav=page.getByRole('navigation',{name:'resources'});await nav.getByRole('button',{name:'Services',exact:true}).click();await page.getByRole('grid',{name:'resources'}).getByRole('gridcell',{name:'api',exact:true}).click();await page.locator('[data-area=details]').getByRole('button',{name:'Pin properties',exact:true}).click()
   await expect.poll(async()=>{const saved=await state(page,url);return saved?JSON.parse(saved).panels.length:0}).toBe(2)
   const saved=JSON.parse((await state(page,url))!);saved.panels[0].ref.uid='old-object-replaced'
@@ -99,7 +106,7 @@ test('cross-target pins remain dormant and reject a same-name replacement after 
   await dock(page).locator('[data-tab-kind=properties]').first().getByRole('button').first().click();await expect(dock(page).getByRole('button',{name:'Open pinned properties',exact:true})).toBeDisabled()
   await connectSelected(page);expect(connections).toEqual(['demo2']);await expect(dock(page).getByRole('button',{name:'Open pinned properties',exact:true})).toBeDisabled()
   await dock(page).locator('[data-tab-kind=properties]').nth(1).getByRole('button').first().click();await dock(page).getByRole('button',{name:'Open pinned properties',exact:true}).click();await expect(dock(page).getByRole('dialog',{name:'Pinned properties · api',exact:true})).toBeVisible();await expect(dock(page).getByRole('dialog',{name:'Pinned properties · api',exact:true}).getByRole('button',{name:'Files',exact:true})).toHaveCount(0)
-  await dock(page).locator('[data-tab-kind=properties]').first().getByRole('button').first().click();await page.getByRole('option',{name:/^demo\b/}).click();await connectSelected(page);await dock(page).getByRole('button',{name:'Open pinned properties',exact:true}).click()
+  await dock(page).locator('[data-tab-kind=properties]').first().getByRole('button').first().click();await selectConnection(page,/^demo\b/);await connectSelected(page);await dock(page).getByRole('button',{name:'Open pinned properties',exact:true}).click()
   const pinned=dock(page).getByRole('dialog',{name:'Pinned properties · api',exact:true});await expect(pinned).toContainText('This object no longer exists.');await expect(pinned.locator('.cm-editor')).toHaveCount(0)
   await page.screenshot({path:join(scratchRoot,'workspace-replaced-object.png')})
  }finally{await page.close();if(app)await stop(app)}

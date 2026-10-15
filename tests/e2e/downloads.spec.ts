@@ -1,3 +1,4 @@
+import { selectConnection, openAppMenu } from './fixtures'
 import {expect,type Page} from '@playwright/test'
 import {readFile} from 'node:fs/promises'
 import {join} from 'node:path'
@@ -5,7 +6,7 @@ import {test,connectSelected,scratchRoot} from './fixtures'
 import {languages,languageNames} from '../../web/src/languages'
 
 async function logs(page:Page) {
- await page.goto('/');await page.getByRole('option',{name:/^demo\b/}).click();await connectSelected(page)
+ await page.goto('/');await selectConnection(page,/^demo\b/);await connectSelected(page)
  await page.getByRole('navigation',{name:'resources'}).getByRole('button',{name:'Services',exact:true}).click()
  await page.getByRole('grid',{name:'resources'}).getByRole('gridcell',{name:'api',exact:true}).click();await page.keyboard.press('l')
  const panel=page.locator('[role=tabpanel]:not([hidden])');await expect(panel.getByLabel('stream state')).toHaveText('Live');return panel
@@ -101,7 +102,7 @@ test('Downloads panel fits all eight locales and keeps keyboard focus within its
  const titles={en:'Downloads',ru:'Загрузки',zh:'下载',es:'Descargas',de:'Downloads',fr:'Téléchargements',pt:'Downloads',ja:'ダウンロード'}
  try {
  for(const lang of languages) {
-  await page.locator('.language-menu button').click();await page.getByRole('option',{name:languageNames[lang],exact:true}).click()
+  await openAppMenu(page);await page.locator('.language-menu button').click();await page.getByRole('option',{name:languageNames[lang],exact:true}).click()
   await expect(page.locator('html')).toHaveAttribute('lang',lang)
   for(const width of [1440,860]) {
    await page.setViewportSize({width,height:900});await page.getByRole('button',{name:titles[lang],exact:true}).click()
@@ -121,7 +122,7 @@ test('Downloads panel fits all eight locales and keeps keyboard focus within its
  }finally{
   const panel=page.locator('[data-downloads-panel]')
   if(await panel.isVisible())await panel.locator('header button').last().click()
-  await page.locator('.language-menu button').click();await page.getByRole('option',{name:'English',exact:true}).click()
+  await openAppMenu(page);await page.locator('.language-menu button').click();await page.getByRole('option',{name:'English',exact:true}).click()
   await expect(page.locator('html')).toHaveAttribute('lang','en')
  }
 })

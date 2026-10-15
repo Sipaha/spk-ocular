@@ -1,3 +1,4 @@
+import { selectConnection, openAppMenu } from './fixtures'
 import { connectSelected } from './fixtures'
 import { expect, type Page } from '@playwright/test'
 import { test, scratchRoot } from './fixtures'
@@ -21,7 +22,7 @@ async function stats(page: Page) {
 
 async function openLogs(page: Page, object: string) {
   await page.goto('/')
-  await page.getByRole('option', { name: /^demo\b/ }).click()
+  await selectConnection(page,/^demo\b/)
   await connectSelected(page)
   await page.getByRole('navigation', { name: 'resources' }).getByRole('button', { name: 'Services', exact: true }).click()
   const grid = page.getByRole('grid', { name: 'resources' })
@@ -163,7 +164,6 @@ test('the app select of the toolbar: focused list, live lines do not close it, E
 test('panels resize independently while active logs keep streaming', async ({ page }) => {
   await page.setViewportSize({ width: 1600, height: 1000 })
   const panel = await openLogs(page, 'api')
-  const targets = page.locator('[data-area="targets"]')
   const navigation = page.locator('[data-area="nav"]')
   const details = page.locator('[data-area="details"]')
   const drag = async (label: string, dx: number, dy: number) => {
@@ -173,11 +173,7 @@ test('panels resize independently while active logs keep streaming', async ({ pa
     await page.mouse.move(box.x + box.width / 2 + dx, box.y + box.height / 2 + dy, { steps: 12 })
     await page.mouse.up()
   }
-  const tw = (await targets.boundingBox())!.width
-  await drag('Resize targets panel', 60, 0)
-  await expect(targets).toBeVisible()
   await expect(navigation).toBeVisible()
-  expect((await targets.boundingBox())!.width).toBeCloseTo(tw + 60, 0)
   const nw = (await navigation.boundingBox())!.width
   await drag('Resize resource navigation', 60, 0)
   expect((await navigation.boundingBox())!.width).toBeCloseTo(nw + 60, 0)
@@ -210,11 +206,9 @@ test('panels resize independently while active logs keep streaming', async ({ pa
   console.log('resize step ms including emit and two frames:', JSON.stringify(latencies))
   if (process.env.E2E_PANELS_SCREENSHOT) await page.screenshot({ path: process.env.E2E_PANELS_SCREENSHOT })
   // Navigation keeps the user's widths; the table still has room.
-  await page.getByRole('option', { name: /^demo2\b/ }).click()
+  await selectConnection(page,/^demo2\b/)
   await connectSelected(page)
-  await expect(targets).toBeVisible()
   await expect(navigation).toBeVisible()
-  await expect.poll(async () => (await targets.boundingBox())?.width ?? 0).toBeCloseTo(tw + 60, 0)
   await expect.poll(async () => (await navigation.boundingBox())?.width ?? 0).toBeCloseTo(nw + 60, 0)
 })
 
@@ -288,15 +282,15 @@ test('separate log window shares one stream and returns its settings and buffer'
  expect((await stats(page)).streams).toBe(before.streams)
 })
 
-test('left panel resize keeps search geometry fixed and avoids log row updates during drag', async ({ page }) => {
+test('resource navigation resize keeps search geometry fixed and avoids log row updates during drag', async ({ page }) => {
  await page.setViewportSize({width:1600,height:1000})
  const panel=await openLogs(page,'api')
  await emit(page,'api',{lines:Array.from({length:20000},(_,i)=>`buffered line ${i}`)})
  await expect(panel.getByText('buffered line 19999',{exact:true})).toBeVisible()
- const field=page.locator('.target-filter')
+ const field=page.locator('.resource-nav-filter')
  const icon=field.locator('svg');const input=field.locator('input')
  const originalIcon=(await icon.boundingBox())!;const originalInput=(await input.boundingBox())!
- const separator=page.getByRole('separator',{name:'Resize targets panel',exact:true})
+ const separator=page.getByRole('separator',{name:'Resize resource navigation',exact:true})
  const box=(await separator.boundingBox())!
  await page.mouse.move(box.x+2,box.y+40);await page.mouse.down()
  await page.evaluate(()=>new Promise<void>(resolve=>requestAnimationFrame(()=>requestAnimationFrame(()=>resolve()))))
@@ -363,7 +357,7 @@ test('inspector and log actions use compact icons with hover/focus descriptions 
  await expect(panel.getByRole('button',{name:'Time',exact:true})).toHaveAttribute('aria-pressed','true')
  try {
   for(const language of languages){
-   await page.locator('.language-menu button').click()
+   await openAppMenu(page);await page.locator('.language-menu button').click()
    await page.getByRole('option',{name:languageNames[language],exact:true}).click()
    await expect(page.locator('html')).toHaveAttribute('lang',language)
    for(const width of [1280,960]){
@@ -391,7 +385,7 @@ test('inspector and log actions use compact icons with hover/focus descriptions 
    }
   }
  } finally {
-  await page.locator('.language-menu button').click()
+  await openAppMenu(page);await page.locator('.language-menu button').click()
   await page.getByRole('option',{name:languageNames.en,exact:true}).click()
  }
 })

@@ -1,3 +1,4 @@
+import {openAppMenu} from '../test/connections'
 import { act, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -394,6 +395,7 @@ describe('agent access: journal', () => {
     const table = await within(panel).findByRole('table', { name: 'Journal' })
     await waitFor(() => expect(within(table).getAllByRole('row')).toHaveLength(2))
     const before = within(table).getAllByRole('row')[1].querySelector('td')!.textContent
+    await openAppMenu(user)
     await user.click(screen.getByRole('button', { name: 'Language' }))
     await user.click(screen.getByRole('option', { name: '日本語' }))
     await waitFor(() => expect(within(table).getAllByRole('row')[1].querySelector('td')!.textContent).not.toBe(before))

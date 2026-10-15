@@ -1,33 +1,38 @@
+import { useEffect, useRef, useState, type RefObject } from 'react'
+import { createPortal } from 'react-dom'
 import type { Client } from '../api/client'
 import { LanguageMenu } from './LanguageMenu'
 import type { Target } from '../api/types'
+import type { ConfigurationActions } from '../configurations/Configurations'
+import type { Actions } from '../store'
 import { t } from '../i18n'
 import { openPalette } from '../palette/store'
-import { ProviderIcon, SearchIcon } from './icons'
-import { TargetInfoButton } from './TargetDetails'
+import { SearchIcon } from './icons'
 import { DownloadsButton } from '../downloads/DownloadsButton'
+import { ConnectionSwitcher } from '../connections/ConnectionSwitcher'
 
-/** App-wide navigation stays visible while individual panels scroll. */
-export function AppHeader({ target, onHelp, onAbout, client }: { target: Target | null; onHelp: () => void; onAbout: () => void; client: Client }) {
-  return (
-    <header className="app-header">
-      <div className="app-brand flex items-center gap-2"><img src="./icon.svg" width="24" height="24" alt="" className="h-6 w-6" />SPK Ocular</div>
-      <div className="app-context" aria-label={t('shell.context')}>
-        {target ? <>
-          <ProviderIcon provider={target.provider} className="h-4 w-4 shrink-0 text-fg-muted" />
-          <span className="truncate" title={target.title}>{target.title}</span>
-          <TargetInfoButton key={`${target.provider}/${target.id}`} target={target} />
-        </> : <span className="text-fg-muted">{t('shell.workspace')}</span>}
-      </div>
-      <button className="command-trigger" onClick={openPalette} aria-label={`${t('palette.label')} (Ctrl+K)`}>
-        <SearchIcon className="h-4 w-4 shrink-0" />
-        <span className="truncate">{t('shell.search')}</span>
-        <kbd>Ctrl K</kbd>
-      </button>
-      <DownloadsButton />
-      <LanguageMenu client={client} />
-      <button type="button" className="about-trigger" onClick={onAbout} aria-label={t('about.title')} title={t('about.title')} aria-haspopup="dialog">{t('about.open')}</button>
-      <button className="help-trigger" onClick={onHelp} aria-label={t('keys.title')} title={`${t('keys.title')} (?)`}>?</button>
-    </header>
-  )
+/** Connection identity leads the workspace; app utilities stay in a quiet menu. */
+export function AppHeader({target,onHelp,onAbout,client,act,configRef}:{target:Target|null;onHelp:()=>void;onAbout:()=>void;client:Client;act:Actions;configRef:RefObject<ConfigurationActions|null>}){
+ const [open,setOpen]=useState(false),button=useRef<HTMLButtonElement>(null),menu=useRef<HTMLElement>(null)
+ const close=()=>{setOpen(false);button.current?.focus()}
+ useEffect(()=>{if(open)menu.current?.querySelector<HTMLElement>('button')?.focus()},[open])
+ return <header className="app-header">
+  <ConnectionSwitcher client={client} act={act} configRef={configRef} target={target}/>
+  <button className="command-trigger" onClick={openPalette} aria-label={`${t('palette.label')} (Ctrl+K)`}><SearchIcon className="h-4 w-4 shrink-0"/><span className="truncate">{t('shell.search')}</span><kbd>Ctrl K</kbd></button>
+  <DownloadsButton/>
+  <button ref={button} type="button" className="help-trigger" aria-label={t('connections.appMenu')} title={t('connections.appMenu')} aria-haspopup="dialog" aria-expanded={open} data-app-menu onClick={()=>setOpen(!open)}><svg aria-hidden="true" viewBox="0 0 20 20" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M4 5h12M4 10h12M4 15h12"/></svg></button>
+  {open&&createPortal(<div className="fixed inset-0 z-40" onMouseDown={e=>{if(e.target===e.currentTarget)close()}}><section ref={menu} role="dialog" aria-modal="true" aria-label={t('connections.appMenu')} className="app-utilities" onKeyDown={e=>{
+   if(e.defaultPrevented)return
+   if(e.key==='Escape'){e.preventDefault();e.stopPropagation();close()}
+   if(e.key==='Tab'){
+    const stops=Array.from(menu.current?.querySelectorAll<HTMLElement>('button')??[]),first=stops[0],last=stops.at(-1)
+    if(e.shiftKey&&document.activeElement===first){e.preventDefault();last?.focus()}
+    if(!e.shiftKey&&document.activeElement===last){e.preventDefault();first?.focus()}
+   }
+  }}>
+   <LanguageMenu client={client} onChanged={close}/>
+   <button type="button" className="app-utility-action about-trigger" aria-label={t('about.title')} onClick={()=>{close();onAbout()}}>{t('about.open')}</button>
+   <button type="button" className="app-utility-action" onClick={()=>{close();onHelp()}}>{t('keys.title')}<kbd>?</kbd></button>
+  </section></div>,document.body)}
+ </header>
 }

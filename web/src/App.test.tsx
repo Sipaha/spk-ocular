@@ -1,3 +1,4 @@
+import {connectionButton,openConnections,selectConnection} from './test/connections'
 import { act, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -11,11 +12,11 @@ describe('App', () => {
   it('selects a context without opening it until Connect is pressed', async () => {
     const f = fakeClient([k8s('prod', { current: true }), k8s('dev')])
     render(<App client={f.client} />)
-    expect(await screen.findByRole('option', { name: /prod/ })).toBeInTheDocument()
+    expect(await connectionButton(/prod/)).toBeInTheDocument()
     expect(screen.queryByText('current')).not.toBeInTheDocument()
-    expect(screen.getByText('Pick a context on the left')).toBeInTheDocument()
+    expect(screen.getByText('Choose a connection')).toBeInTheDocument()
 
-    await userEvent.click(screen.getByRole('option', { name: /dev/ }))
+    await selectConnection(/dev/)
     const connect = await screen.findByRole('button', { name: 'Connect' })
     expect(f.client.connectTarget).not.toHaveBeenCalled()
     expect(f.client.listKinds).not.toHaveBeenCalled()
@@ -24,7 +25,7 @@ describe('App', () => {
     await userEvent.click(connect)
     expect(f.client.connectTarget).toHaveBeenCalledWith('kubernetes', 'dev')
     expect(await screen.findByRole('heading', { name: 'Pods' })).toBeInTheDocument()
-    expect(screen.getByRole('option', { name: /dev/ })).toHaveAttribute('aria-selected', 'true')
+    expect((await connectionButton(/dev/))).toHaveAttribute('aria-pressed', 'true')
     expect(screen.queryByRole('button', { name: 'Overview' })).not.toBeInTheDocument()
     await userEvent.click(screen.getByRole('button', { name: 'Connection information' }))
     expect(await screen.findByRole('heading', { name: 'dev' })).toBeInTheDocument()
@@ -80,7 +81,7 @@ describe('App', () => {
     expect(await screen.findByText('https://new.example:6443')).toBeInTheDocument()
     f.state.view.groups[0].targets = []
     act(() => f.emit({ type: 'targets_changed' }))
-    await screen.findByText('Pick a context on the left')
+    await screen.findByText('Choose a connection')
     expect(screen.queryByRole('dialog', { name: 'Connection information' })).not.toBeInTheDocument()
     f.state.view.groups[0].targets = [target]
     act(() => f.emit({ type: 'targets_changed' }))
@@ -91,9 +92,9 @@ describe('App', () => {
   it('"/" focuses the filter; arrows and Enter select from the keyboard', async () => {
     const f = fakeClient([k8s('alpha'), k8s('beta'), k8s('gamma')])
     render(<App client={f.client} />)
-    await screen.findByRole('option', { name: /alpha/ })
-    await userEvent.keyboard('[Slash]')
-    expect(screen.getByRole('textbox', { name: 'Filter' })).toHaveFocus()
+    await connectionButton(/alpha/)
+    await userEvent.keyboard('{Escape}[Slash]')
+    expect(screen.getByRole('combobox', { name: 'Search connections…' })).toHaveFocus()
     await userEvent.keyboard('a')
     // alpha, beta, gamma all contain "a": cursor starts on the first one
     await userEvent.keyboard('{ArrowDown}{Enter}')
@@ -105,25 +106,26 @@ describe('App', () => {
   it('reloads on targets_changed', async () => {
     const f = fakeClient([k8s('a')])
     render(<App client={f.client} />)
-    await screen.findByRole('option', { name: /a/ })
+    await connectionButton(/a/)
     f.state.view.groups[0].targets.push(k8s('added'))
     act(() => f.emit({ type: 'targets_changed' }))
-    expect(await screen.findByRole('option', { name: /added/ })).toBeInTheDocument()
+    expect(await connectionButton(/added/)).toBeInTheDocument()
   })
 
   it('reloads on resync (missed events)', async () => {
     const f = fakeClient([k8s('a')])
     render(<App client={f.client} />)
-    await screen.findByRole('option', { name: /a/ })
+    await connectionButton(/a/)
     f.state.view.groups[0].targets.push(k8s('late'))
     act(() => f.emit({ type: 'resync' }))
-    expect(await screen.findByRole('option', { name: /late/ })).toBeInTheDocument()
+    expect(await connectionButton(/late/)).toBeInTheDocument()
   })
 
   it('shows unreadable kubeconfig files as a warning', async () => {
     const f = fakeClient([k8s('ok')])
     f.state.view.groups[0].problems = [{ source: '/home/u/.kube/broken', message: 'yaml: line 3: did not find expected key' }]
     render(<App client={f.client} />)
+    await openConnections()
     expect(await screen.findByRole('alert')).toHaveTextContent('Could not read 1 file(s)')
     expect(screen.getByRole('alert')).toHaveTextContent('broken: yaml: line 3')
   })
@@ -131,6 +133,7 @@ describe('App', () => {
   it('offers explicit configuration import when there are no targets', async () => {
     const f = fakeClient([])
     render(<App client={f.client} />)
+    await openConnections()
     await waitFor(() => expect(screen.getByText(/No configurations added/)).toBeInTheDocument())
   })
 })

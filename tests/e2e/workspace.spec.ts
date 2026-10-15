@@ -1,8 +1,9 @@
+import { selectConnection, openAppMenu } from './fixtures'
 import {expect,type Page} from '@playwright/test'
 import {test,connectSelected,scratchRoot} from './fixtures'
 import {join} from 'node:path'
 async function web(page:Page){
- await page.goto('/');await page.getByRole('option',{name:/^demo\b/}).click();await connectSelected(page)
+ await page.goto('/');await selectConnection(page,/^demo\b/);await connectSelected(page)
  await page.getByRole('navigation',{name:'resources'}).getByRole('button',{name:'Workloads',exact:true}).click()
  await page.getByRole('grid',{name:'resources'}).getByRole('gridcell',{name:'web',exact:true}).click()
  return page.locator('[data-area=details]')
@@ -20,10 +21,10 @@ test('pinning read-only properties and Escape preserve a main YAML draft and all
  await details.getByRole('button',{name:'Pin properties',exact:true}).click();await expect(pinned).toBeVisible()
  const names={en:'English',ru:'Русский',zh:'简体中文',es:'Español',de:'Deutsch',fr:'Français',pt:'Português (Brasil)',ja:'日本語'}
  for(const [code,name] of Object.entries(names)){
-  await page.locator('.language-menu button').click();await page.getByRole('option',{name,exact:true}).click();await expect(page.locator('html')).toHaveAttribute('lang',code);await expect(pinned).toContainText('web');await expect(shelf(page).locator('[aria-pressed=true]')).toHaveCount(1)
+  await openAppMenu(page);await page.locator('.language-menu button').click();await page.getByRole('option',{name,exact:true}).click();await expect(page.locator('html')).toHaveAttribute('lang',code);await expect(pinned).toContainText('web');await expect(shelf(page).locator('[aria-pressed=true]')).toHaveCount(1)
   await page.screenshot({path:join(scratchRoot,'workspace-'+code+'.png')})
  }
- await page.locator('.language-menu button').click();await page.getByRole('option',{name:'English',exact:true}).click()
+ await openAppMenu(page);await page.locator('.language-menu button').click();await page.getByRole('option',{name:'English',exact:true}).click()
  await shelf(page).getByRole('button',{name:'Close tab',exact:true}).click();await expect(editor).toContainText('PRIVATE_UNSAVED_DRAFT')
 })
 

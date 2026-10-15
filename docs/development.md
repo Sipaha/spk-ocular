@@ -108,6 +108,12 @@ variable-height measurements. Format changes and resize rounding must not
 silently resume Follow or move the reader's anchor; explicit End and user scroll
 input must still work after the temporary layout guard clears.
 
+Graph zoom regressions observe actual canvas strip coordinates and compare them
+with the worker-layout geometry in the visible world rectangle. A faster paint
+must not omit resources to meet the existing frame budget. Overview fill batching
+can change subpixel edge antialiasing; detailed labels, geometry and data remain
+unchanged.
+
 Fake Engine event emission queues a server-side message; it does not acknowledge
 the client's reader. Tests for initial reconciliation hold the list response
 until the feed has recorded the event, so a late live event cannot be mistaken

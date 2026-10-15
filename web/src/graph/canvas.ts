@@ -171,17 +171,31 @@ export class GraphCanvas {
    for(const n of shown)if(n.health===state){ctx.globalAlpha=1;ctx.rect(n.x,n.y,NODE_W,NODE_H)}
    ctx.fillStyle=p.bg;ctx.fill()
   }
+  // Keep every strip and colour/opacity run in its original order. Native
+  // fills are shared while no individual border or text must intervene.
+  let lastAlpha=NaN,lastFill='',pending=false
+  const flush=()=>{if(pending){ctx.fill();pending=false}}
   for(const n of shown){
    const active=n.id===this.selected||n.id===this.hover
    const matches=!this.filter||[n.ref.title??n.ref.name,n.kindTitle,n.ref.scope??''].some(s=>s.toLocaleLowerCase().includes(this.filter))
-   ctx.globalAlpha=!matches?.15:(this.selected&&!connected.has(n.id)?.3:1)
-   ctx.fillStyle=healthColor[n.health]??healthColor.unknown;ctx.fillRect(n.x,n.y,Math.max(3,1/zoom),NODE_H)
-   if(active){ctx.strokeStyle=p.accent;ctx.lineWidth=2/zoom;ctx.strokeRect(n.x-2,n.y-2,NODE_W+4,NODE_H+4)}
-   if(zoom>.42||active){
-    ctx.fillStyle=p.muted;ctx.font='10px system-ui';ctx.fillText(n.kindTitle.slice(0,24),n.x+12,n.y+17)
-    ctx.fillStyle=p.fg;ctx.font='13px system-ui';ctx.fillText((n.ref.title??n.ref.name).length>19?(n.ref.title??n.ref.name).slice(0,18)+'…':(n.ref.title??n.ref.name),n.x+12,n.y+35)
+   const alpha=!matches?.15:(this.selected&&!connected.has(n.id)?.3:1),fill=healthColor[n.health]??healthColor.unknown
+   if(alpha!==lastAlpha||fill!==lastFill){
+    flush()
+    if(alpha!==lastAlpha){ctx.globalAlpha=alpha;lastAlpha=alpha}
+    if(fill!==lastFill){ctx.fillStyle=fill;lastFill=fill}
    }
+   if(zoom<=.42&&!active){
+    if(!pending){ctx.beginPath();pending=true}
+    ctx.rect(n.x,n.y,Math.max(3,1/zoom),NODE_H)
+    continue
+   }
+   flush();ctx.fillRect(n.x,n.y,Math.max(3,1/zoom),NODE_H)
+   if(active){ctx.strokeStyle=p.accent;ctx.lineWidth=2/zoom;ctx.strokeRect(n.x-2,n.y-2,NODE_W+4,NODE_H+4)}
+   ctx.fillStyle=p.muted;ctx.font='10px system-ui';ctx.fillText(n.kindTitle.slice(0,24),n.x+12,n.y+17)
+   ctx.fillStyle=p.fg;ctx.font='13px system-ui';ctx.fillText((n.ref.title??n.ref.name).length>19?(n.ref.title??n.ref.name).slice(0,18)+'…':(n.ref.title??n.ref.name),n.x+12,n.y+35)
+   lastFill=p.fg
   }
+  flush()
   ctx.globalAlpha=1
   for(const region of this.layout.regions){
    if(!visible(region.x,region.y,region.x+region.width,region.y+region.height))continue

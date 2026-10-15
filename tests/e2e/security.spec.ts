@@ -1,3 +1,4 @@
+import { selectConnection, openAppMenu } from './fixtures'
 import {expect,type Page} from '@playwright/test'
 import {test,connectSelected,scratchRoot} from './fixtures'
 import {join} from 'node:path'
@@ -5,7 +6,7 @@ import {languages,languageNames} from '../../web/src/languages'
 
 async function openSecurity(page:Page) {
  await page.goto('/')
- await page.getByRole('option',{name:/^demo\b/}).click();await connectSelected(page)
+ await selectConnection(page,/^demo\b/);await connectSelected(page)
  const nav=page.getByRole('navigation',{name:'resources'})
  await nav.getByRole('textbox',{name:'Filter resources'}).fill('Security')
  await nav.getByRole('button',{name:'Security',exact:true}).click()
@@ -88,7 +89,7 @@ test('security bounds the DOM, preserves all eight locales and fits narrow viewp
  await workspace.locator('[data-table-scroll]').evaluate(el=>{el.scrollTop=32000})
  await expect(workspace.locator('[data-row-id]').first()).not.toHaveAttribute('data-row-id','finding-0')
  for(const language of languages) {
-  await page.locator('.language-menu button').click();await page.getByRole('option',{name:languageNames[language],exact:true}).click()
+  await openAppMenu(page);await page.locator('.language-menu button').click();await page.getByRole('option',{name:languageNames[language],exact:true}).click()
   await expect(page.locator('html')).toHaveAttribute('lang',language)
   expect(await workspace.locator('[data-row-id]').count()).toBeLessThan(100)
   await expect(workspace.getByRole('columnheader')).toHaveCount(8)
@@ -99,7 +100,7 @@ test('security bounds the DOM, preserves all eight locales and fits narrow viewp
    if(language==='en'||language==='ru') await page.screenshot({path:join(scratchRoot,`security-${language}-${width}.png`)})
   }
  }
- await page.locator('.language-menu button').click();await page.getByRole('option',{name:'English',exact:true}).click()
+ await openAppMenu(page);await page.locator('.language-menu button').click();await page.getByRole('option',{name:'English',exact:true}).click()
  await page.setViewportSize({width:1280,height:900})
  await page.unrouteAll({behavior:'wait'})
 })

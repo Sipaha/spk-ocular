@@ -1,3 +1,4 @@
+import { selectConnection } from './fixtures'
 import { connectSelected } from './fixtures'
 import { expect, type Page } from '@playwright/test'
 import { test, scratchRoot } from './fixtures'
@@ -32,7 +33,7 @@ async function forgetDemo(page: Page) {
 
 async function openDemo(page: Page, zone = 'blue') {
   await forgetDemo(page)
-  await page.getByRole('option', { name: /^demo\b/ }).click()
+  await selectConnection(page,/^demo\b/)
   await connectSelected(page)
   const grid = page.getByRole('grid', { name: 'resources' })
   await expect(page.getByRole('heading', { name: 'Crates', level: 1 })).toBeVisible()
@@ -46,7 +47,7 @@ async function openDemo(page: Page, zone = 'blue') {
 
 test('the default view and scope, the provider’s scope words, a typed scope', async ({ page }) => {
   await forgetDemo(page)
-  await page.getByRole('option', { name: /^demo\b/ }).click()
+  await selectConnection(page,/^demo\b/)
   await connectSelected(page)
   const grid = page.getByRole('grid', { name: 'resources' })
   const zone = page.getByRole('textbox', { name: 'Zone' })
@@ -96,7 +97,7 @@ test('scope checkboxes keep the popup and exact set; text chooses one; the set s
   // specs; only this browser is given a catalog of its real zones.
   await page.route('**/api/ListScopes', (route) => route.fulfill({ json: { scopes: ['blue', 'green', 'empty'].map((name) => ({ name })) } }))
   await forgetDemo(page)
-  await page.getByRole('option', { name: /^demo\b/ }).click()
+  await selectConnection(page,/^demo\b/)
   await connectSelected(page)
   const grid = page.getByRole('grid', { name: 'resources' })
   const picker = page.getByRole('button', { name: 'Zone', exact: true })
@@ -114,9 +115,9 @@ test('scope checkboxes keep the popup and exact set; text chooses one; the set s
   await page.keyboard.press('Escape')
   await page.getByRole('navigation', { name: 'resources' }).getByRole('button', { name: 'Parcels', exact: true }).click()
   await expect(picker).toHaveText('blue, green')
-  await page.getByRole('option', { name: /^demo2\b/ }).click()
+  await selectConnection(page,/^demo2\b/)
   await connectSelected(page)
-  await page.getByRole('option', { name: /^demo\b/ }).click()
+  await selectConnection(page,/^demo\b/)
   await connectSelected(page)
   await expect(picker).toHaveText('blue, green')
   await page.getByRole('navigation', { name: 'resources' }).getByRole('button', { name: 'Crates', exact: true }).click()
@@ -162,7 +163,7 @@ test('global favorites can be added, opened and removed from any connection', as
     await expect(nav.getByRole('region', { name: 'Synthetic', exact: true }).getByRole('button', { name: 'Services', exact: true })).toHaveCount(0)
     await favorites.getByRole('button', { name: 'Services', exact: true }).click()
     await expect(page.getByRole('heading', { name: 'Services', exact: true })).toBeVisible()
-    await page.getByRole('option', { name: /^demo2\b/ }).click()
+    await selectConnection(page,/^demo2\b/)
     await connectSelected(page)
     await expect(favorites.getByRole('button', { name: 'Services', exact: true })).toBeVisible()
     await expect(nav.getByRole('button', { name: 'Services', exact: true })).toHaveCount(1)
@@ -171,7 +172,7 @@ test('global favorites can be added, opened and removed from any connection', as
     await page.getByRole('menuitem', { name: 'Remove Services from favorites', exact: true }).click()
     await expect(favorites.getByRole('button', { name: 'Services', exact: true })).toHaveCount(0)
     await expect(nav.getByRole('region', { name: 'Synthetic', exact: true }).getByRole('button', { name: 'Services', exact: true })).toBeVisible()
-    await page.getByRole('option', { name: /^demo\b/ }).click()
+    await selectConnection(page,/^demo\b/)
     await connectSelected(page)
     await expect(favorites.getByRole('button', { name: 'Services', exact: true })).toHaveCount(0)
     await expect(page.getByRole('heading', { name: 'Services', exact: true })).toBeVisible()
@@ -277,7 +278,7 @@ test('favorites drag and drop changes the shared order without opening a resourc
     await fav.getByRole('button', { name: 'Parcels', exact: true }).dragTo(fav.getByRole('button', { name: 'Services', exact: true }), { targetPosition: { x: 20, y: 2 } })
     await expect(rows).toHaveText(['Parcels', 'Services', 'Crates'])
     await expect(page.getByRole('heading', { name: 'Crates', exact: true })).toBeVisible()
-    await page.getByRole('option', { name: /^demo2\b/ }).click()
+    await selectConnection(page,/^demo2\b/)
     await connectSelected(page)
     await expect(rows).toHaveText(['Parcels', 'Services', 'Crates'])
     await fav.getByRole('button', { name: 'Parcels', exact: true }).dragTo(fav.getByRole('button', { name: 'Crates', exact: true }), { targetPosition: { x: 20, y: 28 } })
@@ -317,7 +318,7 @@ test('connection information preserves the resource page and old Overview select
   await expect(page.getByRole('heading', { name: 'Crates', level: 1 })).toBeVisible()
   await expect(page.getByRole('button', { name: 'Overview', exact: true })).toHaveCount(0)
   await expect(dialog).toHaveCount(0)
-  await expect(page.getByRole('option', { name: /^demo\b/ })).toHaveAttribute('aria-selected', 'true')
+  await expect(page.locator('[data-connection-switcher]')).toContainText('demo')
   await expect(grid.getByRole('gridcell', { name: 'alpha', exact: true })).toBeVisible()
 })
 

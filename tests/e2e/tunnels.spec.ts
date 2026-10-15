@@ -111,7 +111,7 @@ test('a terminal and a tunnel opened before a reconfiguration say so; new ones d
   expect(await (await fetch(`http://${addr}/still`)).text()).toBe('hello from api:80 /still\n') // and works
 
   await expect(page.getByRole('button', { name: 'Connect', exact: true })).toHaveCount(0)
-  await expect(page.getByRole('option', { name: /^demo\b/ }).locator('[data-connection-state=connected]')).toBeVisible()
+  await expect(page.locator('[data-connection-switcher] [data-connection-state=connected]')).toBeVisible()
   // a terminal opened now uses the automatically recovered configuration
   await page.getByRole('grid', { name: 'resources' }).getByRole('gridcell', { name: 'api', exact: true }).click()
   await page.keyboard.press('s')

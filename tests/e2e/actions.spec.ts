@@ -1,3 +1,4 @@
+import { selectConnection } from './fixtures'
 import { connectSelected } from './fixtures'
 import { expect, type Locator, type Page } from '@playwright/test'
 import { test, scratchRoot } from './fixtures'
@@ -18,7 +19,7 @@ const mutate = (page: Page, m: Record<string, unknown>) => post(page, '/api/_tes
 async function openWorkloads(page: Page) {
   await page.goto('/')
   await post(page, '/api/_test/synthetic/reset')
-  await page.getByRole('option', { name: /^demo\b/ }).click()
+  await selectConnection(page,/^demo\b/)
   await connectSelected(page)
   await page.getByRole('navigation', { name: 'resources' }).getByRole('button', { name: 'Workloads', exact: true }).click()
   const grid = page.getByRole('grid', { name: 'resources' })

@@ -1,5 +1,5 @@
 import { expect, type Page } from '@playwright/test'
-import { connectSelected } from './fixtures'
+import { connectSelected,selectConnection } from './fixtures'
 
 // Helpers of the specs against the synthetic provider (playwright.synth.config.ts).
 
@@ -17,7 +17,7 @@ export async function stats(page: Page): Promise<Stats> {
 /** Opens the synthetic target's Services and selects object's row. */
 export async function selectObject(page: Page, object: string) {
   await page.goto('/')
-  await page.getByRole('option', { name: /^demo\b/ }).click()
+  await selectConnection(page,/^demo\b/)
   await connectSelected(page)
   await page.getByRole('navigation', { name: 'resources' }).getByRole('button', { name: 'Services', exact: true }).click()
   const grid = page.getByRole('grid', { name: 'resources' })

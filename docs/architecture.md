@@ -256,7 +256,10 @@ bounded inventory snapshots from optional provider `GraphSource` implementations
 Kubernetes discovery supplies resource types; scoped reads remain namespace
 specific. Relationships are resolved by UID and indexed selectors/references.
 Worker layout and an imperative Canvas2D camera keep pan/zoom independent of
-React node rendering. Selection reuses ResourceDrawer and its edit guards.
+React node rendering. Consecutive overview strips share native canvas fills
+by colour and opacity; individual borders/text flush each run. Every rectangle,
+relationship and semantic-zoom threshold is retained. Selection reuses
+ResourceDrawer and its edit guards.
 The optional layer shows declared routes, not measured traffic.
 See [cluster graph](cluster-graph.md) for coverage, limits and lifecycle.
 
@@ -430,9 +433,14 @@ later after an unrelated manual selection.
 
 ## Visual and performance constraints
 
-Sidebar provider headings use 14 px semibold text, 16 px icons and a 10 px bottom
-inset before their rows; the subordinate
-Add kubeconfig action uses muted 12 px text.
+The header connection picker replaces the permanent targets column. Provider
+headings group searchable rows with independent selected and connected states.
+The configuration controller stays mounted outside the picker, so closing it
+cannot destroy an unlock continuation or an open source editor. Appearance uses
+stable catalogue IDs in the existing per-target UI-state queue; initialization
+reads saved data before random assignment, and Save waits for initialization.
+Failures are visible and retries retain the assigned value. No appearance action
+opens a provider session or changes source/configuration revisions.
 Use graphite surfaces, system fonts, 14 px text, a 17 px root rem, 32 px table
 rows, 40 px headers/toolbars, 14 px semibold resource-page titles, and mostly
 2/4 px radii. Command-palette rows have a 38 px minimum height and vertically

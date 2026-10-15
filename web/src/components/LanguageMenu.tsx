@@ -7,7 +7,7 @@ import { Select } from './Select'
 import { GlobeIcon } from './icons'
 
 /** Changes text without remounting workspaces, editors or live sessions. */
-export function LanguageMenu({ client }: { client: Client }) {
+export function LanguageMenu({ client, onChanged }: { client: Client; onChanged?: () => void }) {
   const info = useStore(s => s.info)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState(false)
@@ -23,6 +23,7 @@ export function LanguageMenu({ client }: { client: Client }) {
       await client.setLanguage(language)
       setLanguage(language)
       useStore.setState(s => ({ info: s.info ? { ...s.info, language, languagePreference: language } : null }))
+      onChanged?.()
     } catch {
       setError(true)
     } finally {
@@ -32,7 +33,7 @@ export function LanguageMenu({ client }: { client: Client }) {
   return <div className="language-menu">
     <Select value={info.language}
       options={languages.map(value => ({ value, label: languageNames[value], lang: value === 'pt' ? 'pt-BR' : value }))}
-      label={t('language.title')} search={false} className="language-trigger"
+      label={t('language.title')} search={false} onReselect={onChanged} className="language-trigger"
       leadingIcon={<GlobeIcon className="h-4 w-4 shrink-0" />}
       disabled={busy} onChange={value => void choose(value)} />
     {error && <span role="alert" className="language-error">{t('language.failed')}</span>}

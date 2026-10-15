@@ -44,6 +44,8 @@ interface Props {
   /** The picker's name (its button's accessible name and title). */
   label: string
   onChange: (value: string) => void
+  /** A same-value pick closes an enclosing menu without rewriting preferences. */
+  onReselect?: () => void
   /** A search field on top; by default for long lists. Its name. */
   search?: boolean
   searchLabel?: string
@@ -64,7 +66,7 @@ const BUTTON = 'select-look max-w-full truncate rounded-md border border-line bg
  * elsewhere closes; a letter jumps to the next option starting with it; with
  * search, typing filters and marks the first found.
  */
-export function Select({ value, options, label, onChange, search, searchLabel, className, leadingIcon, disabled, memory, multiple }: Props) {
+export function Select({ value, options, label, onChange, onReselect, search, searchLabel, className, leadingIcon, disabled, memory, multiple }: Props) {
   const [open, setOpenNow] = useState(memory?.read().open ?? false)
   const setOpen = (next: boolean) => {
     memory?.update(next ? { open: true } : { open: false, query: '', index: null, scroll: 0, focus: 'search' })
@@ -110,6 +112,7 @@ export function Select({ value, options, label, onChange, search, searchLabel, c
             if (back) button.current?.focus()
           }}
           onChange={onChange}
+          onReselect={onReselect}
           memory={memory}
           multiple={multiple}
         />
@@ -126,11 +129,13 @@ interface ListProps {
   anchor: React.RefObject<HTMLElement | null>
   onClose: (back: boolean) => void
   onChange: (value: string) => void
+  /** A same-value pick closes an enclosing menu without rewriting preferences. */
+  onReselect?: () => void
   memory?: SelectMemory
   multiple?: Multiple
 }
 
-export function SelectList({ value, options, label, search, anchor, onClose, onChange, memory, multiple }: ListProps) {
+export function SelectList({ value, options, label, search, anchor, onClose, onChange, onReselect, memory, multiple }: ListProps) {
   const id = useId()
   const [query, setQueryNow] = useState(memory?.read().query ?? '')
   const [index, setIndexNow] = useState<number | null>(memory?.read().index ?? null)
@@ -215,6 +220,7 @@ export function SelectList({ value, options, label, search, anchor, onClose, onC
     if (o.disabled) return
     onClose(true)
     if (multiple || o.value !== value) onChange(o.value)
+    else onReselect?.()
   }
   const toggle = (o: SelectOption) => {
     if (!multiple || o.disabled || o.pinned) return

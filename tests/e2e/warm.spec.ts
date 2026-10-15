@@ -1,3 +1,5 @@
+import {selectConnection} from './fixtures'
+import {connectionChoice} from './fixtures'
 import { expect, type Page } from '@playwright/test'
 import { test, connectSelected } from './fixtures'
 
@@ -16,8 +18,6 @@ async function emit(page: Page, target: string, object: string, event: Record<st
 // independent; «Disconnect» ends A's session, its dot and its tab.
 test('two warm targets: A → B → A keeps everything; Disconnect ends A', async ({ page }) => {
   await page.goto('/')
-  const demo = page.getByRole('option', { name: /^demo\b/ })
-  const demo2 = page.getByRole('option', { name: /^demo2\b/ })
   const services = () => page.getByRole('navigation', { name: 'resources' }).getByRole('button', { name: 'Services', exact: true })
   const grid = () => page.getByRole('grid', { name: 'resources' })
   const tabs = page.getByRole('tab', { name: /services\/api/ })
@@ -26,7 +26,7 @@ test('two warm targets: A → B → A keeps everything; Disconnect ends A', asyn
   // the badge text is present.
   const tabAOnB = tabs.filter({ has: page.getByText('demo', { exact: true }) })
 
-  await demo.click()
+  await selectConnection(page,/^demo\b/)
   await connectSelected(page)
   await services().click()
 
@@ -45,7 +45,7 @@ test('two warm targets: A → B → A keeps everything; Disconnect ends A', asyn
   await expect(page.getByText('warm line one')).toBeVisible()
 
   // B: the other target; its own log tab streams its own feed.
-  await demo2.click()
+  await selectConnection(page,/^demo2\b/)
   await connectSelected(page)
   await services().click()
   await grid().getByRole('gridcell', { name: 'api', exact: true }).click()
@@ -64,7 +64,7 @@ test('two warm targets: A → B → A keeps everything; Disconnect ends A', asyn
   await expect(page.getByText('a line of B')).toHaveCount(0)
 
   // Back to A: the page comes back as it was left.
-  await demo.click()
+  await selectConnection(page,/^demo\b/)
   await connectSelected(page)
   await expect(page.locator('[data-primary-filter]')).toHaveValue('api')
   await expect(grid().getByRole('columnheader', { name: 'Sources' })).toHaveAttribute('aria-sort', 'descending')
@@ -74,12 +74,13 @@ test('two warm targets: A → B → A keeps everything; Disconnect ends A', asyn
   await expect(page.getByText('warm line two')).toBeVisible()
 
   // Disconnect is available for a warm non-selected target too.
-  await demo2.click()
+  await selectConnection(page,/^demo2\b/)
   await connectSelected(page)
-  await demo.click({ button: 'right' })
+  await (await connectionChoice(page,/^demo\b/)).click({button:'right'})
   await page.getByRole('menuitem', { name: 'Disconnect' }).click()
   // The dot is gone (no tooltip), the tab ended with the reason.
-  await expect(demo).not.toHaveAttribute('title', /Connection open/)
+  await expect(await connectionChoice(page,/^demo\b/)).toHaveAttribute('title',/Not connected/)
+  await page.keyboard.press('Escape')
   await tabAOnB.click()
   await expect(state()).toContainText('the connection to the target was closed')
 })

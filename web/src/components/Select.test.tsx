@@ -132,3 +132,12 @@ describe('Select', () => {
     expect(screen.getByRole('button', { name: 'Pick' })).toHaveFocus()
   })
 })
+
+it('reports reselect separately without rewriting the selected value',async()=>{
+ const changed=vi.fn(),reselected=vi.fn()
+ render(<Select value="a" options={opts} label="Same choice" onChange={changed} onReselect={reselected}/>)
+ await userEvent.click(screen.getByRole('button',{name:'Same choice'}))
+ await userEvent.click(screen.getByRole('option',{name:'alpha'}))
+ expect(reselected).toHaveBeenCalledTimes(1);expect(changed).not.toHaveBeenCalled()
+ expect(screen.queryByRole('listbox')).not.toBeInTheDocument()
+})

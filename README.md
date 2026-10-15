@@ -58,7 +58,7 @@ included in a downloaded version.
 ## Languages
 
 The application offers Russian, English, Simplified Chinese, Spanish, German,
-French, Brazilian Portuguese and Japanese. The header shows the current native
+French, Brazilian Portuguese and Japanese. The application menu in the header shows the current native
 language name. Before a manual choice, the app detects the system/browser language.
 A manual choice is saved in the local profile and
 survives restarts. See [localization](docs/localization.md) for coverage and fallback rules.

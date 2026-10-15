@@ -11,10 +11,10 @@ import { Menu } from '../actions/Menu'
 const YamlView = lazy(() => import('../components/YamlView'))
 
 export type ConfigurationAction = 'inspect' | 'edit' | 'rename' | 'remove' | 'reveal'
-export interface ConfigurationActions { unlockTarget: (target: Target, resume: () => Promise<void>) => void; openTarget: (target: Target, action: ConfigurationAction) => void }
+export interface ConfigurationActions { openAdd: (at: {x:number;y:number}) => void; unlockTarget: (target: Target, resume: () => Promise<void>) => void; openTarget: (target: Target, action: ConfigurationAction) => void }
 
 type Mode = 'reset' | 'edit' | 'inspect' | 'scan' | 'setup' | 'unlock' | 'editor' | 'rename' | 'remove'
-export function Configurations({ client, onChanged, ref }: { client: Client; onChanged: () => unknown; ref?: Ref<ConfigurationActions> }) {
+export function Configurations({ client, onChanged, ref, hideTrigger=false }: { client: Client; onChanged: () => unknown; ref?: Ref<ConfigurationActions>; hideTrigger?: boolean }) {
  const [state,setState]=useState<ConfigState|null>(null)
  const [mode,setMode]=useState<Mode|null>(null)
  const [entry,setEntry]=useState<ConfigEntry|null>(null)
@@ -73,7 +73,7 @@ export function Configurations({ client, onChanged, ref }: { client: Client; onC
   setEntry(e)
   if(e.kind==='stored'&&locked){setError(t('configs.connectToUnlock'))}else return inspect(e,editing)
  }
- useImperativeHandle(ref,()=>({unlockTarget:(_target,resume)=>{if(busy||mode)return;resumeConnect.current=resume;setAfterUnlock(null);setError('');setMode('unlock')},openTarget:(target,action)=>{
+ useImperativeHandle(ref,()=>({openAdd:at=>{setError('');setAddMenu(at)},unlockTarget:(_target,resume)=>{if(busy||mode)return;resumeConnect.current=resume;setAfterUnlock(null);setError('');setMode('unlock')},openTarget:(target,action)=>{
   if(busy||mode)return
   setBusy(true);setError('')
   void client.configurations({command:'resolve',target:target.id}).then(async s=>{
@@ -95,8 +95,8 @@ export function Configurations({ client, onChanged, ref }: { client: Client; onC
  const primary=buttonBase+' border-accent bg-accent text-accent-fg hover:opacity-90'
  const danger=buttonBase+' border-danger/50 bg-danger/10 text-danger hover:bg-danger/20'
  return <>
-  <div className="px-2 pb-2 text-sm" onKeyDown={e=>e.stopPropagation()}>
-   <button disabled={busy} className="inline-flex min-h-6 items-center gap-1 text-[12px] text-fg-muted hover:text-accent focus-visible:outline focus-visible:outline-accent" aria-haspopup="menu" aria-expanded={!!addMenu} onClick={event=>{setError('');const r=event.currentTarget.getBoundingClientRect();setAddMenu({x:r.left,y:r.bottom})}}>{t('configs.add')}<svg aria-hidden viewBox="0 0 12 12" className="h-3 w-3" fill="none" stroke="currentColor" strokeWidth="1.3"><path d="m3 4.5 3 3 3-3"/></svg></button>
+  <div className={hideTrigger?"connection-config-host":"px-2 pb-2 text-sm"} onKeyDown={e=>e.stopPropagation()}>
+   <button style={hideTrigger?{display:'none'}:undefined} hidden={hideTrigger} disabled={busy} className="inline-flex min-h-6 items-center gap-1 text-[12px] text-fg-muted hover:text-accent focus-visible:outline focus-visible:outline-accent" aria-haspopup="menu" aria-expanded={!!addMenu} onClick={event=>{setError('');const r=event.currentTarget.getBoundingClientRect();setAddMenu({x:r.left,y:r.bottom})}}>{t('configs.add')}<svg aria-hidden viewBox="0 0 12 12" className="h-3 w-3" fill="none" stroke="currentColor" strokeWidth="1.3"><path d="m3 4.5 3 3 3-3"/></svg></button>
    {!mode&&error&&<p role="alert" className="text-danger">{error}</p>}
   </div>
   {addMenu&&createPortal(<Menu at={addMenu} label={t('configs.add')} onClose={()=>setAddMenu(null)} items={[

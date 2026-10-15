@@ -1,3 +1,4 @@
+import { selectConnection, openAppMenu } from './fixtures'
 import {expect} from '@playwright/test'
 import {test,connectSelected,scratchRoot} from './fixtures'
 import {join} from 'node:path'
@@ -5,7 +6,7 @@ import type {Page} from '@playwright/test'
 
 async function timelinePage(page:Page) {
  await page.goto('/')
- await page.getByRole('option',{name:/^demo\b/}).click()
+ await selectConnection(page,/^demo\b/)
  await connectSelected(page)
  const nav=page.getByRole('navigation',{name:'resources'})
  await nav.getByRole('textbox',{name:'Filter resources'}).fill('Events timeline')
@@ -75,13 +76,13 @@ test('timeline virtualizes 10,000 event series and retains selection across all 
  await timeline.getByRole('button',{name:'Open resource · Crate/alpha',exact:true}).click()
  const names={en:'English',ru:'Русский',zh:'简体中文',es:'Español',de:'Deutsch',fr:'Français',pt:'Português (Brasil)',ja:'日本語'}
  for(const [code,name] of Object.entries(names)){
-  await page.locator('.language-menu button').click();await page.getByRole('option',{name,exact:true}).click()
+  await openAppMenu(page);await page.locator('.language-menu button').click();await page.getByRole('option',{name,exact:true}).click()
   await expect(page.locator('html')).toHaveAttribute('lang',code)
   await expect(page.locator('.timeline-workspace [data-area=details]').getByText('alpha',{exact:true}).first()).toBeVisible()
   await expect(page.locator('.timeline-workspace [role=row][aria-selected=true]')).toHaveCount(1)
   await page.screenshot({path:join(scratchRoot,'timeline-language-'+code+'.png')})
  }
- await page.locator('.language-menu button').click();await page.getByRole('option',{name:'English',exact:true}).click()
+ await openAppMenu(page);await page.locator('.language-menu button').click();await page.getByRole('option',{name:'English',exact:true}).click()
  await timeline.getByRole('button',{name:'Resource kind',exact:true}).click()
  await page.getByRole('option',{name:'Crate',exact:true}).click()
  await timeline.getByRole('button',{name:'Time range',exact:true}).click()

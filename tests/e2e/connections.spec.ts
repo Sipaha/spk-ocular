@@ -1,3 +1,5 @@
+import {openConnections} from './fixtures'
+import { selectConnection } from './fixtures'
 import { expect, type Page } from '@playwright/test'
 import { test } from './fixtures'
 import { stats, token } from './synth'
@@ -32,7 +34,7 @@ test('selection and reload do not connect; Connect opens resources explicitly', 
   page.on('request', (request) => {
     if (/\/api\/(ListKinds|ListScopes|OpenView)$/.test(request.url()) && request.postDataJSON()?.target === 'demo') resources.push(request.url())
   })
-  await page.getByRole('option', { name: /^demo\b/ }).click()
+  await selectConnection(page,/^demo\b/)
   await expect(page.getByRole('button', { name: 'Connect', exact: true })).toBeVisible()
   await page.reload()
   await expect(page.getByRole('button', { name: 'Connect', exact: true })).toBeVisible()
@@ -87,15 +89,17 @@ test('three failed attempts stop and reload does not start another', async ({ pa
 
 
 test('Disconnect is available on the selected connected target and disappears after closing',async({page})=>{
- const row=page.getByRole('region',{name:'Synthetic (test)',exact:true}).getByRole('option',{name:/^demo\b/})
+ const row=page.getByRole('button',{name:/^demo\b/}).and(page.locator('.connection-choice'))
  await page.getByRole('button',{name:'Connect',exact:true}).click()
  await expect(page.getByRole('grid',{name:'resources'})).toBeVisible()
+ await openConnections(page)
  await expect(row.locator('[data-connection-state=connected]')).toHaveCSS('background-color','rgb(126, 197, 156)')
  await page.screenshot({path:process.env.OCULAR_SCRATCH_DIR+'/selected-connected-green.png'})
  await row.click({button:'right'})
  await page.getByRole('menuitem',{name:'Disconnect',exact:true}).click()
  await expect(page.getByRole('button',{name:'Connect',exact:true})).toBeVisible()
- await expect(row).toHaveAttribute('aria-selected','true')
+ await openConnections(page)
+ await expect(row).toHaveAttribute('aria-pressed','true')
  await row.click({button:'right'})
  await expect(page.getByRole('menuitem',{name:'Disconnect',exact:true})).toHaveCount(0)
  await page.screenshot({path:process.env.OCULAR_SCRATCH_DIR+'/selected-disconnected.png'})

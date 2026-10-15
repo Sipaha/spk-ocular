@@ -48,6 +48,7 @@ export const test = base.extend<{ cleanPageMemo: void }>({
 
 /** Connect explicitly unless this process already has that target connected. */
 export async function connectSelected(page: Page) {
+  if(await page.locator('[data-connection-picker]').isVisible())await page.keyboard.press('Escape')
   const connect = page.getByRole('button', { name: 'Connect', exact: true })
   const resources = page.getByRole('textbox', { name: 'Filter resources', exact: true })
   await expect(connect.or(resources).first()).toBeVisible()
@@ -144,3 +145,21 @@ export async function pickOption(button: Locator, name: string | RegExp) {
   await button.page().locator(`[id="${id}"]`).getByRole('option', { name, exact: typeof name === 'string' }).click()
   await expect(button).toHaveText(name)
 }
+
+/** Connection navigation lives in the header picker, never a persistent sidebar. */
+export async function openConnections(page: Page) {
+ const picker=page.locator('[data-connection-picker]')
+ if(!await picker.isVisible())await page.locator('[data-connection-switcher]').click()
+ await expect(picker).toBeVisible();return picker
+}
+export async function connectionChoice(page:Page,name:string|RegExp){
+ const picker=await openConnections(page)
+ return picker.getByRole('button',{name}).and(picker.locator('.connection-choice'))
+}
+export async function selectConnection(page:Page,name:string|RegExp){await(await connectionChoice(page,name)).click()}
+export async function openAppMenu(page:Page){
+ const button=page.locator('[data-app-menu]')
+ if(await button.getAttribute('aria-expanded')!=='true')await button.click()
+}
+
+export async function closeConnections(page:Page){if(await page.locator('[data-connection-picker]').isVisible())await page.keyboard.press('Escape')}

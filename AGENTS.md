@@ -100,7 +100,7 @@ D-Bus without portals; don't assume a timeout means the application is broken.
   independent of Kubernetes pod/namespace/container assumptions.
 - Live data: `internal/events`, `internal/views`, Kubernetes cache/discovery/schema,
   Docker/Compose feeds, `web/src/views/viewSync.ts` and hooks.
-- Workspace/navigation: `web/src/components/Workspace.tsx`, `Sidebar.tsx`,
+- Workspace/navigation: `web/src/components/Workspace.tsx`, `web/src/connections`,
   `ResourceDrawer.tsx`, `ResourceTable.tsx`, `ScopeSelect.tsx`, `Select.tsx`.
 - Persistence: SQLite `internal/store`; `pageMemo*`, `navigationPersist.ts`,
   `columnWidths.ts`, global preferences in `web/src/store.ts`.
@@ -163,6 +163,10 @@ reviewed writes or retry mutations. Failed recovery requires a new Connect. Canc
 and stops checks, backoff and credential helpers. Report real phase/error/time
 and at most three total automatic attempts. Granted agent sessions remain
 independent. Preserve held edits when a connection becomes unavailable.
+
+Connection switching lives in the header picker; opening/searching it never connects.
+Appearance uses 32 stable SVG IDs and 8 curated pairs in per-target UI state; no arbitrary colours.
+The app logo/name is absent from the workspace header. Native window chrome remains unchanged.
 
 Only Workloads defaults to expanded; saved global section choices take priority.
 

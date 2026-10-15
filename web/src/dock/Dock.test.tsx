@@ -1,3 +1,4 @@
+import {selectConnection} from '../test/connections'
 import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -41,7 +42,7 @@ describe('terminal tabs', () => {
     expect(dockTabs().map((t) => t.dataset.tabKind)).toEqual(['term', 'logs'])
     expect(within(dockTabs()[0]).queryByText('prod')).not.toBeInTheDocument() // current target: no badge
 
-    await user.click(screen.getByRole('option', { name: /dev/ }))
+    await selectConnection(/dev/,user)
     await screen.findByRole('heading', { name: 'Pods' })
     await waitFor(() => expect(within(dockTabs()[1]).getByText('prod')).toBeInTheDocument())
     expect(dockTabs().map((t) => t.dataset.tabKind)).toEqual(['term', 'logs']) // P18: recent targets stay open
@@ -68,7 +69,7 @@ describe('terminal tabs', () => {
     await user.click(await within(grid).findByText('api-1'))
     await user.keyboard('l')
     await waitFor(() => expect(ctl).toBeDefined())
-    await user.click(screen.getByRole('option', { name: /dev/ }))
+    await selectConnection(/dev/,user)
     await waitFor(() => expect(within(dockTabs()[0]).getByText('prod')).toBeInTheDocument())
     const send = (f: unknown) => ctl.enqueue(new TextEncoder().encode(JSON.stringify(f) + '\n'))
     send({ k: 'source', id: 1, key: 'api-1/app', label: 'api-1/app', channel: 'app' })

@@ -1,3 +1,4 @@
+import { selectConnection } from './fixtures'
 import { connectSelected } from './fixtures'
 import { expect, type Page } from '@playwright/test'
 import { test } from './fixtures'
@@ -98,7 +99,7 @@ test.afterEach(async ({ page }) => {
 test('granted in the UI, an agent reads its zone only; its delete waits for Yes; the journal shows it', async ({ page }) => {
   await page.goto('/')
   await post(page, '/api/_test/synthetic/reset')
-  await page.getByRole('option', { name: /^demo\b/ }).click()
+  await selectConnection(page,/^demo\b/)
   await connectSelected(page)
 
   // Nothing granted: the agent sees no target.
@@ -182,7 +183,7 @@ test('revoked grants take effect at once', async ({ page }) => {
 test('contextual permissions preserve other scopes and require explicit grants', async ({ page }) => {
   await page.goto('/')
   await post(page, '/api/SaveAgentGrants', { ...target, grants: [{ scope: { mode: 'one', name: 'green' }, verb: 'read', kinds: ['parcels'] }] })
-  await page.getByRole('option', { name: /^demo\b/ }).click()
+  await selectConnection(page,/^demo\b/)
   await connectSelected(page)
   await page.getByRole('navigation', { name: 'resources' }).getByRole('button', { name: 'Parcels', exact: true }).click()
   const zone = page.getByRole('textbox', { name: 'Zone', exact: true })
@@ -227,7 +228,7 @@ test('contextual permissions preserve other scopes and require explicit grants',
 
 test('permissions layout keeps actions visible, traps focus and fits Russian text', async ({ page }) => {
   await page.goto('/')
-  await page.getByRole('option', { name: /^demo\b/ }).click()
+  await selectConnection(page,/^demo\b/)
   await connectSelected(page)
   await page.getByRole('navigation', { name: 'resources' }).getByRole('button', { name: 'Parcels', exact: true }).click()
   await expect(page.getByRole('textbox', { name: 'Filter resources', exact: true })).toBeVisible()
@@ -266,7 +267,7 @@ test('permissions layout keeps actions visible, traps focus and fits Russian tex
 
 test('named groups union their access and both switches persist without deleting permissions', async ({ page }) => {
   await page.goto('/')
-  await page.getByRole('option', { name: /^demo\b/ }).click()
+  await selectConnection(page,/^demo\b/)
   await connectSelected(page)
   await page.getByRole('navigation', { name: 'resources' }).getByRole('button', { name: 'Parcels', exact: true }).click()
   const zone = page.getByRole('textbox', { name: 'Zone', exact: true })
@@ -327,7 +328,7 @@ test('named groups union their access and both switches persist without deleting
 test('exec is explicitly granted, reviews exact input, runs once and retains its scope', async ({ page }) => {
   await page.goto('/')
   await post(page, '/api/_test/synthetic/reset')
-  await page.getByRole('option', { name: /^demo\b/ }).click()
+  await selectConnection(page,/^demo\b/)
   await connectSelected(page)
   const ref = { ...parcel('parcel-1', 'blue'), uid: 'uid-parcel-1' }
   expect((await agent('GetExecInfo', { ref })).status).toBe(403)

@@ -1,4 +1,6 @@
 import { useEffect, useId, useRef, useState } from 'react'
+import type { Client } from '../api/client'
+import { ConnectionIcon } from '../connections/ConnectionIcon'
 import type { Target } from '../api/types'
 import { detailLabel, t } from '../i18n'
 import { focusMark, restoreFocus } from '../shortcuts'
@@ -17,18 +19,18 @@ export function EmptyWorkspace() {
 }
 
 /** Keyed by target in the header: changing/disappearing targets closes its info. */
-export function TargetInfoButton({ target }: { target: Target }) {
+export function TargetInfoButton({ target, client }: { target: Target; client?: Client }) {
   const [open, setOpen] = useState(false)
   return <>
     <button type="button" className="context-info-trigger" aria-label={t('target.info')}
       title={t('target.info')} aria-haspopup="dialog" aria-expanded={open} onClick={() => setOpen(true)}>
       <InfoIcon className="h-4 w-4" />
     </button>
-    {open && <TargetDetails target={target} onClose={() => setOpen(false)} />}
+    {open && <TargetDetails client={client} target={target} onClose={() => setOpen(false)} />}
   </>
 }
 
-function TargetDetails({ target, onClose }: { target: Target; onClose: () => void }) {
+function TargetDetails({ target, client, onClose }: { target: Target; client?: Client; onClose: () => void }) {
   const [mark] = useState(focusMark)
   const close = useRef<HTMLButtonElement>(null)
   const facts = useRef<HTMLDListElement>(null)
@@ -53,7 +55,7 @@ function TargetDetails({ target, onClose }: { target: Target; onClose: () => voi
           }
         }}>
         <header className="mb-4 flex shrink-0 items-start gap-3">
-          <div className="connection-icon shrink-0"><ProviderIcon provider={target.provider} className="h-6 w-6" /></div>
+          <div className="shrink-0">{client?<ConnectionIcon client={client} target={target} className="connection-avatar-large"/>:<ProviderIcon provider={target.provider} className="h-6 w-6"/>}</div>
           <div className="min-w-0 flex-1">
             <h2 id={titleId} className="mb-1 text-xs text-fg-subtle">{t('target.info')}</h2>
             <h3 className="text-lg font-semibold break-all">{target.title}</h3>

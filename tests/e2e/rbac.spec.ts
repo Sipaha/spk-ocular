@@ -1,3 +1,4 @@
+import { selectConnection, openAppMenu } from './fixtures'
 import {expect} from '@playwright/test'
 import {test,connectSelected,scratchRoot} from './fixtures'
 import {join} from 'node:path'
@@ -5,7 +6,7 @@ import type {Page} from '@playwright/test'
 
 async function rbacPage(page:Page){
  await page.goto('/')
- await page.getByRole('option',{name:/^demo\b/}).click();await connectSelected(page)
+ await selectConnection(page,/^demo\b/);await connectSelected(page)
  const nav=page.getByRole('navigation',{name:'resources'})
  await nav.getByRole('textbox',{name:'Filter resources'}).fill('RBAC explanation')
  await nav.getByRole('button',{name:'RBAC explanation',exact:true}).click()
@@ -54,12 +55,12 @@ test('RBAC incomplete sources and 12000 rule rows stay bounded and fully localiz
  await rbac.locator('footer summary').click();await expect(rbac).toContainText('clusterrolebindings · forbidden')
  const names={en:'English',ru:'Русский',zh:'简体中文',es:'Español',de:'Deutsch',fr:'Français',pt:'Português (Brasil)',ja:'日本語'}
  for(const [code,name] of Object.entries(names)){
-  await page.locator('.language-menu button').click();await page.getByRole('option',{name,exact:true}).click()
+  await openAppMenu(page);await page.locator('.language-menu button').click();await page.getByRole('option',{name,exact:true}).click()
   await expect(page.locator('html')).toHaveAttribute('lang',code)
   await expect(page.locator('[data-rbac-workbench]')).toContainText('operator')
   await page.screenshot({path:join(scratchRoot,'rbac-language-'+code+'.png')})
  }
- await page.locator('.language-menu button').click();await page.getByRole('option',{name:'English',exact:true}).click()
+ await openAppMenu(page);await page.locator('.language-menu button').click();await page.getByRole('option',{name:'English',exact:true}).click()
  await page.unrouteAll({behavior:'wait'})
 })
 

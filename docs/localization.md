@@ -1,7 +1,7 @@
 # Application localization
 
 The application supports Russian, English, Simplified Chinese, Spanish, German,
-French, Brazilian Portuguese and Japanese. The header language menu displays
+French, Brazilian Portuguese and Japanese. The language selector inside the header application menu displays
 the current native language name with a globe icon at 14 px. Its menu offers
 only the eight supported languages; system/browser detection is the initial
 default until a manual choice is saved. The choice is stored in the
