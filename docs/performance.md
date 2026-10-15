@@ -1,6 +1,17 @@
 # Kubernetes inventory load and memory measurements
 
-Measured on 2026-10-15. These results describe a local development candidate,
+The latest production-build measurements are from **16.10.2026**: three paired
+CPU comparisons and a separate 47.78-minute memory observation. Initial loading
+used 45.75% less Go CPU after the JSON decoder change, while elapsed loading
+remained about 9.7 seconds under the same request budget. The largest sampled
+combined app/Chromium PSS across six valid current-build sessions was
+**557.947 MiB**. The memory stability protocol returned **NOT ACCEPTED**; do not
+advertise a confirmed plateau or a before/after memory reduction. See the
+[current CPU comparison](#production-build-cpu-comparison-on-16102026) and
+[current memory observation](#production-build-memory-observation-on-16102026).
+Earlier fixtures and their raw data below remain identified separately.
+
+The original measurements below were collected on 2026-10-15. They describe a local development candidate,
 not a published release or a certification of arbitrary production clusters.
 The application version remained 1.6.3. The source base was commit
 `3704cf7d643573e8a8c1888139b1189b061358e2` plus the inventory/refresh changes.
@@ -346,3 +357,132 @@ GitHub run exceeded both assertions; it published no release. Profiling identifi
 the upstream envelope/item reparsing, and decoder compatibility tests cover typed
 item inference, pagination, large integers, malformed envelopes and API errors.
 This timing comparison does not replace or complete the memory plateau protocol.
+
+## Production-build CPU comparison on 16.10.2026
+
+Three alternating pairs of fresh application sessions compared the production
+1.7.0 build before and after the single-pass JSON decoder. Both builds used the
+same Go 1.26.9 production flags, embedded frontend, 10,000-Pod HTTP fixture,
+100-object pages and shared 10 QPS / burst 20 request budget. This comparison is
+between two local 1.7.0 builds, **not against the published 1.6.3 release**.
+
+| Observation | Before decoder change | Single-pass decoder | Change |
+| --- | ---: | ---: | ---: |
+| Initial loading, Go process CPU median | 5.180 s (5.150–5.190) | 2.810 s (2.680–2.820) | −45.75% |
+| Explicit refresh, Go process CPU median | 5.150 s (4.550–5.200) | 2.710 s (2.640–2.720) | −47.38% |
+| Connect to complete list, elapsed median | 9.752 s | 9.758 s | Effectively unchanged |
+| Explicit refresh, elapsed median | 9.697 s | 9.690 s | Effectively unchanged |
+
+CPU time is the Go application's `/proc/PID/stat` user plus system ticks,
+divided by the operating system's `CLK_TCK`, between the corresponding UI
+operation and complete-list readiness. It excludes Chromium CPU, the HTTP
+fixture and the measurement harness. Each pair used new processes and profiles;
+all six sessions exited cleanly. No other owned heavy test or build ran beside
+the comparison. No garbage collection or cache purge was forced.
+
+![Three alternating fresh-session pairs: Go CPU time before and after decoding change](images/inventory-cpu-2026-10-16.png)
+
+[CPU chart as SVG](images/inventory-cpu-2026-10-16.svg). Every dot is one
+measured session; connecting lines retain the alternating pair identity.
+
+The request pacing dominates elapsed loading time in this fixture. Reduced Go
+CPU time therefore does not mean a corresponding reduction in user waiting
+time. Each load still transfers all 10,000 selected objects: 100 Pod LIST
+responses and 39,566,575 JSON body bytes (37.73 MiB). Warm navigation issued no
+additional Pod LIST. Before selecting a row there were no individual Pod GETs;
+the selected-object observer's named LIST returned exactly that one Pod.
+
+The measured single-pass executable has SHA-256
+`2e22b65b36dd654815209863569f31a55b1c16301b87a5b33b7876dc322d517b`
+and source `a01cee524fb40ce94170e230fc5cf7a3a43b2bb2`. The release source
+`6bafa1cadfe0f346856f475458b3c8ccc76f8eae` differs in the browser test
+interceptor and native capture diagnostics; application runtime inputs are identical. The earlier executable's
+SHA-256 is
+`0392b178ea0089120006cb3568be4f9ca74429462984f0574ba3d65762475119`.
+[Raw CPU observations and summary](performance-data/2026-10-16-cpu.json) retain
+every pair, executable hash and unrounded result. These CPU results establish neither a before/after memory reduction nor native
+window performance on other operating systems.
+
+## Production-build memory observation on 16.10.2026
+
+The same production GTK executable ran in `--browser` mode with owned headless
+Chromium. Memory is the **sum of both process trees**, excluding the HTTP fixture,
+measurement harness and unrelated applications. It is not native-WebKit window
+memory. The synthetic fixture and application input match the CPU comparison;
+this is not a real-cluster churn or API-server benchmark.
+
+Across two fixture-validation sessions, three current-build CPU sessions and the
+long observation, the largest sampled PSS was **557.947 MiB** and the largest
+Private_Dirty was **300.789 MiB**, both during explicitly selected-object details
+in one validation session. The long observation itself peaked at **527.582 MiB
+PSS / 266.156 MiB Private_Dirty**. Peaks are sampled observations, not guaranteed
+upper bounds. They are not directly comparable to the earlier 10-second-sampled
+pure-Go candidate above. No before/after RAM reduction is established.
+
+The long run collected 275 criterion samples over 47.78 minutes, plus 5,248
+nominally 0.5-second process-tree samples including the interaction prelude.
+It completed 20 minutes of warm-up and a separate full 10-minute loaded
+observation, then switched normally to Nodes while retaining the connection.
+No forced garbage collection, cache purge or application restart was used.
+
+| Criterion | Observation | Result |
+| --- | --- | --- |
+| Loaded Private_Dirty growth | Baseline 189.723 MiB; maximum +7.152 MiB | Within unchanged 100 MiB budget |
+| Post-load return | Private_Dirty fell to about 141.9 MiB in criterion samples | Within unchanged 100 MiB return budget |
+| Ordered post-load upward excursion | +10.082 MiB, about 17.6 minutes after navigation | **Exceeded unchanged 10 MiB limit** |
+| Plateau followed by separate control | No confirmed plateau / no control start | Not established |
+| Process-tree swap | Zero throughout | Passed |
+
+![Long memory observation: loaded inventory, navigation away and failed rebound criterion](images/inventory-memory-2026-10-16.png)
+
+[Memory chart as SVG](images/inventory-memory-2026-10-16.svg). The line uses
+the ten-second criterion samples from the separate long run; its visible peak
+is not the six-session maximum reported above.
+
+The resulting verdict is **NOT ACCEPTED**, not merely an incomplete duration.
+The detector stopped the observation when the upward-excursion limit failed;
+it did not use the remaining 30-minute post-load cap to erase that failure.
+The 60-second confirmation, separate 600-second control, 100/10/5 MiB budgets
+and all existing test timeouts were unchanged. This demonstrates a failed
+stability criterion; it does not by itself establish a retained-object leak or
+its cause. A lower ending footprint is not a passing plateau measurement.
+
+The high-frequency post-load minimum and final sample differ by 10.164 MiB:
+8.496 MiB in the Chromium renderer and 1.551 MiB in the Go process, with small
+changes in other Chromium processes. Those values use the high-frequency
+samples, so they differ from the 10.082 MiB criterion result. At the end the Go
+heap was about 6 MiB, the Pod cache was released, idle caches were zero and only
+the current empty Node view/cache remained. These counters do not prove that
+Chromium has no retained frontend objects.
+
+Pod collection reads stayed at 202 LISTs / 20,101 returned objects: 100 initial
+pages, 100 refresh pages, one rejected broad page containing 100 objects and
+one named selected-object LIST containing exactly one Pod. Four individual GETs
+were all for that explicitly selected Pod. There were no eager individual GETs
+before selection and no additional Pod LIST during the long observation.
+All application, Chromium and fixture processes closed cleanly with exit code 0.
+
+- [Criterion CSV, 275 rows](performance-data/2026-10-16-memory.csv)
+- [High-frequency memory CSV, 5,248 rows](performance-data/2026-10-16-memory-high-frequency.csv)
+- [All six valid current-build sessions: raw peak samples](performance-data/2026-10-16-peak-samples.csv)
+- [Artifact, protocol, all valid-run peaks, exclusions and hashes](performance-data/2026-10-16-metadata.json)
+
+CSV times are relative seconds; local paths, URLs, tokens and process IDs are
+omitted. Historical `*_mb` criterion columns contain MiB. Running
+`python3 scripts/soak-verdict.py docs/performance-data/2026-10-16-memory.csv`
+reproduces the failed verdict without changing source memory values. Two early
+short sessions and one interrupted long session are excluded because their
+fixture ignored the selected-object `metadata.name` field selector. Their
+original evidence is retained; the corrected fixture's named read returns one
+Pod. Those excluded runs are not alternate memory acceptance results.
+
+A separate six-minute targeted diagnostic used Chromium's `Runtime.getHeapUsage`
+and `Memory.getDOMCounters` every ten seconds after the same interaction
+prelude and normal navigation to Nodes. It did not force GC or purge memory.
+After the first ten seconds the DOM stayed at 313 nodes; sampled JS heap
+repeatedly fell naturally rather than increasing monotonically. This short
+instrumented observation does not identify the source of the long run's
+Private_Dirty rebound, establish leak freedom or replace its **NOT ACCEPTED**
+verdict. All diagnostic processes exited with code 0.
+[Raw targeted heap/DOM observations](performance-data/2026-10-16-heap-diagnostic.csv)
+keep this experiment separate from the acceptance data.

@@ -1,0 +1,139 @@
+{
+  "date": "2026-10-16",
+  "version": "1.7.0",
+  "runtime_source": "a01cee524fb40ce94170e230fc5cf7a3a43b2bb2",
+  "release_source": "6bafa1cadfe0f346856f475458b3c8ccc76f8eae",
+  "runtime_inputs_identical": true,
+  "artifact_sha256": "2e22b65b36dd654815209863569f31a55b1c16301b87a5b33b7876dc322d517b",
+  "environment": "Linux Mint 22.3, kernel 6.17.0-20-generic amd64; Ryzen 7 260, 8 cores/16 threads; Go 1.26.9 production GTK build --browser, owned headless Chromium 153.0.8010.12",
+  "scope": "Synthetic local read-only Kubernetes HTTP fixture, 10000 Pods in one selected namespace; no live cluster or native-window memory guarantee. App plus owned Chromium trees; fixture and harness excluded.",
+  "memory": {
+    "verdict": "NOT ACCEPTED",
+    "verdict_detail": "samples 275, span 47.78 min, load points 174, after-load points 101\nmax swap 0.0\n  pods-ns        base 189.723 MB; max excess +7.152 MB; within budget True\nphases within +100 MB: True; quiet baseline 189.722656\nafter load: {'status': 'NOT ACCEPTED', 'control_start_seconds': None, 'control_seconds': 0.0, 'reason': 'post-load upward excursion exceeds 10 MB', 'max_upward_excursion_MB': 10.082031999999998}\nVERDICT NOT ACCEPTED\n",
+    "normal_navigation_seconds": 1811.6317999362946,
+    "loaded_warmup_seconds": 1200,
+    "loaded_observation_seconds": 600,
+    "postload_confirmation_seconds": 60,
+    "separate_control_seconds": 600,
+    "postload_cap_seconds": 1800,
+    "sample_count": 275,
+    "high_frequency_sample_count": 5248,
+    "nominal_peak_sampling_seconds": 0.5,
+    "actual_peak_sampling_seconds": {
+      "median": 0.5496926307678223,
+      "min": 0.5294559001922607,
+      "max": 0.6144051551818848
+    },
+    "loaded_baseline_private_dirty_mib": 189.722656,
+    "max_loaded_growth_mib": 7.152344,
+    "postload_max_upward_excursion_mib": 10.082032,
+    "control_started": false,
+    "no_forced_gc": true,
+    "max_swap_mib": 0,
+    "peak_pss_mib": 527.58203125,
+    "peak_private_dirty_mib": 266.15625,
+    "all_valid_current_runs": [
+      {
+        "run": "fresh-fixed-trial-1",
+        "peak_pss_mib": 557.947265625,
+        "peak_private_dirty_mib": 300.7890625,
+        "peak_phase": "one-object-details"
+      },
+      {
+        "run": "fresh-fixed-trial-2",
+        "peak_pss_mib": 539.49609375,
+        "peak_private_dirty_mib": 278.74609375,
+        "peak_phase": "broad-admission"
+      },
+      {
+        "run": "fresh-cpu-current-1",
+        "peak_pss_mib": 546.759765625,
+        "peak_private_dirty_mib": 290.25,
+        "peak_phase": "one-object-details"
+      },
+      {
+        "run": "fresh-cpu-current-2",
+        "peak_pss_mib": 550.1845703125,
+        "peak_private_dirty_mib": 290.01171875,
+        "peak_phase": "one-object-details"
+      },
+      {
+        "run": "fresh-cpu-current-3",
+        "peak_pss_mib": 552.234375,
+        "peak_private_dirty_mib": 295.5546875,
+        "peak_phase": "one-object-details"
+      },
+      {
+        "run": "fresh-fixed-soak-20261016",
+        "peak_pss_mib": 527.58203125,
+        "peak_private_dirty_mib": 266.15625,
+        "peak_phase": "pods-ns"
+      }
+    ],
+    "aggregate_sampled_peak_pss_mib": 557.947265625,
+    "aggregate_sampled_peak_private_dirty_mib": 300.7890625,
+    "all_valid_current_peak_samples": 5462
+  },
+  "inventory": {
+    "objects": 10000,
+    "pages_per_load": 100,
+    "json_body_bytes_per_load": 39566575,
+    "warm_extra_pod_lists": 0,
+    "broad_read_pages": 1,
+    "broad_read_objects": 100,
+    "no_partial_broad_success": true,
+    "eager_pod_gets": 0,
+    "named_detail_list_objects": 1,
+    "final_pod_lists": 202,
+    "final_pod_objects": 20101
+  },
+  "closed": {
+    "app_exit": 0,
+    "browser_harness_exit": 0,
+    "fixture_closed": true
+  },
+  "excluded_runs": {
+    "fresh-trial-1": "Old fixture ignored metadata.name selector; invalid for this comparison.",
+    "fresh-trial-2": "Old fixture ignored metadata.name selector; invalid for this comparison.",
+    "fresh-soak-20261016": "Stopped after discovering the same fixture selector defect; not a memory failure verdict."
+  },
+  "raw_data": {
+    "docs/performance-data/2026-10-16-memory.csv": {
+      "sha256": "57cd094d3e8114aaf59f1b700aa06f261f99411e69d9a8241f62de5150ae6b7b",
+      "bytes": 19802
+    },
+    "docs/performance-data/2026-10-16-memory-high-frequency.csv": {
+      "sha256": "b306a0699ee3057395e4508a948867c9b430ee7be6e1ceccfce79a92755c23fe",
+      "bytes": 393658
+    },
+    "docs/performance-data/2026-10-16-peak-samples.csv": {
+      "sha256": "322d665b8279ce95aeec8ed949669f05214424c8e714bb01f4d42b7e1861bf8b",
+      "bytes": 435548
+    }
+  },
+  "privacy": "Process IDs, absolute host timestamps/paths, local URLs and tokens omitted. CSV time is relative seconds; historical *_mb fields contain MiB, not decimal MB. No source memory values were changed.",
+  "diagnostic": {
+    "mode": "Separate six-minute targeted observation after the same interaction prelude; not a full loaded warm-up, a plateau acceptance or an alternative verdict.",
+    "commands": [
+      "Runtime.getHeapUsage",
+      "Memory.getDOMCounters"
+    ],
+    "no_forced_gc": true,
+    "samples": 36,
+    "closed": {
+      "app_exit": 0,
+      "browser_harness_exit": 0,
+      "fixture_closed": true
+    },
+    "raw_sha256": "cfc21ebd485f8fb66fbb5d852acdca4829bf2ca205060512875d4471c09005c0"
+  },
+  "plots": {
+    "tool": "Matplotlib 3.11.2; Agg renderer; NumPy 2.5.4; isolated scratch installation, no application dependency changes",
+    "artifacts": {
+      "docs/images/inventory-cpu-2026-10-16.png": "74a6d68c91dcae3c8b8b8b070ecf5497fd0de2724a1810fff111ed7e32d28585",
+      "docs/images/inventory-cpu-2026-10-16.svg": "6f15294ab9810ac16ca930e63e32c02237dd17883c954db8a78b9e5e08df27e3",
+      "docs/images/inventory-memory-2026-10-16.png": "9135f7c21707214e076f784ca3affbee57bf7346de00c4457da074c10e831584",
+      "docs/images/inventory-memory-2026-10-16.svg": "acb59783addf26046f911091de422fa6ee2e426ae566417f31adaf98e8ea377b"
+    }
+  }
+}
