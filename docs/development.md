@@ -165,6 +165,9 @@ CSS scrollbar widgets under the [CSS Scrollbars interaction rules](https://draft
 The workspace is an isolated stacking context; the palette
 is a body portal above it. Table focus uses a pointer-transparent inset overlay
 covering the header and rows within the grid's own stacking context.
+Focus indicators use document-level Tab modality, not browser heuristics: Tab
+enables rings, pointer input hides them, and focus ownership/traps remain intact.
+The shared entry point installs this policy for both the workspace and detached logs.
 Popup action menus also use body portals so an isolated grid cannot place them
 behind an open dock or clip their viewport-relative positioning.
 Native selects are not used because GTK popup styling differs from the app.

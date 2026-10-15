@@ -14,7 +14,8 @@ Source/discovery problems are available in the picker and flagged on its trigger
 pending agent requests also remain visible in the header.
 
 Each row's **⋯** menu offers connection appearance and the existing source or
-connection actions. **Add kubeconfig** is at the bottom of the picker. Connection
+connection actions. The **＋** button on the right of the **Kubernetes** heading
+opens **Add kubeconfig** and remains reachable by Tab in long connection lists. Connection
 information remains available through the separate header info button. A neutral
 application menu on the right contains language, About and keyboard help; the
 workspace header does not display the application logo or name. Native window
@@ -348,6 +349,9 @@ before recovering the name; loading/read errors are not treated as no matches.
 The same single scoped temporary view and UID/edit guards apply. This recovery
 is not transliteration, does not guess Latin/IME layouts from the UI language,
 and is available from 1.4.0.
+
+Blue focus outlines appear after Tab/Shift+Tab navigation and hide on mouse or
+touch input. Selection and hover highlights remain independent of focus.
 
 F6 cycles interface areas. Arrow keys navigate resource kinds and table rows.
 `?` opens the current keyboard reference. Ctrl+K inside a terminal belongs to

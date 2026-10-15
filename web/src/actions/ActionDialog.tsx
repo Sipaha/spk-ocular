@@ -532,7 +532,7 @@ function Choices({ title, choices, chosen, disabled, onChoose, boxRef }: { title
               checked={chosen === c.value}
               disabled={disabled || !!c.unavailable}
               onChange={() => onChoose(c.value)}
-              // A visible focus: WebKitGTK shows no :focus-visible for focus set by script.
+              // The shared Tab modality also covers scripted focus on WebKitGTK.
               className="mt-1 accent-accent outline-none focus:ring-2 focus:ring-accent focus:ring-offset-2 focus:ring-offset-panel"
             />
             <span className="flex min-w-0 flex-col">

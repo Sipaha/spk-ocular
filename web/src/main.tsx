@@ -3,6 +3,10 @@ import { createRoot } from 'react-dom/client'
 import { App } from './App'
 import { client } from './api/client'
 import './index.css'
+import { installFocusMode } from './focusMode'
+
+const removeFocusMode=installFocusMode(document)
+if(import.meta.hot)import.meta.hot.dispose(removeFocusMode)
 
 const LogWindow=lazy(()=>import('./logs/LogWindow').then(module=>({default:module.LogWindow})))
 const logWindowID=new URLSearchParams(window.location.search).get('logsWindow')

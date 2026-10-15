@@ -15,9 +15,8 @@ export type Outcome =
   | { type: 'partial'; text: string; parts: ActionPart[]; unknown: boolean }
 
 
-// A visible focus on every button: WebKitGTK does not show :focus-visible
-// for focus set by script (the initial focus, the Tab trap), and which
-// button Enter presses must be seen.
+// Shared focus utilities follow the app-wide Tab modality, including scripted
+// focus inside keyboard traps on WebKitGTK.
 export const btn = 'rounded-md px-3 py-1 outline-none focus:ring-2 focus:ring-accent focus:ring-offset-2 focus:ring-offset-panel disabled:opacity-50'
 
 export class RunTimeout extends Error {}
