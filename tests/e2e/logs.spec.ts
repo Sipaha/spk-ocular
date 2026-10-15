@@ -700,3 +700,28 @@ test('log selection cannot escape into surrounding UI and cleanup restores norma
   await expect(vp).toHaveCount(0);await expect(page.locator('body')).not.toHaveClass(/log-select-drag/)
  }finally{await page.mouse.up()}
 })
+
+test('log scrolling and dock resizing keep the application frame inside the viewport', async ({page})=>{
+ await page.setViewportSize({width:1280,height:820})
+ const panel=await openLogs(page,'api'),vp=panel.locator('[data-log-viewport]')
+ await emit(page,'api',{lines:Array.from({length:342},(_,i)=>`INFO frame row ${i} ${'long log message '.repeat(16)}`)})
+ await expect(rows(panel).last()).toContainText('frame row 341')
+ const frame=()=>page.evaluate(()=>({
+  y:window.scrollY,x:window.scrollX,
+  height:document.documentElement.scrollHeight,viewport:innerHeight,
+  footer:document.querySelector('footer')!.getBoundingClientRect().bottom,
+  header:document.querySelector('header')!.getBoundingClientRect().top,
+ }))
+ for(const height of [820,540,360,820]) {
+  await page.setViewportSize({width:1280,height})
+  const resize=page.getByRole('separator',{name:'Resize the bottom panel'})
+  await resize.focus();await page.keyboard.press('End')
+  await vp.hover();await page.mouse.wheel(0,20000)
+  await page.mouse.wheel(1200,0)
+  await page.locator('footer').hover();await page.mouse.wheel(0,20000)
+  await expect.poll(frame).toEqual({y:0,x:0,height,viewport:height,footer:height,header:0})
+  await vp.evaluate(el=>{el.scrollLeft=0})
+  await page.screenshot({path:join(scratchRoot,`logs-application-frame-${height}.png`)})
+ }
+ await page.screenshot({path:join(scratchRoot,'logs-application-frame.png')})
+})

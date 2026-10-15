@@ -135,11 +135,11 @@ export function App({ client }: { client: Client }) {
   }
 
   return (
-    <div className="relative flex h-full flex-col">
+    <div className="relative flex h-full min-h-0 flex-col overflow-hidden">
       <AppHeader act={act} configRef={configRef} client={client} target={target} onHelp={() => setHelp(true)} onAbout={() => setAbout(true)} />
       {workspaceStatus.error&&<div role="alert" className="flex shrink-0 flex-wrap items-center gap-2 border-b border-line px-3 py-1 text-xs text-warning" data-workspace-error>{t(`workspace.error.${workspaceStatus.error}`)}<button className="text-accent" onClick={workspaceStatus.retry}>{t('workspace.retry')}</button>{!workspaceStatus.ready&&<button className="text-accent" onClick={workspaceStatus.reset}>{t('workspace.reset')}</button>}</div>}
       <div className="relative isolate z-0 flex min-h-0 flex-1" data-workspace-surface>
-        <div className="flex min-w-0 flex-1 flex-col">
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col">
           {reconnecting && <div role="status" className="border-b border-line px-3 py-2 text-sm text-fg-muted">{t('connection.connecting')}</div>}
           {held && target && <div role="status" className="border-b border-line px-3 py-2 text-sm text-fg-muted">
             {t('connection.disconnected')}

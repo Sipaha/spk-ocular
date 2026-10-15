@@ -39,7 +39,7 @@ export function Dock({ client, hub, current, mode, onHeightDone }: Props) {
   const targets = useStore((s) => s.view)
   if (!tabs.length) return null
   return (
-    <section aria-label={t('dock.label')} data-area="dock" className="flex shrink-0 flex-col border-t border-line bg-app" style={{ height, maxHeight:'85dvh' }}>
+    <section aria-label={t('dock.label')} data-area="dock" className="flex min-h-0 flex-col border-t border-line bg-app" style={{ height, maxHeight:'85dvh' }}>
       <PanelResize label={t('logs.resize')} axis="height" reverse value={height} min={MIN_DOCK} max={() => window.innerHeight * 0.85} onDone={(h) => { dock.setHeight(h); onHeightDone(h) }} />
       <div role="tablist" className="dock-tabs">
         {tabs.map((tb) => (

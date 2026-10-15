@@ -4,7 +4,11 @@ BIN_DIR := build/bin
 BIN     := $(BIN_DIR)/spk-ocular
 DIST    := cmd/spk-ocular/dist
 DESKTOP_TAGS := wails gtk3
-VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
+# Local builds carry a UTC build time (to the second) and source revision.
+# Packaging supplies VERSION explicitly and retains the exact release version.
+LOCAL_BUILD_TIME := $(shell date -u +%Y%m%dT%H%M%SZ)
+LOCAL_BUILD_REV := $(shell git rev-parse --short=12 HEAD 2>/dev/null || echo unknown)
+VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)+$(LOCAL_BUILD_TIME).$(LOCAL_BUILD_REV)
 LDFLAGS := -w -s -X main.version=$(VERSION)
 PORT ?= 5190
 RELEASE_VERSION ?= $(shell cat VERSION)

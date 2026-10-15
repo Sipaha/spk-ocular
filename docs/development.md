@@ -404,3 +404,18 @@ The package builder and verifier both enforce `packaging/linux_abi.py`'s glibc
 2.35 symbol ceiling. This static guard complements, rather than replaces, the
 older-userspace native runtime gate. The compatibility evidence is published
 inside the existing native verification bundle without profiles, logs or tokens.
+
+## Local build identity and application frame
+
+Default Make builds append UTC build time to the second and a 12-character Git
+revision to the descriptive version, for example
+`v1.7.0-dirty+20261016T002015Z.cbb70a4ef8d5`. The footer, About and `version`
+command receive the same value. The timestamp identifies a build, not process
+startup, and `dirty` still means the revision alone does not identify local edits.
+Explicit `VERSION` overrides remain exact for release packaging. Builds produced
+directly with `go build` must provide their own version linker flag.
+
+The workspace column and bottom dock may shrink with the available window height.
+The outer application frame clips overflow; resource and log viewports own their
+scrolling. A large saved dock height or a later window resize must not move the
+header/footer or expose blank space below the footer through document scrolling.
