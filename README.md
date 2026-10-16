@@ -89,14 +89,15 @@ No vendor claims, customer logos, testimonials or performance statistics are reu
 
 ## Screenshot source
 
-All twenty-four RU/EN product screenshots show the actual SPK Ocular 1.7.0
-production application in isolated profiles. Kubernetes and Docker use owned
+All twenty-four RU/EN product screenshots show the actual SPK Ocular 1.8.0
+production application from the published Linux amd64 release archive, captured
+at 1440 × 900 in isolated browser profiles. Kubernetes and Docker use owned
 synthetic HTTP API fixtures, without a real cluster, daemon or containers. Helm
 and Security use the built-in synthetic provider; simulated findings do not
 represent a live scan or real vulnerabilities. File browsing executes only the
 fixture's bounded read-only scripts against its scratch demonstration tree.
 The captures are real application UI, not interface mockups. Captions identify
-simulated data. All product and social-image URLs use the 1.7.0 version query.
+simulated data. All product and social-image URLs use the 1.8.0 version query.
 The other six website locales use the English screenshots with an explicit notice.
 
 ## Develop and verify

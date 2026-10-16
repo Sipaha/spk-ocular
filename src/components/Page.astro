@@ -13,7 +13,7 @@ const base = '/spk-ocular/';
 const external = { target: '_blank', rel: 'noopener noreferrer' };
 const about = 'https://sipaha.github.io/about/';
 const shots = ['workloads', 'logs', 'helm', 'docker'];
-const shotURL = (name: string) => `${base}media/${name}-${lang === 'ru' ? 'ru' : 'en'}.webp?v=1.7.0`;
+const shotURL = (name: string) => `${base}media/${name}-${lang === 'ru' ? 'ru' : 'en'}.webp?v=1.8.0`;
 const navIDs = ['features', 'interface', 'free'];
 const fmt = (value: number, digits = 0) => new Intl.NumberFormat(lang, {maximumFractionDigits:digits, minimumFractionDigits:digits}).format(value);
 const fill = (text: string, values: Record<string,string>) => text.replace(/\{(\w+)\}/g, (match,key) => values[key] ?? match);

@@ -88,8 +88,8 @@ behavior. Provider retention, export caps and incomplete reads are explicit.
 Both RU/EN screenshot sets use actual app captures; the other six locales retain
 the explicit English-UI notice. Preserve sh/readlink/tar requirements, the UTF-8
 editor limit of 2 MiB, desktop-only file downloads and refusal to overwrite existing
-names. All screenshot and social-image URLs carry the 1.7.0 version query.
-Security uses current 1.7.0 RU/EN captures and a localized caption
+names. All screenshot and social-image URLs carry the 1.8.0 version query.
+Security uses current 1.8.0 RU/EN captures and a localized caption
 identifying simulated security findings. All eight locales describe workload
 configuration, declared RBAC rules, NetworkPolicy selection and existing Trivy
 Operator reports without claiming live scans, exploitability or compliance.
