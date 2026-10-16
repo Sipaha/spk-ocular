@@ -187,7 +187,7 @@ try{
   const page=await browser.newPage({userAgent:ua,viewport:{width:320,height:1000},reducedMotion:'reduce'});
   await page.addInitScript(hints => Object.defineProperty(navigator,'userAgentData',{value:hints?{getHighEntropyValues:async()=>hints}:undefined,configurable:true}), hints);
   await page.route(API,r=>r.fulfill({json:{tag_name:'v0.1.0',assets}}));
-  await page.route(`${REPO}/releases/download/**`,r=>r.fulfill({headers:{'Content-Type':'application/octet-stream','Content-Disposition':`attachment; filename="${r.request().url().split('/').pop()}"`},body:'Synthetic test package'}));
+  await page.context().route(`${REPO}/releases/download/**`,r=>r.fulfill({headers:{'Content-Type':'application/octet-stream','Content-Disposition':`attachment; filename="${r.request().url().split('/').pop()}"`},body:'Synthetic test package'}));
   await page.goto(root+(lang==='en'?'en/':''),{waitUntil:'networkidle'});
   await expect(page.locator('select[name=os]')).toHaveValue(expectedOS);
   await expect(page.locator('select[name=arch]')).toHaveValue(expectedArch);
@@ -207,6 +207,8 @@ try{
    const filename=`spk-ocular_0.1.0_${expectedOS}_${expectedArch}.${extension}`;
    for(const button of await buttons.all()) {
     await expect(button).toHaveAttribute('href',`${REPO}/releases/download/v0.1.0/${filename}`);
+    await expect(button).toHaveAttribute('target','_blank');
+    await expect(button).toHaveAttribute('rel','noopener noreferrer');
     const downloaded=page.waitForEvent('download');await button.click();const file=await downloaded;
     expect(file.suggestedFilename()).toBe(filename);
     await file.saveAs(path.join(out,`${lang}-${filename}`));
@@ -215,6 +217,7 @@ try{
    }
   } else {
    await expect(buttons.first()).toHaveAttribute('href','#downloads');
+   await expect(buttons.first()).not.toHaveAttribute('target');
    await buttons.first().click();await expectAnchorPosition(page,'downloads');
   }
   await page.locator('select[name=os]').selectOption('darwin');

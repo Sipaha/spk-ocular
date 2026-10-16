@@ -299,21 +299,20 @@
       "Actualiza una lista, consulta el tiempo y los datos recibidos o cancela la solicitud. El grafo del clúster solo se carga cuando lo pides."
     ]
   ],
-  "measurementTitle": "Listas grandes. Carga controlada.",
+  "measurementTitle": "{resources} Pods. {memory} MiB de memoria.",
   "measurementText": "Una lista completa de {resources} Pods, con búsqueda y ordenación locales. Las solicitudes pequeñas, la caché compartida y la carga explícita le permiten controlar el trabajo.",
   "measurementLoad": "Conexión → lista completa de recursos",
   "measurementSeconds": "s",
   "measurementMiB": "MiB",
-  "measurementWarm": "Volver a la lista de Pods en caché no generó solicitudes Pod LIST adicionales.",
   "measurementConditions": "Condiciones y mediciones originales",
   "measurementBoundary": "Modo navegador en Linux con Chromium headless dedicado. El PSS incluye los procesos de la aplicación y Chromium; se excluyen la API HTTP de prueba y la herramienta de medición. El pico observado en {runs} sesiones válidas fue de 558 MiB.",
-  "measurementMethod": "Los picos de memoria se muestrearon aproximadamente cada {peakInterval} segundos. La prueba de estabilidad incluye {warmup} minutos de calentamiento, {loaded} minutos de observación con la lista cargada y después un cambio normal a otro tipo de recurso. Para superar la prueba se requieren {confirmation} segundos de confirmación de meseta y después {control} minutos de control independientes. Sin recolección de basura forzada ni vaciado de cachés.",
+  "measurementMethod": "La memoria se muestreó aproximadamente cada {peakInterval} segundos. El informe completo describe la carga y los criterios de evaluación.",
   "measurementRaw": "Muestras originales de memoria",
   "measurementSummary": "Resumen de las mediciones",
-  "measurementStability": "La prueba independiente de estabilidad de memoria no se superó: un repunte de {rebound} MiB excedió el límite de {limit} MiB. Los resultados completos están enlazados abajo.",
   "measurementResources": "Recursos en la lista completa",
   "measurementRate": "Presupuesto de lectura · solicitudes/s",
-  "measurementWarmRequests": "Solicitudes Pod LIST adicionales al volver",
   "measurementSetup": "Medido con SPK Ocular {version} en una API HTTP Kubernetes de prueba local. La carga inicial es la mediana de 3 sesiones nuevas; 100 páginas de 100 Pods forman la lista completa.",
-  "measurementBudget": "Por conexión: 10 solicitudes de lectura/s con una ráfaga de 20 y un máximo de 4 respuestas finitas en curso."
+  "measurementBudget": "Por conexión: 10 solicitudes de lectura/s con una ráfaga de 20 y un máximo de 4 respuestas finitas en curso.",
+  "measurementMemory": "Pico de memoria muestreado · app y navegador",
+  "measurementNote": "Medido con SPK Ocular {version} en Linux, en modo navegador. Pico muestreado del PSS total de la app y Chromium en {runs} sesiones, incluida la vista de detalles."
 }

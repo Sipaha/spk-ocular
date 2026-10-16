@@ -113,7 +113,9 @@ browser verification of all eight languages/themes at mobile, tablet and desktop
 widths. It checks keyboard tabs, theme persistence, WCAG AA, layout and image
 loading, free-use and donation copy, mobile section/download navigation, valid
 anchor targets and content aligned 28px below the sticky header, API failure, JavaScript-disabled rendering, all 14 native release files, exclusion of browser-only builds
-and architecture filters. Review its screenshots. `scripts/server.mjs` prints an
+and architecture filters. It also checks the prominent memory metric outside
+expanded conditions, outbound new-tab behavior with and without JavaScript,
+generated package/checksum links and a real report popup. Review its screenshots. `scripts/server.mjs` prints an
 available loopback preview URL and stops on SIGTERM without orphan processes.
 
 Set `OCULAR_SITE_SCRATCH` and `TMPDIR` to directories inside your workspace scratch
@@ -229,18 +231,23 @@ stability result is NOT ACCEPTED in the application measurement report.
 
 ## Large-inventory evidence
 
-All eight locales emphasize care for cluster and computer resources through
-selected-scope reads, shared compact caches, bounded requests and explicit graph
-loading. The evidence section shows a complete 10,000-Pod list, a median 9.8-second
-initial load, the 10 QPS read limit and zero additional Pod LIST requests when
-returning to the warm list. The rate is a configured read budget, not measured
-throughput. It is not a whole-process memory cap.
+All eight locales lead with the measured 10,000-Pod workload and a rounded
+558 MiB sampled peak of combined application and Chromium PSS. The metric is
+visible without opening the conditions, together with Linux/browser-mode,
+version 1.7.0 and six-session scope. The complete list supports local search and
+sorting. A 9.8-second median load and configured 10 QPS budget remain visible;
+the rate is not observed throughput or a whole-process memory cap.
 
-The internal CPU comparison against an unpublished build is intentionally absent
-from product copy. Existing application benchmark reports remain unchanged.
-Expanded conditions retain the local HTTP fixture, browser-mode scope, memory
-sampling method and failed stability criterion (NOT ACCEPTED, 10.08 MiB rebound
-against 10 MiB). The site does not promise stable total memory or universal
-performance. Public wording describes the verified mechanisms and scale without
-statements about absence of production testing. Measurement inputs live in
-`src/data/measurements.json`; source reports and raw evidence remain linked.
+Warm-return LIST counts and internal stability verdicts are not product sales
+copy. The original reports and raw samples remain linked and unchanged; current
+technical documentation separately records reassessment with the owner-selected
+15 MiB rebound tolerance. No stable-memory or universal-performance guarantee is
+made. The site contains neither unpublished-build CPU comparisons nor statements
+about absence of production testing. Measurement inputs are in
+`src/data/measurements.json`.
+
+All outbound links open a new tab with `noopener noreferrer`, including static
+reports/author/source links without JavaScript, generated release packages and
+checksums, and primary buttons when they resolve to an external package. Local
+section/language links retain their current-tab behavior. Image links retain
+the existing modal preview.

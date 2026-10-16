@@ -299,21 +299,20 @@
       "一覧を手動で更新し、経過時間や受信データ量を確認して、リクエストをキャンセルできます。クラスターグラフは明示的な操作でのみ読み込みます。"
     ]
   ],
-  "measurementTitle": "大量のリソースも、負荷を制御。",
+  "measurementTitle": "{resources} Pods。メモリ {memory} MiB。",
   "measurementText": "{resources} 個の Pod を完全な一覧で表示し、ローカルで検索・並べ替えできます。小さなリクエスト、共有キャッシュ、明示的な読み込みで負荷を制御できます。",
   "measurementLoad": "接続 → 完全なリソース一覧",
   "measurementSeconds": "秒",
   "measurementMiB": "MiB",
-  "measurementWarm": "キャッシュ済みの Pod 一覧に戻っても、追加の Pod LIST リクエストは発生しませんでした。",
   "measurementConditions": "測定条件と生データ",
   "measurementBoundary": "Linux のブラウザーモードで専用のヘッドレス Chromium を使用。PSS はアプリと Chromium のプロセスツリーを含み、HTTP テスト API と測定ツールは除外します。有効な {runs} セッションで観測されたピークは 558 MiB でした。",
-  "measurementMethod": "メモリのピークを約 {peakInterval} 秒ごとにサンプリングしました。安定性の測定では {warmup} 分間ウォームアップし、一覧を読み込んだ状態で {loaded} 分間観測してから、通常の操作で別のリソースに切り替えます。合格には、プラトーを {confirmation} 秒間確認した後、別途 {control} 分間の制御観測を行う必要があります。強制 GC やキャッシュ削除は行いません。",
+  "measurementMethod": "メモリは約 {peakInterval} 秒ごとにサンプリングしました。負荷と評価基準は完全なレポートに記載しています。",
   "measurementRaw": "メモリの生データ",
   "measurementSummary": "測定の概要",
-  "measurementStability": "別途行ったメモリ安定性テストは不合格でした。{rebound} MiB の再増加が {limit} MiB の上限を超えました。詳しい結果は下のリンクで確認できます。",
   "measurementResources": "完全な一覧のリソース数",
   "measurementRate": "読み取り予算 · リクエスト／秒",
-  "measurementWarmRequests": "一覧に戻った際の追加 Pod LIST リクエスト数",
   "measurementSetup": "SPK Ocular {version} とローカルの Kubernetes HTTP テスト API で測定。初回読み込み時間は新規アプリセッション 3 回の中央値です。100 個ずつの 100 ページで完全な一覧を構成します。",
-  "measurementBudget": "接続ごとに毎秒 10 件の読み取りリクエスト、バーストは 20 件まで。同時に受信する有限のレスポンスは最大 4 件です。"
+  "measurementBudget": "接続ごとに毎秒 10 件の読み取りリクエスト、バーストは 20 件まで。同時に受信する有限のレスポンスは最大 4 件です。",
+  "measurementMemory": "メモリのサンプリングピーク · アプリとブラウザ",
+  "measurementNote": "Linux のブラウザモードで SPK Ocular {version} を測定。オブジェクト詳細の表示を含む {runs} セッションにおける、アプリと Chromium の合計 PSS のサンプリングピークです。"
 }

@@ -35,6 +35,8 @@ const updateDownloadButtons = (selectedOS: string, file?: {url: string; name: st
     const format = file?.format.toUpperCase();
     const text = file && version ? labels.downloadFormatFor.replace('{version}', version).replace('{format}', format!).replace('{os}', osNames[selectedOS]) : osNames[selectedOS] ? `${labels.chooseFor} ${osNames[selectedOS]}` : labels.choose;
     button.href = file && version ? file.url : '#downloads';
+    if (file && version) { button.target = '_blank'; button.rel = 'noopener noreferrer'; }
+    else { button.removeAttribute('target'); button.removeAttribute('rel'); }
     button.querySelector<HTMLElement>('[data-download-text]')!.textContent = text;
     const compact = button.querySelector<HTMLElement>('.compact-download-text');
     if (compact) compact.textContent = file && version ? labels.downloadCompactVersion.replace('{version}', version) : labels.chooseCompact;
@@ -89,9 +91,9 @@ if (host) {
           title.textContent = `${({linux:'Linux',windows:'Windows',darwin:'macOS'} as Record<string,string>)[file.os]} · ${file.arch === 'amd64' ? 'x86-64' : 'ARM64'}`;
           const detail = document.createElement('small'); detail.textContent = `${labels.desktopMode} / ${file.format.toUpperCase()}${file.size ? ' / ' + (file.size / 1048576).toFixed(1) + ' MB' : ''}`;
           info.append(title, detail);
-          const link = document.createElement('a'); link.href = file.url; link.textContent = labels.downloadVersion.replace('{version}', release.version); link.setAttribute('aria-label', `${labels.download} ${file.name}`);
+          const link = document.createElement('a'); link.href = file.url; link.target = '_blank'; link.rel = 'noopener noreferrer'; link.textContent = labels.downloadVersion.replace('{version}', release.version); link.setAttribute('aria-label', `${labels.download} ${file.name}`);
           item.append(info, link);
-          if (file.checksum) { const checksum = document.createElement('a'); checksum.href = file.checksum; checksum.textContent = 'SHA-256'; checksum.setAttribute('aria-label', `${labels.checksum} ${file.name}`); item.append(checksum); }
+          if (file.checksum) { const checksum = document.createElement('a'); checksum.href = file.checksum; checksum.target = '_blank'; checksum.rel = 'noopener noreferrer'; checksum.textContent = 'SHA-256'; checksum.setAttribute('aria-label', `${labels.checksum} ${file.name}`); item.append(checksum); }
           return item;
         }));
       };

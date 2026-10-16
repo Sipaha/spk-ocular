@@ -4,3 +4,4 @@ check:
 	pnpm build
 	pnpm verify
 	node scripts/verify-languages.mjs
+	node scripts/verify-measurements.mjs
