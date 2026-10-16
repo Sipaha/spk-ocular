@@ -52,9 +52,8 @@ const fill = (text: string, values: Record<string,string>) => text.replace(/\{(\
       </div>
       <div class="hero-meta"><a href="#free">{d.freeShort}<span aria-hidden="true">↗</span></a><span>{d.platforms}</span></div>
       <figure class="hero-visual">
-        <div class="visual-caption"><span><span class="status-dot" aria-hidden="true"></span>SPK Ocular</span><span>{d.heroCaption}</span></div>
         <a data-image-preview href={shotURL('logs')} aria-label={d.fullImage}><img src={shotURL('logs')} width="1440" height="900" alt={d.galleryAlts[1]} fetchpriority="high" decoding="async" /></a>
-        <figcaption>{d.demo}</figcaption>
+        <figcaption><span>{d.heroCaption}</span><span>{d.demo}</span></figcaption>
       </figure>
     </section>
     <div class="container facts">{d.facts.map(([title,text]) => <div><strong>{title}</strong><span>{text}</span></div>)}</div>

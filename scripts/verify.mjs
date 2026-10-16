@@ -45,6 +45,15 @@ try{
   await page.locator('img[src]').evaluateAll(els=>els.forEach(el=>el.loading='eager'));
   await expect.poll(()=>page.locator('img[src]').evaluateAll(els=>els.every(el=>el.complete&&el.naturalWidth>0))).toBe(true);
   expect(await page.locator('body').textContent()).not.toMatch(/[—–]/);
+  await expect(page.locator('.visual-caption')).toHaveCount(0);
+  const frames=await page.locator('.hero-visual,.workflow-image,.gallery-panel').evaluateAll(figures=>figures.map(figure=>{
+   const image=figure.querySelector('img'),link=image.closest('a'),caption=figure.querySelector('figcaption');
+   const plain=el=>{const s=getComputedStyle(el);return [s.paddingTop,s.paddingRight,s.paddingBottom,s.paddingLeft,s.borderTopWidth,s.borderRightWidth,s.borderBottomWidth,s.borderLeftWidth].every(v=>parseFloat(v)===0)&&s.boxShadow==='none'&&s.backgroundColor==='rgba(0, 0, 0, 0)'};
+   const visible=image.getBoundingClientRect().height>0;
+   return {plain:plain(figure)&&plain(link)&&plain(caption),captionOutside:!visible||caption.getBoundingClientRect().top-image.getBoundingClientRect().bottom>=12};
+  }));
+  expect(frames.every(frame=>frame.plain&&frame.captionOutside)).toBe(true);
+
   const preview = page.locator('.image-preview');
   const screenshot = page.locator('.hero-visual [data-image-preview]');
   const originalURL = page.url();
