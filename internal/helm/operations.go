@@ -279,7 +279,9 @@ func applyChart(ctx context.Context, a *action.Configuration, o Operation, ch ch
 	if dry {
 		u.DryRunStrategy = action.DryRunServer
 	}
-	return u.RunWithContext(ctx, o.Name, ch, vals)
+	upgradeCtx, stop := newUpgradeContext(ctx)
+	defer stop()
+	return u.RunWithContext(upgradeCtx, o.Name, ch, vals)
 }
 
 // Helm mutates chart values/dependencies while processing conditions. Each pass

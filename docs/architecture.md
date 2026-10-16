@@ -592,6 +592,11 @@ already admitted REST configuration, including proxy/authentication/exec shim;
 no second kubeconfig resolution can redirect a Helm operation. Transport and readiness-wait contexts
 bind legacy SDK requests to the UI operation and session lifetime. Mutation
 Retry-After responses do not trigger client-go retries.
+The upgrade SDK cancellation listener uses a detachable context bridge. Once
+RunWithContext returns, operation cleanup cannot turn a successful upgrade into
+a failed release through a late SDK cancellation listener. Active cancellation,
+deadlines and cancellation causes still propagate; transport and readiness waits
+retain the original bounded operation context.
 
 The UI-only `Helm` API is served through HTTP and Wails; it is absent from the
 agent method registry and additionally requires the UI context marker. UI kind

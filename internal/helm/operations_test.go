@@ -55,6 +55,9 @@ func TestLifecycleWithHelmSDK(t *testing.T) {
 	result, err = p.Run(t.Context(), "session1", plan.ID, f)
 	require.NoError(t, err)
 	require.Equal(t, "done", result.Outcome)
+	d, err = Get(a, "demo", 0)
+	require.NoError(t, err)
+	require.Equal(t, "deployed", d.Status, "successful upgrade must survive operation cleanup")
 	o.Action = "rollback"
 	o.Revision = 1
 	plan, err = p.Prepare(t.Context(), "session1", f, o, nil)
