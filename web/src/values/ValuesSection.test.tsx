@@ -9,6 +9,7 @@ import { initialState, useStore } from '../store'
 import { fakeClient, k8s } from '../test/fakeClient'
 import { resetCopies } from './copy'
 import { ValuesSection } from './ValuesSection'
+import { ValueDialog } from './ValueDialog'
 
 const MARKER = 'MARKER-5e1f-value'
 const subject: Ref = { provider: 'kubernetes', target: 'prod', scope: 'web', kind: 'secrets', name: 'db', uid: 'u1' }
@@ -571,4 +572,82 @@ describe('review findings (P10)', () => {
     expect(await within(rv).findByText(`the key is deleted (${MARKER.length} B)`)).toBeInTheDocument()
     expect(rv).not.toHaveTextContent('→ -1')
   })
+})
+
+describe('ConfigMap value editor',()=>{
+ it('offers only icon Edit/Delete, omits retention prose and automatically loads the selected value',async()=>{
+  const f=fakeClient([k8s('prod')]),ref={...subject,kind:'configmaps'}
+  f.client.getValues=vi.fn(async()=>({...listOf('7'),ref}))
+  f.client.revealValue=vi.fn(async()=>valueOf('password','7'))
+  render(<ValuesSection client={f.client} subject={ref} revision="7" kindTitle="ConfigMap" />)
+  const row=(await screen.findByText('password',{selector:'div'})).closest('li')!
+  expect(within(row).getAllByRole('button').map(button=>button.getAttribute('aria-label'))).toEqual(['Edit','Delete'])
+  expect(screen.queryByText(/A value is read only/)).toBeNull()
+  expect(f.client.revealValue).not.toHaveBeenCalled()
+  await userEvent.click(within(row).getByRole('button',{name:'Edit'}))
+  await waitFor(()=>expect(document.querySelector('.configmap-value-dialog .cm-content')).toHaveTextContent(MARKER))
+  expect(f.client.revealValue).toHaveBeenCalledWith(ref,'password')
+  expect(document.querySelector('.configmap-value-dialog textarea')).toBeNull()
+  expect(document.querySelector('.configmap-value-dialog .cm-gutters')).not.toBeNull()
+  expect(f.client.prepareValueEdit).not.toHaveBeenCalled()
+ })
+ it('does not accept a mismatched current version',async()=>{
+  const f=fakeClient([k8s('prod')]),ref={...subject,kind:'configmaps'},read=deferred<Value>()
+  f.client.getValues=vi.fn(async()=>({...listOf('7'),ref}))
+  f.client.revealValue=vi.fn(()=>read.promise)
+  render(<ValuesSection client={f.client} subject={ref} revision="7" kindTitle="ConfigMap" />)
+  const row=(await screen.findByText('password',{selector:'div'})).closest('li')!
+  await userEvent.click(within(row).getByRole('button',{name:'Edit'}))
+  await waitFor(()=>expect(f.client.revealValue).toHaveBeenCalledTimes(1))
+  expect(screen.getByRole('button',{name:/^Review/})).toBeDisabled()
+  await act(async()=>read.resolve(valueOf('password','8')))
+  expect(await screen.findByRole('alert')).toHaveTextContent('The value changed')
+  expect(document.querySelector('.configmap-value-dialog')).not.toHaveTextContent(MARKER)
+  expect(screen.getByRole('button',{name:/^Review/})).toBeDisabled()
+  await userEvent.click(screen.getByRole('button',{name:'Cancel'}))
+  expect(document.querySelector('.configmap-value-dialog')).toBeNull()
+ })
+})
+
+it('ConfigMap auto-load discards a value arriving after Cancel',async()=>{
+ const f=fakeClient([k8s('prod')]),ref={...subject,kind:'configmaps'},read=deferred<Value>()
+ f.client.getValues=vi.fn(async()=>({...listOf('7'),ref}))
+ f.client.revealValue=vi.fn(()=>read.promise)
+ render(<ValuesSection client={f.client} subject={ref} revision="7" kindTitle="ConfigMap" />)
+ const row=(await screen.findByText('password',{selector:'div'})).closest('li')!
+ await userEvent.click(within(row).getByRole('button',{name:'Edit'}))
+ await waitFor(()=>expect(f.client.revealValue).toHaveBeenCalledTimes(1))
+ expect(screen.getByRole('dialog')).toHaveFocus()
+ await userEvent.keyboard('{Escape}')
+ await act(async()=>read.resolve(valueOf('password','7')))
+ expect(document.querySelector('.configmap-value-dialog')).toBeNull()
+ expect(document.body).not.toHaveTextContent(MARKER)
+ expect(f.client.prepareValueEdit).not.toHaveBeenCalled()
+})
+
+it('ConfigMap Cancel before fresh keys arrive does not start a late value read',async()=>{
+ const f=fakeClient([k8s('prod')]),ref={...subject,kind:'configmaps'},fresh=deferred<ValueList>()
+ f.client.getValues=vi.fn().mockResolvedValueOnce({...listOf('7'),ref}).mockImplementation(()=>fresh.promise)
+ render(<ValuesSection client={f.client} subject={ref} revision="7" kindTitle="ConfigMap" />)
+ const row=(await screen.findByText('password',{selector:'div'})).closest('li')!
+ await userEvent.click(within(row).getByRole('button',{name:'Edit'}))
+ await userEvent.click(screen.getByRole('button',{name:'Cancel'}))
+ await act(async()=>fresh.resolve({...listOf('7'),ref}))
+ expect(f.client.revealValue).not.toHaveBeenCalled()
+ expect(document.querySelector('.configmap-value-dialog')).toBeNull()
+})
+
+for(const configMap of [true,false])it(`review exposes text only for ConfigMaps: ${configMap}`,async()=>{
+ const f=fakeClient([k8s('prod')]),ref={...subject,kind:configMap?'configmaps':'secrets'},back=vi.fn()
+ f.client.prepareValueEdit=vi.fn(async()=>({where:{provider:ref.provider,target:ref.target,targetTitle:'prod',ref,configHash:'h'},key:'password',op:'delete',before:3,after:-1,checked:true,changed:true,destructive:true,rights:{state:'allowed'},token:'plan',textDiff:{before:'old text',after:''}} as ValuePlan))
+ render(<ValueDialog client={f.client} subject={ref} list={listOf('7')} mode={{op:'delete',key:'password'}} kindTitle={configMap?'ConfigMap':'Secret'} onClose={back} onDone={vi.fn()} />)
+ await screen.findByRole('button',{name:'Apply'})
+ if(configMap){
+  expect(screen.getByRole('region',{name:'Changes'})).toHaveTextContent('old text')
+  await userEvent.click(screen.getByRole('button',{name:'Close'}));expect(back).toHaveBeenCalledOnce()
+ }else{
+  expect(screen.queryByRole('region',{name:'Changes'})).toBeNull()
+  expect(screen.queryByText('old text')).toBeNull()
+ }
+ expect(f.client.runValueEdit).not.toHaveBeenCalled()
 })

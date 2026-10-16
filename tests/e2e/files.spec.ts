@@ -237,6 +237,15 @@ test('tree resize, edge scrollbar and compact centered footer preserve the draft
  expect((await tree.boundingBox())!.width).toBeCloseTo(before.width+100,1)
  await separator.focus();await page.keyboard.press('ArrowLeft')
  expect((await tree.boundingBox())!.width).toBeCloseTo(before.width+80,1)
+ await tree.focus();await page.keyboard.press('Alt+Shift+ArrowRight')
+ expect((await tree.boundingBox())!.width).toBeCloseTo(before.width+100,1)
+ await expect(tree).toBeFocused()
+ await page.keyboard.press('Alt+Shift+ArrowLeft')
+ expect((await tree.boundingBox())!.width).toBeCloseTo(before.width+80,1)
+ await editor.click();await page.keyboard.press('Alt+Shift+ArrowLeft')
+ expect((await tree.boundingBox())!.width).toBeCloseTo(before.width+80,1)
+ await expect(editor).toContainText('draft: keep')
+
  const footer=dialog.locator('[data-file-footer]')
  const centered=await footer.evaluate(el=>{
   const rect=el.getBoundingClientRect(),border=parseFloat(getComputedStyle(el).borderTopWidth)

@@ -1,3 +1,4 @@
+import { LocationStatus } from '../components/LocationStatus'
 import { RefreshButton } from '../components/RefreshButton'
 import { useEffect, useRef, useState, type ComponentProps, type ReactNode } from 'react'
 import type { Client } from '../api/client'
@@ -37,6 +38,7 @@ export default function GraphWorkspace(props:Props) {
  if(requested!==null&&requested!==identity&&!retained)setRequested(null)
  const enabled=session>0&&connection>0&&(requested===identity||cached)
  if(!enabled&&!retained)return <section className="graph-workspace flex min-h-0 flex-1 flex-col" aria-label={t('graph.title')}>
+  <LocationStatus><span>{t('graph.title')}</span></LocationStatus>
   <header className="flex min-h-10 shrink-0 flex-wrap items-center gap-2 border-b border-line bg-panel px-3 py-1"><h2 className="mr-1 text-sm font-semibold">{t('graph.title')}</h2>{scopePicker}</header>
   <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-4 p-6 text-center">
    <p className="max-w-md text-sm text-fg-muted">{t('graph.loadHint')}</p>
@@ -122,13 +124,14 @@ function LoadedGraph({client,target,scope,scopePicker,drawer}:Props) {
    </div>
    {selected&&<ResourceDrawer {...drawer} subject={selected} onClose={()=>setSelected(null)}/>}
   </div>
-  <footer className="flex shrink-0 flex-wrap items-center gap-x-4 gap-y-1 border-t border-line px-3 py-2 text-xs text-fg-muted">
+  <LocationStatus>
    <span>{t('graph.counts',{nodes:state?.graph.nodes.length??0,edges:state?.graph.edges.length??0})}</span>
    <span id="graph-help">{routes?t('graph.declared'):t('graph.help')}</span>
    {state&&state.graph.discovery!=='ready'&&<span role="status">{t('graph.discovery')}</span>}
    {state?.graph.truncated&&<span role="status" className="text-warning">{t('graph.truncated')}</span>}
    <span className="ml-auto max-w-xs truncate" aria-live="polite">{hover?hover.kindTitle+' · '+(hover.ref.title??hover.ref.name):''}</span>
-  </footer>
   {!!state?.graph.problems.length&&<details className="border-t border-line px-3 py-1 text-xs text-warning"><summary>{t('graph.partial',{count:state.graph.problems.length})}</summary><ul className="max-h-24 overflow-y-auto">{state.graph.problems.map((p,i)=><li key={i}>{p.kind}{p.scope?' / '+p.scope:''} · {p.class}</li>)}</ul></details>}
+  </LocationStatus>
+
  </section>
 }

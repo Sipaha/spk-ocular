@@ -102,7 +102,8 @@ describe('Problems', () => {
     expect(await within(grid).findByText('crash')).toBeVisible()
     expect(screen.getByRole('note', { name: 'Not observed' })).toHaveTextContent('Nodes (access denied)')
     expect(screen.getByRole('note', { name: 'Not observed' })).not.toHaveTextContent('Warning events')
-    expect(screen.getByRole('status', { name: 'Loading…' })).toBeVisible()
+    expect(screen.queryByRole('status', { name: 'Loading…' })).not.toBeInTheDocument()
+    await waitFor(() => expect(screen.getByRole('status', { name: 'Loading…' })).toBeVisible(), { timeout: 3000 })
     expect(screen.getByRole('status', { name: 'Loading…' }).closest('header')).not.toBeNull()
   })
 
@@ -113,7 +114,10 @@ describe('Problems', () => {
       problem('pods#crash', 'pods', 'crash', 'error', 4, 5),
       problem('pods#new', 'pods', 'new-warn', 'warning', 3, 2),
     ])
-    expect(within(screen.getByRole('navigation', { name: 'resources' })).getByRole('button', { name: 'Problems' })).toHaveAttribute('aria-current', 'page')
+    const nav=screen.getByRole('navigation',{name:'resources'})
+    expect(within(nav).queryByRole('button',{name:'Problems'})).toBeNull()
+    fireEvent.click(within(nav).getByRole('button',{name:/^Health \(/}))
+    expect(within(nav).getByRole('button',{name:'Problems'})).toHaveAttribute('aria-current','page')
     await within(grid).findByText('crash')
     expect(names(grid)).toEqual(['crash', 'new-warn', 'old-warn', 'pod/a'])
   })

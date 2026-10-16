@@ -1,3 +1,4 @@
+import { LocationStatus } from '../components/LocationStatus'
 import { ActionIconButton } from '../components/ActionIconButton'
 import { ActionIcon, WindowActionIcon } from '../components/icons'
 import type { LogViewState, LogWindowBridge } from './windowBridge'
@@ -8,6 +9,7 @@ import type { LogInfo, LogQuery, Ref } from '../api/types'
 import { Select as AppSelect, type SelectOption } from '../components/Select'
 import { classLabel, messageText, t, type MessageKey } from '../i18n'
 import { isShortcut } from '../keyboard'
+import { overlayOpen } from '../shortcuts'
 import { LogViewport } from './LogViewport'
 import { rowText, shortLabels, sourceColor, type RowOpts } from './row'
 import { downloadLogHistory } from './downloadHistory'
@@ -104,7 +106,8 @@ export default function LogViewer({ client, subject, active, bridge, initial, in
       query={query}
       bridge={bridge}
       initial={initial}
-      windowButton={onWindowAction && <ActionIconButton onClick={onWindowAction} label={t(bridge?.role === 'guest' ? 'logs.returnWindow' : 'logs.detachWindow')} description={t(bridge?.role === 'guest' ? 'logs.returnWindow' : 'logs.detachWindow')} ><WindowActionIcon returning={bridge?.role === 'guest'} className="h-4 w-4"/></ActionIconButton>}
+      onWindowAction={onWindowAction}
+      windowButton={onWindowAction && <ActionIconButton onClick={onWindowAction} label={t(bridge?.role === 'guest' ? 'logs.returnWindow' : 'logs.detachWindow')} description={`${t(bridge?.role === 'guest' ? 'logs.returnWindow' : 'logs.detachWindow')} (Alt+Shift+Enter)`} ><WindowActionIcon returning={bridge?.role === 'guest'} className="h-4 w-4"/></ActionIconButton>}
       toolbar={
         <>
           <Select
@@ -157,8 +160,8 @@ interface ViewState {
   setNote: (v: string | null) => void
 }
 
-function Stream({ client, subject, active, focusEpoch, query, toolbar, view, bridge, initial, windowButton }: { client: Client; subject: Ref; active: boolean; focusEpoch?: number; query: LogQuery; toolbar: ReactNode; view: ViewState; bridge?: LogWindowBridge; initial?: LogViewState
-  initialChannel?: string; windowButton?: ReactNode }) {
+function Stream({ client, subject, active, focusEpoch, query, toolbar, view, bridge, initial, windowButton, onWindowAction }: { client: Client; subject: Ref; active: boolean; focusEpoch?: number; query: LogQuery; toolbar: ReactNode; view: ViewState; bridge?: LogWindowBridge; initial?: LogViewState
+  initialChannel?: string; windowButton?: ReactNode; onWindowAction?: () => void }) {
   const { showTime, setShowTime, wrap, setWrap, follow, setFollow, resizing, selecting, setSelecting, note, setNote } = view
   const { win, sources, status, reopen, clear } = useLogStream({ client, ref: subject, query, paused: selecting || resizing, frozen: !follow, bridge })
   const f = useLogFilter(win.entries, { initial })
@@ -225,7 +228,13 @@ function Stream({ client, subject, active, focusEpoch, query, toolbar, view, bri
   }
 
   const onKeyDown = (e: React.KeyboardEvent) => {
-    if (!active || e.altKey) return
+    if (!active || e.defaultPrevented || e.nativeEvent.isComposing) return
+    if (e.key === 'Enter' && e.altKey && e.shiftKey && !e.ctrlKey && !e.metaKey && onWindowAction && !overlayOpen()) {
+      e.preventDefault(); e.stopPropagation()
+      if (!e.repeat) onWindowAction()
+      return
+    }
+    if (e.altKey) return
     const target = e.target as HTMLElement
     const inInput = target.tagName === 'INPUT' || target.tagName === 'SELECT' || target.tagName === 'TEXTAREA'
     const inSearch = target === searchRef.current
@@ -357,7 +366,7 @@ function Stream({ client, subject, active, focusEpoch, query, toolbar, view, bri
         selectAllRef={selectAllRef}
         onSelectingChange={setSelecting}
       />
-      <div className="log-status flex shrink-0 items-center gap-3 border-t border-line px-3 py-0.5 text-[12px] text-fg-subtle">
+      <LocationStatus active={active}>
         <span aria-label="line count">
           {f.filtered.length !== win.entries.length
             ? t('logs.linesOf', { count: f.filtered.length, total: win.entries.length })
@@ -374,7 +383,7 @@ function Stream({ client, subject, active, focusEpoch, query, toolbar, view, bri
         )}
         {downloading&&<><span role="status" className="min-w-0 truncate" title={t('logs.historyReading',{lines:downloadProgress.lines,bytes:downloadProgress.bytes})}>{t('logs.historyReading',{lines:downloadProgress.lines,bytes:downloadProgress.bytes})}</span><ActionIconButton label={t('logs.historyCancel')} description={t('logs.historyCancel')} onClick={()=>downloadController.current?.abort()}><CloseIcon className="h-4 w-4"/></ActionIconButton></>}
         {note&&!downloading&&<span role="status" className="min-w-0 truncate" title={note}>{note}</span>}
-      </div>
+      </LocationStatus>
     </div>
   )
 }

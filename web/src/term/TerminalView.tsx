@@ -13,6 +13,7 @@ import { formatArgv } from './argv'
 import { copyText, readText } from './clipboard'
 import { PasteTooLargeError, TermConnection, wsBase, type TermEnd, type TermPhase } from './protocol'
 import { errorDetail } from '../errors'
+import { clearDeliveredInput } from './inputResidue'
 
 // xterm needs resolved colours, so read the same tokens as the rest of the
 // interface when mounting, after the stylesheet has loaded.
@@ -165,6 +166,7 @@ export default function TerminalView({ client, tab, active, mode }: Props) {
     const fit = new FitAddon()
     term.loadAddon(fit)
     term.open(host)
+    const clearInput = term.textarea ? clearDeliveredInput(term.textarea, () => !!term.options.screenReaderMode) : () => {}
     termRef.current = term
     fitRef.current = fit
     if (host.clientWidth > 0 && host.clientHeight > 0) fit.fit()
@@ -254,6 +256,7 @@ export default function TerminalView({ client, tab, active, mode }: Props) {
       connRef.current = null
       if (idRef.current) void client.forgetTerminal(idRef.current).catch(() => {})
       idRef.current = null
+      clearInput()
       term.dispose()
       termRef.current = null
     }

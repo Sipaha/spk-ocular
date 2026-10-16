@@ -1,4 +1,6 @@
+import { LocationStatus } from './LocationStatus'
 import { RefreshButton } from './RefreshButton'
+import { ResourceGroupIcon } from './ResourceGroupIcon'
 import { lazy, Suspense } from 'react'
 const RbacWorkspace = lazy(() => import('../rbac/RbacWorkspace'))
 const SecurityWorkspace = lazy(() => import('../security/SecurityWorkspace'))
@@ -314,7 +316,7 @@ export function Workspace({ client, hub, target, onFavorite, onMoveFavorite, onN
     <ViewConnectionContext value={`${target.connection?.id ?? 0}:${catalog.view?.session ?? 0}`}>
     <div className="flex min-h-0 flex-1">
       <div className="relative shrink-0" style={{ width: navigationWidth, maxWidth: '25vw' }}>
-      <nav aria-label="resources" data-area="nav" onKeyDown={onNavKey} className="resource-nav">
+      <nav aria-label="resources" tabIndex={-1} data-area="nav" onKeyDown={onNavKey} className="resource-nav">
         <label className="resource-nav-filter field-shell">
           <SearchIcon className="h-3.5 w-3.5 shrink-0 text-fg-subtle" />
           <input value={resourceFilter} onChange={(e) => useStore.setState({ resourceFilter: e.target.value })}
@@ -332,10 +334,10 @@ export function Workspace({ client, hub, target, onFavorite, onMoveFavorite, onN
             }} />
         </label>
         <div className="resource-nav-list min-h-0 flex-1 overflow-y-auto pb-3" data-resource-nav-list>
-        <section className="mt-3" aria-label={t('nav.favorites')}>
-          <NavSectionHeading label={t('nav.favorites')} open={favoritesOpen} count={visibleFavorites.length}
+        <section className="resource-nav-section" aria-label={t('nav.favorites')}>
+          <NavSectionHeading group="Favorites" label={t('nav.favorites')} open={favoritesOpen} count={visibleFavorites.length}
             disabled={!navSectionsReady || searching} onToggle={(o) => onNavSection(favoritesKey, o)} />
-          {visibleFavorites.map((k, i) => (favoritesOpen || kind === k.id) && (
+          {visibleFavorites.map((k, i) => favoritesOpen && (
             <NavItem key={k.id} active={kind === k.id} onClick={() => setKind(k.id)} label={kindLabel(target.provider, k)} hint={k.subgroup}
               favorite onFavorite={() => toggleFavorite(k.id)} favoriteDisabled={!favoritesReady}
               moveUp={i > 0 ? () => onMoveFavorite(target.provider, k.id, visibleFavorites[i - 1].id) : undefined}
@@ -372,13 +374,10 @@ export function Workspace({ client, hub, target, onFavorite, onMoveFavorite, onN
         {resourceFilter.trim() && !matchingKinds.length && <p role="status" className="px-2 py-2 text-fg-subtle">{t('nav.noMatches')}</p>}
         {groups.map((g) => {
           const open = sectionOpen(groupKey(g.group), g.group === 'Workloads')
-          const activeIn = g.items.flatMap((it) => ('kind' in it ? [it.kind] : it.kinds)).find((k) => k.id === kind)
           return (
-            <section key={g.group} className="mt-3" aria-label={groupLabel(target.provider, g.group)}>
-              <NavSectionHeading label={groupLabel(target.provider, g.group)} open={open} count={g.count}
+            <section key={g.group} className="resource-nav-section" aria-label={groupLabel(target.provider, g.group)}>
+              <NavSectionHeading group={g.group} label={groupLabel(target.provider, g.group)} open={open} count={g.count}
                 disabled={!navSectionsReady || searching} onToggle={(o) => onNavSection(groupKey(g.group), o)} />
-              {!open && activeIn && !favorites.has(activeIn.id) && <NavItem active onClick={() => setKind(activeIn.id)} label={kindLabel(target.provider, activeIn)} hint={activeIn.subgroup}
-                favorite={false} onFavorite={() => toggleFavorite(activeIn.id)} favoriteDisabled={!favoritesReady} />}
               {open &&
                 g.items.map((it) =>
                   'kind' in it ? (
@@ -417,7 +416,7 @@ export function Workspace({ client, hub, target, onFavorite, onMoveFavorite, onN
       </nav>
       <PanelResize label={t('panels.navigation')} value={navigationWidth} min={140} max={() => Math.min(360, window.innerWidth * 0.25)} onDone={(navigation) => usePanelWidths.setState({ navigation })} />
       </div>
-      <main className="flex min-w-0 flex-1 flex-col overflow-hidden">
+      <main className="flex min-h-0 min-w-0 flex-1 flex-col overflow-clip">
         <div className="flex min-h-0 flex-1 flex-col">
         {!ui || waiting || (!kinds && !kindsError) ? (
           <LoadingState />
@@ -446,7 +445,7 @@ export function Workspace({ client, hub, target, onFavorite, onMoveFavorite, onN
             drawer={{client,hub,target,hasLogs,onLogs:openLogs,hasExec,onTerminal:openTerminal,hasForward,actionsOf,onAction:openAction,eventsKindOf,editableOf,valuesOf,kindTitleOf}}
           /></Suspense>
         ) : page.kind.workspace?.startsWith('helm-') ? (
-          <HelmWorkspace key={page.key} client={client} target={target} scope={scope} onResource={ref => paletteActs.current?.openObject(ref)} onSection={tab => setKind(`ocular.helm.${tab}`)} initialTab={page.kind.workspace === 'helm-charts' ? 'charts' : 'releases'} scopePicker={<WorkspaceScopePicker client={client} hub={hub} target={target} scope={scope} scopes={scopes} scopeMenu={scopeMenu} onScope={setScope} />} />
+          <><LocationStatus><span>{kindLabel(target.provider, page.kind)}</span></LocationStatus><HelmWorkspace key={page.key} client={client} target={target} scope={scope} onResource={ref => paletteActs.current?.openObject(ref)} onSection={tab => setKind(`ocular.helm.${tab}`)} initialTab={page.kind.workspace === 'helm-charts' ? 'charts' : 'releases'} scopePicker={<WorkspaceScopePicker client={client} hub={hub} target={target} scope={scope} scopes={scopes} scopeMenu={scopeMenu} onScope={setScope} />} /></>
         ) : (
           <ResourcePage
             key={page.key}
@@ -572,10 +571,14 @@ export function navGroups(kinds: KindDescriptor[]): NavGroup[] {
   return out
 }
 
+function NavChevron({ open, section = false }: { open: boolean; section?: boolean }) {
+  return <svg data-nav-chevron aria-hidden viewBox="0 0 8 8" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className={['h-[9px] w-[9px] mr-px shrink-0 relative transition-transform', section ? 'left-[-1px]' : 'left-[-2px]', open ? 'rotate-90' : ''].join(' ')}><path d="m2 1 4 3-4 3"/></svg>
+}
+
 /** Every section, including Favorites, has the same keyboard/mouse control.
  * Physical icon/gap pixels match child text insets despite the 17 px root rem. */
-function NavSectionHeading({ label, open, count, disabled, onToggle }: {
-  label: string; open: boolean; count: number; disabled: boolean; onToggle: (open: boolean) => void
+function NavSectionHeading({ group, label, open, count, disabled, onToggle }: {
+  group: string; label: string; open: boolean; count: number; disabled: boolean; onToggle: (open: boolean) => void
 }) {
   return <button type="button" data-nav-item tabIndex={-1} aria-label={`${label} (${count})`} aria-expanded={open} aria-disabled={disabled}
     onClick={() => { if (!disabled) onToggle(!open) }}
@@ -585,10 +588,11 @@ function NavSectionHeading({ label, open, count, disabled, onToggle }: {
         onToggle(!open)
       }
     }}
-    className="nav-group-heading w-full items-center gap-[2px] rounded-md text-left hover:text-fg">
-    <svg aria-hidden viewBox="0 0 8 8" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className={['h-[8px] w-[8px] shrink-0 relative left-[-1px] transition-transform',open?'rotate-90':''].join(' ')}><path d="m2 1 4 3-4 3"/></svg>
+    className="nav-group-heading w-full items-center gap-0 rounded-md text-left hover:text-fg">
+    <NavChevron open={open} section />
+    <ResourceGroupIcon group={group} />
     <span className="min-w-0 flex-1 truncate">{label}</span>
-    <span className="font-normal" title={t('nav.kinds', { count })}>{count}</span>
+    <span className="nav-trailing font-normal" title={t('nav.kinds', { count })}>{count}</span>
   </button>
 }
 
@@ -630,13 +634,13 @@ function NavItem({ active, onClick, label, hint, nested, favorite, onFavorite, f
       data-area-focus={active ? '' : undefined}
       aria-current={active ? 'page' : undefined}
       title={hint ? `${label} · ${hint}` : label}
-      className={['nav-item block w-full truncate rounded-md py-1 text-left', nested ? 'pr-2 pl-[22px]' : 'pr-2 pl-[10px]', active ? 'text-fg' : 'text-fg-muted hover:bg-hover hover:text-fg', onFavorite ? 'pr-8' : ''].join(' ')}
+      className={['nav-item block w-full truncate rounded-md py-1 text-left', nested ? 'pr-2 pl-[42px]' : 'pr-2 pl-[30px]', active ? 'text-fg' : 'text-fg-muted hover:bg-hover hover:text-fg', onFavorite ? 'pr-8' : ''].join(' ')}
     >
       {label}
     </button>
     {onFavorite && <button type="button" tabIndex={-1} aria-label={favoriteLabel} title={favoriteLabel} aria-pressed={!!favorite}
       disabled={favoriteDisabled} onClick={onFavorite}
-      className={`nav-favorite absolute right-1 top-1/2 -translate-y-1/2 rounded p-1 hover:bg-hover disabled:opacity-30 ${favorite ? 'text-accent' : 'text-fg-subtle opacity-0 group-hover/nav:opacity-100 group-focus-within/nav:opacity-100'}`}>
+      className={`nav-favorite absolute top-1/2 -translate-y-1/2 rounded hover:bg-hover disabled:opacity-30 ${favorite ? 'text-fg-muted' : 'text-fg-subtle opacity-0 group-hover/nav:opacity-100 group-focus-within/nav:opacity-100'}`}>
       <StarIcon className="h-3.5 w-3.5" filled={favorite} />
     </button>}
     {menu && onFavorite && <Menu label={t('nav.resourceMenu')} at={menu} onClose={() => setMenu(null)}
@@ -649,8 +653,7 @@ function NavItem({ active, onClick, label, hint, nested, favorite, onFavorite, f
   )
 }
 
-/** A collapsible level of the navigation; collapsed, it still shows the
- * open kind (so the page's place is never hidden). → opens, ← closes. */
+/** A collapsed navigation level hides all its children. → opens, ← closes. */
 function NavSubgroup(props: {
   label: string
   kinds: KindDescriptor[]
@@ -664,7 +667,7 @@ function NavSubgroup(props: {
   favoritesReady: boolean
 }) {
   const { label, kinds, open, disabled, onToggle, active, onPick, favorites, onFavorite, favoritesReady } = props
-  const shown = open ? kinds : kinds.filter((k) => k.id === active)
+  const shown = open ? kinds : []
   return (
     <div role="group" aria-label={label}>
       <button
@@ -682,7 +685,8 @@ function NavSubgroup(props: {
         }}
         className="flex w-full items-center gap-[4px] rounded-md px-[8px] py-1 text-left text-fg-muted hover:bg-hover hover:text-fg"
       >
-        <svg aria-hidden viewBox="0 0 8 8" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" className={['h-[10px] w-[10px] shrink-0 relative left-[-1px] transition-transform',open?'rotate-90':''].join(' ')}><path d="m2 1 4 3-4 3"/></svg>
+        <NavChevron open={open} />
+        <ResourceGroupIcon group={label} />
         <span className="min-w-0 flex-1 truncate">{label}</span>
         <span className="shrink-0 text-[12px] text-fg-subtle">{kinds.length}</span>
       </button>
@@ -851,12 +855,12 @@ function ResourcePage(props: {
 
   return (
     <>
-      <header className="resource-toolbar">
+      <LocationStatus><span>{kindLabel(target.provider, kind)}</span><span>{view.cancelled ? '—' : view.status.state === 'loading' && !view.rows.length ? '…' : view.rows.length}</span></LocationStatus>
+      <header className="resource-toolbar resource-list-toolbar">
         <h1 className="sr-only">{kindLabel(target.provider, kind)}</h1>
         <span className="sr-only" aria-label="count">
           {view.cancelled ? '—' : view.status.state === 'loading' && !view.rows.length ? '…' : view.rows.length}
         </span>
-        {!initialLoading && view.status.state === 'loading' && <ListLoading view={view} inline />}
         {marked.size > 0 && (
           <div role="toolbar" aria-label={t('bulk.bar')} className="flex shrink-0 items-center gap-2 whitespace-nowrap rounded-md bg-marked px-2 py-0.5 text-xs">
             <span>{t('bulk.marked', { n: marked.size, total: shownRows.length })}</span>
@@ -894,7 +898,10 @@ function ResourcePage(props: {
             {t('agents.scopeAccess')}
           </button>
         )}
-        {view.resync && !view.cancelled && <ResyncButton client={client} viewId={view.viewId} />}
+        <div className="resource-refresh-progress">
+          {!initialLoading && view.status.state === 'loading' && <ListLoading view={view} inline />}
+        </div>
+        {view.resync && !view.cancelled && <ResyncButton client={client} viewId={view.viewId} loading={view.status.state === 'loading'} />}
         <label className="resource-filter field-shell">
           <SearchIcon className="h-3.5 w-3.5 text-fg-subtle" />
           <input
@@ -992,10 +999,10 @@ function ResourcePage(props: {
 }
 
 /** F5 refreshes the complete observation while preserving the current rows. */
-function ResyncButton({ client, viewId, shortcut = true }: { client: Client; viewId: string | null; shortcut?: boolean }) {
+function ResyncButton({ client, viewId, shortcut = true, loading = false }: { client: Client; viewId: string | null; shortcut?: boolean; loading?: boolean }) {
   const [busy, setBusy] = useState(false)
   const pending = useRef(false)
-  return <RefreshButton data-resync={shortcut || undefined} busy={busy} disabled={!viewId} description={t(shortcut ? 'view.resyncHint' : 'graph.refresh')} onClick={() => {
+  return <RefreshButton data-resync={shortcut || undefined} busy={busy || loading} disabled={!viewId} description={t(shortcut ? 'view.resyncHint' : 'graph.refresh')} onClick={() => {
     if (!viewId || pending.current) return
     pending.current = true; setBusy(true)
     client.resyncView(viewId).catch(e => {

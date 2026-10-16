@@ -60,8 +60,15 @@ class PlateauTests(unittest.TestCase):
         self.assertEqual(result["status"], "ACCEPTED")
 
     def test_rebound_failure_cannot_be_hidden_by_later_plateau(self):
-        points = series(20, lambda t: 120 if t < 60 else 131)
+        points = series(20, lambda t: 120 if t < 60 else 136)
         self.assertEqual(self.evaluate(points)["status"], "NOT ACCEPTED")
+
+    def test_owner_selected_rebound_limit_is_inclusive(self):
+        points = series(20, lambda t: 120 if t < 60 else 135)
+        self.assertEqual(self.evaluate(points)["status"], "ACCEPTED")
+        self.assertEqual(SOAK.after_load(points, 200, rebound_limit=10)["status"], "NOT ACCEPTED")
+        over = series(20, lambda t: 120 if t < 60 else 135.001)
+        self.assertEqual(self.evaluate(over)["status"], "NOT ACCEPTED")
 
     def test_net_growth_failure_cannot_be_hidden_by_restart(self):
         points = series(20, lambda t: 120 if t < 300 else 126)

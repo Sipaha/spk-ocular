@@ -92,6 +92,8 @@ test('first opening retains known table headers while rows and coverage load', a
   const readsBeforeResync = problemsReads
   await resync()
   await expect.poll(() => problemsReads).toBeGreaterThan(readsBeforeResync)
+  await expect(page.locator('.resource-toolbar [data-resync]')).toHaveAttribute('aria-busy','true')
+  await page.setViewportSize({width:1920,height:900})
   await expect(page.locator('.resource-toolbar').getByRole('status', { name: 'Loading…', exact: true })).toBeVisible()
   await expect(page.getByRole('note', { name: 'Not observed' })).toHaveCount(0)
   await page.screenshot({ path: testInfo.outputPath('problems-partial-loading.png') })

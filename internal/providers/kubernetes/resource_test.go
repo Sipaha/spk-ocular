@@ -389,3 +389,40 @@ func TestAnOwnerOfAKindNotShownIsNotOpenable(t *testing.T) {
 	require.NoError(t, err)
 	assert.Contains(t, r.Relations, core.Relation{Type: "owner", Ref: core.Ref{Provider: ProviderID, Target: "t", Scope: "web", Kind: "job", Name: "backup", UID: "uid-j"}, Inert: true})
 }
+
+func TestIngressRelationsKeepEachDeclaredPathAndDefaultBackend(t *testing.T) {
+	backend := func(name string) map[string]any {
+		return map[string]any{"service": map[string]any{"name": name, "port": map[string]any{"number": int64(80)}}}
+	}
+	path := func(p, typ, name string) map[string]any {
+		return map[string]any{"path": p, "pathType": typ, "backend": backend(name)}
+	}
+	ingress := mk("networking.k8s.io/v1", "Ingress", "web", "routes", "ingress-uid", map[string]any{"spec": map[string]any{
+		"defaultBackend": backend("shared"),
+		"rules": []any{
+			map[string]any{"host": "example.test", "http": map[string]any{"paths": []any{path("/", "Prefix", "shared"), path("/api", "Exact", "shared"), path("/admin", "Prefix", "other")}}},
+			map[string]any{"host": "other.test", "http": map[string]any{"paths": []any{path("/api", "ImplementationSpecific", "shared")}}},
+			map[string]any{"http": map[string]any{"paths": []any{path("", "ImplementationSpecific", "shared"), path("/ignored", "Prefix", "")}}},
+		},
+	}})
+	s := newSession("t", "h", fullFake(ingress), false)
+	defer s.Close()
+	r, err := s.Get(context.Background(), core.Ref{Kind: ingressesKind.desc.ID, Scope: "web", Name: "routes", UID: "ingress-uid"})
+	require.NoError(t, err)
+	require.Len(t, r.Relations, 6)
+	want := []core.IngressRoute{
+		{DefaultBackend: true},
+		{Host: "example.test", Path: "/", PathType: "Prefix"},
+		{Host: "example.test", Path: "/api", PathType: "Exact"},
+		{Host: "example.test", Path: "/admin", PathType: "Prefix"},
+		{Host: "other.test", Path: "/api", PathType: "ImplementationSpecific"},
+		{PathType: "ImplementationSpecific"},
+	}
+	for i, route := range want {
+		name := "shared"
+		if i == 3 {
+			name = "other"
+		}
+		assert.Equal(t, core.Relation{Type: "routes-to", Ref: core.Ref{Provider: ProviderID, Target: "t", Kind: "services", Scope: "web", Name: name}, Route: &route}, r.Relations[i])
+	}
+}

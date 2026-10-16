@@ -183,8 +183,8 @@ func (s *Service) openValueEdit(ctx context.Context, req ValueEditRequest, grant
 	return provider.ValueEditRequest{Ref: req.Ref, Base: base, Key: req.Key, Op: req.Op, Value: value}, rev, vh, nil
 }
 
-// PrepareValueEdit reviews a key's change (nothing changes, no value in
-// the answer); a plan that can be written carries a signed token.
+// PrepareValueEdit reviews a key's change without writing. Only ConfigMap
+// text plans may contain values; writable plans carry a signed token.
 func (s *Service) PrepareValueEdit(ctx context.Context, req ValueEditRequest) (core.ValuePlan, error) {
 	preq, rev, vh, err := s.openValueEdit(ctx, req, "")
 	if err != nil {
@@ -196,6 +196,9 @@ func (s *Service) PrepareValueEdit(ctx context.Context, req ValueEditRequest) (c
 	}
 	plan.Where.Provider, plan.Where.Target = req.Ref.Provider, req.Ref.Target
 	plan.Where = s.live(plan.Where)
+	if req.Ref.Kind != "configmaps" {
+		plan.TextDiff = nil
+	}
 	plan.Token = ""
 	if grant != nil {
 		if plan.Token, err = s.signEdit(valueGrantKind, req.Ref.Provider, req.Ref.Target, rev, grant); err != nil {

@@ -20,6 +20,16 @@ key; the actual selected connection retains its left accent. There is no
 redundant check mark. Provider
 headings use muted text rather than competing with connection names.
 
+The selected connection in the header sizes to its content without a minimum
+width. Its shared identity surface starts 4 px from the left window edge at all
+window widths; the icon starts at 12 px, aligned with the resource search field.
+Its icon and name share one hover background; a name tooltip appears
+only when the name is clipped. The shared hover background has equal 8 px
+outer insets before the icon and after the chevron. The icon still opens
+connection appearance. The icon-to-name and name-to-state gaps are also 8 px.
+Keyboard Tab focus outlines the same complete identity surface, including the
+icon; the appearance and connection-picker buttons retain their separate actions.
+
 Click a connection icon in the header or picker to change its appearance without
 selecting or connecting it. Clicking a row icon keeps the picker open beneath the
 appearance dialog, preserving its search and scroll. Save or Cancel returns focus
@@ -65,14 +75,75 @@ Overflow is measured only for that cell before showing the hint; resizing does
 not scan the table or install per-cell observers. The resource toolbar omits the
 repeated section title and count; the selected navigation entry identifies the
 section. Its heading and count remain available to assistive technology.
-Resource navigation disclosure chevrons sit 1 px left of their layout position;
-labels and click targets retain their alignment.
+Resource navigation section headings have equal 8 px top/bottom padding.
+Known section names use matching stroke icons, including Favorites, Workloads,
+Network, Config, Storage, Cluster, Access Control, Health, Helm and Docker groups.
+Unknown groups and API subgroups use a neutral layers icon. Labels and child rows
+share an additional 20 px icon lane; disclosure glyph positions and the protected
+trailing count/star lane are retained.
+Resource entries and section content sit 2 px to the right of the navigation
+inset; disclosure chevrons retain their independent position. Counters and
+favorite stars share a centered 24 px trailing column flush with the list content
+edge, while a separate lane of at least 24 px protects them from GTK overlay-scrollbar hits. Selected
+favorite stars use a muted accent, with stronger hover/focus feedback. The
+selected resource has its own blue-toned background and left accent; hovering
+another resource uses the neutral hover background.
+Section and subgroup disclosure chevrons share the same 9 px icon in a 10 px
+layout slot. Section chevrons stay inside the clipped list edge; subgroups keep
+their 1 px left offset. Labels and click targets retain their alignment.
+
+Object Events places its Refresh button at the right edge of the section heading,
+vertically centered with its title and count. Delayed refresh details appear to
+its left only when the available space fits them. Its grid uses the compact detail
+table surface, header and row separators, with sorting and resizable columns.
+Short lists fit their rows; longer lists scroll within a seven-row viewport.
+
+The application has one bottom status row. Its left side shows the active
+location status: resource kind/count, Graph, Events timeline, Security and RBAC
+coverage, or the visible log tab's line count, stream state and
+recovery/export controls. Inactive log tabs do not publish status there. General
+application information (tunnels, agents, version and runtime mode) stays on the
+right. Detached log windows keep their own status row.
+
+With focus inside a resizable panel, **Alt+Shift+Left/Right** moves its vertical
+boundary and **Alt+Shift+Up/Down** moves its horizontal boundary in 20 px steps.
+This includes navigation, resource/Helm details, the bottom log/terminal panel
+and the file tree inside its dialog. The nearest matching boundary owns the key;
+limits and saved sizes are the same as pointer resizing. Focus stays in place,
+key repeat is supported, and a modal dialog cannot resize a panel behind it.
+Other arrow combinations retain their text/editor/terminal behavior.
+
+With focus in the active log viewer, **Alt+Shift+Enter** detaches it into a
+separate window. The same shortcut in that window returns it to the bottom
+panel. It uses the same single-stream handoff as the window button; key repeat
+does not open additional windows. Editors, terminals and open modal dialogs
+retain their own Enter shortcuts.
+
+Detached logs open at the available screen width and 90% of its working height,
+centered on the main window's monitor in desktop mode (or the primary monitor
+if identification fails). Browser popups use the
+current screen's available CSS-pixel area; browser window-placement restrictions
+may adjust it. Native dimensions use Wails device-independent units, without
+applying the OS scale twice. If no screen area is available, the fallback is
+1100 × 750 logical pixels. Existing detached windows keep their user-chosen size
+when brought forward again.
 
 ## Start and connect
 
 The desktop application opens one window and exits when that window closes.
 It has no tray process. Choose a Kubernetes context or Docker connection in the
-header connection switcher, then press **Connect** in the resource-list area. Selecting a target
+header connection switcher, then press **Connect** in the main connection-status
+area on the right. While disconnected, two independent schematic illustrations
+frame the interface: a lighthouse in the navigation panel and mountains with a
+lake in the main panel. Their transparent backgrounds retain the same panel base
+colors used after connection. The slightly enlarged lighthouse stays at the
+lower-left edge at a fixed size; resizing the panel clips the artwork rather than
+scaling it. Its beam extends to the panel edge. The inactive preview fits its available height without a scroll container,
+including when a docked log panel reduces that height. The preview does not load a
+resource catalogue or promise API availability. Connect/Cancel lives beside the
+status, progress and errors. The landscape also appears before selecting a
+connection, and disappears when a working resource workspace is shown.
+See [illustration provenance](illustrations.md). Selecting a target
 or restoring the previous selection never starts a connection. Discovery reads
 local configuration without contacting servers. Explicit connections remain
 open while switching targets, reading Helm charts, editing values, or minimizing
@@ -330,7 +401,10 @@ automatically change your selection. The current admission budgets are described
 in [Architecture](architecture.md#live-tables-and-discovery).
 
 Live updates normally keep lists current. Use the circular-arrow icon to force
-an update; it spins until that update finishes. F5 refreshes the resource view;
+an update; it spins until that update finishes. The resource filter stays at the right edge, with Refresh immediately to its left.
+Refresh details and Cancel appear to its left after two seconds, only when the
+toolbar has room; the button spins immediately without moving other controls.
+F5 refreshes the resource view;
 F5 in navigation refreshes the resource-kind catalog. The namespace popup has
 the same action beside its search field and preserves the query and selected
 names. During a live-table refresh, old rows remain until the new snapshot is
@@ -339,8 +413,10 @@ them and asks for a narrower scope. Refresh preserves filters, sorting and held
 editor drafts.
 
 While a resource list or an object's Events list loads, **Cancel** stops that
-observation. The loader shows total elapsed time and consumed inventory response
-bytes when the provider can measure them; an em dash means unavailable, not zero.
+observation. Initial loading shows only its simple loader for the first two
+seconds. Elapsed time, consumed inventory response bytes and Cancel appear
+only if loading continues beyond that delay. Bytes are shown when the provider
+can measure them; an em dash means unavailable, not zero.
 After cancellation, **Request cancelled** and **Retry** replace the list. The
 placeholder survives navigation, warm target switching and frontend reloads
 until an explicit Retry or a new connection. Cancelling one observation does not
@@ -365,8 +441,8 @@ All resource sections, including Favorites and API subgroups, can be collapsed.
 Click a heading or use Enter/Space and Left/Right. Their expansion state is
 shared globally and saved in the database. With no saved choice, only Workloads
 is expanded; Favorites and all other sections start collapsed. Saved choices
-continue to take precedence. The current kind remains visible
-inside a collapsed section. Search temporarily expands matching sections and
+continue to take precedence. Collapsing hides every child, including the current
+kind, while preserving the open page and its selection for the next expansion. Search temporarily expands matching sections and
 restores the saved state when cleared.
 Resource navigation rows use the standard arrow cursor, including draggable favorites.
 Section chevrons are centered SVGs rather than font glyphs; direct child labels
@@ -404,7 +480,16 @@ names, for example `green cr gamma`. The selected namespace changes only after
 choosing a result, atomically with its view/object and behind the unsaved-edit
 guard. Existing type-first queries and colon commands keep their meaning; the
 name part can contain several words. Keyboard-layout recovery preserves the
-explicit namespace/type prefix. Ambiguous types offer a choice without fan-out.
+explicit namespace/type prefix. When the namespace catalog is available, an
+exact name wins; a unique substring resolves to the full name. Several matching
+names offer explicit choices without starting resource reads. Choosing one with
+arrows/Enter or a click reads only that namespace, keeps the palette open while
+loading, and opens a single matching object with its exact UID. Multiple object
+matches remain in the palette for selection. Only a search with no
+matching object falls back to its filtered resource table. An absent namespace
+cannot open a nonexistent namespace. If listing is unavailable, an explicitly
+typed name remains usable for restricted connections. Ambiguous types also
+offer a choice without fan-out.
 
 Opening an object selects its kind, opens details, and selects/reveals its exact
 row when available. The revealed row's table receives keyboard focus, so `L`
@@ -449,7 +534,13 @@ panel commands. Plain text, IME composition and AltGr retain their input behavio
 ## Details and changes
 
 The detail header shows the object name before its less prominent kind.
+Inspector section headings use 14 px semibold sentence case. Relation names and
+primary values use 14 px text; table labels and resource types use 13 px with
+stronger secondary contrast. Empty Events states use the normal body size.
 Details include facts, YAML, relationships, and the tools supported by that kind.
+Ingress **Routes to** lists each declared Service route with its path, host and
+path type, retaining multiple paths to the same Service. The default backend has
+no HTTP path and is shown as `—` with `defaultBackend`, rather than as `/`.
 Kubernetes supports reviewed edits and actions including restart, scale, delete,
 Deployment rollout actions, CronJob actions, node operations, and pod debugging.
 Availability depends on kind, permissions, and current state.
@@ -465,6 +556,25 @@ Secret YAML uses `<N bytes>` placeholders. Its editor permits metadata changes
 only; placeholders cannot be written into Secret data. Real values are read or
 changed explicitly in **Details → Values → Change**. Value reads are not stored
 in SQLite or included in recent-object records.
+
+ConfigMaps also have **Details → Values**, listing keys from `data` and
+`binaryData` with their decoded byte sizes. Each row has two icon actions, Edit
+and Delete. Edit reads the current value automatically into a large CodeMirror
+modal with line numbers, filename-based syntax, search and undo/redo. Binary
+values stay base64. Loading/version errors cannot silently become an empty edit.
+Writes still require review without editing the full object YAML. Text reviews
+show a line diff from the freshly read value to the expected dry-run result
+(or the local result when dry run is unavailable), including a changed final LF.
+Binary/CRLF values retain the byte-size review. The top-right close button
+returns from review to the draft; closing a changed draft asks before discarding. Existing
+`binaryData` keys retain their binary storage even when their bytes are text;
+new non-UTF-8 values use `binaryData`. Empty values and CRLF/binary bytes are
+preserved. Adding, changing or deleting one key leaves the other keys intact.
+Immutable ConfigMaps refuse changes. UID, namespace, connection configuration
+and the reviewed resource version remain write preconditions; a concurrent
+change requires a new review. The review includes observed Pod consumers and
+warns that environment variables require restart, mounted volumes update with a
+delay and subPath mounts do not update.
 
 Checkboxes mark rows for bulk actions; the cursor controls details and keyboard
 shortcuts. Ctrl-click toggles marks without opening details, Shift selects a
@@ -507,6 +617,14 @@ revisionHistoryLimit. This section adds no rollback control.
 
 ## Logs, terminals, and tunnels
 
+Right-click a bottom-panel tab (logs, terminal or pinned properties), or press
+Shift+F10 on its title, for Close, Close all, Close all to the left and Close all
+to the right. Side actions follow visible tab order and are disabled when that
+side is empty. The clicked tab stays open for side actions; unrelated active
+tabs retain selection. Closing a group ends its streams/terminals through the
+same cleanup as individual close buttons and removes closed pins from workspace
+continuity. Opening the menu alone does not activate or close a tab.
+
 Logs show all levels without severity toggle buttons or a default DEBUG filter.
 Opening or reactivating logs focuses the visible log viewport. `End` in that
 viewport jumps to the newest line and resumes Follow; text fields retain their
@@ -545,7 +663,10 @@ Terminal layout dragging fits and sends the final geometry on release, with
 identical resize messages suppressed; focus returns from the mouse separator.
 BusyBox ash can itself emit a new prompt line after a real SIGWINCH: this is shell
 output, not an Enter sent by the UI, and is preserved. Plain physical Cyrillic
-keys are sent once; IME composition and AltGr remain handled by xterm.
+keys are sent once; IME composition and AltGr remain handled by xterm. After
+input settles, already-delivered helper-field text is cleared outside active
+composition so a later IME replacement cannot replay it. Screen reader mode
+retains its announcement buffer.
 
 Terminal tabs keep their connection when you change the selected target. Closing
 a Kubernetes terminal sends a hang-up sequence before disconnecting. A connection

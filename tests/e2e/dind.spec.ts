@@ -55,7 +55,7 @@ test('standalone Docker containers have details and logs and stay outside projec
     await expect(drawer.getByRole('button', { name: /^Actions\b/ })).toBeVisible()
     await page.keyboard.press('l')
     const logs = page.locator('[role=tabpanel]:not([hidden])')
-    await expect(logs.getByLabel('stream state')).toHaveText('Live')
+    await expect(page.locator('.status-bar').getByLabel('stream state')).toHaveText('Live')
     await expect(logs).toContainText('standalone-ui-log')
     await page.screenshot({ path: join(scratchRoot, 'docker-standalone-browser.png') })
     await page.keyboard.press('Escape')
@@ -135,7 +135,7 @@ test('logs of a service: both replicas, stdout and stderr, live', async ({ page 
   await row(grid, 'logger').click()
   await page.keyboard.press('l')
   const panel = logPanel(page)
-  await expect(panel.getByLabel('stream state')).toHaveText('Live', { timeout: 30_000 })
+  await expect(page.locator('.status-bar').getByLabel('stream state')).toHaveText('Live', { timeout: 30_000 })
   // Source labels lose their common prefix: "ocular-fixture-logger-2 (stderr)" shows as "2 (stderr)".
   await expect(logRows(page).filter({ hasText: /^\s*1\s+line \d+/ }).first()).toBeAttached({ timeout: 30_000 })
   await expect(logRows(page).filter({ hasText: /^\s*2\s+line \d+/ }).first()).toBeAttached()

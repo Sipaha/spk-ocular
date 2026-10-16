@@ -1,16 +1,23 @@
 import {connectionChoice} from './fixtures'
 import { selectConnection } from './fixtures'
-import { expect } from '@playwright/test'
+import { expect, type Locator } from '@playwright/test'
 import { test, connectSelected, scratchRoot } from './fixtures'
 import { token } from './synth'
 import { join } from 'node:path'
+
+async function expandHelm(nav: Locator) {
+  const group = nav.getByRole('button', { name: /^Helm \(2\)$/ })
+  await expect(group).toHaveAttribute('aria-disabled', 'false')
+  if (await group.getAttribute('aria-expanded') === 'false') await group.click()
+  await expect(group).toHaveAttribute('aria-expanded', 'true')
+}
 
 test('Helm release details, history, review and deletion use the embedded SDK', async ({ page }) => {
   await page.goto('/')
   await selectConnection(page,/^demo\b/)
   await connectSelected(page)
   const nav = page.getByRole('navigation', { name: 'resources' })
-  await nav.getByRole('button', { name: /^Helm \(2\)$/ }).click()
+  await expandHelm(nav)
   await nav.getByRole('button', { name: 'Releases', exact: true }).click()
   const workspace = page.locator('.helm-workspace')
   await workspace.getByRole('gridcell', { name: 'demo-web', exact: true }).click()
@@ -68,7 +75,7 @@ test('Helm repositories use application controls and private settings', async ({
   await connectSelected(page)
   const nav = page.getByRole('navigation', { name: 'resources' })
   const releases = nav.getByRole('button', { name: 'Releases', exact: true })
-  if (!await releases.isVisible()) await nav.getByRole('button', { name: /^Helm \(2\)$/ }).click()
+  await expandHelm(nav)
   await releases.click()
   const workspace = page.locator('.helm-workspace')
   await workspace.getByRole('button', { name: 'Helm section', exact: true }).click()
@@ -124,7 +131,7 @@ test('chart catalogue drives install, values upgrade and rollback', async ({ pag
     expect(save.ok()).toBe(true)
     const nav = page.getByRole('navigation', { name: 'resources' })
     const charts = nav.getByRole('button', { name: 'Charts', exact: true })
-    if (!await charts.isVisible()) await nav.getByRole('button', { name: /^Helm \(2\)$/ }).click()
+    await expandHelm(nav)
     await charts.click()
     const workspace = page.locator('.helm-workspace')
     await workspace.getByRole('row').filter({ hasText: '2.0.0' }).getByRole('gridcell', { name: 'demo-chart' }).click()
@@ -180,7 +187,7 @@ test('Helm values and connection survive an inactive renderer until Disconnect',
   await connectSelected(page)
   const nav = page.getByRole('navigation', { name: 'resources' })
   const releases = nav.getByRole('button', { name: 'Releases', exact: true })
-  if (!await releases.isVisible()) await nav.getByRole('button', { name: /^Helm \(2\)$/ }).click()
+  await expandHelm(nav)
   await releases.click()
   const workspace = page.locator('.helm-workspace')
   await workspace.getByRole('gridcell', { name: 'demo-web', exact: true }).click()

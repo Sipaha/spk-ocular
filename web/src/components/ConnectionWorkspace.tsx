@@ -2,6 +2,9 @@ import { useEffect, useState } from 'react'
 import type { Target } from '../api/types'
 import { classLabel, t } from '../i18n'
 import { PanelResize, usePanelWidths } from './PanelResize'
+import { groupLabel } from '../presentation'
+import { CloseIcon, ProviderIcon } from './icons'
+import { ResourceGroupIcon } from './ResourceGroupIcon'
 
 export function ConnectionWorkspace({ target, pending, onConnect, onCancel }: {
   target: Target
@@ -30,37 +33,47 @@ export function ConnectionWorkspace({ target, pending, onConnect, onCancel }: {
       status?.phase === 'checking' ? t('connection.checking') : t('connection.opening') :
     status?.state === 'failed' ? t('connection.failed') :
       status?.state === 'cancelled' ? t('connection.cancelled') : t('connection.disconnected')
-  return <div className="flex min-h-0 flex-1">
+  const preview = target.provider === 'kubernetes'
+    ? ['Workloads', 'Network', 'Config', 'Storage', 'Cluster', 'Access Control', 'Health', 'Helm', 'API groups']
+    : target.provider === 'compose' ? ['Compose', 'Engine'] : []
+  const providerTitle = target.provider === 'kubernetes' ? 'Kubernetes' : target.provider === 'compose' ? 'Docker' : target.provider
+  return <div className="connection-workspace flex min-h-0 flex-1">
     <div className="relative shrink-0" style={{ width, maxWidth: '25vw' }}>
-      <nav aria-label="resources" data-area="nav" className="resource-nav">
-        <div className="px-1 py-1">
-          <p className="mb-3 text-xs text-fg-subtle">{active ? t('connection.connecting') : t('connection.disconnected')}</p>
-          <button type="button" data-area-focus data-nav-item disabled={cancelling}
-            onClick={active ? onCancel : onConnect}
-            className="w-full rounded-md border border-line px-3 py-1.5 text-left text-fg hover:bg-hover disabled:opacity-50">
-            {active ? t('connection.cancel') : t('connection.connect')}
-          </button>
-        </div>
+      <nav aria-label="resources" data-area="nav" tabIndex={-1} className="resource-nav connection-preview">
+        <p className="connection-preview-provider">{providerTitle}</p>
+        <ul aria-label={t('connection.hint')} className="connection-preview-sections" style={{flexBasis:preview.length * 40}}>
+          {preview.map(group => <li key={group} aria-disabled="true" title={`${groupLabel(target.provider, group)} · ${t('connection.hint')}`}>
+            <ResourceGroupIcon group={group} /><span>{groupLabel(target.provider, group)}</span>
+          </li>)}
+        </ul>
       </nav>
       <PanelResize label={t('panels.navigation')} value={width} min={140} max={() => Math.min(360, window.innerWidth * 0.25)} onDone={(navigation) => usePanelWidths.setState({ navigation })} />
     </div>
-    <main className="flex min-w-0 flex-1 items-center justify-center overflow-y-auto p-6">
-      <section aria-label={t('connection.status')} className="w-full max-w-md text-sm">
-        <h1 className="mb-1 break-words text-sm font-semibold">{target.title}</h1>
-        {endpoint && <p className="mb-5 break-all text-xs text-fg-subtle">{endpoint}</p>}
-        <p role="status" className="flex items-center gap-2 text-fg-muted">
+    <main data-area="table" tabIndex={-1} className="connection-main min-h-0 min-w-0 flex-1 overflow-y-auto">
+      <section aria-label={t('connection.status')} className="connection-status-content">
+        <div className="connection-scene-mark" aria-hidden="true"><ProviderIcon provider={target.provider} className="h-12 w-12" /><span><PlugIcon disconnected /></span></div>
+        <h1>{target.title}</h1>
+        {endpoint && <p className="connection-endpoint">{endpoint}</p>}
+        <p role="status" className="connection-phase">
           {active && <span aria-hidden className="h-3 w-3 shrink-0 animate-spin rounded-full border border-line border-t-accent" />}
           {phase}
         </p>
-        {status && status.state !== 'disconnected' && status.attempt > 0 && <p className="mt-2 text-xs text-fg-subtle">
+        {status && status.state !== 'disconnected' && status.attempt > 0 && <p className="connection-attempt">
           {t('connection.attempt', { attempt: status.attempt, max: status.maxAttempts })} · {t('connection.elapsed', { seconds: elapsed })}
         </p>}
-        {status?.error && <div role={status.state === 'failed' ? 'alert' : undefined} className="mt-4 border-l border-line pl-3 text-xs">
-          <p className="mb-1 text-fg-muted">{t('connection.lastError')}{status.errorClass ? ` · ${classLabel(status.errorClass)}` : ''}</p>
-          <p className="break-words whitespace-pre-wrap text-fg-subtle">{status.error}</p>
+        {!active && status?.state !== 'failed' && <p className="connection-hint">{t('connection.hint')}</p>}
+        <button type="button" data-area-focus disabled={cancelling} onClick={active ? onCancel : onConnect} className="connection-primary-action">
+          {active ? <CloseIcon /> : <PlugIcon />}{active ? t('connection.cancel') : t('connection.connect')}
+        </button>
+        {status?.error && <div role={status.state === 'failed' ? 'alert' : undefined} className="connection-last-error">
+          <p className="mb-1 font-medium text-fg-muted">{t('connection.lastError')}{status.errorClass ? ` · ${classLabel(status.errorClass)}` : ''}</p>
+          <p className="break-words whitespace-pre-wrap text-fg-muted">{status.error}</p>
         </div>}
-        {!active && status?.state !== 'failed' && <p className="mt-3 text-xs text-fg-subtle">{t('connection.hint')}</p>}
       </section>
     </main>
   </div>
+}
+
+function PlugIcon({disconnected=false}:{disconnected?:boolean}) {
+  return <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="m8 3 3 3m5 5 3 3M6 10l4-4 8 8-4 4a5.7 5.7 0 0 1-8-8ZM6 18l-3 3" />{disconnected && <path d="m4 4 16 16" />}</svg>
 }

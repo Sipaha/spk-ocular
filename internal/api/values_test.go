@@ -58,7 +58,8 @@ func (v *valueSession) PrepareValueEdit(_ context.Context, req provider.ValueEdi
 	noGrant := v.o.noGrant
 	v.o.mu.Unlock()
 	plan := core.ValuePlan{Where: core.LiveTarget{Provider: "k", Target: v.target, ConfigHash: v.hash, Ref: req.Ref},
-		Key: req.Key, Op: req.Op, Before: len(valueMarker), After: len(req.Value), Changed: true}
+		Key: req.Key, Op: req.Op, Before: len(valueMarker), After: len(req.Value), Changed: true,
+		TextDiff: &core.ValueTextDiff{Before: valueMarker, After: string(req.Value)}}
 	if noGrant {
 		return plan, nil, nil
 	}
@@ -115,6 +116,7 @@ func TestValueTokensAreSignedAndBindTheReview(t *testing.T) {
 	require.NoError(t, err)
 	require.NotEmpty(t, plan.Token)
 	assert.NotEmpty(t, plan.Where.ConfigRev)
+	assert.Nil(t, plan.TextDiff, "Secret output strips even an erroneous provider text diff")
 	require.Len(t, k.prepared, 1)
 	assert.Equal(t, valueBase, k.prepared[0].Base)
 	assert.Equal(t, []byte("new"), k.prepared[0].Value)

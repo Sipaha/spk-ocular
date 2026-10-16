@@ -26,10 +26,10 @@ test('graph selects standard details, preserves camera when route layer changes,
  let independentLayout:ReturnType<typeof layoutGraph>|undefined
  await page.route('**/api/ClusterGraph',async route=>{const response=await route.fetch(),snapshot=await response.json();independentLayout=layoutGraph(snapshot);await route.fulfill({response,json:snapshot})})
  const graph=await graphPage(page),canvas=graph.locator('canvas')
- await expect(graph).toContainText('4 resources')
+ await expect(page.locator('.status-bar')).toContainText('4 resources')
  const before=await canvas.getAttribute('data-zoom')
  await graph.getByRole('checkbox',{name:'Route layer'}).check()
- await expect(graph).toContainText('Declared routes, not measured traffic')
+ await expect(page.locator('.status-bar')).toContainText('Declared routes, not measured traffic')
  expect(await canvas.getAttribute('data-zoom')).toBe(before)
  const box=(await canvas.boundingBox())!
  await page.mouse.move(box.x+box.width/2,box.y+box.height/2);await page.mouse.wheel(0,-180)
@@ -71,7 +71,7 @@ test('graph selects standard details, preserves camera when route layer changes,
  await expect(details.getByText('alpha',{exact:true}).first()).toBeVisible()
  const zone=graph.getByRole('textbox',{name:'Zone',exact:true})
  await zone.fill('blue, green');await zone.press('Enter')
- await expect(graph).toContainText('5 resources')
+ await expect(page.locator('.status-bar')).toContainText('5 resources')
  await page.screenshot({path:join(scratchRoot,'graph-two-scopes.png')})
  const reply=await page.request.post('/api/ClusterGraph',{headers:{Authorization:'Bearer '+await token(page),Origin:new URL(page.url()).origin},data:{provider:'synthetic',target:'demo',scope:{mode:'some',names:[]}}})
  expect(reply.ok()).toBeTruthy()
@@ -83,7 +83,7 @@ for(const count of [10000,30000]) test(`canvas handles ${count} resources withou
  const layout=layoutGraph(snapshot)
  await page.route('**/api/ClusterGraph',route=>route.fulfill({json:snapshot}))
  const graph=await graphPage(page),canvas=graph.locator('canvas')
- await expect(graph).toContainText(count+' resources')
+ await expect(page.locator('.status-bar')).toContainText(count+' resources')
  expect(await graph.locator('*').count()).toBeLessThan(150)
  // Observe actual drawing primitives, not a renderer-maintained node counter.
  // The independent layout supplies the geometry that must remain on screen.
@@ -171,28 +171,32 @@ test('graph waits for explicit loading per session, retains warm opt-in and rese
  const labels={en:['English','Load graph'],ru:['Русский','Загрузить граф'],zh:['简体中文','加载关系图'],es:['Español','Cargar grafo'],de:['Deutsch','Graph laden'],fr:['Français','Charger le graphe'],pt:['Português (Brasil)','Carregar grafo'],ja:['日本語','グラフを読み込む']}
  for(const [code,[language,label]] of Object.entries(labels)){
   await openAppMenu(page);await page.locator('.language-menu button').click();await page.getByRole('option',{name:language,exact:true}).click()
+  await expect(page.locator('html')).toHaveAttribute('lang',code)
+  await expect(page.locator('[data-app-menu]')).toHaveAttribute('aria-expanded','false')
   await expect(graph.getByRole('button',{name:label,exact:true})).toBeVisible();expect(calls).toBe(0)
   await page.screenshot({path:join(scratchRoot,'graph-load-language-'+code+'.png')})
  }
  await openAppMenu(page);await page.locator('.language-menu button').click();await page.getByRole('option',{name:'English',exact:true}).click()
+ await expect(page.locator('html')).toHaveAttribute('lang','en')
+ await expect(page.locator('[data-app-menu]')).toHaveAttribute('aria-expanded','false')
  // Scope changes before consent do not start the inventory or layout worker.
  const zone=graph.getByRole('textbox',{name:'Zone',exact:true})
  await zone.fill('blue, green');await zone.press('Enter')
  await expect(load).toBeVisible();expect(calls).toBe(0);expect(workers.filter(url=>url.includes('layout.worker'))).toEqual([])
  await page.screenshot({path:join(scratchRoot,'graph-explicit-load.png')})
- await load.click();await expect(graph).toContainText('5 resources');expect(calls).toBe(1)
+ await load.click();await expect(page.locator('.status-bar')).toContainText('5 resources');expect(calls).toBe(1)
  await nav.getByRole('button',{name:'Services',exact:true}).click();await openGraph()
- await expect(load).toHaveCount(0);await expect(graph).toContainText('5 resources');expect(calls).toBe(2)
+ await expect(load).toHaveCount(0);await expect(page.locator('.status-bar')).toContainText('5 resources');expect(calls).toBe(2)
  // Another warm target has its own opt-in, while returning to A keeps A's.
  await selectConnection(page,/^demo2\b/);await connectSelected(page);await openGraph()
  await expect(load).toBeVisible();expect(calls).toBe(2)
  await selectConnection(page,/^demo\b/);await connectSelected(page)
- await expect(load).toHaveCount(0);await expect(graph).toContainText('5 resources');expect(calls).toBe(3)
+ await expect(load).toHaveCount(0);await expect(page.locator('.status-bar')).toContainText('5 resources');expect(calls).toBe(3)
  const selected=await connectionChoice(page,/^demo\b/)
  await selected.click({button:'right'});await page.getByRole('menuitem',{name:'Disconnect',exact:true}).click()
  await page.keyboard.press('Escape');await expect(page.getByRole('button',{name:'Connect',exact:true})).toBeVisible()
  await connectSelected(page);await expect(load).toBeVisible();expect(calls).toBe(3)
- await load.click();await expect(graph).toContainText('5 resources');expect(calls).toBe(4)
+ await load.click();await expect(page.locator('.status-bar')).toContainText('5 resources');expect(calls).toBe(4)
  await page.reload();await expect(load).toBeVisible();expect(calls).toBe(4)
- await load.click();await expect(graph).toContainText('5 resources');expect(calls).toBe(5)
+ await load.click();await expect(page.locator('.status-bar')).toContainText('5 resources');expect(calls).toBe(5)
 })

@@ -1,3 +1,4 @@
+import { logWindowFeatures } from './windowGeometry'
 import { isDesktop } from '../api/client'
 import type { Ref, LogQuery } from '../api/types'
 import type { Frame } from './ndjson'
@@ -22,6 +23,7 @@ export class LogWindowBridge {
  readonly sender = crypto.randomUUID()
  private listeners = new Set<(message: WindowMessage) => void>()
  private channel: BroadcastChannel | null = null
+ private popup: ReturnType<typeof window.open> = null
  private generation = 0
  opened = false
  private off: (() => void) | null = null
@@ -59,7 +61,8 @@ export class LogWindowBridge {
     } else { this.connected = true; this.applyQuery?.(query) }
    }
    if (message.type === 'view') this.applyView?.(message.payload as LogViewState)
-   if (message.type === 'closed' || message.type === 'return') this.connected = false
+   if (message.type === 'closed' || message.type === 'return') { this.connected = false; this.opened = false }
+   if (message.type === 'closed') this.popup = null
   }
   this.listeners.forEach(listener => listener(message))
  }
@@ -82,9 +85,9 @@ export class LogWindowBridge {
  publish(frame: Frame) { if(this.role==='owner' && this.connected) void this.post('frame', frame) }
  async open(title: string) {
   if(isDesktop()) { const { Call }=await import('@wailsio/runtime');await Call.ByName(service+'Open',this.id,title) }
-  else { const popup=window.open(`?logsWindow=${encodeURIComponent(this.id)}`,'ocular-logs-'+this.id,'popup,width=1000,height=650');if(!popup) throw new Error('The browser blocked the log window'); }
+  else { const popup=window.open(`?logsWindow=${encodeURIComponent(this.id)}`,'ocular-logs-'+this.id,logWindowFeatures(window.screen));if(!popup) throw new Error('The browser blocked the log window');this.popup=popup; }
   this.opened=true
  }
- async close() { this.opened=false; if(isDesktop()){ const {Call}=await import('@wailsio/runtime');await Call.ByName(service+'Close',this.id) } else window.close() }
+ async close() { this.opened=false; if(isDesktop()){ const {Call}=await import('@wailsio/runtime');await Call.ByName(service+'Close',this.id) } else if(this.role==='owner'){this.popup?.close();this.popup=null} else window.close() }
  stop() { this.generation++; this.off?.(); this.channel?.close();this.off=null;this.channel=null;this.listeners.clear() }
 }

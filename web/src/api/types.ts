@@ -408,8 +408,10 @@ export interface ValueConsumers {
   items?: string[]
 }
 
-/** What a key's change would do, read without changing anything and without any value. */
+/** What a key's change would do. Secret plans never contain values. */
 export interface ValuePlan {
+  /** ConfigMap text only: fresh current value → expected server/local result. */
+  textDiff?: { before: string; after: string }
   where: LiveTarget
   key: string
   op: ValueOp
@@ -574,6 +576,8 @@ export interface Page {
 }
 
 export interface Relation {
+  /** One declared Ingress route; repeated Service refs may have different paths. */
+  route?: { path: string; host?: string; pathType?: string; defaultBackend?: boolean }
   /** owner | owns | selects | routes-to | runs-on | about */
   type: string
   ref: Ref

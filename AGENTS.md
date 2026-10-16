@@ -164,7 +164,7 @@ unreturned partial export. Do not use the UI's tail/merge limits for archive rea
 ### Workspace and interaction
 
 Selecting or restoring an unopened target never connects it. Connect belongs in
-the resource-list area; ordinary UI reads cannot create sessions. Once explicitly
+the main connection-status area; ordinary UI reads cannot create sessions. Once explicitly
 connected, a target stays connected while idle, minimized or unselected until
 Disconnect/application exit; idle cleanup applies only to implicit sessions.
 Configuration changes automatically check a replacement incarnation for the same
@@ -191,7 +191,8 @@ returns the original position. D&D changes order without navigation and has a
 keyboard equivalent. Empty original sections disappear and counts reflect their
 remaining kinds. Keep one active nav row and F6 entry point.
 
-Collapsed groups retain their current kind. Search expands matches temporarily
+Collapsed groups hide every child, including the current kind, while retaining
+the selected page. Search expands matches temporarily
 without persisting that expansion. Ordinary palette object results use the selected
 scope even on unscoped tables; explicit scope/type/name queries read only that
 scope and commit it atomically with the chosen result behind mayLeave; opening a result changes the kind and reveals the

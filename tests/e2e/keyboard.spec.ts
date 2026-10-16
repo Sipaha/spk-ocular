@@ -1,3 +1,4 @@
+import {languages,languageNames} from '../../web/src/languages'
 import {openAppMenu} from './fixtures'
 import { selectConnection } from './fixtures'
 import { connectSelected } from './fixtures'
@@ -128,7 +129,7 @@ test('workspace header and grouped log controls stay reachable in a narrow windo
   await page.getByRole('gridcell', { name: 'api', exact: true }).click()
   await page.getByRole('dialog', { name: 'services api' }).getByRole('button', { name: 'Logs', exact: true }).click()
   const panel = page.getByRole('region', { name: 'Bottom panel' })
-  await expect(panel.getByLabel('line count')).toHaveText('6 lines')
+  await expect(page.locator('.status-bar').getByLabel('line count')).toHaveText('6 lines')
   for (const label of ['Log source', 'Search in logs', 'Filter logs', 'Log display', 'Log actions']) {
     const group = panel.getByRole('group', { name: label, exact: true })
     await expect(group).toBeInViewport()
@@ -140,4 +141,85 @@ test('workspace header and grouped log controls stay reachable in a narrow windo
   await expect(panel.getByLabel('matches')).toHaveText('1/1')
   await panel.getByRole('button', { name: 'Wrap', exact: true }).click()
   await expect(panel.getByRole('button', { name: 'Wrap', exact: true })).toHaveAttribute('aria-pressed', 'true')
+})
+
+test('Alt+Shift arrows resize the focused navigation, details and dock without moving focus or drafts',async({page})=>{
+ await page.route('**/api/ListKinds',async route=>{
+  const response=await route.fetch()
+  if(!response.ok()){await route.fulfill({response});return}
+  const data=await response.json()
+  for(const kind of data.kinds)if(kind.id==='crates')kind.editable=true
+  await route.fulfill({response,json:data})
+ })
+ await page.route('**/api/GetEditSource',route=>route.fulfill({json:{ref:route.request().postDataJSON(),text:'key: crate-7f3a\ntitle: alpha\n',base:'keyboard-resize-fixture'}}))
+ await page.setViewportSize({width:1440,height:1000})
+ await page.goto('/');await selectConnection(page,/^demo\b/);await connectSelected(page)
+ const nav=page.getByRole('navigation',{name:'resources'}),filter=nav.getByRole('textbox',{name:'Filter resources'})
+ const navGrip=page.getByRole('separator',{name:'Resize resource navigation',exact:true})
+ await filter.focus()
+ const initial=Number(await navGrip.getAttribute('aria-valuenow'))
+ await page.keyboard.press('Alt+Shift+ArrowRight')
+ await expect(navGrip).toHaveAttribute('aria-valuenow',String(initial+20));await expect(filter).toBeFocused()
+ await page.keyboard.press('Alt+Shift+ArrowLeft')
+ await expect(navGrip).toHaveAttribute('aria-valuenow',String(initial))
+ await filter.fill('word one two');await page.keyboard.press('Control+Shift+ArrowLeft')
+ await expect(navGrip).toHaveAttribute('aria-valuenow',String(initial));await expect(filter).toHaveValue('word one two')
+ await filter.fill('');await nav.getByRole('button',{name:'Services',exact:true}).click()
+ await page.getByRole('grid',{name:'resources'}).getByRole('gridcell',{name:'api',exact:true}).click()
+ await page.keyboard.press('l')
+ const viewport=page.locator('[role=tabpanel]:not([hidden]) [data-log-viewport]')
+ await expect(viewport).toBeFocused()
+ await nav.getByRole('button',{name:'Crates',exact:true}).click()
+ await page.getByRole('grid',{name:'resources'}).getByRole('gridcell',{name:'alpha',exact:true}).click()
+ const details=page.locator('[data-area=details]'),detailsGrip=details.getByRole('separator',{name:'Resize details panel',exact:true})
+ await details.getByRole('tab',{name:'YAML',exact:true}).click()
+ await details.getByRole('button',{name:'Edit',exact:true}).click()
+ const editor=details.locator('.cm-content')
+ await editor.click();await page.keyboard.press('Control+End');await page.keyboard.type('\n# keep this draft')
+ const width=(await details.boundingBox())!.width
+ await page.keyboard.press('Alt+Shift+ArrowLeft')
+ await expect.poll(async()=>(await details.boundingBox())!.width).toBe(width+20)
+ await expect(editor).toContainText('keep this draft');await expect(editor).toBeFocused()
+ await page.keyboard.press('Alt+Shift+ArrowRight')
+ await expect.poll(async()=>(await details.boundingBox())!.width).toBe(width)
+ // An open modal owns its keys; the details behind it must stay fixed.
+ await page.keyboard.press('Control+k');await expect(page.getByRole('dialog',{name:'Go to',exact:true})).toBeVisible()
+ await page.keyboard.press('Alt+Shift+ArrowLeft')
+ expect((await details.boundingBox())!.width).toBe(width)
+ await page.keyboard.press('Escape')
+ await viewport.focus()
+ await expect(viewport).toBeFocused()
+ const dock=page.locator('[data-area=dock]'),height=(await dock.boundingBox())!.height
+ await page.keyboard.press('Alt+Shift+ArrowUp')
+ await expect.poll(async()=>(await dock.boundingBox())!.height).toBe(height+20)
+ await expect(viewport).toBeFocused()
+ await page.keyboard.press('Alt+Shift+ArrowDown')
+ await expect.poll(async()=>(await dock.boundingBox())!.height).toBe(height)
+ await expect(editor).toContainText('keep this draft')
+ await page.screenshot({path:join(scratchRoot,'keyboard-panel-resize.png')})
+ // Existing separator keys still work and retain their limits.
+ await detailsGrip.focus();await detailsGrip.press('Home')
+ await expect(detailsGrip).toHaveAttribute('aria-valuenow','280')
+})
+
+
+test('panel reorganization shortcuts are explained in all eight languages',async({page})=>{
+ await page.setViewportSize({width:1280,height:900});await page.goto('/')
+ for(const language of languages){
+  await openAppMenu(page);await page.locator('.language-menu button').click()
+  await page.getByRole('option',{name:languageNames[language],exact:true}).click()
+  await expect(page.locator('html')).toHaveAttribute('lang',language)
+  await expect(page.locator('[data-app-menu]')).toHaveAttribute('aria-expanded','false')
+  await openAppMenu(page);await page.locator('.app-utilities > button').last().click()
+  const dialog=page.getByRole('dialog').filter({has:page.getByText('Alt+Shift+Enter',{exact:true})})
+  await expect(dialog).toBeVisible()
+  await expect(dialog.getByText('Alt+Shift+←',{exact:true})).toBeVisible()
+  await expect(dialog).not.toContainText('keys.resizePanel')
+  await expect(dialog).not.toContainText('keys.logWindow')
+  await page.screenshot({path:join(scratchRoot,`keyboard-panel-help-${language}.png`)})
+  await page.keyboard.press('Escape');await expect(dialog).toHaveCount(0)
+ }
+ await openAppMenu(page);await page.locator('.language-menu button').click()
+ await page.getByRole('option',{name:languageNames.en,exact:true}).click()
+ await expect(page.locator('html')).toHaveAttribute('lang','en')
 })

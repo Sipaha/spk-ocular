@@ -128,3 +128,18 @@ it('keeps the mounted workspace during automatic connection recovery', async () 
   expect(screen.queryByRole('button', { name: 'Connect' })).not.toBeInTheDocument()
   expect(f.client.connectTarget).not.toHaveBeenCalled()
 })
+
+it('keeps the only Connect action in the right status panel and previews sections without reading resources', async()=>{
+ const f=fakeClient([k8s('prod')]);f.state.view.selected={provider:'kubernetes',id:'prod'}
+ render(<App client={f.client}/>);
+ const button=await screen.findByRole('button',{name:'Connect'})
+ expect(button.closest('main')).toHaveAttribute('data-area','table')
+ expect(screen.getByRole('navigation',{name:'resources'}).querySelector('button')).toBeNull()
+ expect(screen.getByRole('navigation',{name:'resources'}).querySelectorAll('[aria-disabled=true]')).toHaveLength(9)
+ expect(f.client.listKinds).not.toHaveBeenCalled();expect(f.client.listScopes).not.toHaveBeenCalled();expect(f.client.connectTarget).not.toHaveBeenCalled()
+ await userEvent.click(button)
+ await screen.findByRole('grid',{name:'resources'})
+ expect(document.querySelector('.connection-workspace')).toBeNull()
+ expect(document.querySelector('.connection-main')).toBeNull()
+ expect(f.client.connectTarget).toHaveBeenCalledTimes(1)
+})

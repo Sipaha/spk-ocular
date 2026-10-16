@@ -21,7 +21,7 @@ test('two warm targets: A → B → A keeps everything; Disconnect ends A', asyn
   const services = () => page.getByRole('navigation', { name: 'resources' }).getByRole('button', { name: 'Services', exact: true })
   const grid = () => page.getByRole('grid', { name: 'resources' })
   const tabs = page.getByRole('tab', { name: /services\/api/ })
-  const state = () => page.locator('[role=tabpanel]:not([hidden])').getByLabel('stream state')
+  const state = () => page.locator('.status-bar').getByLabel('stream state')
   // A tab that is not selected wears its target's badge (foreign): only then
   // the badge text is present.
   const tabAOnB = tabs.filter({ has: page.getByText('demo', { exact: true }) })

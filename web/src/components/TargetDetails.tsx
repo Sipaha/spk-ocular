@@ -8,7 +8,7 @@ import { CloseIcon, EyeIcon, InfoIcon, ProviderIcon } from './icons'
 
 export function EmptyWorkspace() {
   return (
-    <div className="empty-workspace">
+    <div className="empty-workspace disconnected-workspace-surface">
       <div className="empty-workspace-content">
         <div className="connection-icon"><EyeIcon className="h-7 w-7" /></div>
         <p className="mb-2 text-xl font-semibold tracking-tight">{t('main.pick')}</p>

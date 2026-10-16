@@ -1,3 +1,4 @@
+import {stats as lifecycleStats} from './synth'
 import { selectConnection, openAppMenu } from './fixtures'
 import { connectSelected } from './fixtures'
 import { expect, type Page } from '@playwright/test'
@@ -29,7 +30,7 @@ async function openLogs(page: Page, object: string) {
   await grid.getByRole('gridcell', { name: object, exact: true }).click()
   await page.keyboard.press('l')
   const panel = page.locator('[role=tabpanel]:not([hidden])')
-  await expect(panel.getByLabel('stream state')).toHaveText('Live')
+  await expect(page.locator('.status-bar').getByLabel('stream state')).toHaveText('Live')
   await expect(panel.locator('[data-log-viewport]')).toBeFocused()
   return panel
 }
@@ -49,7 +50,7 @@ test('opening and reopening logs focuses the viewport and enables its shortcuts'
 test('one source: backlog, live lines, ANSI, text filters, search, copy', async ({ page }) => {
   const panel = await openLogs(page, 'api')
   // All six backlog lines are visible, including DEBUG.
-  await expect(panel.getByLabel('line count')).toHaveText('6 lines')
+  await expect(page.locator('.status-bar').getByLabel('line count')).toHaveText('6 lines')
   // "\x1b[1;32mready": bold green from the theme's ANSI palette
   await expect(panel.getByText('ready', { exact: true })).toHaveAttribute('style', /color: var\(--color-ansi-2\).*font-weight: 600/)
   await expect(rows(panel).filter({ hasText: 'at handler' })).toHaveClass(/text-log-error/) // continuation keeps ERROR
@@ -73,7 +74,7 @@ test('one source: backlog, live lines, ANSI, text filters, search, copy', async 
 
 test('a group: sources with prefixes and per-source states', async ({ page }) => {
   const panel = await openLogs(page, 'workers')
-  await expect(panel.getByLabel('line count')).toHaveText('18 lines')
+  await expect(page.locator('.status-bar').getByLabel('line count')).toHaveText('18 lines')
   await expect(panel.getByRole('button', { name: 'Source' })).toHaveAttribute('aria-pressed', 'true')
   // the shared "worker-" part of the source names is dropped from the prefix
   await expect(rows(panel).first()).toHaveText('1 INFO worker-1/main starting')
@@ -94,10 +95,10 @@ test('closing a tab ends its stream', async ({ page }) => {
 test('a stream that ends says so and can be reopened', async ({ page }) => {
   const panel = await openLogs(page, 'api')
   await emit(page, 'api', { end: true })
-  await expect(panel.getByLabel('stream state')).toHaveText('Complete')
+  await expect(page.locator('.status-bar').getByLabel('stream state')).toHaveText('Complete')
   await panel.getByRole('button', { name: 'Previous', exact: true }).click()
   await expect(rows(panel).first()).toHaveText(/^previous: INFO api\/main starting/)
-  await expect(panel.getByLabel('stream state')).toHaveText('Complete')
+  await expect(page.locator('.status-bar').getByLabel('stream state')).toHaveText('Complete')
 })
 
 test('scrolling up stops following; new lines do not move the view; Follow returns', async ({ page }) => {
@@ -111,7 +112,7 @@ test('scrolling up stops following; new lines do not move the view; Follow retur
   await expect(panel.getByRole('button', { name: 'Follow' })).toBeVisible()
   const top = await vp.evaluate((el) => el.scrollTop)
   await emit(page, 'api', { lines: ['INFO while reading'] })
-  await expect(panel.getByLabel('line count')).toHaveText('207 lines')
+  await expect(page.locator('.status-bar').getByLabel('line count')).toHaveText('207 lines')
   expect(await vp.evaluate((el) => el.scrollTop)).toBe(top)
   await expect(panel.getByText('INFO while reading')).toHaveCount(0) // not scrolled into view (virtualized away)
   const follow=panel.getByRole('button',{name:'Follow'})
@@ -145,7 +146,7 @@ test('the app select of the toolbar: focused list, live lines do not close it, E
   await page.keyboard.press('Escape')
   await expect(list).toHaveCount(0)
   await expect(lines).toBeFocused()
-  await expect(panel.getByLabel('stream state')).toHaveText('Live')
+  await expect(page.locator('.status-bar').getByLabel('stream state')).toHaveText('Live')
   await page.keyboard.press('ArrowDown')
   await expect(list).toBeFocused()
   await page.keyboard.press('Home')
@@ -253,7 +254,7 @@ test('wheel scrolling stays responsive with a text selection and select-all', as
 
 test('separate log window shares one stream and returns its settings and buffer', async ({ page, context }) => {
  const panel=await openLogs(page,'api')
- await expect(panel.getByLabel('line count')).toHaveText('6 lines')
+ await expect(page.locator('.status-bar').getByLabel('line count')).toHaveText('6 lines')
  await emit(page,'api',{lines:['unique-before-detach']})
  const before=await stats(page)
  const popupPromise=context.waitForEvent('page')
@@ -331,7 +332,7 @@ test('Download chooses a destination and exports uncolored text; the last row cl
  await expect.poll(()=>page.evaluate(()=>(window as unknown as {downloadedLogs?:string}).downloadedLogs)).toContain('INFO api/main starting')
  expect(await page.evaluate(()=>(window as unknown as {downloadedLogs:string}).downloadedLogs)).toContain('INFO api/main ready')
  expect(await page.evaluate(()=>(window as unknown as {downloadedLogs:string}).downloadedLogs)).not.toContain('\u001b')
- await expect(panel).toContainText('Saved to chosen.log')
+ await expect(page.locator('.status-bar')).toContainText('Saved to chosen.log')
  await page.screenshot({path:join(scratchRoot,'logs-scrollbar-clearance.png')})
 })
 
@@ -375,6 +376,18 @@ test('inspector and log actions use compact icons with hover/focus descriptions 
     const ys=await tools.locator('button').evaluateAll(els=>els.map(el=>el.getBoundingClientRect().y))
     expect(new Set(ys).size).toBe(1)
     expect(await page.evaluate(()=>document.documentElement.scrollWidth)).toBe(width)
+    await expect(page.locator('.status-bar')).toHaveCount(1)
+    await expect(page.locator('.log-status')).toHaveCount(0)
+    await expect(page.locator('.status-bar').getByLabel('line count')).toBeVisible()
+    await expect(page.locator('.status-bar').getByLabel('stream state')).toBeVisible()
+    const footerBox=(await page.locator('.status-bar').boundingBox())!
+    expect(footerBox.height).toBe(27)
+    expect(footerBox.y+footerBox.height).toBe(900)
+    const local=(await page.locator('[data-location-status]').boundingBox())!
+    const general=(await page.locator('[data-general-status]').boundingBox())!
+    expect(local.x+local.width).toBeLessThanOrEqual(general.x)
+    expect(general.x+general.width).toBeLessThanOrEqual(width)
+
     const last=panel.locator('.log-toolbar .action-icon-button').last()
     await panel.locator('input').first().focus()
     await last.focus();await expect(page.getByRole('tooltip')).toBeVisible()
@@ -409,13 +422,13 @@ test('Download reads all retained history rather than viewport, loaded buffer or
   return route.fulfill({contentType:'application/x-ndjson',body:[source,{k:'lines',s:1,l:lines},{k:'end',reason:'done'}].map(f=>JSON.stringify(f)+'\n').join('')})
  })
  const panel=await openLogs(page,'api')
- await expect(panel.getByLabel('line count')).toHaveText('6 lines')
+ await expect(page.locator('.status-bar').getByLabel('line count')).toHaveText('6 lines')
  await panel.getByLabel('Filter (*)',{exact:true}).fill('DOES_NOT_MATCH_HISTORY')
  await panel.getByRole('button',{name:'Download',exact:true}).click()
  await expect.poll(()=>page.evaluate(()=>(window as unknown as {historyCommitted?:boolean}).historyCommitted)).toBe(true)
  const text=await page.evaluate(()=>(window as unknown as {historyText:string}).historyText)
  expect(text.split('\n').filter(Boolean)).toHaveLength(4000);expect(text).toContain('archive line 0\n');expect(text).toContain('archive line 3999\n')
- expect(historyReads).toBe(1);await expect(panel).toContainText('Saved to full-history.log')
+ expect(historyReads).toBe(1);await expect(page.locator('.status-bar')).toContainText('Saved to full-history.log')
  await page.screenshot({path:join(scratchRoot,'history-export-all-lines.png')})
 })
 
@@ -428,7 +441,7 @@ test('Incomplete history aborts its chosen destination without committing a part
  const panel=await openLogs(page,'api');await panel.getByRole('button',{name:'Download',exact:true}).click()
  await expect.poll(()=>page.evaluate(()=>(window as unknown as {aborted?:boolean}).aborted)).toBe(true)
  expect(await page.evaluate(()=>(window as unknown as {committed?:boolean}).committed)).not.toBe(true)
- await expect(panel).toContainText('source history incomplete')
+ await expect(page.locator('.status-bar')).toContainText('source history incomplete')
  await page.screenshot({path:join(scratchRoot,'history-export-incomplete.png')})
 })
 
@@ -446,9 +459,9 @@ test('Cancelling a pending history download aborts its destination and ignores a
  })
  const panel=await openLogs(page,'api');await panel.getByRole('button',{name:'Download',exact:true}).click()
  await expect.poll(()=>started).toBe(true)
- await panel.getByRole('button',{name:'Cancel log download',exact:true}).click()
+ await page.locator('.status-bar').getByRole('button',{name:'Cancel log download',exact:true}).click()
  await expect.poll(()=>page.evaluate(()=>(window as unknown as {aborted?:boolean}).aborted)).toBe(true)
- release();await expect(panel).toContainText('Log download cancelled')
+ release();await expect(page.locator('.status-bar')).toContainText('Log download cancelled')
  expect(await page.evaluate(()=>(window as unknown as {committed?:boolean}).committed)).not.toBe(true)
  await expect(panel.getByRole('button',{name:'Download',exact:true})).toBeEnabled()
 })
@@ -724,4 +737,173 @@ test('log scrolling and dock resizing keep the application frame inside the view
   await page.screenshot({path:join(scratchRoot,`logs-application-frame-${height}.png`)})
  }
  await page.screenshot({path:join(scratchRoot,'logs-application-frame.png')})
+})
+
+
+test('one footer follows the active dock tab and restores resource status when closed', async ({page}) => {
+ await openLogs(page,'api')
+ const grid=page.getByRole('grid',{name:'resources'})
+ await grid.getByRole('gridcell',{name:'workers',exact:true}).click()
+ await page.keyboard.press('l')
+ const footer=page.locator('.status-bar')
+ await expect(footer.getByLabel('line count')).toHaveText('18 lines')
+ await emit(page,'api',{lines:['hidden-tab-update']})
+ await expect(footer.getByLabel('line count')).toHaveText('18 lines')
+ await page.getByRole('tab',{name:/services\/api/}).click()
+ await expect(footer.getByLabel('line count')).toHaveText('7 lines')
+ await page.screenshot({path:join(scratchRoot,'unified-footer-active-logs.png')})
+ await page.getByRole('tab',{name:/services\/api/}).getByRole('button',{name:'Close tab'}).click()
+ await expect(footer.getByLabel('line count')).toHaveText('18 lines')
+ await page.getByRole('tab',{name:/services\/workers/}).getByRole('button',{name:'Close tab'}).click()
+ await expect(footer.getByLabel('line count')).toHaveCount(0)
+ await expect(footer.locator('[data-location-status]')).toContainText('Services')
+ await expect(page.locator('.log-status')).toHaveCount(0)
+ await page.screenshot({path:join(scratchRoot,'unified-footer-resources.png')})
+})
+
+test('Alt+Shift+Enter detaches and returns focused logs without a second stream or repeated windows',async({page,context})=>{
+ const panel=await openLogs(page,'api'),viewport=panel.locator('[data-log-viewport]')
+ const before=await stats(page)
+ await page.keyboard.press('Control+k')
+ const palette=page.getByRole('dialog',{name:'Go to',exact:true})
+ await expect(palette).toBeVisible()
+ await page.keyboard.press('Alt+Shift+Enter')
+ expect(context.pages()).toHaveLength(1)
+ await page.keyboard.press('Escape')
+ await viewport.focus()
+ await viewport.dispatchEvent('keydown',{key:'Enter',code:'Enter',altKey:true,shiftKey:true,repeat:true})
+ expect(context.pages()).toHaveLength(1)
+ const opened=context.waitForEvent('page')
+ await viewport.press('Alt+Shift+Enter')
+ const popup=await opened,popupViewport=popup.locator('[data-log-viewport]')
+ await expect(popupViewport).toContainText('api/main ready')
+ expect((await stats(page)).streams).toBe(before.streams)
+ await popupViewport.focus()
+ await popupViewport.dispatchEvent('keydown',{key:'Enter',code:'Enter',altKey:true,shiftKey:true,repeat:true})
+ expect(popup.isClosed()).toBe(false)
+ await popup.screenshot({path:join(scratchRoot,'logs-keyboard-detached.png')})
+ const closed=popup.waitForEvent('close')
+ // The Enter keydown closes this exact popup before a chord's keyup sequence.
+ await popup.keyboard.down('Alt');await popup.keyboard.down('Shift');await popup.keyboard.down('Enter')
+ await closed
+ await expect(viewport).toBeVisible();await expect(viewport).toBeFocused()
+ expect((await stats(page)).streams).toBe(before.streams)
+ expect(context.pages()).toHaveLength(1)
+ await page.screenshot({path:join(scratchRoot,'logs-keyboard-returned.png')})
+})
+
+test('detached logs use the screen work area in CSS pixels at multiple device scales',async({browser,baseURL})=>{
+ for(const [scale,width,height] of [[1,1920,1080],[1.25,1536,864],[1.5,1280,720],[2,960,540]]){
+  const context=await browser.newContext({baseURL,viewport:{width:Math.min(1280,width),height:Math.min(900,height)},screen:{width,height},deviceScaleFactor:scale})
+  try{
+   const page=await context.newPage()
+   await page.addInitScript(()=>{
+    const open=window.open.bind(window)
+    window.open=(...args:Parameters<typeof window.open>)=>{(window as unknown as {logWindowFeatures?:string}).logWindowFeatures=args[2];return open(...args)}
+   })
+   const panel=await openLogs(page,'api'),opened=context.waitForEvent('page')
+   await panel.getByRole('button',{name:'Open in window',exact:true}).click()
+   const popup=await opened
+   await expect(popup.locator('[data-log-viewport]')).toContainText('api/main ready')
+   const work=await page.evaluate(()=>({width:screen.availWidth,height:screen.availHeight,scale:devicePixelRatio}))
+   expect(work).toEqual({width,height,scale})
+   const features=await page.evaluate(()=>(window as unknown as {logWindowFeatures:string}).logWindowFeatures)
+   expect(features).toContain(`width=${width},height=${Math.floor(height*.9)}`)
+   expect(await popup.evaluate(()=>({width:innerWidth,height:innerHeight,scale:devicePixelRatio}))).toEqual({width,height:Math.floor(height*.9),scale})
+   await popup.screenshot({path:join(scratchRoot,`logs-wide-scale-${scale}.png`)})
+   await popup.close()
+  }finally{await context.close()}
+ }
+})
+
+test('dock tab context menus close by order, keep active survivors and clean up streams and detached windows',async({page,context})=>{
+ await openLogs(page,'api')
+ const grid=page.getByRole('grid',{name:'resources'})
+ await grid.getByRole('gridcell',{name:'workers',exact:true}).click();await page.keyboard.press('l')
+ await grid.getByRole('gridcell',{name:'api',exact:true}).click();await page.keyboard.press('s')
+ const tabs=page.locator('.dock-tab'),workers=page.getByRole('tab',{name:/services\/workers/}),api=page.getByRole('tab',{name:/services\/api/})
+ await expect(tabs).toHaveCount(3)
+ await expect.poll(async()=>(await lifecycleStats(page)).terminals).toBe(1)
+ await expect.poll(async()=>(await stats(page)).streams).toBe(2)
+ const active=page.locator('.dock-tab[aria-selected=true]'),activeTitle=await active.textContent()
+ await api.click({button:'right'})
+ const menu=page.getByRole('menu')
+ await expect(menu.getByRole('menuitem',{name:'Close all to the left',exact:true})).toHaveAttribute('aria-disabled','true')
+ await expect(active).toHaveText(activeTitle!)
+ await page.keyboard.press('Escape')
+ await workers.click({button:'right'})
+ await expect(menu.getByRole('menuitem')).toHaveCount(4)
+ for(const language of languages){
+  await page.keyboard.press('Escape')
+  await openAppMenu(page);await page.locator('.language-menu button').click();await page.getByRole('option',{name:languageNames[language],exact:true}).click()
+  await expect(page.locator('html')).toHaveAttribute('lang',language)
+  await expect(page.locator('[data-app-menu]')).toHaveAttribute('aria-expanded','false')
+  await workers.click({button:'right'});await expect(menu.getByRole('menuitem')).toHaveCount(4)
+  const bounds=(await menu.boundingBox())!,viewport=page.viewportSize()!
+  expect(bounds.x).toBeGreaterThanOrEqual(0);expect(bounds.y).toBeGreaterThanOrEqual(0)
+  expect(bounds.x+bounds.width).toBeLessThanOrEqual(viewport.width);expect(bounds.y+bounds.height).toBeLessThanOrEqual(viewport.height)
+  await page.screenshot({path:join(scratchRoot,`dock-tab-menu-${language}.png`)})
+ }
+ await page.keyboard.press('Escape')
+ await openAppMenu(page);await page.locator('.language-menu button').click();await page.getByRole('option',{name:languageNames.en,exact:true}).click()
+ await expect(page.locator('html')).toHaveAttribute('lang','en')
+ await expect(page.locator('[data-app-menu]')).toHaveAttribute('aria-expanded','false')
+ await workers.click({button:'right'})
+ await page.screenshot({path:join(scratchRoot,'dock-tab-context-menu.png')})
+ await menu.getByRole('menuitem',{name:'Close all to the left',exact:true}).click()
+ await expect(tabs).toHaveCount(2);await expect(api).toHaveCount(0)
+ await expect.poll(async()=>(await stats(page)).streams).toBe(1)
+ await expect(active).toHaveText(activeTitle!)
+ await workers.click({button:'right'})
+ await menu.getByRole('menuitem',{name:'Close all to the right',exact:true}).click()
+ await expect(tabs).toHaveCount(1);await expect(workers).toHaveAttribute('aria-selected','true')
+ await expect.poll(async()=>(await lifecycleStats(page)).terminals).toBe(0)
+ const viewport=page.locator('[role=tabpanel]:not([hidden]) [data-log-viewport]')
+ await expect(viewport).toBeFocused()
+ const opened=context.waitForEvent('page');await viewport.press('Alt+Shift+Enter');const popup=await opened
+ await expect(popup.locator('[data-log-viewport]')).toContainText('worker-1')
+ await workers.locator('button').first().focus();await page.keyboard.press('Shift+F10')
+ await expect(menu).toBeVisible()
+ const closed=popup.waitForEvent('close')
+ await menu.getByRole('menuitem',{name:'Close all',exact:true}).click();await closed
+ await expect(tabs).toHaveCount(0);await expect.poll(async()=>(await stats(page)).streams).toBe(0)
+ expect(page.isClosed()).toBe(false);expect(context.pages()).toHaveLength(1)
+ // Single Close is available on terminal and property tabs through the same menu.
+ await grid.getByRole('gridcell',{name:'api',exact:true}).click();await page.keyboard.press('s')
+ await expect(tabs).toHaveCount(1);await tabs.first().click({button:'right'})
+ await menu.getByRole('menuitem',{name:'Close',exact:true}).click();await expect(tabs).toHaveCount(0)
+ await expect.poll(async()=>(await lifecycleStats(page)).terminals).toBe(0)
+})
+
+test('hidden resource frame cannot scroll away its headers above a resized log dock',async({page})=>{
+ await page.route('**/api/GetResource',async route=>{
+  const response=await route.fetch(),body=await response.json()
+  body.facts=Array.from({length:150},(_,index)=>({key:`fact-${index}`,value:`Resource detail ${index}`}))
+  await route.fulfill({response,json:body})
+ })
+ await page.setViewportSize({width:1916,height:960})
+ await openLogs(page,'api')
+ const drawer=page.getByRole('dialog',{name:'services api',exact:true})
+ const resize=page.getByRole('separator',{name:'Resize the bottom panel',exact:true})
+ const main=page.locator('[data-workspace-surface] main')
+ for(const height of [540,960,360,960]){
+  await page.setViewportSize({width:1916,height})
+  await resize.focus();await resize.press('End')
+  // Native focus scrolling is the trigger: this tab can be below a compressed
+  // resource viewport while the dock owns most of the available height.
+  await drawer.getByRole('tab',{name:'Details',exact:true}).evaluate(el=>(el as HTMLElement).focus())
+  await page.screenshot({path:join(scratchRoot,`resource-frame-focus-${height}.png`)})
+  expect(await main.evaluate(el=>el.scrollTop)).toBe(0)
+  await drawer.getByText('Resource detail 149',{exact:true}).evaluate(el=>el.scrollIntoView({block:'start'}))
+  expect(await main.evaluate(el=>el.scrollTop)).toBe(0)
+  expect(await page.locator('#root > div').evaluate(el=>el.scrollTop)).toBe(0)
+  expect(await page.evaluate(()=>window.scrollY)).toBe(0)
+  const top=(await main.boundingBox())!.y
+  expect((await page.locator('.resource-list-toolbar').boundingBox())!.y).toBe(top)
+  await resize.focus();await resize.press('Home')
+  const bounds=(await main.boundingBox())!,dock=(await page.locator('[data-area=dock]').boundingBox())!
+  expect(Math.abs(bounds.y+bounds.height-dock.y)).toBeLessThanOrEqual(1)
+  expect((await page.locator('.resource-list-toolbar').boundingBox())!.y).toBe(bounds.y)
+ }
+ await page.screenshot({path:join(scratchRoot,'resource-frame-restored.png')})
 })

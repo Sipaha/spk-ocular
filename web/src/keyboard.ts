@@ -34,7 +34,8 @@ export function isShortcut(
 
 /**
  * Keys typed in a terminal belong to the program in it: app-wide shortcuts
- * (including capture-phase and window listeners) must ignore them.
+ * must ignore them, apart from the explicitly reserved Alt+Shift panel
+ * resize chord handled by App before terminal input.
  */
 export function inTerminal(target: EventTarget | null): boolean {
   return target instanceof Element && !!target.closest('[data-terminal]')

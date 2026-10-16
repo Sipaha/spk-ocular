@@ -1,6 +1,30 @@
-import { useEffect, useRef } from 'react'
-import { setLayoutResizing } from './layoutResize'
+import { useEffect, useLayoutEffect, useRef } from 'react'
+import { layoutResizing, setLayoutResizing } from './layoutResize'
 import { create } from 'zustand'
+
+type ResizeAxis = 'width' | 'height'
+const panelResizers = new WeakMap<HTMLElement, Map<ResizeAxis, (direction: number) => void>>()
+
+/** Reserve only the chosen chord and only inside its nearest resizable panel. */
+export function resizeFocusedPanel(event: KeyboardEvent): boolean {
+  if (!event.altKey || !event.shiftKey || event.ctrlKey || event.metaKey || event.isComposing || event.defaultPrevented || event.getModifierState?.('AltGraph') || layoutResizing()) return false
+  const axis = event.key === 'ArrowLeft' || event.key === 'ArrowRight' ? 'width' : event.key === 'ArrowUp' || event.key === 'ArrowDown' ? 'height' : null
+  if (!axis || !(event.target instanceof HTMLElement)) return false
+  const target = event.target
+  const overlay = document.querySelector('[aria-modal="true"], [role="menu"]')
+  if (overlay && !overlay.contains(target)) return false
+  const boundary = target.closest('[aria-modal="true"], [role="menu"]')
+  for (let panel: HTMLElement | null = target; panel; panel = panel.parentElement) {
+    if (panel.closest('[hidden], [inert], [aria-hidden="true"]')) return false
+    const resize = panelResizers.get(panel)?.get(axis)
+    if (resize) {
+      resize(event.key === 'ArrowRight' || event.key === 'ArrowDown' ? 1 : -1)
+      return true
+    }
+    if (panel === boundary) break
+  }
+  return false
+}
 
 /** Widths live above targets and drawers, so navigation does not reset the layout. */
 export const usePanelWidths = create<{ targets: number; navigation: number; details: number | null; helmDetails: number | null; agentsTargets: number }>(() => ({ targets: 240, navigation: 192, details: null, helmDetails: null, agentsTargets: 210 }))
@@ -20,8 +44,22 @@ interface Props {
 
 /** Resize the parent panel once per frame; commit React state only on release. */
 export function PanelResize({ label, axis = 'width', reverse = false, outside = false, value, min, max, onDone }: Props) {
+  const handleRef = useRef<HTMLDivElement>(null)
   const drag = useRef<{ panel: HTMLElement; start: number; size: number; next: number; frame: number | null; cursor: string; select: string; handle: HTMLElement; focus: HTMLElement | null } | null>(null)
   const clamp = (size: number) => Math.max(Math.min(min, max()), Math.min(max(), size))
+  useLayoutEffect(() => {
+    const panel = handleRef.current?.parentElement
+    if (!panel) return
+    let resizers = panelResizers.get(panel)
+    if (!resizers) { resizers = new Map(); panelResizers.set(panel, resizers) }
+    const resize = (direction: number) => {
+      const next = clamp(panel.getBoundingClientRect()[axis] + direction * 20 * (reverse ? -1 : 1))
+      panel.style[axis] = `${next}px`
+      onDone(next)
+    }
+    resizers.set(axis, resize)
+    return () => { if (resizers.get(axis) === resize) resizers.delete(axis) }
+  })
   const paint = () => {
     const d = drag.current
     if (!d) return
@@ -57,7 +95,7 @@ export function PanelResize({ label, axis = 'width', reverse = false, outside = 
     d.next = clamp(d.size + ((axis === 'width' ? x : y) - d.start) * (reverse ? -1 : 1))
     if (d.frame === null) d.frame = requestAnimationFrame(paint)
   }
-  return <div
+  return <div ref={handleRef}
     role="separator" tabIndex={0} aria-label={label}
     aria-orientation={axis === 'width' ? 'vertical' : 'horizontal'}
     aria-valuemin={min} aria-valuenow={Math.round(value)}

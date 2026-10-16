@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { lazy, Suspense, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { ApiError, type Client } from '../api/client'
 import type { Ref, Value, ValueEditRequest, ValueEncoding, ValueList, ValueOp, ValuePlan, ValueResult } from '../api/types'
 import { holdEdits, mayLeave } from '../edit/guard'
@@ -7,6 +7,13 @@ import { refTitle } from '../refs'
 import { useScopeWords } from '../scopeNames'
 import { asText, fromBase64, toBase64, typedBytes, utf8, validKey } from './bytes'
 import { errorDetail } from '../errors'
+import { focusMark, restoreFocus, overlayOpen } from '../shortcuts'
+
+import { EditDiff } from '../edit/EditDiff'
+import { ActionIconButton } from '../components/ActionIconButton'
+import { CloseIcon } from '../components/icons'
+
+const Editor = lazy(() => import('../components/YamlView'))
 
 /** What the dialog does: set a key's value (a new key without key) or delete a key. */
 export interface ValueDialogMode {
@@ -37,12 +44,13 @@ const draftOf = (v: Value | undefined) => v?.value ?? ''
 
 /**
  * A key's change: the value (text or base64, bytes kept exactly), then a
- * review without any value (sizes, what else changes, who reads it,
- * rights), then one write of exactly what was reviewed. An existing key's
- * value starts not loaded: nothing is written until it is loaded or a new
- * one typed (an untouched field is not an empty value).
+ * review (sizes, other changes, readers, rights, and text diffs for
+ * ConfigMaps only), then one write of exactly what was reviewed. An existing key's
+ * value starts not loaded (ConfigMaps load it on opening): nothing is
+ * written until it is loaded or a new one typed (an untouched field is not an empty value).
  */
 export function ValueDialog({ client, subject, list: listed, mode, shown, revision, kindTitle, onClose, onDone }: Props) {
+  const configMap = subject.kind === 'configmaps'
   const isNew = mode.op === 'set' && !mode.key
   // The base the draft lies on; "Load current" moves it to the version it loaded.
   const [list, setList] = useState(listed)
@@ -55,13 +63,18 @@ export function ValueDialog({ client, subject, list: listed, mode, shown, revisi
   const [loaded, setLoaded] = useState(!!shown)
   const [touched, setTouched] = useState(false)
   const [note, setNote] = useState<string | null>(null)
-  const [loading, setLoading] = useState(false)
+  const [loading, setLoading] = useState(configMap && mode.op === 'set' && !!mode.key)
+  const [editorVersion, setEditorVersion] = useState(0)
+  const editorHost = useRef<HTMLDivElement>(null)
+  const focusValue = () => configMap ? (editorHost.current?.querySelector<HTMLElement>('.cm-content') ?? box.current)?.focus({preventScroll:true}) : field.current?.focus()
+  const loadingEpoch = useRef(0)
   // The review asked for: a snapshot of the draft then.
   const [review, setReview] = useState<ValueEditRequest | null>(mode.op === 'delete' ? { ref: subject, base: list.base, key: mode.key ?? '', op: 'delete' } : null)
   const box = useRef<HTMLDivElement>(null)
   const field = useRef<HTMLTextAreaElement>(null)
   const keyField = useRef<HTMLInputElement>(null)
   const live = useRef(true)
+  const [opener] = useState(focusMark)
   // The draft's epoch: typing, switching the encoding or starting a review
   // makes a pending "Load current" stale (its answer never replaces them).
   const epoch = useRef(0)
@@ -74,16 +87,18 @@ export function ValueDialog({ client, subject, list: listed, mode, shown, revisi
   useLayoutEffect(() => {
     live.current = true
     // The draft is held like the YAML editor's text: leaving asks first.
-    const release = holdEdits({ dirty: () => dirtyRef.current, discard: onClose, focus: () => field.current?.focus() })
+    const release = holdEdits({ dirty: () => dirtyRef.current, discard: onClose, focus: focusValue })
     return () => {
       live.current = false
       release()
+      if(configMap)requestAnimationFrame(()=>{if(!live.current && !overlayOpen())restoreFocus(opener)})
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
   useLayoutEffect(() => {
     if (review) return
-    ;(isNew ? keyField.current : field.current)?.focus()
+    if(isNew)keyField.current?.focus()
+    else focusValue()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [review === null])
 
@@ -117,17 +132,21 @@ export function ValueDialog({ client, subject, list: listed, mode, shown, revisi
 
   // The current value, with the keys of the same version: the draft's base moves to it.
   const loadCurrent = () => {
-    if (!mode.key || loading) return
+    if (!mode.key || loadingEpoch.current) return
     setLoading(true)
     setNote(null)
     const key = mode.key
     const at = ++epoch.current
+    loadingEpoch.current = at
     client
       .getValues(subject)
-      .then(async (fresh) => ({ fresh, v: await client.revealValue({ ...subject, uid: fresh.ref.uid ?? subject.uid }, key) }))
+      .then(async (fresh) => !live.current || loadingEpoch.current !== at ? null : ({ fresh, v: await client.revealValue({ ...subject, uid: fresh.ref.uid ?? subject.uid }, key) }))
       .then(
-        ({ fresh, v }) => {
-          if (!live.current) return
+        (result) => {
+          if(!result)return
+          const {fresh,v}=result
+          if (!live.current || loadingEpoch.current !== at) return
+          loadingEpoch.current = 0
           setLoading(false)
           if (at !== epoch.current) return setNote(t('values.loadDropped'))
           if (v.uid !== subject.uid || v.version !== fresh.version) return setNote(t('values.changed'))
@@ -137,20 +156,30 @@ export function ValueDialog({ client, subject, list: listed, mode, shown, revisi
           setValue(v.value)
           setLoaded(true)
           setTouched(false)
-          requestAnimationFrame(() => field.current?.focus())
+          setEditorVersion(n=>n+1)
+          requestAnimationFrame(focusValue)
         },
         (e) => {
-          if (!live.current) return
+          if (!live.current || loadingEpoch.current !== at) return
+          loadingEpoch.current = 0
           setLoading(false)
           setNote(t('values.readFailed', { class: classLabel(codeOf(e)), detail: errorDetail(e) }))
         },
       )
   }
 
+  useEffect(()=>{
+    if(configMap && mode.op==='set' && mode.key)loadCurrent()
+    // The initial load belongs to this dialog. StrictMode replay may reuse its
+    // pending request; ordinary edits never trigger another load.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  },[])
+
   const title = t(mode.op === 'delete' ? 'values.dialogDelete' : isNew ? 'values.dialogAdd' : 'values.dialogEdit')
   const moved = !!revision && revision !== list.version
 
   const onKey = (e: React.KeyboardEvent) => {
+    if(configMap && (e.defaultPrevented || e.nativeEvent.isComposing))return
     if (e.key === 'Escape') {
       e.stopPropagation()
       e.preventDefault()
@@ -175,7 +204,7 @@ export function ValueDialog({ client, subject, list: listed, mode, shown, revisi
     )
 
   return (
-    <Overlay onOutside={cancel}>
+    <Overlay onOutside={cancel} roomy={configMap}>
       <div
         ref={box}
         role="dialog"
@@ -183,11 +212,12 @@ export function ValueDialog({ client, subject, list: listed, mode, shown, revisi
         aria-label={`${title} ${refTitle(subject)}`}
         tabIndex={-1}
         onKeyDown={onKey}
-        className="flex max-h-[88%] w-[min(760px,94%)] flex-col gap-3 overflow-y-auto rounded-lg border border-line bg-panel p-4 shadow-2xl outline-none"
+        className={configMap ? "configmap-value-dialog flex h-[min(780px,90dvh)] w-[min(1100px,96vw)] min-h-0 flex-col gap-3 overflow-y-auto rounded-lg border border-line bg-panel p-4 shadow-2xl outline-none" : "flex max-h-[88%] w-[min(760px,94%)] flex-col gap-3 overflow-y-auto rounded-lg border border-line bg-panel p-4 shadow-2xl outline-none"}
       >
-        <h2 className="font-semibold">
-          {title} · <span className="font-mono text-fg-muted">{refTitle(subject)}</span>
-        </h2>
+        <div className="flex items-start justify-between gap-3">
+          <h2 className="min-w-0 break-all font-semibold">{title} · <span className="font-mono text-fg-muted">{refTitle(subject)}</span></h2>
+          {configMap && <ActionIconButton label={t('edit.close')} description={t('edit.close')} onClick={cancel}><CloseIcon className="h-4 w-4" /></ActionIconButton>}
+        </div>
         {moved && (
           <p role="status" className="rounded-md bg-warning/10 px-3 py-1.5 text-xs text-warning">
             {t('values.changedOnServer')}
@@ -218,7 +248,7 @@ export function ValueDialog({ client, subject, list: listed, mode, shown, revisi
                 type="button"
                 role="radio"
                 aria-checked={encoding === enc}
-                disabled={enc === 'text' && textOnlyBase64}
+                disabled={(enc === 'text' && textOnlyBase64) || (configMap && loading)}
                 onClick={() => switchTo(enc)}
                 className={['border border-line px-2 py-0.5', i === 0 ? 'rounded-l-md' : '-ml-px rounded-r-md', encoding === enc ? 'bg-accent text-accent-fg' : 'text-fg-muted hover:bg-hover', 'disabled:opacity-50'].join(' ')}
               >
@@ -234,7 +264,12 @@ export function ValueDialog({ client, subject, list: listed, mode, shown, revisi
           )}
         </div>
         {textOnlyBase64 && <p className="text-xs text-fg-subtle">{t('values.binaryOnly')}</p>}
-        {!isNew && !loaded && !touched && <p className="text-xs text-warning">{t('values.notLoaded')}</p>}
+        {!configMap && !isNew && !loaded && !touched && <p className="text-xs text-warning">{t('values.notLoaded')}</p>}
+        {configMap ? <div ref={editorHost} className="min-h-[160px] flex-1 overflow-hidden rounded-md border border-line bg-app" aria-busy={loading}>
+          {loading ? <p role="status" className="p-3 text-fg-subtle">{t('values.reading')}</p> : <Suspense fallback={<p role="status" className="p-3 text-fg-subtle">{t('app.loading')}</p>}>
+            <Editor key={`${encoding}:${editorVersion}`} filename={encoding==='base64'?'value.txt':keyName || 'value.txt'} text={value} editable={isNew || loaded} autoFocus={!isNew && loaded} label={t('values.value')} onSubmit={startReview} onChange={next=>{epoch.current++;setValue(next);setTouched(true)}} />
+          </Suspense>}
+        </div> : (
         <textarea
           ref={field}
           aria-label={t('values.value')}
@@ -248,6 +283,7 @@ export function ValueDialog({ client, subject, list: listed, mode, shown, revisi
           }}
           className="min-h-40 resize-y rounded-md border border-line bg-app px-2 py-1 font-mono text-xs break-all text-fg outline-none focus:border-accent"
         />
+        )}
         <p className="text-xs text-fg-subtle">
           {'bytes' in typed ? t('values.bytes', { n: typed.bytes.length }) : <span className="text-danger">{t(typed.error === 'tooLong' ? 'values.tooLong' : 'values.badBase64')}</span>}
         </p>
@@ -269,9 +305,9 @@ export function ValueDialog({ client, subject, list: listed, mode, shown, revisi
   )
 }
 
-function Overlay({ onOutside, children }: { onOutside: () => void; children: React.ReactNode }) {
+function Overlay({ onOutside, children, roomy=false }: { onOutside: () => void; children: React.ReactNode; roomy?: boolean }) {
   return (
-    <div className="fixed inset-0 z-30 flex items-start justify-center bg-black/40 pt-10" onMouseDown={(e) => e.target === e.currentTarget && onOutside()}>
+    <div className={roomy?"fixed inset-0 z-30 flex items-center justify-center bg-black/40 p-2":"fixed inset-0 z-30 flex items-start justify-center bg-black/40 pt-10"} onMouseDown={(e) => e.target === e.currentTarget && onOutside()}>
       {children}
     </div>
   )
@@ -279,7 +315,7 @@ function Overlay({ onOutside, children }: { onOutside: () => void; children: Rea
 
 /** Tab stays in the dialog. */
 function trapTab(e: React.KeyboardEvent, box: HTMLElement | null) {
-  const list = [...(box?.querySelectorAll<HTMLElement>('button:not(:disabled), input, textarea') ?? [])]
+  const list = [...(box?.querySelectorAll<HTMLElement>('button:not(:disabled), input, textarea, .cm-content') ?? [])]
   if (!list.length) return
   const i = list.indexOf(document.activeElement as HTMLElement)
   const next = e.shiftKey ? (i <= 0 ? list.length - 1 : i - 1) : i < 0 || i === list.length - 1 ? 0 : i + 1
@@ -430,9 +466,9 @@ function ValueReview({ client, req, kindTitle, title, onBack, onDone }: { client
         onKeyDown={onKey}
         className="flex max-h-[88%] w-[min(760px,94%)] flex-col gap-3 overflow-y-auto rounded-lg border border-line bg-panel p-4 shadow-2xl outline-none"
       >
-        <h2 className="font-semibold">
+        <div className="flex items-start justify-between gap-3"><h2 className="min-w-0 break-all font-semibold">
           <span className={destructive ? 'text-danger' : ''}>{title}</span> · <span className="font-mono text-fg-muted">{name}</span>
-        </h2>
+        </h2>{req.ref.kind==='configmaps' && <ActionIconButton label={t('edit.close')} description={t(written?'edit.close':req.op==='delete'?'values.cancel':'values.back')} disabled={busy==='run'} onClick={back}><CloseIcon className="h-4 w-4" /></ActionIconButton>}</div>
 
         <dl aria-label="where" className="grid grid-cols-[max-content_1fr] gap-x-4 gap-y-0.5 rounded-md border border-line px-3 py-2 text-xs">
           <dt className="text-fg-muted">{t('action.context')}</dt>
@@ -472,6 +508,7 @@ function ValueReview({ client, req, kindTitle, title, onBack, onDone }: { client
                     {sizes}
                   </p>
                 )}
+                {req.ref.kind==='configmaps' && plan.textDiff && <EditDiff before={plan.textDiff.before} after={plan.textDiff.after} exactText />}
                 <p aria-label={t('edit.mode')} className={plan.checked ? 'text-fg-muted' : 'text-warning'}>
                   {plan.checked ? t('edit.checked') : t('edit.local')}
                 </p>

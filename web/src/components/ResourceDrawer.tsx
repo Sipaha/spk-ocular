@@ -496,7 +496,7 @@ function Details(props: { client: Client; hub: ViewHub; target: { provider: stri
         {r.facts.map((f) => (
           <div key={f.key} className="contents">
             <dt className="text-fg-muted">{detailLabel(f.key)}</dt>
-            <dd className="min-w-0 font-mono text-[13px] break-all whitespace-pre-line">{f.value}</dd>
+            <dd className="min-w-0 font-mono text-[14px] break-all whitespace-pre-line">{f.value}</dd>
           </div>
         ))}
       </dl>
@@ -505,23 +505,30 @@ function Details(props: { client: Client; hub: ViewHub; target: { provider: stri
       <DeploymentRevisions key={`${r.ref.uid}/${r.ref.name}`} client={client} resource={r}/>
       {(groups.length > 0 || r.relationsError) && (
         <section aria-label={t('drawer.related')}>
-          <h3 className="mb-1.5 text-[12px] font-semibold uppercase tracking-wider text-fg-subtle">{t('drawer.related')}</h3>
-          {groups.map(([type, rels]) => (
+          <h3 className="mb-1.5 text-[14px] font-semibold text-fg">{t('drawer.related')}</h3>
+          {groups.map(([type, rels]) => {
+            const routes = type === 'routes-to' && (r.ref.kind === 'networking.k8s.io/ingresses' || rels.some(rel => rel.route))
+            return (
             <div key={type} className="mb-3">
-              <p className="mb-1.5 flex items-center gap-2 text-[12px] text-fg-subtle">{relationLabel(type)}<span className="font-mono text-[11px]">{rels.length}</span></p>
-              <CompactDetailTable label={relationLabel(type)} minWidth={240} columns={[
+              <p className="mb-1.5 flex items-center gap-2 text-[14px] font-medium text-fg-muted">{relationLabel(type)}<span className="font-mono text-[13px] font-normal tabular-nums">{rels.length}</span></p>
+              <CompactDetailTable headerClassName="text-[13px] text-fg-muted" label={relationLabel(type)} minWidth={routes ? 420 : 240} columns={[
                 { id: 'type', label: t('drawer.relationType'), width: 100 },
                 { id: 'name', label: t('drawer.relationName') },
-                { id: 'open', label: t('drawer.relationOpen'), width: 64 },
+                ...(routes ? [{ id: 'path', label: t('drawer.path') }] : []),
+                { id: 'open', label: t('drawer.relationOpen'), width: 80 },
               ]}>
-                {rels.map(rel => {
+                {rels.map((rel,index) => {
                   const title = `${rel.ref.kind}/${refTitle(rel.ref)}`
-                  return <CompactDetailRow key={`${rel.ref.kind}/${rel.ref.scope ?? ''}/${rel.ref.name}/${rel.ref.uid ?? ''}`} className="text-fg-muted" data-related-resource>
-                    <td className="px-2 py-1"><span className="block truncate text-[11px] text-fg-subtle" title={rel.ref.kind}>{(kindTitleOf?.(rel.ref.kind) && kindTitleOf(rel.ref.kind) !== rel.ref.kind ? kindTitleOf(rel.ref.kind) : rel.ref.kind.split('/').pop())}</span></td>
+                  return <CompactDetailRow key={`${rel.ref.kind}/${rel.ref.scope ?? ''}/${rel.ref.name}/${rel.ref.uid ?? ''}/${index}`} className="text-fg-muted" data-related-resource>
+                    <td className="px-2 py-1"><span className="block truncate text-[13px] text-fg-muted" title={rel.ref.kind}>{(kindTitleOf?.(rel.ref.kind) && kindTitleOf(rel.ref.kind) !== rel.ref.kind ? kindTitleOf(rel.ref.kind) : rel.ref.kind.split('/').pop())}</span></td>
                     <td className="px-2 py-1" title={rel.inert ? `${title} · ${t('drawer.relationInert')}` : title}>
-                      <span className="block truncate text-[13px]">{refTitle(rel.ref)}</span>
-                      {rel.ref.scope && rel.ref.scope !== r.ref.scope && <span className="block truncate text-[11px] text-fg-subtle" title={rel.ref.scope}>{rel.ref.scope}</span>}
+                      <span className="block truncate text-[14px] text-fg">{refTitle(rel.ref)}</span>
+                      {rel.ref.scope && rel.ref.scope !== r.ref.scope && <span className="block truncate text-[13px] text-fg-muted" title={rel.ref.scope}>{rel.ref.scope}</span>}
                     </td>
+                    {routes && <td className="px-2 py-1 font-mono text-[14px] text-fg break-all whitespace-pre-wrap">
+                      {rel.route?.path || '—'}
+                      {(rel.route?.host || rel.route?.pathType || rel.route?.defaultBackend) && <span className="block text-[12px] text-fg-muted">{rel.route.defaultBackend ? 'defaultBackend' : [rel.route.host,rel.route.pathType].filter(Boolean).join(' · ')}</span>}
+                    </td>}
                     <td className="px-2 py-1">
                       {rel.inert ? <span className="text-fg-subtle" title={t('drawer.relationInert')}>—</span> : <CompactDetailAction label={title} className="text-fg-subtle hover:text-accent" onClick={()=>onGo({...rel.ref,provider:target.provider,target:target.id})}><LinkArrowIcon className="h-[14px] w-[14px]"/></CompactDetailAction>}
                     </td>
@@ -529,7 +536,7 @@ function Details(props: { client: Client; hub: ViewHub; target: { provider: stri
                 })}
               </CompactDetailTable>
             </div>
-          ))}
+          )})}
           {r.relationsError && <p className="text-xs text-warning">{t('drawer.relationsPartial', { error: r.relationsError })}</p>}
           {r.relationsTruncated && <p className="text-xs text-fg-subtle">{t('drawer.relationsTruncated')}</p>}
         </section>
@@ -572,26 +579,28 @@ function ObjectEvents({ client, hub, kind, subject }: { client: Client; hub: Vie
   const [refreshing, setRefreshing] = useState(false)
   const refreshingRef = useRef(false)
   return (
-    <section aria-label={t('drawer.events')} className="flex h-72 flex-col">
-      <h3 className="mb-1.5 text-[12px] font-semibold uppercase tracking-wider text-fg-subtle">
-        {t('drawer.events')} <span className="font-normal">{view.rows.length}</span>
-        {view.resync && !view.cancelled && <RefreshButton className="ml-2" busy={refreshing} disabled={!view.viewId} onClick={() => {
+    <section aria-label={t('drawer.events')} className="flex flex-col">
+      <div data-object-events-toolbar className="mb-1.5 flex min-h-7 shrink-0 items-center gap-2">
+        <h3 className="shrink-0 text-[14px] font-semibold text-fg">{t('drawer.events')} <span className="ml-1 font-mono text-[13px] font-normal tabular-nums text-fg-muted">{view.rows.length}</span></h3>
+        <div className="resource-refresh-progress">
+          {view.status.state === 'loading' && view.rows.length > 0 && <ListLoading view={view} inline />}
+        </div>
+        {view.resync && !view.cancelled && <RefreshButton busy={refreshing || view.status.state === 'loading'} disabled={!view.viewId} onClick={() => {
           if (!view.viewId || refreshingRef.current) return
           refreshingRef.current = true; setRefreshing(true)
           client.resyncView(view.viewId).catch(e => { if (!(e instanceof ApiError && e.code === 'gone')) showNotice(t('view.resyncFailed', {error: String(e)})) }).finally(() => { refreshingRef.current = false; setRefreshing(false) })
         }} />}
-      </h3>
-      {view.status.state === 'loading' && view.rows.length > 0 && <ListLoading view={view} inline />}
+      </div>
       {!view.cancelled && view.status.state === 'stale' && <p role="alert" className="mb-1 text-xs text-warning">{classLabel(view.status.class ?? '')} {view.status.message}</p>}
       {view.cancelled ? <CancelledList retry={view.retry} pending={view.cancelling} /> : view.status.state === 'error' ? (
         <p className="text-xs text-danger">
           {classLabel(view.status.class ?? '')} {view.status.message}
         </p>
       ) : view.rows.length === 0 ? (
-        view.status.state === 'loading' ? <ListLoading view={view} /> : <p className="text-xs text-fg-subtle">{t('drawer.noEvents')}</p>
+        view.status.state === 'loading' ? <ListLoading view={view} /> : <p className="text-[14px] text-fg-muted">{t('drawer.noEvents')}</p>
       ) : (
-        <div className="flex min-h-0 flex-1 flex-col rounded-md border border-line">
-          <ResourceTable columns={cols} rows={view.rows} hideScope filter="" selected={null} onSelect={() => {}} />
+        <div className="flex min-h-0 flex-col overflow-hidden rounded border border-line">
+          <ResourceTable appearance="detail" ariaLabel={t('drawer.events')} columns={cols} rows={view.rows} hideScope filter="" selected={null} onSelect={() => {}} />
         </div>
       )}
     </section>

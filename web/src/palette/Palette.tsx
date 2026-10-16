@@ -3,7 +3,7 @@ import type { Client } from '../api/client'
 import type { Row, RecentObject } from '../api/types'
 import { classLabel, t, type MessageKey } from '../i18n'
 import { type Actions, useStore } from '../store'
-import { typedKindQuery, buildKeyboardItems, type PaletteItem, type Sources } from './items'
+import { typedKindQuery, buildKeyboardItems, type PaletteAction, type PaletteItem, type Sources } from './items'
 import { scopeWords } from '../scopeNames'
 import { closePalette, usePalette } from './store'
 import { focusMark, restoreFocus } from '../shortcuts'
@@ -31,6 +31,8 @@ function PaletteDialog({ client, act, hub }: { client: Client; act: Actions; hub
   const [query, setQuery] = useState('')
   // The item the user moved to (kept across live updates by its key).
   const [moved, setMoved] = useState<string | null>(null)
+  const [resolution, setResolution] = useState<{ input: string; target: string; action: Extract<PaletteAction, {type:'search'}> } | null>(null)
+  const completedResolution = useRef<typeof resolution>(null)
   const [recents, setRecents] = useState<RecentObject[]>([])
   const [mark] = useState(focusMark)
   const input = useRef<HTMLInputElement>(null)
@@ -75,13 +77,16 @@ function PaletteDialog({ client, act, hub }: { client: Client; act: Actions; hub
     }
   }, [view, host, hostProvider, liveScopes, recents])
   const currentSources: Sources = useMemo(() => ({ ...baseSources, rows: host ? rows : EMPTY_ROWS }), [baseSources, host, rows])
-  const originalTyped = typedKindQuery(query, baseSources.kinds)
-  const originalNeedsRead = originalTyped?.kinds.length === 1 && (originalTyped.kinds[0].id !== host?.currentKind || !!originalTyped.scope)
+  const originalTyped = typedKindQuery(query, baseSources.kinds, baseSources.scopes)
+  const originalNeedsRead = originalTyped?.kinds.length === 1 && !originalTyped.scopeChoices && (originalTyped.kinds[0].id !== host?.currentKind || !!originalTyped.scope)
   const originalSources = originalNeedsRead ? baseSources : currentSources
   const baseSearch = useMemo(() => buildKeyboardItems(query, originalSources, !originalNeedsRead), [query, originalSources, originalNeedsRead])
   const lookupQuery = originalTyped ? query : baseSearch.query
-  const typed=typedKindQuery(lookupQuery,host?.kinds??[])
-  const searchedKind=typed?.kinds.length===1?typed.kinds[0]:null
+  const targetKey=JSON.stringify(host?.target)
+  const resolving=resolution?.input===query&&resolution.target===targetKey ? resolution : null
+  const parsed=typedKindQuery(lookupQuery,host?.kinds??[],baseSources.scopes)
+  const typed=resolving?{kinds:(host?.kinds??[]).filter(kind=>kind.id===resolving.action.kind),filter:resolving.action.filter,scope:resolving.action.scope}:parsed
+  const searchedKind=typed?.kinds.length===1&&!typed.scopeChoices?typed.kinds[0]:null
   const lookupScope=typed?.scope??(searchedKind?.scoped?host?.selectedScope:{mode:'none' as const})
   const searchKey=host&&searchedKind&&(searchedKind.id!==host.currentKind||!!typed?.scope)&&lookupScope ? JSON.stringify({provider:host.target.provider,target:host.target.id,kind:searchedKind.id,scope:lookupScope}) : ''
   const lookupSync=useMemo(()=>{
@@ -100,7 +105,7 @@ function PaletteDialog({ client, act, hub }: { client: Client; act: Actions; hub
   const searchError=searchKey&&lookup?.status.state==='error' ? lookup.openError||lookup.status.message||t('status.error') : ''
   const failures=lookup?.status.coverage?.filter(source=>source.state!=='ready'&&source.state!=='loading')??[]
   const searchWarning=lookup?.status.state==='stale' ? lookup.status.message||t('coverage.stale') : failures.length ? t('coverage.notObserved')+': '+failures.map(source=>source.source+' · '+classLabel(source.class??source.state)).join(', ') : ''
-  const sources: Sources = useMemo(() => ({ ...baseSources,selectedScope:typed?.scope??baseSources.selectedScope, rows: host ? searchRows : [] }), [baseSources, host, searchRows,typed?.scope])
+  const sources: Sources = useMemo(() => ({ ...baseSources,kinds:resolving?baseSources.kinds.filter(kind=>kind.id===resolving.action.kind):baseSources.kinds,scopes:resolving?.action.scope.mode==='one'?[resolving.action.scope.name!]:baseSources.scopes,selectedScope:typed?.scope??baseSources.selectedScope, rows: host ? searchRows : [] }), [baseSources, host, searchRows,typed?.scope,resolving])
   const search = useMemo(() => searchKey ? buildKeyboardItems(lookupQuery, sources, !searching && !searchError) : baseSearch, [searchKey, lookupQuery, sources, searching, searchError, baseSearch])
   const built = search.built
   const correctedQuery = search.query !== query ? search.query : null
@@ -119,14 +124,35 @@ function PaletteDialog({ client, act, hub }: { client: Client; act: Actions; hub
   }, [cursor])
 
   const run = (item: PaletteItem) => {
-    closePalette()
+    if(searching||searchError)return
     const a = item.action
+    if(a.type==='search') {
+      setResolution({input:query,target:targetKey,action:a})
+      setMoved(null)
+      return
+    }
+    closePalette()
     if (a.type === 'target') void act.select(a.ref)
     else if (a.type === 'kind') host?.openKind(a.kind, a.filter ?? '',a.scope)
     else if (a.type === 'scope') host?.setScope(a.scope)
     else if (a.type === 'command') agents.showPanel('grants')
     else host?.openObject(a.ref,a.scope)
   }
+
+  // A namespace choice resolves only that one view. Keep the palette open
+  // while loading, then hand the exact live Ref/UID to ordinary navigation.
+  useEffect(()=>{
+    if(!resolving||!lookup||searching||searchError||completedResolution.current===resolving)return
+    const item=built.items.find(candidate=>candidate.key===built.cursor)
+    if(!item)return
+    const action=item.action
+    if(action.type!=='object'&&action.type!=='kind')return
+    completedResolution.current=resolving
+    if(built.items.length>1)return
+    closePalette()
+    if(action.type==='object')host?.openObject(action.ref,action.scope)
+    else host?.openKind(action.kind,action.filter??'',action.scope)
+  },[resolving,lookup,searching,searchError,built,host])
 
   const move = (to: number) => {
     const n = built.items.length
@@ -176,6 +202,7 @@ function PaletteDialog({ client, act, hub }: { client: Client; act: Actions; hub
             value={query}
             onChange={(e) => {
               setQuery(e.target.value)
+              setResolution(null)
               setMoved(null)
             }}
             placeholder={placeholder}

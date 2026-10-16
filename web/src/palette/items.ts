@@ -13,6 +13,7 @@ import { englishKeyboardQuery } from './keyboardLayout'
 
 export type PaletteAction =
   | { type: 'kind'; kind: string; filter?: string; scope?:ScopeSel }
+  | { type: 'search'; kind: string; filter: string; scope: ScopeSel }
   | { type: 'target'; ref: TargetRef }
   | { type: 'scope'; scope: ScopeSel }
   | { type: 'object'; ref: Ref; scope?:ScopeSel }
@@ -65,10 +66,10 @@ function kindTitle(kinds: KindDescriptor[], id: string) {
 const objectHint = (kinds: KindDescriptor[], r: Ref) => (r.scope ? `${kindTitle(kinds, r.kind)} · ${r.scope}` : kindTitle(kinds, r.kind))
 
 const kindItem = (k: KindDescriptor, filter?: string,scope?:ScopeSel): PaletteItem => ({
-  key: `kind:${k.id}${filter ? `:${filter}` : ''}`,
+  key: `kind:${k.id}${filter ? `:${filter}` : ''}${scope ? `:scope:${JSON.stringify(scope)}` : ''}`,
   section: 'kind',
   label: k.title,
-  hint: filter ? t('palette.filtered', { text: filter }) : k.subgroup ? `${k.group} · ${k.subgroup}` : k.group,
+  hint: `${scope?.mode === 'one' ? `${scope.name} · ` : ''}${filter ? t('palette.filtered', { text: filter }) : k.subgroup ? `${k.group} · ${k.subgroup}` : k.group}`,
   action: { type:'kind',kind:k.id,...(filter?{filter}:{}),...(scope?{scope}:{}) },
 })
 
@@ -206,7 +207,7 @@ function command(input: string, src: Sources): Built {
   return { items: [], cursor: null, unknown: true }
 }
 
-export interface TypedKindQuery { kinds: KindDescriptor[]; filter: string; scope?:ScopeSel }
+export interface TypedKindQuery { kinds: KindDescriptor[]; filter: string; scope?:ScopeSel; scopeChoices?: string[] }
 
 /** Exact provider aliases win; an unambiguous prefix also supports "dep model".
  * Ambiguity offers views to choose from and must not start multiple reads. */
@@ -225,15 +226,24 @@ function kindQuery(input:string,kinds:KindDescriptor[]):TypedKindQuery|null {
  return matches.length?{kinds:matches,filter}:null
 }
 /** Explicit scope + kind + name, after the existing kind-first grammar. */
-export function typedKindQuery(input:string,kinds:KindDescriptor[]):TypedKindQuery|null {
+export function typedKindQuery(input:string,kinds:KindDescriptor[],scopes:string[]|null):TypedKindQuery|null {
  const regular=kindQuery(input,kinds)
  if(regular||input.trimStart().startsWith(':')||kinds.some(k=>lower(k.title)===lower(input.trim())))return regular
  const match=input.trim().match(/^(\S+)\s+(\S+)\s+(.+)$/)
  if(!match)return null
  const scoped=kindQuery(match[2]+' '+match[3],kinds.filter(k=>k.scoped))
- return scoped?{...scoped,scope:{mode:'one',name:match[1]}}:null
+ if(!scoped)return null
+ // Only unavailable catalogs allow an unchecked explicit name. A partial
+ // catalog match must resolve before any scoped read or navigation begins.
+ if(scopes===null||scopes.includes(match[1]))return {...scoped,scope:{mode:'one',name:match[1]}}
+ const matches=scopes.filter(name=>name.includes(match[1]))
+ return matches.length===1?{...scoped,scope:{mode:'one',name:matches[0]}}:{...scoped,scopeChoices:matches}
 }
 function typedItems(query:TypedKindQuery,src:Sources):Built {
+ if(query.scopeChoices)return choose(query.scopeChoices.flatMap(name=>query.kinds.map(k=>{
+  const scope:ScopeSel={mode:'one',name}
+  return {...kindItem(k,query.filter,scope),action:{type:'search' as const,kind:k.id,filter:query.filter,scope}}
+ })),[])
  if(query.kinds.length!==1)return choose(query.kinds.map(k=>kindItem(k,query.filter,query.scope)),[])
  const kind=query.kinds[0]
  const found=objects(query.scope?{...src,selectedScope:query.scope}:src).filter(item=>item.action.type==='object'&&item.action.ref.kind===kind.id).map(item=>item.action.type==='object'&&query.scope?{...item,action:{...item.action,scope:query.scope}}:item)
@@ -247,7 +257,7 @@ function typedItems(query:TypedKindQuery,src:Sources):Built {
 }
 export function buildItems(input: string, src: Sources): Built {
  if(input.trimStart().startsWith(':'))return command(input.trimStart(),src)
- const typed=typedKindQuery(input,src.kinds)
+ const typed=typedKindQuery(input,src.kinds,src.scopes)
  return typed?typedItems(typed,src):fuzzy(input,src)
 }
 
@@ -257,7 +267,7 @@ export function buildItems(input: string, src: Sources): Built {
 export function buildKeyboardItems(input: string, src: Sources, allowFallback = true): { query: string; built: Built } {
  const built = buildItems(input, src)
  if (!allowFallback || input.trimStart().startsWith(':')) return { query: input, built }
- const typed = typedKindQuery(input, src.kinds)
+ const typed = typedKindQuery(input, src.kinds, src.scopes)
  const matched = typed?.kinds.length === 1 ? built.items.some(item => item.action.type === 'object') : built.items.length > 0
  if (matched) return { query: input, built }
  const mapped = englishKeyboardQuery(typed ? typed.filter : input)

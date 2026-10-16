@@ -1,3 +1,4 @@
+import { LocationStatus } from '../components/LocationStatus'
 import { RefreshButton } from '../components/RefreshButton'
 import { useEffect, useMemo, useRef, useState, type ComponentProps, type ReactNode } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
@@ -119,12 +120,13 @@ export default function TimelineWorkspace({client,target,scope,scopePicker,drawe
    </div>
    {subject&&<ResourceDrawer {...drawer} subject={subject} onClose={()=>setSubject(null)}/>}
   </div>
-  <footer className="flex shrink-0 flex-wrap gap-x-3 gap-y-1 border-t border-line px-3 py-2 text-xs text-fg-muted">
+  <LocationStatus>
    <span>{t('timeline.counts',{shown:rows.length,total:snapshot?.events.length??0})}</span>
    <span>{t('timeline.retention')}</span><span>{t('timeline.series')}</span>
    {snapshot?.discovery!=='ready'&&snapshot&&<span className="text-warning">{t('graph.discovery')}</span>}
    {snapshot?.truncated&&<span role="status" className="text-warning">{t('timeline.truncated')}</span>}
-  </footer>
   {!!snapshot?.problems.length&&<details className="border-t border-line px-3 py-1 text-xs text-warning"><summary>{t('graph.partial',{count:snapshot.problems.length})}</summary><ul className="max-h-24 overflow-y-auto">{snapshot.problems.map((p,i)=><li key={i}>{p.kind}{p.scope?' / '+p.scope:''} · {p.class}</li>)}</ul></details>}
+  </LocationStatus>
+
  </section>
 }

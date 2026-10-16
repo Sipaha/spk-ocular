@@ -372,17 +372,16 @@ func (s *session) relations(ctx context.Context, def *kindDef, u *unstructured.U
 			}
 		}
 	case ingressesKind:
-		seen := map[string]bool{}
-		add := func(name string) {
-			if name != "" && !seen[name] {
-				seen[name] = true
-				out = append(out, core.Relation{Type: "routes-to", Ref: s.ref(servicesKind, ns, name, "")})
+		// Keep each route: one Service may receive several paths and hosts.
+		add := func(name string, route core.IngressRoute) {
+			if name != "" {
+				out = append(out, core.Relation{Type: "routes-to", Ref: s.ref(servicesKind, ns, name, ""), Route: &route})
 			}
 		}
-		add(str(u.Object, "spec", "defaultBackend", "service", "name"))
-		for _, r := range slice(u.Object, "spec", "rules") {
-			for _, p := range slice(r, "http", "paths") {
-				add(str(p, "backend", "service", "name"))
+		add(str(u.Object, "spec", "defaultBackend", "service", "name"), core.IngressRoute{DefaultBackend: true})
+		for _, rule := range slice(u.Object, "spec", "rules") {
+			for _, path := range slice(rule, "http", "paths") {
+				add(str(path, "backend", "service", "name"), core.IngressRoute{Host: str(rule, "host"), Path: str(path, "path"), PathType: str(path, "pathType")})
 			}
 		}
 	case eventsKind:

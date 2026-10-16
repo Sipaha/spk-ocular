@@ -73,7 +73,7 @@ Ocular's features remain free; competitor packaging does not change that policy.
 ## Editing and actions
 
 - Object creation, multi-document apply, Compose editing and three-way YAML merge.
-- ConfigMap/binaryData value tools, file import/export and decoded certificate views.
+- File import/export and decoded certificate views.
 - Namespace deletion with a typed name and a persistent action journal.
 - Bulk actions with text/choice parameters; reviewed finalizer removal.
 - StatefulSet/DaemonSet rollback, revision browsing and richer YAML comparisons.

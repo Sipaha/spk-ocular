@@ -205,6 +205,8 @@ describe('editing an object in the details', () => {
     const prompt = await choose()
     await userEvent.click(within(prompt).getByRole('button', { name: 'Discard' }))
     expect(await screen.findByRole('heading', { name: 'Nodes' })).toBeInTheDocument()
+    expect(screen.queryByRole('button',{name:'Nodes'})).toBeNull()
+    await userEvent.click(screen.getByRole('button',{name:/^Cluster \(/}))
     expect(screen.getByRole('button', { name: 'Nodes' })).toHaveAttribute('aria-current', 'page')
     expect(await screen.findByRole('dialog', { name: 'nodes node-palette' })).toBeInTheDocument()
     expect(await screen.findByRole('row', { selected: true })).toHaveAttribute('data-row-id', 'node-row')

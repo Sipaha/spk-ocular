@@ -308,7 +308,9 @@ Compact resource relationships, Deployment revision history and declared Helm
 resources share semantic detail-table layout and compact action controls. These
 bounded read-only lists retain feature-owned columns, localized labels and guarded
 resource navigation; they do not inherit primary-grid selection, bulk actions or
-persistence. Timeline keeps its time-axis grid and the agent journal keeps its
+persistence. Ingress relations retain one row per declared HTTP path with host
+and pathType, including repeated Service references; defaultBackend is represented
+without an invented HTTP path. This is configuration, not observed routing. Timeline keeps its time-axis grid and the agent journal keeps its
 server-paginated, variable-height evidence rows.
 
 The cache stores reduced objects, omits Secret/ConfigMap values from list caches,
@@ -397,7 +399,11 @@ than being silently discarded. A stopped source waits on events, not polling.
 Terminal fitting is deferred during panel pointer drags, then the final size is
 applied once. The protocol suppresses equal dimensions. Native Cyrillic keydown
 is forwarded once and its keypress replay suppressed; composing/AltGr events
-retain xterm handling. Shell-generated SIGWINCH redraws remain raw output.
+retain xterm handling. The helper textarea clears delivered residue after xterm
+input/composition finalizers, outside active composition and screen reader mode.
+New key/input/composition events cancel pending cleanup; unmount removes its
+listeners and timer. No output or transport-input deduplication is performed.
+Shell-generated SIGWINCH redraws remain raw output.
 
 Workload tool metadata is prefetched with details and cached for five seconds.
 Selections pin concrete identities; pending clicks are cancellable and never
@@ -481,6 +487,18 @@ operations use a separate read/review/write path for the selected key and object
 Secret error text is sanitized; real values never enter list caches, events,
 recent-object history, grants, audit records, or SQLite.
 
+The same guarded value API supports built-in ConfigMaps. `data` reads as UTF-8;
+`binaryData` is decoded losslessly and edited as base64 when a text field would
+change its bytes. Per-key merge patches remove the same key from the opposite
+storage field while retaining all other keys. Existing binary keys retain their
+storage. ConfigMap Run checks the reviewed version before reconstructing storage
+and still sends UID/resourceVersion preconditions in the single patch. Both kinds
+respect immutable objects and report bounded Pod consumers; key/value data never
+enters list/watch caches through this feature. ConfigMap text review plans may
+include only the selected key's freshly read and expected dry-run/local text for
+a line diff. Binary/CRLF keys and all Secret plans omit text. Text is not included
+in signed grants or persisted; the API also strips it from non-ConfigMap plans.
+
 Action availability and parameters come from kind descriptors. Node drain,
 CronJob creation, Deployment rollout, debugging, and bulk operations have their
 own guarded plans. A destructive confirmation displays the actual target,
@@ -514,6 +532,11 @@ Removed Overview selections map to the default resource kind with the same scope
 Resource navigation search is shared across target switches within one run and
 clears after restart. Search expands groups temporarily. Favorites appear in only
 one place. Namespace row/Enter selects one; checkbox/Space toggles a set.
+Inspector Events uses the shared virtual resource grid with a compact detail
+appearance. Its transparent surface, muted header and row separators match the
+read-only detail tables; content height is bounded to seven rows. Sorting, column
+resizing and Subject/UID-scoped live observation retain the shared paths.
+
 Column resizing uses inherited CSS variables, one DOM update per animation
 frame, and commits React/persistent state on release. Known table headers remain
 mounted during the first row read; later schema refinements preserve sorting by
@@ -554,6 +577,18 @@ escape to the document. Detached log windows expose log export, while Downloads
 history belongs to the main window only. Resource switches keep inert toolbar
 controls and section geometry until the new object settles; privileged children
 are unmounted immediately and their layout space is retained.
+The unopened/closed-connection scene uses two bundled transparent schematic
+illustrations, anchored independently to navigation and main panels. The larger
+lower-left lighthouse and its extended beam have fixed geometry and are clipped
+when navigation resizes; the tower never scales with the panel. Base colors
+match the connected panels; there is no shared panorama or translucent sidebar.
+The illustrations are absent from mounted resource workspaces, including held
+edits during recovery. Its static
+provider section preview performs no discovery or resource reads. The main status
+area owns the single Connect/Cancel action and unchanged attempt controls.
+Navigation section icons are deterministic SVGs keyed by canonical group name,
+with a neutral fallback; localization does not change icon identity.
+
 Use graphite surfaces, system fonts, 14 px text, a 17 px root rem, 32 px table
 rows, 40 px headers/toolbars, 14 px semibold titles, and mostly
 2/4 px radii. Command-palette rows have a 38 px minimum height and vertically

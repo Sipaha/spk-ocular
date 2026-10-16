@@ -50,12 +50,20 @@ type ValueConsumers struct {
 	Items []string `json:"items,omitempty"`
 }
 
-// ValuePlan is what a value edit would do, read without changing
-// anything and without any value.
+// ValueTextDiff is limited to a ConfigMap key whose two sides are text.
+// Empty strings represent absent keys as well as empty values; sizes distinguish them.
+type ValueTextDiff struct {
+	Before string `json:"before"`
+	After  string `json:"after"`
+}
+
+// ValuePlan is what a value edit would do, without changing anything.
+// Secret plans never include values.
 type ValuePlan struct {
-	Where LiveTarget `json:"where"`
-	Key   string     `json:"key"`
-	Op    string     `json:"op"`
+	TextDiff *ValueTextDiff `json:"textDiff,omitempty"`
+	Where    LiveTarget     `json:"where"`
+	Key      string         `json:"key"`
+	Op       string         `json:"op"`
 	// Before and After: the key's size in bytes; -1 is absent.
 	Before int `json:"before"`
 	After  int `json:"after"`

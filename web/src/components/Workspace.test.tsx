@@ -500,3 +500,25 @@ describe('page snapshot across restarts (P19)', () => {
     expect(writes).toHaveLength(0)
   })
 })
+
+it('route relations show each path while ordinary relation tables keep their columns',async()=>{
+ const f=fakeClient([k8s('prod')]);f.state.rows=[podRow('api-1','web')]
+ const service={provider:'kubernetes',target:'prod',kind:'services',scope:'web',name:'shared'}
+ f.client.getResource=vi.fn(async ref=>({ref,health:{state:'ok' as const},yaml:'',facts:[],relations:[
+  {type:'routes-to',ref:service,route:{path:'/api',host:'example.test',pathType:'Prefix'}},
+  {type:'routes-to',ref:service,route:{path:'/admin',host:'example.test',pathType:'Exact'}},
+  {type:'routes-to',ref:service,route:{path:'',defaultBackend:true}},
+  {type:'owner',ref:{...service,kind:'deployments',name:'owner'}},
+ ]}))
+ const grid=await openProd(f);await userEvent.click(await within(grid).findByText('api-1'))
+ const drawer=await screen.findByRole('dialog',{name:'pods api-1'}),routes=within(drawer).getByRole('table',{name:'Routes to'})
+ expect(within(routes).getAllByRole('columnheader').map(c=>c.textContent)).toEqual(['Type','Name','Path','Open'])
+ const rows=within(routes).getAllByRole('row').slice(1)
+ expect(rows).toHaveLength(3)
+ expect(within(rows[0]).getAllByRole('cell')[2]).toHaveTextContent('/api')
+ expect(within(rows[1]).getAllByRole('cell')[2]).toHaveTextContent('/admin')
+ expect(within(rows[2]).getAllByRole('cell')[2]).toHaveTextContent('—defaultBackend')
+ expect(within(drawer).getByRole('table',{name:'Owned by'}).querySelectorAll('th')).toHaveLength(3)
+ await userEvent.click(within(rows[1]).getByRole('button',{name:'services/shared'}))
+ await waitFor(()=>expect(f.client.getResource).toHaveBeenLastCalledWith(service))
+})

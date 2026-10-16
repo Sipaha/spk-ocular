@@ -106,8 +106,17 @@ type Row struct {
 	Health Health `json:"health"`
 }
 
+// IngressRoute describes one declared HTTP route, not observed traffic.
+type IngressRoute struct {
+	Path           string `json:"path"`
+	Host           string `json:"host,omitempty"`
+	PathType       string `json:"pathType,omitempty"`
+	DefaultBackend bool   `json:"defaultBackend,omitempty"`
+}
+
 // Relation links an object to another one.
 type Relation struct {
+	Route *IngressRoute `json:"route,omitempty"`
 	// Type: "owner" (up), "owns" (down), "selects", "routes-to", "runs-on",
 	// "about" (what an event is about).
 	Type string `json:"type"`

@@ -9,7 +9,7 @@ async function logs(page:Page) {
  await page.goto('/');await selectConnection(page,/^demo\b/);await connectSelected(page)
  await page.getByRole('navigation',{name:'resources'}).getByRole('button',{name:'Services',exact:true}).click()
  await page.getByRole('grid',{name:'resources'}).getByRole('gridcell',{name:'api',exact:true}).click();await page.keyboard.press('l')
- const panel=page.locator('[role=tabpanel]:not([hidden])');await expect(panel.getByLabel('stream state')).toHaveText('Live');return panel
+ const panel=page.locator('[role=tabpanel]:not([hidden])');await expect(page.locator('.status-bar').getByLabel('stream state')).toHaveText('Live');return panel
 }
 
 test('Downloads lists a real browser download, restores its history and clears metadata without deleting the file',async({page})=>{

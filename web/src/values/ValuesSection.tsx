@@ -6,6 +6,8 @@ import { showNotice } from '../store'
 import { copyValue } from './copy'
 import { ValueDialog, type ValueDialogMode } from './ValueDialog'
 import { errorDetail } from '../errors'
+import { ActionIconButton } from '../components/ActionIconButton'
+import { ActionIcon } from '../components/icons'
 
 interface Props {
   client: Client
@@ -43,6 +45,7 @@ type Line = { state: 'reading' } | { state: 'shown'; v: Value; whole: boolean } 
  * and version asked about).
  */
 export function ValuesSection({ client, subject: given, revision, gone, kindTitle }: Props) {
+  const configMap = given.kind === 'configmaps'
   const [list, setList] = useState<{ data?: ValueList; error?: string } | null>(null)
   const [lines, setLines] = useState<Record<string, Line>>({})
   const [dialog, setDialog] = useState<ValueDialogMode | null>(null)
@@ -231,7 +234,7 @@ export function ValuesSection({ client, subject: given, revision, gone, kindTitl
   return (
     <section aria-label={t('values.title')} data-values>
       <div className="mb-1.5 flex items-center gap-2">
-        <h3 className="text-[12px] font-semibold uppercase tracking-wider text-fg-subtle">{t('values.title')}</h3>
+        <h3 className="text-[14px] font-semibold text-fg">{t('values.title')}</h3>
         <span className="flex-1" />
         {anyShown && (
           <button className={toolBtn} onClick={hideAll}>
@@ -255,6 +258,7 @@ export function ValuesSection({ client, subject: given, revision, gone, kindTitl
             <KeyLine
               key={k.key}
               k={k}
+              configMap={configMap}
               line={lineOf(k.key)}
               over={over}
               onShow={() => reveal(k.key)}
@@ -267,7 +271,7 @@ export function ValuesSection({ client, subject: given, revision, gone, kindTitl
           ))}
         </ul>
       )}
-      <p className="mt-1 text-xs text-fg-subtle">{t('values.hint')}</p>
+      {!configMap && <p className="mt-1 text-xs text-fg-subtle">{t('values.hint')}</p>}
       {dialog && data && (
         <ValueDialog
           client={client}
@@ -290,6 +294,7 @@ class StaleValue extends Error {}
 
 function KeyLine(props: {
   k: ValueKey
+  configMap?: boolean
   line?: Line
   /** The object is gone: nothing more is read or changed. */
   over: boolean
@@ -300,7 +305,7 @@ function KeyLine(props: {
   onEdit: () => void
   onDelete: () => void
 }) {
-  const { k, line, over, onShow, onHide, onWhole, onCopy, onEdit, onDelete } = props
+  const { k, configMap, line, over, onShow, onHide, onWhole, onCopy, onEdit, onDelete } = props
   const shown = line?.state === 'shown' ? line : null
   const text = shown ? (shown.whole || shown.v.value.length <= SHOWN_CHARS ? shown.v.value : shown.v.value.slice(0, SHOWN_CHARS)) : ''
   return (
@@ -316,6 +321,10 @@ function KeyLine(props: {
           </div>
         </div>
         <div className="ml-auto flex shrink-0 gap-1">
+        {configMap ? <>
+          <ActionIconButton label={t('edit.open')} description={t('values.editHint')} disabled={over} onClick={onEdit}><ActionIcon name="edit" /></ActionIconButton>
+          <ActionIconButton label={t('values.delete')} description={t('values.deleteHint')} disabled={over} onClick={onDelete} className="hover:text-danger"><ActionIcon name="clear" /></ActionIconButton>
+        </> : <>
         {shown || line?.state === 'reading' ? (
           // While reading too: a slow answer can be given up.
           <button className={toolBtn} onClick={onHide}>
@@ -335,6 +344,7 @@ function KeyLine(props: {
         <button className={`${toolBtn} hover:text-danger`} disabled={over} onClick={onDelete} title={t('values.deleteHint')}>
           {t('values.delete')}
         </button>
+        </>}
         </div>
       </div>
       {line?.state === 'reading' && <p className="mt-1 text-xs text-fg-subtle">{t('values.reading')}</p>}

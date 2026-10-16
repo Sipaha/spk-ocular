@@ -1,3 +1,4 @@
+import { LocationStatus } from '../components/LocationStatus'
 import { RefreshButton } from '../components/RefreshButton'
 import { useEffect, useState, type ComponentProps, type MouseEvent, type ReactNode } from 'react'
 import type { Client } from '../api/client'
@@ -139,13 +140,14 @@ export default function SecurityWorkspace({client,target,scope,scopePicker,drawe
       }}/>
     </div>
     {selected&&explanation(selected)}
-    <footer className="flex shrink-0 flex-wrap items-center gap-2 border-t border-line px-3 py-2 text-xs text-fg-muted">
+    <LocationStatus>
      <span>{t('security.counts',{shown:rows.length,total:snapshot?.findings.length??0})}</span>
      {snapshot?.discovery!=='ready'&&snapshot&&<span className="text-warning">{t('graph.discovery')}</span>}
      {snapshot?.truncated&&<span role="status" className="text-warning">{t('security.truncated')}</span>}
 
-    </footer>
     {!!snapshot?.problems.length&&<details className="shrink-0 border-t border-line px-3 py-1 text-xs text-warning"><summary>{t('graph.partial',{count:snapshot.problems.length})}</summary><ul className="max-h-24 overflow-y-auto">{snapshot.problems.map((p,i)=><li key={i}>{p.kind}{p.scope?' / '+p.scope:''} · {p.class}</li>)}</ul></details>}
+  </LocationStatus>
+
    </div>
    {subject&&<ResourceDrawer {...drawer} subject={subject} onClose={()=>setSubject(null)}/>}
   </div>

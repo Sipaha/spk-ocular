@@ -199,7 +199,7 @@ owner-clarified rule separates unloading from the **subsequent** control window:
 3. Samples must be strictly ordered. A gap over one minute invalidates the
    candidate/control window; means use time weights and interpolate only between
    valid adjacent samples. One-minute and ten-second collectors are supported.
-4. Retain the 100 MiB loaded-phase/return budgets, maximum 10 MiB upward rebound
+4. Retain the 100 MiB loaded-phase/return budgets, maximum 15 MiB upward rebound
    from a preceding post-load minimum, and maximum 5 MiB net control growth.
    Growth violations are not erased by restarting the plateau timer. If there
    is no confirmed plateau followed by ten minutes, return **INCOMPLETE**, not
@@ -441,13 +441,15 @@ No forced garbage collection, cache purge or application restart was used.
 the ten-second criterion samples from the separate long run; its visible peak
 is not the six-session maximum reported above.
 
-The resulting verdict is **NOT ACCEPTED**, not merely an incomplete duration.
+Under the original 10 MiB rebound criterion, the verdict was **NOT ACCEPTED**.
 The detector stopped the observation when the upward-excursion limit failed;
 it did not use the remaining 30-minute post-load cap to erase that failure.
 The 60-second confirmation, separate 600-second control, 100/10/5 MiB budgets
 and all existing test timeouts were unchanged. This demonstrates a failed
 stability criterion; it does not by itself establish a retained-object leak or
-its cause. A lower ending footprint is not a passing plateau measurement.
+its cause. A lower ending footprint is not a passing plateau measurement. The separate
+15 MiB reassessment below supersedes this criterion for the current evaluation
+without changing the original recording or verdict.
 
 The high-frequency post-load minimum and final sample differ by 10.164 MiB:
 8.496 MiB in the Chromium renderer and 1.551 MiB in the Go process, with small
@@ -471,7 +473,7 @@ All application, Chromium and fixture processes closed cleanly with exit code 0.
 
 CSV times are relative seconds; local paths, URLs, tokens and process IDs are
 omitted. Historical `*_mb` criterion columns contain MiB. Running
-`python3 scripts/soak-verdict.py docs/performance-data/2026-10-16-memory.csv`
+`python3 scripts/soak-verdict.py --rebound-limit-mib 10 docs/performance-data/2026-10-16-memory.csv`
 reproduces the failed verdict without changing source memory values. Two early
 short sessions and one interrupted long session are excluded because their
 fixture ignored the selected-object `metadata.name` field selector. Their
@@ -488,3 +490,26 @@ Private_Dirty rebound, establish leak freedom or replace its **NOT ACCEPTED**
 verdict. All diagnostic processes exited with code 0.
 [Raw targeted heap/DOM observations](performance-data/2026-10-16-heap-diagnostic.csv)
 keep this experiment separate from the acceptance data.
+
+
+## Reassessment with the owner-selected 15 MiB rebound tolerance
+
+The current evaluator defaults to a 15 MiB post-load upward-excursion budget.
+The 100 MiB phase/return budgets, 5 MiB net control-growth budget, plateau
+confirmation, separate ten-minute control and sampling rules are unchanged.
+Original raw samples and reports retain their original assessment; a new
+criterion can be applied to those same samples without rerunning the application.
+
+Reevaluating all 275 criterion samples from 16.10.2026 with the current default:
+
+```sh
+python3 scripts/soak-verdict.py docs/performance-data/2026-10-16-memory.csv
+```
+
+The 10.082032 MiB rebound is within 15 MiB. Loaded growth remains +7.152 MiB
+and process-tree swap remains zero. The overall reassessment is **INCOMPLETE**:
+the unchanged plateau detector finds no confirmed plateau followed by a separate
+ten-minute control (`control_start_seconds: None`, `control_seconds: 0`). This is
+a reassessment of the existing recording, not a new soak or an accepted stability
+claim. Use `--rebound-limit-mib 10` to reproduce the original **NOT ACCEPTED**
+result; neither assessment changes the measured peak PSS of 557.947 MiB.

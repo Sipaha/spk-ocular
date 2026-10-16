@@ -150,3 +150,85 @@ test('physical Cyrillic keys send each character once, and resize sends only the
  await expect.poll(async()=>(await sizes(page)).length).toBe(before.length+1)
  await page.mouse.move(10,10);await expect(sep).not.toBeFocused()
 })
+
+test('Alt+Shift arrows resize a focused terminal panel without sending the chord to its program',async({page})=>{
+ await page.setViewportSize({width:1440,height:1000})
+ await openShell(page)
+ await focusTerminal(page)
+ const dock=page.locator('[data-area=dock]'),height=(await dock.boundingBox())!.height
+ await page.keyboard.press('Alt+Shift+ArrowUp')
+ await expect.poll(async()=>(await dock.boundingBox())!.height).toBe(height+20)
+ await page.keyboard.press('Alt+Shift+ArrowDown')
+ await expect.poll(async()=>(await dock.boundingBox())!.height).toBe(height)
+ await run(page,'keyboard resize kept focus')
+ await expectScreen(page,'you said: keyboard resize kept focus')
+})
+
+test('three repeated Cyrillic characters stay three across physical, text-input and composition paths',async({page})=>{
+ await openShell(page)
+ const input=activePanel(page).locator('textarea.xterm-helper-textarea')
+ for(let i=0;i<3;i++){
+  await input.dispatchEvent('keydown',{key:'ы',code:'KeyS',keyCode:0,bubbles:true,cancelable:true})
+  await input.dispatchEvent('keypress',{key:'ы',code:'KeyS',charCode:1099,bubbles:true,cancelable:true})
+  await input.dispatchEvent('keyup',{key:'ы',code:'KeyS',keyCode:0,bubbles:true,cancelable:true})
+ }
+ await page.keyboard.press('Enter')
+ await expectScreen(page,'you said: ыыы')
+ await expect(screen(page)).not.toContainText('you said: ыыыы')
+ await page.keyboard.insertText('ы');await page.keyboard.insertText('ы');await page.keyboard.insertText('ы')
+ await page.keyboard.press('Enter')
+ await expect.poll(async()=>((await screen(page).textContent())?.match(/you said: ыыы/g)??[]).length).toBe(2)
+ // Real xterm, including asynchronous composition delivery and residue cleanup.
+ for(let i=0;i<3;i++){
+  await input.dispatchEvent('compositionstart',{data:'',bubbles:true})
+  await input.dispatchEvent('compositionupdate',{data:'ы',bubbles:true})
+  await input.evaluate(el=>{const field=el as HTMLTextAreaElement;field.value+='ы';field.dispatchEvent(new InputEvent('input',{data:'ы',inputType:'insertCompositionText',isComposing:true,bubbles:true}))})
+  await input.dispatchEvent('compositionend',{data:'ы',bubbles:true})
+  await expect.poll(async()=>await input.inputValue()).toBe('')
+  // Wait for xterm's zero-delay finalizer before the next independent commit.
+  await page.evaluate(()=>new Promise(resolve=>setTimeout(resolve,0)))
+ }
+ await page.keyboard.press('Enter')
+ await expect.poll(async()=>((await screen(page).textContent())?.match(/you said: ыыы/g)??[]).length).toBe(3)
+ await expect(screen(page)).not.toContainText('you said: ыыыы')
+ await page.screenshot({path: `${process.env.OCULAR_SCRATCH_DIR}/terminal-three-cyrillic-input-paths.png`})
+})
+
+test('an IME replacement cannot replay text already delivered by earlier keys',async({page})=>{
+ await openShell(page)
+ const input=activePanel(page).locator('textarea.xterm-helper-textarea')
+ await page.keyboard.type('ABC')
+ await expectScreen(page,'ABC')
+ // xterm#6078: a 229 edit outside active composition replaces the trailing
+ // helper-field character; unpatched xterm emits the whole retained buffer.
+ await input.evaluate(el=>{
+  const field=el as HTMLTextAreaElement
+  field.dispatchEvent(new KeyboardEvent('keydown',{key:'Process',keyCode:229,bubbles:true,cancelable:true}))
+  field.value=field.value.slice(0,-1)+'ы'
+  field.dispatchEvent(new KeyboardEvent('keyup',{key:'Process',keyCode:229,bubbles:true}))
+ })
+ await page.evaluate(()=>new Promise(resolve=>setTimeout(resolve,0)))
+ await page.keyboard.press('Enter')
+ await expectScreen(page,'you said: ABCы')
+ await expect(screen(page)).not.toContainText('you said: ABCABы')
+})
+
+test('IME preedit replacement, cancellation and Unicode paste keep committed input once',async({page})=>{
+ await openShell(page)
+ const input=activePanel(page).locator('textarea.xterm-helper-textarea')
+ const cdp=await page.context().newCDPSession(page)
+ await cdp.send('Input.imeSetComposition',{text:'に',selectionStart:1,selectionEnd:1})
+ await cdp.send('Input.imeSetComposition',{text:'日本',selectionStart:2,selectionEnd:2})
+ await cdp.send('Input.insertText',{text:'日本語'})
+ await expect(input).toHaveValue('')
+ await page.keyboard.press('Enter');await expectScreen(page,'you said: 日本語')
+ await cdp.send('Input.imeSetComposition',{text:'取消',selectionStart:2,selectionEnd:2})
+ await cdp.send('Input.imeSetComposition',{text:'',selectionStart:0,selectionEnd:0})
+ await page.keyboard.type('hello');await page.keyboard.press('Backspace');await page.keyboard.type('p')
+ await page.keyboard.press('Enter');await expectScreen(page,'you said: hellp')
+ await expect(screen(page)).not.toContainText('you said: 取消')
+ await page.evaluate(()=>navigator.clipboard.writeText('paste Ж🙂'))
+ await page.keyboard.press('Control+Shift+V');await expectScreen(page,'paste Ж🙂')
+ await page.keyboard.press('Enter');await expectScreen(page,'you said: paste Ж🙂')
+ await cdp.detach()
+})

@@ -35,9 +35,11 @@ export const diffLines = (before: string, after: string): DiffLine[] => diff(bef
 
 /** A line diff, common ends trimmed first; lines compare as interned
  * numbers; beyond the budget the middle is replaced whole (approximate). */
-export function diff(before: string, after: string): Diff {
-  const a = split(before)
-  const b = split(after)
+export function diff(before: string, after: string, exactText = false): Diff {
+  // Value bytes distinguish a final LF: retain its empty terminal line.
+  const lines = exactText ? (s: string) => s === '' ? [] : s.split('\n') : split
+  const a = lines(before)
+  const b = lines(after)
   let pre = 0
   while (pre < a.length && pre < b.length && a[pre] === b[pre]) pre++
   let suf = 0

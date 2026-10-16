@@ -271,3 +271,98 @@ describe('Palette', () => {
     expect(within(dlg).getByRole('option', { selected: true })).toHaveTextContent('api-1')
   })
 })
+
+it('does not read or navigate an absent or ambiguous scope; a chosen full scope is atomic',async()=>{
+ const f=setup()
+ f.client.listScopes=vi.fn(async()=>({scopes:['web','demo-enterprise','enterprise-alfresco'].map(name=>({name}))}))
+ await openApp(f)
+ const dlg=await openPalette(),input=within(dlg).getByRole('combobox')
+ const before=vi.mocked(f.client.openView).mock.calls.length
+ await userEvent.type(input,'уте вуз ьщвуд')
+ expect(within(dlg).getAllByRole('option')).toHaveLength(2)
+ expect(within(dlg).getByText('Nothing chosen: pick with ↑ ↓, then Enter')).toBeInTheDocument()
+ await userEvent.keyboard('{Enter}')
+ expect(dlg).toBeInTheDocument()
+ expect(vi.mocked(f.client.openView).mock.calls).toHaveLength(before)
+ await userEvent.clear(input);await userEvent.type(input,'missing dep model{Enter}')
+ expect(within(dlg).queryAllByRole('option')).toHaveLength(0)
+ expect(vi.mocked(f.client.openView).mock.calls).toHaveLength(before)
+ await userEvent.clear(input);await userEvent.type(input,'ent dep model')
+ await userEvent.click(within(dlg).getByRole('option',{name:/demo-enterprise/}))
+ await waitFor(()=>expect(f.client.openView).toHaveBeenCalledWith('kubernetes','prod',{kind:'apps/deployments',scope:{mode:'one',name:'demo-enterprise'}},expect.any(AbortSignal),expect.any(String),false,expect.any(String)))
+ expect(screen.getByRole('button',{name:'Namespace'})).toHaveTextContent('demo-enterprise')
+ expect(screen.getByRole('textbox',{name:'Filter rows'})).toHaveValue('model')
+})
+
+it('arrow selection and Enter resolves one namespace and opens its exact object after loading',async()=>{
+ const f=setup()
+ f.client.getTargetState=vi.fn(async()=>({scope:JSON.stringify({mode:'one',name:'web'})}))
+ f.client.listScopes=vi.fn(async()=>({scopes:['web','demo-enterprise','enterprise-ecos24','enterprise-other'].map(name=>({name}))}))
+ const wanted=f.state.rowsByKind['apps/deployments'][0]
+ wanted.ref={...wanted.ref,scope:'enterprise-ecos24',name:'ecos-model-app',uid:'chosen-model-uid'}
+ wanted.cells=[{text:'ecos-model-app'}]
+ const getRows=f.client.getRows
+ let release:(()=>void)|undefined
+ let released=false
+ f.client.getRows=vi.fn((id:string,since:number)=>id==='v-apps/deployments'&&!released?new Promise<Page>(resolve=>{release=()=>{released=true;void getRows(id,since).then(resolve)}}):getRows(id,since))
+ await openApp(f)
+ const dlg=await openPalette()
+ const before=vi.mocked(f.client.openView).mock.calls.length
+ await userEvent.type(within(dlg).getByRole('combobox'),'уте вуз ьщвуд')
+ expect(within(dlg).getAllByRole('option')).toHaveLength(3)
+ expect(vi.mocked(f.client.openView).mock.calls).toHaveLength(before)
+ await userEvent.keyboard('{ArrowDown}{ArrowDown}{Enter}')
+ await within(dlg).findByText('Loading…')
+ expect(dlg).toBeInTheDocument()
+ expect(screen.getByRole('button',{name:'Namespace'})).toHaveTextContent('web')
+ expect(vi.mocked(f.client.openView).mock.calls.slice(before)).toEqual([['kubernetes','prod',{kind:'apps/deployments',scope:{mode:'one',name:'enterprise-ecos24'}},expect.any(AbortSignal),expect.any(String),false,expect.any(String)]])
+ await userEvent.keyboard('{Enter}')
+ expect(dlg).toBeInTheDocument()
+ await waitFor(()=>expect(release).toBeTypeOf('function'))
+ await act(async()=>release!())
+ expect(await screen.findByRole('dialog',{name:'apps/deployments ecos-model-app'})).toBeInTheDocument()
+ expect(screen.queryByRole('dialog',{name:'Go to'})).toBeNull()
+ expect(screen.getByRole('button',{name:'Namespace'})).toHaveTextContent('enterprise-ecos24')
+ expect(screen.getByRole('row',{selected:true})).toHaveAttribute('data-row-id',wanted.id)
+ expect(f.client.getResource).toHaveBeenLastCalledWith(expect.objectContaining({uid:'chosen-model-uid',scope:'enterprise-ecos24'}))
+})
+
+it.each(['escape','query'])('cancels namespace object resolution on %s without late navigation',async(cancel)=>{
+ const f=setup()
+ f.client.listScopes=vi.fn(async()=>({scopes:['web','enterprise-one','enterprise-two'].map(name=>({name}))}))
+ const getRows=f.client.getRows
+ let release:(()=>void)|undefined
+ let released=false
+ f.client.getRows=vi.fn((id:string,since:number)=>id==='v-apps/deployments'&&!released?new Promise<Page>(resolve=>{release=()=>{released=true;void getRows(id,since).then(resolve)}}):getRows(id,since))
+ await openApp(f)
+ const dlg=await openPalette(),input=within(dlg).getByRole('combobox')
+ await userEvent.type(input,'ent dep web{ArrowDown}{Enter}')
+ await within(dlg).findByText('Loading…')
+ await waitFor(()=>expect(release).toBeTypeOf('function'))
+ const before=vi.mocked(f.client.openView).mock.calls.length
+ if(cancel==='escape')await userEvent.keyboard('{Escape}')
+ else {await userEvent.clear(input);await userEvent.type(input,'ent dep web')}
+ await act(async()=>release!())
+ expect(vi.mocked(f.client.openView).mock.calls).toHaveLength(before)
+ expect(screen.queryByRole('heading',{name:'Deployments'})).toBeNull()
+ expect(f.client.getResource).not.toHaveBeenCalled()
+ if(cancel==='query')expect(within(dlg).getAllByRole('option')).toHaveLength(2)
+})
+
+it('keeps multiple matching objects available after namespace choice instead of opening an arbitrary one',async()=>{
+ const f=setup()
+ f.client.listScopes=vi.fn(async()=>({scopes:['enterprise-one','enterprise-two'].map(name=>({name}))}))
+ for(const [index,row] of f.state.rowsByKind['apps/deployments'].entries()){
+  row.ref={...row.ref,scope:'enterprise-one',name:`model-${index}`,uid:`model-uid-${index}`}
+  row.cells=[{text:row.ref.name}]
+ }
+ await openApp(f)
+ const dlg=await openPalette()
+ await userEvent.type(within(dlg).getByRole('combobox'),'ent dep model{ArrowDown}{Enter}')
+ await within(dlg).findByRole('option',{name:/Objectmodel-0/})
+ expect(within(dlg).getAllByRole('option')).toHaveLength(2)
+ expect(f.client.getResource).not.toHaveBeenCalled()
+ await userEvent.keyboard('{ArrowDown}{Enter}')
+ expect(await screen.findByRole('dialog',{name:'apps/deployments model-1'})).toBeInTheDocument()
+ expect(f.client.getResource).toHaveBeenLastCalledWith(expect.objectContaining({uid:'model-uid-1'}))
+})

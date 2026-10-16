@@ -311,3 +311,67 @@ test('scope type name searches one explicit scope and commits it only when a res
  await expect(page.getByRole('dialog',{name:/crates gamma/})).toBeVisible()
  expect(requests.every(q=>{const v=q as {kind:string;scope:{mode:string;name:string}};return v.kind==='crates'&&v.scope.mode==='one'&&v.scope.name==='green'})).toBe(true)
 })
+
+test('namespace fragments resolve only catalog names and ambiguous layout recovery waits for a choice',async({page})=>{
+ await page.route('**/api/ListScopes',route=>route.fulfill({json:{scopes:['blue','green','demo-enterprise','enterprise-alfresco'].map(name=>({name}))}}))
+ await openDemo(page)
+ const requests:{kind:string;scope:{mode:string;name?:string}}[]=[]
+ page.on('request',request=>{if(request.url().endsWith('/api/OpenView'))requests.push(request.postDataJSON().query)})
+ const dlg=await palette(page),input=dlg.getByRole('combobox')
+ await input.fill('уте ск ьщвуд')
+ await expect(dlg.getByRole('option')).toHaveCount(2)
+ await expect(dlg.getByText('Nothing chosen: pick with ↑ ↓, then Enter',{exact:true})).toBeVisible()
+ await expect(dlg.getByRole('option').filter({hasText:'demo-enterprise'})).toHaveCount(1)
+ await expect(dlg.getByRole('option').filter({hasText:'enterprise-alfresco'})).toHaveCount(1)
+ await input.press('Enter');await expect(dlg).toBeVisible();expect(requests).toEqual([])
+ await page.screenshot({path:join(scratchRoot,'namespace-fragment-ambiguous.png')})
+ await input.fill('absent cr model');await expect(dlg.getByRole('option')).toHaveCount(0)
+ await input.press('Enter');await expect(dlg).toBeVisible();expect(requests).toEqual([])
+ await page.screenshot({path:join(scratchRoot,'namespace-fragment-absent.png')})
+ await input.fill('пкуу ск пфььф')
+ await expect(dlg.getByRole('option')).toContainText('Object')
+ await expect(dlg.getByRole('option')).toContainText('gamma')
+ expect(requests).toEqual([{kind:'crates',scope:{mode:'one',name:'green'}}])
+ await page.screenshot({path:join(scratchRoot,'namespace-fragment-resolved.png')})
+ await input.press('Enter')
+ await expect(page.getByRole('button',{name:'Zone',exact:true})).toHaveText('green')
+ await expect(page.getByRole('dialog',{name:/crates gamma/})).toBeVisible()
+ expect(requests.every(q=>q.scope.mode==='one'&&q.scope.name==='green')).toBe(true)
+})
+
+test('choosing a namespace fragment by arrows opens the matching object instead of its filtered table',async({page})=>{
+ await page.route('**/api/ListScopes',route=>route.fulfill({json:{scopes:['blue','demo-green','green','green-other'].map(name=>({name}))}}))
+ await openDemo(page)
+ const reads:unknown[]=[],resources:unknown[]=[]
+ page.on('request',r=>{
+  if(r.url().endsWith('/api/OpenView'))reads.push(r.postDataJSON().query)
+  if(r.url().endsWith('/api/GetResource'))resources.push(r.postDataJSON())
+ })
+ let release!:()=>void
+ const gate=new Promise<void>(resolve=>{release=resolve})
+ await page.route('**/api/GetRows',async route=>{
+  const response=await route.fetch()
+  await gate
+  await route.fulfill({response})
+ })
+ try {
+  const dlg=await palette(page),input=dlg.getByRole('combobox')
+  await input.fill('пкуу ск пфььф')
+  await expect(dlg.getByRole('option')).toHaveCount(3)
+  expect(reads).toEqual([])
+  await input.press('ArrowDown');await input.press('ArrowDown')
+  await expect(dlg.getByRole('option',{selected:true})).toContainText('green ·')
+  await input.press('Enter')
+  await expect(dlg.getByText('Loading…',{exact:true})).toBeVisible()
+  expect(reads).toEqual([{kind:'crates',scope:{mode:'one',name:'green'}}])
+  await input.press('Enter');await expect(dlg).toBeVisible()
+  await page.screenshot({path:join(scratchRoot,'namespace-choice-loading.png')})
+  release()
+  await expect(page.getByRole('dialog',{name:'crates gamma',exact:true})).toBeVisible()
+  await expect(dlg).toBeHidden()
+  expect(resources).toEqual([{provider:'synthetic',target:'demo',kind:'crates',scope:'green',name:'crate-03de',uid:'crate-03de',title:'gamma'}])
+  await expect(page.getByRole('button',{name:'Zone',exact:true})).toHaveText('green')
+  await expect(page.getByRole('grid',{name:'resources'}).getByRole('row',{selected:true})).toContainText('gamma')
+  await page.screenshot({path:join(scratchRoot,'namespace-choice-object-open.png')})
+ } finally {release()}
+})

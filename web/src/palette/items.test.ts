@@ -283,11 +283,30 @@ it('scope type name limits live results to the explicitly typed scope',()=>{
  expect(result.items[0].action).toMatchObject({type:'object',scope:{mode:'one',name:'demo-2'},ref:{scope:'demo-2',name:'api-two'}})
 })
 it('scope type name retains a filtered-view fallback without widening to all scopes',()=>{
- const result=buildItems('unlisted deploy absent',sources({selectedScope:{mode:'all'}}))
+ const result=buildItems('unlisted deploy absent',sources({selectedScope:{mode:'all'},scopes:null}))
  expect(result.items[0].action).toEqual({type:'kind',kind:'apps/deployments',filter:'absent',scope:{mode:'one',name:'unlisted'}})
  expect(buildItems('po api server',sources()).items[0].action).toEqual({type:'kind',kind:'pods',filter:'api server'})
 })
 it('scope type name layout recovery preserves the scope and type prefixes',()=>{
  const result=buildKeyboardItems('demo-2 po фзш',sources({selectedScope:{mode:'one',name:'demo'},rows:[row('api-one','demo'),row('api-two','demo-2')]}))
  expect(result.query).toBe('demo-2 po api');expect(result.built.items[0].action).toMatchObject({type:'object',scope:{mode:'one',name:'demo-2'},ref:{scope:'demo-2'}})
+})
+
+it('resolves a unique namespace fragment to the catalog name, including keyboard recovery',()=>{
+ const src=sources({scopes:['demo-enterprise','demo-next']})
+ for(const input of ['ent dep model','уте вуз ьщвуд']) {
+  const result=buildKeyboardItems(input,src).built
+  expect(result.items).toHaveLength(1)
+  expect(result.items[0].action).toEqual({type:'kind',kind:'apps/deployments',filter:'model',scope:{mode:'one',name:'demo-enterprise'}})
+ }
+})
+it('offers ambiguous namespace fragments without choosing, and rejects absent namespaces',()=>{
+ const src=sources({scopes:['demo-enterprise','enterprise-alfresco','ent']})
+ expect(buildItems('ent dep model',src).items[0].action).toMatchObject({scope:{mode:'one',name:'ent'}})
+ const ambiguous=buildItems('ent dep model',{...src,scopes:src.scopes!.slice(0,2)})
+ expect(ambiguous.cursor).toBeNull()
+ expect(ambiguous.items.map(item=>item.action)).toEqual(src.scopes!.slice(0,2).map(name=>({type:'search',kind:'apps/deployments',filter:'model',scope:{mode:'one',name}})))
+ expect(new Set(ambiguous.items.map(item=>item.key)).size).toBe(2)
+ expect(buildItems('missing dep model',src)).toMatchObject({items:[],cursor:null})
+ expect(buildItems('ent dep model',{...src,scopes:[]})).toMatchObject({items:[],cursor:null})
 })

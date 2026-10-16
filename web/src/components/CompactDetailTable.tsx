@@ -8,17 +8,18 @@ interface DetailColumn {
 }
 
 /** Bounded read-only details keep semantic tables, without resource-grid state. */
-export function CompactDetailTable({ label, columns, minWidth, className = '', children }: {
+export function CompactDetailTable({ label, columns, minWidth, className = '', headerClassName = 'text-[11px] text-fg-subtle', children }: {
   label: string
   columns: DetailColumn[]
   minWidth: number
   className?: string
+  headerClassName?: string
   children: ReactNode
 }) {
   return <div className="overflow-x-auto rounded border border-line" tabIndex={0} aria-label={label}>
     <table className={`w-full table-fixed text-left ${className}`} style={{ minWidth }} aria-label={label}>
       <colgroup>{columns.map(column => <col key={column.id} style={column.width === undefined ? undefined : { width: column.width }} />)}</colgroup>
-      {columns.some(column => column.label !== undefined) && <thead className="bg-hover/50 text-[11px] text-fg-subtle"><tr>
+      {columns.some(column => column.label !== undefined) && <thead className={`bg-hover/50 ${headerClassName}`}><tr>
         {columns.map(column => <th key={column.id} scope="col" title={column.label} className="truncate px-2 py-1.5 font-medium">{column.label}</th>)}
       </tr></thead>}
       <tbody className="divide-y divide-line">{children}</tbody>

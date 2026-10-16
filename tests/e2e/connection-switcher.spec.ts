@@ -250,8 +250,8 @@ test('connection icons edit appearance directly without selecting or connecting;
  const picker=await openConnections(page),kube=picker.getByRole('rowgroup',{name:'Kubernetes',exact:true}),heading=kube.getByRole('columnheader')
  const avatar=(await headerIcon.locator('.connection-avatar').boundingBox())!,menu=(await picker.boundingBox())!
  for(const dot of [trigger.locator('[data-connection-state]'),picker.locator('[data-connection-state]').first()]){const b=(await dot.boundingBox())!;expect(b.width).toBe(10);expect(b.height).toBe(10)}
- expect(Math.abs(avatar.x-menu.x)).toBeLessThanOrEqual(1)
- expect((await page.locator('.connection-identity').boundingBox())!.width).toBeGreaterThanOrEqual(200)
+ expect(avatar.x-menu.x).toBe(6) // New 8 px header inset; picker keeps its own screen inset.
+ expect(await page.locator('.connection-identity').evaluate(el=>getComputedStyle(el).minWidth)).toBe('0px')
  const title=(await heading.locator('span').first().boundingBox())!,count=(await heading.locator('.connection-group-count').boundingBox())!,actions=(await heading.locator('.connection-group-actions').boundingBox())!,bounds=(await heading.boundingBox())!
  expect(count.x-title.x-title.width).toBeLessThanOrEqual(9);expect(count.x).toBeGreaterThan(title.x+title.width)
  expect(Math.abs(actions.x+actions.width-(bounds.x+bounds.width-8))).toBeLessThanOrEqual(1)
@@ -323,4 +323,70 @@ test('connection context menu shares one pointer and keyboard highlight and keep
  await disconnect.hover();await expect(disconnect).toHaveCSS('background-color',color);await expect(remove).toHaveCSS('background-color','rgba(0, 0, 0, 0)')
  await page.screenshot({path:join(scratchRoot,'connection-context-menu-hover.png')})
  await picker.getByRole('rowgroup',{name:'Kubernetes',exact:true}).getByRole('columnheader').hover();await expect(menu.locator('[data-active=true]')).toHaveCount(0)
+})
+
+test('selected connection shares hover across its icon and only hints clipped names', async ({ page }) => {
+ await page.goto('/'); await selectConnection(page,/^demo\b/)
+ const trigger=page.locator('[data-connection-switcher]'),identity=page.locator('.connection-identity')
+ await trigger.hover()
+ const hovered=await identity.evaluate(el=>getComputedStyle(el).backgroundColor)
+ expect(hovered).not.toBe('rgba(0, 0, 0, 0)')
+ await page.locator('[data-connection-appearance=header]').hover()
+ await expect(identity).toHaveCSS('background-color',hovered)
+ await trigger.hover()
+ await expect(trigger).not.toHaveAttribute('title')
+ await page.waitForTimeout(900)
+ await expect(page.getByRole('tooltip')).toHaveCount(0)
+ expect(await identity.evaluate(el=>getComputedStyle(el).minWidth)).toBe('0px')
+ const outer=(await identity.boundingBox())!
+ const avatar=(await identity.locator('.connection-avatar').boundingBox())!
+ const chevron=(await trigger.locator(':scope > svg').boundingBox())!
+ const name=(await trigger.locator(':scope > span').first().boundingBox())!
+ const state=(await trigger.locator('[data-connection-state]').boundingBox())!
+ expect(name.x-avatar.x-avatar.width).toBe(8)
+ expect(state.x-name.x-name.width).toBe(8)
+ expect(avatar.x-outer.x).toBe(8)
+ expect(outer.x+outer.width-chevron.x-chevron.width).toBe(8)
+ await page.screenshot({path:join(scratchRoot,'connection-shared-hover.png')})
+ await page.route('**/api/ListTargets',async route=>{
+  const response=await route.fetch(),body=await response.json()
+  for(const group of body.groups)for(const target of group.targets)if(target.provider==='synthetic'&&target.id==='demo')target.title='A very long selected connection name '.repeat(8)
+  await route.fulfill({response,json:body})
+ })
+ await page.reload()
+ await trigger.hover()
+ await expect(page.getByRole('tooltip')).toHaveText('A very long selected connection name '.repeat(8))
+ await page.screenshot({path:join(scratchRoot,'connection-clipped-title.png')})
+})
+
+test('connection identity keyboard outline matches its full hover surface including the icon',async({page})=>{
+ await page.goto('/');await selectConnection(page,/^demo\b/)
+ const identity=page.locator('.connection-identity'),icon=page.locator('[data-connection-appearance=header]'),trigger=page.locator('[data-connection-switcher]')
+ for(const width of [1280,860,375]){
+  await page.setViewportSize({width,height:820})
+  await identity.hover()
+  const hovered=await identity.boundingBox()
+  expect(hovered!.x).toBe(4)
+  expect((await icon.locator(".connection-avatar").boundingBox())!.x).toBe(12)
+  expect(await identity.evaluate(el=>getComputedStyle(el).backgroundColor)).not.toBe('rgba(0, 0, 0, 0)')
+  await page.screenshot({path:join(scratchRoot,`connection-identity-hover-${width}.png`)})
+  await page.mouse.move(width-1,819)
+  await icon.focus();await page.keyboard.press('Tab')
+  await expect(trigger).toBeFocused()
+  expect(await identity.boundingBox()).toEqual(hovered)
+  expect(await identity.evaluate(el=>({style:getComputedStyle(el).outlineStyle,width:getComputedStyle(el).outlineWidth,offset:getComputedStyle(el).outlineOffset}))).toEqual({style:'solid',width:'2px',offset:'-2px'})
+  expect(await trigger.evaluate(el=>getComputedStyle(el).outlineStyle)).toBe('none')
+  await page.screenshot({path:join(scratchRoot,`connection-identity-keyboard-${width}.png`)})
+  await page.keyboard.press('Shift+Tab');await expect(icon).toBeFocused()
+  expect(await identity.evaluate(el=>getComputedStyle(el).outlineStyle)).toBe('solid')
+  expect(await icon.evaluate(el=>getComputedStyle(el).outlineStyle)).toBe('none')
+  await page.keyboard.press('Enter');await expect(page.locator('.appearance-dialog')).toBeVisible()
+  await page.keyboard.press('Escape');await page.keyboard.press('Tab');await expect(trigger).toBeFocused()
+  await page.keyboard.press('Enter');await expect(page.locator('[data-connection-picker]')).toBeVisible()
+  expect((await page.locator('[data-connection-picker]').boundingBox())!.x).toBe(6)
+  await page.keyboard.press('Escape')
+  await trigger.click();await expect(page.locator('[data-connection-picker]')).toBeVisible()
+  await page.keyboard.press('Escape')
+  expect(await identity.evaluate(el=>getComputedStyle(el).outlineStyle)).toBe('none')
+ }
 })

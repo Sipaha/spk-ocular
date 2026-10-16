@@ -15,6 +15,7 @@ it('favorites are shared across connections, preserve the current page, and can 
   await screen.findByRole('grid', { name: 'resources' })
   const nav = screen.getByRole('navigation', { name: 'resources' })
   const favorites = within(nav).getByRole('region', { name: 'Favorites' })
+  await userEvent.click(within(favorites).getByRole('button',{name:/^Favorites/}))
   const add = within(nav).getByRole('button', { name: 'Add Pods to favorites' })
   await userEvent.click(add)
   expect(within(favorites).getByRole('button', { name: 'Pods' })).toHaveAttribute('aria-current', 'page')
@@ -60,9 +61,12 @@ it('omits favorite kinds from collapsed API groups and restores their active row
   const nav = screen.getByRole('navigation', { name: 'resources' })
   expect(within(nav).queryByRole('region', { name: 'API groups' })).toBeNull()
   const favorites = within(nav).getByRole('region', { name: 'Favorites' })
+  await userEvent.click(within(favorites).getByRole('button',{name:/^Favorites/}))
   await userEvent.click(within(favorites).getByRole('button', { name: 'Remove Widgets from favorites' }))
   const group = within(nav).getByRole('region', { name: 'API groups' })
   expect(within(group).getByRole('button', { name: /API groups/ })).toHaveTextContent('1')
+  expect(within(group).queryByRole('button', { name: 'Widgets' })).toBeNull()
+  await userEvent.click(within(group).getByRole('button',{name:/API groups/}))
   expect(within(group).getByRole('button', { name: 'Widgets' })).toHaveAttribute('aria-current', 'page')
   expect(within(favorites).queryByRole('button', { name: 'Widgets' })).toBeNull()
   expect(within(group).queryByRole('button', { name: 'Gadgets' })).toBeNull()
@@ -131,4 +135,17 @@ it('uses the saved favorite order and lets the keyboard move an item without ope
   expect(order()).toEqual(['Pods', 'Services'])
   expect(f.client.moveFavoriteKind).toHaveBeenCalledWith('kubernetes', 'pods', 'services')
   expect(screen.getByRole('heading', { name: 'Pods' })).toBeInTheDocument()
+})
+
+it('collapsed Favorites hides the selected item and expansion restores it without opening a view',async()=>{
+ const f=fakeClient([k8s('a')]);f.state.view.selected={provider:'kubernetes',id:'a'}
+ f.client.getFavoriteKinds=vi.fn(async()=>[{provider:'kubernetes',kind:'pods'}])
+ render(<App client={f.client}/>);await screen.findByRole('grid',{name:'resources'})
+ const fav=screen.getByRole('region',{name:'Favorites'}),head=within(fav).getByRole('button',{name:/^Favorites/})
+ expect(within(fav).queryByRole('button',{name:'Pods'})).toBeNull()
+ const reads=vi.mocked(f.client.openView).mock.calls.length
+ await userEvent.click(head);expect(within(fav).getByRole('button',{name:'Pods'})).toHaveAttribute('aria-current','page')
+ await userEvent.click(head);expect(within(fav).queryByRole('button',{name:'Pods'})).toBeNull()
+ expect(screen.getByRole('heading',{name:'Pods'})).toBeInTheDocument()
+ expect(f.client.openView).toHaveBeenCalledTimes(reads)
 })

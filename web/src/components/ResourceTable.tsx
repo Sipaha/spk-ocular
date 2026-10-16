@@ -18,6 +18,9 @@ export interface Sort {
 }
 
 interface Props {
+  /** Compact inspector surface; keeps virtual rows, sorting and column resizing. */
+  appearance?: 'detail'
+
   /** Specialized investigation cells retain the shared grid behavior and widths. */
   renderCell?: (row: Row, column: Column, cell: Cell | undefined) => ReactNode
   ariaLabel?: string
@@ -131,7 +134,7 @@ export function matchesRow(r: Row, f: string): boolean {
   return r.cells.some((c) => (c.text ?? '').toLowerCase().includes(needle)) || (r.health.reason ?? '').toLowerCase().includes(needle)
 }
 
-export function ResourceTable({ renderCell, ariaLabel = t('table.resources'), emptyMessage, columns, rows, hideScope, filter, selected, reveal, onSelect, onOpen, onLogs, onTerminal, metrics, onVisibleRows, rowMenu, onDelete, defaultSort, initialSort, onSort, initialWidths, onWidths, areaFocus, marked, onMarked }: Props) {
+export function ResourceTable({ appearance, renderCell, ariaLabel = t('table.resources'), emptyMessage, columns, rows, hideScope, filter, selected, reveal, onSelect, onOpen, onLogs, onTerminal, metrics, onVisibleRows, rowMenu, onDelete, defaultSort, initialSort, onSort, initialWidths, onWidths, areaFocus, marked, onMarked }: Props) {
   const now = useNow(10_000)
   const [widths, setWidths] = useState<Record<string, number>>(initialWidths ?? {})
   const resizeColumn = (id: string, width: number | null) => {
@@ -349,7 +352,7 @@ export function ResourceTable({ renderCell, ariaLabel = t('table.resources'), em
   }
 
   return (
-    <div key={JSON.stringify(columns.map(c=>c.id))} className="resource-grid flex min-h-0 min-w-0 flex-1 flex-col" style={widthStyle} role="grid" aria-rowcount={sorted.length} aria-label={ariaLabel}>
+    <div key={JSON.stringify(columns.map(c=>c.id))} className={`resource-grid flex min-h-0 min-w-0 flex-col ${appearance === 'detail' ? 'flex-none' : 'flex-1'}`} data-appearance={appearance} style={widthStyle} role="grid" aria-rowcount={sorted.length} aria-label={ariaLabel}>
       {/* The header scrolls sideways with the rows (a narrow window), never the page. */}
       <div ref={headRef} className="resource-grid-header shrink-0 overflow-hidden border-b border-line [scrollbar-gutter:stable]">
         <div className="grid" style={{ gridTemplateColumns: template, minWidth }} role="row">
@@ -364,7 +367,7 @@ export function ResourceTable({ renderCell, ariaLabel = t('table.resources'), em
               role="columnheader"
               aria-sort={sort.col === i ? (sort.desc ? 'descending' : 'ascending') : 'none'}
               onClick={() => setSort((s) => ({ col: i, desc: s.col === i ? !s.desc : false, clicks: s.clicks + 1 }))}
-              className={['h-full w-full truncate px-3 py-1.5 text-left hover:text-fg', isNumeric(c) ? 'text-right' : ''].join(' ')}
+              className={['h-full w-full truncate py-1.5 text-left hover:text-fg', appearance === 'detail' ? 'px-2' : 'px-3', isNumeric(c) ? 'text-right' : ''].join(' ')}
             >
               {columnLabel(c.title)}
               {sort.col === i && <span className="ml-1">{sort.desc ? '↓' : '↑'}</span>}
@@ -380,7 +383,7 @@ export function ResourceTable({ renderCell, ariaLabel = t('table.resources'), em
         data-area-focus={areaFocus ? '' : undefined}
         onKeyDown={onKey}
         onScroll={(e) => headRef.current && (headRef.current.scrollLeft = e.currentTarget.scrollLeft)}
-        className="min-h-0 flex-1 overflow-auto outline-none [scrollbar-gutter:stable]"
+        className={`min-h-0 overflow-auto outline-none [scrollbar-gutter:stable] ${appearance === 'detail' ? 'max-h-[224px]' : 'flex-1'}`}
         data-table-scroll
       >
         {sorted.length === 0 && emptyMessage && <div data-table-empty className="px-4 py-6 text-center text-fg-subtle" role="status">{emptyMessage}</div>}
@@ -436,7 +439,7 @@ export function ResourceTable({ renderCell, ariaLabel = t('table.resources'), em
                       role="gridcell"
                       data-cell-tooltip={text || undefined}
                       className={[
-                        'truncate px-3',
+                        'truncate', appearance === 'detail' ? 'px-2' : 'px-3',
                         isNumeric(c) ? 'text-right font-mono text-[13px]' : '',
                         c.type === 'status' ? (cell?.muted ? 'text-fg-subtle' : healthText[r.health.state]) : '',
                         !hasStatus && i === 0 && r.health.state === 'terminating' ? healthText.terminating : '',

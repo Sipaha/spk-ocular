@@ -5,12 +5,14 @@ Usage: scripts/soak-verdict.py samples.csv (soak-sample.sh CSV).
 The owner clarified on 2026-10-15 that the ten-minute control window must
 start after unloading ends, not simply accept a negative ten-minute drift.
 """
+import argparse
 import csv
+import math
 import statistics
-import sys
 
 WARM_MIN = 20
 BUDGET = 100.0
+REBOUND_BUDGET = 15.0
 MEAN_SECONDS = 60
 CONFIRM_SECONDS = 60
 CONTROL_SECONDS = 600
@@ -46,7 +48,7 @@ def upward_excursion(values):
     return rebound
 
 
-def after_load(points, quiet_baseline):
+def after_load(points, quiet_baseline, rebound_limit=REBOUND_BUDGET):
     """Seconds/Private_Dirty pairs, returning incomplete until a plateau is measured.
 
     Confirmation is causal: its one minute does not count toward the subsequent
@@ -62,8 +64,8 @@ def after_load(points, quiet_baseline):
     vals = [v for _, v in points]
     result["max_upward_excursion_MB"] = upward_excursion(vals)
     # Do not hide growing memory by continually restarting the plateau timer.
-    if upward_excursion(vals) > 10:
-        return {**result, "status": "NOT ACCEPTED", "reason": "post-load upward excursion exceeds 10 MB"}
+    if upward_excursion(vals) > rebound_limit:
+        return {**result, "status": "NOT ACCEPTED", "reason": f"post-load upward excursion exceeds {rebound_limit:g} MiB"}
     if quiet_baseline is not None and max(vals) > quiet_baseline + BUDGET:
         return {**result, "status": "NOT ACCEPTED", "reason": "post-load return budget exceeded"}
     candidate = None
@@ -111,7 +113,7 @@ def after_load(points, quiet_baseline):
     return result
 
 
-def main(path):
+def main(path, rebound_limit=REBOUND_BUDGET):
     with open(path) as file:
         rows = list(csv.DictReader(file))
     if not rows:
@@ -144,11 +146,19 @@ def main(path):
     quiet = [base[p] for p in base if p in QUIET]
     qb = statistics.median(quiet) if quiet else None
     print(f"phases within +{BUDGET:.0f} MB: {ok}; quiet baseline {qb}")
-    assessment = after_load(after, qb)
+    print(f"post-load rebound limit {rebound_limit:g} MiB")
+    assessment = after_load(after, qb, rebound_limit)
     print("after load:", assessment)
     verdict = "NOT ACCEPTED" if not ok else assessment["status"]
     print("VERDICT", verdict)
 
 
 if __name__ == "__main__":
-    main(sys.argv[1])
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("samples")
+    parser.add_argument("--rebound-limit-mib", type=float, default=REBOUND_BUDGET,
+                        help="post-load upward excursion limit; default 15 MiB, use 10 to replay original reports")
+    args = parser.parse_args()
+    if args.rebound_limit_mib < 0 or not math.isfinite(args.rebound_limit_mib):
+        parser.error("rebound limit must be finite and non-negative")
+    main(args.samples, args.rebound_limit_mib)

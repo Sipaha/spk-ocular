@@ -1,7 +1,8 @@
 // The app's keys in one place: what the help (?) lists, and the matcher of
 // the app-wide ones. Routing, top to bottom: an open modal dialog or menu
 // keeps its keys; a terminal gets every key (Ctrl+K, Esc and F6 included) and
-// CodeMirror its own; then the app's. Letters go by KeyboardEvent.code, so
+// CodeMirror its own; then the app's. Alt+Shift+arrows reserve panel resizing
+// in the App capture listener when a matching panel boundary exists. Letters go by KeyboardEvent.code, so
 // they work on a Russian layout (keyboard.ts).
 import type { MessageKey } from './i18n'
 import { inTerminal, isShortcut } from './keyboard'
@@ -34,6 +35,7 @@ export const KEYS: KeyDef[] = [
   { id: 'filter', scope: 'global', keys: '/', help: 'keys.filter', match: (e) => plain(e) && isShortcut(e, 'Slash', { shift: false }) },
   // F-keys type nothing: they work from a field too.
   { id: 'nextArea', scope: 'global', keys: 'F6', help: 'keys.nextArea', inFields: true, match: (e) => plain(e) && e.key === 'F6' && !e.shiftKey },
+  { id: 'resizePanel', scope: 'global', keys: 'Alt+Shift+← → ↑ ↓', help: 'keys.resizePanel' },
   { id: 'prevArea', scope: 'global', keys: 'Shift+F6', help: 'keys.prevArea', inFields: true, match: (e) => plain(e) && e.key === 'F6' && e.shiftKey },
   // In the navigation (it offers [data-refresh-kinds]): the list of kinds, before the view's F5.
   { id: 'refreshKinds', scope: 'global', keys: 'F5', help: 'keys.refreshKinds', match: (e) => plain(e) && e.key === 'F5' && !e.shiftKey && inNav(e.target) && !!document.querySelector('[data-refresh-kinds]') },
@@ -54,6 +56,7 @@ export const KEYS: KeyDef[] = [
   { id: 'editReview', scope: 'details', keys: 'Ctrl+Enter', help: 'keys.editReview' },
   { id: 'search', scope: 'logs', keys: 'Ctrl+F', help: 'keys.logSearch' },
   { id: 'next', scope: 'logs', keys: 'F3 Shift+F3', help: 'keys.logNext' },
+  { id: 'window', scope: 'logs', keys: 'Alt+Shift+Enter', help: 'keys.logWindow' },
   { id: 'save', scope: 'logs', keys: 'Ctrl+S', help: 'keys.logSave' },
   { id: 'clear', scope: 'logs', keys: 'Ctrl+L', help: 'keys.logClear' },
   { id: 'follow', scope: 'logs', keys: 'End', help: 'logs.follow' },

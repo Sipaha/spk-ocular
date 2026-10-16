@@ -10,6 +10,9 @@ import { Workspace } from './components/Workspace'
 import { ConnectionWorkspace } from './components/ConnectionWorkspace'
 import type { ConfigurationActions } from './configurations/Configurations'
 import { AppHeader } from './components/AppHeader'
+import { useDock } from './dock/store'
+import { LocationStatusProvider, LocationStatusScope } from './components/LocationStatus'
+import { resizeFocusedPanel } from './components/PanelResize'
 import { StatusBar } from './components/StatusBar'
 import { EmptyWorkspace } from './components/TargetDetails'
 import { Dock } from './dock/Dock'
@@ -30,6 +33,7 @@ export function App({ client }: { client: Client }) {
   useEffect(()=>clearComparison,[client])
   useWorkspacePersistence(client)
   const workspaceStatus=useWorkspaceStatus()
+  const dockOpen = useDock(s => s.tabs.length > 0)
   const act = useMemo(() => actions(client), [client])
   const configRef = useRef<ConfigurationActions>(null)
   const connect = () => {
@@ -88,6 +92,16 @@ export function App({ client }: { client: Client }) {
     document.title = waiting ? `(${waiting}) ${base}` : base
   }, [waiting])
 
+  useEffect(() => {
+    const resize = (event: KeyboardEvent) => {
+      if (!resizeFocusedPanel(event)) return
+      event.preventDefault()
+      event.stopPropagation()
+    }
+    window.addEventListener('keydown', resize, true)
+    return () => window.removeEventListener('keydown', resize, true)
+  }, [])
+
   // The app-wide keys (shortcuts.ts): not a terminal's, not under a modal dialog.
   const [help, setHelp] = useState(false)
   const [about, setAbout] = useState(false)
@@ -135,7 +149,7 @@ export function App({ client }: { client: Client }) {
   }
 
   return (
-    <div className="relative flex h-full min-h-0 flex-col overflow-hidden">
+    <LocationStatusProvider>{slot => <div className="relative flex h-full min-h-0 flex-col overflow-clip">
       <AppHeader act={act} configRef={configRef} client={client} target={target} onHelp={() => setHelp(true)} onAbout={() => setAbout(true)} />
       {workspaceStatus.error&&<div role="alert" className="flex shrink-0 flex-wrap items-center gap-2 border-b border-line px-3 py-1 text-xs text-warning" data-workspace-error>{t(`workspace.error.${workspaceStatus.error}`)}<button className="text-accent" onClick={workspaceStatus.retry}>{t('workspace.retry')}</button>{!workspaceStatus.ready&&<button className="text-accent" onClick={workspaceStatus.reset}>{t('workspace.reset')}</button>}</div>}
       <div className="relative isolate z-0 flex min-h-0 flex-1" data-workspace-surface>
@@ -146,6 +160,7 @@ export function App({ client }: { client: Client }) {
             <button className="ml-3 text-accent" onClick={() => mayLeave(() => { connect() })}>{t('connection.connect')}</button>
           </div>}
           <Comparison client={client}/>
+          <LocationStatusScope active={!dockOpen}>
           {target ? (
             showWorkspace ?
               <Workspace key={`${target.provider}/${target.id}`} client={client} hub={hub} target={target} onFavorite={act.setKindFavorite} onMoveFavorite={act.moveFavoriteKind} onNavSection={act.setNavSection} /> :
@@ -155,6 +170,7 @@ export function App({ client }: { client: Client }) {
               <EmptyWorkspace />
             </main>
           )}
+          </LocationStatusScope>
           <Dock
             client={client}
             hub={hub}
@@ -171,7 +187,7 @@ export function App({ client }: { client: Client }) {
       {about && <AboutDialog info={info} onClose={() => setAbout(false)} />}
       {help && <HelpDialog onClose={() => setHelp(false)} />}
       <DiscardPrompt />
-      <StatusBar />
-    </div>
+      <StatusBar locationRef={slot} />
+    </div>}</LocationStatusProvider>
   )
 }

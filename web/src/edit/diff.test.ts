@@ -139,3 +139,9 @@ describe('hunks', () => {
     expect(hunks(diffLines('a\nb', 'a\nb'))).toEqual([])
   })
 })
+
+it('exact text comparison retains final LF changes without changing YAML comparison',()=>{
+ expect(diff('a','a\n',true).lines).toContainEqual({op:'+',text:'',b:2})
+ expect(diff('a\n','a',true).lines).toContainEqual({op:'-',text:'',a:2})
+ expect(diff('a','a\n').lines.every(l=>l.op===' ')).toBe(true)
+})

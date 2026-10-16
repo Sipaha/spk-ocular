@@ -26,8 +26,7 @@ import (
 
 var _ provider.ValueHolder = (*session)(nil)
 
-// maxValue bounds one value (decoded bytes): the API's limit on a whole
-// Secret.
+// maxValue bounds one decoded Secret or ConfigMap value to 1 MiB.
 const maxValue = 1 << 20
 
 // maxConsumers bounds the pods a review names.
@@ -93,6 +92,60 @@ func secretData(u *unstructured.Unstructured) map[string][]byte {
 		out[k] = b
 	}
 	return out
+}
+
+// ConfigMap data is plain UTF-8; binaryData is base64. Neither enters caches.
+func objectValueData(def *kindDef, u *unstructured.Unstructured) map[string][]byte {
+	if def == secretsKind {
+		return secretData(u)
+	}
+	out := map[string][]byte{}
+	data, _, _ := unstructured.NestedStringMap(u.Object, "data")
+	for key, value := range data {
+		out[key] = []byte(value)
+	}
+	binary, _, _ := unstructured.NestedStringMap(u.Object, "binaryData")
+	for key, value := range binary {
+		decoded, err := base64.StdEncoding.DecodeString(value)
+		if err != nil {
+			decoded = []byte(value)
+		}
+		out[key] = decoded
+	}
+	return out
+}
+
+func configMapValuePatch(u *unstructured.Unstructured, req provider.ValueEditRequest) map[string]any {
+	if req.Op == core.ValueDelete {
+		return map[string]any{"data": map[string]any{req.Key: nil}, "binaryData": map[string]any{req.Key: nil}}
+	}
+	field, other, value := "data", "binaryData", string(req.Value)
+	_, binary, _ := unstructured.NestedFieldNoCopy(u.Object, "binaryData", req.Key)
+	if binary || !utf8.Valid(req.Value) {
+		field, other, value = "binaryData", "data", base64.StdEncoding.EncodeToString(req.Value)
+	}
+	return map[string]any{field: map[string]any{req.Key: value}, other: map[string]any{req.Key: nil}}
+}
+
+func valueMessage(def *kindDef, key string, kv ...any) core.Message {
+	if def == configMapsKind {
+		switch key {
+		case "values.immutable":
+			key = "values.configMapImmutable"
+		case "values.rebased":
+			key = "values.configMapRebased"
+		case "values.reload":
+			key = "values.configMapReload"
+		}
+	}
+	return msg(key, kv...)
+}
+
+func valueObjectKind(def *kindDef) string {
+	if def == configMapsKind {
+		return "configmap"
+	}
+	return "secret"
 }
 
 // isText: shown and edited as text — UTF-8 without control characters but
@@ -176,13 +229,13 @@ var errValuesClosed = &provider.Error{Class: provider.ClassUnavailable, Message:
 
 func (s *session) valueTarget(ref core.Ref) (*kindDef, error) {
 	def := s.kind(ref.Kind)
-	if def != secretsKind {
+	if def != secretsKind && def != configMapsKind {
 		return nil, &provider.Error{Class: provider.ClassUnsupported, Message: fmt.Sprintf("%s keeps no values", ref.Kind)}
 	}
 	return def, nil
 }
 
-// Values lists a Secret's keys with sizes, read now (lists keep no values).
+// Values lists Secret or ConfigMap keys with sizes; lists keep no values.
 func (s *session) Values(ctx context.Context, ref core.Ref) (core.ValueList, provider.ValueBase, error) {
 	def, err := s.valueTarget(ref)
 	if err != nil {
@@ -197,7 +250,7 @@ func (s *session) Values(ctx context.Context, ref core.Ref) (core.ValueList, pro
 	if err != nil {
 		return core.ValueList{}, provider.ValueBase{}, err
 	}
-	data := secretData(u)
+	data := objectValueData(def, u)
 	list := core.ValueList{
 		Ref:     core.Ref{Provider: ProviderID, Target: s.target, Scope: u.GetNamespace(), Kind: def.desc.ID, Name: u.GetName(), UID: string(u.GetUID())},
 		Version: u.GetResourceVersion(),
@@ -231,9 +284,9 @@ func (s *session) RevealValue(ctx context.Context, ref core.Ref, key string) (co
 	if err != nil {
 		return core.Value{}, err
 	}
-	b, ok := secretData(u)[key]
+	b, ok := objectValueData(def, u)[key]
 	if !ok {
-		return core.Value{}, &provider.Error{Class: provider.ClassGone, Message: fmt.Sprintf("key %q is no longer in secret %s", key, u.GetName())}
+		return core.Value{}, &provider.Error{Class: provider.ClassGone, Message: fmt.Sprintf("key %q is no longer in %s %s", key, valueObjectKind(def), u.GetName())}
 	}
 	if len(b) > maxValue {
 		return core.Value{}, badEdit("the value is over 1 MiB")
@@ -265,7 +318,7 @@ func (s *session) checkValueEdit(req provider.ValueEditRequest) (*valueCheck, er
 	b := req.Base
 	route := editRoute(def)
 	if b.Route != route {
-		return nil, &provider.Error{Class: provider.ClassConflict, Message: "the API resource of Secrets changed since the keys were listed: open them again"}
+		return nil, &provider.Error{Class: provider.ClassConflict, Message: "the API resource changed since the keys were listed: open them again"}
 	}
 	if req.Ref.Name != b.Name || req.Ref.Scope != b.Namespace || (req.Ref.UID != "" && req.Ref.UID != b.UID) || b.UID == "" {
 		return nil, badEdit("the object is not the one the keys were listed of")
@@ -322,7 +375,10 @@ func (s *session) prepareValueEdit(ctx context.Context, c *valueCheck, req provi
 		return core.ValuePlan{}, nil, err
 	}
 	uid := string(cur.GetUID())
-	data := secretData(cur)
+	data := objectValueData(def, cur)
+	if def == configMapsKind {
+		c.patch = configMapValuePatch(cur, req)
+	}
 	now, present := data[req.Key]
 	plan := core.ValuePlan{
 		Where: core.LiveTarget{Provider: ProviderID, Target: s.conn.target, TargetTitle: s.conn.targetTitle, Endpoint: s.conn.endpoint,
@@ -351,7 +407,7 @@ func (s *session) prepareValueEdit(ctx context.Context, c *valueCheck, req provi
 	}
 	plan.Collision = nowPrint != c.was
 	if b, _, _ := unstructured.NestedBool(cur.Object, "immutable"); b {
-		m := msg("values.immutable")
+		m := valueMessage(def, "values.immutable")
 		plan.Unavailable = &m
 		return plan, nil, nil
 	}
@@ -372,13 +428,13 @@ func (s *session) prepareValueEdit(ctx context.Context, c *valueCheck, req provi
 			if err := u.UnmarshalJSON(body); err != nil {
 				return core.ValuePlan{}, nil, &provider.Error{Class: provider.ClassInternal, Message: "the dry run's answer could not be read"}
 			}
-			result, mode, plan.Checked = secretData(u), "checked", true
+			result, mode, plan.Checked = objectValueData(def, u), "checked", true
 		case noDryRun(werr):
 			plan.Warnings = append(plan.Warnings, msg("edit.noDryRunWebhook"))
 		case apierrors.IsConflict(werr):
-			return core.ValuePlan{}, nil, &provider.Error{Class: provider.ClassConflict, Message: fmt.Sprintf("secret %s changed while the edit was being checked: review it again", cur.GetName())}
+			return core.ValuePlan{}, nil, &provider.Error{Class: provider.ClassConflict, Message: fmt.Sprintf("%s %s changed while the edit was being checked: review it again", valueObjectKind(def), cur.GetName())}
 		case apierrors.IsNotFound(werr):
-			return core.ValuePlan{}, nil, &provider.Error{Class: provider.ClassGone, Message: fmt.Sprintf("secret %s no longer exists", cur.GetName())}
+			return core.ValuePlan{}, nil, &provider.Error{Class: provider.ClassGone, Message: fmt.Sprintf("%s %s no longer exists", valueObjectKind(def), cur.GetName())}
 		case apierrors.IsInvalid(werr) || apierrors.IsBadRequest(werr) || apierrors.IsForbidden(werr):
 			m := secretSafe(werr)
 			plan.Unavailable = &m
@@ -394,11 +450,17 @@ func (s *session) prepareValueEdit(ctx context.Context, c *valueCheck, req provi
 	if b, ok := result[req.Key]; ok {
 		plan.After = len(b)
 	}
+	// Only ConfigMaps may expose text in a review. Compare the fresh server
+	// value with the dry-run result, never a stale editor snapshot.
+	if after := result[req.Key]; def == configMapsKind && isText(now) && isText(after) {
+		plan.TextDiff = &core.ValueTextDiff{Before: string(now), After: string(after)}
+	}
+
 	expected := prints(c.route, uid, result)
 	plan.ServerChanges = differing(prints(c.route, uid, local), expected)
 
 	if plan.Rebased {
-		plan.Warnings = append(plan.Warnings, msg("values.rebased"))
+		plan.Warnings = append(plan.Warnings, valueMessage(def, "values.rebased"))
 	}
 	if plan.Collision {
 		plan.Warnings = append(plan.Warnings, msg("values.collision", "key", req.Key))
@@ -420,8 +482,8 @@ func (s *session) prepareValueEdit(ctx context.Context, c *valueCheck, req provi
 	defer cancel()
 	rights := make(chan core.Rights, 1)
 	consumers := make(chan consumerScan, 1)
-	go func() { rights <- valueRights(s.rights(ectx, def, "edit", cur), cur.GetNamespace()) }()
-	go func() { consumers <- s.secretConsumers(ectx, cur, req.Key) }()
+	go func() { rights <- valueRights(s.rights(ectx, def, "edit", cur), cur.GetNamespace(), def.gvr.Resource) }()
+	go func() { consumers <- s.valueConsumers(ectx, def, cur, req.Key) }()
 	for got := 0; got < 2; {
 		select {
 		case plan.Rights = <-rights:
@@ -433,7 +495,7 @@ func (s *session) prepareValueEdit(ctx context.Context, c *valueCheck, req provi
 				plan.Warnings = append(plan.Warnings, msg("values.deleteUsed", "key", req.Key, "pods", sc.requires))
 			}
 			if len(sc.Items) > 0 || !sc.Known {
-				plan.Warnings = append(plan.Warnings, msg("values.reload"))
+				plan.Warnings = append(plan.Warnings, valueMessage(def, "values.reload"))
 			}
 			consumers = nil
 			got++
@@ -443,7 +505,7 @@ func (s *session) prepareValueEdit(ctx context.Context, c *valueCheck, req provi
 			}
 			if consumers != nil {
 				plan.Consumers = &core.ValueConsumers{Why: "the lookup took too long"}
-				plan.Warnings = append(plan.Warnings, msg("values.reload"))
+				plan.Warnings = append(plan.Warnings, valueMessage(def, "values.reload"))
 			}
 			got = 2
 		}
@@ -469,7 +531,7 @@ func (s *session) RunValueEdit(ctx context.Context, run provider.ValueEditRun) (
 	}
 	g := run.Grant
 	if g.Route != c.route {
-		return core.ValueResult{}, &provider.Error{Class: provider.ClassConflict, Message: "the API resource of Secrets changed since the edit was reviewed: review it again"}
+		return core.ValueResult{}, &provider.Error{Class: provider.ClassConflict, Message: "the API resource changed since the edit was reviewed: review it again"}
 	}
 	if g.UID != run.Base.UID || g.Name != run.Base.Name || g.Namespace != run.Base.Namespace || g.Version == "" {
 		return core.ValueResult{}, badEdit("the review is of another object")
@@ -478,11 +540,23 @@ func (s *session) RunValueEdit(ctx context.Context, run provider.ValueEditRun) (
 	if !hmac.Equal([]byte(want), []byte(g.Digest)) {
 		return core.ValueResult{}, badEdit("the edit is not the one reviewed: review it again")
 	}
+	if c.def == configMapsKind {
+		// Reconstruct the same data/binaryData location against the reviewed version.
+		// The subsequent patch still carries UID+resourceVersion preconditions.
+		current, err := s.editGet(ctx, c.def, c.ref)
+		if err != nil {
+			return core.ValueResult{}, err
+		}
+		if current.GetResourceVersion() != g.Version {
+			return core.ValueResult{}, &provider.Error{Class: provider.ClassConflict, Message: "the ConfigMap changed after review: review it again"}
+		}
+		c.patch = configMapValuePatch(current, run.ValueEditRequest)
+	}
 	send, err := withPreconditions(c.patch, g.UID, g.Version)
 	if err != nil {
 		return core.ValueResult{}, &provider.Error{Class: provider.ClassInternal, Message: err.Error()}
 	}
-	name := "secret " + g.Name
+	name := valueObjectKind(c.def) + " " + g.Name
 	wctx, cancel := context.WithTimeout(ctx, getTimeout)
 	defer cancel()
 	body, werr := s.editWriter().editPatch(wctx, c.def.gvr, g.Namespace, g.Name, send, false)
@@ -501,19 +575,19 @@ func (s *session) RunValueEdit(ctx context.Context, run provider.ValueEditRun) (
 		return out, nil
 	}
 	out.Version = u.GetResourceVersion()
-	out.Differs = differing(g.Expected, prints(c.route, string(u.GetUID()), secretData(u)))
+	out.Differs = differing(g.Expected, prints(c.route, string(u.GetUID()), objectValueData(c.def, u)))
 	return out, nil
 }
 
 // valueRights is a rights check said in our words only: a failed check or
 // an authorizer's evaluation error is "not known", a denial is ours without
 // the authorizer's reason (none of the server's text reaches a value plan).
-func valueRights(r core.Rights, ns string) core.Rights {
+func valueRights(r core.Rights, ns, resource string) core.Rights {
 	switch r.State {
 	case core.RightsUnknown:
 		r.Reason = "the permission check did not answer"
 	case core.RightsDenied:
-		r.Reason = fmt.Sprintf("you may not patch secrets in %s", ns)
+		r.Reason = fmt.Sprintf("you may not patch %s in %s", resource, ns)
 	}
 	return r
 }
@@ -525,12 +599,16 @@ type consumerScan struct {
 	requires string
 }
 
-// secretConsumers looks for the Secret in the specs of the namespace's
+// valueConsumers looks for the object in the specs of the namespace's
 // pods (env, envFrom, volumes with their items, projected volumes, image
 // pull secrets; all containers: regular, init, ephemeral). It only adds to
 // the review: a failed or cut lookup is "not known", never "nobody".
-func (s *session) secretConsumers(ctx context.Context, sec *unstructured.Unstructured, key string) consumerScan {
+func (s *session) valueConsumers(ctx context.Context, def *kindDef, sec *unstructured.Unstructured, key string) consumerScan {
 	name := sec.GetName()
+	keyRef, envRef, volumeField, volumeName := "secretKeyRef", "secretRef", "secret", "secretName"
+	if def == configMapsKind {
+		keyRef, envRef, volumeField, volumeName = "configMapKeyRef", "configMapRef", "configMap", "name"
+	}
 	var trunc bool
 	type use struct {
 		pod      string
@@ -544,15 +622,15 @@ func (s *session) secretConsumers(ctx context.Context, sec *unstructured.Unstruc
 		for _, path := range [][]string{{"spec", "containers"}, {"spec", "initContainers"}, {"spec", "ephemeralContainers"}} {
 			for _, c := range slice(spec, path...) {
 				for _, e := range slice(c, "env") {
-					if str(e, "valueFrom", "secretKeyRef", "name") == name && str(e, "valueFrom", "secretKeyRef", "key") == key {
+					if str(e, "valueFrom", keyRef, "name") == name && str(e, "valueFrom", keyRef, "key") == key {
 						u.how["env"] = true
-						if b, _, _ := unstructured.NestedBool(e, "valueFrom", "secretKeyRef", "optional"); !b {
+						if b, _, _ := unstructured.NestedBool(e, "valueFrom", keyRef, "optional"); !b {
 							u.requires = true
 						}
 					}
 				}
 				for _, e := range slice(c, "envFrom") {
-					if str(e, "secretRef", "name") == name {
+					if str(e, envRef, "name") == name {
 						u.how["envFrom"] = true
 					}
 				}
@@ -574,18 +652,21 @@ func (s *session) secretConsumers(ctx context.Context, sec *unstructured.Unstruc
 			}
 		}
 		for _, v := range slice(spec, "spec", "volumes") {
-			if str(v, "secret", "secretName") == name {
-				m, _, _ := unstructured.NestedMap(v, "secret")
+			if str(v, volumeField, volumeName) == name {
+				m, _, _ := unstructured.NestedMap(v, volumeField)
 				items(m)
 			}
 			for _, src := range slice(v, "projected", "sources") {
-				if str(src, "secret", "name") == name {
-					m, _, _ := unstructured.NestedMap(src, "secret")
+				if str(src, volumeField, "name") == name {
+					m, _, _ := unstructured.NestedMap(src, volumeField)
 					items(m)
 				}
 			}
 		}
 		for _, r := range slice(spec, "spec", "imagePullSecrets") {
+			if def != secretsKind {
+				continue
+			}
 			if str(r, "name") == name {
 				u.how["imagePull"] = true
 			}

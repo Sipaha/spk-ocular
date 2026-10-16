@@ -208,8 +208,10 @@ growth after warm-up, then a separately measured plateau after unloading. Compar
 adjacent time-weighted one-minute means: within ±0.5 MiB and a 1 MiB band for
 one minute confirms a candidate. Start the ten-minute control only afterward;
 renewed decline resets it, and sampling gaps over one minute invalidate it.
-Retain the 10 MiB rebound, 5 MiB net control-growth and 100 MiB phase/return
-budgets. Growth violations cannot be hidden by resetting the timer. Insufficient
+Use the owner-selected 15 MiB rebound, 5 MiB net control-growth and 100 MiB phase/return
+budgets. Replay a historical 10 MiB assessment with `--rebound-limit-mib 10`;
+new criteria may also be applied to unchanged samples as an explicitly separate
+reassessment. Growth violations cannot be hidden by resetting the timer. Insufficient
 post-plateau evidence is INCOMPLETE; do not extend a run's predefined timeout
 automatically or count settling time as control time. Regression checks run with
 `python3 -m unittest discover -s scripts/tests -v`. Samples include app/webview child
@@ -419,3 +421,7 @@ The workspace column and bottom dock may shrink with the available window height
 The outer application frame clips overflow; resource and log viewports own their
 scrolling. A large saved dock height or a later window resize must not move the
 header/footer or expose blank space below the footer through document scrolling.
+The application frame and resource frame use non-scrollable overflow clipping: native
+focus scrolling and `scrollIntoView` may move the inner viewport, never these frames.
+A compressed resource pane must keep its toolbar origin and leave no shifted-content
+gap after the dock is reduced again.

@@ -249,6 +249,9 @@ var messageTexts = map[string]string{
 	"values.delete":                  "A deleted key cannot be restored here; readers outside the pods (controllers, other systems) cannot be seen.",
 	"values.deleteUsed":              "Pods read key {key} without marking it optional: {pods}.",
 	"values.reload":                  "Pods reading the Secret as environment variables see a change only after a restart; mounted volumes update after a delay (subPath mounts never).",
+	"values.configMapImmutable":      "The ConfigMap is immutable: its values cannot change (create a new ConfigMap instead).",
+	"values.configMapRebased":        "The ConfigMap changed since its keys were listed; the edit lies over its current version.",
+	"values.configMapReload":         "Pods reading the ConfigMap as environment variables see a change only after a restart; mounted volumes update after a delay (subPath mounts never).",
 	"secret.hiddenReadForbidden":     "The server refused to show the Secret; its message is hidden: it may contain Secret values.",
 	"secret.hiddenReadOther":         "The Secret could not be read; the server's message is hidden: it may contain Secret values.",
 }

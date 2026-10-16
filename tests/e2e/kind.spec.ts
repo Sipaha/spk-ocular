@@ -151,7 +151,7 @@ test('logs of a pod from its details; previous of a crash-looping one', async ({
   await expect(async () => {
     if ((await previous.getAttribute('aria-pressed')) === 'true') await previous.click()
     await previous.click()
-    await expect(logPanel(page).getByLabel('stream state')).toHaveText('Complete', { timeout: 30_000 })
+    await expect(page.locator('.status-bar').getByLabel('stream state')).toHaveText('Complete', { timeout: 30_000 })
     await expect(logRows(page).first()).toHaveText('starting', { timeout: 2_000 })
   }).toPass({ timeout: 90_000 })
 })
@@ -162,7 +162,7 @@ test('logs of a deployment: every pod in one stream, live', async ({ page }) => 
   await row(grid, 'chatter').click()
   await page.keyboard.press('l')
   const panel = logPanel(page)
-  await expect(panel.getByLabel('stream state')).toHaveText('Live', { timeout: 30_000 })
+  await expect(page.locator('.status-bar').getByLabel('stream state')).toHaveText('Live', { timeout: 30_000 })
   const pods = kubectl('-n', 'ocular-demo', 'get', 'pods', '-l', 'app=chatter', '-o', 'jsonpath={.items[*].metadata.name}').trim().split(/\s+/)
   expect(pods).toHaveLength(2)
   for (const p of pods) await expect(logRows(page).filter({ hasText: `${p} tick` }).first()).toBeAttached({ timeout: 30_000 })

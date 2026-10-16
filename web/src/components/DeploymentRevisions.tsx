@@ -13,13 +13,13 @@ export function DeploymentRevisions({client,resource}:{client:Client;resource:Re
   const [opened,setOpened]=useState<{revision:ResourceRevision;compare:boolean}|null>(null)
   if (!resource.revisionsAvailable) return null
   return <section aria-label={t('revisions.title')}>
-    <h3 className="mb-1.5 text-[12px] font-semibold uppercase tracking-wider text-fg-subtle">{t('revisions.title')}</h3>
-    {resource.revisionsError ? <p role="alert" className="text-xs text-warning">{resource.revisionsError}</p> : !resource.revisions?.length ? <p className="text-xs text-fg-subtle">{t('revisions.empty')}</p> : <CompactDetailTable label={t('revisions.title')} minWidth={400} className="text-xs" columns={[
+    <h3 className="mb-1.5 text-[14px] font-semibold text-fg">{t('revisions.title')}</h3>
+    {resource.revisionsError ? <p role="alert" className="text-xs text-warning">{resource.revisionsError}</p> : !resource.revisions?.length ? <p className="text-[14px] text-fg-muted">{t('revisions.empty')}</p> : <CompactDetailTable headerClassName="text-[13px] text-fg-muted" label={t('revisions.title')} minWidth={400} className="text-[14px]" columns={[
       { id: 'revision', label: t('revisions.column.revision'), width: 90 },
       { id: 'images', label: t('revisions.column.images') },
-      { id: 'ready', label: t('revisions.column.ready'), width: 48 },
+      { id: 'ready', label: t('revisions.column.ready'), width: 64 },
       { id: 'created', label: t('revisions.column.created'), width: 80 },
-      { id: 'actions', label: t('revisions.column.actions'), width: 60 },
+      { id: 'actions', label: t('revisions.column.actions'), width: 80 },
     ]}>
           {resource.revisions.map(revision=><CompactDetailRow key={revision.ref.uid || revision.ref.name} data-deploy-revision>
             <th scope="row" className="px-2 py-1 font-normal"><span className="whitespace-nowrap font-medium tabular-nums">{t('revisions.number',{number:revision.number})}</span>

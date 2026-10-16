@@ -1,3 +1,4 @@
+import { LocationStatus } from '../components/LocationStatus'
 import { RefreshButton } from '../components/RefreshButton'
 import {useEffect,useMemo,useRef,useState} from 'react'
 import {useVirtualizer} from '@tanstack/react-virtual'
@@ -100,6 +101,6 @@ export default function RbacWorkbench({client,target,scope,initialSubject,failed
     </article>
    })}</div>
   </div>
-  <footer className="shrink-0 border-t border-line px-3 py-2 text-xs text-fg-muted"><p>{t('rbac.coverage')}</p>{snapshot?.discovery!=='ready'&&snapshot&&<p className="text-warning">{t('graph.discovery')}</p>}{snapshot?.truncated&&<p role="status" className="text-warning">{t('rbac.truncated')}</p>}{!!snapshot?.problems.length&&<details className="text-warning"><summary>{t('graph.partial',{count:snapshot.problems.length})}</summary><ul className="max-h-24 overflow-auto">{snapshot.problems.map((p,i)=><li key={i}>{p.kind}{p.scope?' / '+p.scope:''} · {p.class}</li>)}</ul></details>}</footer>
+  <LocationStatus><p>{t('rbac.coverage')}</p>{snapshot?.discovery!=='ready'&&snapshot&&<p className="text-warning">{t('graph.discovery')}</p>}{snapshot?.truncated&&<p role="status" className="text-warning">{t('rbac.truncated')}</p>}{!!snapshot?.problems.length&&<details className="text-warning"><summary>{t('graph.partial',{count:snapshot.problems.length})}</summary><ul className="max-h-24 overflow-auto">{snapshot.problems.map((p,i)=><li key={i}>{p.kind}{p.scope?' / '+p.scope:''} · {p.class}</li>)}</ul></details>}</LocationStatus>
  </div>
 }

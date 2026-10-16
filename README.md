@@ -132,7 +132,7 @@ app process only. The password is not stored or recoverable; see
 [configuration storage](docs/usage.md#kubernetes-configurations).
 Docker connections come from
 Docker contexts and the Docker environment variables. Select a target and press
-**Connect** in the resource-list area; selecting or restoring a target does not
+**Connect** in the main connection-status area; selecting or restoring a target does not
 connect. Connection progress includes errors and at most three total automatic
 attempts, with **Cancel** available during attempts and retry waits. Connecting
 may execute credential helpers configured in kubeconfig.

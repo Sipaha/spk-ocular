@@ -20,8 +20,8 @@ const opClass: Record<DiffLine['op'], string> = {
  * of DIFF_PAGE rows, long lines folded. Everything is reachable: a page
  * never hides a change for good.
  */
-export function EditDiff({ before, after, label }: { before: string; after: string; label?: string }) {
-  const d = useMemo(() => diff(before, after), [before, after])
+export function EditDiff({ before, after, label, exactText = false }: { before: string; after: string; label?: string; exactText?: boolean }) {
+  const d = useMemo(() => diff(before, after, exactText), [before, after, exactText])
   const rows = useMemo(() => hunks(d.lines).flatMap((h): Row[] => ('skipped' in h ? [h] : h.lines.map((line) => ({ line })))), [d])
   const added = useMemo(() => d.lines.filter((l) => l.op === '+').length, [d])
   const removed = useMemo(() => d.lines.filter((l) => l.op === '-').length, [d])

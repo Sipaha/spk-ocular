@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"sync"
 
 	"github.com/wailsapp/wails/v3/pkg/application"
@@ -50,7 +51,13 @@ func (m *LogWindows) Open(id, title string) error {
 		return errors.New("at most eight detached log windows")
 	}
 	m.mu.Unlock()
-	w := m.app.Window.NewWithOptions(application.WebviewWindowOptions{Name: "logs-" + id, Title: title + " · SPK Ocular", Hidden: true, Width: 1000, Height: 650, MinWidth: 480, MinHeight: 280, URL: "/?logsWindow=" + id, BackgroundColour: application.NewRGBA(21, 24, 30, 255), DevToolsEnabled: devToolsEnabled, Linux: application.LinuxWindow{WebviewGpuPolicy: webviewGPUPolicy(os.Getenv("SPK_OCULAR_GPU"))}})
+	var screen *application.Screen
+	if m.mainWindow != nil {
+		screen, _ = m.mainWindow.GetScreen()
+	}
+	screen = detachedLogScreen(runtime.GOOS, screen, m.app.Screen.GetAll(), m.app.Screen.GetPrimary())
+	width, height := detachedLogSize(screen)
+	w := m.app.Window.NewWithOptions(application.WebviewWindowOptions{Name: "logs-" + id, Title: title + " · SPK Ocular", Hidden: true, Width: width, Height: height, MinWidth: min(480, width), MinHeight: min(280, height), Screen: screen, InitialPosition: application.WindowCentered, URL: "/?logsWindow=" + id, BackgroundColour: application.NewRGBA(21, 24, 30, 255), DevToolsEnabled: devToolsEnabled, Linux: application.LinuxWindow{WebviewGpuPolicy: webviewGPUPolicy(os.Getenv("SPK_OCULAR_GPU"))}})
 	configureWindowIcons(w)
 	w.OnWindowEvent(events.Common.WindowClosing, func(_ *application.WindowEvent) {
 		m.abortWindowExports(id)

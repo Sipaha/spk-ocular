@@ -1,3 +1,4 @@
+import { LocationStatus } from '../components/LocationStatus'
 import {ActionIconButton} from '../components/ActionIconButton'
 import { WindowActionIcon } from '../components/icons'
 import { lazy, Suspense, useEffect, useState } from 'react'
@@ -21,6 +22,7 @@ export function LogHost({ client, tab, active }: { client: Client; tab: LogsTab;
  return <>
   {error && <p role="alert" className="p-2 text-danger">{error}</p>}
   <div className="h-full" hidden={detached}><Suspense fallback={<p>{t('app.loading')}</p>}><LogViewer client={client} subject={tab.ref} initialChannel={tab.channel} focusEpoch={tab.focusEpoch} active={active&&!detached} bridge={bridge} onWindowAction={()=>void detach()}/></Suspense></div>
+  {detached && <LocationStatus active={active}><span>{tab.title}</span><span>{t('logs.inWindow')}</span></LocationStatus>}
   {detached && <div className="relative flex h-full items-center justify-center gap-3 text-fg-muted"><span>{t('logs.inWindow')}</span><div className="absolute right-3 top-2"><ActionIconButton label={t('logs.returnWindow')} description={t('logs.returnWindow')} onClick={()=>{setDetached(false);void bridge.close()}}><WindowActionIcon returning className="h-4 w-4"/></ActionIconButton></div></div>}
  </>
 }

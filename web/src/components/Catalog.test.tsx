@@ -54,13 +54,17 @@ describe('navigation of discovered kinds', () => {
     await userEvent.click(within(section).getByRole('button', { name: 'Widgets' }))
     expect(f.client.setNavSection).toHaveBeenCalledWith('API groups/ocular.dev', true)
     expect(f.client.openView).toHaveBeenLastCalledWith('kubernetes', 'prod', expect.objectContaining({ kind: 'ocular.dev/widgets' }), expect.any(AbortSignal), expect.any(String), false, expect.any(String))
-    // Folded again, the open kind stays in sight.
+    // Folding hides every child without changing the open page.
+    await userEvent.click(head)
+    expect(within(section).queryByRole('button', { name: 'Widgets' })).not.toBeInTheDocument()
+    expect(within(section).queryByRole('button', { name: 'Gadgets' })).not.toBeInTheDocument()
+    const reads=vi.mocked(f.client.openView).mock.calls.length
     await userEvent.click(head)
     expect(within(section).getByRole('button', { name: 'Widgets' })).toHaveAttribute('aria-current', 'page')
-    expect(within(section).queryByRole('button', { name: 'Gadgets' })).not.toBeInTheDocument()
+    expect(f.client.openView).toHaveBeenCalledTimes(reads)
   })
 
-  it('remembers what was expanded; a collapsed subgroup still shows the open kind', async () => {
+  it('remembers expansion and selection while a collapsed subgroup hides every kind', async () => {
     const f = fakeClient([k8s('prod')])
     f.client.listKinds = vi.fn(async () => catalog([podsKind, widgets, gadgets, discovered('x.io/foos', 'Foos', 'x.io'), discovered('x.io/bars', 'Bars', 'x.io')]))
     f.client.getNavSections = vi.fn(async () => ({ 'group:API groups': true, 'API groups/x.io': true }))
@@ -68,8 +72,11 @@ describe('navigation of discovered kinds', () => {
     const nav = await open(f)
     const ocular = await within(nav).findByRole('group', { name: 'ocular.dev' })
     expect(within(ocular).getByRole('button', { name: /^ocular\.dev/ })).toHaveAttribute('aria-expanded', 'false')
-    expect(within(ocular).getByRole('button', { name: 'Widgets' })).toHaveAttribute('aria-current', 'page')
+    expect(within(ocular).queryByRole('button', { name: 'Widgets' })).not.toBeInTheDocument()
     expect(within(ocular).queryByRole('button', { name: 'Gadgets' })).not.toBeInTheDocument()
+    await userEvent.click(within(ocular).getByRole('button', { name: /^ocular\.dev/ }))
+    expect(within(ocular).getByRole('button', { name: 'Widgets' })).toHaveAttribute('aria-current', 'page')
+    expect(within(ocular).getByRole('button', { name: 'Gadgets' })).toBeInTheDocument()
     const x = within(nav).getByRole('group', { name: 'x.io' })
     expect(within(x).getByRole('button', { name: 'Foos' })).toBeInTheDocument()
   })
@@ -196,10 +203,12 @@ describe('the catalog in an open target', () => {
 })
 
 describe('the navigation follows the open view', () => {
-  it('a view opened elsewhere (the palette) is scrolled into the navigation', async () => {
+  it('a view opened elsewhere is scrolled into an expanded navigation', async () => {
     const f = fakeClient([k8s('prod')])
     f.client.listKinds = vi.fn(async () => catalog([podsKind, widgets, gadgets]))
     const nav = await open(f)
+    await userEvent.click(within(nav).getByRole('button',{name:/API groups/}))
+    await userEvent.click(within(nav).getByRole('button',{name:/ocular\.dev/}))
     const spy = vi.spyOn(Element.prototype, 'scrollIntoView')
     await userEvent.keyboard('{Control>}k{/Control}')
     await userEvent.keyboard(':wd{Enter}')
@@ -338,4 +347,13 @@ describe('a page whose view gave up', () => {
     await waitFor(() => expect(jobsOpens(f)).toBe(before + 1))
     await waitFor(() => expect(screen.queryByRole('alert')).not.toBeInTheDocument())
   })
+})
+
+it('uses section icons for known canonical groups and a neutral icon for unknown groups and API subgroups',async()=>{
+ const f=fakeClient([k8s('prod')]);f.client.listKinds=vi.fn(async()=>catalog([podsKind,widgets,gadgets,{...foos,group:'Vendor tools'}]))
+ const nav=await open(f)
+ expect(within(nav).getByRole('region',{name:'Workloads'}).querySelector('[data-resource-group-icon]')).toHaveAttribute('data-resource-group-icon','Workloads')
+ expect(within(nav).getByRole('region',{name:'Vendor tools'}).querySelector('[data-resource-group-icon]')).toHaveAttribute('data-resource-group-icon','default')
+ await userEvent.click(within(nav).getByRole('button',{name:/API groups/}))
+ expect(within(nav).getByRole('group',{name:'ocular.dev'}).querySelector('[data-resource-group-icon]')).toHaveAttribute('data-resource-group-icon','default')
 })

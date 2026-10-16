@@ -47,12 +47,12 @@ test('RBAC incomplete sources and 12000 rule rows stay bounded and fully localiz
  const ref={provider:'synthetic',target:'demo',kind:'',name:'reader',scope:'blue',uid:'role'}
  await page.route('**/api/RBACSnapshot',route=>route.fulfill({json:{principal:'operator',groups:['team:dev'],accounts:[],grants:[{binding:{...ref,uid:'binding'},bindingKind:'RoleBinding',role:ref,roleKind:'ClusterRole',subjectKind:'Group',subjectName:'team:dev',namespace:'blue',clusterWide:false,rules:Array.from({length:12000},(_,i)=>({verbs:['get'],apiGroups:[''],resources:['pods'],resourceNames:['pod-'+i],nonResourceURLs:[]})),error:'limit',aggregated:true}],problems:[{kind:'clusterrolebindings',class:'forbidden'}],truncated:true,discovery:'partial',capturedAt:Date.now()}}))
  const rbac=await rbacPage(page)
- await expect(rbac).toContainText('RBAC limit reached')
+ await expect(page.locator('.status-bar')).toContainText('RBAC limit reached')
  await expect(rbac).toContainText('Role could not be fully read (limit)')
  expect(await rbac.locator('[data-rbac-grant]').count()).toBeLessThan(35)
  await rbac.getByRole('button',{name:'Find declared grant',exact:true}).click()
  await expect(rbac).toContainText('No matching grant observed in this snapshot')
- await rbac.locator('footer summary').click();await expect(rbac).toContainText('clusterrolebindings · forbidden')
+ await page.locator('.status-bar summary').click();await expect(page.locator('.status-bar')).toContainText('clusterrolebindings · forbidden')
  const names={en:'English',ru:'Русский',zh:'简体中文',es:'Español',de:'Deutsch',fr:'Français',pt:'Português (Brasil)',ja:'日本語'}
  for(const [code,name] of Object.entries(names)){
   await openAppMenu(page);await page.locator('.language-menu button').click();await page.getByRole('option',{name,exact:true}).click()

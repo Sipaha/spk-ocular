@@ -69,6 +69,20 @@ function activate(tab: DockTab) {
   useDock.setState((s) => ({ tabs: s.tabs.some((x) => x.id === tab.id) ? s.tabs.map(x=>x.id===tab.id?{...tab,pinned:x.pinned,dormant:false}:x) : [...s.tabs, tab], active: tab.id }))
 }
 
+export type TabCloseScope = 'one' | 'all' | 'left' | 'right'
+
+function closeTabs(id: string, scope: TabCloseScope) {
+  useDock.setState(state => {
+    const anchor = state.tabs.findIndex(tab => tab.id === id)
+    if (anchor < 0) return state
+    const tabs = state.tabs.filter((_, index) => scope === 'one' ? index !== anchor : scope === 'left' ? index >= anchor : scope === 'right' ? index <= anchor : false)
+    if (tabs.length === state.tabs.length) return state
+    const activeIndex = state.tabs.findIndex(tab => tab.id === state.active)
+    const active = tabs.some(tab => tab.id === state.active) ? state.active : (tabs.find(tab => state.tabs.indexOf(tab) >= activeIndex) ?? tabs.at(-1))?.id ?? null
+    return { tabs, active }
+  })
+}
+
 export const dock = {
   pin(id:string):boolean {
     const state=useDock.getState();const tabs=state.tabs.map(t=>t.id===id?{...t,pinned:!t.pinned}:t);if(!fitsPins(tabs))return false;useDock.setState({tabs});return true
@@ -100,14 +114,8 @@ export const dock = {
   activate(id: string) {
     useDock.setState({ active: id })
   },
-  close(id: string) {
-    useDock.setState((s) => {
-      const i = s.tabs.findIndex((x) => x.id === id)
-      const rest = s.tabs.filter((x) => x.id !== id)
-      const active = s.active === id ? (rest[Math.min(i, rest.length - 1)]?.id ?? null) : s.active
-      return { tabs: rest, active }
-    })
-  },
+  close(id: string) { closeTabs(id, 'one') },
+  closeGroup(id: string, scope: TabCloseScope) { closeTabs(id, scope) },
   setHeight(h: number) {
     useDock.setState({ height: h })
   },

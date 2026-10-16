@@ -47,7 +47,7 @@ func secret(rv string, data map[string]string, extra map[string]any) *unstructur
 
 func valueClient(objs ...runtime.Object) *dynamicfake.FakeDynamicClient {
 	return dynamicfake.NewSimpleDynamicClientWithCustomListKinds(runtime.NewScheme(), map[schema.GroupVersionResource]string{
-		secretGVR: "SecretList", podGVR: "PodList",
+		secretGVR: "SecretList", cmGVR: "ConfigMapList", podGVR: "PodList",
 	}, objs...)
 }
 
