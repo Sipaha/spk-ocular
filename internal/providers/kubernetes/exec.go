@@ -148,7 +148,7 @@ func (c *conn) get(ctx context.Context, def *kindDef, ns, name string) (*unstruc
 // ExecInfo: a pod is its own single instance; a workload offers its
 // running pods (by controller UID), ready and newest first.
 func (s *session) ExecInfo(ctx context.Context, ref core.Ref) (core.ExecInfo, error) {
-	pods, err := s.execPods(ctx, ref)
+	pods, details, err := s.execPodsInfo(ctx, ref)
 	if err != nil {
 		return core.ExecInfo{}, err
 	}
@@ -156,7 +156,9 @@ func (s *session) ExecInfo(ctx context.Context, ref core.Ref) (core.ExecInfo, er
 	none := msg("exec.noPods")
 	info := core.ExecInfo{Aggregate: s.kind(ref.Kind) != podsKind, InstanceLabel: &pod, ChannelLabel: &container, NoInstances: &none}
 	for _, p := range pods {
-		info.Instances = append(info.Instances, execInstance(p))
+		instance := execInstance(p)
+		instance.Details = details[string(p.GetUID())]
+		info.Instances = append(info.Instances, instance)
 	}
 	if len(info.Instances) > 0 {
 		info.DefaultInstance = info.Instances[0].ID
@@ -167,24 +169,29 @@ func (s *session) ExecInfo(ctx context.Context, ref core.Ref) (core.ExecInfo, er
 // execPods: ref itself for a pod (UID-checked); a workload's running,
 // not deleting pods in preference order.
 func (s *session) execPods(ctx context.Context, ref core.Ref) ([]*unstructured.Unstructured, error) {
+	pods, _, err := s.execPodsInfo(ctx, ref)
+	return pods, err
+}
+
+func (s *session) execPodsInfo(ctx context.Context, ref core.Ref) ([]*unstructured.Unstructured, map[string][]core.Message, error) {
 	def := s.kind(ref.Kind)
 	if def == podsKind {
 		u, err := s.getObject(ctx, ref)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
-		return []*unstructured.Unstructured{u}, nil
+		return []*unstructured.Unstructured{u}, map[string][]core.Message{string(u.GetUID()): podChoiceDetails(u, nil, nil)}, nil
 	}
 	if !logWorkloads[def] {
-		return nil, &provider.Error{Class: provider.ClassUnsupported, Message: fmt.Sprintf("commands cannot run in %s", ref.Kind)}
+		return nil, nil, &provider.Error{Class: provider.ClassUnsupported, Message: fmt.Sprintf("commands cannot run in %s", ref.Kind)}
 	}
 	owner, err := s.getObject(ctx, ref)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	pods, err := workloadPods(ctx, s.conn.dyn, def, owner)
+	pods, details, err := workloadPodsInfo(ctx, s.conn.dyn, def, owner)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	var out []*unstructured.Unstructured
 	for _, p := range pods {
@@ -194,40 +201,53 @@ func (s *session) execPods(ctx context.Context, ref core.Ref) ([]*unstructured.U
 	}
 	rankExecPods(out)
 	if len(out) == 0 {
-		return nil, &provider.Error{Class: provider.ClassUnavailable, Message: fmt.Sprintf("%s has no running pods", ref.Name)}
+		return nil, nil, &provider.Error{Class: provider.ClassUnavailable, Message: fmt.Sprintf("%s has no running pods", ref.Name)}
 	}
-	return out[:min(len(out), maxInstances)], nil
+	return out[:min(len(out), maxInstances)], details, nil
 }
 
 // workloadPods lists every pod controlled by owner (a Deployment through
 // its ReplicaSets), following all pages: the choice must not depend on a
 // capped relation list.
 func workloadPods(ctx context.Context, dyn dynamic.Interface, def *kindDef, owner *unstructured.Unstructured) ([]*unstructured.Unstructured, error) {
+	pods, _, err := workloadPodsInfo(ctx, dyn, def, owner)
+	return pods, err
+}
+
+func workloadPodsInfo(ctx context.Context, dyn dynamic.Interface, def *kindDef, owner *unstructured.Unstructured) ([]*unstructured.Unstructured, map[string][]core.Message, error) {
 	ns := owner.GetNamespace()
 	controllers := map[types.UID]bool{owner.GetUID(): true}
+	replicaSets := map[types.UID]*unstructured.Unstructured{}
 	if def == deploymentsKind {
 		controllers = map[types.UID]bool{}
 		rss, err := listAll(ctx, dyn, replicaSetsKind, ns, selectorOf(owner))
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		for _, rs := range rss {
 			if c := metav1.GetControllerOfNoCopy(rs); c != nil && c.UID == owner.GetUID() {
 				controllers[rs.GetUID()] = true
+				replicaSets[rs.GetUID()] = rs
 			}
 		}
 	}
 	pods, err := listAll(ctx, dyn, podsKind, ns, selectorOf(owner))
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	var out []*unstructured.Unstructured
+	details := map[string][]core.Message{}
 	for _, p := range pods {
 		if c := metav1.GetControllerOfNoCopy(p); c != nil && controllers[c.UID] {
 			out = append(out, p)
+			var deployment *unstructured.Unstructured
+			if def == deploymentsKind {
+				deployment = owner
+			}
+			details[string(p.GetUID())] = podChoiceDetails(p, deployment, replicaSets[c.UID])
 		}
 	}
-	return out, nil
+	return out, details, nil
 }
 
 // selectorOf is a workload's spec.selector as a label selector ("" = none).

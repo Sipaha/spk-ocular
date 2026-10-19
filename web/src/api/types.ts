@@ -649,7 +649,7 @@ export interface LogInfo {
   instanceLabel?: Message
   allInstancesLabel?: Message
   /** Concrete sources of an aggregate workload, including stopped Pods. */
-  instances?: { ref: Ref; title: string }[]
+  instances?: { ref: Ref; title: string; details?: Message[] }[]
   channels: LogChannel[]
   defaultChannel: string
   /** The object is a group of sources (a workload's pods). */
@@ -688,6 +688,7 @@ export interface ExecChannel {
 }
 
 export interface ExecInstance {
+  details?: Message[]
   id: string
   title: string
   ready: boolean

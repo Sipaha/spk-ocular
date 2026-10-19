@@ -2,7 +2,7 @@ import { act, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 import type { Client } from '../api/client'
-import type { ExecInfo, ExecInstance, Ref } from '../api/types'
+import type { ExecInfo, ExecInstance, Message, Ref } from '../api/types'
 import { useInstancePicker } from './useInstancePicker'
 
 const ref: Ref = {provider:'kubernetes',target:'ctx',scope:'ns',kind:'apps/deployments',name:'web',uid:'deployment-uid'}
@@ -54,6 +54,26 @@ describe('tool instance selection',()=>{
   await s.user.click(screen.getByRole('button',{name:'Logs'}))
   await s.user.click(await screen.findByRole('option',{name:'All Pods'}))
   expect(s.openLogs).toHaveBeenLastCalledWith(ref)
+ })
+ it('shows rollout context without changing UID selection or accessible names',async()=>{
+  const details:Message[]=[{key:'kubernetes.instance.current',text:'Current revision 194',params:{revision:'194'}},{key:'kubernetes.instance.notReady',text:'Not ready'},{key:'kubernetes.instance.state',text:'ContainerCreating',params:{state:'ContainerCreating'}}]
+  const log=vi.fn(async()=>({channels:[],defaultChannel:'',aggregate:true,selectChannels:true,previous:false,instances:info.instances.map((i,n)=>({title:i.title,ref:{...ref,kind:'pods',name:i.title,uid:i.id},details:n===1?details:[{text:'Previous revision 193 · Ready · Containers 1/1 · Running'}]}))}))
+  const s=setup(vi.fn(async()=>info),log)
+  await s.user.click(screen.getByRole('button',{name:'Logs'}))
+  const option=await screen.findByRole('option',{name:'pod-2'})
+  expect(option).toHaveAccessibleDescription('Current revision 194 · Not ready · ContainerCreating')
+  expect(option).toHaveTextContent('Current revision 194')
+  await s.user.click(option)
+  expect(s.openLogs).toHaveBeenLastCalledWith({...ref,kind:'pods',name:'pod-2',uid:info.instances[1].id})
+ })
+ it('exec and files reuse the same details, with a plain fallback for providers without them',async()=>{
+  const candidate={...info.instances[1],ready:false,details:[{text:'Current revision 194 · Not ready · Containers 0/1 · Running'}]}
+  const s=setup(vi.fn(async()=>({...info,instances:[info.instances[0],candidate]})))
+  await s.user.click(screen.getByRole('button',{name:'Exec'}))
+  const option=await screen.findByRole('option',{name:'pod-2'})
+  expect(option).toHaveAccessibleDescription('Current revision 194 · Not ready · Containers 0/1 · Running')
+  await s.user.click(option)
+  expect(s.openExec).toHaveBeenCalledExactlyOnceWith(candidate)
  })
  it('opens Docker stdout/stderr streams directly instead of treating them as containers',async()=>{
   const s=setup(vi.fn(async()=>info),vi.fn(async()=>({channels:[{id:'stdout',title:'stdout'},{id:'stderr',title:'stderr'}],defaultChannel:'*',aggregate:false,previous:false,instances:[]})))

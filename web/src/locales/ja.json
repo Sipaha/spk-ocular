@@ -88,7 +88,7 @@
     "security.fix.rbac-escalation": "bind、escalate、impersonate とそのバインディングを確認し、意図した委任のみ残してください。",
     "security.fix.rbac-exec": "pods/exec を対象の運用者に限定し、バインディングと resourceNames の制限を確認してください。",
     "workspace.pinPropertiesHint": "移動中もこのリソースの読み取り専用プロパティを下部パネルに保持し、再起動後も参照を保持します。",
-    "compare.pinHint": "保存済みリソースの比較基準としてこのリソースを選択します。",
+    "compare.pinHint": "保存済みリソースを比較する基準として {name} を使用します。",
     "compare.withHint": "この保存済みリソースを選択した基準と比較します。未保存の編集は除外されます。",
     "rbac.permissionsHint": "この ServiceAccount の RBAC バインディング、ロール、宣言された権限を確認します。",
     "logs.reopenHint": "このリソースの新しいログストリームを開きます。",
@@ -589,7 +589,7 @@
     "logs.tailAll": "すべて",
     "logs.since": "開始時刻",
     "logs.connection": "接続",
-  "logs.sinceAll": "全期間",
+    "logs.sinceAll": "全期間",
     "logs.previous": "前",
     "logs.previous.tooltip": "前の（最後に終了した）インスタンスのログ",
     "logs.search": "検索（Ctrl+F）",
@@ -1159,7 +1159,8 @@
     "appearance.save": "保存",
     "appearance.retry": "再試行",
     "view.scopeLimit": "All Namespaces の一覧が大きすぎます。上で特定の namespace を選択して、完全な一覧を読み込んでください。",
-    "class.scope_limit": "namespace を選択"
+    "class.scope_limit": "namespace を選択",
+    "compare.noBaseline": "比較基準が選択されていません。リソースのプロパティを開き、「{pin}」をクリックしてください。次に別のリソースを開き、「{compare}」をクリックすると、両方の YAML を比較できます。"
   },
   "provider": {
     "kubernetes.rbac.source": "RBACの情報を取得できません（{class}）",
@@ -1475,6 +1476,13 @@
     "api.closedByUser": "ターゲットへの接続がユーザーによって閉じられました",
     "api.loginByPerson": "クラスターへのログインはユーザーによって行われます: Ocular でターゲットを選択し、Connect を押してください",
     "api.rbacInput": "接続先、名前空間の選択、APIリクエストの項目を確認してください",
-    "api.compareUnavailable": "比較には UID を固定した 二つのリソース、変更のない接続、1 MiB・20000 行・深さ 64 以下の有効な単一オブジェクト YAML が必要です"
+    "api.compareUnavailable": "比較には UID を固定した 二つのリソース、変更のない接続、1 MiB・20000 行・深さ 64 以下の有効な単一オブジェクト YAML が必要です",
+    "kubernetes.instance.revision": "リビジョン {revision}",
+    "kubernetes.instance.current": "現在のリビジョン {revision}",
+    "kubernetes.instance.previous": "以前のリビジョン {revision}",
+    "kubernetes.instance.ready": "準備完了",
+    "kubernetes.instance.notReady": "未準備",
+    "kubernetes.instance.containers": "コンテナー {ready}/{total}",
+    "kubernetes.instance.state": "{state}"
   }
 }

@@ -734,6 +734,15 @@ The log list includes stopped Pods, while Terminal and Files offer running
 instances/containers. Variant metadata is prefetched when details load and cached
 for five seconds; clicking never inserts a Loading row in the dropdown.
 
+Pod choices for logs, terminals and files include secondary snapshot details:
+readiness, ready application-container count and Kubernetes status/reason (for
+example ContainerCreating, CrashLoopBackOff or Terminating). Deployment choices
+also identify the current or previous ReplicaSet revision. Current means that
+its template matches the desired Deployment template, excluding pod-template-hash;
+it is independent of Pod readiness and is not inferred from age or the highest
+revision number. Missing revision/template data is left unclassified. Ready Pods
+retain their existing ordering; commands still require a running container.
+
 Right-click any of these three buttons for a full setup dialog. Pod and container
 selectors stay visible even with one option. Terminal alone includes a Command
 field; Shift+S also opens its setup. The former terminal split-button arrow is
@@ -1103,7 +1112,10 @@ visible in-memory history for the current process instead of overwriting it.
 In resource properties, use **Use as comparison baseline**, then open another
 resource (also on another connected target) and choose **Compare with baseline**.
 The comparison baseline is indicated by the permanent icon in the app header.
-Click it to inspect or clear the baseline; no banner moves the workspace.
+Click it to inspect or clear the baseline; no banner moves the workspace. When
+no baseline is selected, the popover explains how to open resource properties,
+set the baseline and compare another resource, naming the localized actions.
+The resource-specific pin tooltip names the actual resource.
 Collapsed unchanged diff blocks can reveal 20 lines at a time above or below
 the boundary, retaining original line numbers and the existing paging limits.
 The same context controls apply to edit reviews and ConfigMap value diffs.

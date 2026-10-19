@@ -160,7 +160,8 @@ const en = {
  "logs.historyBrowserLimit": "This browser supports only a 64 MiB in-memory download. Use the desktop app or a browser with a streaming save picker.",
  "workspace.propertiesLabel": "Pinned properties",
  "workspace.pinPropertiesHint": "Keep this resource’s read-only properties in the bottom panel while navigating; retain its reference after restart.",
- "compare.pinHint": "Select this resource as the baseline for comparing saved resources.",
+ "compare.noBaseline": "No baseline selected. Open a resource’s properties and click “{pin}”. Then open another resource and click “{compare}” to compare their YAML.",
+ "compare.pinHint": "Use {name} as the baseline for comparing saved resources.",
  "compare.withHint": "Compare this saved resource with the selected baseline; unsaved edits are excluded.",
  "rbac.permissionsHint": "Inspect this ServiceAccount’s RBAC bindings, roles and declared permissions.",
  "logs.reopenHint": "Open a fresh log stream for this resource.",
@@ -1341,7 +1342,8 @@ const ru: Record<MessageKey, string> = {
  "logs.historyBrowserLimit": "Этот браузер поддерживает только скачивание до 64 MiB через память. Используйте приложение или браузер с потоковым сохранением в файл.",
  "workspace.propertiesLabel": "Закреплённые свойства",
  "workspace.pinPropertiesHint": "Закрепить свойства этого ресурса только для чтения в нижней панели при навигации; сохранить ссылку после перезапуска.",
- "compare.pinHint": "Выбрать этот ресурс как базу для сравнения сохранённых ресурсов.",
+ "compare.noBaseline": "База сравнения не выбрана. Откройте свойства ресурса и нажмите «{pin}». Затем откройте другой ресурс и нажмите «{compare}», чтобы сравнить их YAML.",
+ "compare.pinHint": "Использовать {name} как базу для сравнения сохранённых ресурсов.",
  "compare.withHint": "Сравнить этот сохранённый ресурс с выбранной базой; несохранённые изменения не учитываются.",
  "rbac.permissionsHint": "Посмотреть привязки RBAC, роли и объявленные права этого ServiceAccount.",
  "logs.reopenHint": "Открыть новый поток логов этого ресурса.",
@@ -2402,6 +2404,14 @@ export function loadLanguage(language: Language): Promise<void> {
  */
 const providerTexts: Partial<Record<Language, Record<string, string>>> = {
   ru: {
+    'kubernetes.instance.revision': 'Ревизия {revision}',
+    'kubernetes.instance.current': 'Текущая ревизия {revision}',
+    'kubernetes.instance.previous': 'Предыдущая ревизия {revision}',
+    'kubernetes.instance.ready': 'Готов',
+    'kubernetes.instance.notReady': 'Не готов',
+    'kubernetes.instance.containers': 'Контейнеры {ready}/{total}',
+    'kubernetes.instance.state': '{state}',
+
     'kubernetes.rbac.source': 'Не удалось прочитать источник RBAC ({class})',
     'kubernetes.rbac.replaced': 'ServiceAccount был заменён; явно выберите текущий объект',
     'kubernetes.rbac.unsupported': 'Этот тип ресурса недоступен для проверки прав',

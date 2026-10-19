@@ -5,6 +5,8 @@ import { SearchIcon } from './icons'
 export interface SelectOption {
   value: string
   label: string
+  /** Secondary context, kept separate from the compact selected value. */
+  description?: string
   /** Pronunciation of a foreign-language label, without changing its value. */
   lang?: string
   disabled?: boolean
@@ -154,8 +156,9 @@ export function SelectList({ value, options, label, search, searchAction, anchor
     close.current = onClose
   })
 
+  const hasDescriptions = options.some(option => !!option.description)
   const q = query.trim().toLowerCase()
-  const items = useMemo(() => (q ? options.filter((o) => !o.pinned && o.label.toLowerCase().includes(q)) : options), [options, q])
+  const items = useMemo(() => (q ? options.filter((o) => !o.pinned && `${o.label} ${o.description ?? ''}`.toLowerCase().includes(q)) : options), [options, q])
   const firstEnabled = (from: number, step: 1 | -1) => {
     const n = items.length
     for (let k = 0; k < n; k++) {
@@ -176,17 +179,20 @@ export function SelectList({ value, options, label, search, searchAction, anchor
       const below = window.innerHeight - r.bottom - 8
       const above = r.top - 8
       const up = below < 200 && above > below
+      // Described options have a stable width; automatic shrink-to-fit would
+      // feed a new width back into positioning on every render near an edge.
+      const width = hasDescriptions ? Math.min(window.innerWidth * 0.9, 32 * parseFloat(getComputedStyle(document.documentElement).fontSize)) : Math.max(r.width, 160)
       setPos({
-        left: Math.max(4, Math.min(r.left, window.innerWidth - Math.max(r.width, 160) - 4)),
+        left: Math.max(4, Math.min(r.left, window.innerWidth - width - 4)),
         ...(up ? { bottom: window.innerHeight - r.top + 4 } : { top: r.bottom + 4 }),
-        minWidth: r.width,
+        minWidth: hasDescriptions ? Math.min(r.width, width) : r.width,
         maxHeight: Math.max(120, Math.min(360, up ? above : below)),
       })
     }
     place()
     window.addEventListener('resize', place)
     return () => window.removeEventListener('resize', place)
-  }, [anchor])
+  }, [anchor, hasDescriptions])
 
   useEffect(() => {
     ;(memory?.read().focus === 'list' ? list.current : input.current ?? list.current)?.focus()
@@ -292,7 +298,7 @@ export function SelectList({ value, options, label, search, searchAction, anchor
     <div
       ref={box}
       onKeyDown={onKey}
-      style={pos ? { position: 'fixed', left: pos.left, top: pos.top, bottom: pos.bottom, minWidth: pos.minWidth } : { position: 'fixed', left: 0, top: 0, opacity: 0, pointerEvents: 'none' }}
+      style={pos ? { position: 'fixed', left: pos.left, top: pos.top, bottom: pos.bottom, minWidth: pos.minWidth, ...(hasDescriptions ? {width:'min(90vw,32rem)'} : {}) } : { position: 'fixed', left: 0, top: 0, opacity: 0, pointerEvents: 'none' }}
       className={['z-50 flex max-w-[min(90vw,32rem)] flex-col overflow-hidden rounded-md border border-line bg-panel text-[14px] text-fg shadow-xl', search ? 'w-72' : ''].join(' ')}
     >
       {search && (
@@ -340,6 +346,8 @@ export function SelectList({ value, options, label, search, searchAction, anchor
             data-index={i}
             role="option"
             aria-label={o.label}
+            aria-describedby={o.description ? `${optId(i)}-description` : undefined}
+            title={o.description ? `${o.label} — ${o.description}` : undefined}
             aria-selected={multiple ? (o.pinned ? value === '' : multiple.selected.includes(o.value)) : i === active}
             aria-disabled={o.disabled || undefined}
             onMouseDown={(e) => e.preventDefault()}
@@ -364,7 +372,7 @@ export function SelectList({ value, options, label, search, searchAction, anchor
             ) : (
               <span aria-hidden="true" className="w-4 shrink-0 text-accent">{o.value === value ? '✓' : ''}</span>
             )}
-            <span className="min-w-0 truncate">{o.label}</span>
+            <span className="min-w-0"><span className="block truncate">{o.label}</span>{o.description && <span id={`${optId(i)}-description`} className="block whitespace-normal break-words text-xs text-fg-muted">{o.description}</span>}</span>
           </div>
         ))}
         {!items.length && (

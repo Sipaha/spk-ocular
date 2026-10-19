@@ -13,6 +13,8 @@ type ExecChannel struct {
 // ExecInstance is one concrete thing an object runs as (k8s: a pod of a
 // workload, or the pod itself).
 type ExecInstance struct {
+	// Details describe the instance snapshot without changing its identity.
+	Details        []Message     `json:"details,omitempty"`
 	ID             string        `json:"id"`
 	Title          string        `json:"title"`
 	Ready          bool          `json:"ready"`

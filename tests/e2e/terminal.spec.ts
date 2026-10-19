@@ -232,3 +232,37 @@ test('IME preedit replacement, cancellation and Unicode paste keep committed inp
  await page.keyboard.press('Enter');await expectScreen(page,'you said: paste Ж🙂')
  await cdp.detach()
 })
+
+test('instance details remain readable in quick and setup pickers after a narrow resize', async ({page})=>{
+  await page.route('**/api/ExecInfo',async route=>{
+    const response=await route.fetch(), info=await response.json()
+    info.instances=info.instances.map((item:{title:string},index:number)=>({...item,details:[
+      {text:index===0?'Previous revision 193 · Ready · Containers 1/1 · Running':'Current revision 194 · Not ready · Containers 0/1 · Running'},
+    ]}))
+    await route.fulfill({response,json:info})
+  })
+  await page.setViewportSize({width:1440,height:900})
+  await selectObject(page,'workers')
+  await page.getByRole('button',{name:'Terminal',exact:true}).click()
+  const list=page.getByRole('listbox')
+  await expect(list.getByRole('option',{name:'worker-2',exact:true})).toHaveAccessibleDescription(/Current revision 194/)
+  for(const width of [375,768,1440]){
+    // Close before resizing: ancestor scroll intentionally dismisses open menus.
+    await page.keyboard.press('Escape')
+    await page.setViewportSize({width,height:820})
+    const button=page.getByRole('button',{name:'Terminal',exact:true})
+    await button.scrollIntoViewIfNeeded()
+    await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))))
+    await button.click()
+    await expect.poll(async()=>{const box=await list.boundingBox();return !!box&&box.x>=0&&box.x+box.width<=width}).toBe(true)
+    await expect(list.getByRole('option',{name:'worker-2',exact:true}).getByText(/Current revision 194/)).toBeVisible()
+  }
+  await page.keyboard.press('Escape')
+  await page.getByRole('button',{name:'Terminal',exact:true}).click({button:'right'})
+  const dialog=page.getByRole('dialog',{name:'Open a terminal'})
+  await selects(dialog).first().click()
+  await expect(page.getByRole('option',{name:'worker-2',exact:true})).toHaveAccessibleDescription(/Current revision 194/)
+  await page.getByRole('option',{name:'worker-2',exact:true}).click()
+  await dialog.getByRole('button',{name:'Open',exact:true}).click()
+  await expectScreen(page,'synthetic terminal on worker-2')
+})

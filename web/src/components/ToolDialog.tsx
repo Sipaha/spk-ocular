@@ -7,7 +7,7 @@ import { refTitle } from '../refs'
 import { useModalFocus } from './modal'
 import { parseArgv } from '../term/argv'
 import { Select } from './Select'
-import { runningChannel } from './useInstancePicker'
+import { instanceOption, runningChannel } from './useInstancePicker'
 
 export type ToolMode = 'terminal' | 'logs' | 'files'
 export interface ToolSelection { ref: Ref; instance?: ExecInstance; channel?: string; command?: string[] }
@@ -57,8 +57,8 @@ export function ToolDialog({client, subject, mode, onOpen, onClose}: Props) {
   }, [client, logs, instance, selectedRef])
   const selectedExec = exec?.instances.find(item=>item.id === instance)
   const instanceOptions = mode === 'logs'
-    ? logs?.aggregate ? [{value:'*',label:logs.allInstancesLabel ? messageText(logs.allInstancesLabel) : t('logs.allPods')}, ...(logs.instances ?? []).map(item=>({value:item.ref.uid || item.ref.name,label:item.title}))] : [{value:'',label:refTitle(subject)}]
-    : (exec?.instances ?? []).map(item=>({value:item.id,label:item.ready ? item.title : `${item.title} (${t('term.notReady')})`}))
+    ? logs?.aggregate ? [{value:'*',label:logs.allInstancesLabel ? messageText(logs.allInstancesLabel) : t('logs.allPods')}, ...(logs.instances ?? []).map(item=>({value:item.ref.uid || item.ref.name,...instanceOption(item)}))] : [{value:'',label:refTitle(subject)}]
+    : (exec?.instances ?? []).map(item=>({value:item.id,...instanceOption(item)}))
   const channelOptions = mode === 'logs'
     ? [{value:'*',label:selectedLogs?.allChannelsLabel ? messageText(selectedLogs.allChannelsLabel) : t('logs.allChannels')}, ...(selectedLogs?.channels ?? []).map(item=>({value:item.id,label:item.title}))]
     : (selectedExec?.channels ?? []).map(item=>({value:item.id,label:`${item.title}${item.note ? ` (${item.note})` : ''}${item.running ? '' : ` — ${t('term.notRunning',{state:item.state ?? ''})}`}`,disabled:!item.running}))

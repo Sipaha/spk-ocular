@@ -88,7 +88,7 @@
     "security.fix.rbac-escalation": "bind, escalate, impersonate und Bindungen prüfen; nur beabsichtigte Delegation behalten.",
     "security.fix.rbac-exec": "pods/exec auf vorgesehene Bediener begrenzen; Bindungen und resourceNames prüfen.",
     "workspace.pinPropertiesHint": "Schreibgeschützte Eigenschaften dieser Ressource beim Navigieren im unteren Bereich behalten; die Referenz nach einem Neustart wiederherstellen.",
-    "compare.pinHint": "Diese Ressource als Basis für den Vergleich gespeicherter Ressourcen auswählen.",
+    "compare.pinHint": "{name} als Basis für den Vergleich gespeicherter Ressourcen verwenden.",
     "compare.withHint": "Diese gespeicherte Ressource mit der gewählten Basis vergleichen; ungespeicherte Änderungen werden ausgeschlossen.",
     "rbac.permissionsHint": "RBAC-Bindungen, Rollen und deklarierte Berechtigungen dieses ServiceAccounts prüfen.",
     "logs.reopenHint": "Einen neuen Log-Stream für diese Ressource öffnen.",
@@ -589,7 +589,7 @@
     "logs.tailAll": "Alle",
     "logs.since": "Seit",
     "logs.connection": "Verbindung",
-  "logs.sinceAll": "Gesamter Zeitraum",
+    "logs.sinceAll": "Gesamter Zeitraum",
     "logs.previous": "Vorherige",
     "logs.previous.tooltip": "Protokolle der vorherigen (zuletzt beendeten) Instanz",
     "logs.search": "Suchen (Strg+F)",
@@ -1159,7 +1159,8 @@
     "appearance.save": "Speichern",
     "appearance.retry": "Erneut versuchen",
     "view.scopeLimit": "All Namespaces ist zu groß. Wählen Sie oben bestimmte Namespaces, um eine vollständige Liste zu laden.",
-    "class.scope_limit": "Namespaces auswählen"
+    "class.scope_limit": "Namespaces auswählen",
+    "compare.noBaseline": "Keine Vergleichsbasis ausgewählt. Öffnen Sie die Eigenschaften einer Ressource und klicken Sie auf „{pin}“. Öffnen Sie dann eine andere Ressource und klicken Sie auf „{compare}“, um deren YAML zu vergleichen."
   },
   "provider": {
     "kubernetes.rbac.source": "RBAC-Quelle konnte nicht gelesen werden ({class})",
@@ -1475,6 +1476,13 @@
     "api.closedByUser": "Die Verbindung zum Ziel wurde vom Benutzer geschlossen",
     "api.loginByPerson": "Ein Login in den Cluster wurde von einer Person durchgeführt: Wählen Sie das Ziel in Ocular aus und drücken Sie Verbinden",
     "api.rbacInput": "Ziel, Namespace-Auswahl und API-Anfragefelder prüfen",
-    "api.compareUnavailable": "Der Vergleich erfordert zwei UID-gebundene Ressourcen mit unveränderten Verbindungen und gültiges YAML eines Objekts bis 1 MiB, 20000 Zeilen und Tiefe 64"
+    "api.compareUnavailable": "Der Vergleich erfordert zwei UID-gebundene Ressourcen mit unveränderten Verbindungen und gültiges YAML eines Objekts bis 1 MiB, 20000 Zeilen und Tiefe 64",
+    "kubernetes.instance.revision": "Revision {revision}",
+    "kubernetes.instance.current": "Aktuelle Revision {revision}",
+    "kubernetes.instance.previous": "Vorherige Revision {revision}",
+    "kubernetes.instance.ready": "Bereit",
+    "kubernetes.instance.notReady": "Nicht bereit",
+    "kubernetes.instance.containers": "Container {ready}/{total}",
+    "kubernetes.instance.state": "{state}"
   }
 }

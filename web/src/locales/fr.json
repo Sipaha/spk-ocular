@@ -88,7 +88,7 @@
     "security.fix.rbac-escalation": "Vérifiez bind, escalate, impersonate et leurs liaisons ; gardez uniquement la délégation voulue.",
     "security.fix.rbac-exec": "Limitez pods/exec aux opérateurs prévus ; vérifiez les liaisons et resourceNames.",
     "workspace.pinPropertiesHint": "Conserver les propriétés en lecture seule de cette ressource dans le panneau inférieur pendant la navigation ; garder sa référence après redémarrage.",
-    "compare.pinHint": "Sélectionner cette ressource comme référence pour comparer les ressources enregistrées.",
+    "compare.pinHint": "Utiliser {name} comme base pour comparer les ressources enregistrées.",
     "compare.withHint": "Comparer cette ressource enregistrée à la référence sélectionnée ; les modifications non enregistrées sont exclues.",
     "rbac.permissionsHint": "Examiner les liaisons RBAC, les rôles et les autorisations déclarées de ce ServiceAccount.",
     "logs.reopenHint": "Ouvrir un nouveau flux de logs pour cette ressource.",
@@ -589,7 +589,7 @@
     "logs.tailAll": "Toutes",
     "logs.since": "Depuis",
     "logs.connection": "Connexion",
-  "logs.sinceAll": "Toute la période",
+    "logs.sinceAll": "Toute la période",
     "logs.previous": "Précédent",
     "logs.previous.tooltip": "Journaux de l'instance précédente (dernière terminée)",
     "logs.search": "Rechercher (Ctrl+F)",
@@ -1159,7 +1159,8 @@
     "appearance.save": "Enregistrer",
     "appearance.retry": "Réessayer",
     "view.scopeLimit": "All Namespaces est trop volumineux. Sélectionnez des namespaces précis ci-dessus pour charger une liste complète.",
-    "class.scope_limit": "sélectionnez des namespaces"
+    "class.scope_limit": "sélectionnez des namespaces",
+    "compare.noBaseline": "Aucune base de comparaison sélectionnée. Ouvrez les propriétés d’une ressource et cliquez sur « {pin} ». Ouvrez ensuite une autre ressource et cliquez sur « {compare} » pour comparer leur YAML."
   },
   "provider": {
     "kubernetes.rbac.source": "Impossible de lire la source RBAC ({class})",
@@ -1475,6 +1476,13 @@
     "api.closedByUser": "la connexion à la cible a été fermée",
     "api.loginByPerson": "une connexion au cluster est effectuée par une personne : sélectionnez la cible dans Ocular et appuyez sur Connecter",
     "api.rbacInput": "Vérifier la cible, les espaces sélectionnés et les champs API",
-    "api.compareUnavailable": "Il faut deux ressources liées à leur UID sur des connexions inchangées et un YAML valide pour un objet de 1 Mio, 20000 lignes et profondeur 64 au maximum"
+    "api.compareUnavailable": "Il faut deux ressources liées à leur UID sur des connexions inchangées et un YAML valide pour un objet de 1 Mio, 20000 lignes et profondeur 64 au maximum",
+    "kubernetes.instance.revision": "Révision {revision}",
+    "kubernetes.instance.current": "Révision actuelle {revision}",
+    "kubernetes.instance.previous": "Révision précédente {revision}",
+    "kubernetes.instance.ready": "Prêt",
+    "kubernetes.instance.notReady": "Non prêt",
+    "kubernetes.instance.containers": "Conteneurs {ready}/{total}",
+    "kubernetes.instance.state": "{state}"
   }
 }

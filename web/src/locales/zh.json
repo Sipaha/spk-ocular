@@ -88,7 +88,7 @@
     "security.fix.rbac-escalation": "检查 bind、escalate、impersonate 规则及绑定；仅保留有意委派。",
     "security.fix.rbac-exec": "将 pods/exec 限制为指定运维人员；检查绑定及 resourceNames 限制。",
     "workspace.pinPropertiesHint": "导航时将此资源的只读属性保留在底部面板中，并在重启后保留其引用。",
-    "compare.pinHint": "选择此资源作为比较已保存资源的基准。",
+    "compare.pinHint": "将 {name} 用作比较已保存资源的基准。",
     "compare.withHint": "将此已保存资源与选定基准进行比较；不包括未保存的编辑。",
     "rbac.permissionsHint": "查看此 ServiceAccount 的 RBAC 绑定、角色和声明的权限。",
     "logs.reopenHint": "为此资源打开新的日志流。",
@@ -557,7 +557,7 @@
     "logs.tailAll": "全部",
     "logs.since": "自",
     "logs.connection": "连接",
-  "logs.sinceAll": "全部时间",
+    "logs.sinceAll": "全部时间",
     "logs.previous": "上一个",
     "logs.previous.tooltip": "上一个（最后终止）实例的日志",
     "logs.search": "搜索（Ctrl+F）",
@@ -1159,7 +1159,8 @@
     "appearance.save": "保存",
     "appearance.retry": "重试",
     "view.scopeLimit": "All Namespaces 的列表过大。请在上方选择具体的 namespace，以加载完整列表。",
-    "class.scope_limit": "请选择 namespace"
+    "class.scope_limit": "请选择 namespace",
+    "compare.noBaseline": "尚未选择比较基准。打开一个资源的属性，点击“{pin}”。然后打开另一个资源，点击“{compare}”以比较两者的 YAML。"
   },
   "provider": {
     "kubernetes.rbac.source": "无法读取 RBAC 来源（{class}）",
@@ -1475,6 +1476,13 @@
     "api.closedByUser": "与目标的连接已被用户关闭",
     "api.loginByPerson": "通过人员登录集群：在 Ocular 中选择目标并点击连接",
     "api.rbacInput": "请检查目标、命名空间选择和 API 请求字段",
-    "api.compareUnavailable": "比较需要两个固定 UID 的资源，连接不能更改，且有效的单对象 YAML 不超过 1 MiB、20000 行及 64 层深度"
+    "api.compareUnavailable": "比较需要两个固定 UID 的资源，连接不能更改，且有效的单对象 YAML 不超过 1 MiB、20000 行及 64 层深度",
+    "kubernetes.instance.revision": "修订版本 {revision}",
+    "kubernetes.instance.current": "当前修订版本 {revision}",
+    "kubernetes.instance.previous": "旧修订版本 {revision}",
+    "kubernetes.instance.ready": "就绪",
+    "kubernetes.instance.notReady": "未就绪",
+    "kubernetes.instance.containers": "容器 {ready}/{total}",
+    "kubernetes.instance.state": "{state}"
   }
 }

@@ -136,6 +136,7 @@ export function matchesRow(r: Row, f: string): boolean {
 }
 
 export function ResourceTable({ appearance, renderCell, ariaLabel = t('table.resources'), emptyMessage, columns, rows, hideScope, filter, selected, reveal, onSelect, onOpen, onLogs, onTerminal, metrics, onVisibleRows, rowMenu, onDelete, defaultSort, initialSort, onSort, initialWidths, onWidths, areaFocus, marked, onMarked }: Props) {
+  "use no memo"; // TanStack Virtual exposes mutable state; keep its reads outside automatic memoization.
   const now = useNow(10_000)
   const [widths, setWidths] = useState<Record<string, number>>(initialWidths ?? {})
   const resizeColumn = (id: string, width: number | null) => {
@@ -231,6 +232,7 @@ export function ResourceTable({ appearance, renderCell, ariaLabel = t('table.res
 
   const scrollRef = useRef<HTMLDivElement>(null)
   const headRef = useRef<HTMLDivElement>(null)
+  // eslint-disable-next-line react-hooks/incompatible-library -- explicit "use no memo" boundary above; virtualizer reads stay in this component.
   const virt = useVirtualizer({
     count: sorted.length,
     getScrollElement: () => scrollRef.current,

@@ -21,6 +21,7 @@ interface Props {client: Client; target: {provider: string; id: string}; scope: 
 const button = 'rounded-md border border-line px-2 py-1 text-xs hover:bg-hover disabled:opacity-40'
 
 export default function TimelineWorkspace({client,target,scope,scopePicker,drawer}: Props) {
+ "use no memo"; // TanStack Virtual exposes mutable state; keep its reads outside automatic memoization.
  const [query,setQuery] = useState('')
  const [warnings,setWarnings] = useState(false)
  const [kind,setKind] = useState('')
@@ -37,6 +38,7 @@ export default function TimelineWorkspace({client,target,scope,scopePicker,drawe
  const bounds = useMemo(()=>timelineBounds(rows,snapshot?.capturedAt??0,rangeMs),[rows,snapshot,rangeMs])
  const bins = useMemo(()=>timelineDensity(rows,bounds.start,bounds.end),[rows,bounds])
  const maxDensity = Math.max(1,...bins.map(b=>b.normal+b.warning))
+ // eslint-disable-next-line react-hooks/incompatible-library -- explicit "use no memo" boundary above; virtualizer reads stay in this component.
  const virtual = useVirtualizer({count:rows.length,getScrollElement:()=>scroll.current,estimateSize:()=>48,overscan:8,getItemKey:i=>rows[i].event.id})
  const selected = snapshot?.events.find(e=>e.id===eventID)
  const selectedRow = rows.find(r=>r.event.id===eventID)

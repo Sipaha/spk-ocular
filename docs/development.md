@@ -425,3 +425,12 @@ The application frame and resource frame use non-scrollable overflow clipping: n
 focus scrolling and `scrollIntoView` may move the inner viewport, never these frames.
 A compressed resource pane must keep its toolbar origin and leave no shifted-content
 gap after the dock is reduced again.
+
+### Virtualizer memoization boundary
+
+Resource table, RBAC and timeline components use an explicit `"use no memo"`
+function directive for TanStack Virtual: its stable instance exposes mutable state that automatic
+memoization must not cache. Keep virtualizer reads local to that component.
+The current Vite build does not enable React Compiler; its ESLint compatibility
+rule still runs and requires a documented, call-local exception even with the
+directive. Keep that exception narrow; do not disable the rule globally.

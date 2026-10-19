@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import type { Client } from '../api/client'
-import type { ExecInstance, Ref } from '../api/types'
+import type { ExecInstance, Message, Ref } from '../api/types'
 import { messageText, t } from '../i18n'
 import { showNotice } from '../store'
 import { getExecInfo, getLogInfo } from './toolInfo'
@@ -78,7 +78,7 @@ export function useInstancePicker(client: Client, context: string) {
       }
       return {
         label: info.instanceLabel ? messageText(info.instanceLabel) : t('term.instance'),
-        choices: instances.map(instance => ({value:instance.id, label:instance.ready ? instance.title : `${instance.title} (${t('term.notReady')})`, choose:()=>open(instance)})),
+        choices: instances.map(instance => ({value:instance.id, ...instanceOption(instance), choose:()=>open(instance)})),
         direct: instances.length === 1 ? () => open(instances[0]) : undefined,
       }
     }, t('term.open'))
@@ -99,7 +99,7 @@ export function useInstancePicker(client: Client, context: string) {
       }
       return {
         label: info.instanceLabel ? messageText(info.instanceLabel) : t('logs.pod'),
-        choices: [{value:'*', label:info.allInstancesLabel ? messageText(info.allInstancesLabel) : t('logs.allPods'), choose:()=>open(ref)}, ...instances.map(instance => ({value:instance.ref.uid || instance.ref.name, label:instance.title, choose:()=>open(instance.ref)}))],
+        choices: [{value:'*', label:info.allInstancesLabel ? messageText(info.allInstancesLabel) : t('logs.allPods'), choose:()=>open(ref)}, ...instances.map(instance => ({value:instance.ref.uid || instance.ref.name, ...instanceOption(instance), choose:()=>open(instance.ref)}))],
         direct: instances.length <= 1 ? () => open(ref) : undefined,
       }
     }, t('logs.open'))
@@ -114,4 +114,12 @@ export function useInstancePicker(client: Client, context: string) {
 export function runningChannel(instance: ExecInstance) {
   return instance.channels?.find(channel => channel.id === instance.defaultChannel && channel.running)
     ?? instance.channels?.find(channel => channel.running)
+}
+
+/** Provider details are localized at render time and never change UID selection. */
+export function instanceOption(instance: {title:string; ready?:boolean; details?:Message[]}) {
+  return {
+    label: !instance.details?.length && instance.ready === false ? `${instance.title} (${t('term.notReady')})` : instance.title,
+    description: instance.details?.map(messageText).join(' · ') || undefined,
+  }
 }

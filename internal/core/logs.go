@@ -11,8 +11,10 @@ type LogChannel struct {
 
 // LogInstance identifies a concrete source offered by an aggregate object.
 type LogInstance struct {
-	Ref   Ref    `json:"ref"`
-	Title string `json:"title"`
+	// Details describe the instance snapshot without changing its identity.
+	Details []Message `json:"details,omitempty"`
+	Ref     Ref       `json:"ref"`
+	Title   string    `json:"title"`
 }
 
 // LogInfo says what logs an object has.

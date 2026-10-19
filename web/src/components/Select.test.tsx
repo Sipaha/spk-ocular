@@ -29,6 +29,19 @@ function Host({ onEsc, onChange }: { onEsc: () => void; onChange: (v: string) =>
 }
 
 describe('Select', () => {
+  it('describes two-line options and searches metadata while preserving the chosen value', async()=>{
+    const user=userEvent.setup(), onChange=vi.fn()
+    render(<Select label="Pod" search value="" onChange={onChange} options={[
+      {value:'old-uid',label:'web-old',description:'Previous revision 193 · Ready · Containers 1/1 · Running'},
+      {value:'new-uid',label:'web-new',description:'Current revision 194 · Not ready · Containers 0/1 · ContainerCreating'},
+    ]}/>)
+    await user.click(screen.getByRole('button',{name:'Pod'}))
+    await user.type(screen.getByRole('combobox'),'194')
+    expect(screen.queryByRole('option',{name:'web-old'})).not.toBeInTheDocument()
+    expect(screen.getByRole('option',{name:'web-new'})).toHaveAccessibleDescription('Current revision 194 · Not ready · Containers 0/1 · ContainerCreating')
+    await user.keyboard('{Enter}')
+    expect(onChange).toHaveBeenCalledExactlyOnceWith('new-uid')
+  })
   it('keyboard: arrows skip disabled options, a letter jumps, Home/End, Enter chooses; Esc stays its own', async () => {
     const onEsc = vi.fn()
     const onChange = vi.fn()

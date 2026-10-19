@@ -32,7 +32,7 @@ func (s *session) LogInfo(ctx context.Context, ref core.Ref) (core.LogInfo, erro
 	if err != nil || !info.Aggregate {
 		return info, err
 	}
-	pods, err := workloadPods(ctx, s.conn.dyn, def, u)
+	pods, details, err := workloadPodsInfo(ctx, s.conn.dyn, def, u)
 	if err != nil {
 		return core.LogInfo{}, err
 	}
@@ -40,7 +40,7 @@ func (s *session) LogInfo(ctx context.Context, ref core.Ref) (core.LogInfo, erro
 	for _, p := range pods {
 		source := ref
 		source.Kind, source.Name, source.UID, source.Title = podsKind.desc.ID, p.GetName(), string(p.GetUID()), ""
-		info.Instances = append(info.Instances, core.LogInstance{Ref: source, Title: p.GetName()})
+		info.Instances = append(info.Instances, core.LogInstance{Ref: source, Title: p.GetName(), Details: details[string(p.GetUID())]})
 	}
 	return info, nil
 }

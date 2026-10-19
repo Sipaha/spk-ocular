@@ -20,6 +20,7 @@ const defaults=(scope:ScopeSel):AccessAttributes=>({verb:'get',group:'',resource
 export interface RbacProps {client:Client;target:{provider:string;id:string};scope:ScopeSel;initialSubject?:Ref;failedRef?:Ref;onResource:(ref:Ref)=>void;scopePicker?:ReactNode}
 
 export default function RbacWorkbench({client,target,scope,initialSubject,failedRef,onResource,scopePicker}:RbacProps){
+ "use no memo"; // TanStack Virtual exposes mutable state; keep its reads outside automatic memoization.
  const [subject,setSubject]=useState<Ref|undefined>(initialSubject)
  const [filter,setFilter]=useState('')
  const [attrs,setAttrs]=useState<AccessAttributes>(()=>defaults(scope))
@@ -55,6 +56,7 @@ export default function RbacWorkbench({client,target,scope,initialSubject,failed
    return grant.rules.length?grant.rules.map((rule,ruleIndex)=>({grant,index,rule,ruleIndex})):[{grant,index,rule:null,ruleIndex:0}]
   })
  },[snapshot,filter])
+ // eslint-disable-next-line react-hooks/incompatible-library -- explicit "use no memo" boundary above; virtualizer reads stay in this component.
  const virtual=useVirtualizer({count:rows.length,getScrollElement:()=>scroll.current,estimateSize:()=>108,overscan:4,getItemKey:i=>(rows[i].grant.binding.uid||rows[i].index)+':'+rows[i].ruleIndex})
  const matches=local&&snapshot?matchingGrants(snapshot.grants,local):null
  const selectedKey=subject?JSON.stringify(subject):'self'
