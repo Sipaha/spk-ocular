@@ -1,3 +1,5 @@
+import {useLearning} from '../learning/store'
+import {learn} from '../learning/content'
 import { BaselineControl } from '../compare/BaselineControl'
 import { useEffect, useRef, useState, type RefObject } from 'react'
 import { createPortal } from 'react-dom'
@@ -33,6 +35,7 @@ export function AppHeader({target,onHelp,onAbout,client,act,configRef}:{target:T
    }
   }}>
    <LanguageMenu client={client} onChanged={close}/>
+   <button type="button" className="app-utility-action" onClick={()=>{close();useLearning.getState().open()}}>{learn('library')}</button>
    <button type="button" className="app-utility-action about-trigger" aria-label={t('about.title')} onClick={()=>{close();onAbout()}}>{t('about.open')}</button>
    <button type="button" className="app-utility-action" onClick={()=>{close();onHelp()}}>{t('keys.title')}<kbd>?</kbd></button>
   </section></div>,document.body)}

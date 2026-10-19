@@ -50,7 +50,12 @@ has only been configured. Keep local links valid (`scripts/check-docs.py`).
   or real clusters. `scripts/dind-verify.sh` is mandatory before DIND mutations.
 - Every new commit's author **and** committer must be
   `Pavel Simonov <sipahabk@gmail.com>`. Do not change global Git identity.
-  Do not commit, push or publish outside the user's authorization.
+- The owner grants standing authorization to commit and push in this repository
+  without additional approval. Keep commits scoped to the current task and
+  preserve unrelated work.
+- Create or publish a release only on the owner's explicit command. Standing
+  commit/push authorization does not authorize release tags, release workflows
+  or release publication.
 - Published history is rewritten only on an explicit request. Before rewriting,
   save a bundle and preserve the working tree inside solution scratch; compare
   tree contents afterward. A requested remote replacement uses an exact

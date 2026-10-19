@@ -1127,3 +1127,10 @@ reads both UID-pinned objects again; editor drafts remain untouched. See
 [resource comparison](resource-comparison.md) for identity, normalization and
 retention boundaries. This feature is implemented from 1.2.0 and is
 included from 1.2.0.
+
+## Kubernetes learning and resource help
+
+The application menu opens [Kubernetes learning](learning.md) without a cluster.
+The What is this? button beside a Kubernetes kind opens offline, localized
+resource help. The same library includes an explicitly simulated introductory
+Deployment/ReplicaSet/Pod lesson. Its actions change only local lesson state.

@@ -9,6 +9,26 @@ capabilities and proposed validation priorities. It does not authorize additiona
 implementation or publication. [Website direction](site-plan.md) tracks remaining
 site and download-journey work separately from application features.
 
+## Learning and resource help
+
+See [learning direction](product-plan.md#kubernetes-learning-and-contextual-help)
+for the native-language help and interactive learning direction.
+Current behavior is documented in [learning](learning.md).
+
+- Implemented locally: offline explanations for the 37 described/placed built-in
+  API kinds in all eight languages, with purpose, relationships, key fields and
+  common misconceptions.
+- Implemented locally: one isolated Deployment/ReplicaSet/Pod lesson without a
+  cluster, with reset, owner navigation and a bounded comprehension check.
+- P2: a broader task-based learning path after validating independent understanding.
+- P2: a bounded form-based resource builder and manifest export; create/apply is
+  not the leading priority merely because competitors offer it.
+
+Detailed scope and acceptance live in `spk-ocular-learning-resource-help`,
+`spk-ocular-learning-first-lesson`, `spk-ocular-learning-path` and
+`spk-ocular-competitive-resource-create`. Help and the first lesson have been
+selected; the broader path remains dependent on learner validation.
+
 ## Investigation workbench
 
 Events Timeline, RBAC explanation, resource comparison and workspace continuity

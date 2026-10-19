@@ -113,6 +113,57 @@ P0 means a baseline or adoption prerequisite. P1/P2 are proposed validation orde
 
 Narrow public demand signals support testing manifest review, configurable columns and workload logs, but do not establish market-wide demand or today's unfixed state: [Freelens manifest-review request](https://github.com/freelensapp/freelens-ai-extension/issues/87), [custom columns](https://github.com/freelensapp/freelens/issues/2244), [aggregated logs](https://github.com/freelensapp/freelens/issues/687). Ocular already has relevant logs/review primitives; demonstrate and improve them before adding another generic chat interface.
 
+## Kubernetes learning and contextual help
+
+The owner selected localized resource help and the first interactive lesson.
+Their current local implementation is documented in [learning](learning.md).
+Broader lessons and the resource builder remain proposals; the priorities below
+record direction rather than delivery dates.
+
+The recommended sequence is diagnosis and configuration/reliability checks, then
+localized resource help, then one introductory interactive lesson. Help precedes
+lessons so both reuse the same explanations. GitOps context, network diagnosis,
+custom views and multi-target/log workflows remain important daily-work priorities.
+A beginner-acquisition focus can move the first lesson earlier; demand is not yet
+validated. Generic create/apply is a capability gap, not evidence that it should
+lead the roadmap. No market-wide frequency of manual creation has been measured.
+
+| Priority | Planned outcome | Boundary and validation |
+| --- | --- | --- |
+| P1 | Offline contextual help for built-in Kubernetes resource types, in all eight application languages | A “What is this?” entry beside the kind explains purpose, relationships, common misconceptions and key fields, with links to related concepts and official documentation. Preserve technical identifiers. Validate understanding and locale completeness. |
+| P1 | One interactive introduction: Deployment, ReplicaSet, Pod and reconciliation | Start without kubeconfig, Docker, cloud accounts or a real cluster. Use clearly labeled synthetic data through familiar Ocular views. Delete a simulated Pod, observe replacement and find its controller. Success means independently explaining and navigating the relationship, not merely clicking through. |
+| P2 | Broader task-based learning path | After validating the first lesson: labels/Service/endpoints and broken selectors; readiness/liveness/startup; image pull/CrashLoop/events/logs; ConfigMap/Secret references; requests/limits and scheduling. Avoid implementing a general Kubernetes simulator. |
+| P2 | Small resource builder and manifest preparation | Optional Deployment plus Service form, YAML preview and export for a project; reviewed cluster application is separate. Do not prioritize a large visual editor without demonstrated demand. |
+
+Help content ships locally without mandatory AI or runtime translation. Built-in
+kinds receive reviewed explanations; arbitrary CRDs may expose attributed schema
+descriptions, with explicit missing/untranslated coverage instead of invented help.
+For example, ReplicaSet maintains the desired number of Pods and is normally
+managed through Deployment; link Deployment → ReplicaSet → Pods. Contextual help
+on live objects is read-only, observes existing permissions and identifies missing
+evidence. Learning does not grant access or silently connect to a target.
+
+The laboratory must remain visibly separate from live infrastructure; resetting
+or completing a lesson cannot mutate a real cluster. Simulated outcomes do not
+prove real networking, scheduling or controller behavior. Reuse resource navigation,
+properties, events and logs so learned skills transfer to ordinary work. AI tutoring
+is an optional later design, not a prerequisite or source of authoritative answers.
+
+If selected later, the builder can cover image, command/arguments, ports, replicas,
+resources, probes, environment and ConfigMap/Secret references, with explicit target
+and namespace. Never invent universal limits/probes. Keep selectors consistent;
+preview generated objects and distinguish local validation from server dry-run.
+Deployment/Service creation is not atomic: show per-object outcomes and ambiguous
+results. Export must not imply Git writeback. Arbitrary YAML edits enter an explicit
+manual mode without silently dropping unknown fields. General schema-generated CRD
+forms, other kinds and reverse form conversion are later scope, not part of the
+first proposal. Existing Secret and Prepare/Run boundaries remain mandatory.
+
+Operational proposals: `spk-ocular-learning-resource-help`,
+`spk-ocular-learning-first-lesson`, `spk-ocular-learning-path`, and the existing
+`spk-ocular-competitive-resource-create`. Task cards hold acceptance and status;
+this document records product direction only.
+
 ## Remaining website priorities
 
 The redesign and initial publication are complete. Preserve the implemented

@@ -1,3 +1,4 @@
+import {ResourceHelpButton} from '../learning/ResourceHelp'
 import { WorkspaceToolbar } from './WorkspaceToolbar'
 import { LocationStatus } from './LocationStatus'
 import { RefreshButton } from './RefreshButton'
@@ -864,7 +865,7 @@ function ResourcePage(props: {
 
   return (
     <>
-      <LocationStatus><span>{kindLabel(target.provider, kind)}</span><span>{view.cancelled ? '—' : view.status.state === 'loading' && !view.rows.length ? '…' : view.rows.length}</span></LocationStatus>
+      <LocationStatus><span>{kindLabel(target.provider, kind)}</span><ResourceHelpButton provider={target.provider} kind={kind.id}/><span>{view.cancelled ? '—' : view.status.state === 'loading' && !view.rows.length ? '…' : view.rows.length}</span></LocationStatus>
       <WorkspaceToolbar title={kindLabel(target.provider, kind)} count={view.cancelled ? '—' : view.status.state === 'loading' && !view.rows.length ? '…' : view.rows.length}>
         {marked.size > 0 && (
           <div role="toolbar" aria-label={t('bulk.bar')} className="flex shrink-0 items-center gap-2 whitespace-nowrap rounded-md bg-marked px-2 py-0.5 text-xs">

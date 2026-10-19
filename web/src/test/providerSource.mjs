@@ -10,3 +10,8 @@ for (const [prefix, folder] of [['api', 'api'], ['compose', 'providers/compose']
   const source = readFileSync(resolve(here, `../../../internal/${folder}/messages.go`), 'utf8').split('var messageTexts = map[string]string{')[1].split('\n}')[0]
   for (const entry of source.matchAll(/"([^"\n]+)":\s*("(?:[^"\\]|\\.)*")/g)) providerEnglish[`${prefix}.${entry[1]}`] = JSON.parse(entry[2])
 }
+
+export const kubernetesKindSources = Object.fromEntries(
+  ['catalog.go', 'kind_pods.go', 'kind_workloads.go', 'kind_cluster.go', 'kind_network.go'].map(name =>
+    [name, readFileSync(resolve(here, '../../../internal/providers/kubernetes', name), 'utf8')]),
+)

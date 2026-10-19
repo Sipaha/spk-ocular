@@ -1,3 +1,4 @@
+import {ResourceHelpButton} from '../learning/ResourceHelp'
 import { RefreshButton } from './RefreshButton'
 import { CancelledList, ListLoading } from './ListLoading'
 import {dock} from '../dock/store'
@@ -292,7 +293,7 @@ export function ResourceDrawer({ hidden = false, embedded = false, client, hub, 
           <h2 className="drawer-title min-w-0 truncate" title={title}>
             {title}
           </h2>
-          <span className="drawer-kind min-w-0 max-w-[40%] truncate" title={displayKind}>{kindTitleOf?.(displayKind) ?? displayKind}</span>
+          <span className="drawer-kind min-w-0 max-w-[40%] truncate" title={displayKind}>{kindTitleOf?.(displayKind) ?? displayKind}</span><ResourceHelpButton provider={target.provider} kind={displayKind}/>
           </div>
           <button data-drawer-close className="action-icon-button" onClick={close} aria-label={t('drawer.close')} title={t('drawer.close')}>
             <CloseIcon className="h-[20px] w-[20px]"/>

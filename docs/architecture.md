@@ -880,3 +880,12 @@ metadata are retained. Noncanonical envelope field aliases fall back to the
 upstream serializer. GETs, mutations, watch framing and non-JSON serializers keep
 the upstream path. This reduces decoding work; it does not omit object fields
 from the received response or replace cache projection/admission checks.
+
+## Local learning boundary
+
+`web/src/learning` owns locally shipped resource explanations and a deterministic
+introductory lesson. It registers no target, provider, API or agent capability.
+The lesson reducer has no transport or Client dependency; its UID-scoped objects
+exist only in renderer memory. Shared ResourceTable and read-only YamlView retain
+familiar navigation without exposing live actions, comparison pins or writes.
+See [learning](learning.md) for coverage, reset and validation boundaries.

@@ -1,3 +1,5 @@
+import {LearningDialog} from './learning/ResourceHelp'
+import {LanguageMenu} from './components/LanguageMenu'
 import {useWorkspacePersistence,useWorkspaceStatus} from './workspace/persistence'
 import {clearComparison} from './compare/store'
 import Comparison from './compare/Comparison'
@@ -184,6 +186,7 @@ export function App({ client }: { client: Client }) {
       <AgentsPanel client={client} />
       <AgentConfirm client={client} reload={loadAgents.pending} />
       <Palette client={client} act={act} hub={hub} />
+      <LearningDialog languageMenu={<LanguageMenu client={client}/>}/>
       {about && <AboutDialog info={info} onClose={() => setAbout(false)} />}
       {help && <HelpDialog onClose={() => setHelp(false)} />}
       <DiscardPrompt />
