@@ -77,7 +77,13 @@ declared RBAC rules, NetworkPolicy selection and existing Trivy Operator reports
 It does not advertise live scanning, operator installation, exploitability or
 compliance verification. These capabilities are present in the published application. kubectl and a
 separate Helm CLI are unnecessary; kubeconfig-configured external authentication
-helpers still need to be installed. New product copy describes released features
+helpers still need to be installed. The 1.9.0 log copy describes bounded progressive history filtering, matching lines
+shown during the scan and concurrent live capture. Search is scoped to the filtered
+viewer result; it is not a Kubernetes-native text-query promise. Desktop downloads
+start in the system Downloads folder and open the progress/cancellation panel.
+Right-clicking the log download button chooses a location; completed rows open
+files, and successful open/reveal actions close the popup. Existing names remain
+protected. New product copy describes released features
 without announcements or competitor comparisons. Docker includes standalone containers and Compose project/service
 grouping; it does not supply a runtime. Standalone containers remain UI-only and
 are not included in existing agent project grants. The gallery identifies released-version screenshots and demonstration data.
@@ -89,7 +95,7 @@ No vendor claims, customer logos, testimonials or performance statistics are reu
 
 ## Screenshot source
 
-All twenty-four RU/EN product screenshots show the actual SPK Ocular 1.8.0
+All twenty-four RU/EN product screenshots show the actual SPK Ocular 1.9.0
 production application from the published Linux amd64 release archive, captured
 at 1440 × 900 in isolated browser profiles. Kubernetes and Docker use owned
 synthetic HTTP API fixtures, without a real cluster, daemon or containers. Helm
@@ -97,7 +103,7 @@ and Security use the built-in synthetic provider; simulated findings do not
 represent a live scan or real vulnerabilities. File browsing executes only the
 fixture's bounded read-only scripts against its scratch demonstration tree.
 The captures are real application UI, not interface mockups. Captions identify
-simulated data. All product and social-image URLs use the 1.8.0 version query.
+simulated data. All product and social-image URLs use the 1.9.0 version query.
 The other six website locales use the English screenshots with an explicit notice.
 
 ## Develop and verify

@@ -76,7 +76,7 @@
     {
       "label": "02 / FEHLERSUCHE",
       "title": "Die entscheidenden Hinweise im Blick behalten.",
-      "text": "Verfolgen Sie Logs zusammengehöriger Workloads, filtern Sie unwichtige Meldungen und suchen Sie nach dem entscheidenden Eintrag. Öffnen Sie ein Terminal oder leiten Sie einen Service-Port weiter, um genauer zu prüfen.",
+      "text": "Passende Zeilen erscheinen bereits während der begrenzten Suche im Verlauf; neue Live-Zeilen kommen parallel hinzu. Die Suche durchsucht das gefilterte Ergebnis. Öffnen Sie zur weiteren Untersuchung ein Terminal oder leiten Sie einen Service-Port weiter.",
       "points": [
         "Alle Protokollstufen, Textfilter und Suche",
         "Separate Protokollfenster und Klartextexporte",
@@ -122,7 +122,7 @@
     ]
   ],
   "gallery": "So sieht die Arbeit damit aus.",
-  "galleryText": "Echte Ansichten von SPK Ocular 1.8.0. Demodaten statt Produkt-Mockups.",
+  "galleryText": "Echte Ansichten von SPK Ocular 1.9.0. Demodaten statt Produkt-Mockups.",
   "galleryTabs": [
     "Workloads",
     "Logs und Details",
@@ -237,7 +237,7 @@
     "Ordnercache, Eintragszahlen und Navigation über symbolische Links",
     "Syntaxhervorhebung und UTF-8-Bearbeitung bis 2 MiB",
     "Speichern mit Schutz ungespeicherter Änderungen und Prüfung externer Änderungen",
-    "Desktop-Downloads mit nativem Dialog für das Zielverzeichnis"
+    "Desktop-Downloads direkt in Ihren Download-Ordner"
   ],
   "filesBoundary": "Erfordert einen laufenden Linux-Container: sh zum Durchsuchen, readlink für symbolische Links und tar für Downloads. Dateien und Ordner werden ohne die Editorgrenze von 2 MiB gestreamt; vorhandene Zielnamen werden nicht überschrieben. Downloads im Browsermodus benötigen die Desktop-App.",
   "filesAlt": "SPK Ocular mit aufgeklapptem Anwendungsordnerbaum und hervorgehobener YAML-Konfiguration",
@@ -281,7 +281,7 @@
       "alt": "SPK Ocular · Arbeitsbereich behalten"
     }
   ],
-  "logHistoryText": "Laden Sie die gesamte von der Quelle aufbewahrte Loghistorie unabhängig von Filtern oder Zeilenlimits der Anzeige herunter. Streaming unterstützt Fortschritt und Abbruch; Aufbewahrung, Exportlimits und unvollständige Lesevorgänge werden ausdrücklich angezeigt. Kopieren nutzt weiterhin den gefilterten Anzeigepuffer.",
+  "logHistoryText": "Laden Sie den vom Ursprung aufbewahrten Logverlauf unabhängig von Anzeigefiltern und Zeilenlimits herunter. Die Download-Übersicht öffnet sich automatisch und bietet Fortschritt und Abbruch; ein Klick auf einen abgeschlossenen Eintrag öffnet die Datei. Per Rechtsklick auf die Log-Download-Schaltfläche wählen Sie den Speicherort. Aufbewahrung, Exportlimits und unvollständige Lesevorgänge bleiben erkennbar. Kopieren verwendet den gefilterten Anzeigepuffer.",
   "securityDemo": "Echte Anwendung · simulierte Sicherheitsbefunde",
   "clusterTitle": "Schont Ihren Cluster und Ihren Computer.",
   "clusterText": "Ocular lädt den gewählten Ressourcentyp und die gewählten Namespaces. Es sammelt nicht im Hintergrund sämtliche Ressourcen und deren vollständige Beschreibungen.",

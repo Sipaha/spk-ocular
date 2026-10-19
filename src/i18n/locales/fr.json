@@ -76,7 +76,7 @@
     {
       "label": "02 / DIAGNOSTIC",
       "title": "Gardez les indices sous les yeux.",
-      "text": "Suivez les logs des workloads liés, filtrez le bruit et recherchez le message utile. Ouvrez un terminal ou transférez le port d’un service pour approfondir l’analyse.",
+      "text": "Les lignes correspondantes apparaissent pendant la lecture limitée de l’historique ; les nouvelles lignes arrivent en parallèle. La recherche porte sur le résultat filtré. Ouvrez un terminal ou redirigez un port de service pour poursuivre le diagnostic.",
       "points": [
         "Tous les niveaux de journal, filtres textuels et recherche",
         "Fenêtres de journaux séparées et exports en texte brut",
@@ -122,7 +122,7 @@
     ]
   ],
   "gallery": "Découvrez l’interface.",
-  "galleryText": "Écrans réels de SPK Ocular 1.8.0. Données de démonstration, sans maquettes.",
+  "galleryText": "Écrans réels de SPK Ocular 1.9.0. Données de démonstration, sans maquettes.",
   "galleryTabs": [
     "Workloads",
     "Logs et détails",
@@ -237,7 +237,7 @@
     "Dossiers en cache, nombres d’entrées et navigation par liens symboliques",
     "Coloration syntaxique et édition UTF-8 jusqu’à 2 MiB",
     "Enregistrement avec protection des modifications non enregistrées et vérification des changements externes",
-    "Téléchargements de bureau avec sélecteur natif de répertoire de destination"
+    "Téléchargements directs dans le dossier de téléchargements du système"
   ],
   "filesBoundary": "Nécessite un conteneur Linux actif : sh pour parcourir, readlink pour les liens et tar pour télécharger. Les fichiers et dossiers sont transférés sans la limite de 2 MiB de l’éditeur ; les noms existants ne sont pas écrasés. Les téléchargements en mode navigateur nécessitent l’application de bureau.",
   "filesAlt": "SPK Ocular avec une arborescence d’application développée et une configuration YAML colorée",
@@ -281,7 +281,7 @@
       "alt": "SPK Ocular · Conserver votre espace d’investigation"
     }
   ],
-  "logHistoryText": "Téléchargez tout l’historique des logs conservé par la source, indépendamment des filtres ou des limites du visualiseur. L’écriture en flux affiche la progression et permet l’annulation ; rétention, limites d’export et lectures incomplètes sont signalées. La copie utilise toujours le tampon filtré du visualiseur.",
+  "logHistoryText": "Téléchargez l’historique conservé par la source indépendamment des filtres et de la limite de lignes affichées. Le panneau des téléchargements s’ouvre automatiquement avec progression et annulation ; cliquez sur une ligne terminée pour ouvrir le fichier. Un clic droit sur le bouton de téléchargement des logs permet de choisir l’emplacement. La rétention, les limites d’export et les lectures incomplètes restent explicites. La copie utilise le tampon filtré de l’affichage.",
   "securityDemo": "Application réelle · résultats de sécurité simulés",
   "clusterTitle": "Préserve les ressources de votre cluster et de votre ordinateur.",
   "clusterText": "Ocular charge le type de ressource et les namespaces choisis. Il ne collecte pas en arrière-plan toutes les ressources et leurs descriptions complètes.",

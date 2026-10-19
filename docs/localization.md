@@ -83,13 +83,18 @@ provenance separately from self-only server decisions. Saved-resource comparison
 excludes Secret payloads and drafts. Workspace continuity restores metadata with
 explicit connection/resume and no command replay. Log downloads read retained
 source history independently of viewer filters; Copy retains its filtered-buffer
-behavior. Provider retention, export caps and incomplete reads are explicit.
+behavior. All eight locales describe progressive matching lines during a bounded
+history scan and concurrent live capture, with search inside the filtered result.
+Downloads start in the system Downloads folder, automatically open progress and
+cancellation, and support opening a completed row. A right-click on the log
+download button chooses a location. Provider retention, export caps and incomplete
+reads remain explicit.
 
 Both RU/EN screenshot sets use actual app captures; the other six locales retain
 the explicit English-UI notice. Preserve sh/readlink/tar requirements, the UTF-8
 editor limit of 2 MiB, desktop-only file downloads and refusal to overwrite existing
-names. All screenshot and social-image URLs carry the 1.8.0 version query.
-Security uses current 1.8.0 RU/EN captures and a localized caption
+names. All screenshot and social-image URLs carry the 1.9.0 version query.
+Security uses current 1.9.0 RU/EN captures and a localized caption
 identifying simulated security findings. All eight locales describe workload
 configuration, declared RBAC rules, NetworkPolicy selection and existing Trivy
 Operator reports without claiming live scans, exploitability or compliance.

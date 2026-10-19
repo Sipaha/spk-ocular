@@ -76,7 +76,7 @@
     {
       "label": "02 / DIAGNÓSTICO",
       "title": "Mantenha as evidências à vista.",
-      "text": "Acompanhe logs de workloads relacionados, filtre o ruído e busque a mensagem relevante. Abra um terminal ou encaminhe a porta de um serviço para investigar mais a fundo.",
+      "text": "As linhas correspondentes aparecem durante a leitura limitada do histórico; novas linhas chegam em paralelo. A busca atua sobre o resultado filtrado. Abra um terminal ou encaminhe uma porta do serviço para continuar a investigação.",
       "points": [
         "Todos os níveis de log, filtros de texto e pesquisa",
         "Janelas de logs separadas e exportação de texto",
@@ -122,7 +122,7 @@
     ]
   ],
   "gallery": "Veja como funciona.",
-  "galleryText": "Telas reais do SPK Ocular 1.8.0. Dados de demonstração, não mockups.",
+  "galleryText": "Telas reais do SPK Ocular 1.9.0. Dados de demonstração, não mockups.",
   "galleryTabs": [
     "Workloads",
     "Logs e detalhes",
@@ -237,7 +237,7 @@
     "Pastas em cache, contagens de entradas e navegação por links",
     "Destaque de sintaxe e edição UTF-8 até 2 MiB",
     "Salvamento com proteção de alterações não salvas e verificação de mudanças externas",
-    "Downloads no desktop com seletor nativo de diretório de destino"
+    "Downloads no aplicativo diretamente na pasta Downloads"
   ],
   "filesBoundary": "Exige um contêiner Linux em execução: sh para explorar, readlink para links e tar para downloads. Arquivos e pastas são transferidos sem o limite de 2 MiB do editor; nomes existentes não são sobrescritos. Downloads no modo navegador exigem o aplicativo desktop.",
   "filesAlt": "SPK Ocular com árvore de pastas da aplicação expandida e configuração YAML destacada",
@@ -281,7 +281,7 @@
       "alt": "SPK Ocular · Preserve seu espaço de investigação"
     }
   ],
-  "logHistoryText": "Baixe todo o histórico de logs retido pela origem, independentemente dos filtros ou limites do visualizador. A gravação em streaming oferece progresso e cancelamento; retenção, limites de exportação e leituras incompletas são informados. Copiar continua usando o buffer filtrado do visualizador.",
+  "logHistoryText": "Baixe o histórico retido pela origem independentemente dos filtros e do limite de linhas da visualização. O painel de downloads abre automaticamente com progresso e cancelamento; clique em uma linha concluída para abrir o arquivo. Clique com o botão direito no botão de download dos logs para escolher o local. A retenção, os limites de exportação e as leituras incompletas são indicados explicitamente. Copiar usa o buffer filtrado da visualização.",
   "securityDemo": "Aplicativo real · resultados de segurança simulados",
   "clusterTitle": "Cuida dos recursos do seu cluster e do seu computador.",
   "clusterText": "O Ocular carrega o tipo de recurso e os namespaces escolhidos. Ele não coleta todos os recursos e suas descrições completas em segundo plano.",
