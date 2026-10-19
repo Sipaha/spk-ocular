@@ -56,6 +56,8 @@ var (
 	membersWait    = 30 * time.Second
 )
 
+var filteredLiveSlots = make(chan struct{}, maxLogRequests/2)
+
 // LogInfo: a container, or a service's containers, have the channels
 // stdout and stderr (both by default); a TTY has one stream.
 func (s *session) LogInfo(ctx context.Context, ref core.Ref) (core.LogInfo, error) {
@@ -203,7 +205,7 @@ func (s *session) StreamLogs(ctx context.Context, ref core.Ref, q provider.LogQu
 	if err != nil {
 		return err
 	}
-	g := &logGroup{s: s, q: q, sel: sel, sink: &lockedSink{sink: sink}}
+	g := &logGroup{s: s, q: q, sel: sel, sink: &lockedSink{sink: provider.FilterLogSink(q, sink)}}
 	switch ref.Kind {
 	case KindContainers:
 		c, err := s.container(ctx, ref)
@@ -290,6 +292,7 @@ type logGroup struct {
 	active   map[string]*member
 	finished map[string]bool
 	limited  string
+	preview  *provider.LogPreview
 	done     chan string
 }
 
@@ -316,11 +319,15 @@ func (g *logGroup) run(ctx context.Context) (err error) {
 		}
 		return g.sink.Ready()
 	}
-	if err := g.backlog(ctx, initial); err != nil {
-		return err
+	if !g.q.LiveOnly {
+		if err := g.backlog(ctx, initial); err != nil {
+			return err
+		}
 	}
-	if err := g.sink.Ready(); err != nil {
-		return err
+	if !g.q.LiveOnly {
+		if err := g.sink.Ready(); err != nil {
+			return err
+		}
 	}
 	if !g.q.Follow {
 		for _, m := range initial {
@@ -357,6 +364,11 @@ func (g *logGroup) run(ctx context.Context) (err error) {
 		}
 	}
 	start(initial)
+	if g.q.LiveOnly {
+		if err := g.sink.Ready(); err != nil {
+			return err
+		}
+	}
 	for {
 		// Decide from one snapshot and wait for changes after that same
 		// snapshot: a member that came meanwhile is never missed.
@@ -480,6 +492,8 @@ func (g *logGroup) newMember(c *engine.ContainerInspect, late bool) (*member, er
 // bytes), merges them by time and keeps the newest N overall. What was
 // read moves each member's cursor, so its follow resumes after it.
 func (g *logGroup) backlog(ctx context.Context, ms []*member) error {
+	g.preview = provider.NewLogPreview(g.sink, g.q.Filter)
+	defer g.preview.Close()
 	if len(ms) == 0 {
 		return nil
 	}
@@ -506,6 +520,9 @@ func (g *logGroup) backlog(ctx context.Context, ms []*member) error {
 	}
 	close(work)
 	wg.Wait()
+	if err := g.preview.Close(); err != nil {
+		return err
+	}
 	if ctx.Err() != nil && g.q.Follow {
 		return ctx.Err()
 	}
@@ -518,6 +535,9 @@ func (g *logGroup) backlog(ctx context.Context, ms []*member) error {
 			m.seen.read(l, m.backlogPartial && i == len(m.backlogLines)-1, true)
 		}
 		m.opened = m.backlogErr == nil || len(m.backlogLines) > 0
+		if !m.filterLiveSince.IsZero() {
+			m.seen = seenLog{}
+		}
 		out, errs := m.split(m.backlogLines)
 		if len(out) > 0 {
 			lists, ids = append(lists, out), append(ids, m.outID)
@@ -525,6 +545,9 @@ func (g *logGroup) backlog(ctx context.Context, ms []*member) error {
 		if len(errs) > 0 {
 			lists, ids = append(lists, errs), append(ids, m.errID)
 		}
+	}
+	for i := range lists {
+		lists[i] = provider.MatchingLogLines(g.q.Filter, lists[i])
 	}
 	merged := mergeByTime(lists)
 	if keep := tailOf(g.q); len(merged) > keep {
@@ -564,8 +587,16 @@ func (g *logGroup) backlog(ctx context.Context, ms []*member) error {
 			if err := m.state(provider.LogError, engine.ClassOf(err), errText(err)); err != nil {
 				return err
 			}
+		case m.backlogScanLimited:
+			if err := m.state(provider.LogTruncated, "", provider.FilterScanLimited); err != nil {
+				return err
+			}
 		case m.backlogCut:
-			if err := m.state(provider.LogTruncated, "", "only the first part of its recent lines fit the backlog budget; the rest follows"); err != nil {
+			message := "only the first part of its recent lines fit the backlog budget; the rest follows"
+			if provider.NewLogFilter(g.q.Filter).Enabled() {
+				message = "history exceeded the byte budget; older matching lines may be missing"
+			}
+			if err := m.state(provider.LogTruncated, "", message); err != nil {
 				return err
 			}
 		}
@@ -837,11 +868,14 @@ type member struct {
 	seen         seenLog
 	sent         provider.LogState
 
-	backlogLines   []logLine
-	backlogPartial bool // the last backlog line is a clean partial one
-	backlogCut     bool
-	backlogErr     error
-	backlogGaps    []string
+	backlogLines       []logLine
+	backlogPartial     bool // the last backlog line is a clean partial one
+	filterLiveSince    time.Time
+	backlogScanLimited bool
+	backlogReadBytes   int64
+	backlogCut         bool
+	backlogErr         error
+	backlogGaps        []string
 }
 
 func (m *member) ids() []int {
@@ -910,12 +944,35 @@ func (m *member) split(ls []logLine) (out, errs []provider.LogLine) {
 
 func (m *member) options(follow bool) engine.LogsOptions {
 	sel := m.g.sel
-	return engine.LogsOptions{Follow: follow, Timestamps: true, Stdout: sel.out || m.tty, Stderr: sel.err || m.tty}
+	return engine.LogsOptions{Follow: follow, Timestamps: true, Stdout: sel.out || m.tty, Stderr: sel.err || m.tty, LivePacer: m.g.q.LivePacer}
 }
 
 // open takes one of the app's log request slots for the life of the
 // response (waiting, and saying so, while all are taken).
 func (m *member) open(ctx context.Context, o engine.LogsOptions) (*engine.LogReader, func(), error) {
+	liveReserved := false
+	if m.g.q.LiveOnly {
+		select {
+		case filteredLiveSlots <- struct{}{}:
+			liveReserved = true
+		default:
+			if err := m.state(provider.LogWaiting, "", "live capture slots are full; waiting while history can load independently"); err != nil {
+				return nil, nil, err
+			}
+			select {
+			case filteredLiveSlots <- struct{}{}:
+				liveReserved = true
+			case <-ctx.Done():
+				return nil, nil, ctx.Err()
+			}
+		}
+		defer func() {
+			if liveReserved {
+				<-filteredLiveSlots
+			}
+		}()
+	}
+
 	slots := m.g.s.logSlots
 	if slots != nil {
 		select {
@@ -941,6 +998,11 @@ func (m *member) open(ctx context.Context, o engine.LogsOptions) (*engine.LogRea
 		release()
 		return nil, nil, err
 	}
+	if liveReserved {
+		liveReserved = false
+		oldRelease := release
+		release = func() { oldRelease(); <-filteredLiveSlots }
+	}
 	var once sync.Once
 	return lr, func() { _ = lr.Close(); once.Do(release) }, nil
 }
@@ -948,18 +1010,90 @@ func (m *member) open(ctx context.Context, o engine.LogsOptions) (*engine.LogRea
 // readBacklog: a non-follow request for the user's window (late members:
 // from their start), bounded by per bytes of lines.
 func (m *member) readBacklog(ctx context.Context, per int64) {
+	filter := provider.NewLogFilter(m.g.q.Filter)
+	if !filter.Enabled() {
+		m.readBacklogWindow(ctx, per, tailOf(m.g.q))
+		return
+	}
+	window, ceiling := provider.FilterScanWindow(m.g.q, len(m.g.active))
+	var previous []logLine
+	previousPartial := false
+	remainingLines := ceiling
+	for {
+		m.readBacklogWindow(ctx, per, window)
+		per -= m.backlogReadBytes
+		remainingLines -= len(m.backlogLines)
+		if m.backlogCut || m.backlogErr != nil {
+			if previous != nil {
+				m.backlogLines = previous
+				m.backlogPartial = previousPartial
+			} else {
+				m.filterLiveSince = time.Now().UTC()
+				if m.g.q.SinceTime.After(m.filterLiveSince) {
+					m.filterLiveSince = m.g.q.SinceTime
+				}
+			}
+			return
+		}
+		matches := 0
+		for _, line := range m.backlogLines {
+			if filter.Match(line.line.Text) {
+				matches++
+			}
+		}
+		if m.g.q.TailLines > 0 && matches >= tailOf(m.g.q) {
+			return
+		}
+		if len(m.backlogLines) < window {
+			return
+		}
+		next := min(window*2, remainingLines)
+		if next <= window {
+			m.backlogScanLimited = true
+			return
+		}
+		if per <= 0 {
+			m.backlogCut = true
+			return
+		}
+		previous = m.backlogLines
+		previousPartial = m.backlogPartial
+		window = next
+	}
+}
+
+func (m *member) readBacklogWindow(ctx context.Context, per int64, tail int) {
+	m.backlogLines = nil
+	m.backlogPartial = false
+	m.backlogReadBytes = 0
+	m.g.preview.Reset(m.outID)
+	m.g.preview.Reset(m.errID)
+
 	o := m.options(false)
-	o.Tail = tailOf(m.g.q)
+	o.Tail = tail
 	o.Since = m.g.q.SinceTime
 	if m.late {
 		o.Tail = startupTail
 	}
+
 	lr, closeFn, err := m.open(ctx, o)
 	if err != nil {
 		m.backlogErr = err
 		return
 	}
 	defer closeFn()
+	if provider.NewLogFilter(m.g.q.Filter).Enabled() {
+		lr.LimitReadBytes(per)
+		defer func() {
+			m.backlogReadBytes = lr.ReadBudgetBytes()
+			if lr.ReadBudgetHit() {
+				m.backlogCut = true
+				if ctx.Err() == nil {
+					m.backlogErr = nil
+				}
+			}
+		}()
+	}
 	var size int64
 	for {
 		rec, err := lr.Next()
@@ -977,9 +1111,25 @@ func (m *member) readBacklog(ctx context.Context, per int64) {
 			m.seen.tear(rec.Stream, rec.Time)
 			continue // a damaged prefix: the follow reads the line whole
 		}
+		if provider.NewLogFilter(m.g.q.Filter).Enabled() && tail > 0 && len(m.backlogLines) >= tail {
+			m.backlogCut = true
+			return
+		}
 		m.backlogLines = append(m.backlogLines, toLine(rec))
+		to := m.outID
+		if rec.Stream == engine.Stderr && !m.tty {
+			to = m.errID
+		}
+		if to != 0 {
+			if err := m.g.preview.Add(to, toLine(rec).line); err != nil {
+				m.backlogErr = err
+				return
+			}
+		}
+
 		m.backlogPartial = rec.Partial
 		size += int64(len(rec.Line)) + lineKeep
+		m.backlogReadBytes = size
 		if size >= per {
 			m.backlogCut = true
 			return
@@ -1078,6 +1228,8 @@ func (m *member) followLoop(ctx context.Context) error {
 		o := m.options(true)
 		var rp *replay
 		switch {
+		case !m.filterLiveSince.IsZero() && !m.seen.resumable():
+			o.Since = m.filterLiveSince
 		case m.opened && m.seen.resumable():
 			o.Since = m.seen.since()
 			rp = m.seen.replay()
@@ -1087,6 +1239,13 @@ func (m *member) followLoop(ctx context.Context) error {
 			o.Tail, o.Since = startupTail, m.g.q.SinceTime
 		default:
 			o.Tail, o.Since = tailOf(m.g.q), m.g.q.SinceTime
+		}
+		if provider.NewLogFilter(m.g.q.Filter).Enabled() && rp == nil {
+			o.Tail = 10_000
+		}
+		if m.g.q.LiveOnly && !m.seen.resumable() && !m.late {
+			o.Tail = 0
+			o.ZeroTail = true
 		}
 		lr, closeFn, err := m.open(ctx, o)
 		if err != nil {
@@ -1369,4 +1528,13 @@ func (h *mergeHeap) Pop() any {
 	x := old[len(old)-1]
 	*h = old[:len(old)-1]
 	return x
+}
+
+func (l *lockedSink) Preview(lines []provider.LogPreviewLine, final bool) error {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if p, ok := l.sink.(provider.LogPreviewSink); ok {
+		return p.Preview(lines, final)
+	}
+	return nil
 }

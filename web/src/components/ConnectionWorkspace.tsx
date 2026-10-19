@@ -34,7 +34,7 @@ export function ConnectionWorkspace({ target, pending, onConnect, onCancel }: {
     status?.state === 'failed' ? t('connection.failed') :
       status?.state === 'cancelled' ? t('connection.cancelled') : t('connection.disconnected')
   const preview = target.provider === 'kubernetes'
-    ? ['Workloads', 'Network', 'Config', 'Storage', 'Cluster', 'Access Control', 'Health', 'Helm', 'API groups']
+    ? ['Workloads', 'Network', 'Config', 'Storage', 'Helm', 'Cluster', 'Access Control', 'Health', 'API groups']
     : target.provider === 'compose' ? ['Compose', 'Engine'] : []
   const providerTitle = target.provider === 'kubernetes' ? 'Kubernetes' : target.provider === 'compose' ? 'Docker' : target.provider
   return <div className="connection-workspace flex min-h-0 flex-1">
@@ -54,21 +54,25 @@ export function ConnectionWorkspace({ target, pending, onConnect, onCancel }: {
         <div className="connection-scene-mark" aria-hidden="true"><ProviderIcon provider={target.provider} className="h-12 w-12" /><span><PlugIcon disconnected /></span></div>
         <h1>{target.title}</h1>
         {endpoint && <p className="connection-endpoint">{endpoint}</p>}
+        <div className="connection-controls">
         <p role="status" className="connection-phase">
           {active && <span aria-hidden className="h-3 w-3 shrink-0 animate-spin rounded-full border border-line border-t-accent" />}
           {phase}
         </p>
+        <div className="connection-detail">
         {status && status.state !== 'disconnected' && status.attempt > 0 && <p className="connection-attempt">
           {t('connection.attempt', { attempt: status.attempt, max: status.maxAttempts })} · {t('connection.elapsed', { seconds: elapsed })}
         </p>}
         {!active && status?.state !== 'failed' && <p className="connection-hint">{t('connection.hint')}</p>}
+        </div>
         <button type="button" data-area-focus disabled={cancelling} onClick={active ? onCancel : onConnect} className="connection-primary-action">
           {active ? <CloseIcon /> : <PlugIcon />}{active ? t('connection.cancel') : t('connection.connect')}
         </button>
-        {status?.error && <div role={status.state === 'failed' ? 'alert' : undefined} className="connection-last-error">
+        {status?.error && <div className="connection-error-space"><div role={status.state === 'failed' ? 'alert' : undefined} className="connection-last-error">
           <p className="mb-1 font-medium text-fg-muted">{t('connection.lastError')}{status.errorClass ? ` · ${classLabel(status.errorClass)}` : ''}</p>
           <p className="break-words whitespace-pre-wrap text-fg-muted">{status.error}</p>
-        </div>}
+        </div></div>}
+        </div>
       </section>
     </main>
   </div>

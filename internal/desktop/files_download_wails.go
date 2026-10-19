@@ -35,13 +35,10 @@ func (m *FileDownloads) Download(req api.FilesRequest, title, button string) (st
 	if err != nil {
 		return "", err
 	}
-	dialog := m.app.Dialog.OpenFile()
-	dialog.SetOptions(&application.OpenFileDialogOptions{Title: title, ButtonText: button, Directory: initialDirectory, CanChooseDirectories: true, CanChooseFiles: false, CanCreateDirectories: true, Window: m.window})
-	directory, err := dialog.PromptForSingleSelection()
-	if err != nil || directory == "" {
+	if err = os.MkdirAll(initialDirectory, 0700); err != nil {
 		return "", err
 	}
-	return m.downloadSelected(req, directory)
+	return m.downloadSelected(req, initialDirectory)
 }
 
 func (m *FileDownloads) downloadSelected(req api.FilesRequest, directory string) (string, error) {
@@ -52,9 +49,10 @@ func (m *FileDownloads) downloadSelected(req api.FilesRequest, directory string)
 		name = "root"
 	}
 	id := m.history.begin(filepath.Join(directory, name), "files")
+	m.history.registerCancel(id, cancel)
 	destination, err := copyContainerDownload(ctx, directory, path.Base(path.Clean(req.Path)), func(ctx context.Context, w io.Writer) error {
 		return m.source.DownloadFiles(api.UIContext(ctx), req, &downloadCountingWriter{Writer: w, history: m.history, id: id})
-	})
+	}, true)
 	status := "complete"
 	if err != nil {
 		status = "failed"

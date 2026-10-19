@@ -98,30 +98,30 @@ func (m *LogWindows) Send(id, sender, kind string, payload string) error {
 	return nil
 }
 
-// ExportLogs prompts in the requesting native window, then writes only to the
-// path the user chose. Cancel returns an empty path and writes nothing.
-func (m *LogWindows) ExportLogs(id, name, title, button, text string) (string, error) {
+// ExportLogs saves buffered logs to the default download directory without replacing files.
+func (m *LogWindows) ExportLogs(_ string, name, title, button, text string) (string, error) {
 	if len(name) > 200 || len(title) > 256 || len(button) > 80 || len(text) > 96<<20 {
 		return "", errors.New("log download exceeds its limits")
 	}
-	m.mu.Lock()
-	parent := m.windows[id]
-	if parent == nil {
-		parent = m.mainWindow
-	}
-	m.mu.Unlock()
 	directory, err := paths.Downloads(os.Getenv)
 	if err != nil {
 		return "", err
 	}
-	dialog := m.app.Dialog.SaveFile()
-	dialog.SetOptions(&application.SaveFileDialogOptions{Title: title, ButtonText: button, Directory: directory, Filename: filepath.Base(name), CanCreateDirectories: true, AllowOtherFileTypes: true, Window: parent})
-	destination, err := dialog.PromptForSingleSelection()
-	if err != nil || destination == "" {
+	if err = os.MkdirAll(directory, 0700); err != nil {
 		return "", err
 	}
+	destination := filepath.Join(directory, filepath.Base(name))
 	downloadID := m.history.begin(destination, "logs")
-	if err = writeLogExport(destination, text); err != nil {
+	staged, err := newStagedLogExport(destination, 96<<20)
+	if err == nil {
+		staged.unique = true
+		defer staged.Abort()
+		if err = staged.Write(text); err == nil {
+			err = staged.Complete()
+		}
+		destination = staged.destination
+	}
+	if err != nil {
 		m.history.finish(downloadID, "", "failed", downloadFailureReason(err, "write"))
 		return "", err
 	}

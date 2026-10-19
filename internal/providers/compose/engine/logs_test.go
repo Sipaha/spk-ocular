@@ -299,3 +299,18 @@ func TestContainerLogsOverTheWire(t *testing.T) {
 	_, err = c.ContainerLogs(context.Background(), "gone", engine.LogsOptions{}, false)
 	assert.True(t, engine.IsNotFound(err))
 }
+
+func TestLogReaderLocalWireBudget(t *testing.T) {
+	body := strings.NewReader(strings.Repeat("INFO lots of raw logs\n", 100_000))
+	r := engine.NewLogReader(body, true, false, engine.Limits{})
+	r.LimitReadBytes(1024)
+	for {
+		_, err := r.Next()
+		if err != nil {
+			break
+		}
+	}
+	require.True(t, r.ReadBudgetHit())
+	require.Equal(t, int64(1024), r.ReadBudgetBytes())
+	require.Equal(t, len(strings.Repeat("INFO lots of raw logs\n", 100_000))-1024, body.Len())
+}

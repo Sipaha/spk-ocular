@@ -1,9 +1,15 @@
+import { WorkspaceToolbar } from '../components/WorkspaceToolbar'
+import { SnapshotBoundary } from '../components/SnapshotBoundary'
+import { ListRefreshProgress } from '../components/ListLoading'
+import { useSnapshotRequest } from '../views/useSnapshotRequest'
+import { errorDetail } from '../errors'
+import { isoDateTime, localDateTime } from '../dates'
 import { LocationStatus } from '../components/LocationStatus'
 import { RefreshButton } from '../components/RefreshButton'
-import { useEffect, useState, type ComponentProps, type MouseEvent, type ReactNode } from 'react'
+import { useCallback, useEffect, useState, type ComponentProps, type MouseEvent, type ReactNode } from 'react'
 import type { Client } from '../api/client'
-import type { Column, Row, Ref, ScopeSel, SecurityFinding, SecuritySnapshot } from '../api/types'
-import { getLanguage, t } from '../i18n'
+import type { Column, Row, Ref, ScopeSel, SecurityFinding } from '../api/types'
+import { t } from '../i18n'
 import { mayLeave } from '../edit/guard'
 import { ResourceTable } from '../components/ResourceTable'
 import { columnWidthsKey } from '../components/columnWidths'
@@ -25,11 +31,7 @@ export const accessURL='https://aquasecurity.github.io/trivy-operator/latest/tut
 const tableKind='ocular.security'
 
 export default function SecurityWorkspace({client,target,scope,scopePicker,drawer}: Props) {
- const [saved,setSaved]=useState<{key:string;value:SecuritySnapshot}|null>(null)
- const [busy,setBusy]=useState(true)
- const [error,setError]=useState('')
  const [linkError,setLinkError]=useState('')
- const [revision,setRevision]=useState(0)
  const [query,setQuery]=useState('')
  const [category,setCategory]=useState('')
  const [severity,setSeverity]=useState('')
@@ -38,16 +40,11 @@ export default function SecurityWorkspace({client,target,scope,scopePicker,drawe
  const [mode,setMode]=useState<'desktop'|'browser'>('browser')
  const scopeKey=JSON.stringify(scope)
  const key=target.provider+'/'+target.id+'/'+scopeKey
- const snapshot=saved?.key===key?saved.value:null
- const date=(at:number)=>at>0?new Date(at).toLocaleString(getLanguage()):t('security.unknown')
+ const date=(at:number)=>at>0?localDateTime(at):t('security.unknown')
  useEffect(()=>{let live=true;client.appInfo().then(info=>{if(live)setMode(info.mode)},()=>{});return()=>{live=false}},[client])
- useEffect(()=>{
-  let live=true;const abort=new AbortController()
-  client.clusterSecurity({provider:target.provider,target:target.id,scope:JSON.parse(scopeKey)},abort.signal).then(value=>{
-   if(live){setSaved({key,value});setError('');setBusy(false)}
-  },e=>{if(live){setError(e instanceof Error?e.message:String(e));setBusy(false)}})
-  return()=>{live=false;abort.abort()}
- },[client,target.provider,target.id,scopeKey,key,revision])
+ const load=useCallback((signal:AbortSignal)=>client.clusterSecurity({provider:target.provider,target:target.id,scope:JSON.parse(scopeKey)},signal),[client,target.provider,target.id,scopeKey])
+ const request=useSnapshotRequest(load,key)
+ const snapshot=request.value,busy=request.busy,error=request.error?errorDetail(request.error):''
  const rows=filterFindings(snapshot?.findings??[],query,category,severity)
  const tkey=targetKey(target)
  const findings=new Map(rows.map(f=>[f.id,f]))
@@ -83,19 +80,20 @@ export default function SecurityWorkspace({client,target,scope,scopePicker,drawe
    {f.workload&&<p className="mt-1 text-fg-muted">{t('security.workload')}: {f.workload}</p>}
    <p className="mt-1 break-words">{f.image} · {f.package}</p>
    <p className="mt-1">{t('security.installed')}: {f.installed||'—'} · {t('security.fixed')}: {f.fixed||t('security.noFix')}</p>
-   <p className="mt-1 text-fg-muted">{f.scanner} · {t('security.reportAge',{time:date(f.scannedAt??0)})}</p>
+   <p className="mt-1 text-fg-muted" title={isoDateTime(f.scannedAt??0)}>{f.scanner} · {t('security.reportAge',{time:date(f.scannedAt??0)})}</p>
    <p className="mt-1 text-fg-muted">{t('security.cveFreshness')}</p>
   </>:<p className="mt-2"><span className="text-fg-muted">{t('security.recommendation')}: </span>{recommendation(f)}</p>}
   {f.category==='network'&&<p className="mt-1 text-fg-muted">{t('security.networkNotice')}</p>}
   {f.category==='rbac'&&<p className="mt-1 text-fg-muted">{t('security.rbacNotice')}</p>}
  </div>
  return <section className="security-workspace flex min-h-0 flex-1 flex-col" aria-label={t('security.title')}>
-  <header className="flex min-h-10 shrink-0 flex-wrap items-center gap-2 border-b border-line bg-panel px-3 py-1">
-   <h2 className="text-sm font-semibold">{t('security.title')}</h2>{scopePicker}
-   <RefreshButton data-resync busy={busy} onClick={()=>{setBusy(true);setRevision(r=>r+1)}} />
-   <span className="ml-auto text-xs text-fg-muted">{snapshot?t('security.snapshot',{time:date(snapshot.capturedAt)}):''}</span>
-  </header>
-  <div className="relative flex min-h-0 flex-1">
+  <WorkspaceToolbar title={t('security.title')}>{scopePicker}
+   <ListRefreshProgress view={request.loading} initial={!snapshot}/>
+   <RefreshButton data-resync busy={busy} onClick={request.refresh} />
+   <span className="ml-auto text-xs text-fg-muted tabular-nums" title={snapshot?isoDateTime(snapshot.capturedAt):undefined}>{snapshot?t('security.snapshot',{time:date(snapshot.capturedAt)}):''}</span>
+  </WorkspaceToolbar>
+  <SnapshotBoundary request={request}>
+  <div className="relative flex min-h-0 min-w-0 flex-1">
    <div className="flex min-w-0 flex-1 flex-col">
     <div className="grid shrink-0 grid-cols-2 gap-2 border-b border-line p-3 lg:grid-cols-4" aria-label={t('security.severity')}>
      <div className="rounded border border-line bg-panel px-3 py-2"><p className="text-xs text-fg-muted">{t('security.resources')}</p><strong className="text-xl tabular-nums">{snapshot?snapshot.resources:'—'}</strong></div>
@@ -127,7 +125,7 @@ export default function SecurityWorkspace({client,target,scope,scopePicker,drawe
        void persistTargetEntries(client,target.provider,target.id,{[columnWidthsKey(tableKind)]:JSON.stringify(widths)}).catch(()=>showNotice(t('table.widthsNotSaved')))
       }}
       onSelect={row=>setSelectedID(row.id)} onOpen={row=>{if(row.ref.kind&&row.ref.uid)open(row.ref)}}
-      emptyMessage={busy&&!snapshot?t('app.loading'):!snapshot?null:snapshot.findings.length?t('security.noMatches'):(snapshot.truncated||snapshot.problems.length||snapshot.discovery!=='ready'?t('security.incompleteEmpty'):t('security.empty'))}
+      emptyMessage={!snapshot?null:snapshot.findings.length?t('security.noMatches'):(snapshot.truncated||snapshot.problems.length||snapshot.discovery!=='ready'?t('security.incompleteEmpty'):t('security.empty'))}
       renderCell={(row,column)=>{
        const f=findings.get(row.id)!
        const openLabel=t('security.open')+' · '+f.kindTitle+'/'+(f.ref.title??f.ref.name)
@@ -140,7 +138,7 @@ export default function SecurityWorkspace({client,target,scope,scopePicker,drawe
       }}/>
     </div>
     {selected&&explanation(selected)}
-    <LocationStatus>
+    <LocationStatus><span>{t('security.title')}</span>
      <span>{t('security.counts',{shown:rows.length,total:snapshot?.findings.length??0})}</span>
      {snapshot?.discovery!=='ready'&&snapshot&&<span className="text-warning">{t('graph.discovery')}</span>}
      {snapshot?.truncated&&<span role="status" className="text-warning">{t('security.truncated')}</span>}
@@ -151,5 +149,6 @@ export default function SecurityWorkspace({client,target,scope,scopePicker,drawe
    </div>
    {subject&&<ResourceDrawer {...drawer} subject={subject} onClose={()=>setSubject(null)}/>}
   </div>
+  </SnapshotBoundary>
  </section>
 }

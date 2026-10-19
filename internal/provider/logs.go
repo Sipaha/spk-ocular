@@ -24,6 +24,11 @@ const ChannelAll = "*"
 const TailAll = -1
 
 type LogQuery struct {
+	// LiveOnly starts existing sources at EOF; internal UI capture paired with a finite history scan.
+	LiveOnly  bool          `json:"-"`
+	LivePacer *LogReadPacer `json:"-"`
+	// Filter is the UI case-insensitive * wildcard text filter, applied before history limits.
+	Filter string `json:"filter,omitempty"`
 	// Archive reads retained history incrementally without the UI's tail or
 	// merge-buffer ceilings. Internal only; the caller must bound output and
 	// duration. It is finite, never followed, and sources are read in turn.
@@ -84,4 +89,14 @@ type LogSink interface {
 	State(id int, st LogState) error
 	// Ready: the initial backlog was delivered; later lines are live.
 	Ready() error
+}
+
+// LogPreviewLine carries a provisional, replaceable matching-history record.
+// Preview snapshots are bounded separately from the final history buffer.
+type LogPreviewLine struct {
+	Source int
+	Line   LogLine
+}
+type LogPreviewSink interface {
+	Preview(lines []LogPreviewLine, final bool) error
 }

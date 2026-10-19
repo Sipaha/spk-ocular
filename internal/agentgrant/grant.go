@@ -46,7 +46,8 @@ type Grant struct {
 	Scope Scope  `json:"scope"`
 	Verb  string `json:"verb"`
 	// Kinds are the kind ids the verb covers; nil: every kind (not the
-	// sensitive ones for edit, and nothing destructive).
+	// sensitive ones for edit, and no destructive actions/edits). Exec
+	// explicitly covers every supported kind when nil.
 	Kinds []string `json:"kinds"`
 	// NoConfirm: a destructive plan runs without the user's confirmation.
 	NoConfirm bool `json:"noConfirm,omitempty"`
@@ -94,9 +95,6 @@ func (g Grant) Validate() error {
 	}
 	if g.Scope.Mode == ScopeCluster && g.Verb != VerbRead {
 		return errors.New("objects outside namespaces can only be read")
-	}
-	if g.Verb == VerbExec && g.Kinds == nil {
-		return errors.New("exec requires explicitly named kinds")
 	}
 	if g.Kinds != nil && len(g.Kinds) == 0 {
 		return errors.New("no kinds: leave the list out for all kinds")
@@ -168,7 +166,10 @@ func Allows(gs []Grant, r Request) Decision {
 		case g.Kinds == nil:
 			sawAllKinds = true
 			sensitiveEdit := r.Sensitive && r.Verb == VerbEdit
-			d.OK = d.OK || !r.Destructive && !sensitiveEdit
+			d.OK = d.OK || r.Verb == VerbExec || !r.Destructive && !sensitiveEdit
+			if r.Verb == VerbExec {
+				d.NoConfirm = d.NoConfirm || g.NoConfirm && r.Destructive
+			}
 		}
 	}
 	switch {

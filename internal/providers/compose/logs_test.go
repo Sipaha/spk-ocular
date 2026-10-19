@@ -1193,3 +1193,45 @@ func TestLogsARunOfEqualRecordsLongerThanTheRingRepeatsNothing(t *testing.T) {
 		t.Fatalf("%d records (want %d), gap %v", n, maxSeen+2, sk.hadState("p-web-1", provider.LogGap))
 	}
 }
+
+func TestFilteredLogsReadBeforeRawTailAndFilterLive(t *testing.T) {
+	e := newLogEnv(t)
+	e.fe.Journal(e.c.ID, 1, e.at(1), "ERROR old one")
+	e.fe.Journal(e.c.ID, 1, e.at(2), "ERROR old two")
+	e.fe.Journal(e.c.ID, 1, e.at(3), "INFO newest")
+	sk, _ := e.stream(e.containerRef(), provider.LogQuery{Follow: true, TailLines: 1, Filter: "err*or"})
+	sk.waitFor(t, "ready", func() bool { sk.mu.Lock(); defer sk.mu.Unlock(); return sk.ready })
+	if got := sk.texts("p-web-1"); fmt.Sprint(got) != "[ERROR old two]" {
+		t.Fatalf("matching tail: %v", got)
+	}
+	e.fe.Journal(e.c.ID, 1, e.at(4), "INFO live noise")
+	e.fe.Journal(e.c.ID, 1, e.at(5), "ERROR live")
+	sk.waitFor(t, "matching live", func() bool { return len(sk.texts("p-web-1")) == 2 })
+	if got := sk.texts("p-web-1"); fmt.Sprint(got) != "[ERROR old two ERROR live]" {
+		t.Fatalf("filtered live: %v", got)
+	}
+}
+
+func TestLiveOnlyContainerStartsAtEOFWithoutReplayingHistory(t *testing.T) {
+	e := newLogEnv(t)
+	e.fe.Journal(e.c.ID, 1, e.at(1), "ERROR retained")
+	sk, _ := e.stream(e.containerRef(), provider.LogQuery{Follow: true, TailLines: 500, Filter: "error", LiveOnly: true})
+	sk.waitFor(t, "live open", func() bool { return sk.lastState("p-web-1").State == provider.LogStreaming })
+	e.fe.Journal(e.c.ID, 1, e.at(2), "ERROR new")
+	sk.waitFor(t, "captured live", func() bool { return len(sk.texts("p-web-1")) == 1 })
+	if got := sk.texts("p-web-1"); !eq(got, "ERROR new") {
+		t.Fatalf("unexpected history replay: %v", got)
+	}
+	found := false
+	for _, req := range e.fe.Requests() {
+		if strings.HasSuffix(req.Path, "/logs") && req.Query.Get("follow") == "1" {
+			found = true
+			if req.Query.Get("tail") != "0" {
+				t.Fatalf("live capture must start at EOF: %v", req.Query)
+			}
+		}
+	}
+	if !found {
+		t.Fatal("no live request")
+	}
+}

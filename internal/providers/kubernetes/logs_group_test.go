@@ -2,7 +2,13 @@ package kubernetes
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"io"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	clienttesting "k8s.io/client-go/testing"
+	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -341,4 +347,179 @@ func TestLogRequestSlotsAreShared(t *testing.T) {
 	<-firstDone
 	firstDone <- nil
 	second.await(t, "x", func() bool { return len(second.texts()) == 1 })
+}
+
+func TestFilteredHistoryTailCountsMatchesAcrossPodsAndContinuesLive(t *testing.T) {
+	k := newFakeKubelet(t)
+	for _, name := range []string{"web-a", "web-b"} {
+		k.start(name, "app", "cid-"+name+"-app")
+	}
+	k.log("web-a", "app", fakeRec{ts: at(1), text: "ERROR older a"}, fakeRec{ts: at(4), text: "INFO noise"})
+	k.log("web-b", "app", fakeRec{ts: at(2), text: "ERROR newest b"}, fakeRec{ts: at(5), text: "INFO noise"})
+	client := groupClient(deployment("web", "d1", "app"), replicaSet("web-rs", "rs1", "d1"), memberOf("web-a", "pa", "rs1", 0, "app"), memberOf("web-b", "pb", "rs1", 0, "app"))
+	g := startGroup(t, client, k, webRef(), provider.LogQuery{Follow: true, TailLines: 1, Filter: "err*or"})
+	g.sink.await(t, "filtered backlog ready", func() bool { g.sink.mu.Lock(); defer g.sink.mu.Unlock(); return g.sink.ready })
+	assert.Equal(t, []string{"ERROR newest b"}, g.sink.texts())
+	for _, req := range k.requestLog() {
+		if req.Get("follow") != "true" {
+			assert.Contains(t, []string{"1", "2"}, req.Get("tailLines"), "bounded windows expand when the raw tail hides older matches")
+		}
+	}
+	k.log("web-a", "app", fakeRec{ts: at(6), text: "INFO dropped live"}, fakeRec{ts: at(7), text: "ERROR live"})
+	g.sink.await(t, "filtered live", func() bool { return len(g.sink.texts()) == 2 })
+	assert.Equal(t, []string{"ERROR newest b", "ERROR live"}, g.sink.texts())
+}
+
+func TestFilteredSinglePodReadsBeforeItsRawTail(t *testing.T) {
+	k := newFakeKubelet(t)
+	k.start("web-a", "app", "cid-web-a-app")
+	k.log("web-a", "app", fakeRec{ts: at(1), text: "ERROR older"}, fakeRec{ts: at(2), text: "INFO newest"})
+	client := groupClient(memberOf("web-a", "pa", "rs1", 0, "app"))
+	ref := webRef()
+	ref.Kind = "pods"
+	ref.Name = "web-a"
+	ref.UID = "pa"
+	g := startGroup(t, client, k, ref, provider.LogQuery{Channel: "app", TailLines: 1, Filter: "error"})
+	g.sink.await(t, "ready", func() bool { g.sink.mu.Lock(); defer g.sink.mu.Unlock(); return g.sink.ready })
+	assert.Equal(t, []string{"ERROR older"}, g.sink.texts())
+}
+
+func TestFilteredHistoryReadBudgetStopsProgressiveExpansion(t *testing.T) {
+	k := newFakeKubelet(t)
+	k.start("web-a", "app", "cid-web-a-app")
+	records := recs(0, 20_000, func(i int) time.Time { return at(float64(i)) })
+	k.log("web-a", "app", records...)
+	client := groupClient(deployment("web", "d1", "app"), replicaSet("web-rs", "rs1", "d1"), memberOf("web-a", "pa", "rs1", 0, "app"))
+	g := startGroup(t, client, k, webRef(), provider.LogQuery{TailLines: 500, Filter: "no-match"})
+	g.sink.await(t, "limited ready", func() bool { g.sink.mu.Lock(); defer g.sink.mu.Unlock(); return g.sink.ready })
+	require.Empty(t, g.sink.texts())
+	require.True(t, g.sink.hasState(provider.LogTruncated))
+	total := 0
+	var windows []int
+	for _, req := range k.requestLog() {
+		n, err := strconv.Atoi(req.Get("tailLines"))
+		require.NoError(t, err)
+		total += n
+		windows = append(windows, n)
+	}
+	require.Equal(t, []int{500, 1000, 2000, 4000}, windows)
+	require.LessOrEqual(t, total, 10_000, "overlapping reads count too")
+}
+
+func TestFilteredHistoryLocalByteBudgetDoesNotTrustTheUpstream(t *testing.T) {
+	wire := &countingReader{r: strings.NewReader(strings.Repeat("x", 100_000))}
+	box := newObsBox()
+	src := newPodSource(1, "ns", "p", "u", "app", func(context.Context, podLogRequest) (io.ReadCloser, error) { return io.NopCloser(wire), nil }, box, newLogRecorder(), provider.LogQuery{})
+	x := &groupSrc{pod: memberPod{name: "p", uid: "u", box: box}, src: src, ctr: "app"}
+	g := &logGroup{ns: "ns", q: provider.LogQuery{TailLines: 500, Filter: "error"}}
+	_, cut, err := g.readBacklogWindow(t.Context(), x, 1024, 500)
+	require.NoError(t, err)
+	require.True(t, cut)
+	require.LessOrEqual(t, wire.n, int64(1025))
+}
+
+func TestLiveOnlyPodStartsAtEOFWithoutReplayingHistory(t *testing.T) {
+	k := newFakeKubelet(t)
+	k.start("web-a", "app", "cid-web-a-app")
+	k.log("web-a", "app", fakeRec{ts: at(1), text: "ERROR retained"})
+	client := groupClient(memberOf("web-a", "pa", "rs1", 0, "app"))
+	ref := webRef()
+	ref.Kind = "pods"
+	ref.Name = "web-a"
+	ref.UID = "pa"
+	g := startGroup(t, client, k, ref, provider.LogQuery{Follow: true, TailLines: 500, Filter: "error", LiveOnly: true})
+	require.Eventually(t, func() bool {
+		for _, req := range k.requestLog() {
+			if req.Get("follow") == "true" && req.Get("tailLines") == "0" {
+				return true
+			}
+		}
+		return false
+	}, 3*time.Second, time.Millisecond)
+	g.sink.await(t, "live connection", func() bool { return g.sink.state("pa/app").State == provider.LogStreaming })
+	k.log("web-a", "app", fakeRec{ts: at(2), text: "ERROR new"})
+	g.sink.await(t, "captured live", func() bool { return len(g.sink.texts()) == 1 })
+	require.Equal(t, []string{"ERROR new"}, g.sink.texts())
+}
+
+func TestFilteredExplicitPodDoesNotRequireListOrWatchPermission(t *testing.T) {
+	k := newFakeKubelet(t)
+	k.start("web-a", "app", "cid-web-a-app")
+	k.log("web-a", "app", fakeRec{ts: at(1), text: "ERROR retained"}, fakeRec{ts: at(2), text: "INFO noise"})
+	client := groupClient()
+	client.PrependReactor("*", "pods", func(_ clienttesting.Action) (bool, runtime.Object, error) {
+		return true, nil, apierrors.NewForbidden(schema.GroupResource{Resource: "pods"}, "web-a", errors.New("logs-only principal"))
+	})
+	s := newSession("ctx", "h", client, false)
+	defer s.Close()
+	s.logs = k.fetcher(t)
+	ref := webRef()
+	ref.Kind = "pods"
+	ref.Name = "web-a"
+	ref.UID = "pa"
+	sink := newLogRecorder()
+	require.NoError(t, s.StreamLogs(t.Context(), ref, provider.LogQuery{Channel: "app", TailLines: 1, Filter: "error"}, sink))
+	require.Equal(t, []string{"ERROR retained"}, sink.texts())
+	for _, action := range client.Actions() {
+		require.NotEqual(t, "list", action.GetVerb())
+		require.NotEqual(t, "watch", action.GetVerb())
+	}
+}
+
+type previewRecorder struct{ *logRecorder }
+
+func (r *previewRecorder) Preview(rows []provider.LogPreviewLine, _ bool) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.lines = nil
+	r.lineSrc = nil
+	for _, row := range rows {
+		r.lines = append(r.lines, row.Line)
+		r.lineSrc = append(r.lineSrc, r.keys[row.Source])
+	}
+	r.bumpLocked()
+	return nil
+}
+func TestFilteredViewCapturesNewPodLinesWhileHTTPHistoryIsDelayed(t *testing.T) {
+	k := newFakeKubelet(t)
+	k.start("web-a", "app", "cid-web-a-app")
+	k.log("web-a", "app", fakeRec{ts: at(1), text: "ERROR history"})
+	historyGate := make(chan struct{})
+	k.mu.Lock()
+	k.hold = map[string]<-chan struct{}{"web-a": historyGate}
+	k.mu.Unlock()
+	s := newSession("ctx", "h", groupClient(memberOf("web-a", "pa", "rs1", 0, "app")), false)
+	defer s.Close()
+	s.logs = k.fetcher(t)
+	ref := webRef()
+	ref.Kind = "pods"
+	ref.Name = "web-a"
+	ref.UID = "pa"
+	r := &previewRecorder{newLogRecorder()}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	done := make(chan error, 1)
+	go func() {
+		done <- provider.StreamFilteredLogView(ctx, provider.LogQuery{Follow: true, Channel: "app", TailLines: 500, Filter: "error"}, func(ctx context.Context, q provider.LogQuery, sink provider.LogSink) error {
+			return s.StreamLogs(ctx, ref, q, sink)
+		}, r)
+	}()
+	r.await(t, "armed live request", func() bool { return r.state("pa/app").State == provider.LogStreaming })
+	k.log("web-a", "app", fakeRec{ts: at(2), text: "ERROR new while history loads"})
+	r.await(t, "new row before history ready", func() bool {
+		for _, text := range r.texts() {
+			if text == "ERROR new while history loads" {
+				return true
+			}
+		}
+		return false
+	})
+	r.mu.Lock()
+	require.False(t, r.ready)
+	r.mu.Unlock()
+	close(historyGate)
+	r.await(t, "history ready", func() bool { r.mu.Lock(); defer r.mu.Unlock(); return r.ready })
+	require.Equal(t, []string{"ERROR history", "ERROR new while history loads"}, r.texts())
+	cancel()
+	require.ErrorIs(t, <-done, context.Canceled)
 }

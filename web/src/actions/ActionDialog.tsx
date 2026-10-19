@@ -1,10 +1,11 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { isoDateTime } from '../dates'
+import { useEffect, useLayoutEffect, useId, useRef, useState } from 'react'
 import type { Client } from '../api/client'
 import type { ActionChoice, ActionDescriptor, ActionParams, ActionPlan, ActionResult, Message, Ref, TerminalOpen } from '../api/types'
 import { actionLabel, classLabel, messageText, t } from '../i18n'
 import { refTitle } from '../refs'
 import { useScopeWords } from '../scopeNames'
-import { showNotice } from '../store'
+import { showNotice, useStore } from '../store'
 import { focusMark, restoreFocus } from '../shortcuts'
 import { Portions } from './ActionLists'
 import { PlanDetails } from './PlanDetails'
@@ -47,6 +48,8 @@ const RUN_TIMEOUT_MS = 60_000
  */
 export function ActionDialog({ client, req, onClose, onTerminal, runTimeoutMs = RUN_TIMEOUT_MS }: Props) {
   const { ref, action, kindTitle } = req
+  const connectionName = useStore(state => state.view?.groups.flatMap(group => group.targets).find(target => target.provider === ref.provider && target.id === ref.target)?.title)
+  const countId = useId()
   // The object's own provider names its scopes (not the target selected now).
   const scopeWords = useScopeWords(ref.provider)
   const param = action.param
@@ -212,6 +215,15 @@ export function ActionDialog({ client, req, onClose, onTerminal, runTimeoutMs = 
     if (!bad) prepare(values({ choice: v }))
   }
 
+  const stepCount = (delta: number) => {
+    if (!param || !counted || sent || busy === 'run') return
+    const parsed = /^\d+$/.test(count.trim()) ? Number(count) : NaN
+    const base = Number.isSafeInteger(parsed) ? parsed : plan?.current ?? param.min
+    countTouched.current = true
+    setCount(String(Math.max(param.min, Math.min(param.max, base + delta))))
+    setCountError(null)
+  }
+  const numericCount = /^\d+$/.test(count.trim()) ? Number(count) : NaN
   const review = () => {
     if (busy === 'run') return
     if (textDesc) {
@@ -238,7 +250,7 @@ export function ActionDialog({ client, req, onClose, onTerminal, runTimeoutMs = 
     setBusy('run')
     setOutcome(null)
     const op = ++runSeq.current
-    const where = `${plan.where.targetTitle} · `
+    const where = `${connectionName || plan.where.targetTitle} · `
     let timer: ReturnType<typeof setTimeout> | undefined
     const answer = client.runAction(plan)
     let timedOut = false
@@ -280,7 +292,7 @@ export function ActionDialog({ client, req, onClose, onTerminal, runTimeoutMs = 
       ])
       // Told even when the dialog is gone (another target was chosen meanwhile).
       const partial = partialOf(res)
-      if (!live.current) showNotice(`${plan.where.targetTitle} · ${told(res)}`, partial ? 10_000 : undefined)
+      if (!live.current) showNotice(`${connectionName || plan.where.targetTitle} · ${told(res)}`, partial ? 10_000 : undefined)
       else if (partial) {
         // The dialog stays: what was done and what not, part by part.
         showNotice(told(res), 10_000)
@@ -364,7 +376,7 @@ export function ActionDialog({ client, req, onClose, onTerminal, runTimeoutMs = 
 
         <dl aria-label="where" className="grid grid-cols-[max-content_1fr] gap-x-4 gap-y-0.5 rounded-md border border-line px-3 py-2 text-xs">
           <dt className="text-fg-muted">{t('action.context')}</dt>
-          <dd className="min-w-0 break-all font-mono">{where?.targetTitle ?? ref.target}</dd>
+          <dd className="min-w-0 break-all font-mono">{connectionName || where?.targetTitle || '—'}</dd>
           {where?.endpoint && (
             <>
               <dt className="text-fg-muted">{t('action.server')}</dt>
@@ -413,9 +425,10 @@ export function ActionDialog({ client, req, onClose, onTerminal, runTimeoutMs = 
           )}
 
           {counted && (
-            <label className="flex items-center gap-2 text-xs text-fg-muted">
-              {t('action.count')}
-              <input
+            <div className="flex flex-wrap items-center gap-2 text-xs text-fg-muted">
+              <label htmlFor={countId}>{t('action.count')}</label>
+              <button type="button" aria-label={t('action.countDecrease')} disabled={busy === 'run' || sent || (!!param && numericCount <= param.min)} onClick={() => stepCount(-1)} className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded border border-line text-sm text-fg enabled:hover:bg-hover disabled:opacity-40">−</button>
+              <input id={countId}
                 ref={countRef}
                 inputMode="numeric"
                 value={count}
@@ -428,9 +441,10 @@ export function ActionDialog({ client, req, onClose, onTerminal, runTimeoutMs = 
                 aria-invalid={!!countError}
                 className="w-24 rounded-md border border-line bg-app px-2 py-1 font-mono text-sm text-fg outline-none focus:border-accent"
               />
+              <button type="button" aria-label={t('action.countIncrease')} disabled={busy === 'run' || sent || (!!param && numericCount >= param.max)} onClick={() => stepCount(1)} className="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded border border-line text-sm text-fg enabled:hover:bg-hover disabled:opacity-40">+</button>
               {plan?.current !== undefined && <span>{t('action.countNow', { count: plan.current })}</span>}
               {countError && <span className="text-danger">{countError}</span>}
-            </label>
+            </div>
           )}
 
           {busy === 'prepare' && <p className="text-fg-subtle">{t('action.preparing')}</p>}
@@ -508,7 +522,6 @@ export function ActionDialog({ client, req, onClose, onTerminal, runTimeoutMs = 
   )
 }
 
-const dateTime = () => new Intl.DateTimeFormat(document.documentElement.lang || undefined, { dateStyle: 'short', timeStyle: 'medium' })
 
 /** The values a choice parameter may take, newest first as the provider gives them; one that cannot be chosen says why. */
 function Choices({ title, choices, chosen, disabled, onChoose, boxRef }: { title?: Message; choices: ActionChoice[]; chosen: string | null; disabled: boolean; onChoose: (v: string) => void; boxRef: React.RefObject<HTMLDivElement | null> }) {
@@ -540,7 +553,7 @@ function Choices({ title, choices, chosen, disabled, onChoose, boxRef }: { title
                 <span className="font-medium">{messageText(c.title)}</span>
                 {c.current && <span className="ml-2 rounded bg-fg/10 px-1 text-xs text-fg-muted">{t('action.choiceCurrent')}</span>}
                 {!!c.at && (
-                  <span className="ml-2 text-xs text-fg-subtle" title={dateTime().format(c.at)}>
+                  <span className="ml-2 text-xs text-fg-subtle" title={isoDateTime(c.at!)}>
                     {t('action.choiceAge', { age: formatAge(now - c.at) })}
                   </span>
                 )}

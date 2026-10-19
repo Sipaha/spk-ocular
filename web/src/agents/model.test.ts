@@ -108,11 +108,19 @@ describe('warnings', () => {
   })
 })
 
-it('exec is separate, scoped, explicitly kind-bound and confirmable', () => {
+it('exec is separate, scope-wide and confirmable, preserving legacy kind limits', () => {
   const execKinds = [{ ...kinds[0], exec: true }, ...kinds.slice(1)]
   const options = (mode: 'one' | 'all' | 'cluster') => verbOptions(execKinds, mode)
   expect(options('one').find(o => o.verb === 'exec')).toMatchObject({ destructive: true, kinds: [{ id: kinds[0].id }] })
   expect(options('cluster').some(o => o.verb === 'exec')).toBe(false)
-  expect(problems([{ scope: { mode: 'one', name: 'a' }, verbs: { exec: { kinds: null, noConfirm: false } } }], options)).toEqual([{ scope: 'one:a', verb: 'exec', key: 'agents.problem.destructiveAll' }])
+  expect(problems([{ scope: { mode: 'one', name: 'a' }, verbs: { exec: { kinds: null, noConfirm: false } } }], options)).toEqual([])
   expect(warnings('kubernetes', [{ scope: { mode: 'one', name: 'a' }, verbs: { exec: { kinds: [kinds[0].id], noConfirm: false } } }], execKinds)).toEqual(['exec'])
+})
+
+it('scope-wide exec retains explicit no-confirm while legacy kind lists round-trip', () => {
+ const grants = [
+  { scope: { mode: 'one' as const, name: 'a' }, verb: 'exec', kinds: null, noConfirm: true },
+  { scope: { mode: 'one' as const, name: 'b' }, verb: 'exec', kinds: ['pods'], noConfirm: true },
+ ]
+ expect(toGrants(fromGrants(grants))).toEqual(grants)
 })

@@ -5,14 +5,19 @@ import {classLabel,messageText,t} from '../i18n'
 import {NdjsonDecoder,LINE_CUT,LINE_NO_TIME,type Frame} from './ndjson'
 import {logFileName,openLogDownload,plainLogDownload} from './save'
 import {refTitle} from '../refs'
+import {rowText,type RowOpts} from './row'
+
+export interface LogDownloadFormat extends Pick<RowOpts,'showTime'|'showSource'>{
+ labelOf:(key:string,fallback:string)=>string
+}
 
 const MAX_BYTES=1<<30,MAX_LINES=10_000_000
 const utf8=new TextEncoder()
 interface Progress{lines:number;bytes:number}
 /** Export finite retained source history, never the virtual viewport or UI
  * buffer. Every destination is aborted unless a valid complete end arrives. */
-export async function downloadLogHistory(client:Client,subject:Ref,channel:string,previous:boolean,signal:AbortSignal,windowID='',progress?:(value:Progress)=>void):Promise<(Progress&{path:string|null})|null>{
- const writer=await openLogDownload(logFileName(refTitle(subject)),windowID)
+export async function downloadLogHistory(client:Client,subject:Ref,channel:string,previous:boolean,format:LogDownloadFormat,signal:AbortSignal,windowID='',progress?:(value:Progress)=>void,onCancel?:()=>void,chooseLocation=false):Promise<(Progress&{path:string|null})|null>{
+ const writer=await openLogDownload(logFileName(refTitle(subject)),windowID,onCancel,chooseLocation)
  if(!writer)return null
  let reader:ReadableStreamDefaultReader<Uint8Array>|undefined
  const abort=()=>{void reader?.cancel().catch(()=>{});void writer.abort().catch(()=>{})}
@@ -48,11 +53,13 @@ export async function downloadLogHistory(client:Client,subject:Ref,channel:strin
     case 'lines':{
      const source=sources.get(value.s)
      if(!source||!Array.isArray(value.l))throw incomplete()
+     const label=plainLogDownload(format.labelOf(source.key,source.label)).replace(/[\r\n]/g,' ')
+     const rowOpts={showTime:format.showTime,showSource:format.showSource,labelOf:()=>label}
      let text=''
      for(const line of value.l){
       if(!Array.isArray(line)||line.length<2||line.length>3||typeof line[0]!=='string'||typeof line[1]!=='string'||line[2]!==undefined&&(!Number.isSafeInteger(line[2])||line[2]<0||line[2]&~(LINE_CUT|LINE_NO_TIME)||line[2]&LINE_CUT))throw incomplete()
       if(line[0]&&(!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,9})?(?:Z|[+-]\d{2}:\d{2})$/.test(line[0])||Number.isNaN(Date.parse(line[0]))))throw incomplete()
-      const entry=`${line[0]?plainLogDownload(line[0])+' ':''}[${source.label}] ${plainLogDownload(line[1])}\n`
+      const entry=rowText({ts:line[0],src:value.s,plain:plainLogDownload(line[1]),flags:0},rowOpts)+'\n'
       bytes+=utf8.encode(entry).length;lines++
       if(bytes>MAX_BYTES||lines>MAX_LINES)throw new DownloadFailureError('limit',t('logs.historyLimit'))
       text+=entry

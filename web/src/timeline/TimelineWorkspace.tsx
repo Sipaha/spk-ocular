@@ -1,10 +1,16 @@
+import { WorkspaceToolbar } from '../components/WorkspaceToolbar'
+import { SnapshotBoundary } from '../components/SnapshotBoundary'
+import { ListRefreshProgress } from '../components/ListLoading'
+import { useSnapshotRequest } from '../views/useSnapshotRequest'
+import { errorDetail } from '../errors'
+import { isoDateTime, localDateTime } from '../dates'
 import { LocationStatus } from '../components/LocationStatus'
 import { RefreshButton } from '../components/RefreshButton'
-import { useEffect, useMemo, useRef, useState, type ComponentProps, type ReactNode } from 'react'
+import { useCallback, useMemo, useRef, useState, type ComponentProps, type ReactNode } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import type { Client } from '../api/client'
-import type { ClusterTimeline, Ref, ScopeSel } from '../api/types'
-import { getLanguage, t } from '../i18n'
+import type { Ref, ScopeSel } from '../api/types'
+import { t } from '../i18n'
 import { mayLeave } from '../edit/guard'
 import { ResourceDrawer } from '../components/ResourceDrawer'
 import { Select } from '../components/Select'
@@ -15,10 +21,6 @@ interface Props {client: Client; target: {provider: string; id: string}; scope: 
 const button = 'rounded-md border border-line px-2 py-1 text-xs hover:bg-hover disabled:opacity-40'
 
 export default function TimelineWorkspace({client,target,scope,scopePicker,drawer}: Props) {
- const [snapshot,setSnapshot] = useState<ClusterTimeline|null>(null)
- const [busy,setBusy] = useState(true)
- const [error,setError] = useState('')
- const [revision,setRevision] = useState(0)
  const [query,setQuery] = useState('')
  const [warnings,setWarnings] = useState(false)
  const [kind,setKind] = useState('')
@@ -27,16 +29,10 @@ export default function TimelineWorkspace({client,target,scope,scopePicker,drawe
  const [subject,setSubject] = useState<Ref|null>(null)
  const scroll = useRef<HTMLDivElement>(null)
  const scopeKey = JSON.stringify(scope)
- const language = getLanguage()
- const date = (at:number, full=false) => at > 0 ? new Date(at).toLocaleString(language,{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit',...(full?{second:'2-digit'}:{})}) : t('timeline.unknownTime')
- useEffect(()=>{
-  let live = true
-  const abort = new AbortController()
-  client.clusterTimeline({provider:target.provider,target:target.id,scope:JSON.parse(scopeKey)},abort.signal).then(value=>{
-   if(live){setSnapshot(value);setError('');setBusy(false)}
-  },e=>{if(live){setError(e instanceof Error?e.message:String(e));setBusy(false)}})
-  return ()=>{live=false;abort.abort()}
- },[client,target.provider,target.id,scopeKey,revision])
+ const date = (at:number) => at > 0 ? localDateTime(at) : t('timeline.unknownTime')
+ const load=useCallback((signal:AbortSignal)=>client.clusterTimeline({provider:target.provider,target:target.id,scope:JSON.parse(scopeKey)},signal),[client,target.provider,target.id,scopeKey])
+ const request=useSnapshotRequest(load,JSON.stringify([target.provider,target.id,scopeKey]))
+ const snapshot=request.value,busy=request.busy,error=request.error?errorDetail(request.error):''
  const rows = useMemo(()=>snapshot?timelineRows(snapshot,{query,warnings,kind,rangeMs}):[],[snapshot,query,warnings,kind,rangeMs])
  const bounds = useMemo(()=>timelineBounds(rows,snapshot?.capturedAt??0,rangeMs),[rows,snapshot,rangeMs])
  const bins = useMemo(()=>timelineDensity(rows,bounds.start,bounds.end),[rows,bounds])
@@ -49,14 +45,15 @@ export default function TimelineWorkspace({client,target,scope,scopePicker,drawe
   if(subject && subject.uid===ref.uid && subject.kind===ref.kind)return
   mayLeave(()=>setSubject(ref))
  }
- const refresh = () => {setBusy(true);setRevision(r=>r+1)}
+ const refresh = request.refresh
  return <section className="timeline-workspace flex min-h-0 flex-1 flex-col" aria-label={t('timeline.title')}>
-  <header className="flex min-h-10 shrink-0 flex-wrap items-center gap-2 border-b border-line bg-panel px-3 py-1">
-   <h2 className="text-sm font-semibold">{t('timeline.title')}</h2>{scopePicker}
+  <WorkspaceToolbar title={t('timeline.title')}>{scopePicker}
+   <ListRefreshProgress view={request.loading} initial={!snapshot}/>
    <RefreshButton data-resync busy={busy} onClick={refresh} />
-   <span className="ml-auto text-xs text-fg-muted">{snapshot?t('timeline.snapshot',{time:date(snapshot.capturedAt,true)}):''}</span>
-  </header>
-  <div className="relative flex min-h-0 flex-1">
+   <span className="ml-auto text-xs text-fg-muted tabular-nums" title={snapshot?isoDateTime(snapshot.capturedAt):undefined}>{snapshot?t('timeline.snapshot',{time:date(snapshot.capturedAt)}):''}</span>
+  </WorkspaceToolbar>
+  <SnapshotBoundary request={request}>
+  <div className="relative flex min-h-0 min-w-0 flex-1">
    <div className="flex min-w-0 flex-1 flex-col">
     <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-line px-3 py-2 text-xs">
      <input className="min-w-32 flex-1 rounded-md border border-line bg-panel px-2 py-1 outline-none focus:border-accent" aria-label={t('timeline.search')} placeholder={t('timeline.search')} value={query} onChange={e=>setQuery(e.target.value)} onKeyDown={e=>{if(e.key==='Escape'){e.stopPropagation();setQuery('')}}}/>
@@ -70,7 +67,7 @@ export default function TimelineWorkspace({client,target,scope,scopePicker,drawe
       <svg viewBox="0 0 480 24" preserveAspectRatio="none" className="h-6 w-full" role="img" aria-label={t('timeline.density')}>
        {bins.map((b,i)=><g key={i}><rect x={i*10} y={24-(b.normal+b.warning)/maxDensity*24} width={8} height={b.normal/maxDensity*24} fill="var(--color-accent)" opacity=".4"/><rect x={i*10} y={24-b.warning/maxDensity*24} width={8} height={b.warning/maxDensity*24} fill="var(--color-warning)"/></g>)}
       </svg>
-      <div className="mt-1 flex justify-between gap-2 text-[10px] text-fg-muted">{[0,.5,1].map(f=><span key={f}>{snapshot?date(bounds.start+(bounds.end-bounds.start)*f):'—'}</span>)}</div>
+      <div className="mt-1 flex justify-between gap-2 text-[10px] text-fg-muted">{[0,.5,1].map(f=><span key={f} title={snapshot?isoDateTime(bounds.start+(bounds.end-bounds.start)*f):undefined}>{snapshot?date(bounds.start+(bounds.end-bounds.start)*f):'—'}</span>)}</div>
      </div>
     </div>
     {error&&<p role="alert" className="shrink-0 border-b border-line px-3 py-2 text-xs text-danger">{error}{snapshot&&' · '+t('timeline.stale')}</p>}
@@ -83,7 +80,6 @@ export default function TimelineWorkspace({client,target,scope,scopePicker,drawe
       if(rows[index]){setEventID(rows[index].event.id);virtual.scrollToIndex(index)}
      }
     }}>
-     {busy&&!snapshot&&<p role="status" className="p-4 text-sm text-fg-muted">{t('timeline.loading')}</p>}
      {!busy&&!rows.length&&<p role="status" className="p-4 text-sm text-fg-muted">{snapshot?.events.length?t('timeline.noMatches'):t('timeline.empty')}</p>}
      <div className="relative" style={{height:virtual.getTotalSize()}}>
       {virtual.getVirtualItems().map(item=>{
@@ -96,7 +92,7 @@ export default function TimelineWorkspace({client,target,scope,scopePicker,drawe
          <div className="truncate text-[10px] text-fg-muted">{event.subject.scope||t('graph.clusterResources')} · {event.subjectKind}/{event.subject.title??event.subject.name}{row.incomplete?' · '+t('timeline.incompleteChain'):''}</div>
         </div>
         <div role="gridcell" className="relative min-w-0 overflow-hidden pr-3">
-         <button className={'absolute inset-y-1 left-0 right-3 rounded-sm px-2 text-left text-xs outline-none focus-visible:ring-1 focus-visible:ring-accent '+(warning?'text-warning':'text-fg-muted')} aria-label={event.reason+' · '+event.subjectKind+'/'+(event.subject.title??event.subject.name)+' · '+date(event.lastAt,true)} onClick={()=>setEventID(event.id)}>
+         <button className={'absolute inset-y-1 left-0 right-3 rounded-sm px-2 text-left text-xs outline-none focus-visible:ring-1 focus-visible:ring-accent '+(warning?'text-warning':'text-fg-muted')} aria-label={event.reason+' · '+event.subjectKind+'/'+(event.subject.title??event.subject.name)+' · '+date(event.lastAt)} onClick={()=>setEventID(event.id)}>
           {event.lastAt>0&&<span aria-hidden="true" className={'absolute top-0 h-full rounded-sm border-l-2 '+(warning?'border-warning bg-warning/15':'border-accent bg-accent/10')} style={{left:left+'%',width:`max(3px, ${right-left}%)`}}/>}
           <span className="relative block truncate">{event.reason||event.type} · {t('timeline.count',{count:event.count})}</span>
          </button>
@@ -109,7 +105,7 @@ export default function TimelineWorkspace({client,target,scope,scopePicker,drawe
      <div className="flex flex-wrap items-center gap-2"><strong className={selected.type==='Warning'?'text-warning':''}>{selected.reason||selected.type}</strong><span className="text-fg-muted">{selected.type} · {t('timeline.count',{count:selected.count})}</span><button className={'ml-auto '+button} onClick={()=>setEventID('')}>{t('timeline.closeEvent')}</button></div>
      <p className="mt-1 whitespace-pre-wrap break-words">{selected.message}</p>
      {selected.messageTruncated&&<p className="text-warning">{t('timeline.messageTruncated')}</p>}
-     <p className="mt-2 text-fg-muted">{date(selected.firstAt,true)} → {date(selected.lastAt,true)}{selected.timeFallback?' · '+t('timeline.timeFallback'):''}</p>
+     <p className="mt-2 text-fg-muted"><span title={isoDateTime(selected.firstAt)}>{date(selected.firstAt)}</span> → <span title={isoDateTime(selected.lastAt)}>{date(selected.lastAt)}</span>{selected.timeFallback?' · '+t('timeline.timeFallback'):''}</p>
      {selectedRow&&<p className="mt-1 break-words text-fg-muted">{selectedRow.chain.map(r=>r.kindTitle+'/'+(r.ref.title??r.ref.name)).join(' → ')}</p>}
      <div className="mt-2 flex flex-wrap gap-2">
       <button className={button} disabled={!selected.openable} onClick={()=>openResource(selected.subject)}>{t('timeline.openResource')} · {selected.subjectKind}/{selected.subject.title??selected.subject.name}</button>
@@ -120,7 +116,8 @@ export default function TimelineWorkspace({client,target,scope,scopePicker,drawe
    </div>
    {subject&&<ResourceDrawer {...drawer} subject={subject} onClose={()=>setSubject(null)}/>}
   </div>
-  <LocationStatus>
+  </SnapshotBoundary>
+  <LocationStatus><span>{t('timeline.title')}</span>
    <span>{t('timeline.counts',{shown:rows.length,total:snapshot?.events.length??0})}</span>
    <span>{t('timeline.retention')}</span><span>{t('timeline.series')}</span>
    {snapshot?.discovery!=='ready'&&snapshot&&<span className="text-warning">{t('graph.discovery')}</span>}

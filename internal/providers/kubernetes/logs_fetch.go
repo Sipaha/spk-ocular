@@ -28,6 +28,7 @@ const logHeaderTimeout = 30 * time.Second
 type podLogRequest struct {
 	Namespace, Pod, Container string
 	Follow, Previous          bool
+	ZeroTail                  bool
 	TailLines                 int64     // 0: not set (all)
 	SinceTime                 time.Time // zero: not set; sent with second precision
 	LimitBytes                int64     // 0: not set
@@ -44,7 +45,7 @@ func (r podLogRequest) query() url.Values {
 	if r.Previous {
 		v.Set("previous", "true")
 	}
-	if r.TailLines > 0 {
+	if r.TailLines > 0 || r.ZeroTail {
 		v.Set("tailLines", strconv.FormatInt(r.TailLines, 10))
 	}
 	if !r.SinceTime.IsZero() {

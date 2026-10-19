@@ -312,7 +312,17 @@ body.log-select-drag [data-log-viewport], body.log-select-drag [data-log-viewpor
   .agents-permission:last-child { padding-bottom: 8px; }
   .agents-permission-row { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 12px; min-height: 34px; padding: 3px 0; }
   .agents-permission-label { display: flex; align-items: center; gap: 8px; width: 240px; flex-shrink: 0; }
-  .agents-permission input[type="checkbox"] { accent-color: var(--color-accent); width: 14px; height: 14px; flex-shrink: 0; }
+  .agents-permission input[type="checkbox"] { appearance:none; display:inline-grid; place-content:center; width:16px; height:16px; margin:0; flex-shrink:0; border:1px solid var(--color-fg-subtle); border-radius:2px; background:var(--color-app); color:var(--color-accent-fg); cursor:pointer; transition:none; }
+  .agents-permission input[type="checkbox"]::after { content:""; width:8px; height:5px; border-left:2px solid currentColor; border-bottom:2px solid currentColor; transform:translateY(-1px) rotate(-45deg); visibility:hidden; }
+  .agents-permission input[type="checkbox"]:checked { background:var(--color-accent); border-color:var(--color-accent); }
+  .agents-permission input[type="checkbox"]:checked::after { visibility:visible; }
+  .agents-permission input[type="checkbox"]:enabled:hover { border-color:var(--color-accent); }
+  .agents-permission input[type="checkbox"]:focus-visible { outline:2px solid var(--color-accent); outline-offset:2px; }
+  .agents-permission input[type="checkbox"]:disabled { opacity:.4; cursor:default; }
+  @media (forced-colors:active) {
+    .agents-permission input[type="checkbox"] { appearance:auto; }
+    .agents-permission input[type="checkbox"]::after { display:none; }
+  }
   .agents-kinds-button { max-width: min(100%, 260px); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-height: 26px; padding: 2px 8px; border: 1px solid var(--color-line); border-radius: var(--radius-md); text-align: left; font-size: 12px; }
   .agents-kinds-button:hover { background: var(--color-hover); }
   .agents-editor-footer { display: flex; flex-wrap: wrap; gap: 8px; flex-shrink: 0; padding: 12px 20px; border-top: 1px solid var(--color-line); background: var(--color-panel); }
@@ -486,12 +496,15 @@ html[data-tab-focus] :is(.connection-choice, .connection-more, .connection-row-a
   .connection-status-content h1 { font-size:24px; line-height:1.25; font-weight:600; overflow-wrap:anywhere; }
   .connection-endpoint { margin-top:8px; font-size:13px; font-family:var(--font-mono); color:var(--color-fg-muted); overflow-wrap:anywhere; }
   .connection-phase { display:flex; justify-content:center; align-items:center; gap:8px; margin-top:24px; font-size:16px; font-weight:500; }
-  .connection-attempt { margin-top:8px; font-size:13px; color:var(--color-fg-muted); }
-  .connection-hint { margin-top:8px; font-size:14px; color:var(--color-fg-muted); }
+  .connection-controls { position:relative; }
+  .connection-detail { display:flex; flex-direction:column; justify-content:center; min-height:42px; margin-top:8px; line-height:21px; }
+  .connection-attempt { font-size:13px; color:var(--color-fg-muted); }
+  .connection-hint { font-size:14px; color:var(--color-fg-muted); }
   .connection-primary-action { display:inline-flex; justify-content:center; align-items:center; gap:9px; min-height:40px; margin-top:24px; padding:8px 22px; border:1px solid transparent; border-radius:4px; background:var(--color-accent); color:var(--color-accent-fg); font-weight:600; }
   .connection-primary-action > svg { width:18px; height:18px; }
   .connection-primary-action:hover { filter:brightness(1.08); }
   .connection-primary-action:disabled { opacity:.55; }
+  .connection-error-space { position:absolute; top:100%; left:0; right:0; padding-bottom:16px; }
   .connection-last-error { max-height:200px; overflow:auto; margin-top:24px; padding:12px 14px; border:1px solid color-mix(in srgb,var(--color-warning) 25%,var(--color-line)); border-radius:4px; background:color-mix(in srgb,var(--color-app) 85%,transparent); font-size:13px; text-align:left; overflow-wrap:anywhere; }
   .empty-workspace.disconnected-workspace-surface .empty-workspace-content { padding-bottom:100px; text-align:center; }
   .empty-workspace.disconnected-workspace-surface .connection-icon { margin-inline:auto; }

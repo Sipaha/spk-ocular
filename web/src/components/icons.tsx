@@ -108,6 +108,7 @@ const actionPaths = {
   files: 'M3 7V5h6l2 3h10v12H3ZM3 8h8',
   edit: 'm4 16 12-12 4 4L8 20H4ZM13 7l4 4',
   actions: 'M5 12h.01M12 12h.01M19 12h.01',
+  scale: 'M3 14h6v6H3ZM15 14h6v6h-6ZM6 14v-4h12v4M12 10V3m-3 3 3-3 3 3',
   reconnect: 'M20 11a8 8 0 0 0-14-5L3 9M3 4v5h5M4 13a8 8 0 0 0 14 5l3-3m0 5v-5h-5',
   previous: 'M4 9a8 8 0 1 1-1 7M4 4v5h5m3-2v5l3 2',
   time: 'M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18ZM12 7v5l3 2',

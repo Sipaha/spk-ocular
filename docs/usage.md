@@ -72,8 +72,8 @@ row hints cannot overlap cell hints (including Message in object Events).
 The resource header shows the provider’s singular kind label beside the object
 name on the same text baseline, retaining the technical kind ID in its hover hint.
 Overflow is measured only for that cell before showing the hint; resizing does
-not scan the table or install per-cell observers. The resource toolbar omits the
-repeated section title and count; the selected navigation entry identifies the
+not scan the table or install per-cell observers. All workspace toolbars (resources, Helm, Graph, Timeline, Security and RBAC) omit
+the repeated section title and count; the selected navigation entry identifies the
 section. Its heading and count remain available to assistive technology.
 Resource navigation section headings have equal 8 px top/bottom padding.
 Known section names use matching stroke icons, including Favorites, Workloads,
@@ -154,6 +154,10 @@ same target. Connect is needed again after failed recovery, a restart, or an
 explicit Disconnect. Background authentication that cannot proceed without a
 person is a recovery failure, not an idle timeout.
 
+Connection status reserves its detail area while connecting, checking, retrying
+and cancelling. Error details remain below the controls without recentering the
+provider icon, connection name or endpoint.
+
 During connection, the page shows the actual phase, elapsed time, attempt number,
 last error, and time until a retry. Temporary availability failures get at most
 **three total attempts**. Authentication and configuration errors stop immediately.
@@ -226,6 +230,11 @@ namespace picker can select one, several or all namespaces. The canvas includes
 discovered readable resources (including custom resources and retained objects);
 cluster-scoped objects form a separate region. Empty explicit namespace sets do
 not widen to all namespaces.
+
+Loading and refresh show the common elapsed/progress and Cancel controls after
+two seconds. Cancellation stops the read and layout calculation; Retry starts a
+fresh request. Cancelled or late responses cannot republish the old graph.
+Byte counts are shown only when supplied by the transport.
 
 Drag the background to pan, use the wheel or zoom buttons to zoom, and choose
 **Fit graph** to return to the overview. Search finds resources across the chosen
@@ -557,6 +566,25 @@ only; placeholders cannot be written into Secret data. Real values are read or
 changed explicitly in **Details → Values → Change**. Value reads are not stored
 in SQLite or included in recent-object records.
 
+Application calendar dates use **dd.mm.yyyy** and local machine time (24-hour
+clock), independently of the selected UI language. Hovering a displayed timestamp
+shows its original ISO value. API data, YAML and original log messages retain
+their source timestamps. Relative ages remain relative.
+
+Kubernetes navigation places **Helm** directly after **Storage**, including
+the disconnected section preview.
+
+Deployment properties expose **Scale** directly on the action toolbar. It opens
+the same reviewed scaling dialog; the overflow menu retains the other actions.
+Its location summary uses the connection display name. Minus/plus controls adjust
+replicas within the supported range and still require a fresh Review.
+
+Pod properties show **Containers** and **Init Containers** as separate sections.
+Each container has its full name above its image; long values wrap within the
+panel. Restartable init containers stay under Init Containers with a Sidecar
+label. Ephemeral containers appear under **Debug Containers**. Empty sections
+are omitted. Other resource properties and the provider fact data are unchanged.
+
 ConfigMaps also have **Details → Values**, listing keys from `data` and
 `binaryData` with their decoded byte sizes. Each row has two icon actions, Edit
 and Delete. Edit reads the current value automatically into a large CodeMirror
@@ -624,6 +652,59 @@ side is empty. The clicked tab stays open for side actions; unrelated active
 tabs retain selection. Closing a group ends its streams/terminals through the
 same cleanup as individual close buttons and removes closed pins from workspace
 continuity. Opening the menu alone does not activate or close a tab.
+
+The information strip above log contents shows **Connection: name** using the
+connection display name, never its internal ID or configuration path, plus namespace/project
+when present, and resource. Period selection stays in the toolbar, without a
+second period/date label in the information strip. **All time** means no start-time
+constraint; the selected line limit and backend history bounds still apply.
+This strip is also present in detached log windows. An indeterminate spinner in
+its reserved right-hand slot stays visible while history is loading. Partial
+matches appear before the scan finishes; atomic previews replace earlier
+previews without accumulating duplicate rows. Preview traffic is capped at
+500 rows/256 KiB and coalesced to at most one update per 250 ms. An empty
+viewport says **Loading…** until history is ready; **No log lines** describes
+only the completed/current buffer, alongside any incompleteness warning.
+Clear is unavailable during filtered history loading so reconciliation cannot
+restore rows the user just cleared.
+
+The text filter runs on Ocular's backend before the history line limit and before
+lines enter the viewer buffer. It is case-insensitive and supports `*` for any
+text; fewer than two non-wildcard characters leave it disabled. Changing the
+filter reloads history after a short debounce, including in detached windows.
+For example, 500 with an ERROR filter selects up to the newest 500 matching
+history lines across the selected sources, then only matching live lines.
+Kubernetes and Docker do not provide this text predicate. Ocular progressively
+expands recent-tail requests (for example 500 → 1000 → 2000), stopping once enough
+matches are available or the retained history is exhausted. The initial history
+scan has a total budget of 10,000 raw lines across the selected sources, including
+records reread in overlapping requests; these APIs do not support offset pages.
+If the next larger window cannot fit, expansion stops, so fewer than 10,000
+unique lines may be inspected. The 16 MiB response-body byte budget is also shared across
+sources and overlapping windows; filtered live-view history has a 30-second
+read deadline (standalone finite Docker reads retain their two-minute deadline). Local readers enforce byte bounds even
+if the upstream ignores its limit. At most four source histories load in parallel
+within a group, under the existing global request slots. Live reads retain bounded
+batches and buffers, backpressure, cancellation and reconnect cursors. Truncation, unavailable sources
+and incomplete history remain visible; the filter cannot recover rotated logs.
+A filtered live view opens EOF-only capture alongside the finite history scan,
+so new matching records are collected while older windows are filtered.
+Timestamped history/live overlaps are reconciled by record multiplicity.
+Untimestamped ambiguous overlap is retained with an explicit possible-repeat
+warning rather than dropping potentially new records. The
+capture buffer is capped at 50,000 records/16 MiB; overflowing it reports a gap.
+Raw live decoding, including rejected lines, is paced at 1 MiB/s per view across
+all its sources. Faster producers apply TCP backpressure and can make the display
+lag; retained/rotated source history still limits recovery. Live capture uses at
+most half the existing provider request slots, preserving room for history;
+waiting sources are explicit. Closing/changing the query cancels and joins both
+readers. Download still exports retained history independently of the panel filter.
+Cancel active downloads in the Downloads panel; the log footer shows progress
+without an additional cancel action or changing its height.
+
+The toolbar places the server filter before local search and match navigation.
+Search and match navigation stay local to the already received matching log
+buffer, for both plain text and regex. Search does not read the server archive.
 
 Logs show all levels without severity toggle buttons or a default DEBUG filter.
 Opening or reactivating logs focuses the visible log viewport. `End` in that
@@ -747,6 +828,12 @@ bottom dock. Escape during a drag restores the previous size; panel widths
 survive navigation and, from 1.2.0, application restarts through the
 [workspace metadata](workspace-continuity.md).
 
+**Releases**, **Charts** and **Repositories & settings** are separate entries
+under Helm in the left navigation. There is no second section dropdown above
+the list. Refresh uses the same retained-content, delayed progress, Cancel and
+explicit Retry controls as the other workspaces; it does not insert a loading
+row or shift the table.
+
 Connected Kubernetes targets offer Helm Releases and Charts using the same
 resource table and detail-panel components as other sections. The tables support
 filtering, sorting and remembered column widths. Ocular embeds Helm
@@ -846,11 +933,13 @@ Save writes back to the selected container; Ctrl+S/Command+S also saves. Unsaved
 edits are protected when closing or opening another file. Browsing, expanding
 folders and refreshing the tree keep the open draft.
 In the desktop app, right-click either a file or a folder and choose
-**Download**. A native directory chooser selects the local destination. The
-selected file or entire folder is copied with its original name, including
+**Download**. The transfer starts in the system Downloads directory without a
+location prompt and opens the Downloads panel. The selected file or entire folder
+is copied with its original name, including
 binary files, hidden files and empty subfolders; the editor's 2 MiB limit does
-not apply. Existing destination names are refused, never overwritten or merged.
-Cancelling the chooser starts no transfer. Downloads read the container's saved
+not apply. Existing destination names receive a numbered suffix; files are never
+overwritten or merged. Cancel active transfers from the Downloads panel.
+Downloads read the container's saved
 contents, not an unsaved editor draft. The browser UI explains that this native
 operation requires the desktop app.
 
@@ -880,23 +969,30 @@ persisted in Ocular's settings or resource caches.
 
 ### Log windows, downloads and resizing
 
-**Download** reads all currently retained history of the selected log source in a
-separate finite archive. It uses the selected channel and previous-instance option,
+**Download** uses the timestamp/source display toggles and source labels selected
+when the download starts, matching the viewer’s local time format. Disabling
+both toggles saves only the original message text; timestamps or source names
+already inside the application message are preserved. Soft wrapping does not
+insert line breaks into the file. It reads all currently retained history of the
+selected log source in a separate finite archive. It uses the selected channel and previous-instance option,
 but ignores the viewer's line limit, time range, search and text filter. It does
 not export only the viewport or the bounded viewer buffer. **Copy** continues to
-copy the filtered loaded lines. Each exported line includes its original provider
-timestamp, when available, and source label; ANSI formatting is removed.
+copy the filtered loaded lines. Known source labels match the viewer; historical
+sources no longer in its buffer keep their full labels. ANSI formatting is removed.
 
-In desktop mode, including detached log windows, choose the destination before
-history reads start. Native and supported browser save pickers write chunks to a
+In desktop mode, including detached log windows, a normal click saves to the
+system Downloads directory without prompting, using a unique name instead of
+replacing existing files. Right-click the log download button to choose a location
+before history reads start. Native and supported browser save pickers write chunks to a
 staged file and replace the destination only after a complete stream. Progress
-shows lines/bytes, and **Cancel log download** stops the export. Closing its tab or
+shows lines/bytes, and the active row in **Downloads** can cancel the export. Closing its tab or
 changing source/channel cancels it. Cancelling the chooser starts no history read.
 Source failures, gaps, truncated lines, limits or an interrupted stream abort the
 staged download instead of silently saving a partial history as complete.
 
 The archive read is bounded to 1 GiB, 10000000 lines, 1000 sources and 5 minutes.
-Browsers without a streaming save picker use a 64 MiB in-memory download-manager
+Normal browser downloads, and browsers without a streaming save picker, use a
+64 MiB in-memory download-manager
 fallback and report an error beyond that size; use the desktop app or a streaming
 save picker for larger exports. Ctrl+S/Command+S invokes the same action. History
 is limited to what Kubernetes/Docker still retain: expired/rotated logs and deleted
@@ -936,7 +1032,10 @@ mouseup, and stops caret correction from pulling the scroll position back.
 
 The download button in the application header opens the Downloads popup, with
 a distinct outline and floating-window shadow separating it from the workspace.
-Detached log windows have the same button and share the list. Downloads stay visible while
+The popup aligns with the button’s right edge, four pixels below it, and stays
+within the viewport when the window is resized.
+Detached log windows share the main window list without an extra header button.
+A new download automatically opens the main Downloads panel. Downloads stay visible while
 switching targets; opening the popup never connects a target or changes grants.
 While a download is active, a thin track beneath the stationary button icon
 shows a runner moving left to right in a loop, without implying a percentage.
@@ -949,7 +1048,8 @@ with other windows through storage events/BroadcastChannel.
 
 The list covers container file/folder copies and log exports started through the
 Ocular UI. Compact rows show a file-type icon, filename, human-readable transferred
-size and localized relative time measured against the moment the popup opens. Relative
+size and localized relative time measured against the moment the popup opens.
+A reserved progress slot keeps row height stable when the progress bar disappears. Relative
 time is omitted for entries younger than one minute and stays fixed until the
 next opening; transfer status, progress and new entries continue updating. Hover
 the size or visible relative time for the exact date. Full paths are available through Copy path rather than repeated in every row. Active,
@@ -967,8 +1067,10 @@ not reconstruct missing causes. Native staged-export expiry is a failed timeout,
 while explicit cancellation and application/window closure keep their distinct
 states. No partial output is presented as a completed download.
 
-In desktop mode, completed entries offer **Open downloaded item**, **Show in
-folder** and **Copy path**. File opening uses the OS default application; folder
+In desktop mode, click a completed row (or press Enter/Space on it) to open the
+file with the OS default application. Rows also offer **Show in folder** and
+**Copy path**. Successful file opening or folder reveal closes the popup; failed
+opening keeps it visible with the error. Folder
 opening selects the item on Windows/macOS and opens its parent folder on Linux.
 Moved or deleted items report an error. Nothing opens automatically. Interrupted
 or failed downloads do not expose an actionable destination as a complete file.
@@ -984,9 +1086,8 @@ The row's **Remove from history** cross removes only that terminal entry and
 never deletes its file. The **Delete downloaded item** trash button is desktop-only:
 it previews the exact path, starts confirmation on Cancel, and permanently deletes
 the file or the folder and its contents after confirmation, then removes the row.
-Active transfers cannot be dismissed or deleted. Missing/replaced items or failed
-deletions remain in history with an error. Existing log-source cancellation and
-staging/overwrite rules remain unchanged.
+Active transfers can be cancelled from their row, but cannot be dismissed or deleted. Missing/replaced items or failed
+deletions remain in history with an error. Closing a log source also cancels its active export.
 
 Browser mode also lists UI log exports and shares metadata with detached windows.
 Successful save-picker exports are Completed; a Blob download is **Sent to browser
@@ -1001,6 +1102,12 @@ visible in-memory history for the current process instead of overwriting it.
 
 In resource properties, use **Use as comparison baseline**, then open another
 resource (also on another connected target) and choose **Compare with baseline**.
+The comparison baseline is indicated by the permanent icon in the app header.
+Click it to inspect or clear the baseline; no banner moves the workspace.
+Collapsed unchanged diff blocks can reveal 20 lines at a time above or below
+the boundary, retaining original line numbers and the existing paging limits.
+The same context controls apply to edit reviews and ConfigMap value diffs.
+
 The read-only dialog compares normalized saved YAML, preserving meaningful fields
 and array order. **Show service fields and status** includes otherwise hidden
 Kubernetes metadata and status. Secret payloads remain excluded. **Refresh**

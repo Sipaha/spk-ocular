@@ -76,17 +76,21 @@ type logGroup struct {
 	active   map[string]*groupSrc
 	finished map[string]bool
 	limited  string // the last "showing N of K" message
+	preview  *provider.LogPreview
 	done     chan string
 }
 
 type groupSrc struct {
-	key   string
-	pod   memberPod
-	ctr   string
-	src   *podSource
-	lines []provider.LogLine // backlog
-	cut   bool               // the backlog hit its byte budget
-	err   error              // the backlog request failed
+	key         string
+	pod         memberPod
+	ctr         string
+	src         *podSource
+	lines       []provider.LogLine // backlog
+	cut         bool               // the backlog hit its byte budget
+	scanLimited bool
+	liveOnly    bool
+	readBytes   int64
+	err         error // the backlog request failed
 }
 
 func (g *logGroup) run(ctx context.Context) (err error) {
@@ -112,11 +116,15 @@ func (g *logGroup) run(ctx context.Context) (err error) {
 		}
 		return g.sink.Ready()
 	}
-	if err := g.backlog(ctx, initial); err != nil {
-		return err
+	if !g.q.LiveOnly {
+		if err := g.backlog(ctx, initial); err != nil {
+			return err
+		}
 	}
-	if err := g.sink.Ready(); err != nil {
-		return err
+	if !g.q.LiveOnly {
+		if err := g.sink.Ready(); err != nil {
+			return err
+		}
 	}
 	if !g.q.Follow {
 		return nil
@@ -147,6 +155,11 @@ func (g *logGroup) run(ctx context.Context) (err error) {
 		}
 	}
 	start(initial)
+	if g.q.LiveOnly {
+		if err := g.sink.Ready(); err != nil {
+			return err
+		}
+	}
 	for {
 		// Reconcile with the current member set, and wait for changes after
 		// that same snapshot: a pod that came during the backlog (or between
@@ -274,6 +287,8 @@ func (g *logGroup) admit(late bool) ([]*groupSrc, <-chan struct{}, error) {
 // line read counts as consumed by its source's cursor, so the follow that
 // comes next resumes after it.
 func (g *logGroup) backlog(ctx context.Context, srcs []*groupSrc) error {
+	g.preview = provider.NewLogPreview(g.sink, g.q.Filter)
+	defer g.preview.Close()
 	if len(srcs) == 0 {
 		return nil
 	}
@@ -296,6 +311,9 @@ func (g *logGroup) backlog(ctx context.Context, srcs []*groupSrc) error {
 	}
 	close(work)
 	wg.Wait()
+	if err := g.preview.Close(); err != nil {
+		return err
+	}
 	if ctx.Err() != nil && g.q.Follow {
 		return ctx.Err()
 	}
@@ -314,6 +332,17 @@ func (g *logGroup) backlog(ctx context.Context, srcs []*groupSrc) error {
 		for _, l := range x.lines {
 			if l.TS != "" {
 				x.src.cur.add(l.TS)
+			}
+		}
+	}
+	for i := range lists {
+		lists[i] = provider.MatchingLogLines(g.q.Filter, lists[i])
+	}
+	for _, x := range srcs {
+		if x.liveOnly && g.q.Follow {
+			x.src.cur.reset()
+			if now := time.Now().UTC(); x.src.q.SinceTime.Before(now) {
+				x.src.q.SinceTime = now
 			}
 		}
 	}
@@ -352,8 +381,16 @@ func (g *logGroup) backlog(ctx context.Context, srcs []*groupSrc) error {
 			if err := x.src.requestFailedState(x.err); err != nil {
 				return err
 			}
+		case x.scanLimited:
+			if err := g.sink.State(x.src.id, provider.LogState{State: provider.LogTruncated, Message: provider.FilterScanLimited}); err != nil {
+				return err
+			}
 		case x.cut:
-			if err := g.sink.State(x.src.id, provider.LogState{State: provider.LogTruncated, Message: "only the first part of its recent lines fit the backlog budget; the rest follows"}); err != nil {
+			message := "only the first part of its recent lines fit the backlog budget; the rest follows"
+			if provider.NewLogFilter(g.q.Filter).Enabled() {
+				message = "history exceeded the byte budget; older matching lines may be missing"
+			}
+			if err := g.sink.State(x.src.id, provider.LogState{State: provider.LogTruncated, Message: message}); err != nil {
 				return err
 			}
 		}
@@ -364,19 +401,67 @@ func (g *logGroup) backlog(ctx context.Context, srcs []*groupSrc) error {
 // readBacklog: a non-follow request limited to per bytes; complete lines
 // only when the limit was hit (the cut line comes with the follow).
 func (g *logGroup) readBacklog(ctx context.Context, x *groupSrc, per int64) ([]provider.LogLine, bool, error) {
+	filter := provider.NewLogFilter(g.q.Filter)
+	if !filter.Enabled() {
+		return g.readBacklogWindow(ctx, x, per, tailOf(g.q))
+	}
+	window, ceiling := provider.FilterScanWindow(g.q, len(g.active))
+	var previous []provider.LogLine
+	remainingLines := ceiling
+	for {
+		lines, cut, err := g.readBacklogWindow(ctx, x, per, int64(window))
+		per -= x.readBytes
+		remainingLines -= len(lines)
+		if cut || err != nil {
+			if previous != nil {
+				lines = previous
+			} else {
+				x.liveOnly = true
+			}
+			return lines, cut, err
+		}
+		matches := 0
+		for _, line := range lines {
+			if filter.Match(line.Text) {
+				matches++
+			}
+		}
+		if g.q.TailLines > 0 && matches >= int(tailOf(g.q)) {
+			return lines, false, nil
+		}
+		if len(lines) < window {
+			return lines, false, nil
+		}
+		next := min(window*2, remainingLines)
+		if next <= window {
+			x.scanLimited = true
+			return lines, false, nil
+		}
+		if per <= 0 {
+			return lines, true, nil
+		}
+		previous = lines
+		window = next
+	}
+}
+
+func (g *logGroup) readBacklogWindow(ctx context.Context, x *groupSrc, per int64, tail int64) ([]provider.LogLine, bool, error) {
+	x.readBytes = 0
+	g.preview.Reset(x.src.id)
 	// the queue may have waited: never read a replacement by its name
 	if obs, synced, _, _ := x.pod.box.get(); synced && (!obs.exists || obs.uid != x.pod.uid) {
 		return nil, false, errMemberGone
 	}
 	rc, err := x.src.open(ctx, podLogRequest{
 		Namespace: g.ns, Pod: x.pod.name, Container: x.ctr, Previous: g.q.Previous,
-		TailLines: tailOf(g.q), SinceTime: g.q.SinceTime, LimitBytes: per,
+		TailLines: tail, SinceTime: g.q.SinceTime, LimitBytes: per,
 	})
 	if err != nil {
 		return nil, false, err
 	}
 	defer func() { _ = rc.Close() }()
-	cr := &countingReader{r: rc}
+	cr := &countingReader{r: io.LimitReader(rc, per+1)}
+	defer func() { x.readBytes = cr.n }()
 	lr := newLineReader(cr)
 	var out []provider.LogLine
 	for {
@@ -384,6 +469,12 @@ func (g *logGroup) readBacklog(ctx context.Context, x *groupSrc, per int64) ([]p
 		limitHit := cr.n >= per
 		if complete || (errors.Is(rerr, io.EOF) && !limitHit && (l.Text != "" || l.TS != "")) {
 			out = append(out, l)
+			if err := g.preview.Add(x.src.id, l); err != nil {
+				return nil, false, err
+			}
+			if tail > 0 && int64(len(out)) > tail {
+				return out[:tail], true, nil
+			}
 		}
 		if rerr != nil {
 			if errors.Is(rerr, io.EOF) {
@@ -485,4 +576,13 @@ func (h *mergeHeap) Pop() any {
 	x := old[len(old)-1]
 	*h = old[:len(old)-1]
 	return x
+}
+
+func (l *lockedSink) Preview(lines []provider.LogPreviewLine, final bool) error {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if p, ok := l.sink.(provider.LogPreviewSink); ok {
+		return p.Preview(lines, final)
+	}
+	return nil
 }

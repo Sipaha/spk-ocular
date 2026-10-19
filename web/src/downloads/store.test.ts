@@ -1,9 +1,16 @@
 import {beforeEach,describe,expect,it,vi} from 'vitest'
 vi.mock('../api/client',()=>({isDesktop:()=>false}))
-import {beginBrowserDownload,dismissDownload,isDownloadUnseen,markDownloadsViewed,clearDownloadHistory,updateBrowserDownload,useDownloads,watchDownloads} from './store'
+import {cancelDownload,beginBrowserDownload,dismissDownload,isDownloadUnseen,markDownloadsViewed,clearDownloadHistory,updateBrowserDownload,useDownloads,watchDownloads} from './store'
 
 beforeEach(()=>{localStorage.clear();useDownloads.setState({records:[],storageError:false,error:false,viewed:[]})})
 describe('browser download metadata',()=>{
+ it('routes cancellation only to the active owner and ignores completed jobs',async()=>{
+  const cancel=vi.fn()
+  const id=beginBrowserDownload('pending.log',cancel)
+  await cancelDownload(id);expect(cancel).toHaveBeenCalledOnce()
+  updateBrowserDownload(id,5,'cancelled')
+  await cancelDownload(id);expect(cancel).toHaveBeenCalledOnce()
+ })
  it('retains only a safe first failure reason and removes unrecognized properties from restored history',()=>{
   const id=beginBrowserDownload('failed.log');updateBrowserDownload(id,12,'failed','permission');updateBrowserDownload(id,99,'failed','write')
   expect(useDownloads.getState().records.find(r=>r.id===id)).toMatchObject({failureReason:'permission',bytes:12})

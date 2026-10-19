@@ -1,3 +1,4 @@
+import { navGroups } from './Workspace'
 import { act, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -25,6 +26,15 @@ async function open(f: ReturnType<typeof fakeClient>) {
   render(<App client={f.client} />)
   return await screen.findByRole('navigation', { name: 'resources' })
 }
+
+it('places Kubernetes Helm after Storage without changing provider data, other providers or inner kinds', () => {
+ const kinds=['Workloads','Storage','Cluster','Access Control','Helm','API groups'].map((group,index)=>({...podsKind,id:'kind-'+index,group}))
+ const before=JSON.stringify(kinds)
+ expect(navGroups(kinds,'kubernetes').map(g=>g.group)).toEqual(['Workloads','Storage','Helm','Cluster','Access Control','API groups'])
+ expect(navGroups(kinds,'compose').map(g=>g.group)).toEqual(kinds.map(k=>k.group))
+ expect(navGroups(kinds.filter(k=>k.group!=='Storage'),'kubernetes').map(g=>g.group)).toEqual(['Workloads','Cluster','Access Control','Helm','API groups'])
+ expect(JSON.stringify(kinds)).toBe(before)
+})
 
 describe('navigation of discovered kinds', () => {
   it('API groups fold whole, folded by default; inside, groups by API group; one kind has no level; the header counts kinds', async () => {

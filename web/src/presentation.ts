@@ -11,6 +11,9 @@ const rows = [
 'Class|Класс|类别|Clase|Klasse|Classe|Classe|クラス',
 'Config files|Файлы конфигурации|配置文件|Archivos de configuración|Konfigurationsdateien|Fichiers de configuration|Arquivos de configuração|設定ファイル',
 'Containers|Контейнеры|容器|Contenedores|Container|Conteneurs|Contêineres|コンテナ',
+'Init Containers|Init-контейнеры|初始化容器|Contenedores de inicialización|Init-Container|Conteneurs d’initialisation|Contêineres de inicialização|初期化コンテナ',
+'Debug Containers|Отладочные контейнеры|调试容器|Contenedores de depuración|Debug-Container|Conteneurs de débogage|Contêineres de depuração|デバッグコンテナ',
+'Sidecar|Sidecar|边车|Sidecar|Sidecar|Sidecar|Sidecar|サイドカー',
 'Count|Количество|数量|Cantidad|Anzahl|Nombre|Quantidade|数',
 'Current|Текущее|当前|Actual|Aktuell|Actuel|Atual|現在',
 'Desired|Желаемое|期望|Deseados|Gewünscht|Souhaité|Desejado|希望数',
@@ -78,9 +81,13 @@ export function kindLabel(provider: string, kind: KindDescriptor): string {
  if(kind.workspace === 'security') return t('security.title')
  if(kind.workspace === 'timeline') return t('timeline.title')
  if(kind.workspace === 'graph') return t('graph.title')
+ if(kind.workspace === 'helm-releases') return t('helm.releases')
+ if(kind.workspace === 'helm-charts') return t('helm.charts')
+ if(kind.workspace === 'helm-settings') return t('helm.settings')
   if (provider === 'kubernetes') {
     if (kind.id === 'ocular.helm.releases') return t('helm.releases')
     if (kind.id === 'ocular.helm.charts') return t('helm.charts')
+    if (kind.id === 'ocular.helm.settings') return t('helm.settings')
     if (kind.id === 'problems') return columnLabel(kind.title)
   }
   return provider === 'compose' ? columnLabel(kind.title) : kind.title

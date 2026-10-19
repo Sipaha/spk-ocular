@@ -4,6 +4,9 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { Ref } from '../api/types'
 import { fakeClient, k8s } from '../test/fakeClient'
 import LogViewer from './LogViewer'
+import { useStore } from '../store'
+import { LogWindowBridge, type WindowMessage } from './windowBridge'
+import { append, EMPTY_WINDOW, Ingest } from './buffer'
 
 /** A controllable NDJSON response body. */
 function stream() {
@@ -20,15 +23,104 @@ function stream() {
 
 const pod: Ref = { provider: 'kubernetes', target: 'dev', scope: 'ns', kind: 'apps/deployments', name: 'web', uid: 'u1' }
 
-afterEach(() => vi.unstubAllGlobals())
+afterEach(() => { vi.unstubAllGlobals(); useStore.setState({ view: null }) })
 
 describe('LogViewer', () => {
+  it('shows atomic partial history with a reserved loader and replaces it before live appends', async () => {
+    const { client: c } = fakeClient([k8s('dev')])
+    const body = stream()
+    vi.stubGlobal('fetch', vi.fn(async () => body.response))
+    const { container } = render(<LogViewer client={c} subject={pod} active />)
+    await waitFor(() => expect(c.openLogStream).toHaveBeenCalledTimes(1))
+    expect(container.querySelector('[data-log-loading]')).toBeInTheDocument()
+    expect(screen.queryByText('No log lines')).not.toBeInTheDocument()
+    expect(container.querySelector('[data-log-empty-state]')).toHaveTextContent('Loading…')
+    act(() => body.send(
+      { k: 'source', id: 1, key: 'pod/app', label: 'pod/app' },
+      { k: 'history-start' },
+      { k: 'lines', s: 1, l: [['2026-10-19T00:00:00Z', 'ERROR partial']] },
+      { k: 'history-end' },
+    ))
+    await screen.findByText('ERROR partial')
+    expect(container.querySelector('[data-log-loading]')).toBeInTheDocument()
+    act(() => body.send(
+      { k: 'history-start' },
+      { k: 'lines', s: 1, l: [['2026-10-19T00:00:00Z', 'ERROR partial'], ['2026-10-19T00:00:01Z', 'ERROR captured live']] },
+      { k: 'history-end' },
+      { k: 'ready' },
+    ))
+    await screen.findByText('ERROR captured live')
+    expect(screen.getAllByText('ERROR partial')).toHaveLength(1)
+    expect(screen.getByLabelText('line count')).toHaveTextContent('2 lines')
+    expect(container.querySelector('[data-log-loading]')).not.toBeInTheDocument()
+    act(() => body.send({ k: 'lines', s: 1, l: [['2026-10-19T00:00:02Z', 'ERROR newest']] }))
+    await screen.findByText('ERROR newest')
+    expect(screen.getByLabelText('line count')).toHaveTextContent('3 lines')
+    expect(c.openLogStream).toHaveBeenCalledTimes(1)
+  })
+
+  it('shows an empty state only after history is ready', async () => {
+    const { client: c } = fakeClient([k8s('dev')])
+    const body = stream()
+    vi.stubGlobal('fetch', vi.fn(async () => body.response))
+    const { container } = render(<LogViewer client={c} subject={pod} active />)
+    await waitFor(() => expect(c.openLogStream).toHaveBeenCalledTimes(1))
+    expect(screen.queryByText('No log lines')).not.toBeInTheDocument()
+    act(() => body.send({ k: 'ready' }))
+    await screen.findByText('No log lines')
+    expect(container.querySelector('[data-log-loading]')).not.toBeInTheDocument()
+  })
+
+  it('a detached viewer rejects frames, snapshots, status and resets from a previous filter', async () => {
+    const { client: c } = fakeClient([k8s('dev')])
+    const bridge = new LogWindowBridge('fenced-view', 'guest')
+    const listeners = new Set<(message: WindowMessage) => void>()
+    vi.spyOn(bridge, 'listen').mockImplementation(listener => { listeners.add(listener); return () => { listeners.delete(listener) } })
+    const emit = (type: string, payload: unknown) => act(() => {
+      for (const listener of listeners) listener({ id: bridge.id, sender: 'owner', type, payload })
+    })
+    render(<LogViewer client={c} subject={pod} active bridge={bridge} initial={{ channel: 'app', tail: 500, since: null, previous: false, showTime: false, showSource: null, wrap: false, follow: true, filterText: 'WARN' }} />)
+    await waitFor(() => expect(listeners.size).toBeGreaterThan(0))
+    const query = { channel: 'app', previous: false, follow: true, tailLines: 500, filter: 'WARN' }
+    const stale = { ...query, filter: 'INFO' }
+    emit('frame', { query, frame: { k: 'source', id: 1, key: 'current/app', label: 'current/app' } })
+    emit('frame', { query, frame: { k: 'lines', s: 1, l: [['2026-10-19T00:00:00Z', 'WARN current']] } })
+    emit('frame', { query, frame: { k: 'ready' } })
+    await screen.findByText('WARN current')
+    for (const frame of [{ k: 'history-start' }, { k: 'lines', s: 1, l: [['', 'INFO stale']] }, { k: 'history-end' }]) emit('frame', { query: stale, frame })
+    const staleWindow = append(EMPTY_WINDOW, new Ingest().entries(1, [['', 'INFO stale snapshot']]))
+    emit('snapshot', { query: stale, win: staleWindow, nextId: 2, carry: [], sources: [], status: { phase: 'live' } })
+    emit('status', { query: stale, status: { phase: 'error', message: 'stale status' } })
+    emit('reset', stale)
+    expect(screen.getByText('WARN current')).toBeInTheDocument()
+    expect(screen.queryByText('INFO stale')).not.toBeInTheDocument()
+    expect(screen.getByLabelText('stream state')).toHaveTextContent('Live')
+    expect(screen.getByLabelText('stream state')).not.toHaveTextContent('stale status')
+    expect(c.openLogStream).not.toHaveBeenCalled()
+  })
+
+  it('uses the connection catalog display name and follows renames without exposing the target ID', async () => {
+    const target = 'file:/home/user/.kube/cloud.yaml:admin@cluster'
+    const { client: c, state } = fakeClient([k8s(target, { title: 'Cloud production' })])
+    useStore.setState({ view: state.view })
+    const body = stream()
+    vi.stubGlobal('fetch', vi.fn(async () => body.response))
+    const { container } = render(<LogViewer client={c} subject={{ ...pod, target }} active />)
+    await screen.findByText('Cloud production')
+    const strip = container.querySelector('[data-log-context]')!
+    expect(strip).toHaveTextContent('Connection: Cloud production')
+    expect(strip.innerHTML).not.toContain(target)
+    act(() => useStore.setState({ view: { ...state.view, groups: state.view.groups.map(group => ({ ...group, targets: group.targets.map(t => ({ ...t, title: 'Renamed cloud' })) })) } }))
+    expect(strip).toHaveTextContent('Connection: Renamed cloud')
+  })
+
   it('streams lines from several sources with ANSI, search and text filters; gone asks to reopen', async () => {
     const { client: c } = fakeClient([k8s('dev')])
     c.logInfo = vi.fn(async () => ({ channels: [{ id: 'app', title: 'app' }], defaultChannel: 'app', aggregate: true, previous: false }))
     const s1 = stream()
     const s2 = stream()
-    const fetchMock = vi.fn().mockResolvedValueOnce(s1.response).mockResolvedValueOnce(s2.response)
+    const s3 = stream()
+    const fetchMock = vi.fn().mockResolvedValueOnce(s1.response).mockResolvedValueOnce(s2.response).mockResolvedValueOnce(s3.response)
     vi.stubGlobal('fetch', fetchMock)
 
     render(<LogViewer client={c} subject={pod} active />)
@@ -58,20 +150,29 @@ describe('LogViewer', () => {
 
     expect(screen.queryByRole('button', { name: /^(DEBUG|INFO|ERROR|WARN|TRACE|UNKNOWN)$/ })).not.toBeInTheDocument()
     await user.type(screen.getByLabelText('Filter (*)'), 'INFO')
+    await waitFor(() => expect(c.openLogStream).toHaveBeenCalledTimes(2))
+    expect(c.openLogStream).toHaveBeenLastCalledWith(pod, expect.objectContaining({ filter: 'INFO' }))
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2))
+    act(() => s2.send(
+      { k: 'source', id: 1, key: 'pa/app', label: 'web-5d8f-abcde/app', channel: 'app' },
+      { k: 'source', id: 2, key: 'pb/app', label: 'web-5d8f-fghij/app', channel: 'app' },
+      { k: 'lines', s: 1, l: [['2026-09-29T10:00:01.5Z', 'INFO started ok']] },
+      { k: 'ready' },
+    ))
     await waitFor(() => expect(screen.queryByText(/boom/)).not.toBeInTheDocument())
-    expect(screen.getByLabelText('line count')).toHaveTextContent('1 of 2 lines')
+    expect(screen.getByLabelText('line count')).toHaveTextContent('1 lines')
 
-    act(() => s1.send({ k: 'state', s: 2, state: 'waiting', msg: 'the container exited (code 1); waiting for it to restart' }))
+    act(() => s2.send({ k: 'state', s: 2, state: 'waiting', msg: 'the container exited (code 1); waiting for it to restart' }))
     await screen.findByText(/waiting for it to restart/)
 
     act(() => {
-      s1.send({ k: 'end', reason: 'gone' })
-      s1.close()
+      s2.send({ k: 'end', reason: 'gone' })
+      s2.close()
     })
     await screen.findByText('The session was closed (context changed)', { exact: false })
     await user.click(screen.getByRole('button', { name: 'Reopen' }))
-    await waitFor(() => expect(c.openLogStream).toHaveBeenCalledTimes(2))
-    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2))
+    await waitFor(() => expect(c.openLogStream).toHaveBeenCalledTimes(3))
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(3))
   })
 
   it('a stream ending with the provider\'s reason says it by key', async () => {

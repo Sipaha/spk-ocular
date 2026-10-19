@@ -1,8 +1,9 @@
+import { localDate } from '../dates'
 import { lazy, Suspense, useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import type { Client } from '../api/client'
 import type { Resource, ResourceRevision } from '../api/types'
-import { getLanguage, t } from '../i18n'
+import { t } from '../i18n'
 import { EditDiff } from '../edit/EditDiff'
 import { focusMark, restoreFocus } from '../shortcuts'
 import { Select } from './Select'
@@ -29,7 +30,7 @@ export function DeploymentRevisions({client,resource}:{client:Client;resource:Re
               {revision.cause && <div className="truncate text-[11px] text-fg-subtle" title={revision.cause}>{revision.cause}</div>}
             </td>
             <td className="px-2 py-1 tabular-nums text-fg-muted" title={t('revisions.replicas',{ready:revision.ready,total:revision.replicas})}>{revision.ready}/{revision.replicas}</td>
-            <td className="px-2 py-1 whitespace-nowrap tabular-nums text-fg-subtle" title={new Date(revision.created).toLocaleString(getLanguage())}>{new Date(revision.created).toLocaleDateString(getLanguage())}</td>
+            <td className="px-2 py-1 whitespace-nowrap tabular-nums text-fg-subtle" title={revision.created}>{localDate(revision.created)}</td>
             <td className="px-1 py-1"><div className="flex items-center gap-1">
               <CompactDetailAction label={t('revisions.view')} onClick={()=>setOpened({revision,compare:false})}><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" aria-hidden="true"><path d="m5 4-4 4 4 4m6-8 4 4-4 4M9.5 2l-3 12"/></svg></CompactDetailAction>
               <CompactDetailAction label={t('revisions.compare')} onClick={()=>setOpened({revision,compare:true})}><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" aria-hidden="true"><path d="M2 2h5v12H2zM9 2h5v12H9zM3.5 5h2m-2 3h2m5-3h2m-1-1v2m-1 4h2"/></svg></CompactDetailAction>
@@ -83,7 +84,7 @@ function RevisionDialog({client,resource,revision,initialCompare,onClose}:{clien
         {compare&&<><span className="ml-2 text-fg-subtle">{t('revisions.baseline')}</span><Select label={t('revisions.baseline')} value={baseline} options={[{value:'current',label:t('revisions.deployment')},...(source.revisions ?? []).filter(item=>item.ref.uid!==revision.ref.uid).map(item=>({value:item.ref.uid||item.ref.name,label:t('revisions.number',{number:item.number})}))]} className="text-xs" onChange={value=>{setBaseline(value);setBaselineError('');setBefore(value==='current'?source.templateYAML ?? null:null)}}/></>}
       </div>
       <div className="min-h-0 flex-1 overflow-auto" data-revision-content>
-        {error || (compare&&baselineError) ? <p role="alert" className="p-3 text-sm text-danger">{error||baselineError}</p> : text===null || (compare&&before===null) ? <p role="status" className="p-3 text-sm text-fg-subtle">{t('app.loading')}</p> : compare && before===text ? <p className="p-3 text-sm text-fg-subtle">{t('revisions.identical')}</p> : compare ? <div className="p-3"><EditDiff key={`${baseline}:${text}`} before={before!} after={text} label={t('revisions.compare')}/></div> : <Suspense fallback={<pre className="p-3 font-mono text-[13px]">{text}</pre>}><YamlView text={text} label={t('revisions.template')}/></Suspense>}
+        {error || (compare&&baselineError) ? <p role="alert" className="p-3 text-sm text-danger">{error||baselineError}</p> : text===null || (compare&&before===null) ? <p role="status" className="p-3 text-sm text-fg-subtle">{t('app.loading')}</p> : compare && before===text ? <p className="p-3 text-sm text-fg-subtle">{t('revisions.identical')}</p> : compare ? <div className="p-3"><EditDiff key={`${baseline}:${text}`} before={before!} after={text} label={t('revisions.compare')}/></div> : <Suspense fallback={<p role="status" className="p-3 text-sm text-fg-subtle">{t('app.loading')}</p>}><YamlView text={text} label={t('revisions.template')}/></Suspense>}
       </div>
     </section>
   </div>,document.body)

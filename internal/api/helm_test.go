@@ -52,6 +52,13 @@ func TestHelmUIBoundaryScopesAndRevision(t *testing.T) {
 		}
 	}
 	require.True(t, found)
+	var helmWorkspaces []string
+	for _, kind := range kinds.Kinds {
+		if kind.Group == "Helm" {
+			helmWorkspaces = append(helmWorkspaces, kind.Workspace)
+		}
+	}
+	require.Equal(t, []string{"helm-releases", "helm-charts", "helm-settings"}, helmWorkspaces)
 	kinds, err = s.ListKinds(t.Context(), synthetic.ID, synthetic.Target)
 	require.NoError(t, err)
 	for _, k := range kinds.Kinds {

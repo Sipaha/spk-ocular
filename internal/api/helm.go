@@ -48,6 +48,7 @@ func helmKinds() []core.KindDescriptor {
 	return []core.KindDescriptor{
 		{ID: "ocular.helm.releases", Title: "Releases", Group: "Helm", Workspace: "helm-releases", Scoped: true, Columns: []core.Column{}},
 		{ID: "ocular.helm.charts", Title: "Charts", Group: "Helm", Workspace: "helm-charts", Columns: []core.Column{}},
+		{ID: "ocular.helm.settings", Title: "Repositories & settings", Group: "Helm", Workspace: "helm-settings", Columns: []core.Column{}},
 	}
 }
 

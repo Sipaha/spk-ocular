@@ -1,12 +1,14 @@
 import {beforeEach,describe,expect,it,vi} from 'vitest'
 import {fakeClient,k8s} from '../test/fakeClient'
 import {downloadLogHistory} from './downloadHistory'
+import {fmtTime} from './row'
 import {openLogDownload} from './save'
 import type {Ref} from '../api/types'
 vi.mock('./save',async original=>({...await original<typeof import('./save')>(),openLogDownload:vi.fn()}))
 const subject:Ref={provider:'kubernetes',target:'dev',kind:'pods',scope:'ns',name:'app',uid:'old-uid'}
 const source={k:'source',id:1,key:'old-uid/app',label:'app/main'}
 const complete={k:'end',reason:'done'}
+const format={showTime:true,showSource:true,labelOf:(_key:string,fallback:string)=>fallback}
 function response(frames:unknown[],finish=true){
  let controller!:ReadableStreamDefaultController<Uint8Array>
  const body=new ReadableStream<Uint8Array>({start:c=>{controller=c},cancel:()=>{}})
@@ -22,20 +24,29 @@ function setup(frames:unknown[]){
 }
 beforeEach(()=>{vi.unstubAllGlobals();vi.clearAllMocks()})
 describe('full retained log history download',()=>{
- it('exports all history, outside the viewport/buffer, preserving channel, previous selection, Unicode and timestamp provenance',async()=>{
+ it('exports all history, outside the viewport/buffer, preserving channel, previous selection, Unicode and configured timestamp formatting',async()=>{
   const tuples=Array.from({length:2000},(_,i)=>['2026-10-11T01:00:00Z',i===3?'\x1b[32mпривет\x1b[0m':`history ${i}`])
   const {writer,client}=setup([source,{k:'lines',s:1,l:tuples},complete])
-  const result=await downloadLogHistory(client,subject,'selected',true,new AbortController().signal,'window')
+  const result=await downloadLogHistory(client,subject,'selected',true,format,new AbortController().signal,'window')
   expect(client.openLogHistory).toHaveBeenCalledWith(subject,'selected',true,expect.any(AbortSignal))
   expect(client.openLogStream).not.toHaveBeenCalled()
   const text=writer.write.mock.calls.map(call=>call[0]).join('')
-  expect(text).toContain('history 0\n');expect(text).toContain('history 1999\n');expect(text).toContain('[app/main] привет\n');expect(text).not.toContain('\x1b')
+  expect(text).toContain('history 0\n');expect(text).toContain('history 1999\n');expect(text).toContain('app/main привет\n');expect(text).not.toContain('\x1b')
   expect(result).toEqual({path:'history.log',lines:2000,bytes:new TextEncoder().encode(text).length})
   expect(writer.close).toHaveBeenCalledOnce();expect(writer.abort).not.toHaveBeenCalled()
  })
+ it.each([[false,false],[true,false],[false,true],[true,true]])('uses configured time=%s and source=%s with viewer labels keyed independently of stream IDs',async(showTime,showSource)=>{
+  const timestamp='2026-10-11T01:02:03.456Z'
+  const {writer,client}=setup([source,{k:'source',id:92,key:'other/main',label:'other/main'},{k:'lines',s:1,l:[[timestamp,'\x1b[32mпривет [app time]\x1b[0m']]},{k:'lines',s:92,l:[['','fallback']]},complete])
+  await downloadLogHistory(client,subject,'',false,{showTime,showSource,labelOf:(key,fallback)=>key==='old-uid/app'?'short   ':fallback},new AbortController().signal)
+  const text=writer.write.mock.calls.map(call=>call[0]).join('')
+  expect(text).toBe(`${showTime?fmtTime(timestamp)+' ':''}${showSource?'short    ':''}привет [app time]\n${showTime?'             ':''}${showSource?'other/main ':''}fallback\n`)
+  expect(text).not.toContain(timestamp)
+  expect(writer.close).toHaveBeenCalledOnce()
+ })
  it('does not open a source when the destination chooser is cancelled',async()=>{
   const {client}=setup([]);vi.mocked(openLogDownload).mockResolvedValue(null)
-  expect(await downloadLogHistory(client,subject,'',false,new AbortController().signal)).toBeNull()
+  expect(await downloadLogHistory(client,subject,'',false,format,new AbortController().signal)).toBeNull()
   expect(client.openLogHistory).not.toHaveBeenCalled();expect(fetch).not.toHaveBeenCalled()
  })
  it.each([
@@ -53,14 +64,14 @@ describe('full retained log history download',()=>{
   ['bytes after end',[source,complete,{k:'lines',s:1,l:[['','late']]}]],
  ] as const)('aborts the staged destination for %s',async(_name,frames)=>{
   const {writer,client}=setup([...frames])
-  await expect(downloadLogHistory(client,subject,'',false,new AbortController().signal)).rejects.toThrow()
+  await expect(downloadLogHistory(client,subject,'',false,format,new AbortController().signal)).rejects.toThrow()
   expect(writer.abort).toHaveBeenCalledWith('failed',_name==='owner closed'?'source_unavailable':_name==='deleted source'?'source_unavailable':'incomplete');expect(writer.close).not.toHaveBeenCalled()
  })
  it('cancels a pending read and aborts the destination, never committing received prefixes',async()=>{
   const {writer,client}=setup([])
   vi.stubGlobal('fetch',vi.fn(async()=>response([source,{k:'lines',s:1,l:[['','prefix']]}],false)))
   const controller=new AbortController()
-  const pending=downloadLogHistory(client,subject,'',false,controller.signal)
+  const pending=downloadLogHistory(client,subject,'',false,format,controller.signal)
   const rejected=expect(pending).rejects.toMatchObject({name:'AbortError'})
   await vi.waitFor(()=>expect(writer.write).toHaveBeenCalled())
   controller.abort();await rejected
@@ -70,7 +81,7 @@ describe('full retained log history download',()=>{
   const {writer,client}=setup([])
   let choose!:(value:typeof writer)=>void
   vi.mocked(openLogDownload).mockReturnValue(new Promise(resolve=>{choose=resolve}))
-  const controller=new AbortController(),pending=downloadLogHistory(client,subject,'',false,controller.signal)
+  const controller=new AbortController(),pending=downloadLogHistory(client,subject,'',false,format,controller.signal)
   const rejected=expect(pending).rejects.toMatchObject({name:'AbortError'})
   controller.abort();choose(writer);await rejected
   expect(client.openLogHistory).not.toHaveBeenCalled();expect(writer.abort).toHaveBeenCalled()
@@ -78,12 +89,12 @@ describe('full retained log history download',()=>{
  it('aborts a failed disk write and reports server export limits without saving a prefix',async()=>{
   const {writer,client}=setup([source,{k:'lines',s:1,l:[['','entry']]},complete])
   writer.write.mockRejectedValue(new Error('disk full'))
-  await expect(downloadLogHistory(client,subject,'',false,new AbortController().signal)).rejects.toThrow('disk full')
+  await expect(downloadLogHistory(client,subject,'',false,format,new AbortController().signal)).rejects.toThrow('disk full')
   expect(writer.abort).toHaveBeenCalledWith('failed','write')
   expect(writer.close).not.toHaveBeenCalled();expect(writer.abort).toHaveBeenCalled()
   writer.write.mockResolvedValue(undefined)
   vi.stubGlobal('fetch',vi.fn(async()=>response([source,{k:'end',reason:'error',class:'limit'}])))
-  await expect(downloadLogHistory(client,subject,'',false,new AbortController().signal)).rejects.toThrow('History export limit')
+  await expect(downloadLogHistory(client,subject,'',false,format,new AbortController().signal)).rejects.toThrow('History export limit')
   expect(writer.abort).toHaveBeenCalledWith('failed','limit')
   expect(writer.close).not.toHaveBeenCalled()
  })

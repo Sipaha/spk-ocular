@@ -79,6 +79,29 @@ describe('ActionDialog', () => {
     expect(where).not.toHaveTextContent('Namespace')
   })
 
+  it('shows the bound connection display name instead of its provider context', async () => {
+    const target=k8s('prod',{title:'Claude Clan'})
+    useStore.setState({view:{groups:[{provider:'kubernetes',title:'Kubernetes',targets:[target],problems:[],scopeNames:k8sScopeNames}],selected:null}})
+    const {dialog}=setup(restart)
+    await within(dialog).findByRole('button',{name:'Restart'})
+    expect(within(dialog).getByLabelText('where')).toHaveTextContent('ConnectionClaude Clan')
+    expect(within(dialog).getByLabelText('where')).not.toHaveTextContent('prod-ctx')
+  })
+
+  it('steps replica counts within bounds and still reviews before any run', async () => {
+    const {dialog,f}=setup(scale,p=>planOf(scale,p,{current:1}))
+    const input=await within(dialog).findByRole('textbox',{name:'Replicas'})
+    await waitFor(()=>expect(input).toHaveValue('1'))
+    const minus=within(dialog).getByRole('button',{name:'Decrease replicas'}),plus=within(dialog).getByRole('button',{name:'Increase replicas'})
+    await userEvent.click(minus);expect(input).toHaveValue('0');expect(minus).toBeDisabled()
+    await userEvent.click(plus);expect(input).toHaveValue('1')
+    await userEvent.clear(input);await userEvent.type(input,'10');expect(plus).toBeDisabled()
+    expect(f.client.runAction).not.toHaveBeenCalled()
+    await userEvent.click(within(dialog).getByRole('button',{name:'Review'}))
+    await waitFor(()=>expect(f.client.prepareAction).toHaveBeenLastCalledWith(ref,'scale',{count:10}))
+    expect(f.client.runAction).not.toHaveBeenCalled()
+  })
+
   it('shows where, what and the rights; the run carries the plan back', async () => {
     const { f, onClose, dialog } = setup(restart)
     const confirm = await within(dialog).findByRole('button', { name: 'Restart' })

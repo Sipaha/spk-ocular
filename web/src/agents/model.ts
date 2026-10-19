@@ -52,8 +52,8 @@ export function toGrants(scopes: ScopeGrants[]): AgentGrant[] {
     for (const verb of Object.keys(s.verbs).sort(verbOrder)) {
       const v = s.verbs[verb]
       const g: AgentGrant = { scope: s.scope.mode === 'one' ? { mode: 'one', name: s.scope.name } : { mode: s.scope.mode }, verb, kinds: v.kinds ? [...v.kinds].sort() : null }
-      // Only a grant of kinds named skips the confirmation (all kinds never do).
-      if (v.noConfirm && v.kinds) g.noConfirm = true
+      // Exec is scope-wide; actions and edits skip confirmation only for named kinds.
+      if (v.noConfirm && (v.kinds || verb === VERB_EXEC)) g.noConfirm = true
       out.push(g)
     }
   }
@@ -135,7 +135,7 @@ export function problems(scopes: ScopeGrants[], options: (mode: AgentScope['mode
     const opts = options(s.scope.mode)
     for (const [verb, v] of Object.entries(s.verbs)) {
       if (v.kinds && v.kinds.length === 0) out.push({ scope: key, verb, key: 'agents.problem.noKinds' })
-      else if (!v.kinds && opts.find((o) => o.verb === verb)?.destructive) out.push({ scope: key, verb, key: 'agents.problem.destructiveAll' })
+      else if (verb !== VERB_EXEC && !v.kinds && opts.find((o) => o.verb === verb)?.destructive) out.push({ scope: key, verb, key: 'agents.problem.destructiveAll' })
     }
   }
   return out

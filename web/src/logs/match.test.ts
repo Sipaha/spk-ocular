@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { compileFilter, compileRegex, plainRanges, regexRanges } from './match'
+import { compileFilter, serverLogFilter, compileRegex, plainRanges, regexRanges } from './match'
 import { RegexSearch, workerCore, type FromWorker, type ToWorker, type WorkerLike } from './regexSearch'
 
 describe('plain search and filter', () => {
@@ -122,4 +122,11 @@ describe('RegexSearch', () => {
     expect(hung.terminate).toHaveBeenCalled()
     vi.useRealTimers()
   })
+})
+
+it('bounds the server predicate before deciding whether it is active', () => {
+ expect(serverLogFilter('*'.repeat(500) + 'ERROR')).toBeUndefined()
+ expect(serverLogFilter('x')).toBeUndefined()
+ expect(serverLogFilter('ERROR')).toBe('ERROR')
+ expect(serverLogFilter('ERROR'.repeat(200))).toHaveLength(500)
 })

@@ -42,6 +42,7 @@ test('saved resources compare across admitted targets and pin UID, configuration
  for(const side of [req.left,req.right]){expect(side.ref.uid).toBeTruthy();expect(side.configRev).toBeTruthy();expect(side.connectionId).toBeGreaterThan(0)}
  await page.screenshot({path:join(scratchRoot,'comparison-cross-target.png')})
  await page.keyboard.press('Escape');await expect(dialog).toHaveCount(0)
+ await page.getByRole('button',{name:'Comparison baseline',exact:true}).click()
  await page.getByRole('button',{name:'Clear baseline',exact:true}).click();await expect(page.locator('[data-comparison-baseline]')).toHaveCount(0)
 })
 
@@ -119,6 +120,43 @@ test('reconfigured connections invalidate snapshots and require an explicit reso
  await expect(dialog.getByRole('region',{name:'Normalized YAML differences'})).toHaveCount(0)
  await expect(dialog.getByRole('button',{name:'Refresh',exact:true})).toBeDisabled()
  await page.keyboard.press('Escape')
+ await page.getByRole('button',{name:'Comparison baseline',exact:true}).click()
  await expect(page.locator('[data-comparison-baseline]')).toContainText('Connection closed or changed')
  await page.getByRole('button',{name:'Clear baseline',exact:true}).click()
+})
+
+test('pinning and clearing the baseline never shifts header, navigation, table or inspector',async({page})=>{
+ await page.goto('/');const grid=await workloads(page);await open(grid,'db')
+ const geometry=async()=>Promise.all(['.app-header','nav[aria-label="resources"]','[data-table-scroll]','[data-area="details"]'].map(selector=>page.locator(selector).first().boundingBox()))
+ const before=await geometry()
+ await drawer(page,'db').getByRole('button',{name:'Use as comparison baseline',exact:true}).click()
+ expect(await geometry()).toEqual(before)
+ await page.getByRole('button',{name:'Comparison baseline',exact:true}).click()
+ expect(await geometry()).toEqual(before)
+ await expect(page.getByRole('dialog',{name:'Comparison baseline',exact:true})).toContainText('demo · db · workloads')
+ await page.screenshot({path:join(scratchRoot,'comparison-baseline-popover-no-shift.png')})
+ await page.getByRole('button',{name:'Clear baseline',exact:true}).click()
+ expect(await geometry()).toEqual(before)
+ await expect(page.getByRole('button',{name:'Comparison baseline',exact:true})).toBeFocused()
+})
+
+test('shared diff expands unchanged context above and below collapsed boundaries',async({page})=>{
+ const before=Array.from({length:350},(_,i)=>`setting-${i+1}: value`).join('\n')+'\n'
+ const after=before.replace('setting-101: value','setting-101: changed').replace('setting-251: value','setting-251: changed')
+ await page.route('**/api/CompareResources',async route=>{
+  const response=await route.fetch(),data=await response.json()
+  data.left.yaml=data.left.fullYAML=before;data.right.yaml=data.right.fullYAML=after
+  await route.fulfill({response,json:data})
+ })
+ const {dialog}=await pair(page)
+ const gaps=dialog.locator('[data-diff-context]')
+ await expect(gaps).toHaveCount(3)
+ await expect(dialog.getByText('setting-78: value',{exact:true})).toHaveCount(0)
+ await gaps.first().getByRole('button',{name:'Show 20 lines above',exact:true}).click()
+ await expect(dialog.getByText('setting-78: value',{exact:true})).toBeVisible()
+ await gaps.nth(1).getByRole('button',{name:'Show 20 lines below',exact:true}).click()
+ await gaps.nth(1).getByRole('button',{name:'Show 20 lines above',exact:true}).click()
+ await expect(dialog.getByText('setting-105: value',{exact:true})).toBeVisible()
+ await expect(dialog.getByText('setting-247: value',{exact:true})).toBeVisible()
+ await page.screenshot({path:join(scratchRoot,'comparison-expanded-context.png')})
 })

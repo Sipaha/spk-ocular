@@ -19,6 +19,7 @@ func TestValidate(t *testing.T) {
 		one("a", VerbRead),
 		one("a", VerbLogs, "pods"),
 		one("a", VerbExec, "pods"),
+		one("a", VerbExec),
 		one("a", VerbEdit, "configmaps"),
 		one("a", "action:restart", "apps/deployments"),
 		{Scope: Scope{Mode: ScopeAll}, Verb: VerbRead},
@@ -113,4 +114,20 @@ func TestNoConfirmOfAnyNamedGrant(t *testing.T) {
 		assert.True(t, d.OK)
 		assert.True(t, d.NoConfirm)
 	}
+}
+
+func TestScopeWideExecAndLegacyLimits(t *testing.T) {
+	for _, kind := range []string{"pods", "apps/deployments"} {
+		r := Request{Scope: "a", Scoped: true, Kind: kind, Verb: VerbExec, Destructive: true}
+		g := one("a", VerbExec)
+		assert.Equal(t, Decision{OK: true}, Allows([]Grant{g}, r))
+		g.NoConfirm = true
+		assert.Equal(t, Decision{OK: true, NoConfirm: true}, Allows([]Grant{g}, r))
+		r.Scope = "b"
+		assert.False(t, Allows([]Grant{g}, r).OK)
+	}
+	r := Request{Scope: "a", Scoped: true, Kind: "apps/deployments", Verb: VerbExec, Destructive: true}
+	assert.False(t, Allows([]Grant{one("a", VerbExec, "pods")}, r).OK)
+	r.Kind = "pods"
+	assert.True(t, Allows([]Grant{one("a", VerbExec, "pods")}, r).OK)
 }

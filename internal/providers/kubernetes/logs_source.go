@@ -154,6 +154,29 @@ const staleIncarnation = "\x00stale"
 // open takes one of the app's log request slots for the life of the
 // response (waiting, and saying so, while all are taken).
 func (s *podSource) open(ctx context.Context, req podLogRequest) (io.ReadCloser, error) {
+	liveReserved := false
+	if s.q.LiveOnly {
+		select {
+		case filteredLiveSlots <- struct{}{}:
+			liveReserved = true
+		default:
+			if err := s.state(provider.LogWaiting, "", "live capture slots are full; waiting while history can load independently"); err != nil {
+				return nil, err
+			}
+			select {
+			case filteredLiveSlots <- struct{}{}:
+				liveReserved = true
+			case <-ctx.Done():
+				return nil, ctx.Err()
+			}
+		}
+		defer func() {
+			if liveReserved {
+				<-filteredLiveSlots
+			}
+		}()
+	}
+
 	if s.slots != nil {
 		select {
 		case s.slots <- struct{}{}:
@@ -173,7 +196,12 @@ func (s *podSource) open(ctx context.Context, req podLogRequest) (io.ReadCloser,
 		s.release()
 		return nil, err
 	}
-	return &slotBody{ReadCloser: rc, release: s.release}, nil
+	release := s.release
+	if liveReserved {
+		liveReserved = false
+		release = func() { s.release(); <-filteredLiveSlots }
+	}
+	return &slotBody{ReadCloser: s.q.LivePacer.Wrap(ctx, rc), release: release}, nil
 }
 
 func (s *podSource) release() {
@@ -228,6 +256,15 @@ func (s *podSource) run(ctx context.Context) error {
 	return err
 }
 
+// The kubelet has no text predicate: filtering must scan before choosing matches.
+func fetchTailOf(q provider.LogQuery) int64 {
+	if provider.NewLogFilter(q.Filter).Enabled() {
+		_, ceiling := provider.FilterScanWindow(q, 1)
+		return int64(ceiling)
+	}
+	return tailOf(q)
+}
+
 func tailOf(q provider.LogQuery) int64 {
 	if q.Archive {
 		return 0
@@ -266,6 +303,7 @@ func (s *podSource) once(ctx context.Context) error {
 
 // onceTimeout bounds a non-follow answer (a var for tests).
 var onceTimeout = 2 * time.Minute
+var filteredLiveSlots = make(chan struct{}, maxLogRequests/2)
 
 // requestFailed reports a failed request that cannot be retried.
 func (s *podSource) requestFailed(ctx context.Context, err error) error {
@@ -295,8 +333,10 @@ var firstSyncWait = 3 * time.Second
 
 func (s *podSource) follow(ctx context.Context) error {
 	backoff := s.retryFirst
-	if err := s.awaitFirstSync(ctx); err != nil {
-		return err
+	if !s.q.LiveOnly {
+		if err := s.awaitFirstSync(ctx); err != nil {
+			return err
+		}
 	}
 	for {
 		obs, synced, blind, changed := s.box.get()
@@ -477,9 +517,16 @@ func (s *podSource) plan(c ctrObs, tracked bool) (podLogRequest, *skipper) {
 	req := podLogRequest{Namespace: s.ns, Pod: s.pod, Container: s.ctr, Follow: true, SinceTime: s.q.SinceTime}
 	if !s.opened {
 		s.incarnation = c.id
-		req.TailLines = tailOf(s.q)
+		req.TailLines = fetchTailOf(s.q)
 		if s.late {
 			req.TailLines = startupTail
+			if provider.NewLogFilter(s.q.Filter).Enabled() {
+				req.TailLines = 10_000
+			}
+		}
+		if s.q.LiveOnly && !s.late {
+			req.TailLines = 0
+			req.ZeroTail = true
 		}
 		return req, nil
 	}
@@ -500,11 +547,18 @@ func (s *podSource) plan(c ctrObs, tracked bool) (podLogRequest, *skipper) {
 		return req, &skipper{expect: expect, mismatch: !covered}
 	}
 	if same {
-		req.TailLines = tailOf(s.q) // nothing delivered yet: the same window again
+		req.TailLines = fetchTailOf(s.q) // nothing delivered yet: the same window again
+		if s.q.LiveOnly {
+			req.TailLines = 0
+			req.ZeroTail = true
+		}
 		return req, nil
 	}
 	s.cur.reset()
 	req.TailLines = startupTail
+	if provider.NewLogFilter(s.q.Filter).Enabled() {
+		req.TailLines = 10_000
+	}
 	return req, nil
 }
 

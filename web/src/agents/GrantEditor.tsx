@@ -9,6 +9,7 @@ import { errorDetail } from '../errors'
 import { Select } from '../components/Select'
 import { WarningIcon } from '../components/icons'
 import {
+  VERB_EXEC,
   confirmable,
   fromGrants,
   isAction,
@@ -386,7 +387,8 @@ function VerbRow({ option, sel, disabled, onChange }: { option: VerbOption; sel:
   const title = verbTitle(option)
   const hint = verbHint(option.verb)
   const on = !!sel
-  const bad = !!sel && ((sel.kinds && sel.kinds.length === 0) || (!sel.kinds && option.destructive))
+  const exec = option.verb === VERB_EXEC
+  const bad = !!sel && ((sel.kinds && sel.kinds.length === 0) || (!exec && !sel.kinds && option.destructive))
   return (
     <li className="agents-permission">
       <div className="agents-permission-row">
@@ -399,14 +401,14 @@ function VerbRow({ option, sel, disabled, onChange }: { option: VerbOption; sel:
             onChange={(e) => {
               if (!e.target.checked) return onChange(null)
               // A destructive action is granted by name: its kinds are chosen first.
-              onChange({ kinds: option.destructive ? [] : null, noConfirm: false })
-              if (option.destructive) setPicking(true)
+              onChange({ kinds: option.destructive && !exec ? [] : null, noConfirm: false })
+              if (option.destructive && !exec) setPicking(true)
             }}
           />
           <span className={option.destructive ? 'text-danger' : ''}>{title}</span>
           {option.destructive && <span className="text-xs font-normal text-danger">{t('agents.destructive')}</span>}
         </label>
-        {on && option.kinds.length > 0 && (
+        {on && !exec && option.kinds.length > 0 && (
           <button
             type="button"
             aria-expanded={picking}
@@ -418,15 +420,16 @@ function VerbRow({ option, sel, disabled, onChange }: { option: VerbOption; sel:
             {kindsText(sel, option.kinds)} ▾
           </button>
         )}
-        {on && confirmable(option.verb) && sel.kinds !== null && (
-          <label className="flex items-center gap-1.5 text-xs text-fg-muted" title={t('agents.noConfirmHint')}>
+        {on && exec && sel.kinds && <span className="text-xs text-fg-muted">{kindsText(sel, option.kinds)}</span>}
+        {on && confirmable(option.verb) && (exec || sel.kinds !== null) && (
+          <label className="flex items-center gap-1.5 text-xs text-fg-muted" title={exec ? undefined : t('agents.noConfirmHint')}>
             <input type="checkbox" checked={sel.noConfirm} disabled={disabled} onChange={(e) => onChange({ ...sel, noConfirm: e.target.checked })} />
             {t('agents.noConfirm')}
           </label>
         )}
 
       </div>
-      {on && picking && <KindPicker verb={option.verb} kinds={option.kinds} sel={sel} onChange={onChange} onDone={() => setPicking(false)} />}
+      {on && !exec && picking && <KindPicker verb={option.verb} kinds={option.kinds} sel={sel} onChange={onChange} onDone={() => setPicking(false)} />}
     </li>
   )
 }

@@ -64,3 +64,51 @@ it('cannot redisplay a late chart-values response after the detail is closed', a
   expect(screen.queryByText('private values must stay hidden')).not.toBeInTheDocument()
   expect(screen.queryByRole('button', { name: 'Install' })).not.toBeInTheDocument()
 })
+
+it('opens settings as a normal workspace without an internal section dropdown or visible section heading',async()=>{
+ const {client}=fakeClient([target])
+ client.helm=vi.fn(async()=>({settings:{repositories:[],storage:{driver:'secret'}}}))
+ render(<HelmWorkspace client={client} target={target} scope={{mode:'all'}} scopePicker={null} initialTab="settings"/>)
+ expect(await screen.findByRole('button',{name:'Add repository'})).toBeEnabled()
+ expect(screen.queryByRole('button',{name:'Helm section'})).toBeNull()
+ expect(screen.getByRole('heading',{name:'Repositories & settings'})).toHaveClass('sr-only')
+ expect(client.helm).not.toHaveBeenCalledWith(expect.objectContaining({command:'list'}),expect.anything())
+})
+it('uses shared delayed refresh/cancel controls, retains the grid, and ignores a cancelled late result',async()=>{
+ const {client}=fakeClient([target]);let count=0,resolve!:(value:HelmResponse)=>void
+ const release={name:'old',namespace:'blue',revision:1,chart:'demo',chartVersion:'1',appVersion:'1',status:'deployed',updated:'2026-10-05T00:00:00Z'}
+ client.helm=vi.fn(async(request:HelmRequest)=>{
+  if(request.command==='settings')return{settings:{repositories:[],storage:{driver:'secret'}}}
+  if(++count===2)return new Promise<HelmResponse>(done=>{resolve=done})
+  return{releases:[{...release,name:count===1?'old':'fresh'}]}
+ })
+ const user=userEvent.setup()
+ render(<HelmWorkspace client={client} target={target} scope={{mode:'all'}} scopePicker={null} initialTab="releases"/>)
+ await screen.findByRole('gridcell',{name:'old'})
+ const grid=screen.getByRole('grid'),refresh=screen.getByRole('button',{name:'Refresh'})
+ await user.click(refresh)
+ expect(screen.queryByRole('button',{name:'Cancel'})).toBeNull();expect(screen.queryByRole('button',{name:'Stop waiting'})).toBeNull()
+ expect(screen.getByRole('grid')).toBe(grid)
+ await waitFor(()=>expect(screen.getByRole('button',{name:'Cancel'})).toBeVisible(),{timeout:3500})
+ expect(screen.getByRole('status')).toHaveTextContent(/Received —/)
+ await user.click(screen.getByRole('button',{name:'Cancel'}))
+ expect(screen.getByText('Request cancelled')).toBeVisible();expect(grid).not.toBeVisible()
+ await act(async()=>resolve({releases:[{...release,name:'late'}]}))
+ expect(screen.queryByText('late')).toBeNull();expect(screen.getByText('Request cancelled')).toBeVisible()
+ await user.click(screen.getByRole('button',{name:'Retry'}));await screen.findByRole('gridcell',{name:'fresh'})
+ expect(screen.getByRole('grid')).toBe(grid);expect(count).toBe(3)
+})
+it('drops previous scope data immediately and fences a late scope response',async()=>{
+ const {client}=fakeClient([target]);let resolve!:(value:HelmResponse)=>void
+ client.helm=vi.fn(async(request:HelmRequest)=>{
+  if(request.command==='settings')return{settings:{repositories:[],storage:{driver:'secret'}}}
+  if(request.scope?.name==='blue')return new Promise<HelmResponse>(done=>{resolve=done})
+  return{releases:[{name:'green-release',namespace:'green',revision:1,chart:'demo',chartVersion:'1',appVersion:'1',status:'deployed',updated:'2026-10-05T00:00:00Z'}]}
+ })
+ const {rerender}=render(<HelmWorkspace client={client} target={target} scope={{mode:'one',name:'blue'}} scopePicker={null} initialTab="releases"/>)
+ await waitFor(()=>expect(resolve).toBeTypeOf('function'))
+ rerender(<HelmWorkspace client={client} target={target} scope={{mode:'one',name:'green'}} scopePicker={null} initialTab="releases"/>)
+ await screen.findByRole('gridcell',{name:'green-release'})
+ await act(async()=>resolve({releases:[]}))
+ expect(screen.getByRole('gridcell',{name:'green-release'})).toBeVisible()
+})

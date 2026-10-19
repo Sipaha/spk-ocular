@@ -48,6 +48,47 @@ test('selection and reload do not connect; Connect opens resources explicitly', 
   expect((await stats(page)).syn_connects).toBe(1)
 })
 
+test('connection hero stays fixed through pending, checking and cancellation',async({page},testInfo)=>{
+ await post(page,'/api/CloseTarget',{provider:'synthetic',id:'demo2'})
+ await page.reload()
+ await selectConnection(page,/^demo2\b/)
+ await expect(page.getByText('Not connected',{exact:true})).toBeVisible()
+ await post(page,'/api/_test/synthetic/controls',{connect_delay_ms:10000})
+ const geometry=()=>page.locator('.connection-status-content').evaluate(el=>[...el.querySelectorAll('.connection-scene-mark,h1,.connection-endpoint')].map(node=>{const r=node.getBoundingClientRect();return {x:r.x,y:r.y,width:r.width,height:r.height}}))
+ const before=await geometry()
+ let release!:()=>void
+ const held=new Promise<void>(resolve=>{release=resolve})
+ await page.route('**/api/ConnectTarget',async route=>{await held;await route.continue()})
+ await page.evaluate(()=>{
+  const target=window as unknown as {connectionHeroSamples:unknown[];stopHeroSample:boolean}
+  target.connectionHeroSamples=[];target.stopHeroSample=false
+  const sample=()=>{
+   const el=document.querySelector('.connection-status-content')
+   if(el)target.connectionHeroSamples.push([...el.querySelectorAll('.connection-scene-mark,h1,.connection-endpoint')].map(node=>{const r=node.getBoundingClientRect();return {x:r.x,y:r.y,width:r.width,height:r.height}}))
+   if(!target.stopHeroSample)requestAnimationFrame(sample)
+  }
+  requestAnimationFrame(sample)
+ })
+ try {
+  await page.screenshot({path:testInfo.outputPath('hero-idle.png')})
+  await page.getByRole('button',{name:'Connect',exact:true}).click()
+  await expect(page.getByRole('button',{name:'Cancel',exact:true})).toBeVisible()
+  await page.evaluate(()=>new Promise<void>(resolve=>requestAnimationFrame(()=>requestAnimationFrame(()=>resolve()))))
+  expect(await geometry()).toEqual(before)
+  release()
+  await expect(page.getByText(/Attempt 1 of 3/)).toBeVisible()
+  expect(await geometry()).toEqual(before)
+  await page.screenshot({path:testInfo.outputPath('hero-checking.png')})
+  await page.getByRole('button',{name:'Cancel',exact:true}).click()
+  await expect(page.getByText('Connection cancelled')).toBeVisible()
+  expect(await geometry()).toEqual(before)
+  await page.screenshot({path:testInfo.outputPath('hero-cancelled.png')})
+  const samples=await page.evaluate(()=>{const w=window as unknown as {connectionHeroSamples:unknown[];stopHeroSample:boolean};w.stopHeroSample=true;return w.connectionHeroSamples})
+  expect(samples.length).toBeGreaterThan(3)
+  for(const sample of samples)expect(sample).toEqual(before)
+ } finally {release();await page.evaluate(()=>{(window as unknown as {stopHeroSample:boolean}).stopHeroSample=true})}
+})
+
 test('Cancel stops a pending connection and a new explicit attempt can succeed', async ({ page }, testInfo) => {
   await post(page, '/api/_test/synthetic/controls', { connect_delay_ms: 10000 })
   await page.getByRole('button', { name: 'Connect', exact: true }).click()
@@ -67,10 +108,12 @@ test('Cancel stops a pending connection and a new explicit attempt can succeed',
 })
 
 test('temporary failures show retry progress and recover on the third attempt', async ({ page }, testInfo) => {
+  const hero=page.locator('.connection-scene-mark'),before=await hero.boundingBox()
   await post(page, '/api/_test/synthetic/controls', { connect_delay_ms: 100, connect_failures: 2 })
   await page.getByRole('button', { name: 'Connect', exact: true }).click()
   await expect(page.getByText('synthetic connection unavailable')).toBeVisible()
   await expect(page.getByText(/Retrying in/)).toBeVisible()
+  expect(await hero.boundingBox()).toEqual(before)
   await page.screenshot({ path: testInfo.outputPath('connect-retry.png') })
   await expect(page.getByRole('grid', { name: 'resources' }).getByRole('gridcell', { name: 'api', exact: true })).toBeVisible()
   expect((await stats(page)).syn_connects).toBe(3)
@@ -84,6 +127,12 @@ test('three failed attempts stop and reload does not start another', async ({ pa
   await expect(page.getByRole('button', { name: 'Connect', exact: true })).toBeVisible()
   expect((await stats(page)).syn_connects).toBe(3)
   await page.screenshot({ path: testInfo.outputPath('connect-failed.png') })
+  await page.setViewportSize({width:1280,height:360})
+  const error=page.locator('.connection-last-error')
+  await error.scrollIntoViewIfNeeded()
+  await expect(error).toBeInViewport({ratio:1})
+  await expect(page.locator('[data-app-menu]')).toBeVisible()
+  await page.screenshot({path:testInfo.outputPath('connect-failed-short.png')})
   await page.reload()
   await expect(page.getByText('Could not connect', { exact: true })).toBeVisible()
   expect((await stats(page)).syn_connects).toBe(3)
@@ -107,6 +156,30 @@ test('Disconnect is available on the selected connected target and disappears af
  await page.screenshot({path:process.env.OCULAR_SCRATCH_DIR+'/selected-disconnected.png'})
 })
 
+
+test('connection hero geometry survives localized attempts in wide and narrow windows',async({page})=>{
+ await post(page,'/api/_test/synthetic/controls',{connect_delay_ms:10000})
+ const main=page.locator('.connection-main'),action=main.locator('.connection-primary-action')
+ const geometry=()=>main.locator('.connection-scene-mark').boundingBox()
+ try {
+  for(const lang of languages){
+   await page.setViewportSize({width:1280,height:900})
+   await openAppMenu(page);await page.locator('.language-menu button').click();await page.getByRole('option',{name:languageNames[lang],exact:true}).click()
+   for(const width of [1280,540]){
+    await page.setViewportSize({width,height:900})
+    const before=await geometry()
+    await action.click();await expect(main.locator('.connection-phase .animate-spin')).toBeVisible()
+    await expect(main.locator('.connection-attempt')).toBeVisible()
+    expect(await geometry()).toEqual(before)
+    await action.click();await expect(main.locator('.connection-phase .animate-spin')).toHaveCount(0)
+    expect(await geometry()).toEqual(before)
+   }
+  }
+ }finally{
+  await page.setViewportSize({width:1280,height:900})
+  await openAppMenu(page);await page.locator('.language-menu button').click();await page.getByRole('option',{name:languageNames.en,exact:true}).click()
+ }
+})
 
 test('disconnected coast and main Connect fit all languages without reading the resource catalog',async({page})=>{
  const view=await (await post(page,'/api/ListTargets')).json(),target=view.groups.find((g:{provider:string})=>g.provider==='kubernetes').targets[0]

@@ -1,3 +1,5 @@
+import { useStore } from '../store'
+import { LogContext } from './LogContext'
 import { LocationStatus } from '../components/LocationStatus'
 import { ActionIconButton } from '../components/ActionIconButton'
 import { ActionIcon, WindowActionIcon } from '../components/icons'
@@ -13,7 +15,7 @@ import { overlayOpen } from '../shortcuts'
 import { LogViewport } from './LogViewport'
 import { rowText, shortLabels, sourceColor, type RowOpts } from './row'
 import { downloadLogHistory } from './downloadHistory'
-import {CloseIcon} from '../components/icons'
+import { serverLogFilter } from './match'
 import { useLogFilter } from './useLogFilter'
 import { useLogStream, type LogSource } from './useLogStream'
 
@@ -28,6 +30,7 @@ const SINCE: [string, number][] = [
 
 interface Props {
   client: Client
+  connectionName?: string
   subject: Ref
   /** The visible tab: keyboard shortcuts are live only there. */
   active: boolean
@@ -43,12 +46,14 @@ interface Props {
  * buffer), useLogFilter (filter, search) and LogViewport (the
  * virtual list).
  */
-export default function LogViewer({ client, subject, active, bridge, initial, initialChannel, focusEpoch, onWindowAction }: Props) {
+export default function LogViewer({ client, connectionName: initialConnectionName, subject, active, bridge, initial, initialChannel, focusEpoch, onWindowAction }: Props) {
+  const connectionName = useStore(state => state.view?.groups.flatMap(group => group.targets).find(target => target.provider === subject.provider && target.id === subject.target)?.title) || initialConnectionName
   const [info, setInfo] = useState<LogInfo | null>(null)
   const [infoError, setInfoError] = useState<string | null>(null)
   const [channel, setChannel] = useState<string | null>(initial?.channel ?? initialChannel ?? null)
   const [tail, setTail] = useState(initial?.tail ?? 500)
   const [since, setSince] = useState<{ key: string; at: string } | null>(initial?.since ?? null)
+  const [serverFilter, setServerFilter] = useState(initial?.filterText ?? '')
   const [previous, setPrevious] = useState(initial?.previous ?? false)
   const [showTime, setShowTime] = useState(initial?.showTime ?? false)
   const [showSource, setShowSource] = useState<boolean | null>(initial?.showSource ?? null) // null: automatic
@@ -82,13 +87,16 @@ export default function LogViewer({ client, subject, active, bridge, initial, in
     }, q => {
       setChannel(q.channel ?? '');setTail(q.tailLines ?? 500);setPrevious(!!q.previous)
       setSince(q.sinceTime ? { key: since?.key ?? '', at: q.sinceTime } : null)
-    })
+      setServerFilter(q.filter ?? '')
+      const current = bridge.captureView?.()
+      if (current) bridge.applyFilter?.({ ...current, filterText: q.filter ?? '' })
+    }, connectionName)
     if (bridge.role === 'guest') void bridge.post('view', bridge.captureView?.())
-  }, [bridge, subject, channel, tail, since, previous, showTime, showSource, wrap, follow])
+  }, [bridge, subject, channel, tail, since, previous, showTime, showSource, wrap, follow, connectionName])
 
   const query = useMemo<LogQuery | null>(
-    () => (channel === null ? null : { channel, previous, follow: !previous, tailLines: tail, sinceTime: since?.at }),
-    [channel, previous, tail, since],
+    () => (channel === null ? null : { channel, previous, follow: !previous, tailLines: tail, sinceTime: since?.at, filter: serverLogFilter(serverFilter) }),
+    [channel, previous, tail, since, serverFilter],
   )
 
   return infoError ? (
@@ -101,9 +109,11 @@ export default function LogViewer({ client, subject, active, bridge, initial, in
     <Stream
       client={client}
       subject={subject}
+      connectionName={connectionName}
       active={active}
       focusEpoch={focusEpoch}
       query={query}
+      onServerFilter={setServerFilter}
       bridge={bridge}
       initial={initial}
       onWindowAction={onWindowAction}
@@ -160,7 +170,7 @@ interface ViewState {
   setNote: (v: string | null) => void
 }
 
-function Stream({ client, subject, active, focusEpoch, query, toolbar, view, bridge, initial, windowButton, onWindowAction }: { client: Client; subject: Ref; active: boolean; focusEpoch?: number; query: LogQuery; toolbar: ReactNode; view: ViewState; bridge?: LogWindowBridge; initial?: LogViewState
+function Stream({ client, connectionName, subject, active, focusEpoch, query, onServerFilter, toolbar, view, bridge, initial, windowButton, onWindowAction }: { client: Client; connectionName?: string; subject: Ref; active: boolean; focusEpoch?: number; query: LogQuery; onServerFilter: (filter: string) => void; toolbar: ReactNode; view: ViewState; bridge?: LogWindowBridge; initial?: LogViewState
   initialChannel?: string; windowButton?: ReactNode; onWindowAction?: () => void }) {
   const { showTime, setShowTime, wrap, setWrap, follow, setFollow, resizing, selecting, setSelecting, note, setNote } = view
   const { win, sources, status, reopen, clear } = useLogStream({ client, ref: subject, query, paused: selecting || resizing, frozen: !follow, bridge })
@@ -186,6 +196,11 @@ function Stream({ client, subject, active, focusEpoch, query, toolbar, view, bri
   )
 
   const { search, filterText, useRegex, setSearch, setFilterText, setUseRegex } = f
+  const historyLoading = status.phase === 'opening' || status.phase === 'backlog' || (serverLogFilter(filterText) ?? '') !== (query.filter ?? '')
+  useEffect(() => {
+    const timer = setTimeout(() => onServerFilter(filterText.slice(0, 500)), 250)
+    return () => clearTimeout(timer)
+  }, [filterText, onServerFilter])
   useEffect(() => {
     if (!bridge) return
     bridge.configureFilter(() => ({search,filterText,useRegex}), state => { setSearch(state.search ?? ''); setFilterText(state.filterText ?? ''); setUseRegex(!!state.useRegex) })
@@ -214,13 +229,15 @@ function Stream({ client, subject, active, focusEpoch, query, toolbar, view, bri
   const [downloadProgress,setDownloadProgress]=useState({lines:0,bytes:0})
   useEffect(()=>{mounted.current=true;return()=>{mounted.current=false;downloadController.current?.abort()}},[])
   useEffect(()=>()=>downloadController.current?.abort(),[client,subject,query.channel,query.previous])
-  const save = async () => {
+  const save = async (chooseLocation=false) => {
     if(downloadPending.current) return
+    const sourceLabels=new Map([...sources.values()].map(source=>[source.key,rowOpts.labelOf(source.id)]))
+    const format={showTime:rowOpts.showTime,showSource:rowOpts.showSource,labelOf:(key:string,fallback:string)=>sourceLabels.get(key)??fallback}
     const controller=new AbortController()
     downloadController.current=controller
     downloadPending.current=true;setDownloading(true);setNote(null);setDownloadProgress({lines:0,bytes:0})
     try {
-      const result=await downloadLogHistory(client,subject,query.channel??'',!!query.previous,controller.signal,bridge?.id,value=>{if(mounted.current&&!controller.signal.aborted)setDownloadProgress(value)})
+      const result=await downloadLogHistory(client,subject,query.channel??'',!!query.previous,format,controller.signal,bridge?.id,value=>{if(mounted.current&&!controller.signal.aborted)setDownloadProgress(value)},()=>controller.abort(),chooseLocation)
       if(mounted.current&&!controller.signal.aborted&&result)setNote(result.path?t('logs.saved',{path:result.path}):t('logs.historySaved',{lines:result.lines}))
     } catch (e) {
       if(mounted.current)setNote(controller.signal.aborted?t('logs.historyCancelled'):t('logs.saveFailed',{error:e instanceof Error?e.message:String(e)}))
@@ -284,6 +301,17 @@ function Stream({ client, subject, active, focusEpoch, query, toolbar, view, bri
     <div ref={rootRef} className="flex h-full min-h-0 flex-col" onKeyDown={onKeyDown}>
       <div className="log-toolbar">
         <div role="group" aria-label={t('shell.logSource')} className="log-control-group">{toolbar}</div>
+        <div role="group" aria-label={t('shell.logFilter')} className="log-control-group">
+        <input
+          value={f.filterText}
+          onChange={(e) => f.setFilterText(e.target.value)}
+          placeholder={t('logs.filter')}
+          title={t('logs.filter.tooltip')}
+          aria-label={t('logs.filter')}
+          spellCheck={false}
+          className="w-32 rounded border border-line bg-app px-2 py-0.5 outline-none focus:border-accent"
+        />
+        </div>
         <div role="group" aria-label={t('shell.logSearch')} className="log-control-group">
         <input
           ref={searchRef}
@@ -315,17 +343,6 @@ function Stream({ client, subject, active, focusEpoch, query, toolbar, view, bri
         {f.regexState === 'slow' && <span className="text-warning">{t('logs.regexSlow')}</span>}
         {f.regexState === 'invalid' && <span className="text-warning">{t('logs.regexInvalid', { error: f.regexError ?? '' })}</span>}
         </div>
-        <div role="group" aria-label={t('shell.logFilter')} className="log-control-group">
-        <input
-          value={f.filterText}
-          onChange={(e) => f.setFilterText(e.target.value)}
-          placeholder={t('logs.filter')}
-          title={t('logs.filter.tooltip')}
-          aria-label={t('logs.filter')}
-          spellCheck={false}
-          className="w-32 rounded border border-line bg-app px-2 py-0.5 outline-none focus:border-accent"
-        />
-        </div>
         <div role="group" aria-label={t('shell.logDisplay')} className="log-control-group">
         <Toggle on={showTime} onClick={() => setShowTime(!showTime)} label={t('logs.time')} description={t('logs.time.tooltip')}>
           <ActionIcon name="time"/>
@@ -341,17 +358,19 @@ function Stream({ client, subject, active, focusEpoch, query, toolbar, view, bri
         <Btn onClick={copyShown} label={t('logs.copy')} description={t('logs.copy.tooltip')}>
           <ActionIcon name="copy"/>
         </Btn>
-        <Btn disabled={downloading} onClick={() => void save()} label={t('logs.save')} description={t('logs.save.tooltip')}>
+        <Btn disabled={downloading} onContextMenu={event=>{event.preventDefault();void save(true)}} onClick={() => void save()} label={t('logs.save')} description={t('logs.save.tooltip')}>
           <ActionIcon name="download"/>
         </Btn>
-        <Btn onClick={clear} label={t('logs.clear')} description={t('logs.clear.tooltip')}>
+        <Btn disabled={!!query.filter && historyLoading} onClick={clear} label={t('logs.clear')} description={t('logs.clear.tooltip')}>
           <ActionIcon name="clear"/>
         </Btn>
         {windowButton}
         </div>
       </div>
+      <LogContext subject={subject} connectionName={connectionName} loading={historyLoading} />
       {(problems.length > 0 || status.notice) && <Problems problems={problems} notice={status.notice} labels={labels} />}
       <LogViewport
+        loading={historyLoading}
         entries={f.filtered}
         rangesFor={f.rangesFor}
         matchIndices={f.matches}
@@ -381,7 +400,7 @@ function Stream({ client, subject, active, focusEpoch, query, toolbar, view, bri
         {terminal && (
           <ActionIconButton label={t('logs.reopen')} description={t('logs.reopenHint')} onClick={reopen}><ActionIcon name="reconnect"/></ActionIconButton>
         )}
-        {downloading&&<><span role="status" className="min-w-0 truncate" title={t('logs.historyReading',{lines:downloadProgress.lines,bytes:downloadProgress.bytes})}>{t('logs.historyReading',{lines:downloadProgress.lines,bytes:downloadProgress.bytes})}</span><ActionIconButton label={t('logs.historyCancel')} description={t('logs.historyCancel')} onClick={()=>downloadController.current?.abort()}><CloseIcon className="h-4 w-4"/></ActionIconButton></>}
+        {downloading&&<span role="status" className="min-w-0 truncate" title={t('logs.historyReading',{lines:downloadProgress.lines,bytes:downloadProgress.bytes})}>{t('logs.historyReading',{lines:downloadProgress.lines,bytes:downloadProgress.bytes})}</span>}
         {note&&!downloading&&<span role="status" className="min-w-0 truncate" title={note}>{note}</span>}
       </LocationStatus>
     </div>

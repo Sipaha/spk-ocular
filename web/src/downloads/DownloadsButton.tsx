@@ -1,35 +1,62 @@
-import {useEffect,useId,useLayoutEffect,useRef,useState} from 'react'
+import { isoDateTime } from '../dates'
+import {useEffect,useId,useLayoutEffect,useRef,useState,type RefObject} from 'react'
 import {createPortal} from 'react-dom'
-import {getLanguage,t} from '../i18n'
+import {t} from '../i18n'
 import {isDesktop} from '../api/client'
 import {copyValue} from '../values/copy'
-import {ActionIcon,FileIcon,FolderIcon,CloseIcon,WindowActionIcon} from '../components/icons'
+import {ActionIcon,FileIcon,FolderIcon,CloseIcon} from '../components/icons'
 import {safeDownloadFailure} from './failures'
 import {downloadSize,downloadTime,downloadType} from './presentation'
 import {ActionIconButton} from '../components/ActionIconButton'
 import {ModalCloseButton,useModalFocus} from '../components/modal'
-import {cancelDownloadDelete,deleteDownloadFile,dismissDownload,prepareDownloadDelete,type DownloadDeletePreview,clearDownloadHistory,isDownloadUnseen,markDownloadsViewed,openDownload,reloadDownloads,useDownloads,watchDownloads,type DownloadRecord} from './store'
+import {cancelDownload,cancelDownloadDelete,deleteDownloadFile,dismissDownload,prepareDownloadDelete,type DownloadDeletePreview,clearDownloadHistory,isDownloadUnseen,markDownloadsViewed,openDownload,reloadDownloads,useDownloads,watchDownloads,type DownloadRecord} from './store'
 
 export function DownloadsButton() {
  useEffect(watchDownloads,[])
  const [open,setOpen]=useState(false)
+ const trigger=useRef<HTMLButtonElement>(null)
+ const records=useDownloads(s=>s.records)
+ const [mountedAt]=useState(()=>Date.now())
+ const known=useRef(new Set(records.map(r=>r.id)))
+ useEffect(()=>{
+  const fresh=records.some(r=>!known.current.has(r.id)&&(r.status==='active'||r.startedAt>=mountedAt))
+  known.current=new Set(records.map(r=>r.id))
+  if(fresh)setOpen(true)
+ },[records,mountedAt])
  const active=useDownloads(s=>s.records.filter(r=>r.status==='active').length)
  const unseen=useDownloads(s=>s.records.filter(r=>isDownloadUnseen(r,s.viewed)).length)
  const description=useId()
  const status=[active?t('downloads.activeCount',{n:active}):'',unseen?t('downloads.unseenCount',{n:unseen}):''].filter(Boolean).join(' · ')
 
  return <>
-  <button type="button" className="help-trigger downloads-trigger relative" data-active={active>0} data-unseen={unseen>0} aria-label={t('downloads.title')} aria-describedby={status?description:undefined} title={[t('downloads.title'),status].filter(Boolean).join(' · ')} aria-haspopup="dialog" aria-expanded={open} onClick={()=>setOpen(!open)}>
+  <button ref={trigger} type="button" className="help-trigger downloads-trigger relative" data-active={active>0} data-unseen={unseen>0} aria-label={t('downloads.title')} aria-describedby={status?description:undefined} title={[t('downloads.title'),status].filter(Boolean).join(' · ')} aria-haspopup="dialog" aria-expanded={open} onClick={()=>setOpen(!open)}>
    <ActionIcon name="download" className="h-4 w-4"/>
    {active>0&&<span className="downloads-trigger-track" aria-hidden="true"><span className="downloads-trigger-runner"/></span>}
    {unseen>0&&<span className="downloads-unseen-dot" aria-hidden="true"/>}
    {status&&<span id={description} className="sr-only">{status}</span>}
   </button>
-  {open&&<DownloadsPanel onClose={()=>setOpen(false)}/>}
+  {open&&<DownloadsPanel anchor={trigger} onClose={()=>{setOpen(false);requestAnimationFrame(()=>trigger.current?.focus())}}/>}
  </>
 }
 
-function DownloadsPanel({onClose}:{onClose:()=>void}) {
+function DownloadsPanel({onClose,anchor}:{onClose:()=>void;anchor:RefObject<HTMLButtonElement|null>}) {
+ const [position,setPosition]=useState<{top:number;right:number;width:number;maxHeight:number}|null>(null)
+ useLayoutEffect(()=>{
+  const update=()=>{
+   const rect=anchor.current?.getBoundingClientRect()
+   if(!rect)return
+   const top=Math.min(rect.bottom+4,Math.max(12,window.innerHeight-96))
+   const right=Math.max(12,window.innerWidth-rect.right)
+   const width=Math.max(0,Math.min(480,window.innerWidth-right-12))
+   setPosition({top,right,width,maxHeight:Math.max(0,window.innerHeight-top-12)})
+  }
+  update()
+  window.addEventListener('resize',update)
+  window.addEventListener('scroll',update,true)
+  const observer=typeof ResizeObserver==='undefined'?null:new ResizeObserver(update)
+  if(anchor.current)observer?.observe(anchor.current)
+  return()=>{window.removeEventListener('resize',update);window.removeEventListener('scroll',update,true);observer?.disconnect()}
+ },[anchor])
  const box=useRef<HTMLElement>(null),close=useRef<HTMLButtonElement>(null),heading=useId()
  const {records,storageError,error}=useDownloads()
  const [actionError,setActionError]=useState(''),[copied,setCopied]=useState(''),[busy,setBusy]=useState('')
@@ -63,9 +90,8 @@ function DownloadsPanel({onClose}:{onClose:()=>void}) {
  }
  const modalKey=useModalFocus(box,()=>{if(deleting)cancelDelete();else onClose()},close)
  const closePanel=()=>{cancelDelete();onClose()}
- const date=(value:number)=>new Date(value).toLocaleString(getLanguage())
  return createPortal(<div className="fixed inset-0 z-50" onMouseDown={event=>{if(event.target===event.currentTarget){event.preventDefault();closePanel()}}}>
-  <section ref={box} role="dialog" aria-modal="true" aria-labelledby={heading} onKeyDown={modalKey} className="absolute right-3 top-12 flex max-h-[calc(100vh-64px)] w-[min(480px,calc(100vw-24px))] min-w-0 flex-col rounded-md border border-fg-subtle/70 bg-panel text-sm shadow-floating" data-downloads-panel>
+  <section ref={box} role="dialog" aria-modal="true" aria-labelledby={heading} onKeyDown={modalKey} style={position?{top:position.top,right:position.right,width:position.width,maxHeight:position.maxHeight}:undefined} className="absolute flex min-w-0 flex-col rounded-md border border-fg-subtle/70 bg-panel text-sm shadow-floating" data-downloads-panel>
    <header className="flex shrink-0 items-center gap-3 border-b border-line px-3 py-2">
     <h2 id={heading} className="min-w-0 flex-1 font-semibold">{t('downloads.title')}</h2>
     <button type="button" className="text-xs text-fg-muted enabled:hover:text-fg disabled:cursor-default disabled:opacity-40" disabled={!!deleting||!!busy||!records.some(r=>r.status!=='active')} onClick={()=>void act('clear',clearDownloadHistory)}>{t('downloads.clear')}</button>
@@ -77,24 +103,27 @@ function DownloadsPanel({onClose}:{onClose:()=>void}) {
     <ul>{records.map(record=>{
      const timestamp=record.endedAt??record.startedAt
      const age=downloadTime(timestamp,openedAt)
-     return <li key={record.id} className="border-b border-line px-3 py-2 last:border-0" data-download-id={record.id}>
+     const canOpen=isDesktop()&&record.status==='complete'&&!!record.path
+     const open=async(folder=false)=>{await openDownload(record.id,folder);onClose()}
+     return <li key={record.id} className={'relative border-b border-line px-3 py-2 last:border-0'+(canOpen?' hover:bg-hover':'')} data-download-id={record.id}>
+      {canOpen&&<button type="button" aria-label={`${t('downloads.open')}: ${record.name}`} title={record.name} disabled={!!busy} onClick={()=>void act(record.id,()=>open())} className="absolute inset-0 z-10 rounded outline-offset-[-2px] focus-visible:outline-2 focus-visible:outline-accent"/>}
       <div className="flex items-center gap-2.5">
        <DownloadItemIcon record={record}/>
        <div className="min-w-0 flex-1">
         <p className="truncate font-medium" title={record.name}>{record.name}</p>
         <div className="flex flex-wrap items-center gap-x-1 text-xs text-fg-muted">
-         <span title={date(timestamp)}>{downloadSize(record.bytes)}</span>
-         {age&&<><span aria-hidden="true">·</span><time dateTime={new Date(timestamp).toISOString()} title={date(timestamp)}>{age}</time></>}
+         <span title={isoDateTime(timestamp)}>{downloadSize(record.bytes)}</span>
+         {age&&<><span aria-hidden="true">·</span><time dateTime={new Date(timestamp).toISOString()} title={isoDateTime(timestamp)}>{age}</time></>}
          {record.status!=='complete'&&<><span aria-hidden="true">·</span><span className={record.status==='failed'?'text-danger':''}>{t(`downloads.status.${record.status}`)}</span></>}
          {record.status==='complete'&&<span className="sr-only">{t('downloads.status.complete')}</span>}
         </div>
        </div>
-       <div className="flex shrink-0 gap-0.5">
+       <div className="relative z-20 flex shrink-0 gap-0.5">
         {record.status==='complete'&&<>
-         <ActionIconButton label={t('downloads.open')} description={t('downloads.open')} disabled={!record.path||!!busy} onClick={()=>void act(record.id,()=>openDownload(record.id))}><WindowActionIcon className="h-4 w-4"/></ActionIconButton>
-         <ActionIconButton label={t('downloads.folder')} description={t('downloads.folder')} disabled={!record.path||!!busy} onClick={()=>void act(record.id,()=>openDownload(record.id,true))}><ActionIcon name="files" className="h-4 w-4"/></ActionIconButton>
+         <ActionIconButton label={t('downloads.folder')} description={t('downloads.folder')} disabled={!record.path||!!busy} onClick={()=>void act(record.id,()=>open(true))}><ActionIcon name="files" className="h-4 w-4"/></ActionIconButton>
          <ActionIconButton label={t('downloads.copy')} description={t('downloads.copy')} disabled={!record.path||!!busy} onClick={()=>void act(record.id,()=>copy(record))}><ActionIcon name="copy" className="h-4 w-4"/></ActionIconButton>
         </>}
+        {record.status==='active'&&<ActionIconButton label={t('action.cancel')} description={t('action.cancel')} disabled={!!busy} onClick={()=>void act(record.id,()=>cancelDownload(record.id))}><CloseIcon className="h-4 w-4"/></ActionIconButton>}
         {record.status!=='active'&&<>
          <ActionIconButton label={t('downloads.delete')} description={t('downloads.delete')} disabled={record.status!=='complete'||!record.path||!!busy} onClick={()=>void act(record.id,()=>prepare(record))}><ActionIcon name="clear" className="h-4 w-4"/></ActionIconButton>
          <ActionIconButton label={t('downloads.dismiss')} description={t('downloads.dismiss')} disabled={!!busy} onClick={()=>void act(record.id,()=>dismissDownload(record.id))}><CloseIcon className="h-4 w-4"/></ActionIconButton>
@@ -102,7 +131,9 @@ function DownloadsPanel({onClose}:{onClose:()=>void}) {
        </div>
       </div>
       {record.status==='failed'&&<p className="ml-[38px] mt-0.5 text-xs text-danger" data-download-failure>{t(`downloads.failure.${safeDownloadFailure(record.failureReason)}`)}</p>}
-      {record.status==='active'&&<div role="progressbar" aria-label={t('downloads.status.active')} className="mt-1.5 h-0.5 overflow-hidden rounded bg-hover"><div className="downloads-progress h-full w-1/3 rounded bg-accent"/></div>}
+      <div className="mt-1.5 h-0.5" data-download-progress-slot>
+       {record.status==='active'&&<div role="progressbar" aria-label={t('downloads.status.active')} className="h-full overflow-hidden rounded bg-hover"><div className="downloads-progress h-full w-1/3 rounded bg-accent"/></div>}
+      </div>
       {copied===record.id&&<p role="status" className="mt-1 text-xs text-fg-muted">{t('downloads.copied')}</p>}
      </li>
     })}</ul>

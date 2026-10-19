@@ -18,6 +18,7 @@ interface HistoryAnchor { id: number; index: number; inset: number; top: number 
 export interface LogViewportProps {
   /** Filtered entries; ids are the stable virtualizer row keys. */
   entries: LogEntry[]
+  loading?: boolean
   /** Search matches of an entry (plain-text ranges). */
   rangesFor: (e: LogEntry) => Range[]
   matchIndices: number[]
@@ -59,6 +60,7 @@ export interface LogViewportProps {
  */
 export function LogViewport({
   entries,
+  loading = false,
   rangesFor,
   matchIndices,
   safeMatchIndex,
@@ -639,7 +641,7 @@ export function LogViewport({
         }}
       >
         {entries.length === 0 ? (
-          <span className="text-fg-subtle">{t('logs.empty')}</span>
+          <span data-log-empty-state role={loading ? 'status' : undefined} className="text-fg-subtle">{t(loading ? 'logs.phase.backlog' : 'logs.empty')}</span>
         ) : (
           <div
             data-log-content

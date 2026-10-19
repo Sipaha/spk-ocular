@@ -142,6 +142,8 @@ func TestExplicitChannelStillChecksTheUID(t *testing.T) {
 	for _, q := range []provider.LogQuery{
 		{Channel: "app", Previous: true, TailLines: 10},
 		{Channel: "app", TailLines: 10},
+		{Channel: "app", TailLines: 10, Filter: "error"},
+		{Channel: "app", Follow: true, TailLines: 10, Filter: "error", LiveOnly: true},
 		{Channel: "app", Follow: true, TailLines: 10},
 	} {
 		err := s.StreamLogs(context.Background(), ref, q, newLogRecorder())

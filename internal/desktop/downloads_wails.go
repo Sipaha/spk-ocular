@@ -22,3 +22,6 @@ func (d *Downloads) PrepareDelete(id string) (DownloadDeletePreview, error) {
 }
 func (d *Downloads) DeleteFile(id, token string) error { return d.history.deleteFile(id, token) }
 func (d *Downloads) CancelDelete(id, token string)     { d.history.cancelDelete(id, token) }
+
+// Cancel stops an active transfer by its app-issued history ID.
+func (d *Downloads) Cancel(id string) { d.history.cancel(id) }

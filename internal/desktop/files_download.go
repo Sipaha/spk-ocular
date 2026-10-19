@@ -15,7 +15,7 @@ import (
 
 // copyContainerDownload stages a complete export privately. Stream errors or
 // unsafe entries discard the staging tree and leave existing destinations alone.
-func copyContainerDownload(ctx context.Context, directory, name string, stream func(context.Context, io.Writer) error) (destination string, result error) {
+func copyContainerDownload(ctx context.Context, directory, name string, stream func(context.Context, io.Writer) error, unique ...bool) (destination string, result error) {
 	phase := "destination_unavailable"
 	defer func() {
 		if result != nil {
@@ -34,7 +34,7 @@ func copyContainerDownload(ctx context.Context, directory, name string, stream f
 		return "", err
 	}
 	defer parent.Close()
-	if _, err = parent.Lstat(name); !errors.Is(err, fs.ErrNotExist) {
+	if _, err = parent.Lstat(name); (len(unique) == 0 || !unique[0]) && !errors.Is(err, fs.ErrNotExist) {
 		if err == nil {
 			err = withDownloadFailure("destination_exists", fmt.Errorf("destination already exists: %s", name))
 		}
@@ -85,7 +85,13 @@ func copyContainerDownload(ctx context.Context, directory, name string, stream f
 	if !info.IsDir() && !info.Mode().IsRegular() {
 		return "", errors.New("source is not a regular file or directory")
 	}
+	if err = ctx.Err(); err != nil {
+		return "", err
+	}
 	phase = "write"
+	if len(unique) > 0 && unique[0] {
+		return publishUniqueDownload(directory, filepath.Join(filepath.Base(stage), name), name)
+	}
 	if err = publishDownload(parent, directory, filepath.Join(filepath.Base(stage), name), name); err != nil {
 		return "", err
 	}

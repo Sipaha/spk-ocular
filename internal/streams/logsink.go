@@ -65,3 +65,28 @@ func (s LogSink) Ready() error {
 	}
 	return s.W.Flush() // the backlog is complete: show it now
 }
+
+// Preview replaces provisional history atomically in the reader. Large final
+// snapshots still travel as the same bounded line frames as live output.
+func (s LogSink) Preview(lines []provider.LogPreviewLine, _ bool) error {
+	if err := s.W.Frame(readyFrame{K: "history-start"}); err != nil {
+		return err
+	}
+	for i := 0; i < len(lines); {
+		id := lines[i].Source
+		var batch []provider.LogLine
+		size := 0
+		for i < len(lines) && lines[i].Source == id && len(batch) < 500 && size < 64<<10 {
+			batch = append(batch, lines[i].Line)
+			size += len(lines[i].Line.Text) + len(lines[i].Line.TS)
+			i++
+		}
+		if err := s.Lines(id, batch); err != nil {
+			return err
+		}
+	}
+	if err := s.W.Frame(readyFrame{K: "history-end"}); err != nil {
+		return err
+	}
+	return s.W.Flush()
+}

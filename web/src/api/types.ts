@@ -662,6 +662,8 @@ export interface LogInfo {
 }
 
 export interface LogQuery {
+  /** Case-insensitive wildcard text filter, applied by backend before history limits. */
+  filter?: string
   /** "" = default, "*" = all */
   channel?: string
   previous?: boolean

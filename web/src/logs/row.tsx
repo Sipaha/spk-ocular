@@ -26,7 +26,7 @@ export function fmtTime(ts: string): string {
 const TIME_WIDTH = 12
 
 /** Exactly the text a row shows: copies and selection offsets use it. */
-export function rowText(e: LogEntry, o: RowOpts): string {
+export function rowText(e: Pick<LogEntry, 'ts' | 'src' | 'plain' | 'flags'>, o: RowOpts): string {
   let s = ''
   if (o.showTime) s += fmtTime(e.ts).padEnd(TIME_WIDTH) + ' '
   if (o.showSource) s += o.labelOf(e.src) + ' '

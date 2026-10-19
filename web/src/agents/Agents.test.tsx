@@ -30,9 +30,9 @@ const deployments: KindDescriptor = {
 const secrets: KindDescriptor = { id: 'secrets', title: 'Secrets', group: 'Config', scoped: true, editable: true, sensitive: true, columns: [] }
 const nodes: KindDescriptor = { id: 'nodes', title: 'Nodes', group: 'Cluster', scoped: false, columns: [] }
 
-async function setup(opts: { targets?: string[]; select?: boolean } = {}) {
+async function setup(opts: { targets?: string[]; select?: boolean; exec?: boolean } = {}) {
   const f = fakeClient((opts.targets ?? ['prod', 'dev']).map((id) => k8s(id)))
-  f.client.listKinds = vi.fn(async () => kindsView([{ ...podsKind, logs: true, actions: [{ id: 'delete', title: 'Delete', destructive: true }] }, deployments, secrets, nodes]))
+  f.client.listKinds = vi.fn(async () => kindsView([{ ...podsKind, exec: opts.exec, logs: true, actions: [{ id: 'delete', title: 'Delete', destructive: true }] }, deployments, secrets, nodes]))
   if (opts.select !== false) f.state.view.selected = { provider: 'kubernetes', id: 'prod' }
   render(<App client={f.client} />)
   await screen.findByRole('button', { name: 'Agents' })
@@ -147,6 +147,23 @@ describe('agent access: grants', () => {
     await user.click(within(panel).getByRole('button', { name: /^prod/ }))
     await user.click(within(editorOf(panel, 'prod')).getByRole('button', { name: 'Revoke all of this target' }))
     expect(f.client.saveAgentGrants).toHaveBeenLastCalledWith('kubernetes', 'prod', [])
+  })
+
+  it('Exec saves a scope-wide grant without a kind picker and retains explicit no-confirm', async () => {
+    const { f, user } = await setup({ exec: true })
+    const panel = await openPanel(user)
+    const editor = editorOf(panel, 'prod')
+    await addScope(user, editor, 'web')
+    const web = within(editor).getByRole('region', { name: 'Namespace web' })
+    await user.click(within(web).getByText('Execution', { exact: true }))
+    await user.click(within(web).getByRole('checkbox', { name: 'Container commands (exec) (destructive)' }))
+    expect(within(web).queryByRole('group', { name: 'Kinds' })).not.toBeInTheDocument()
+    expect(within(web).queryByRole('button', { name: 'Container commands (exec): Kinds' })).not.toBeInTheDocument()
+    const noConfirm = within(web).getByRole('checkbox', { name: 'without confirmation' })
+    expect(noConfirm).not.toBeChecked()
+    await user.click(noConfirm)
+    await user.click(within(editor).getByRole('button', { name: 'Save' }))
+    expect(savedRows(f)).toContainEqual({ scope: { mode: 'one', name: 'web' }, verb: 'exec', kinds: null, noConfirm: true })
   })
 
   it('a destructive action cannot be saved for all kinds: the button says why; named kinds can', async () => {
@@ -387,18 +404,23 @@ describe('agent access: journal', () => {
     expect(f.client.listAgentAudit).toHaveBeenLastCalledWith({ agent: undefined, provider: 'kubernetes', target: 'prod', limit: 200 })
   })
 
-  it('updates mounted journal dates when the interface language changes', async () => {
+  it('keeps mounted journal dates day-first and ISO hover intact when the interface language changes', async () => {
     const { f, user } = await setup()
     f.state.audit = [entry(1)]
     const panel = await openPanel(user)
     await user.click(within(panel).getByRole('tab', { name: 'Journal' }))
     const table = await within(panel).findByRole('table', { name: 'Journal' })
     await waitFor(() => expect(within(table).getAllByRole('row')).toHaveLength(2))
-    const before = within(table).getAllByRole('row')[1].querySelector('td')!.textContent
+    const dateCell = within(table).getAllByRole('row')[1].querySelector('td')!
+    const before = dateCell.textContent
+    expect(before).toMatch(/^\d{2}\.\d{2}\.\d{4} \d{2}:\d{2}:\d{2}$/)
+    expect(dateCell).toHaveAttribute('title', entry(1).at)
     await openAppMenu(user)
     await user.click(screen.getByRole('button', { name: 'Language' }))
     await user.click(screen.getByRole('option', { name: '日本語' }))
-    await waitFor(() => expect(within(table).getAllByRole('row')[1].querySelector('td')!.textContent).not.toBe(before))
+    await waitFor(() => expect(document.documentElement.lang).toBe('ja'))
+    expect(within(table).getAllByRole('row')[1].querySelector('td')).toHaveTextContent(before!)
+    expect(within(table).getAllByRole('row')[1].querySelector('td')).toHaveAttribute('title', entry(1).at)
     expect(within(table).getAllByRole('row')).toHaveLength(2)
   })
 })

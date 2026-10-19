@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-const mocks=vi.hoisted(()=>({desktop:false,call:vi.fn()}))
+const mocks=vi.hoisted(()=>({desktop:false,call:vi.fn(),off:vi.fn(),event:undefined as undefined|((event:{data:unknown})=>void)}))
 vi.mock('../api/client',()=>({isDesktop:()=>mocks.desktop}))
-vi.mock('@wailsio/runtime',()=>({Call:{ByName:mocks.call}}))
+vi.mock('@wailsio/runtime',()=>({Call:{ByName:mocks.call},Events:{On:(_name:string,callback:(event:{data:unknown})=>void)=>{mocks.event=callback;return mocks.off}}}))
 import {useDownloads} from '../downloads/store'
 import { downloadLogs, logFileName, openLogDownload, plainLogDownload } from './save'
 
@@ -9,10 +9,26 @@ beforeEach(()=>{mocks.desktop=false;mocks.call.mockReset()})
 afterEach(()=>vi.unstubAllGlobals())
 
 describe('log downloads',()=>{
+ it('aborts only the matching native owner when Downloads requests cancellation',async()=>{
+  mocks.desktop=true;mocks.call.mockResolvedValue('owned-export')
+  const cancel=vi.fn()
+  const writer=await openLogDownload('app.log','guest',cancel)
+  mocks.event!({data:'other-export'});expect(cancel).not.toHaveBeenCalled()
+  mocks.event!({data:'owned-export'});expect(cancel).toHaveBeenCalledOnce()
+  await writer!.abort();expect(mocks.off).toHaveBeenCalled()
+ })
+ it('uses browser downloads without invoking the location picker by default',async()=>{
+  const picker=vi.fn();vi.stubGlobal('showSaveFilePicker',picker)
+  const writer=await openLogDownload('automatic.log')
+  await writer!.write('buffered')
+  expect(picker).not.toHaveBeenCalled()
+  await writer!.abort()
+  expect(useDownloads.getState().records[0]).toMatchObject({status:'cancelled',bytes:8})
+ })
  it('records permission/quota failures without retaining sensitive exception text',async()=>{
   const writable={write:vi.fn(async()=>{throw new DOMException('credential=DO-NOT-RETAIN','QuotaExceededError')}),close:vi.fn(async()=>{}),abort:vi.fn(async()=>{})}
   vi.stubGlobal('showSaveFilePicker',vi.fn(async()=>({name:'quota.log',createWritable:async()=>writable})))
-  await expect(downloadLogs('quota.log','x')).rejects.toThrow('DO-NOT-RETAIN')
+  await expect(downloadLogs('quota.log','x','',true)).rejects.toThrow('DO-NOT-RETAIN')
   expect(useDownloads.getState().records[0]).toMatchObject({status:'failed',failureReason:'no_space'})
   expect(localStorage.getItem('ocular-download-history-v1')).not.toContain('DO-NOT-RETAIN')
  })
@@ -25,18 +41,18 @@ describe('log downloads',()=>{
   const writable={write:vi.fn(async()=>{}),close:vi.fn(async()=>{}),abort:vi.fn(async()=>{})}
   const picker=vi.fn(async()=>({name:'chosen.log',createWritable:async()=>writable}))
   vi.stubGlobal('showSaveFilePicker',picker)
-  expect(await downloadLogs('suggested.log','\x1b[32mпривет\x1b[0m\r\nplain\n')).toBe('chosen.log')
+  expect(await downloadLogs('suggested.log','\x1b[32mпривет\x1b[0m\r\nplain\n','',true)).toBe('chosen.log')
   expect(picker).toHaveBeenCalledWith(expect.objectContaining({suggestedName:'suggested.log'}))
   expect(writable.write).toHaveBeenCalledWith('привет\r\nplain\n');expect(writable.close).toHaveBeenCalledOnce();expect(writable.abort).not.toHaveBeenCalled()
  })
  it('does not write or report success when the picker is cancelled',async()=>{
   vi.stubGlobal('showSaveFilePicker',vi.fn(async()=>{throw new DOMException('cancelled','AbortError')}))
-  expect(await downloadLogs('logs.log','x')).toBeNull()
+  expect(await downloadLogs('logs.log','x','',true)).toBeNull()
  })
  it('aborts a failed browser write',async()=>{
   const writable={write:vi.fn(async()=>{throw new Error('disk full')}),close:vi.fn(async()=>{}),abort:vi.fn(async()=>{})}
   vi.stubGlobal('showSaveFilePicker',vi.fn(async()=>({name:'logs.log',createWritable:async()=>writable})))
-  await expect(downloadLogs('logs.log','x')).rejects.toThrow('disk full');expect(writable.abort).toHaveBeenCalledOnce();expect(writable.close).not.toHaveBeenCalled();expect(useDownloads.getState().records[0]).toMatchObject({status:'failed',failureReason:'write'})
+  await expect(downloadLogs('logs.log','x','',true)).rejects.toThrow('disk full');expect(writable.abort).toHaveBeenCalledOnce();expect(writable.close).not.toHaveBeenCalled();expect(useDownloads.getState().records[0]).toMatchObject({status:'failed',failureReason:'write'})
  })
  it('uses the requesting native window and preserves cancellation',async()=>{
   mocks.desktop=true;mocks.call.mockResolvedValue('')
@@ -46,7 +62,7 @@ describe('log downloads',()=>{
  it('streams browser chunks into a staged writable and commits only at completion',async()=>{
   const writable={write:vi.fn(async()=>{}),close:vi.fn(async()=>{}),abort:vi.fn(async()=>{})}
   vi.stubGlobal('showSaveFilePicker',vi.fn(async()=>({name:'history.log',createWritable:async()=>writable})))
-  const writer=await openLogDownload('requested.log')
+  const writer=await openLogDownload('requested.log','',undefined,true)
   await writer!.write('first\n');await writer!.write('second\n')
   expect(writable.close).not.toHaveBeenCalled();expect(writable.write.mock.calls).toEqual([['first\n'],['second\n']])
   expect(await writer!.close()).toBe('history.log');expect(writable.close).toHaveBeenCalledOnce()
@@ -55,7 +71,7 @@ describe('log downloads',()=>{
   mocks.desktop=true;mocks.call.mockResolvedValue('opaque-job')
   const writer=await openLogDownload('history.log','guest-window')
   await writer!.write('chunk');await writer!.abort()
-  expect(mocks.call).toHaveBeenCalledWith('github.com/spk/spk-ocular/internal/desktop.LogWindows.BeginLogExport','guest-window','history.log','Download logs','Download')
+  expect(mocks.call).toHaveBeenCalledWith('github.com/spk/spk-ocular/internal/desktop.LogWindows.BeginLogExport','guest-window','history.log','Download logs','Download',false)
   expect(mocks.call).toHaveBeenCalledWith('github.com/spk/spk-ocular/internal/desktop.LogWindows.AppendLogExport','opaque-job','chunk')
   expect(mocks.call).toHaveBeenCalledWith('github.com/spk/spk-ocular/internal/desktop.LogWindows.CancelLogExport','opaque-job')
  })

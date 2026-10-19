@@ -14,7 +14,7 @@ export interface LogStreamSnapshot { nextId: number; carry: [number, Carry][]; w
 export interface WindowMessage { id: string; sender: string; type: string; payload?: unknown }
 export const sameLogQuery = (a: LogQuery, b: LogQuery) =>
  a.channel === b.channel && a.previous === b.previous && a.follow === b.follow &&
- a.tailLines === b.tailLines && a.sinceTime === b.sinceTime
+ a.tailLines === b.tailLines && a.sinceTime === b.sinceTime && (a.filter ?? '') === (b.filter ?? '')
 const event = 'ocular_log_window'
 const service = 'github.com/spk/spk-ocular/internal/desktop.LogWindows.'
 
@@ -33,8 +33,10 @@ export class LogWindowBridge {
  applyFilter?: (state: LogViewState) => void
  captureView?: () => LogViewState
  applyView?: (state: LogViewState) => void
+ private streamQuery?: LogQuery
  captureStream?: () => LogStreamSnapshot
  applyQuery?: (query: LogQuery) => void
+ connectionName?: string
  subject?: Ref
  constructor(readonly id: string, readonly role: 'owner' | 'guest') {}
  async start() {
@@ -51,7 +53,7 @@ export class LogWindowBridge {
  private receive(message: WindowMessage) {
   if (message.id !== this.id || message.sender === this.sender) return
   if (this.role === 'owner') {
-   if (message.type === 'hello') void this.post('boot', { subject: this.subject, view: this.captureView?.() })
+   if (message.type === 'hello') void this.post('boot', { subject: this.subject, connectionName: this.connectionName, view: this.captureView?.() })
    if (message.type === 'subscribe') {
     const query = message.payload as LogQuery
     const snapshot = this.captureStream?.()
@@ -66,9 +68,9 @@ export class LogWindowBridge {
   }
   this.listeners.forEach(listener => listener(message))
  }
- configureView(subject: Ref, capture: () => LogViewState, apply: (state: LogViewState) => void, query: (query: LogQuery) => void) { this.subject=subject;this.captureView=capture;this.applyView=apply;this.applyQuery=query }
+ configureView(subject: Ref, capture: () => LogViewState, apply: (state: LogViewState) => void, query: (query: LogQuery) => void, connectionName?: string) { this.connectionName=connectionName;this.subject=subject;this.captureView=capture;this.applyView=apply;this.applyQuery=query }
  configureFilter(capture: () => Pick<LogViewState,'search'|'filterText'|'useRegex'>, apply: (state: LogViewState) => void) { this.captureFilter=capture;this.applyFilter=apply }
- configureStream(capture: () => LogStreamSnapshot) { this.captureStream=capture }
+ configureStream(capture: () => LogStreamSnapshot, query: LogQuery) { this.captureStream=capture;this.streamQuery=query }
  listen(listener: (message: WindowMessage) => void) { this.listeners.add(listener); return () => { this.listeners.delete(listener) } }
  post(type: string, payload?: unknown): Promise<unknown> {
   const message: WindowMessage = { id: this.id, sender: this.sender, type, payload }
@@ -82,7 +84,7 @@ export class LogWindowBridge {
   this.pending=result.catch(error=>{this.listeners.forEach(listener=>listener({id:this.id,sender:this.sender,type:'error',payload:error instanceof Error?error.message:String(error)}))})
   return result
  }
- publish(frame: Frame) { if(this.role==='owner' && this.connected) void this.post('frame', frame) }
+ publish(frame: Frame) { if(this.role==='owner' && this.connected) void this.post('frame', {query:this.streamQuery,frame}) }
  async open(title: string) {
   if(isDesktop()) { const { Call }=await import('@wailsio/runtime');await Call.ByName(service+'Open',this.id,title) }
   else { const popup=window.open(`?logsWindow=${encodeURIComponent(this.id)}`,'ocular-logs-'+this.id,logWindowFeatures(window.screen));if(!popup) throw new Error('The browser blocked the log window');this.popup=popup; }

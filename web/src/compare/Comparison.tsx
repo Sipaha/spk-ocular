@@ -1,3 +1,4 @@
+import { isoDateTime, localDateTime } from '../dates'
 import { RefreshButton } from '../components/RefreshButton'
 import {lazy,Suspense,useEffect,useRef,useState} from 'react'
 import {createPortal} from 'react-dom'
@@ -5,29 +6,20 @@ import type {Client} from '../api/client'
 import type {CompareRequest,ComparisonSide,ResourceComparison} from '../api/types'
 import {EditDiff} from '../edit/EditDiff'
 import {errorDetail} from '../errors'
-import {getLanguage,t} from '../i18n'
+import {t} from '../i18n'
 import {refTitle} from '../refs'
 import {ModalCloseButton,useModalFocus} from '../components/modal'
 import {useStore} from '../store'
-import {clearComparison,closeComparison,selectionAvailable,useComparison} from './store'
+import {closeComparison,selectionAvailable,useComparison} from './store'
 
 const ComparisonDialog=lazy(async()=>({default:Dialog}))
-const button='rounded border border-line px-2 py-1 text-xs hover:bg-hover disabled:opacity-50'
 
 export default function Comparison({client}:{client:Client}){
  const baseline=useComparison(s=>s.baseline),other=useComparison(s=>s.other)
- const view=useStore(s=>s.view)
- if(!baseline)return null
- const available=selectionAvailable(baseline,view)
- return <>
-  <aside aria-label={t('compare.baseline')} className="flex shrink-0 flex-wrap items-center gap-2 border-b border-line bg-panel px-3 py-1 text-xs" data-comparison-baseline>
-   <strong>{t('compare.baseline')}</strong><span className="min-w-0 flex-1 truncate" title={`${baseline.ref.kind} · ${baseline.ref.scope??''}/${baseline.ref.name} · ${baseline.ref.uid}`}>{baseline.targetTitle} · {baseline.ref.scope?baseline.ref.scope+'/':''}{refTitle(baseline.ref)} · {baseline.ref.kind}</span>
-   {!available&&<span className="text-warning">{t('compare.connectionChanged')}</span>}
-   <span className="text-fg-muted">{t('compare.pickOther')}</span><button className={button} onClick={clearComparison}>{t('compare.clear')}</button>
-  </aside>
-  {other&&<Suspense fallback={<p role="status">{t('app.loading')}</p>}><ComparisonDialog client={client} request={{left:baseline,right:other}}/></Suspense>}
- </>
+ if(!baseline||!other)return null
+ return <Suspense fallback={null}><ComparisonDialog client={client} request={{left:baseline,right:other}}/></Suspense>
 }
+
 function Dialog({client,request}:{client:Client;request:CompareRequest}){
  const view=useStore(s=>s.view)
  const available=selectionAvailable(request.left,view)&&selectionAvailable(request.right,view)
@@ -68,5 +60,5 @@ function Dialog({client,request}:{client:Client;request:CompareRequest}){
  </div>,document.body)
 }
 function Side({label,selection,side}:{label:string;selection:CompareRequest['left'];side?:ComparisonSide}){
- return <div className="min-w-0"><strong>{label}</strong><p className="truncate" title={selection.targetTitle}>{selection.targetTitle} · {selection.ref.provider}</p><p className="break-words" title={selection.ref.uid}>{selection.ref.scope?selection.ref.scope+'/':''}{refTitle(selection.ref)} · {selection.ref.kind}</p>{side&&<p className="text-fg-subtle">{t('compare.captured',{time:new Date(side.capturedAt).toLocaleString(getLanguage())})}</p>}</div>
+ return <div className="min-w-0"><strong>{label}</strong><p className="truncate" title={selection.targetTitle}>{selection.targetTitle} · {selection.ref.provider}</p><p className="break-words" title={selection.ref.uid}>{selection.ref.scope?selection.ref.scope+'/':''}{refTitle(selection.ref)} · {selection.ref.kind}</p>{side&&<p className="text-fg-subtle" title={isoDateTime(side.capturedAt)}>{t('compare.captured',{time:localDateTime(side.capturedAt)})}</p>}</div>
 }

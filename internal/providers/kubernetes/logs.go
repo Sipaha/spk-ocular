@@ -175,7 +175,7 @@ func (s *session) StreamLogs(ctx context.Context, ref core.Ref, q provider.LogQu
 	if q.Archive && q.Follow {
 		return &provider.Error{Class: provider.ClassInvalid, Message: "archive log reads cannot follow"}
 	}
-	err := s.streamLogs(ctx, ref, q, sink)
+	err := s.streamLogs(ctx, ref, q, provider.FilterLogSink(q, sink))
 	if err != nil {
 		var pe *provider.Error
 		class := provider.ErrorClass("")
@@ -279,6 +279,36 @@ func (s *session) streamPod(ctx context.Context, ref core.Ref, q provider.LogQue
 	}
 	src := newPodSource(1, ref.Scope, ref.Name, ref.UID, ctr, s.logs, box, sink, q)
 	src.slots = s.slots
+	if provider.NewLogFilter(q.Filter).Enabled() && !q.LiveOnly {
+		observed := box
+		if observed == nil {
+			observed = newObsBox()
+		}
+		x := &groupSrc{key: ref.UID + "/" + ctr, pod: memberPod{name: ref.Name, uid: ref.UID, box: observed}, ctr: ctr, src: src}
+		group := &logGroup{s: s, ns: ref.Scope, q: q, sink: &lockedSink{sink: sink}, active: map[string]*groupSrc{x.key: x}, nextID: 1}
+		if err := group.backlog(ctx, []*groupSrc{x}); err != nil {
+			return err
+		}
+		if err := sink.Ready(); err != nil {
+			return err
+		}
+		if !q.Follow {
+			return nil
+		}
+		return src.run(ctx)
+	}
+	if q.LiveOnly {
+		captureCtx, cancel := context.WithCancel(ctx)
+		defer cancel()
+		done := make(chan error, 1)
+		go func() { done <- src.run(captureCtx) }()
+		if err := sink.Ready(); err != nil {
+			cancel()
+			<-done
+			return err
+		}
+		return <-done
+	}
 	// One source: its backlog is simply the start of its stream.
 	if err := sink.Ready(); err != nil {
 		return err

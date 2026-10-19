@@ -8,6 +8,7 @@ export type Frame =
   | { k: 'lines'; s: number; l: LineTuple[] }
   | { k: 'state'; s: number; state: string; class?: string; msg?: string }
   | { k: 'ready' }
+  | { k: 'history-start' | 'history-end' }
   | { k: 'ping' }
   | { k: 'end'; reason: 'done' | 'gone' | 'error'; class?: string; message?: string; why?: unknown }
 

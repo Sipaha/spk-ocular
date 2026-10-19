@@ -53,6 +53,7 @@ type downloadDeletePlan struct {
 
 type downloadHistory struct {
 	mu           sync.Mutex
+	cancels      map[string]func()
 	deletes      map[string]downloadDeletePlan
 	records      []DownloadRecord
 	lastNotify   map[string]time.Time
@@ -191,6 +192,35 @@ func (h *downloadHistory) begin(destination, kind string) string {
 	return id
 }
 
+// registerCancel binds only an issued active transfer to its owned cancellation.
+func (h *downloadHistory) registerCancel(id string, cancel func()) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if h.closed {
+		return
+	}
+	for _, r := range h.records {
+		if r.ID == id && r.Status == "active" {
+			if h.cancels == nil {
+				h.cancels = map[string]func(){}
+			}
+			h.cancels[id] = cancel
+			return
+		}
+	}
+}
+
+func (h *downloadHistory) cancel(id string) {
+	h.mu.Lock()
+	cancel := h.cancels[id]
+	delete(h.cancels, id)
+	h.mu.Unlock()
+	// Never invoke owner code while holding the history mutex.
+	if cancel != nil {
+		cancel()
+	}
+}
+
 func (h *downloadHistory) trimLocked() {
 	// Active transfers are never evicted. Terminal records fill the remaining slots.
 	active := 0
@@ -269,6 +299,9 @@ func (h *downloadHistory) finish(id, destination, status string, failure ...stri
 			r.EndedAt = time.Now().UnixMilli()
 			if status == "complete" {
 				r.Path = destination
+				if destination != "" {
+					r.Name = filepath.Base(destination)
+				}
 				if info, err := os.Lstat(destination); err == nil {
 					r.Directory = info.IsDir()
 				}
@@ -277,6 +310,7 @@ func (h *downloadHistory) finish(id, destination, status string, failure ...stri
 		}
 	}
 	delete(h.lastNotify, id)
+	delete(h.cancels, id)
 	h.trimLocked()
 	h.saveLocked()
 	h.mu.Unlock()

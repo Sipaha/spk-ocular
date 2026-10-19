@@ -38,6 +38,31 @@ async function openProd() {
 const body = (grid: HTMLElement) => grid.querySelector<HTMLElement>('[data-table-scroll]')!
 
 describe('actions in the workspace', () => {
+  it('opens Deployment Scale directly from the toolbar with the pinned object and existing review', async () => {
+    const f = fakeClient([k8s('prod')])
+    const deployments = {...pods, id:'apps/deployments', title:'Deployments', actions:[restart,scale,del]}
+    const row = podRow('api-1','web');row.ref={...row.ref,kind:deployments.id}
+    f.state.view.selected={provider:'kubernetes',id:'prod'}
+    f.state.kinds[deployments.id]=deployments;f.state.rowsByKind[deployments.id]=[row]
+    f.client.listKinds=vi.fn(async()=>kindsView([deployments]))
+    f.client.getTargetState=vi.fn(async()=>({kind:JSON.stringify(deployments.id)}))
+    f.client.prepareAction=vi.fn(async(ref:Ref,_action:string,params:ActionParams)=>({where:{provider:'kubernetes',target:'prod',targetTitle:'prod',configRev:'1',ref},action:scale,params,destructive:false,rights:{state:'allowed' as const},expect:'pinned-review',current:1}))
+    render(<App client={f.client}/>)
+    const grid=await screen.findByRole('grid',{name:'resources'})
+    await userEvent.click(await within(grid).findByText('api-1'))
+    const drawer=await screen.findByRole('dialog',{name:'apps/deployments api-1'})
+    await userEvent.click(within(drawer).getByRole('button',{name:'Actions'}))
+    expect(within(screen.getByRole('menu')).queryByRole('menuitem',{name:'Scale…'})).toBeNull()
+    expect(within(screen.getByRole('menu')).getByRole('menuitem',{name:'Restart'})).toBeVisible()
+    await userEvent.keyboard('{Escape}')
+    await userEvent.click(within(drawer).getByRole('button',{name:'Scale'}))
+    const review=await screen.findByRole('dialog',{name:'Scale api-1'})
+    await waitFor(()=>expect(within(review).getByRole('textbox')).toHaveValue('1'))
+    expect(within(review).queryByRole('alert')).toBeNull()
+    expect(f.client.prepareAction).toHaveBeenCalledWith(expect.objectContaining({kind:'apps/deployments',name:'api-1',uid:row.ref.uid}),'scale',{})
+    expect(f.client.runAction).not.toHaveBeenCalled()
+  })
+
   it('the row menu acts on the row it was opened on, not the selected one', async () => {
     const { f, grid } = await openProd()
     await userEvent.click(within(grid).getByText('api-1')) // selected (and opened)

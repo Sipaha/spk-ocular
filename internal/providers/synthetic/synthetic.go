@@ -289,6 +289,7 @@ func backlog(src string) []string {
 }
 
 func (s *session) StreamLogs(ctx context.Context, ref core.Ref, q provider.LogQuery, sink provider.LogSink) error {
+	sink = provider.FilterLogSink(q, sink)
 	srcs, ok := s.objects[ref.Name]
 	if !ok {
 		return &provider.Error{Class: provider.ClassNotFound, Message: ref.Name}
@@ -298,22 +299,21 @@ func (s *session) StreamLogs(ctx context.Context, ref core.Ref, q provider.LogQu
 			return err
 		}
 	}
-	for line := range backlog("x") { // interleaved by time, like a merged backlog
-		for i, src := range srcs {
-			text := backlog(src)[line]
-			if q.Previous {
-				text = "previous: " + text
-			}
-			if err := sink.Lines(i+1, []provider.LogLine{{TS: s.p.ts(), Text: text}}); err != nil {
-				return err
+	if !q.LiveOnly {
+		for line := range backlog("x") { // interleaved by time, like a merged backlog
+			for i, src := range srcs {
+				text := backlog(src)[line]
+				if q.Previous {
+					text = "previous: " + text
+				}
+				if err := sink.Lines(i+1, []provider.LogLine{{TS: s.p.ts(), Text: text}}); err != nil {
+					return err
+				}
 			}
 		}
 	}
-	if err := sink.Ready(); err != nil {
-		return err
-	}
 	if !q.Follow {
-		return nil
+		return sink.Ready()
 	}
 	sb := &sub{target: s.target, object: ref.Name, ch: make(chan Event, 16)}
 	s.p.mu.Lock()
@@ -324,6 +324,10 @@ func (s *session) StreamLogs(ctx context.Context, ref core.Ref, q provider.LogQu
 		delete(s.p.subs, sb)
 		s.p.mu.Unlock()
 	}()
+	if err := sink.Ready(); err != nil {
+		return err
+	}
+
 	for {
 		select {
 		case <-ctx.Done():

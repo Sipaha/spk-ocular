@@ -1,3 +1,4 @@
+import { DateText } from './DateText'
 import { columnLabel } from '../presentation'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react'
@@ -446,7 +447,7 @@ export function ResourceTable({ appearance, renderCell, ariaLabel = t('table.res
                         i === 0 ? 'font-medium' : '',
                       ].join(' ')}
                     >
-                      {content === undefined ? <>{dotHere && <HealthDot state={r.health.state} muted={c.type === 'status' && cell?.muted} title={[r.health.reason, r.health.message].filter(Boolean).join(': ') || undefined} />}{text}</> : content}
+                      {content === undefined ? <>{dotHere && <HealthDot state={r.health.state} muted={c.type === 'status' && cell?.muted} title={[r.health.reason, r.health.message].filter(Boolean).join(': ') || undefined} />}<DateText value={text}/></> : content}
                     </span>
                   )
                 })}

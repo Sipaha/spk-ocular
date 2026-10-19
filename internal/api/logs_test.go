@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -87,6 +88,7 @@ func TestOpenLogStreamValidates(t *testing.T) {
 	ctx := context.Background()
 	s, _, _, _ := newLogService(t)
 	for name, q := range map[string]provider.LogQuery{
+		"oversized filter":        {TailLines: 10, Filter: strings.Repeat("x", 2001)},
 		"tail 0 (kube: no lines)": {TailLines: 0},
 		"tail below -1":           {TailLines: -2},
 		"previous + follow":       {TailLines: 10, Previous: true, Follow: true},

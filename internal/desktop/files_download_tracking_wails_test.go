@@ -92,21 +92,55 @@ func TestFailedContainerDownloadHasNoCompletedPathAndLeavesNoPartialFile(t *test
 	require.Empty(t, entries)
 }
 
-func TestContainerDownloadExistingDestinationReportsSafeReasonAndPreservesFile(t *testing.T) {
+func TestContainerDownloadExistingDestinationGetsUniqueNameAndPreservesFile(t *testing.T) {
 	directory := t.TempDir()
 	file := filepath.Join(directory, "saved")
 	require.NoError(t, os.WriteFile(file, []byte("preserve"), 0600))
 	h := newDownloadHistory(t.TempDir())
 	defer h.close()
 	called := false
-	manager := &FileDownloads{ctx: t.Context(), history: h, source: downloadSourceFixture(func(context.Context, api.FilesRequest, io.Writer) error { called = true; return nil })}
-	_, err := manager.downloadSelected(api.FilesRequest{Path: "/app/saved"}, directory)
-	require.Error(t, err)
-	require.False(t, called)
+	manager := &FileDownloads{ctx: t.Context(), history: h, source: downloadSourceFixture(func(_ context.Context, _ api.FilesRequest, w io.Writer) error {
+		called = true
+		archive := tar.NewWriter(w)
+		if err := archive.WriteHeader(&tar.Header{Name: "saved", Mode: 0600, Size: 3}); err != nil {
+			return err
+		}
+		if _, err := archive.Write([]byte("new")); err != nil {
+			return err
+		}
+		return archive.Close()
+	})}
+	destination, err := manager.downloadSelected(api.FilesRequest{Path: "/app/saved"}, directory)
+	require.NoError(t, err)
+	require.True(t, called)
+	require.Equal(t, filepath.Join(directory, "saved (1)"), destination)
 	r := h.snapshot().Records[0]
-	require.Equal(t, "destination_exists", r.FailureReason)
-	require.Empty(t, r.Path)
+	require.Equal(t, "complete", r.Status)
+	require.Equal(t, destination, r.Path)
 	data, err := os.ReadFile(file)
 	require.NoError(t, err)
 	require.Equal(t, "preserve", string(data))
+}
+
+func TestDownloadsPanelCancelsBlockedContainerTransfer(t *testing.T) {
+	directory := t.TempDir()
+	h := newDownloadHistory("")
+	started := make(chan struct{})
+	manager := &FileDownloads{ctx: t.Context(), history: h, source: downloadSourceFixture(func(ctx context.Context, _ api.FilesRequest, _ io.Writer) error {
+		close(started)
+		<-ctx.Done()
+		return ctx.Err()
+	})}
+	result := make(chan error, 1)
+	go func() {
+		_, err := manager.downloadSelected(api.FilesRequest{Path: "/app/saved"}, directory)
+		result <- err
+	}()
+	<-started
+	(&Downloads{history: h}).Cancel(h.snapshot().Records[0].ID)
+	require.ErrorIs(t, <-result, context.Canceled)
+	require.Equal(t, "cancelled", h.snapshot().Records[0].Status)
+	entries, err := os.ReadDir(directory)
+	require.NoError(t, err)
+	require.Empty(t, entries)
 }

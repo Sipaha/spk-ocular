@@ -4,6 +4,7 @@ import { connectSelected } from './fixtures'
 import { expect, type Page } from '@playwright/test'
 import { test, scratchRoot } from './fixtures'
 import { join } from 'node:path'
+import { createServer, type ServerResponse } from 'node:http'
 import {languageNames,languages} from '../../web/src/languages'
 
 async function token(page: Page) {
@@ -37,6 +38,133 @@ async function openLogs(page: Page, object: string) {
 
 const rows = (panel: ReturnType<Page['locator']>) => panel.locator('[data-log-viewport] [data-index]')
 
+test('log context identifies the source without a duplicate period in all languages and narrow panels',async({page})=>{
+ const panel=await openLogs(page,'api'),strip=panel.locator('[data-log-context]')
+ await expect(strip).toContainText('Connection: demo')
+ await expect(strip).toContainText('api')
+ await expect(strip).not.toContainText('All time')
+ await expect(strip.locator('time')).toHaveCount(0)
+ await panel.getByRole('button',{name:'Since',exact:true}).click()
+ await page.getByRole('option',{name:'1h',exact:true}).click()
+ await expect(strip.locator('time')).toHaveCount(0)
+ await expect(strip).not.toContainText('All time')
+ for(const language of languages){
+  await page.setViewportSize({width:1280,height:900})
+  await openAppMenu(page);await page.locator('.language-menu button').click()
+  await page.getByRole('option',{name:languageNames[language],exact:true}).click()
+  await expect(page.locator('html')).toHaveAttribute('lang',language)
+  await expect(strip.locator('time')).toHaveCount(0)
+  for(const width of [1280,640]){
+   await page.setViewportSize({width,height:900})
+   await expect(strip).toBeVisible()
+   expect(await strip.evaluate(e=>e.scrollWidth<=e.clientWidth)).toBe(true)
+   await page.screenshot({path:join(scratchRoot,`log-context-${language}-${width}.png`)})
+  }
+ }
+ await page.setViewportSize({width:1280,height:900})
+ await openAppMenu(page);await page.locator('.language-menu button').click()
+ await page.getByRole('option',{name:languageNames.en,exact:true}).click()
+ const popupPromise=page.waitForEvent('popup')
+ await panel.getByRole('button',{name:'Open in window',exact:true}).click()
+ const popup=await popupPromise
+ await expect(popup.locator('[data-log-context]')).toContainText('Connection: demo')
+ await expect(popup.locator('[data-log-context] time')).toHaveCount(0)
+ await popup.screenshot({path:join(scratchRoot,'log-context-detached.png')})
+ await popup.getByRole('button',{name:'Return to bottom panel',exact:true}).click()
+ await expect(strip.locator('time')).toHaveCount(0)
+ await panel.getByRole('button',{name:'Since',exact:true}).click()
+ await page.getByRole('option',{name:'All time',exact:true}).click()
+ await expect(strip.locator('time')).toHaveCount(0)
+ await expect(strip).not.toContainText('All time')
+ await expect(strip).not.toContainText('Since:')
+ await panel.getByRole('button',{name:'Since',exact:true}).click()
+ await expect(page.getByRole('option',{name:'All time',exact:true})).toBeVisible()
+ await page.screenshot({path:join(scratchRoot,'log-context-all-time.png')})
+ await page.keyboard.press('Escape')
+})
+
+test('server filter precedes the buffer and local plain/regex search, including detached windows',async({page})=>{
+ const panel=await openLogs(page,'api')
+ const search=panel.getByLabel('Search (Ctrl+F)'),filter=panel.getByLabel('Filter (*)',{exact:true})
+ await search.fill('api/main')
+ await expect(panel.getByLabel('matches')).toHaveText('1/5')
+ const request=page.waitForRequest(r=>r.url().endsWith('/api/OpenLogStream')&&r.postDataJSON().query.filter==='INFO')
+ await filter.fill('INFO');await request
+ await expect(rows(panel)).toHaveCount(2)
+ await expect(panel.getByLabel('matches')).toHaveText('1/2')
+ await expect(page.locator('.status-bar').getByLabel('line count')).toHaveText('2 lines')
+ await emit(page,'api',{lines:['DEBUG backend-dropped-noise','INFO backend-matched-live']})
+ await expect(rows(panel)).toHaveCount(3)
+ await expect(rows(panel).filter({hasText:'backend-dropped-noise'})).toHaveCount(0)
+ await panel.getByRole('button',{name:'Regular expression',exact:true}).click()
+ await search.fill('api/m.in')
+ await expect(panel.getByLabel('matches')).toHaveText('1/2')
+ const popupPromise=page.waitForEvent('popup')
+ await panel.getByRole('button',{name:'Open in window',exact:true}).click()
+ const popup=await popupPromise
+ await expect(popup.getByLabel('Filter (*)',{exact:true})).toHaveValue('INFO')
+ await expect(popup.locator('[data-log-viewport] [data-index]')).toHaveCount(3)
+ const changed=page.waitForRequest(r=>r.url().endsWith('/api/OpenLogStream')&&r.postDataJSON().query.filter==='WARN')
+ await popup.getByLabel('Filter (*)',{exact:true}).fill('WARN');await changed
+ await expect(popup.locator('[data-log-viewport] [data-index]')).toHaveCount(1)
+ await expect(popup.getByLabel('matches')).toHaveText('1/1')
+ await popup.getByRole('button',{name:'Return to bottom panel',exact:true}).click()
+ await expect(filter).toHaveValue('WARN')
+ await expect(rows(panel)).toHaveCount(1)
+ await filter.fill('ZZ-no-match')
+ await expect(rows(panel)).toHaveCount(0)
+ await expect(panel.getByLabel('matches')).toHaveText('0/0')
+ await filter.fill('')
+ await expect(rows(panel)).toHaveCount(6)
+ await expect(panel.getByLabel('matches')).toHaveText('1/5')
+ await page.screenshot({path:join(scratchRoot,'log-search-after-filter.png')})
+})
+
+test('partial history and captured new rows render under a stable loader before history is ready',async({page})=>{
+ let response:ServerResponse|undefined
+ const server=createServer((request,res)=>{
+  res.setHeader('Access-Control-Allow-Origin','*')
+  res.setHeader('Access-Control-Allow-Private-Network','true')
+  if(request.method==='OPTIONS'){res.writeHead(204);res.end();return}
+  res.setHeader('Content-Type','application/x-ndjson');res.writeHead(200);res.flushHeaders();response=res
+  res.write(JSON.stringify({k:'source',id:1,key:'fixture/app',label:'api/main',channel:'main'})+'\n')
+ })
+ await new Promise<void>(resolve=>server.listen(0,'127.0.0.1',resolve))
+ const address=server.address() as {port:number}
+ try{
+  await page.route('**/api/OpenLogStream',route=>route.fulfill({contentType:'application/json',body:JSON.stringify({streamId:'preview-fixture'})}))
+  await page.route('**/api/StreamBase',route=>route.fulfill({contentType:'application/json',body:JSON.stringify(`http://127.0.0.1:${address.port}/preview`)}))
+  await page.goto('/');await selectConnection(page,/^demo\b/);await connectSelected(page)
+  await page.getByRole('navigation',{name:'resources'}).getByRole('button',{name:'Services',exact:true}).click()
+  await page.getByRole('grid',{name:'resources'}).getByRole('gridcell',{name:'api',exact:true}).click()
+  await page.keyboard.press('l')
+  const panel=page.locator('[role=tabpanel]:not([hidden])'),strip=panel.locator('[data-log-context]')
+  await expect.poll(()=>Boolean(response)).toBe(true)
+  await expect(panel.locator('[data-log-empty-state]')).toHaveText('Loading…')
+  await expect(panel.getByText('No log lines',{exact:true})).toHaveCount(0)
+  await expect(panel.locator('[data-log-loading]')).toBeVisible()
+  await page.screenshot({path:join(scratchRoot,'log-empty-loading.png')})
+  for(const frame of [{k:'history-start'},{k:'lines',s:1,l:[['2026-10-19T00:00:00Z','ERROR partial history']]},{k:'history-end'}])response!.write(JSON.stringify(frame)+'\n')
+  await expect(rows(panel)).toHaveText(['ERROR partial history'])
+  await expect(panel.locator('[data-log-loading]')).toBeVisible()
+  const before=await strip.boundingBox()
+  for(const frame of [{k:'history-start'},{k:'lines',s:1,l:[['2026-10-19T00:00:00Z','ERROR partial history'],['2026-10-19T00:00:01Z','ERROR arrived during history']]},{k:'history-end'}])response!.write(JSON.stringify(frame)+'\n')
+  await expect(rows(panel)).toHaveText(['ERROR partial history','ERROR arrived during history'])
+  await expect(panel.locator('[data-log-loading]')).toBeVisible()
+  await page.screenshot({path:join(scratchRoot,'log-progressive-live-loading.png')})
+  response!.write(JSON.stringify({k:'ready'})+'\n')
+  await expect(panel.locator('[data-log-loading]')).toHaveCount(0)
+  expect(await strip.boundingBox()).toEqual(before)
+  response!.write(JSON.stringify({k:'lines',s:1,l:[['2026-10-19T00:00:02Z','ERROR newest live']]})+'\n')
+  await expect(rows(panel)).toHaveText(['ERROR partial history','ERROR arrived during history','ERROR newest live'])
+  await page.screenshot({path:join(scratchRoot,'log-progressive-live-ready.png')})
+  response!.end(JSON.stringify({k:'end',reason:'done'})+'\n')
+ }finally{
+  if(response && !response.writableEnded)response.end()
+  await new Promise<void>(resolve=>{server.close(()=>resolve());server.closeAllConnections()})
+ }
+})
+
 test('opening and reopening logs focuses the viewport and enables its shortcuts',async({page})=>{
  const panel=await openLogs(page,'api'),vp=panel.locator('[data-log-viewport]')
  await page.keyboard.press('Control+f')
@@ -63,13 +191,15 @@ test('one source: backlog, live lines, ANSI, text filters, search, copy', async 
   await expect(panel.getByLabel('matches')).toHaveText('1/2')
   await expect(panel.locator('mark.log-match-current')).toHaveText('live')
   await expect(panel.getByRole('button', { name: /^(DEBUG|INFO|ERROR|WARN|TRACE|UNKNOWN)$/ })).toHaveCount(0)
+  await panel.getByLabel('Search (Ctrl+F)').fill('ready')
   await panel.getByLabel('Filter (*)', { exact: true }).fill('INFO')
+  await expect(rows(panel)).toHaveCount(2)
   await expect(panel.getByLabel('matches')).toHaveText('1/1')
 
   // copy the shown lines
   await panel.getByRole('button', { name: 'Copy' }).click()
   const copied = await page.evaluate(() => navigator.clipboard.readText())
-  expect(copied.split('\n')).toEqual(['INFO api/main starting', 'INFO api/main ready', 'INFO live one'])
+  expect(copied.split('\n')).toEqual(['INFO api/main starting', 'INFO api/main ready'])
 })
 
 test('a group: sources with prefixes and per-source states', async ({ page }) => {
@@ -275,7 +405,9 @@ test('separate log window shares one stream and returns its settings and buffer'
  const back=popup.getByRole('button',{name:'Return to bottom panel',exact:true})
  await expect(back.locator('svg')).toHaveCount(1)
  await expect(back).toHaveText('')
- await back.click()
+ const closed=popup.waitForEvent('close')
+ await back.click({noWaitAfter:true})
+ await closed
  await expect(panel.locator('[data-log-viewport]')).toContainText('unique-before-detach')
  await expect(panel.locator('[data-log-viewport]')).toContainText('unique-in-window')
  await expect(panel.getByLabel('Search (Ctrl+F)')).toHaveValue('unique')
@@ -328,7 +460,7 @@ test('Download chooses a destination and exports uncolored text; the last row cl
   const last=panel.locator('[data-index]').last();const row=(await last.boundingBox())!,viewport=(await vp.boundingBox())!
   return viewport.y+viewport.height-row.y-row.height
  }).toBeGreaterThanOrEqual(20)
- await panel.getByRole('button',{name:'Download',exact:true}).click()
+ await panel.getByRole('button',{name:'Download',exact:true}).click({button:'right'})
  await expect.poll(()=>page.evaluate(()=>(window as unknown as {downloadedLogs?:string}).downloadedLogs)).toContain('INFO api/main starting')
  expect(await page.evaluate(()=>(window as unknown as {downloadedLogs:string}).downloadedLogs)).toContain('INFO api/main ready')
  expect(await page.evaluate(()=>(window as unknown as {downloadedLogs:string}).downloadedLogs)).not.toContain('\u001b')
@@ -424,12 +556,48 @@ test('Download reads all retained history rather than viewport, loaded buffer or
  const panel=await openLogs(page,'api')
  await expect(page.locator('.status-bar').getByLabel('line count')).toHaveText('6 lines')
  await panel.getByLabel('Filter (*)',{exact:true}).fill('DOES_NOT_MATCH_HISTORY')
- await panel.getByRole('button',{name:'Download',exact:true}).click()
+ await panel.getByRole('button',{name:'Download',exact:true}).click({button:'right'})
  await expect.poll(()=>page.evaluate(()=>(window as unknown as {historyCommitted?:boolean}).historyCommitted)).toBe(true)
  const text=await page.evaluate(()=>(window as unknown as {historyText:string}).historyText)
  expect(text.split('\n').filter(Boolean)).toHaveLength(4000);expect(text).toContain('archive line 0\n');expect(text).toContain('archive line 3999\n')
  expect(historyReads).toBe(1);await expect(page.locator('.status-bar')).toContainText('Saved to full-history.log')
  await page.screenshot({path:join(scratchRoot,'history-export-all-lines.png')})
+})
+
+test('History download matches configured time and source labels and snapshots them before the chooser',async({page})=>{
+ await page.addInitScript(()=>{
+  const target=window as unknown as {formattedDownloads:string[];releaseLogChooser?:()=>void;holdLogChooser?:boolean;showSaveFilePicker:()=>Promise<unknown>}
+  target.formattedDownloads=[]
+  target.showSaveFilePicker=async()=>{
+   if(target.holdLogChooser)await new Promise<void>(resolve=>{target.releaseLogChooser=resolve})
+   let text=''
+   return {name:'configured.log',createWritable:async()=>({write:async(chunk:string)=>{text+=chunk},close:async()=>{target.formattedDownloads.push(text)},abort:async()=>{}})}
+  }
+ })
+ const timestamp='2026-10-11T01:02:03.456Z',message='history Ω [original timestamp]'
+ await page.route('**/api/OpenLogHistory',route=>route.fulfill({json:{streamId:'formatted-history'}}))
+ await page.route('**/logs/formatted-history',route=>route.fulfill({contentType:'application/x-ndjson',body:[{k:'source',id:77,key:'workers/worker-1/main',label:'worker-1/main'},{k:'lines',s:77,l:[[timestamp,message]]},{k:'end',reason:'done'}].map(f=>JSON.stringify(f)+'\n').join('')}))
+ const panel=await openLogs(page,'workers')
+ await expect(rows(panel).first()).toHaveText('1 INFO worker-1/main starting')
+ const localTime=await page.evaluate(ts=>{const d=new Date(ts),pad=(n:number,w=2)=>String(n).padStart(w,'0');return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}.${pad(d.getMilliseconds(),3)}`},timestamp)
+ let count=0
+ for(const [time,source] of [[false,false],[true,false],[false,true],[true,true]]){
+  for(const [name,on] of [['Time',time],['Source',source]] as const){const button=panel.getByRole('button',{name,exact:true});if(await button.getAttribute('aria-pressed')!==String(on))await button.click()}
+  await panel.getByRole('button',{name:'Download',exact:true}).click({button:'right'})
+  await expect.poll(()=>page.evaluate(()=>(window as unknown as {formattedDownloads:string[]}).formattedDownloads.length)).toBe(++count)
+  expect(await page.evaluate(()=>(window as unknown as {formattedDownloads:string[]}).formattedDownloads.at(-1))).toBe(`${time?localTime+' ':''}${source?'1 ':''}${message}\n`)
+  await page.getByRole('dialog',{name:'Downloads',exact:true}).getByRole('button',{name:'Close',exact:true}).click()
+ }
+ await page.evaluate(()=>{(window as unknown as {holdLogChooser:boolean}).holdLogChooser=true})
+ await panel.getByRole('button',{name:'Download',exact:true}).click({button:'right'})
+ await expect.poll(()=>page.evaluate(()=>typeof (window as unknown as {releaseLogChooser?:()=>void}).releaseLogChooser)).toBe('function')
+ await panel.getByRole('button',{name:'Time',exact:true}).click();await panel.getByRole('button',{name:'Source',exact:true}).click()
+ await page.evaluate(()=>(window as unknown as {releaseLogChooser:()=>void}).releaseLogChooser())
+ await expect.poll(()=>page.evaluate(()=>(window as unknown as {formattedDownloads:string[]}).formattedDownloads.length)).toBe(++count)
+ expect(await page.evaluate(()=>(window as unknown as {formattedDownloads:string[]}).formattedDownloads.at(-1))).toBe(`${localTime} 1 ${message}\n`)
+ await page.getByRole('dialog',{name:'Downloads',exact:true}).getByRole('button',{name:'Close',exact:true}).click()
+ await panel.getByRole('button',{name:'Time',exact:true}).click();await panel.getByRole('button',{name:'Source',exact:true}).click()
+ await page.screenshot({path:join(scratchRoot,'history-export-configured-format.png')})
 })
 
 test('Incomplete history aborts its chosen destination without committing a partial file',async({page})=>{
@@ -438,7 +606,7 @@ test('Incomplete history aborts its chosen destination without committing a part
  })
  await page.route('**/api/OpenLogHistory',route=>route.fulfill({json:{streamId:'incomplete-fixture'}}))
  await page.route('**/logs/incomplete-fixture',route=>route.fulfill({contentType:'application/x-ndjson',body:[{k:'source',id:1,key:'history-uid/main',label:'api/main'},{k:'lines',s:1,l:[['','partial prefix']]},{k:'state',s:1,state:'truncated',msg:'source history incomplete'},{k:'end',reason:'done'}].map(f=>JSON.stringify(f)+'\n').join('')}))
- const panel=await openLogs(page,'api');await panel.getByRole('button',{name:'Download',exact:true}).click()
+ const panel=await openLogs(page,'api');await panel.getByRole('button',{name:'Download',exact:true}).click({button:'right'})
  await expect.poll(()=>page.evaluate(()=>(window as unknown as {aborted?:boolean}).aborted)).toBe(true)
  expect(await page.evaluate(()=>(window as unknown as {committed?:boolean}).committed)).not.toBe(true)
  await expect(page.locator('.status-bar')).toContainText('source history incomplete')
@@ -457,11 +625,22 @@ test('Cancelling a pending history download aborts its destination and ignores a
   started=true;await paused
   try{await route.fulfill({contentType:'application/x-ndjson',body:'{"k":"source","id":1,"key":"uid/main","label":"api/main"}\n{"k":"end","reason":"done"}\n'})}catch{/* The cancelled fetch may already be gone. */}
  })
- const panel=await openLogs(page,'api');await panel.getByRole('button',{name:'Download',exact:true}).click()
+ const panel=await openLogs(page,'api')
+ const footer=page.locator('.status-bar'),viewport=panel.locator('[data-log-viewport]')
+ const before={footer:await footer.boundingBox(),viewport:await viewport.boundingBox()}
+ await panel.getByRole('button',{name:'Download',exact:true}).click({button:'right'})
  await expect.poll(()=>started).toBe(true)
- await page.locator('.status-bar').getByRole('button',{name:'Cancel log download',exact:true}).click()
+ expect(await footer.boundingBox()).toEqual(before.footer)
+ expect(await viewport.boundingBox()).toEqual(before.viewport)
+ await expect(footer.getByRole('button',{name:'Cancel log download',exact:true})).toHaveCount(0)
+ await page.screenshot({path:join(scratchRoot,'history-download-stable-footer.png')})
+ const downloads=page.getByRole('dialog',{name:'Downloads',exact:true})
+ await expect(downloads).toContainText('pending.log')
+ await downloads.getByRole('button',{name:'Cancel',exact:true}).click()
  await expect.poll(()=>page.evaluate(()=>(window as unknown as {aborted?:boolean}).aborted)).toBe(true)
  release();await expect(page.locator('.status-bar')).toContainText('Log download cancelled')
+ await expect(downloads).toContainText('Cancelled')
+ await page.screenshot({path:join(scratchRoot,'history-download-cancelled-in-downloads.png')})
  expect(await page.evaluate(()=>(window as unknown as {committed?:boolean}).committed)).not.toBe(true)
  await expect(panel.getByRole('button',{name:'Download',exact:true})).toBeEnabled()
 })

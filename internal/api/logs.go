@@ -68,6 +68,9 @@ func (s *Service) LogInfo(ctx context.Context, ref core.Ref) (core.LogInfo, erro
 // outlive a closed session (CloseOwner then ends it with "gone").
 func (s *Service) OpenLogStream(ctx context.Context, req LogStreamRequest) (LogStreamInfo, error) {
 	q := req.Query
+	if len(q.Filter) > 2000 {
+		return LogStreamInfo{}, coded(CodeBadRequest, errors.New("filter must not exceed 2000 bytes"))
+	}
 	if q.TailLines == 0 || q.TailLines < provider.TailAll {
 		return LogStreamInfo{}, coded(CodeBadRequest, fmt.Errorf("tailLines must be > 0 or %d (all)", provider.TailAll))
 	}
@@ -80,7 +83,9 @@ func (s *Service) OpenLogStream(ctx context.Context, req LogStreamRequest) (LogS
 	}
 	ref := req.Ref
 	id, err := s.registerStream(e, func(ctx context.Context, out *streams.Writer) error {
-		return src.StreamLogs(ctx, ref, q, streams.LogSink{W: out})
+		return provider.StreamFilteredLogView(ctx, q, func(ctx context.Context, query provider.LogQuery, sink provider.LogSink) error {
+			return src.StreamLogs(ctx, ref, query, sink)
+		}, streams.LogSink{W: out})
 	})
 	if err != nil {
 		return LogStreamInfo{}, err

@@ -172,6 +172,33 @@ detached log windows; active metadata remains process/window-owned. Blob handoff
 is distinguished from a verified save-picker completion. Native opening and
 folder actions are not fabricated for browser-managed destinations.
 
+## Shared workspace presentation
+
+Resource lists, Helm, Graph, Timeline, Security and RBAC use `WorkspaceToolbar`.
+Section identity remains available as an accessible heading; visible names,
+counts and coverage belong in the active `LocationStatus` footer. Do not add a
+second section selector or a private loading row above retained content.
+
+Finite reads use `useSnapshotRequest` for single-flight refresh, retained
+same-scope results, explicit cancellation/retry and late-response fencing.
+Changing client/request/scope identity cancels the old read and drops data from
+the previous scope. Resource watches retain their protocol-specific `ViewSync`;
+both paths share `RefreshButton`, `ListRefreshProgress`, `ListLoading` and
+`CancelledList`. Inline elapsed/progress controls appear after two seconds in a
+reserved toolbar slot. Unknown byte counts remain unknown, never estimated.
+`SnapshotBoundary` keeps content mounted while initial reads and cancelled
+observations hide it. Cancellation is not a mutation rollback guarantee.
+
+Graph admission remains explicit per connection and owns its request identity;
+a retained editor does not authorize a read on a replacement connection. Global
+Helm settings are independent of connection changes. Its graph read includes the
+layout worker, which is terminated on cancellation or disposal. Helm section
+navigation belongs in the normal left catalogue, including settings; operation
+review, one-shot plans and unsaved-edit protection remain feature-owned.
+Helm operation outcomes use the shared status-bar notice channel instead of
+inserting private success banners. Comparison baseline status occupies a permanent app-header slot and a portal
+popover; selecting or clearing it must not change workspace geometry.
+
 ## Live tables and discovery
 
 Kubernetes LIST supports field/label selectors and continuation pages, but no
@@ -417,11 +444,32 @@ offer container choices. Explicit setup uses provider-supplied instance labels. 
 instance selectors, even for one option; only Terminal accepts a command.
 Cancellation and context changes invalidate pending picker responses.
 
+UI log queries carry a case-insensitive `*` text filter. Providers scan beyond
+the raw tail, consume every raw record into their reconnect cursor, and select
+matches before merging/trimming the history tail. Filtered backlog scans expand
+finite tail windows sequentially per source, charging overlapping reads to a
+shared 10,000 raw-line budget and the group byte/deadline budgets. The readers
+enforce local byte caps, not just upstream parameters. A shared bounded sink filters
+live records before transport. Filtered live views pair that finite scan with
+independent EOF-only capture (explicit upstream tail zero), remap sources by
+stable key, and reconcile timestamped overlaps by multiplicity. New-record
+buffering is capped at 50k/16 MiB and reports overflow. A shared per-view raw
+read pacer limits live decoding to 1 MiB/s across sources; an additional live
+admission semaphore retains half the existing provider slots for other reads.
+Atomic history-start/history-end snapshots provide bounded/coalesced previews
+and a reserved UI loader while capture continues. Raw scan byte/time limits remain separate and
+report incomplete history. Changing the filter opens a new fenced stream;
+detached windows include the filter in query identity and reject stale
+frame/snapshot/status/reset deliveries for older queries. Local search operates on
+the matching buffer. Agent grep/export limits retain their separate contracts.
+
 UI logs and terminal traffic use a token-protected loopback server in both app
 modes. They never stream through the `wails://` asset transport. Stream IDs are
 one-shot and bound to session ownership. Guards run before consuming an ID.
 
-Agent exec uses its own `exec` grant with explicitly named scoped kinds.
+Agent exec uses its own scope-wide `exec` grant for the selected namespace/project.
+Existing kind-restricted grants retain their limits; the editor does not widen them
+unless the user replaces the permission. Unsupported kinds still cannot execute commands.
 GetExecInfo → PrepareExec → RunExec selects an explicit member/container and
 pins object UID plus opaque configuration revision. Preparation retains only
 bounded request/description data in process memory, not a UI terminal handle.
@@ -603,8 +651,18 @@ own size. The combined ARGB property stays below the X11 request limit; simply
 embedding a 512 px PNG can leave the GTK window without a taskbar icon. The resource list reserves 24 px for GTK overlay-scrollbar hit areas.
 Connection details remain a header-button modal; the old Overview page is absent.
 
+Agent permission checkboxes retain native input/label/keyboard semantics, with
+contrasting checked and disabled states; forced-colors mode retains native rendering.
+
 `@theme static` preserves runtime ANSI/xterm colors. CodeMirror and xterm are
-lazy-loaded. Each entry JS chunk has a 300 KiB gzip ceiling enforced by the build.
+lazy-loaded. Resource YAML preloads on tab hover/focus or an explicit edit request.
+While the editor chunk loads, a loading indicator replaces the former full-document
+plain-text fallback, avoiding duplicate YAML DOM and an unhighlighted first paint.
+The syntax parser and virtualized editor keep their existing bounded initialization.
+Switching readable resources reuses the same CodeMirror view and replaces its
+document before paint; a changed resource identity resets selection and scroll.
+Editable drafts remain isolated and protected by the existing leave guard.
+Each entry JS chunk has a 300 KiB gzip ceiling enforced by the build.
 Virtualized row keys remain stable across layout changes. The application does
 not bundle a browser, run telemetry, or keep a tray/background process.
 
@@ -721,13 +779,20 @@ filters. Backend and frontend bound bytes/lines/sources and reject incomplete
 history; source retention and sequential multi-source reads still apply. This
 adds no agent endpoint or grant. Closing a connection retires its export stream.
 
-Native log downloads use the application-only Wails service and a system file
-chooser attached to the requesting window. Begin returns an opaque app-owned
-export id; Append writes bounded UTF-8 chunks, and Complete replaces
-the selected destination only after a successful sync. Cancel, window closure, app
+Native log downloads use the application-only Wails service and the system
+Downloads directory by default. Explicit right-click location selection uses a
+system chooser attached to the requesting window. Default publication atomically
+claims a unique filename and never replaces an existing entry. Begin returns an opaque app-owned
+export id; Append writes bounded UTF-8 chunks, and Complete publishes
+the destination only after a successful sync. Explicit location selection retains
+staged replacement of the selected destination. Cancel, window closure, app
 shutdown and expiry remove the owner-only staged file. The renderer never sends
-a destination path. Streaming browser save pickers likewise stage chunks; the
-legacy download-manager fallback is bounded to 64 MiB. A download must receive a
+a destination path. The Downloads panel cancels owned native transfers by issued
+history ID; log cancellation also notifies the owning renderer to abort its read.
+Browser cancellation routes to the owner through bounded metadata messages,
+including detached windows. New transfers open the main Downloads panel.
+Explicit browser save pickers likewise stage chunks; ordinary browser downloads
+use the download manager with a bounded 64 MiB buffer. A download must receive a
 valid complete end frame before committing. The desktop loopback server does not
 enable the old Downloads save route. Agent exports retain their separate private
 Downloads contract and existing permission checks.

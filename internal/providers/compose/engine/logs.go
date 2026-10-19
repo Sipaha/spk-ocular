@@ -41,6 +41,9 @@ type LogsOptions struct {
 	Since      time.Time // zero: from the start of the journal
 	// Tail: N > 0 — the last N lines; 0 or negative — all.
 	Tail int
+	// ZeroTail follows from EOF without an initial journal tail.
+	ZeroTail  bool
+	LivePacer *provider.LogReadPacer
 	// Stdout, Stderr: which streams; neither set means both.
 	Stdout, Stderr bool
 }
@@ -92,7 +95,9 @@ func (c *Client) ContainerLogs(ctx context.Context, id string, o LogsOptions, tt
 	if !o.Since.IsZero() {
 		q.Set("since", unixNano(o.Since))
 	}
-	if o.Tail > 0 {
+	if o.ZeroTail {
+		q.Set("tail", "0")
+	} else if o.Tail > 0 {
 		q.Set("tail", strconv.Itoa(o.Tail))
 	} else {
 		q.Set("tail", "all")
@@ -101,7 +106,7 @@ func (c *Client) ContainerLogs(ctx context.Context, id string, o LogsOptions, tt
 	if err != nil {
 		return nil, err
 	}
-	r := NewLogReader(resp.Body, tty, o.Timestamps, c.lim)
+	r := NewLogReader(o.LivePacer.Wrap(ctx, resp.Body), tty, o.Timestamps, c.lim)
 	r.ctx, r.cancel = ctx, cancel
 	return r, nil
 }
@@ -118,6 +123,7 @@ type LogReader struct {
 	maxLine    int
 	maxFrame   int
 	maxErr     int
+	readBudget *logReadBudget
 	lines      [3]lineAsm // by Stream
 	queue      []LogRecord
 	err        error // after the queue: io.EOF or the failure
@@ -144,6 +150,34 @@ func NewLogReader(body io.Reader, tty, timestamps bool, lim Limits) *LogReader {
 		maxLine: lim.LogLineBytes, maxFrame: lim.LogFrameBytes, maxErr: int(lim.ErrorBytes),
 		scratch: make([]byte, 32<<10),
 	}
+}
+
+// LimitReadBytes sets a local wire budget before the first Next call. The
+// original response remains owned by Close; even an ignored upstream limit
+// cannot make a finite filtered history read consume an unbounded body.
+func (r *LogReader) LimitReadBytes(n int64) {
+	r.readBudget = &logReadBudget{reader: io.LimitReader(r.body, max(0, n)), limit: max(0, n)}
+	r.br = bufio.NewReaderSize(r.readBudget, 32<<10)
+}
+func (r *LogReader) ReadBudgetBytes() int64 {
+	if r.readBudget == nil {
+		return 0
+	}
+	return r.readBudget.used
+}
+func (r *LogReader) ReadBudgetHit() bool {
+	return r.readBudget != nil && r.readBudget.used >= r.readBudget.limit
+}
+
+type logReadBudget struct {
+	reader      io.Reader
+	used, limit int64
+}
+
+func (r *logReadBudget) Read(p []byte) (int, error) {
+	n, err := r.reader.Read(p)
+	r.used += int64(n)
+	return n, err
 }
 
 // Next returns the next record; io.EOF after the last one of a stream

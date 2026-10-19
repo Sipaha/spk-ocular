@@ -21,6 +21,7 @@ type stagedLogExport struct {
 	bytes       int64
 	limit       int64
 	closed      bool
+	unique      bool
 }
 
 func newStagedLogExport(destination string, limit int64) (*stagedLogExport, error) {
@@ -67,6 +68,13 @@ func (s *stagedLogExport) Complete() error {
 		return err
 	}
 	if err := s.file.Close(); err != nil {
+		return err
+	}
+	if s.unique {
+		destination, err := publishUniqueDownload(filepath.Dir(s.destination), filepath.Base(s.temporary), filepath.Base(s.destination))
+		if err == nil {
+			s.destination = destination
+		}
 		return err
 	}
 	return os.Rename(s.temporary, s.destination)

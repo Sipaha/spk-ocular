@@ -35,6 +35,7 @@ let timer:ReturnType<typeof setInterval>|null=null
 let pulling=false,again=false
 let mutationEpoch=0
 const lastPublish=new Map<string,number>()
+const cancellations=new Map<string,()=>void>()
 
 export function isDownloadUnseen(record:DownloadRecord,viewed:readonly string[]) {
  return (record.status==='complete'||record.status==='browser')&&!viewed.includes(record.id)
@@ -137,6 +138,7 @@ export function watchDownloads() {
      if(event.data?.type==='request')channel?.postMessage({type:'snapshot',records:useDownloads.getState().records})
      else if(event.data?.type==='snapshot'&&Array.isArray(event.data.records))mergeBrowser(event.data.records)
      else if(event.data?.type==='remove'&&typeof event.data.id==='string'){rememberRemoved([event.data.id]);useDownloads.setState({records:useDownloads.getState().records.filter(r=>r.id!==event.data.id)})}
+     else if(event.data?.type==='cancel'&&typeof event.data.id==='string')cancellations.get(event.data.id)?.()
      else if(event.data?.type==='clear')useDownloads.setState({records:useDownloads.getState().records.filter(r=>r.status==='active')})
     }
     channel.postMessage({type:'request'})
@@ -150,8 +152,9 @@ export function watchDownloads() {
  return()=>{users--;if(users===0){generation++;stopViewed?.();stopViewed=null;off?.();off=null;channel?.close();channel=null;if(timer)clearInterval(timer);timer=null}}
 }
 
-export function beginBrowserDownload(name:string):string {
+export function beginBrowserDownload(name:string,onCancel?:()=>void):string {
  const id=crypto.randomUUID()
+ if(onCancel)cancellations.set(id,onCancel)
  const record:DownloadRecord={id,name,kind:'logs',status:'active',bytes:0,startedAt:Date.now(),owner:browserOwner}
  mergeBrowser([record])
  channel?.postMessage({type:'snapshot',records:[record]})
@@ -162,9 +165,19 @@ export function updateBrowserDownload(id:string,bytes:number,status:DownloadStat
  if(status==='active')lastPublish.set(id,Date.now());else lastPublish.delete(id)
  const records=useDownloads.getState().records.map(r=>r.id===id&&r.status==='active'?{...r,bytes,status,failureReason:status==='failed'?safeDownloadFailure(reason):undefined,endedAt:status==='active'?undefined:Date.now(),owner:status==='active'?r.owner:undefined}:r)
  useDownloads.setState({records})
- if(status!=='active')persistBrowser()
+ if(status!=='active'){cancellations.delete(id);persistBrowser()}
  const record=records.find(r=>r.id===id)
  if(record)channel?.postMessage({type:'snapshot',records:[record]})
+}
+
+/** Cancel only an active app-owned transfer, including a detached owner. */
+export async function cancelDownload(id:string) {
+ const record=useDownloads.getState().records.find(r=>r.id===id)
+ if(!record||record.status!=='active')return
+ if(isDesktop()){await call('Cancel',id);await reloadDownloads();return}
+ const cancel=cancellations.get(id)
+ if(cancel)cancel()
+ else channel?.postMessage({type:'cancel',id})
 }
 
 export async function clearDownloadHistory() {

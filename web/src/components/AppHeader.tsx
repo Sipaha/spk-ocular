@@ -1,3 +1,4 @@
+import { BaselineControl } from '../compare/BaselineControl'
 import { useEffect, useRef, useState, type RefObject } from 'react'
 import { createPortal } from 'react-dom'
 import type { Client } from '../api/client'
@@ -19,6 +20,7 @@ export function AppHeader({target,onHelp,onAbout,client,act,configRef}:{target:T
  return <header className="app-header">
   <ConnectionSwitcher client={client} act={act} configRef={configRef} target={target}/>
   <button className="command-trigger" onClick={openPalette} aria-label={`${t('palette.label')} (Ctrl+K)`}><SearchIcon className="h-4 w-4 shrink-0"/><span className="truncate">{t('shell.search')}</span><kbd>Ctrl K</kbd></button>
+  <BaselineControl/>
   <DownloadsButton/>
   <button ref={button} type="button" className="help-trigger" aria-label={t('connections.appMenu')} title={t('connections.appMenu')} aria-haspopup="dialog" aria-expanded={open} data-app-menu onClick={()=>setOpen(!open)}><svg aria-hidden="true" viewBox="0 0 20 20" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M4 5h12M4 10h12M4 15h12"/></svg></button>
   {open&&createPortal(<div className="fixed inset-0 z-40" onMouseDown={e=>{if(e.target===e.currentTarget)close()}}><section ref={menu} role="dialog" aria-modal="true" aria-label={t('connections.appMenu')} className="app-utilities" onKeyDown={e=>{

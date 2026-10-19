@@ -1,4 +1,4 @@
-import type { LogWindowBridge, LogStreamSnapshot } from './windowBridge'
+import { sameLogQuery, type LogWindowBridge, type LogStreamSnapshot } from './windowBridge'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { ApiError, asMessage, type Client } from '../api/client'
 import { messageText } from '../i18n'
@@ -80,12 +80,14 @@ export function useLogStream({ client, ref, query, paused, frozen, bridge }: Opt
 
   const sourceSnapshot = useRef(new Map<number, LogSource>())
   const statusSnapshot = useRef<StreamStatus>({ phase: 'opening' })
+  const statusQueryRef = useRef(JSON.stringify(query))
   useEffect(() => { statusSnapshot.current = status },[status])
   const winRef = useRef<Window>(EMPTY_WINDOW)
   // One Ingest for the tab's life: line ids stay unique across reopened
   // streams (search results and row keys are by id).
   const ingestRef = useRef(new Ingest())
   const pendingRef = useRef<LogEntry[]>([])
+  const pendingHistoryRef = useRef<Window | null>(null)
   const pendingChars = useRef(0)
   const droppedWhilePaused = useRef(0)
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -124,11 +126,12 @@ export function useLogStream({ client, ref, query, paused, frozen, bridge }: Opt
   const flush = useCallback(() => {
     if (pausedRef.current) return
     const add = pendingRef.current
-    if (!add.length && !droppedWhilePaused.current) return
+    if (!add.length && !droppedWhilePaused.current && !pendingHistoryRef.current) return
     pendingRef.current = []
     pendingChars.current = 0
     const before = winRef.current.evicted
-    let w = append(winRef.current, add, frozenRef.current)
+    let w = append(pendingHistoryRef.current ?? winRef.current, add, frozenRef.current)
+    pendingHistoryRef.current = null
     if (droppedWhilePaused.current) w = { ...w, evicted: w.evicted + droppedWhilePaused.current }
     droppedWhilePaused.current = 0
     commit(w)
@@ -181,25 +184,29 @@ export function useLogStream({ client, ref, query, paused, frozen, bridge }: Opt
   const queryKey = JSON.stringify(query)
   useEffect(() => {
     if(!bridge || bridge.role !== 'owner') return
-    bridge.configureStream((): LogStreamSnapshot => ({nextId:ingestRef.current.nextId,carry:ingestRef.current.snapshotCarry(),win:append(winRef.current,pendingRef.current,frozenRef.current),sources:[...sourceSnapshot.current.values()],status:statusSnapshot.current,query}))
+    bridge.configureStream((): LogStreamSnapshot => ({nextId:ingestRef.current.nextId,carry:ingestRef.current.snapshotCarry(),win:append(pendingHistoryRef.current ?? winRef.current,pendingRef.current,frozenRef.current),sources:[...sourceSnapshot.current.values()],status:statusSnapshot.current,query}),query)
   },[bridge,query])
-  useEffect(() => { if(bridge?.role === 'owner' && bridge.connected) void bridge.post('status',status) },[bridge,status])
+  useEffect(() => { if(bridge?.role === 'owner' && bridge.connected && statusQueryRef.current === queryKey) void bridge.post('status',{query,status}) },[bridge,status,query,queryKey])
 
   useEffect(() => {
     const ac = new AbortController()
     let live = true // this effect's stream is the current one
     const q = JSON.parse(queryKey) as LogQuery
+    statusQueryRef.current = queryKey
     ingestRef.current.forget()
     pendingRef.current = []
+    pendingHistoryRef.current = null
     pendingChars.current = 0
     droppedWhilePaused.current = 0
     commit(EMPTY_WINDOW)
     sourceSnapshot.current.clear()
-    if(bridge?.role === 'owner' && bridge.connected) void bridge.post('reset')
+    if(bridge?.role === 'owner' && bridge.connected) void bridge.post('reset',q)
     setSources(new Map())
+    statusSnapshot.current = { phase: 'opening' }
     setStatus({ phase: 'opening' })
     let ended = false
 
+    let history: Window | null = null
     const onFrame = (f: Frame) => {
       bridge?.publish(f)
       switch (f.k) {
@@ -207,12 +214,26 @@ export function useLogStream({ client, ref, query, paused, frozen, bridge }: Opt
           sourceSnapshot.current.set(f.id,{id:f.id,key:f.key,label:f.label,channel:f.channel})
           setSources((m) => new Map(m).set(f.id, { id: f.id, key: f.key, label: f.label, channel: f.channel }))
           break
+        case 'history-start':
+          history = EMPTY_WINDOW
+          ingestRef.current.forget()
+          setStatus(st => ({ ...st, phase: 'backlog' }))
+          break
+        case 'history-end':
+          if (history) {
+            pendingRef.current = []; pendingChars.current = 0
+            if (pausedRef.current) pendingHistoryRef.current = history
+            else { pendingHistoryRef.current = null; commit(history) }
+            history = null
+          }
+          break
         case 'lines':
-          queue(f.s, f)
+          if (history) history = append(history, ingestRef.current.entries(f.s, f.l))
+          else queue(f.s, f)
           break
         case 'state':
           if (f.s === 0) {
-            setStatus((st) => ({ ...st, notice: f.state === 'streaming' ? undefined : { state: f.state, class: f.class, msg: f.msg } }))
+            setStatus((st) => ({ ...st, notice: (f.state === 'streaming' || f.state === 'limited') && st.notice && WARN_STATES.has(st.notice.state) ? st.notice : f.state === 'streaming' ? undefined : { state: f.state, class: f.class, msg: f.msg } }))
             break
           }
           // A state change is a boundary (restart, reconnect): the next
@@ -250,14 +271,22 @@ export function useLogStream({ client, ref, query, paused, frozen, bridge }: Opt
     if(bridge?.role === 'guest') {
       const off=bridge.listen(message => {
         if(!live) return
-        if(message.type === 'frame') onFrame(message.payload as Frame)
-        else if(message.type === 'reset' || message.type === 'cleared') { ingestRef.current.forget(); pendingRef.current=[];pendingChars.current=0;commit(EMPTY_WINDOW);setSources(new Map());setStatus({phase:'opening'}) }
+        if(message.type === 'frame') {
+          const delivery=message.payload as {query?:LogQuery;frame:Frame}
+          if(delivery?.query && sameLogQuery(delivery.query,q)) onFrame(delivery.frame)
+        }
+        else if(message.type === 'reset' || message.type === 'cleared') { if(!message.payload || !sameLogQuery(message.payload as LogQuery,q))return;history=null;pendingHistoryRef.current=null;sourceSnapshot.current.clear();ingestRef.current.forget(); pendingRef.current=[];pendingChars.current=0;commit(EMPTY_WINDOW);setSources(new Map());setStatus({phase:'opening'}) }
         else if(message.type === 'snapshot') {
           const snapshot=message.payload as LogStreamSnapshot
+          if(!snapshot?.query || !sameLogQuery(snapshot.query,q))return
+          history=null;pendingHistoryRef.current=null
           ingestRef.current.restore(snapshot.win.entries,snapshot.nextId,snapshot.carry)
           pendingRef.current=[];pendingChars.current=0
           commit(snapshot.win);setSources(new Map(snapshot.sources.map(source=>[source.id,source])));setStatus(snapshot.status)
-        } else if(message.type === 'status') setStatus(message.payload as StreamStatus)
+        } else if(message.type === 'status') {
+          const delivery=message.payload as {query?:LogQuery;status:StreamStatus}
+          if(delivery?.query && sameLogQuery(delivery.query,q)) setStatus(delivery.status)
+        }
       })
       void bridge.post('subscribe',q)
       return () => { live=false;off();if(timerRef.current){clearTimeout(timerRef.current);timerRef.current=null} }
@@ -316,18 +345,20 @@ export function useLogStream({ client, ref, query, paused, frozen, bridge }: Opt
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [client, refKey, queryKey, generation, commit, flush, queue, bridge])
 
-  const reopen = useCallback(() => { if(bridge?.role === 'guest') void bridge.post('reopen'); else setGeneration((g) => g + 1) }, [bridge])
+  const reopen = useCallback(() => { if(bridge?.role === 'guest') void bridge.post('reopen',query); else setGeneration((g) => g + 1) }, [bridge,query])
   const clear = useCallback(() => {
-    if(bridge?.role === 'guest') void bridge.post('clear')
-    if(bridge?.role === 'owner' && bridge.connected) void bridge.post('cleared')
+    if (query.filter && (statusSnapshot.current.phase === 'opening' || statusSnapshot.current.phase === 'backlog')) return
+    if(bridge?.role === 'guest') void bridge.post('clear',query)
+    if(bridge?.role === 'owner' && bridge.connected) void bridge.post('cleared',query)
     pendingRef.current = []
+    pendingHistoryRef.current = null
     pendingChars.current = 0
     commit({ entries: [], chars: 0, evicted: 0 })
-  }, [commit,bridge])
+  }, [commit,bridge,query])
   useEffect(() => {
     if(bridge?.role !== 'owner') return
-    return bridge.listen(message=>{if(message.type==='clear')clear();if(message.type==='reopen')reopen()})
-  },[bridge,clear,reopen])
+    return bridge.listen(message=>{if(!message.payload || !sameLogQuery(message.payload as LogQuery,query))return;if(message.type==='clear')clear();if(message.type==='reopen')reopen()})
+  },[bridge,clear,reopen,query])
 
   return { win, sources, status, reopen, clear }
 }

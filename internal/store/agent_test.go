@@ -71,7 +71,7 @@ func TestAnInvalidGrantChangesNothing(t *testing.T) {
 	require.Error(t, s.ReplaceAgentGrants(ctx, bad))
 	got, _ := s.AgentTargets(ctx)
 	assert.Equal(t, []agentgrant.Target{a}, got)
-	bad.Grants = []agentgrant.Grant{grantOne("b", "exec")} // the schema has no list of verbs: the model's check
+	bad.Grants = []agentgrant.Grant{grantOne("b", "unknown-verb")} // the schema has no list of verbs: the model's check
 	require.Error(t, s.ReplaceAgentGrants(ctx, bad))
 	got, _ = s.AgentTargets(ctx)
 	assert.Equal(t, []agentgrant.Target{a}, got)
@@ -321,4 +321,15 @@ func TestGroupMigrationPreservesLegacyGrants(t *testing.T) {
 	got, err := s.AgentTargets(ctx)
 	require.NoError(t, err)
 	assert.Equal(t, []agentgrant.Target{original}, got)
+}
+
+func TestScopeWideExecGrantRoundTripsWithoutKindExpansion(t *testing.T) {
+	ctx := context.Background()
+	s := open(t, filepath.Join(t.TempDir(), "db"))
+	target := agentgrant.Target{Provider: "kubernetes", Target: "ctx", Identity: "identity", Grants: []agentgrant.Grant{grantOne("ns", agentgrant.VerbExec)}}
+	require.NoError(t, s.ReplaceAgentGrants(ctx, target))
+	got, err := s.AgentTargets(ctx)
+	require.NoError(t, err)
+	require.Equal(t, []agentgrant.Target{target}, got)
+	require.Nil(t, got[0].Grants[0].Kinds)
 }

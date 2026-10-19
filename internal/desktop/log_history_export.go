@@ -21,9 +21,9 @@ type nativeLogExport struct {
 	downloadID string
 }
 
-// BeginLogExport prompts before starting history reads; an empty id is Cancel.
+// BeginLogExport saves to Downloads by default; explicit location selection may cancel.
 // Tokens authorize only app-owned staged files, never a client-supplied path.
-func (m *LogWindows) BeginLogExport(windowID, name, title, button string) (string, error) {
+func (m *LogWindows) BeginLogExport(windowID, name, title, button string, chooseLocation bool) (string, error) {
 	if len(name) > 200 || len(title) > 256 || len(button) > 80 {
 		return "", errors.New("invalid log export dialog")
 	}
@@ -43,10 +43,15 @@ func (m *LogWindows) BeginLogExport(windowID, name, title, button string) (strin
 	if err != nil {
 		return "", err
 	}
-	dialog := m.app.Dialog.SaveFile()
-	dialog.SetOptions(&application.SaveFileDialogOptions{Title: title, ButtonText: button, Directory: directory, Filename: filepath.Base(name), CanCreateDirectories: true, AllowOtherFileTypes: true, Window: parent})
-	destination, err := dialog.PromptForSingleSelection()
-	if err != nil || destination == "" {
+	destination := filepath.Join(directory, filepath.Base(name))
+	if chooseLocation {
+		dialog := m.app.Dialog.SaveFile()
+		dialog.SetOptions(&application.SaveFileDialogOptions{Title: title, ButtonText: button, Directory: directory, Filename: filepath.Base(name), CanCreateDirectories: true, AllowOtherFileTypes: true, Window: parent})
+		destination, err = dialog.PromptForSingleSelection()
+		if err != nil || destination == "" {
+			return "", err
+		}
+	} else if err = os.MkdirAll(directory, 0700); err != nil {
 		return "", err
 	}
 	downloadID := m.history.begin(destination, "logs")
@@ -55,6 +60,7 @@ func (m *LogWindows) BeginLogExport(windowID, name, title, button string) (strin
 		m.history.finish(downloadID, "", "failed", downloadFailureReason(err, "write"))
 		return "", err
 	}
+	staged.unique = !chooseLocation
 	var raw [24]byte
 	if _, err = rand.Read(raw[:]); err != nil {
 		staged.Abort()
@@ -80,6 +86,12 @@ func (m *LogWindows) BeginLogExport(windowID, name, title, button string) (strin
 	job := &nativeLogExport{staged: staged, owner: owner}
 	job.downloadID = downloadID
 	m.exports[id] = job
+	m.history.registerCancel(downloadID, func() {
+		_ = m.CancelLogExport(id)
+		if m.app != nil {
+			m.app.Event.Emit("ocular_log_export_cancelled", id)
+		}
+	})
 	job.timer = time.AfterFunc(10*time.Minute, func() { _ = m.endLogExport(id, "failed", "timeout") })
 	return id, nil
 }

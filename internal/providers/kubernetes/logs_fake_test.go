@@ -31,7 +31,8 @@ type fakeKubelet struct {
 	eof       chan struct{} // closed: end every open follow cleanly
 	ctrs      map[string]*fakeCtr
 	forbidden bool
-	slow      map[string]time.Duration // pod → delay before a non-follow answer
+	hold      map[string]<-chan struct{} // pod -> finite-history request gate
+	slow      map[string]time.Duration   // pod → delay before a non-follow answer
 	requests  []url.Values
 	srv       *httptest.Server
 }
@@ -161,6 +162,15 @@ func (k *fakeKubelet) serve(w http.ResponseWriter, r *http.Request) {
 	// Capture this request's generation before the client receives any bytes.
 	// Re-reading the replacement channel after a change can miss a drop.
 	cut, eof := k.cut, k.eof
+	if gate := k.hold[pod]; gate != nil && q.Get("follow") != "true" {
+		k.mu.Unlock()
+		select {
+		case <-gate:
+		case <-r.Context().Done():
+			return
+		}
+		k.mu.Lock()
+	}
 	if d := k.slow[pod]; d > 0 && q.Get("follow") != "true" {
 		k.mu.Unlock()
 		select {

@@ -103,7 +103,7 @@ type ExecResult struct {
 }
 
 func (s *Server) execMethods() {
-	register(s, "GetExecInfo", agentgrant.VerbExec, false, "Discover concrete instances and running channels using an explicit exec grant with named kinds. Ref must include UID. This does not start a command or grant read/log access.", s.getExecInfo)
+	register(s, "GetExecInfo", agentgrant.VerbExec, false, "Discover concrete instances and running channels using an explicit scope-wide exec grant. Ref must include UID. This does not start a command or grant read/log access.", s.getExecInfo)
 	register(s, "PrepareExec", agentgrant.VerbExec, false, "Validate an explicit instance, channel and finite argv command without starting it. Returns an in-memory one-shot plan valid 10 minutes, bound to object UID and connection revision. Commands can read secrets or change container/host data; confirmation is required unless this exec grant explicitly sets noConfirm.", s.prepareExec)
 	register(s, "RunExec", agentgrant.VerbExec, true, "Run a prepared exec plan once, with fresh grant, target identity, connection revision and container membership checks. Confirmation uses GetRun. Raw non-PTY stdout/stderr is base64, bounded together; exitKnown and stopReason distinguish exit, timeout, byte limit and unknown outcome. Direct calls cancel on client disconnect. Confirmed runs have their own bounded lifetime. Revocation/configuration changes cancel transport; remote termination is best effort. No automatic replay, attach or interactive shell.", s.runExec)
 }

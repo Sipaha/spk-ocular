@@ -1,7 +1,8 @@
+import { isoDateTime, localDateTime } from '../dates'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { Client } from '../api/client'
 import type { AgentAuditEntry, AgentTarget, Target } from '../api/types'
-import { classLabel, getLanguage, isMessageKey, t, type MessageKey } from '../i18n'
+import { classLabel, isMessageKey, t, type MessageKey } from '../i18n'
 import { showNotice, useStore } from '../store'
 import { copyText } from '../term/clipboard'
 import { errorDetail } from '../errors'
@@ -278,15 +279,12 @@ export function outcomeText(e: AgentAuditEntry): string {
   return isMessageKey(k) ? t(k) : (e.outcome ?? t('agents.phase.outcome'))
 }
 
-const timeFormat = (language: string) => new Intl.DateTimeFormat(language, { dateStyle: 'short', timeStyle: 'medium' })
 
 function JournalTab({ client }: { client: Client }) {
   const rows = useRows()
   const tick = useAgents((s) => s.auditTick)
   const [agent, setAgent] = useState('')
   const [target, setTarget] = useState<Pick<Row, 'key' | 'provider' | 'target' | 'title' | 'groupTitle'> | null>(null)
-  const language = getLanguage()
-  const fmt = useMemo(() => timeFormat(language), [language])
   const provider = target?.provider, targetId = target?.target
   const filter = useMemo(() => ({ agent: agent || undefined, provider, target: targetId }), [agent, provider, targetId])
   const { entries, more, loading, paging, error, agentsSeen, loadMore } = useAuditJournal(client, filter, tick)
@@ -323,7 +321,7 @@ function JournalTab({ client }: { client: Client }) {
           <tbody>
             {entries.map((e) => (
               <tr key={e.id} className="border-t border-line align-top">
-                <td className="whitespace-nowrap px-3 py-1 text-fg-muted">{fmt.format(new Date(e.at))}</td>
+                <td className="whitespace-nowrap px-3 py-1 text-fg-muted" title={isoDateTime(e.at)}>{localDateTime(e.at)}</td>
                 <td className="px-2 py-1">
                   <span className="break-all">{e.agent}</span> <span className="text-fg-subtle">({t('agents.unverified')})</span>
                 </td>

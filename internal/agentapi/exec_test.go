@@ -24,7 +24,7 @@ func execRequest() PrepareExecRequest {
 	return PrepareExecRequest{Ref: r, Instance: r.Name + "/" + r.UID, Channel: "main", Command: []string{"printf", "argument; $(not-a-shell)"}}
 }
 func allowExec(e *env, noConfirm bool) {
-	g := one("a", agentgrant.VerbExec, "pods")
+	g := one("a", agentgrant.VerbExec)
 	g.NoConfirm = noConfirm
 	e.grant(g)
 }
@@ -56,7 +56,7 @@ func TestAgentExecSeparatePermissionAndSelection(t *testing.T) {
 	e.f.mu.Lock()
 	assert.Zero(t, e.f.execStarted)
 	e.f.mu.Unlock()
-	require.Error(t, e.srv.SaveGrants(context.Background(), api.SaveAgentGrantsRequest{Provider: "k", Target: "t", Grants: []agentgrant.Grant{one("a", agentgrant.VerbExec)}}))
+	require.NoError(t, e.srv.SaveGrants(context.Background(), api.SaveAgentGrantsRequest{Provider: "k", Target: "t", Grants: []agentgrant.Grant{one("a", agentgrant.VerbExec)}}))
 }
 
 func TestAgentExecConfirmOnceBinaryOutputAndNoJournalPayload(t *testing.T) {

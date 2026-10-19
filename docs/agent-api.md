@@ -261,10 +261,13 @@ identity/security kinds unless those kinds are named explicitly.
 A separate `exec` permission grants finite commands in containers. Read, logs,
 edit and action permissions do not imply exec, and exec does not imply those
 permissions. Select **Container commands (exec)** in an access group's Execution
-category, explicitly name the resource kinds, and Save. Namespace/project master
+category and Save. New exec grants cover all exec-capable resource kinds in the
+chosen namespace/project scope; no resource-kind selection is required. Namespace/project master
 switches and group switches apply. Confirmation is required for every command by
 default because arbitrary argv cannot be classified as read-only. **Without
-confirmation** applies only to the explicitly named kinds of that exec grant.
+confirmation** applies to that exec grant. Existing kind-restricted exec grants
+retain their limits and appear as a read-only kind summary in the editor. To
+replace one with a scope-wide grant, switch Exec off and back on, then Save.
 No permission is granted automatically by opening the editor or upgrading.
 
 Commands run with the container's existing permissions, not an invented sandbox.

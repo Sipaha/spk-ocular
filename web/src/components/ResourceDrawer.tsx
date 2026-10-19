@@ -11,7 +11,9 @@ import { ToolDialog } from './ToolDialog'
 import { prefetchToolInfo } from './toolInfo'
 import { useInstancePicker } from './useInstancePicker'
 import { LoadingOverlay } from './LoadingOverlay'
+import { DateText } from './DateText'
 import { DetailsPanel } from './DetailsPanel'
+import { PodContainers, podContainerFacts } from './PodContainers'
 import { lazy, Suspense, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { ApiError, type Client } from '../api/client'
 import type { ActionDescriptor, EditDoc, ExecInstance, Relation, Ref, Resource } from '../api/types'
@@ -32,7 +34,9 @@ import { errorDetail } from '../errors'
 
 const RbacDialog = lazy(() => import('../rbac/RbacDialog'))
 const FileBrowser = lazy(() => import('../files/FileBrowser'))
-const YamlView = lazy(() => import('./YamlView'))
+const loadYamlView = () => import('./YamlView')
+const YamlView = lazy(loadYamlView)
+const preloadYamlView = () => { void loadYamlView().catch(() => {}) }
 
 interface Props {
   /** Retain guarded edits while a cancelled list displays its placeholder. */
@@ -170,6 +174,7 @@ export function ResourceDrawer({ hidden = false, embedded = false, client, hub, 
   const loadingEdit = editLoad?.key === key && !editLoad.error
   const startEdit = () => {
     if (!canEdit || editing || loadingEdit) return
+    preloadYamlView()
     setTab('yaml')
     const k = key
     setEditLoad({ key: k })
@@ -231,6 +236,8 @@ export function ResourceDrawer({ hidden = false, embedded = false, client, hub, 
   const displayKind = r?.ref.kind ?? current.kind
   const presentation = loading ? res : shown
   const actions = actionsOf?.(displayKind) ?? []
+  const scaleAction = target.provider === 'kubernetes' && displayKind === 'apps/deployments' ? actions.find(action => action.id === 'scale') : undefined
+  const menuActions = actions.filter(action => action !== scaleAction)
   // The object shown now (after relation navigation: that one), with the UID read.
   // A deleted object has nothing to open or act on.
   const hasTools = !presentation?.gone && (!!r?.ref.uid || !!r?.rbacSubject || (!!onLogs && !!hasLogs?.(displayKind)) || (!!onTerminal && !!hasExec?.(displayKind)) || (!!onAction && actions.length > 0) || !!editableOf?.(displayKind))
@@ -319,7 +326,8 @@ export function ResourceDrawer({ hidden = false, embedded = false, client, hub, 
                 <ActionIcon name="edit"/>
               </ActionIconButton>
             )}
-            {onAction && actions.length > 0 && (
+            {onAction && scaleAction && <ActionIconButton label={actionLabel(scaleAction)} description={actionLabel(scaleAction)} onClick={()=>onAction(shownRef(),scaleAction)}><ActionIcon name="scale"/></ActionIconButton>}
+            {onAction && menuActions.length > 0 && (
               <ActionIconButton
                 ref={actionsBtn}
                 aria-haspopup="menu"
@@ -338,7 +346,7 @@ export function ResourceDrawer({ hidden = false, embedded = false, client, hub, 
                 label={t('action.menu')}
                 at={menuAt}
                 onClose={() => setMenuAt(null)}
-                items={actions.map((a) => ({ id: a.id, label: actionLabel(a) + (a.param ? '…' : ''), danger: a.destructive, onSelect: () => onAction(shownRef(), a) }))}
+                items={menuActions.map((a) => ({ id: a.id, label: actionLabel(a) + (a.param ? '…' : ''), danger: a.destructive, onSelect: () => onAction(shownRef(), a) }))}
               />
             )}
           </div>
@@ -350,6 +358,8 @@ export function ResourceDrawer({ hidden = false, embedded = false, client, hub, 
             key={tb}
             role="tab"
             aria-selected={tab === tb}
+            onPointerEnter={tb === 'yaml' ? preloadYamlView : undefined}
+            onFocus={tb === 'yaml' ? preloadYamlView : undefined}
             onClick={() => pickTab(tb)}
             className={['border-b-2 px-3 py-1.5', tab === tb ? 'border-accent text-fg' : 'border-transparent text-fg-muted hover:text-fg'].join(' ')}
           >
@@ -377,8 +387,8 @@ export function ResourceDrawer({ hidden = false, embedded = false, client, hub, 
         )}
         {r && tab === 'yaml' && !editing && (
           <div className="h-full">
-            <Suspense fallback={<pre className="p-4 font-mono text-xs text-fg-muted">{r.yaml}</pre>}>
-              <YamlView key="view" text={r.yaml} />
+            <Suspense fallback={<LoadingOverlay />}>
+              <YamlView key="view" text={r.yaml} documentId={`${r.ref.kind}/${r.ref.scope ?? ''}/${r.ref.name}/${r.ref.uid ?? ''}`} />
             </Suspense>
           </div>
         )}
@@ -390,7 +400,7 @@ export function ResourceDrawer({ hidden = false, embedded = false, client, hub, 
               </p>
             )}
             <div className="min-h-0 flex-1">
-              <Suspense fallback={<pre className="p-4 font-mono text-xs text-fg-muted">{editing.doc.text}</pre>}>
+              <Suspense fallback={<LoadingOverlay />}>
                 <YamlView
                   key={`edit/${editing.doc.base}`}
                   editable
@@ -474,6 +484,7 @@ function RetainedSection({pending,children}:{pending:boolean;children:ReactNode}
 
 function Details(props: { client: Client; hub: ViewHub; target: { provider: string; id: string }; r: Resource; onGo: (ref: Ref) => void; kindTitleOf?: (kind: string) => string; eventsKind?: string; ports?: ReactNode; values?: ReactNode; pending?:boolean }) {
   const { client, hub, target, r, onGo, kindTitleOf, eventsKind, ports, values, pending=false } = props
+  const containerFacts = useMemo(() => podContainerFacts(r), [r])
   const groups = useMemo(() => {
     const m = new Map<string, Relation[]>()
     for (const rel of r.relations ?? []) m.set(rel.type, [...(m.get(rel.type) ?? []), rel])
@@ -493,13 +504,14 @@ function Details(props: { client: Client; hub: ViewHub; target: { provider: stri
         </section>
       )}
       <dl className="grid grid-cols-[fit-content(35%)_1fr] gap-x-6 gap-y-1.5">
-        {r.facts.map((f) => (
+        {containerFacts.facts.map((f) => (
           <div key={f.key} className="contents">
             <dt className="text-fg-muted">{detailLabel(f.key)}</dt>
-            <dd className="min-w-0 font-mono text-[14px] break-all whitespace-pre-line">{f.value}</dd>
+            <dd className="min-w-0 font-mono text-[14px] break-all whitespace-pre-line"><DateText value={f.value}/></dd>
           </div>
         ))}
       </dl>
+      <PodContainers groups={containerFacts.groups} />
       <RetainedSection pending={pending}>{values}</RetainedSection>
       <RetainedSection pending={pending}>{ports}</RetainedSection>
       <DeploymentRevisions key={`${r.ref.uid}/${r.ref.name}`} client={client} resource={r}/>

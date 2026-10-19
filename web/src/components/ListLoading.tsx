@@ -4,7 +4,9 @@ import type { ViewState } from '../views/viewSync'
 import { formatBytes } from '../format'
 import { t } from '../i18n'
 
-export function ListLoading({ view, label, inline = false }: { view: ViewState & { cancelLoading: () => void }; label?: string; inline?: boolean }) {
+type LoadingView = Pick<ViewState, 'loadingStartedAt' | 'status'> & { cancelLoading: () => void }
+
+export function ListLoading({ view, label, inline = false, cancelLabel }: { view: LoadingView; label?: string; inline?: boolean; cancelLabel?: string }) {
   const now = useNow(250)
   const seconds = Math.max(0, Math.floor((now - (view.loadingStartedAt ?? now)) / 1000))
   const root = useRef<HTMLDivElement>(null)
@@ -28,8 +30,13 @@ export function ListLoading({ view, label, inline = false }: { view: ViewState &
       {!inline && <span>{label ?? t('app.loading')}</span>}
     </div>
     {seconds >= 2 && <span data-load-progress role={inline ? 'status' : undefined} aria-label={inline ? t('app.loading') : undefined} className="whitespace-nowrap tabular-nums">{t('view.loadElapsed', { seconds })} · {t('view.loadReceived', { size: bytes === undefined ? '—' : formatBytes(bytes) + 'B' })}</span>}
-    {seconds >= 2 && <button type="button" onClick={view.cancelLoading} className="shrink-0 rounded border border-line px-2 py-1 text-xs hover:bg-hover hover:text-fg">{t('view.loadCancel')}</button>}
+    {seconds >= 2 && <button type="button" onClick={view.cancelLoading} className="shrink-0 rounded border border-line px-2 py-1 text-xs hover:bg-hover hover:text-fg">{cancelLabel ?? t('view.loadCancel')}</button>}
   </div>
+}
+
+/** Reserve the same toolbar slot before, during and after a refresh. */
+export function ListRefreshProgress({ view, initial = false, cancelLabel }: { view: LoadingView; initial?: boolean; cancelLabel?: string }) {
+ return <div className="resource-refresh-progress">{!initial && view.status.state === 'loading' && <ListLoading view={view} inline cancelLabel={cancelLabel}/>}</div>
 }
 
 export function CancelledList({ retry, pending = false }: { retry: () => void; pending?: boolean }) {

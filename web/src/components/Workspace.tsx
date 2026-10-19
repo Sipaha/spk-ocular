@@ -1,3 +1,4 @@
+import { WorkspaceToolbar } from './WorkspaceToolbar'
 import { LocationStatus } from './LocationStatus'
 import { RefreshButton } from './RefreshButton'
 import { ResourceGroupIcon } from './ResourceGroupIcon'
@@ -32,7 +33,7 @@ import { createSelectMemory, type SelectMemory } from './Select'
 import { parseScope, scopeSet, selectedScopes } from '../scopes'
 import { metricsState, useMetrics } from '../views/useMetrics'
 import { useView, ViewConnectionContext } from '../views/useView'
-import { CancelledList, ListLoading } from './ListLoading'
+import { CancelledList, ListLoading, ListRefreshProgress } from './ListLoading'
 import { useKinds } from '../views/useKinds'
 import type { ViewHub } from '../views/viewSync'
 import { ResourceDrawer } from './ResourceDrawer'
@@ -137,7 +138,7 @@ export function Workspace({ client, hub, target, onFavorite, onMoveFavorite, onN
     return (kinds ?? []).filter((k) => !k.hidden && (!q || [k.id, k.title, kindLabel(target.provider, k), k.singular, k.group, groupLabel(target.provider, k.group, language), k.subgroup, ...(k.aliases ?? [])].some((name) => name?.toLowerCase().includes(q))))
   }, [kinds, resourceFilter, target.provider, language])
   // A kind lives in exactly one place: Favorites or its original group.
-  const groups = useMemo(() => navGroups(matchingKinds.filter((k) => !favorites.has(k.id))), [matchingKinds, favorites])
+  const groups = useMemo(() => navGroups(matchingKinds.filter((k) => !favorites.has(k.id)), target.provider), [matchingKinds, favorites, target.provider])
   const visibleFavorites = useMemo(() => favoriteKinds.filter((f) => f.provider === target.provider)
     .map((f) => matchingKinds.find((k) => k.id === f.kind)).filter((k): k is KindDescriptor => !!k), [favoriteKinds, target.provider, matchingKinds])
   const clearFavoriteDrag = () => { setDragFavorite(null); setFavoriteDrop(null) }
@@ -445,7 +446,7 @@ export function Workspace({ client, hub, target, onFavorite, onMoveFavorite, onN
             drawer={{client,hub,target,hasLogs,onLogs:openLogs,hasExec,onTerminal:openTerminal,hasForward,actionsOf,onAction:openAction,eventsKindOf,editableOf,valuesOf,kindTitleOf}}
           /></Suspense>
         ) : page.kind.workspace?.startsWith('helm-') ? (
-          <><LocationStatus><span>{kindLabel(target.provider, page.kind)}</span></LocationStatus><HelmWorkspace key={page.key} client={client} target={target} scope={scope} onResource={ref => paletteActs.current?.openObject(ref)} onSection={tab => setKind(`ocular.helm.${tab}`)} initialTab={page.kind.workspace === 'helm-charts' ? 'charts' : 'releases'} scopePicker={<WorkspaceScopePicker client={client} hub={hub} target={target} scope={scope} scopes={scopes} scopeMenu={scopeMenu} onScope={setScope} />} /></>
+          <HelmWorkspace key={page.key} client={client} target={target} scope={scope} onResource={ref => paletteActs.current?.openObject(ref)} initialTab={page.kind.workspace === 'helm-settings' ? 'settings' : page.kind.workspace === 'helm-charts' ? 'charts' : 'releases'} scopePicker={<WorkspaceScopePicker client={client} hub={hub} target={target} scope={scope} scopes={scopes} scopeMenu={scopeMenu} onScope={setScope} />} />
         ) : (
           <ResourcePage
             key={page.key}
@@ -538,9 +539,9 @@ interface NavGroup {
   count: number
 }
 
-/** The navigation in the provider's order: groups, and inside a group its
+/** Provider order, with Kubernetes Helm after Storage. Inside each group its
  * subgroups (a subgroup of one kind is that kind, without a level). */
-export function navGroups(kinds: KindDescriptor[]): NavGroup[] {
+export function navGroups(kinds: KindDescriptor[], provider?: string): NavGroup[] {
   const out: NavGroup[] = []
   const byGroup = new Map<string, NavGroup>()
   const bySub = new Map<string, { sub: string; kinds: KindDescriptor[] }>()
@@ -566,6 +567,14 @@ export function navGroups(kinds: KindDescriptor[]): NavGroup[] {
       g.items.push(s)
     }
     s.kinds.push(k)
+  }
+  if (provider === 'kubernetes') {
+    const storage = out.find(group => group.group === 'Storage')
+    const helm = out.find(group => group.group === 'Helm')
+    if (storage && helm) {
+      out.splice(out.indexOf(helm), 1)
+      out.splice(out.indexOf(storage) + 1, 0, helm)
+    }
   }
   for (const g of out) g.items = g.items.map((it) => ('sub' in it && it.kinds.length === 1 ? { kind: it.kinds[0] } : it))
   return out
@@ -856,11 +865,7 @@ function ResourcePage(props: {
   return (
     <>
       <LocationStatus><span>{kindLabel(target.provider, kind)}</span><span>{view.cancelled ? '—' : view.status.state === 'loading' && !view.rows.length ? '…' : view.rows.length}</span></LocationStatus>
-      <header className="resource-toolbar resource-list-toolbar">
-        <h1 className="sr-only">{kindLabel(target.provider, kind)}</h1>
-        <span className="sr-only" aria-label="count">
-          {view.cancelled ? '—' : view.status.state === 'loading' && !view.rows.length ? '…' : view.rows.length}
-        </span>
+      <WorkspaceToolbar title={kindLabel(target.provider, kind)} count={view.cancelled ? '—' : view.status.state === 'loading' && !view.rows.length ? '…' : view.rows.length}>
         {marked.size > 0 && (
           <div role="toolbar" aria-label={t('bulk.bar')} className="flex shrink-0 items-center gap-2 whitespace-nowrap rounded-md bg-marked px-2 py-0.5 text-xs">
             <span>{t('bulk.marked', { n: marked.size, total: shownRows.length })}</span>
@@ -898,9 +903,7 @@ function ResourcePage(props: {
             {t('agents.scopeAccess')}
           </button>
         )}
-        <div className="resource-refresh-progress">
-          {!initialLoading && view.status.state === 'loading' && <ListLoading view={view} inline />}
-        </div>
+        <ListRefreshProgress view={view} initial={initialLoading}/>
         {view.resync && !view.cancelled && <ResyncButton client={client} viewId={view.viewId} loading={view.status.state === 'loading'} />}
         <label className="resource-filter field-shell">
           <SearchIcon className="h-3.5 w-3.5 text-fg-subtle" />
@@ -924,7 +927,7 @@ function ResourcePage(props: {
             spellCheck={false}
           />
         </label>
-      </header>
+      </WorkspaceToolbar>
       {!view.cancelled && !initialLoading && view.status.state !== 'ready' && <StatusBanner state={view.status.state} cls={view.status.class} message={view.status.message} />}
       {!view.cancelled && !initialLoading && view.status.coverage && <CoverageNote coverage={view.status.coverage} notCovered={view.kind?.notCovered ?? kind.notCovered} compact={scope.mode === 'some'} loading={view.status.state === 'loading'} />}
       {!view.cancelled && !initialLoading && metrics && <MetricsNote metrics={metrics} />}

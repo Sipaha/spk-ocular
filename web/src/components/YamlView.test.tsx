@@ -6,6 +6,21 @@ import YamlView from './YamlView'
 const viewOf = (host: HTMLElement) => EditorView.findFromDOM(host.querySelector<HTMLElement>('.cm-editor')!)!
 
 describe('YamlView', () => {
+  it('reuses the view across read-only resources and resets document navigation', () => {
+    const {container,rerender}=render(<YamlView text={'name: first\n'} documentId="first" />)
+    const original=viewOf(container),dom=original.dom
+    original.dispatch({selection:{anchor:8}})
+    rerender(<YamlView text={'name: second\n'} documentId="second" />)
+    expect(viewOf(container)).toBe(original)
+    expect(original.dom).toBe(dom)
+    expect(original.state.doc.toString()).toBe('name: second\n')
+    expect(original.state.selection.main.anchor).toBe(0)
+    original.dispatch({selection:{anchor:8}})
+    rerender(<YamlView text={'name: second\n'} documentId="same-text-other-resource" />)
+    expect(viewOf(container)).toBe(original)
+    expect(original.state.selection.main.anchor).toBe(0)
+  })
+
   it('is read-only unless editable', () => {
     const { container } = render(<YamlView text={'a: 1\n'} />)
     expect(viewOf(container).state.readOnly).toBe(true)

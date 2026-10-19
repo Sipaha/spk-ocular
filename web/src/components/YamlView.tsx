@@ -9,7 +9,7 @@ import { Compartment, EditorState } from '@codemirror/state'
 import { EditorView, highlightActiveLine, keymap, lineNumbers } from '@codemirror/view'
 import { bindPhysicalEditorKeys } from './editorKeyboard'
 import { tags } from '@lezer/highlight'
-import { useEffect, useRef } from 'react'
+import { useEffect, useLayoutEffect, useRef } from 'react'
 
 const theme = EditorView.theme(
   {
@@ -35,6 +35,8 @@ const highlight = HighlightStyle.define([
 ])
 
 interface Props {
+  /** Read-only document identity; changing it resets navigation, not the view. */
+  documentId?: string
   filename?: string
   language?: string
   text: string
@@ -48,10 +50,11 @@ interface Props {
   label?: string
 }
 
-export default function YamlView({ text, editable, onChange, onSubmit, autoFocus, label, filename, language }: Props) {
+export default function YamlView({ text, editable, onChange, onSubmit, autoFocus, label, filename, language, documentId }: Props) {
   const syntax = useRef(new Compartment())
   const host = useRef<HTMLDivElement>(null)
   const view = useRef<EditorView | null>(null)
+  const previousDocument = useRef(documentId)
   const calls = useRef({ onChange, onSubmit })
   useEffect(() => {
     calls.current = { onChange, onSubmit }
@@ -98,13 +101,19 @@ export default function YamlView({ text, editable, onChange, onSubmit, autoFocus
     else view.current?.dispatch({ effects: syntax.current.reconfigure([]) })
     return () => { live = false }
   }, [filename, language])
-  useEffect(() => {
+  useLayoutEffect(() => {
     const v = view.current
+    const changedDocument = previousDocument.current !== documentId
+    previousDocument.current = documentId
     // An editor's text is its own after the start (a late echo of onChange
     // must never overwrite what was typed meanwhile).
-    if (v && !editable && v.state.doc.toString() !== text) {
-      v.dispatch({ changes: { from: 0, to: v.state.doc.length, insert: text } })
+    if (v && !editable) {
+      const changes = v.state.doc.toString() !== text ? { from: 0, to: v.state.doc.length, insert: text } : undefined
+      if (changes || changedDocument) v.dispatch({
+        changes,
+        ...(changedDocument ? { selection: { anchor: 0 }, effects: EditorView.scrollIntoView(0, { y: 'start' }) } : {}),
+      })
     }
-  }, [text, editable])
+  }, [text, editable, documentId])
   return <div ref={host} className="h-full min-h-0" aria-label={label ?? 'yaml'} />
 }

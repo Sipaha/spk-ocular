@@ -67,3 +67,9 @@ export function regexRanges(re: RegExp, text: string): Range[] {
   }
   return out
 }
+
+/** One bounded predicate for UI filtering, query identity and pending state. */
+export function serverLogFilter(text: string): string | undefined {
+ const bounded = text.slice(0, 500)
+ return compileFilter(bounded) ? bounded : undefined
+}
