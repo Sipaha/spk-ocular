@@ -419,6 +419,9 @@ func (s *session) PrepareExec(ctx context.Context, ref core.Ref, req provider.Ex
 			return nil, err
 		}
 	}
+	if req.Agent && nodeShellHelper(p) {
+		return nil, provider.Said(provider.ClassForbidden, msg("nodeShell.agentDenied"))
+	}
 	inst := execInstance(p)
 	ch := req.Channel
 	if ch == "" {

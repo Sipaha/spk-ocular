@@ -10,6 +10,7 @@ import { refTitle } from '../refs'
 // the target's session ends its log tabs' streams ("gone").
 
 export interface TermOpen {
+  preparedId?: string
   ref: Ref
   instance?: string
   channel?: string

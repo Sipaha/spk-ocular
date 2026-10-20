@@ -117,6 +117,19 @@ func (w *restWriter) create(ctx context.Context, gvr schema.GroupVersionResource
 	return w.c.Post().AbsPath(p[:len(p)-1]...).SetHeader("Content-Type", "application/json").Body(body).MaxRetries(0).Do(ctx).Error()
 }
 
+// createResult retains the server-assigned UID for owned temporary resources.
+// Like other action writes, the POST must never retry an ambiguous response.
+func (w *restWriter) createResult(ctx context.Context, gvr schema.GroupVersionResource, ns string, obj *unstructured.Unstructured) (*unstructured.Unstructured, error) {
+	body, err := obj.MarshalJSON()
+	if err != nil {
+		return nil, err
+	}
+	p := objectPath(gvr, ns, "", "")
+	result := &unstructured.Unstructured{}
+	err = w.c.Post().AbsPath(p[:len(p)-1]...).SetHeader("Content-Type", "application/json").Body(body).MaxRetries(0).Do(ctx).Into(result)
+	return result, err
+}
+
 // dynWriter writes through a dynamic client (fake clients in tests: no
 // transport, no retries).
 type dynWriter struct{ dyn dynamic.Interface }
@@ -150,6 +163,10 @@ func (w dynWriter) evict(ctx context.Context, ns, name, uid, rv string) error {
 func (w dynWriter) create(ctx context.Context, gvr schema.GroupVersionResource, ns string, obj *unstructured.Unstructured) error {
 	_, err := w.dyn.Resource(gvr).Namespace(ns).Create(ctx, obj, metav1.CreateOptions{})
 	return err
+}
+
+func (w dynWriter) createResult(ctx context.Context, gvr schema.GroupVersionResource, ns string, obj *unstructured.Unstructured) (*unstructured.Unstructured, error) {
+	return w.dyn.Resource(gvr).Namespace(ns).Create(ctx, obj, metav1.CreateOptions{})
 }
 
 func (w dynWriter) delete(ctx context.Context, gvr schema.GroupVersionResource, ns, name string, opts metav1.DeleteOptions) error {

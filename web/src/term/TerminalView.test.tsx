@@ -8,6 +8,7 @@ import type { TermEnd, TermSink } from './protocol'
 import TerminalView from './TerminalView'
 import { dock } from '../dock/store'
 import { setLanguage } from '../i18n'
+import { useStore } from '../store'
 
 // jsdom cannot run xterm (no canvas, no layout): a stand-in that keeps the
 // handlers the view installs.
@@ -324,4 +325,29 @@ describe('a debugger’s tab (attach)', () => {
     expect(open).not.toHaveBeenCalled()
     open.mockRestore()
   })
+})
+
+it('adopts a reviewed one-shot terminal once in StrictMode and requires a new review after it ends', async () => {
+  const client = fakeClient()
+  const prepared: TermTab = {...tab, open:{ref:{...tab.open.ref,kind:'nodes',name:'worker'},preparedId:'reviewed-7'}}
+  const view = render(<StrictMode><TerminalView client={client as unknown as Client} tab={prepared} active mode="browser" /></StrictMode>)
+  await waitFor(() => expect(h.conns).toHaveLength(1))
+  expect(client.openTerminal).not.toHaveBeenCalled()
+  expect(client.reopenTerminal).toHaveBeenCalledExactlyOnceWith('reviewed-7',80,24)
+  act(() => h.conns[0].end({reason:'done',code:0}))
+  expect(screen.queryByRole('button',{name:'Reconnect'})).not.toBeInTheDocument()
+  expect(screen.queryByRole('button',{name:'Open a new terminal'})).not.toBeInTheDocument()
+  expect(screen.getByRole('alert')).toHaveTextContent('review Node Shell again')
+  view.unmount()
+  expect(client.forgetTerminal).toHaveBeenCalledWith('reviewed-7')
+})
+
+it('reports a helper cleanup failure globally after its terminal tab unmounts', async () => {
+  const client = fakeClient()
+  client.forgetTerminal.mockRejectedValue(new Error('cleanup failed: tools/ocular-node-shell-1'))
+  const view = render(<TerminalView client={client as unknown as Client} tab={{...tab,open:{...tab.open,preparedId:'reviewed-cleanup'}}} active mode="browser" />)
+  await waitFor(()=>expect(h.conns).toHaveLength(1))
+  view.unmount()
+  await waitFor(()=>expect(useStore.getState().notice).toContain('prod · cleanup failed: tools/ocular-node-shell-1'))
+  useStore.setState({notice:null})
 })

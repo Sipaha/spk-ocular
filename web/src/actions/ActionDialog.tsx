@@ -266,7 +266,7 @@ export function ActionDialog({ client, req, onClose, onTerminal, runTimeoutMs = 
       } else showNotice(`${where}${out.type === 'lateDone' ? out.text : `${actionLabel(action)} ${refTitle(plan.where.ref)}: ${out.text}`}`, 10_000)
     }
     // What a result says, for a notice: the sum of its parts or its message.
-    const told = (res: ActionResult) => (res.parts?.length ? `${actionLabel(action)} ${refTitle(plan.where.ref)}: ${partsSummary(res.parts)}` : messageText(res.message))
+    const told = (res: ActionResult) => (res.terminal?.preparedId ? `${actionLabel(action)} · ${refTitle(plan.where.ref)}` : res.parts?.length ? `${actionLabel(action)} ${refTitle(plan.where.ref)}: ${partsSummary(res.parts)}` : messageText(res.message))
     answer.then(
       (res) => {
         const partial = partialOf(res)
@@ -420,7 +420,15 @@ export function ActionDialog({ client, req, onClose, onTerminal, runTimeoutMs = 
             </label>
           )}
 
-          {choosing && !!plan?.choices?.length && (
+          {choosing && param?.custom && (
+            <label className="flex items-center gap-2 text-xs text-fg-muted">
+              {param.title ? messageText(param.title) : t('action.choices')}
+              <input value={chosen ?? ''} disabled={busy === 'run' || sent} spellCheck={false} autoComplete="off"
+                onChange={e => { chosenTouched.current = true; setChosen(e.target.value) }}
+                className="min-w-0 flex-1 rounded-md border border-line bg-app px-2 py-1 font-mono text-sm text-fg outline-none focus:border-accent" />
+            </label>
+          )}
+          {choosing && !param?.custom && !!plan?.choices?.length && (
             <Choices title={param?.title} choices={plan.choices} chosen={chosen} disabled={busy === 'run' || sent || (chosen === null && !!plan.unavailable)} onChoose={choose} boxRef={choicesRef} />
           )}
 
@@ -499,7 +507,7 @@ export function ActionDialog({ client, req, onClose, onTerminal, runTimeoutMs = 
               {t('action.reviewAgain')}
             </button>
           )}
-          {(counted || (textDesc && !textReviewed)) && !reviewed && !sent && (
+          {(counted || (textDesc && !textReviewed) || (choosing && param?.custom)) && !reviewed && !sent && (
             // Enabled while a review is read: a disabled default button would swallow Enter in the count.
             <button type="submit" disabled={busy === 'run'} className={`${btn} bg-accent text-accent-fg`}>
               {t('action.review')}

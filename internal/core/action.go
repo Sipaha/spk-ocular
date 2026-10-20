@@ -25,6 +25,9 @@ type ActionDescriptor struct {
 	// Single: only one object at a time (a node's drain: several at once
 	// evict everything together) — never in a bulk action.
 	Single bool `json:"single,omitempty"`
+	// Terminal actions prepare an app-owned, reviewed terminal handle. They
+	// never write through RunAction and must be UI-only and single-object.
+	Terminal bool `json:"terminal,omitempty"`
 }
 
 // ActionText describes an action's text value.
@@ -37,6 +40,8 @@ type ActionText struct {
 
 // ActionParam is the one parameter an action takes.
 type ActionParam struct {
+	// Custom permits a typed choice (for a namespace not listable by RBAC).
+	Custom bool `json:"custom,omitempty"`
 	// Kind: "count" (an integer in Min..Max) or "choice" (one of the
 	// plan's Choices: they are live, the provider checks the value).
 	Kind string `json:"kind"`
@@ -277,9 +282,12 @@ func FindAction(kinds []KindDescriptor, kind, id string) (ActionDescriptor, erro
 
 // TerminalOpen is a terminal an action's result asks the UI to open.
 type TerminalOpen struct {
-	Ref      Ref    `json:"ref"`
-	Instance string `json:"instance,omitempty"`
-	Channel  string `json:"channel,omitempty"`
+	// PreparedID names an already reviewed app-owned terminal prototype.
+	// Opening its stream starts it; it must never be recreated automatically.
+	PreparedID string `json:"preparedId,omitempty"`
+	Ref        Ref    `json:"ref"`
+	Instance   string `json:"instance,omitempty"`
+	Channel    string `json:"channel,omitempty"`
 	// Attach: to the container's own process (its stdin), not a new one.
 	Attach bool `json:"attach,omitempty"`
 }

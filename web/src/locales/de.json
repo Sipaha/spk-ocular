@@ -1160,7 +1160,9 @@
     "appearance.retry": "Erneut versuchen",
     "view.scopeLimit": "All Namespaces ist zu groß. Wählen Sie oben bestimmte Namespaces, um eine vollständige Liste zu laden.",
     "class.scope_limit": "Namespaces auswählen",
-    "compare.noBaseline": "Keine Vergleichsbasis ausgewählt. Öffnen Sie die Eigenschaften einer Ressource und klicken Sie auf „{pin}“. Öffnen Sie dann eine andere Ressource und klicken Sie auf „{compare}“, um deren YAML zu vergleichen."
+    "compare.noBaseline": "Keine Vergleichsbasis ausgewählt. Öffnen Sie die Eigenschaften einer Ressource und klicken Sie auf „{pin}“. Öffnen Sie dann eine andere Ressource und klicken Sie auf „{compare}“, um deren YAML zu vergleichen.",
+    "act.node-shell": "Knoten-Shell",
+    "term.reviewNodeShell": "Für eine weitere Host-Shell den Knoten wählen und Knoten-Shell erneut bestätigen."
   },
   "provider": {
     "kubernetes.rbac.source": "RBAC-Quelle konnte nicht gelesen werden ({class})",
@@ -1483,6 +1485,22 @@
     "kubernetes.instance.ready": "Bereit",
     "kubernetes.instance.notReady": "Nicht bereit",
     "kubernetes.instance.containers": "Container {ready}/{total}",
-    "kubernetes.instance.state": "{state}"
+    "kubernetes.instance.state": "{state}",
+    "kubernetes.nodeShell.namespace": "Namespace des Hilfs-Pods",
+    "kubernetes.nodeShell.linux": "Node Shell erfordert einen Linux-Knoten mit bekanntem Betriebssystem.",
+    "kubernetes.nodeShell.invalid": "Wählen Sie einen gültigen Namespace und ein Image ohne Leerzeichen.",
+    "kubernetes.nodeShell.namespaceError": "Namespace {namespace} ist nicht verfügbar, nicht lesbar oder wurde geändert; erneut prüfen.",
+    "kubernetes.nodeShell.effect": "Einen temporären Pod in {namespace} auf Knoten {name} mit Image {image} erstellen und die Host-Shell öffnen.",
+    "kubernetes.nodeShell.cleanup": "Der Hilfs-Pod wird beim Ende der Shell, Verbindungsverlust, Schließen des Tabs oder normalen Beenden von Ocular gelöscht. Höchstdauer: 1 Stunde. Nach einem Absturz oder Löschfehler kann der Pod bleiben; seine Frist stoppt ihn, löscht ihn aber nicht.",
+    "kubernetes.nodeShell.privileged": "Dies gewährt Root-Zugriff auf Dateisystem, Prozesse und Netzwerk des Hosts. Befehle können den Knoten und seine Workloads verändern oder beschädigen.",
+    "kubernetes.nodeShell.requirements": "Erfordert create/get/watch/delete für Pods und Zugriff auf pods/exec. Die Namespace-Zulassung muss privilegierte Host-Namespaces erlauben. Das Image benötigt sleep und nsenter, der Host /bin/sh.",
+    "kubernetes.nodeShell.policy": "Namespace {namespace} erzwingt Pod Security baseline/restricted. Die Zulassung kann diesen Hilfs-Pod ablehnen, sofern keine Ausnahme gilt.",
+    "kubernetes.nodeShell.ended": "Diese Node Shell ist einmalig; für eine weitere Sitzung Node Shell erneut bestätigen.",
+    "kubernetes.nodeShell.waiting": "Warten auf den Start des Node-Shell-Hilfs-Pods…",
+    "kubernetes.nodeShell.startFailed": "Der Node-Shell-Hilfs-Pod konnte nicht starten: {reason}",
+    "kubernetes.nodeShell.changed": "Die Identität des Node-Shell-Hilfs-Pods hat sich geändert; keine Shell geöffnet.",
+    "kubernetes.nodeShell.createUnknown": "Das Ergebnis der Erstellung von Pod {namespace}/{name} ist unbekannt. Die Bereinigung wird versucht; diesen Pod vor einer neuen Sitzung prüfen.",
+    "kubernetes.nodeShell.cleanupFailed": "Bereinigung von Pod {namespace}/{name} konnte nicht bestätigt werden: {detail}. Prüfen und bei Bedarf manuell löschen.",
+    "kubernetes.nodeShell.agentDenied": "Hilfs-Pods der Knoten-Shell sind nur über die Oberfläche zugänglich; Container-Exec-Rechte erlauben darin keine Befehle."
   }
 }

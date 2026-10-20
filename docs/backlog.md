@@ -99,8 +99,9 @@ Ocular's features remain free; competitor packaging does not change that policy.
 - StatefulSet/DaemonSet rollback, revision browsing and richer YAML comparisons.
 - Configurable drain timing, multiple-node drain and progress until pods leave.
 - Navigation to newly created CronJob Jobs and reviewed template changes.
-- Pod copies, node debugging, debugger profiles/custom commands and attachment to
-  suitable existing containers.
+- Pod copies, additional node-debugging profiles/custom commands and attachment
+  to suitable existing containers. Reviewed Linux Node Shell is implemented; see
+  [Node Shell](usage.md#node-shell).
 
 ## Workspace and streams
 

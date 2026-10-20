@@ -861,3 +861,21 @@ describe('ActionDialog', () => {
     }
   })
 })
+
+it('requires a fresh review after typing a namespace for a privileged terminal action', async () => {
+  const nodeShell:ActionDescriptor={id:'node-shell',title:'Node Shell',destructive:true,noAgents:true,single:true,terminal:true,param:{kind:'choice',min:0,max:0,custom:true,title:{text:'Helper namespace'}},text:{title:{text:'Image'},default:'alpine:3.24.2',max:512}}
+  const {f,dialog}=setup(nodeShell,p=>planOf(nodeShell,{text:p.text??'alpine:3.24.2',choice:p.choice??'kube-system'}))
+  const open=within(dialog).getByRole('button',{name:'Node Shell'})
+  await waitFor(()=>expect(open).toBeEnabled())
+  expect(within(dialog).getByRole('button',{name:'Cancel'})).toHaveFocus()
+  const ns=within(dialog).getByRole('textbox',{name:'Helper namespace'})
+  await userEvent.clear(ns);await userEvent.type(ns,'private-tools')
+  expect(open).toBeDisabled()
+  expect(f.client.runAction).not.toHaveBeenCalled()
+  await userEvent.click(within(dialog).getByRole('button',{name:'Review'}))
+  await waitFor(()=>expect(open).toBeEnabled())
+  expect(f.client.prepareAction).toHaveBeenLastCalledWith(ref,'node-shell',{text:'alpine:3.24.2',choice:'private-tools'})
+  await userEvent.click(open)
+  await waitFor(()=>expect(f.client.runAction).toHaveBeenCalledOnce())
+  expect((f.client.runAction as ReturnType<typeof vi.fn>).mock.calls[0][0].params.choice).toBe('private-tools')
+})

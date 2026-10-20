@@ -251,6 +251,9 @@ The pending count appears in the UI/window title and can produce a desktop
 notification without raising the window. Non-destructive mutations within a
 valid grant execute without that extra confirmation.
 
+Node Shell and Pod debug actions are UI-only (`NoAgents`); container exec grants
+do not authorize host shells or helper Pod creation.
+
 Cluster-scoped mutations, dedicated Secret value operations, port forwarding, and
 streaming events are not available to agents. Plans naming affected objects
 outside the granted scopes are refused. Broad edit-kind grants exclude sensitive

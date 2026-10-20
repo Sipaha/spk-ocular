@@ -94,6 +94,24 @@ func (s *Service) RunAction(ctx context.Context, req ActionRunRequest) (core.Act
 	if err := d.CheckParams(req.Params, true); err != nil {
 		return core.ActionResult{}, coded(CodeBadRequest, err)
 	}
+	if d.Terminal {
+		if !fromUI(ctx) || !d.NoAgents || !d.Single {
+			return core.ActionResult{}, coded("forbidden", errors.New("terminal actions require the user interface"))
+		}
+		terminal, ok := sess.(provider.TerminalActioner)
+		if !ok {
+			return core.ActionResult{}, coded(CodeUnsupported, errors.New("terminal actions are unavailable"))
+		}
+		h, err := terminal.PrepareTerminalAction(ctx, provider.ActionRun{Ref: req.Ref, Action: req.Action, Params: req.Params, Expect: req.Expect})
+		if err != nil {
+			return core.ActionResult{}, fromProvider(err)
+		}
+		id := s.terms.add(h)
+		if id == "" {
+			return core.ActionResult{}, coded(CodeGone, errors.New("the app is closing"))
+		}
+		return core.ActionResult{Outcome: core.OutcomeDone, Message: core.Message{Text: d.Title}, Terminal: &core.TerminalOpen{Ref: req.Ref, PreparedID: id}}, nil
+	}
 	// Runs on the session checked above, without holding sessMu: a change
 	// of configuration from now on neither redirects nor fails it.
 	res, err := act.RunAction(ctx, provider.ActionRun{Ref: req.Ref, Action: req.Action, Params: req.Params, Expect: req.Expect})

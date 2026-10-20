@@ -889,3 +889,50 @@ The lesson reducer has no transport or Client dependency; its UID-scoped objects
 exist only in renderer memory. Shared ResourceTable and read-only YamlView retain
 familiar navigation without exposing live actions, comparison pins or writes.
 See [learning](learning.md) for coverage, reset and validation boundaries.
+
+## Reviewed node terminals
+
+`ActionDescriptor.terminal` selects the optional `TerminalActioner` capability.
+Only a single-object, `NoAgents` UI action can use it. `RunAction` validates the
+reviewed connection revision, obtains an app-owned `ExecHandle` and returns an
+opaque `TerminalOpen.preparedId`. It performs no remote write. The UI adopts
+that handle through the existing `ReopenTerminal` and one-shot stream protocol;
+its discarded StrictMode mount cannot consume the handle. Prepared terminal
+IDs are memory-only and are never restored or replayed from workspace persistence.
+
+Kubernetes Node Shell signs node Ref/UID, namespace/UID, image, helper name,
+nonce, session incarnation and expiry. Admission consumes the nonce before
+registration; stream Run independently checks expiry and identities, then uses
+one non-retrying CREATE. A shared atomic start guard prevents reconnection from
+creating another helper. The helper has no mounted API token, uses the selected
+nodeName and host namespaces, runs privileged as UID 0 and has a one-hour active
+deadline. After bounded startup, the existing exec transport runs `nsenter` into
+host PID 1's mount/UTS/IPC/network/PID namespaces, root and working directory,
+followed by `/bin/sh -l`.
+Node identity is checked again after startup; normal terminal credits, input,
+resize and transport guards apply.
+
+Cleanup runs under an independent ten-second deadline, including after startup
+failure or an ambiguous create result. The create response pins the server-assigned Pod UID; even a replacement with
+copied ownership labels cannot inherit cleanup. For an ambiguous create without
+a returned UID, the random ownership marker and nodeName identify a helper before
+a UID-conditional DELETE; writes never retry. A read confirms
+disappearance, so admission-added finalizers do not become silent cleanup
+success. Foreign/replaced Pods are not deleted. Failures include the precise
+helper identity in a terminal notice/error. An optional `TerminalCleanup` handle
+lets `ForgetTerminal` await the cleanup result after revoking the stream; the
+frontend reports its failure globally even after the terminal tab has unmounted.
+Application logs retain a warning with target/helper identity, without command
+output or credential details. Unavailable API/kubelet, process
+crashes and revoked rights can leave a helper; the active deadline bounds its
+execution when enforced, not object retention. Kubernetes exec and nodeName placement have no atomic Node UID precondition;
+identity reads reject observed replacements but cannot eliminate the final
+read-to-exec race. No automatic reconnect, node policy mutation, agent grant
+expansion or SSH client is introduced.
+
+Agent exec preparation carries an internal, non-JSON caller marker. The Kubernetes
+provider refuses Node Shell helper Pods by their reserved name or ownership
+marker, even through broad namespace-wide container exec grants. Editing helper
+labels does not make a reserved helper name eligible for agent exec. UI terminals
+retain their ordinary container behavior; this does not add an agent host-shell
+permission.

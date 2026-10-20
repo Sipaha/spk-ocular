@@ -1134,3 +1134,43 @@ The application menu opens [Kubernetes learning](learning.md) without a cluster.
 The What is this? button beside a Kubernetes kind opens offline, localized
 resource help. The same library includes an explicitly simulated introductory
 Deployment/ReplicaSet/Pod lesson. Its actions change only local lesson state.
+
+## Node Shell
+
+Select a Linux node in **Nodes**, open its **Actions → Node Shell…**, and review
+its connection, node, helper namespace and image. The namespace is a typed field;
+listing every namespace is not required. Changing namespace or image requires a
+new **Review** before confirmation. Cancel receives initial focus.
+
+Node Shell uses the Kubernetes API, not SSH. A temporary privileged Pod runs on
+the selected node with host PID, IPC and network namespaces. `nsenter` enters
+PID 1's namespaces and root directory and opens the host's `/bin/sh -l`. This is
+root access to host files, processes and networking; commands can affect the
+node and its workloads. Windows nodes and nodes with an unknown OS are refused.
+The default helper image is `alpine:3.24.2`. An alternative reachable image must
+provide `sleep` and `nsenter` with the same options; the host must have `/bin/sh`.
+Minimal host operating systems without a shell are not supported.
+
+The connection needs node and namespace reads, Pod create/get/watch/delete, and
+pods/exec access (GET for WebSocket; POST for the SPDY fallback). Namespace
+admission must permit privileged Pods and host namespaces. Ocular warns about known
+Pod Security baseline/restricted enforcement before confirmation. It cannot infer
+admission exemptions, so the server makes the final decision. Other admission,
+quota and registry failures remain server errors. It never changes namespace
+policy or grants. No ServiceAccount token is mounted in the helper.
+
+The helper is created only when the terminal stream opens. Node/namespace UID,
+review expiry, session incarnation and connection revision are checked; the
+terminal retains its reviewed connection snapshot across target switching.
+Startup waits at most two minutes. The whole helper has a one-hour active
+deadline. Each confirmed shell starts once: exit, startup failure or connection
+loss requires another explicit Node Shell review, with no automatic creation retry.
+
+When the command ends, its stream disconnects, its tab closes or Ocular exits
+normally, Ocular requests immediate helper deletion with a UID precondition and
+checks disappearance. Cleanup failures name the exact namespace/Pod to inspect;
+never delete a same-named replacement blindly. After an application crash,
+network failure or revoked deletion rights, a helper may remain. Its deadline
+stops it when the kubelet can enforce it, but does not delete the Pod. The Node
+owner reference permits garbage collection when that node object is deleted.
+Node Shell is UI-only and is not included in agent exec/action grants.

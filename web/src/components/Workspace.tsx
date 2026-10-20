@@ -509,7 +509,7 @@ export function Workspace({ client, hub, target, onFavorite, onMoveFavorite, onN
             req={actionReq}
             onClose={() => setActionReq(null)}
             onTerminal={(open) =>
-              dock.openTerminal(targetRef, target.title, { ref: open.ref, instance: open.instance, channel: open.channel, attach: open.attach }, open.channel ? `${open.channel} · ${refTitle(open.ref)}` : undefined)
+              dock.openTerminal(targetRef, target.title, { ref: open.ref, instance: open.instance, channel: open.channel, attach: open.attach, preparedId: open.preparedId }, open.channel ? `${open.channel} · ${refTitle(open.ref)}` : undefined)
             }
           />
         )}

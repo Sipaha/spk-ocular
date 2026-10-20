@@ -234,6 +234,7 @@ export interface SortSpec {
 // ---- actions (internal/core/action.go)
 
 export interface ActionParam {
+  custom?: boolean
   /** 'count': an integer in min..max; 'choice': one of the plan's choices */
   kind: string
   min: number
@@ -253,6 +254,7 @@ export interface ActionDescriptor {
   noAgents?: boolean
   /** only one object at a time (a node's drain): never in a bulk action */
   single?: boolean
+  terminal?: boolean
 }
 
 export interface ActionText {
@@ -502,6 +504,8 @@ export interface ActionResult {
 }
 
 export interface TerminalOpen {
+	/** Reviewed app-owned terminal; starts once, without implicit recreation. */
+	preparedId?: string
   ref: Ref
   instance?: string
   channel?: string

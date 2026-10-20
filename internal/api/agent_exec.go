@@ -45,6 +45,7 @@ func (c *AgentCall) PrepareAgentExec(ref core.Ref, req provider.ExecRequest, rev
 	if !ok {
 		return nil, core.LiveTarget{}, coded(CodeUnsupported, errors.New("commands cannot run on this target"))
 	}
+	req.Agent = true
 	h, err := ex.PrepareExec(c.ctx, ref, req)
 	if err != nil {
 		return nil, core.LiveTarget{}, c.fail(err)

@@ -37,6 +37,8 @@ not collect telemetry. Helm is embedded; a separate Helm CLI is not required.
   resource details and an optional declared-route layer.
 - Standalone Docker containers and Compose project/service grouping.
 - Logs in the bottom panel or a separate OS window, interactive terminals, and local Kubernetes port forwarding.
+- Reviewed [Linux Node Shell](docs/usage.md#node-shell) through the Kubernetes API,
+  with temporary privileged helpers and explicit cleanup reporting.
 - Container folders and UTF-8 file editing with syntax highlighting (up to 2 MiB).
 - Shared Downloads history for UI file/folder copies and log exports; desktop
   entries can open the saved item, show its folder or copy its path, dismiss

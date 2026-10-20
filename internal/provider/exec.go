@@ -20,6 +20,9 @@ type Execer interface {
 }
 
 type ExecRequest struct {
+	// Agent is set by the admitted agent API, never from UI JSON. Providers
+	// can exclude app-owned privileged helpers from ordinary exec grants.
+	Agent bool `json:"-"`
 	// Instance: ExecInfo's instance id ("" = the default one).
 	Instance string `json:"instance,omitempty"`
 	// Channel: ExecInfo's channel id ("" = the default one).
@@ -47,6 +50,13 @@ type ExecHandle interface {
 	// runs copies.
 	Again() (ExecHandle, error)
 	Close()
+}
+
+// TerminalCleanup reports owned-resource cleanup after a terminal tab closes.
+// Ordinary command handles do not need it. Errors must remain visible even
+// when the terminal's own WebSocket is already gone.
+type TerminalCleanup interface {
+	WaitCleanup(context.Context) error
 }
 
 // Terminal is the page side of a running command. Stdout blocks while the

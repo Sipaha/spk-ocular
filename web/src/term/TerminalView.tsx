@@ -14,6 +14,7 @@ import { copyText, readText } from './clipboard'
 import { PasteTooLargeError, TermConnection, wsBase, type TermEnd, type TermPhase } from './protocol'
 import { errorDetail } from '../errors'
 import { clearDeliveredInput } from './inputResidue'
+import { showNotice } from '../store'
 
 // xterm needs resolved colours, so read the same tokens as the rest of the
 // interface when mounting, after the stylesheet has loaded.
@@ -96,6 +97,11 @@ export default function TerminalView({ client, tab, active, mode }: Props) {
     // This mount's life (StrictMode mounts twice: a ref would be revived
     // by the second mount while the first one's open is still pending).
     let alive = true
+    const forget = (id: string) => {
+      void client.forgetTerminal(id).catch(e => {
+        if (tab.open.preparedId) showNotice(`${tab.targetTitle} · ${errText(e)}`, 30_000)
+      })
+    }
     const connect = async (again: boolean) => {
       const term = termRef.current
       if (!term) return
@@ -110,8 +116,9 @@ export default function TerminalView({ client, tab, active, mode }: Props) {
       const { cols, rows } = term
       let info: TerminalInfo
       try {
-        info = idRef.current
-          ? await client.reopenTerminal(idRef.current, cols, rows)
+        const prepared = idRef.current ?? tab.open.preparedId
+        info = prepared
+          ? await client.reopenTerminal(prepared, cols, rows)
           : await client.openTerminal({ ...tab.open, cols, rows })
       } catch (e) {
         if (gen === genRef.current && alive) {
@@ -123,12 +130,12 @@ export default function TerminalView({ client, tab, active, mode }: Props) {
       if (!alive || gen !== genRef.current) {
         // The tab closed or a newer attempt began: a terminal only this
         // attempt knows of is forgotten (a reopen's is the tab's own).
-        if (!alive || info.terminalId !== idRef.current) void client.forgetTerminal(info.terminalId).catch(() => {})
+        if (!alive || info.terminalId !== idRef.current) forget(info.terminalId)
         return
       }
       idRef.current = info.terminalId
       const tg = info.target
-      dock.update(tab.id, { title: tg.channel && tg.instance ? `${tg.channel} · ${tg.instance}` : tg.instance || tab.title, hint: describe(info), rev: tg.configRev })
+      dock.update(tab.id, { title: tab.open.preparedId ? `${t('act.node-shell')} · ${tg.ref.name}` : tg.channel && tg.instance ? `${tg.channel} · ${tg.instance}` : tg.instance || tab.title, hint: describe(info), rev: tg.configRev })
       let base: string
       try {
         base = wsBase(await client.streamBase())
@@ -246,15 +253,19 @@ export default function TerminalView({ client, tab, active, mode }: Props) {
     })
     ro.observe(host)
 
-    void connect(false)
+    // StrictMode's discarded mount must not consume a reviewed one-shot
+    // terminal. Ordinary terminals keep their independent-open behavior.
+    const initial = tab.open.preparedId ? setTimeout(() => void connect(false), 0) : null
+    if (!tab.open.preparedId) void connect(false)
     return () => {
+      if (initial !== null) clearTimeout(initial)
       alive = false
       gens.current++
       ro.disconnect()
       if (timer) clearTimeout(timer)
       connRef.current?.close()
       connRef.current = null
-      if (idRef.current) void client.forgetTerminal(idRef.current).catch(() => {})
+      if (idRef.current) forget(idRef.current)
       idRef.current = null
       clearInput()
       term.dispose()
@@ -311,13 +322,14 @@ export default function TerminalView({ client, tab, active, mode }: Props) {
             </>
           ) : (
             <>
-              {!gone && (
+              {tab.open.preparedId && <span className="text-fg-muted">{t('term.reviewNodeShell')}</span>}
+              {!gone && !tab.open.preparedId && (
                 <button className="rounded-md bg-accent px-2 py-0.5 text-accent-fg" onClick={again}>
                   {t('term.reconnect')}
                 </button>
               )}
               {/* An ended debugger cannot restart: its text says to debug again. */}
-              {gone && !tab.open.attach && (
+              {gone && !tab.open.attach && !tab.open.preparedId && (
                 <button className="rounded-md bg-accent px-2 py-0.5 text-accent-fg" onClick={openNew}>
                   {t('term.openNew')}
                 </button>

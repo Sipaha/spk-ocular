@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"sync"
+	"time"
 
 	"github.com/spk/spk-ocular/internal/core"
 	"github.com/spk/spk-ocular/internal/provider"
@@ -109,7 +110,7 @@ func (p *termProtos) runLocked(id string, start func(proto provider.ExecHandle) 
 }
 
 // forget drops terminal id; the caller ends its runs.
-func (p *termProtos) forget(id string) {
+func (p *termProtos) forget(id string) provider.ExecHandle {
 	p.mu.Lock()
 	h := p.byID[id]
 	delete(p.byID, id)
@@ -123,6 +124,7 @@ func (p *termProtos) forget(id string) {
 	if h != nil {
 		h.Close()
 	}
+	return h
 }
 
 func closeHandles(hs []provider.ExecHandle) {
@@ -249,9 +251,16 @@ func (s *Service) ReopenTerminal(_ context.Context, req ReopenTerminalRequest) (
 
 // ForgetTerminal: the terminal's tab is gone; it cannot be reopened, and
 // its run (connected or not yet) ends.
-func (s *Service) ForgetTerminal(_ context.Context, terminalID string) error {
-	s.terms.forget(terminalID)
+func (s *Service) ForgetTerminal(ctx context.Context, terminalID string) error {
+	h := s.terms.forget(terminalID)
 	s.streams.CloseOwner(termOwner(terminalID))
+	if cleanup, ok := h.(provider.TerminalCleanup); ok {
+		ctx, cancel := context.WithTimeout(ctx, 12*time.Second)
+		defer cancel()
+		if err := cleanup.WaitCleanup(ctx); err != nil {
+			return fromProvider(err)
+		}
+	}
 	return nil
 }
 

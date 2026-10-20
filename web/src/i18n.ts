@@ -8,6 +8,9 @@ const loaders = {
 }
 
 const en = {
+ "act.node-shell": "Node Shell",
+ "term.reviewNodeShell": "To open another host shell, select the node and review Node Shell again.",
+
  "appearance.retry": "Retry",
  "connections.title": "Connections",
  "connections.choose": "Choose connection",
@@ -1190,6 +1193,8 @@ const en = {
 export type MessageKey = keyof typeof en
 
 const ru: Record<MessageKey, string> = {
+ "act.node-shell": "Терминал ноды",
+ "term.reviewNodeShell": "Чтобы открыть новую оболочку хоста, выберите ноду и заново подтвердите «Терминал ноды».",
  "appearance.retry": "Повторить",
  "connections.title": "Подключения",
  "connections.choose": "Выбрать подключение",
@@ -2404,6 +2409,23 @@ export function loadLanguage(language: Language): Promise<void> {
  */
 const providerTexts: Partial<Record<Language, Record<string, string>>> = {
   ru: {
+    'kubernetes.nodeShell.agentDenied': 'Служебные Pod для терминала ноды доступны только через интерфейс; права exec контейнеров не разрешают выполнять в них команды.',
+ 'kubernetes.nodeShell.namespace': 'Namespace служебного Pod',
+ 'kubernetes.nodeShell.linux': 'Для Node Shell нужна Linux-нода с известной операционной системой.',
+ 'kubernetes.nodeShell.invalid': 'Выберите корректный namespace и образ без пробелов.',
+ 'kubernetes.nodeShell.namespaceError': 'Namespace {namespace} недоступен, не читается или изменился; проверьте заново.',
+ 'kubernetes.nodeShell.effect': 'Создать временный Pod в {namespace} на ноде {name} с образом {image} и открыть оболочку хоста.',
+ 'kubernetes.nodeShell.cleanup': 'Служебный Pod удаляется при завершении оболочки, потере соединения, закрытии вкладки или штатном выходе из Ocular. Сеанс — до 1 часа. После сбоя приложения или ошибки удаления Pod может остаться: срок действия останавливает его, но не удаляет.',
+ 'kubernetes.nodeShell.privileged': 'Это даёт root-доступ к файловой системе, процессам и сети хоста. Команды могут изменить или повредить ноду и её нагрузки.',
+ 'kubernetes.nodeShell.requirements': 'Нужны права create/get/watch/delete для Pod и доступ к pods/exec. Политики namespace должны разрешать привилегированный доступ к пространствам имён хоста. В образе нужны sleep и nsenter, на хосте — /bin/sh.',
+ 'kubernetes.nodeShell.policy': 'Namespace {namespace} применяет Pod Security baseline/restricted. Admission может отклонить служебный Pod, если для запроса нет исключения.',
+ 'kubernetes.nodeShell.ended': 'Этот Node Shell одноразовый; для нового сеанса подтвердите Node Shell заново.',
+ 'kubernetes.nodeShell.waiting': 'Ожидание запуска служебного Pod для Node Shell…',
+ 'kubernetes.nodeShell.startFailed': 'Не удалось запустить служебный Pod для Node Shell: {reason}',
+ 'kubernetes.nodeShell.changed': 'Идентичность служебного Pod изменилась; оболочка не открыта.',
+ 'kubernetes.nodeShell.createUnknown': 'Результат создания Pod {namespace}/{name} неизвестен. Выполняется попытка очистки; проверьте этот Pod перед открытием нового сеанса.',
+ 'kubernetes.nodeShell.cleanupFailed': 'Не удалось подтвердить удаление Pod {namespace}/{name}: {detail}. Проверьте его и удалите вручную, если он остался.',
+
     'kubernetes.instance.revision': 'Ревизия {revision}',
     'kubernetes.instance.current': 'Текущая ревизия {revision}',
     'kubernetes.instance.previous': 'Предыдущая ревизия {revision}',

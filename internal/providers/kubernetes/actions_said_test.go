@@ -95,12 +95,17 @@ func TestEveryActionHasItsDoneText(t *testing.T) {
 	ids := map[string]bool{}
 	for _, a := range acts {
 		ids[a.ID] = true
-		_, ok := messageTexts["done."+a.ID]
-		assert.True(t, ok, "no done.%s", a.ID)
+		if !a.Terminal { // Terminal actions prepare a handle; no remote write is reported done.
+			_, ok := messageTexts["done."+a.ID]
+			assert.True(t, ok, "no done.%s", a.ID)
+		} else {
+			assert.True(t, a.NoAgents)
+			assert.True(t, a.Single)
+		}
 	}
 	// Every action write and the drain, run paths handle is enumerated.
-	assert.Len(t, ids, 13)
-	for _, id := range []string{"restart", "scale", "undo", "pause", "debug", "delete", "forceDelete", "cordon", "uncordon", "drain", "suspend", "resume", "run"} {
+	assert.Len(t, ids, 14)
+	for _, id := range []string{"node-shell", "restart", "scale", "undo", "pause", "debug", "delete", "forceDelete", "cordon", "uncordon", "drain", "suspend", "resume", "run"} {
 		assert.True(t, ids[id], id)
 	}
 }
@@ -121,12 +126,12 @@ func TestEveryChoiceHasItsTitle(t *testing.T) {
 			}
 		}
 	}
-	assert.Equal(t, 2, n, "debug and undo")
+	assert.Equal(t, 3, n, "debug, undo and node-shell")
 }
 
 // A drain goes one node at a time (as kubectl drain of several nodes): the
 // UI never runs it on several at once.
-func TestOnlyTheDrainIsSingle(t *testing.T) {
+func TestNodeTerminalAndDrainAreSingle(t *testing.T) {
 	var single []string
 	for _, as := range kindActions {
 		for _, a := range as {
@@ -135,7 +140,7 @@ func TestOnlyTheDrainIsSingle(t *testing.T) {
 			}
 		}
 	}
-	assert.Equal(t, []string{"drain"}, single)
+	assert.Equal(t, []string{"node-shell", "drain"}, single)
 }
 
 // A reason without its "nothing was written" form is said as text rather

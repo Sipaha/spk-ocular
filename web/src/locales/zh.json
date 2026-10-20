@@ -1160,7 +1160,9 @@
     "appearance.retry": "重试",
     "view.scopeLimit": "All Namespaces 的列表过大。请在上方选择具体的 namespace，以加载完整列表。",
     "class.scope_limit": "请选择 namespace",
-    "compare.noBaseline": "尚未选择比较基准。打开一个资源的属性，点击“{pin}”。然后打开另一个资源，点击“{compare}”以比较两者的 YAML。"
+    "compare.noBaseline": "尚未选择比较基准。打开一个资源的属性，点击“{pin}”。然后打开另一个资源，点击“{compare}”以比较两者的 YAML。",
+    "act.node-shell": "节点 Shell",
+    "term.reviewNodeShell": "要打开新的主机 shell，请选择节点并重新确认节点 Shell。"
   },
   "provider": {
     "kubernetes.rbac.source": "无法读取 RBAC 来源（{class}）",
@@ -1483,6 +1485,22 @@
     "kubernetes.instance.ready": "就绪",
     "kubernetes.instance.notReady": "未就绪",
     "kubernetes.instance.containers": "容器 {ready}/{total}",
-    "kubernetes.instance.state": "{state}"
+    "kubernetes.instance.state": "{state}",
+    "kubernetes.nodeShell.namespace": "辅助 Pod 命名空间",
+    "kubernetes.nodeShell.linux": "Node Shell 需要操作系统已知的 Linux 节点。",
+    "kubernetes.nodeShell.invalid": "请选择有效的命名空间和不含空格的镜像。",
+    "kubernetes.nodeShell.namespaceError": "命名空间 {namespace} 不可用、无法读取或已更改；请重新检查。",
+    "kubernetes.nodeShell.effect": "在节点 {name} 的命名空间 {namespace} 中使用镜像 {image} 创建临时 Pod，然后打开主机 shell。",
+    "kubernetes.nodeShell.cleanup": "shell 结束、连接中断、标签页关闭或 Ocular 正常退出时会删除辅助 Pod。会话最长 1 小时。应用崩溃或删除失败后 Pod 可能保留；到期会停止它，但不会删除它。",
+    "kubernetes.nodeShell.privileged": "这将授予对主机文件系统、进程和网络的 root 访问权限。命令可能更改或损坏节点及其工作负载。",
+    "kubernetes.nodeShell.requirements": "需要 Pod 的 create/get/watch/delete 权限和 pods/exec 访问权限。命名空间准入必须允许特权主机命名空间。镜像需要 sleep 和 nsenter；主机需要 /bin/sh。",
+    "kubernetes.nodeShell.policy": "命名空间 {namespace} 强制实施 Pod Security baseline/restricted。除非请求被豁免，否则准入可能拒绝此辅助 Pod。",
+    "kubernetes.nodeShell.ended": "此 Node Shell 仅限使用一次；要开启新会话，请重新确认 Node Shell。",
+    "kubernetes.nodeShell.waiting": "正在等待 Node Shell 辅助 Pod 启动…",
+    "kubernetes.nodeShell.startFailed": "Node Shell 辅助 Pod 无法启动：{reason}",
+    "kubernetes.nodeShell.changed": "Node Shell 辅助 Pod 的身份已更改；未打开 shell。",
+    "kubernetes.nodeShell.createUnknown": "创建 Pod {namespace}/{name} 的结果未知。将尝试清理；开启新会话前请检查该 Pod。",
+    "kubernetes.nodeShell.cleanupFailed": "无法确认 Pod {namespace}/{name} 的清理结果：{detail}。请检查它，若仍存在则手动删除。",
+    "kubernetes.nodeShell.agentDenied": "节点 Shell 辅助 Pod 仅供界面使用；容器 exec 授权不允许在其中执行命令。"
   }
 }

@@ -272,3 +272,39 @@ func TestACreateIsOneRequestOnTheWire(t *testing.T) {
 		})
 	}
 }
+
+func TestTemporaryResourceCreateRetainsUIDAndNeverRetriesOnTheWire(t *testing.T) {
+	for _, code := range []int{201, 503, 429} {
+		t.Run(fmt.Sprint(code), func(t *testing.T) {
+			var mu sync.Mutex
+			requests := 0
+			srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				mu.Lock()
+				requests++
+				mu.Unlock()
+				assert.Equal(t, "POST", r.Method)
+				assert.Equal(t, "/api/v1/namespaces/tools/pods", r.URL.Path)
+				if code == 201 {
+					w.Header().Set("Content-Type", "application/json")
+					w.WriteHeader(code)
+					_, _ = io.WriteString(w, `{"apiVersion":"v1","kind":"Pod","metadata":{"name":"helper","namespace":"tools","uid":"server-assigned"}}`)
+					return
+				}
+				statusReply(w, code, "ServiceUnavailable", true)
+			}))
+			defer srv.Close()
+			wr, err := newRESTWriter(&rest.Config{Host: srv.URL})
+			require.NoError(t, err)
+			p, err := wr.createResult(t.Context(), podGVR, "tools", &unstructured.Unstructured{Object: map[string]any{"apiVersion": "v1", "kind": "Pod", "metadata": map[string]any{"name": "helper"}}})
+			if code == 201 {
+				require.NoError(t, err)
+				assert.EqualValues(t, "server-assigned", p.GetUID())
+			} else {
+				require.Error(t, err)
+			}
+			mu.Lock()
+			assert.Equal(t, 1, requests)
+			mu.Unlock()
+		})
+	}
+}

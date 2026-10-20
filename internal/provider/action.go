@@ -26,3 +26,9 @@ type ActionRun struct {
 	Params core.ActionParams
 	Expect string
 }
+
+// TerminalActioner prepares a reviewed terminal without remote writes.
+// Its handle owns startup and cleanup, including cancelled/failed starts.
+type TerminalActioner interface {
+	PrepareTerminalAction(context.Context, ActionRun) (ExecHandle, error)
+}

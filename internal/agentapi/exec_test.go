@@ -283,3 +283,16 @@ func TestAgentExecPlanExpiryAndRetainedResultBound(t *testing.T) {
 	run := e.ok("RunExec", RunRequest{PlanID: prep["planId"].(string)})
 	assert.Equal(t, stateAwaiting, run["state"])
 }
+
+func TestAgentExecMarksItsProviderRequestAsAgentOwned(t *testing.T) {
+	e := newEnv(t)
+	allowExec(e, true)
+	seen := make(chan bool, 1)
+	e.f.execRun = func(_ context.Context, req provider.ExecRequest, _ provider.Terminal) (provider.ExitStatus, error) {
+		seen <- req.Agent
+		return provider.ExitStatus{Known: true}, nil
+	}
+	prep := e.ok("PrepareExec", execRequest())
+	e.ok("RunExec", RunRequest{PlanID: prep["planId"].(string)})
+	assert.True(t, <-seen, "the UI cannot choose this internal marker and broad grants cannot bypass provider helper exclusions")
+}

@@ -1160,7 +1160,9 @@
     "appearance.retry": "Réessayer",
     "view.scopeLimit": "All Namespaces est trop volumineux. Sélectionnez des namespaces précis ci-dessus pour charger une liste complète.",
     "class.scope_limit": "sélectionnez des namespaces",
-    "compare.noBaseline": "Aucune base de comparaison sélectionnée. Ouvrez les propriétés d’une ressource et cliquez sur « {pin} ». Ouvrez ensuite une autre ressource et cliquez sur « {compare} » pour comparer leur YAML."
+    "compare.noBaseline": "Aucune base de comparaison sélectionnée. Ouvrez les propriétés d’une ressource et cliquez sur « {pin} ». Ouvrez ensuite une autre ressource et cliquez sur « {compare} » pour comparer leur YAML.",
+    "act.node-shell": "Shell du nœud",
+    "term.reviewNodeShell": "Pour une autre session, sélectionnez le nœud et confirmez à nouveau Shell du nœud."
   },
   "provider": {
     "kubernetes.rbac.source": "Impossible de lire la source RBAC ({class})",
@@ -1483,6 +1485,22 @@
     "kubernetes.instance.ready": "Prêt",
     "kubernetes.instance.notReady": "Non prêt",
     "kubernetes.instance.containers": "Conteneurs {ready}/{total}",
-    "kubernetes.instance.state": "{state}"
+    "kubernetes.instance.state": "{state}",
+    "kubernetes.nodeShell.namespace": "Namespace du Pod auxiliaire",
+    "kubernetes.nodeShell.linux": "Node Shell nécessite un nœud Linux dont le système est connu.",
+    "kubernetes.nodeShell.invalid": "Choisissez un namespace valide et une image sans espaces.",
+    "kubernetes.nodeShell.namespaceError": "Le namespace {namespace} est indisponible, illisible ou a changé ; vérifiez à nouveau.",
+    "kubernetes.nodeShell.effect": "Créer un Pod temporaire dans {namespace} sur le nœud {name} avec l’image {image}, puis ouvrir le shell de l’hôte.",
+    "kubernetes.nodeShell.cleanup": "Le Pod auxiliaire est supprimé à la fin du shell, à la perte de connexion, à la fermeture de l’onglet ou à l’arrêt normal d’Ocular. Durée maximale : 1 heure. Après un plantage ou un échec de suppression, le Pod peut rester ; son délai l’arrête sans le supprimer.",
+    "kubernetes.nodeShell.privileged": "Cela donne un accès root aux fichiers, processus et réseau de l’hôte. Les commandes peuvent modifier ou endommager le nœud et ses charges de travail.",
+    "kubernetes.nodeShell.requirements": "Nécessite create/get/watch/delete sur les Pods et l’accès à pods/exec. L’admission du namespace doit autoriser les espaces de noms hôte privilégiés. L’image doit fournir sleep et nsenter, et l’hôte /bin/sh.",
+    "kubernetes.nodeShell.policy": "Le namespace {namespace} impose Pod Security baseline/restricted. L’admission peut refuser ce Pod auxiliaire si la requête n’est pas exemptée.",
+    "kubernetes.nodeShell.ended": "Ce Node Shell est à usage unique ; confirmez à nouveau Node Shell pour une autre session.",
+    "kubernetes.nodeShell.waiting": "En attente du démarrage du Pod auxiliaire Node Shell…",
+    "kubernetes.nodeShell.startFailed": "Impossible de démarrer le Pod auxiliaire Node Shell : {reason}",
+    "kubernetes.nodeShell.changed": "L’identité du Pod auxiliaire Node Shell a changé ; aucun shell ouvert.",
+    "kubernetes.nodeShell.createUnknown": "Le résultat de la création du Pod {namespace}/{name} est inconnu. Un nettoyage est tenté ; vérifiez ce Pod avant une autre session.",
+    "kubernetes.nodeShell.cleanupFailed": "Impossible de confirmer le nettoyage du Pod {namespace}/{name} : {detail}. Vérifiez-le et supprimez-le manuellement s’il reste.",
+    "kubernetes.nodeShell.agentDenied": "Les Pods auxiliaires du shell de nœud sont réservés à l’interface ; les droits exec de conteneur n’y autorisent pas de commandes."
   }
 }
