@@ -317,7 +317,8 @@ func (s *Server) runPlan(ctx context.Context, c caller, method, id string) (*Run
 }
 
 // execute writes p on the server's context (not the agent's request: a
-// hang-up does not cut a write), bounded by runTimeout: the intent before,
+// hang-up does not cut a write), bounded by runTimeout for actions/edits. Exec
+// uses its requested command budget plus a finite setup allowance. The intent before,
 // the outcome after. The grants and the identity are checked again at the
 // moment of the write.
 func (s *Server) execute(p *plan) RunView { return s.executeContext(s.runCtx, p) }
@@ -327,7 +328,13 @@ func (s *Server) executeContext(parent context.Context, p *plan) RunView {
 		return failed(&api.CodedError{Code: api.CodeGone, Detail: "Ocular is closing"})
 	}
 	defer s.runs.Done()
-	ctx, cancel := context.WithTimeout(parent, runTimeout)
+	budget := runTimeout
+	if p.exec != nil {
+		// Preparation must not consume the command's budget or inherit the shorter
+		// action/edit deadline. executeExec still bounds the actual command itself.
+		budget = time.Duration(p.exec.MaxSeconds)*time.Second + callTimeout
+	}
+	ctx, cancel := context.WithTimeout(parent, budget)
 	defer cancel()
 	stop := context.AfterFunc(s.runCtx, cancel)
 	defer stop()

@@ -363,7 +363,7 @@ test('exec is explicitly granted, reviews exact input, runs once and retains its
   expect(info.status).toBe(200)
   const instances = info.body.instances as { id: string }[]
   expect(instances).toHaveLength(1)
-  const prep = await agent('PrepareExec', { ref, instance: instances[0].id, channel: 'main', command: ['stdin'], stdin: 'finite input: привет\n', maxBytes: 4096, maxSeconds: 10 })
+  const prep = await agent('PrepareExec', { ref, instance: instances[0].id, channel: 'main', command: ['stdin'], stdin: 'finite input: привет\n', maxBytes: 4096 })
   expect(prep.status).toBe(200)
   expect(prep.body.confirmation).toBe('user')
   const run = await agent('RunExec', { planId: prep.body.planId })
@@ -373,7 +373,7 @@ test('exec is explicitly granted, reviews exact input, runs once and retains its
   await expect(dialog.getByRole('button', { name: 'No', exact: true })).toBeFocused()
   await expect(dialog.getByLabel('Command', { exact: true })).toHaveText('[\n  "stdin"\n]')
   await expect(dialog.getByLabel('Standard input', { exact: true })).toHaveText(JSON.stringify('finite input: привет\n'))
-  await expect(dialog).toContainText('Output limit: 4096 bytes; duration: 10 seconds. No automatic retry.')
+  await expect(dialog).toContainText('Output limit: 4096 bytes; duration: 300 seconds. No automatic retry.')
   await page.screenshot({ path: join(captures, 'exec-confirmation.png') })
   for (const language of languages) {
     await post(page, '/api/SetLanguage', { language })
@@ -400,6 +400,10 @@ test('exec is explicitly granted, reviews exact input, runs once and retains its
   expect(Buffer.from(output.stdoutBase64, 'base64').toString('utf8')).toBe('finite input: привет\n')
   expect(output.complete).toBe(true)
   expect(output.exitCode).toBe(0)
+  const maxPrep=await agent('PrepareExec',{ref,instance:instances[0].id,channel:'main',command:['stdin'],maxSeconds:1800})
+  expect(maxPrep.status).toBe(200)
+  const maxRun=await agent('RunExec',{planId:maxPrep.body.planId});expect(maxRun.body.state).toBe('awaiting_confirmation')
+  await expect(dialog).toContainText('duration: 1800 seconds.');await expect(dialog.getByRole('button',{name:'No',exact:true})).toBeFocused();await page.screenshot({path:join(captures,'exec-confirmation-maximum.png')});await dialog.getByRole('button',{name:'No',exact:true}).click();expect((await agent('GetRun',{runId:maxRun.body.runId})).body.state).toBe('rejected')
   expect((await agent('RunExec', { planId: prep.body.planId })).status).toBe(404)
   expect((await agent('GetObject', { ref })).status).toBe(403)
   expect((await agent('GetExecInfo', { ref: { ...parcel('parcel-3', 'green'), uid: 'uid-parcel-3' } })).status).toBe(403)

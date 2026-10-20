@@ -669,6 +669,11 @@ func TestTheCatalogIsTheMethods(t *testing.T) {
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &cat))
 	var listed []string
 	for _, m := range cat.Methods {
+		if m.Name == "PrepareExec" {
+			properties := m.Request["properties"].(map[string]any)
+			field := properties["maxSeconds"].(map[string]any)
+			assert.Contains(t, field["description"], "1..1800 seconds, default 300")
+		}
 		listed = append(listed, m.Name)
 		assert.NotEmpty(t, m.Description, m.Name)
 		assert.NotEmpty(t, m.Verb, m.Name)

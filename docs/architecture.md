@@ -476,6 +476,11 @@ bounded request/description data in process memory, not a UI terminal handle.
 Execution prepares a fresh provider handle on the grant-checked AgentCall session,
 rechecks membership and runs once without PTY or replay. Default confirmation
 shares the existing pending-plan UI; argv and stdin are shown but never journaled.
+Commands default to 300 seconds and accept 1–1800 seconds. Exec has its own
+requested command deadline plus a 30-second outer setup allowance, so the generic
+two-minute action/edit deadline cannot clip a longer exec. Running confirmed
+commands are not expired by the ten-minute confirmation wait TTL; retention
+starts after completion.
 Active operations register before authorization so grant saves cannot miss them.
 Revocation and session/configuration cancellation close transport; remote process
 termination is best effort. Separate stdout/stderr share a raw byte budget and

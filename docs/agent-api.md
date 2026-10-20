@@ -308,7 +308,7 @@ Example `PrepareExec` body, using the IDs actually returned by `GetExecInfo`:
   "channel": "app",
   "command": ["cat", "/app/config.json"],
   "maxBytes": 65536,
-  "maxSeconds": 30
+  "maxSeconds": 300
 }
 ```
 
@@ -321,8 +321,10 @@ stdin. Docker connections that cannot half-close finite stdin refuse before
 starting the command; commands without stdin remain available. Output is byte-preserving `stdoutBase64`/`stderrBase64` in the run's `exec`
 result. `maxBytes` bounds their combined **raw** bytes: default 64 KiB, range
 4 KiB–1 MiB; base64 JSON is larger. `maxSeconds` bounds the actual command:
-default 30 seconds, range 1–120. At most four agent exec operations are admitted
-at once. Preparation/discovery also have bounded lifetimes.
+default 300 seconds (5 minutes), range 1–1800 (up to 30 minutes). At most four agent exec operations are admitted
+at once. Preparation/discovery also have bounded lifetimes. The separate
+two-minute action/edit deadline does not shorten exec; it has its own requested
+command budget and a bounded setup allowance.
 
 `exitKnown` distinguishes a witnessed exit from an unknown result; `exitCode`
 is omitted when unknown. `complete` means the command's exit was observed and

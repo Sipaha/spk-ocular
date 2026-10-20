@@ -16,7 +16,11 @@ import (
 	"github.com/spk/spk-ocular/internal/store"
 )
 
-const maxExecs = 4
+const (
+	maxExecs           = 4
+	defaultExecSeconds = 300
+	maxExecSeconds     = 1800
+)
 
 type activeExec struct {
 	ref    core.Ref
@@ -80,7 +84,7 @@ type PrepareExecRequest struct {
 	Command    []string `json:"command" jsonschema:"required" jsonschema_description:"Explicit argv, 1..64 arguments, total at most 16384 UTF-8 bytes, no NUL. No implicit shell or retry."`
 	Stdin      string   `json:"stdin,omitempty" jsonschema_description:"Finite UTF-8 standard input, at most 65536 bytes. Shown for confirmation, never journaled."`
 	MaxBytes   int      `json:"maxBytes,omitempty" jsonschema_description:"Combined raw stdout/stderr byte limit, 4096..1048576, default 65536. Returned as base64 to preserve binary output."`
-	MaxSeconds int      `json:"maxSeconds,omitempty" jsonschema_description:"Maximum execution duration, 1..120 seconds, default 30. Cancellation stops transport; remote termination is best effort."`
+	MaxSeconds int      `json:"maxSeconds,omitempty" jsonschema_description:"Maximum execution duration, 1..1800 seconds, default 300. Cancellation stops transport; remote termination is best effort."`
 }
 
 type PrepareExecView struct {
@@ -156,10 +160,10 @@ func validateExec(req *PrepareExecRequest) error {
 		req.MaxBytes = 65536
 	}
 	if req.MaxSeconds == 0 {
-		req.MaxSeconds = 30
+		req.MaxSeconds = defaultExecSeconds
 	}
-	if req.MaxBytes < 4096 || req.MaxBytes > 1048576 || req.MaxSeconds < 1 || req.MaxSeconds > 120 {
-		return badRequest("maxBytes must be 4096..1048576; maxSeconds must be 1..120")
+	if req.MaxBytes < 4096 || req.MaxBytes > 1048576 || req.MaxSeconds < 1 || req.MaxSeconds > maxExecSeconds {
+		return badRequest("maxBytes must be 4096..1048576; maxSeconds must be 1..1800")
 	}
 	return nil
 }

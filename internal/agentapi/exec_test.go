@@ -4,10 +4,12 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -47,7 +49,7 @@ func TestAgentExecSeparatePermissionAndSelection(t *testing.T) {
 	require.Len(t, info["instances"], 1)
 	e.refused("GetObject", map[string]any{"ref": req.Ref})
 	e.refused("GetExecInfo", GetExecInfoRequest{Ref: ref("b", "pods", "api-1")})
-	for _, change := range []func(*PrepareExecRequest){func(r *PrepareExecRequest) { r.Instance = "" }, func(r *PrepareExecRequest) { r.Instance = "api-1/uid-api-1" }, func(r *PrepareExecRequest) { r.Channel = "" }, func(r *PrepareExecRequest) { r.Ref.UID = "" }, func(r *PrepareExecRequest) { r.Command = nil }, func(r *PrepareExecRequest) { r.Command = []string{"sh\x00"} }, func(r *PrepareExecRequest) { r.Command = []string{strings.Repeat("x", 16385)} }, func(r *PrepareExecRequest) { r.Stdin = strings.Repeat("x", 65537) }, func(r *PrepareExecRequest) { r.MaxSeconds = 121 }, func(r *PrepareExecRequest) { r.MaxBytes = 4095 }} {
+	for _, change := range []func(*PrepareExecRequest){func(r *PrepareExecRequest) { r.Instance = "" }, func(r *PrepareExecRequest) { r.Instance = "api-1/uid-api-1" }, func(r *PrepareExecRequest) { r.Channel = "" }, func(r *PrepareExecRequest) { r.Ref.UID = "" }, func(r *PrepareExecRequest) { r.Command = nil }, func(r *PrepareExecRequest) { r.Command = []string{"sh\x00"} }, func(r *PrepareExecRequest) { r.Command = []string{strings.Repeat("x", 16385)} }, func(r *PrepareExecRequest) { r.Stdin = strings.Repeat("x", 65537) }, func(r *PrepareExecRequest) { r.MaxSeconds = 1801 }, func(r *PrepareExecRequest) { r.MaxBytes = 4095 }} {
 		r := execRequest()
 		change(&r)
 		code, _ := e.call("PrepareExec", r)
@@ -295,4 +297,104 @@ func TestAgentExecMarksItsProviderRequestAsAgentOwned(t *testing.T) {
 	prep := e.ok("PrepareExec", execRequest())
 	e.ok("RunExec", RunRequest{PlanID: prep["planId"].(string)})
 	assert.True(t, <-seen, "the UI cannot choose this internal marker and broad grants cannot bypass provider helper exclusions")
+}
+
+func TestAgentExecDurationBoundsAndEffectiveDeadline(t *testing.T) {
+	for _, seconds := range []int{-1, 1801} {
+		req := execRequest()
+		req.MaxSeconds = seconds
+		require.Error(t, validateExec(&req))
+	}
+	for _, seconds := range []int{1, 121, 300, 1800} {
+		req := execRequest()
+		req.MaxSeconds = seconds
+		require.NoError(t, validateExec(&req))
+		require.Equal(t, seconds, req.MaxSeconds)
+	}
+	require.Equal(t, 2*time.Minute, runTimeout, "ordinary action/edit limit stays unchanged")
+	for _, confirm := range []bool{false, true} {
+		for _, seconds := range []int{0, 1800} {
+			t.Run(fmt.Sprintf("confirm=%v/seconds=%d", confirm, seconds), func(t *testing.T) {
+				e := newEnv(t)
+				allowExec(e, !confirm)
+				req := execRequest()
+				req.MaxSeconds = seconds
+				want := seconds
+				if want == 0 {
+					want = 300
+				}
+				deadlines := make(chan time.Duration, 1)
+				e.f.execRun = func(ctx context.Context, _ provider.ExecRequest, _ provider.Terminal) (provider.ExitStatus, error) {
+					deadline, ok := ctx.Deadline()
+					if !ok {
+						deadlines <- 0
+					} else {
+						deadlines <- time.Until(deadline)
+					}
+					return provider.ExitStatus{Known: true}, nil
+				}
+				prep := e.ok("PrepareExec", req)
+				require.Equal(t, float64(want), prep["plan"].(map[string]any)["maxSeconds"])
+				out := e.ok("RunExec", RunRequest{PlanID: prep["planId"].(string)})
+				if confirm {
+					require.Equal(t, stateAwaiting, out["state"])
+					id := out["runId"].(string)
+					require.NoError(t, e.srv.Decide(t.Context(), api.DecideAgentPendingRequest{ID: id, Approve: true}))
+					require.Eventually(t, func() bool { out = e.ok("GetRun", GetRunRequest{RunID: id}); return out["state"] == stateDone }, 3*time.Second, 10*time.Millisecond)
+				}
+				result := execResult(t, out)
+				require.Equal(t, true, result["complete"])
+				remaining := <-deadlines
+				require.Greater(t, remaining, time.Duration(want-30)*time.Second, "exec must not inherit the two-minute write cap")
+				require.LessOrEqual(t, remaining, time.Duration(want)*time.Second)
+			})
+		}
+	}
+}
+
+func TestConfirmedAgentExecSurvivesConfirmationWaitExpiryWhileRunning(t *testing.T) {
+	e := newEnv(t)
+	allowExec(e, false)
+	var advance atomic.Int64
+	e.srv.now = func() time.Time { return time.Now().Add(time.Duration(advance.Load())) }
+	started, release := make(chan struct{}), make(chan struct{})
+	t.Cleanup(func() {
+		select {
+		case <-release:
+		default:
+			close(release)
+		}
+	})
+	e.f.execRun = func(ctx context.Context, _ provider.ExecRequest, _ provider.Terminal) (provider.ExitStatus, error) {
+		close(started)
+		select {
+		case <-release:
+			return provider.ExitStatus{Known: true}, nil
+		case <-ctx.Done():
+			return provider.ExitStatus{}, ctx.Err()
+		}
+	}
+	req := execRequest()
+	req.MaxSeconds = 1800
+	prep := e.ok("PrepareExec", req)
+	run := e.ok("RunExec", RunRequest{PlanID: prep["planId"].(string)})
+	id := run["runId"].(string)
+	require.NoError(t, e.srv.Decide(t.Context(), api.DecideAgentPendingRequest{ID: id, Approve: true}))
+	select {
+	case <-started:
+	case <-time.After(3 * time.Second):
+		t.Fatal("confirmed exec did not start")
+	}
+	advance.Store(int64(11 * time.Minute))
+	e.srv.pend.mu.Lock()
+	e.srv.pend.sweepLocked()
+	pending := e.srv.pend.runs[id]
+	if assert.NotNil(t, pending) {
+		assert.Equal(t, stateRunning, pending.view.State)
+	}
+	e.srv.pend.mu.Unlock()
+	close(release)
+	out := e.ok("GetRun", GetRunRequest{RunID: id})
+	result := execResult(t, out)
+	require.Equal(t, true, result["complete"])
 }
