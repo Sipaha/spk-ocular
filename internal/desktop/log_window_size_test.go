@@ -56,3 +56,21 @@ func TestDetachedLogScreenUsesNormalizedMonitor(t *testing.T) {
 		t.Fatal("missing screens must retain size fallback")
 	}
 }
+
+func TestDetachedToolSizeStaysNormalAndWithinWorkArea(t *testing.T) {
+	for _, tc := range []struct {
+		kind          string
+		screen        *application.Screen
+		width, height int
+	}{
+		{"shell", nil, 960, 600}, {"files", nil, 1200, 800},
+		{"shell", &application.Screen{WorkArea: application.Rect{Width: 1920, Height: 1040}, ScaleFactor: 2}, 960, 600},
+		{"shell", &application.Screen{WorkArea: application.Rect{Width: 800, Height: 500}}, 720, 450},
+		{"files", &application.Screen{WorkArea: application.Rect{Width: 800, Height: 500}}, 720, 450},
+	} {
+		width, height := detachedToolSize(tc.screen, tc.kind)
+		if width != tc.width || height != tc.height {
+			t.Fatalf("%s: got%dx%d want%dx%d", tc.kind, width, height, tc.width, tc.height)
+		}
+	}
+}

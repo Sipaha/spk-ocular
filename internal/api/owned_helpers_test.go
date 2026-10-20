@@ -88,6 +88,11 @@ func TestHelperRecoverySurvivesReopenAndNeverReapsActiveOrDisconnectedTargets(t 
 	// Simulate a process crash: heartbeat ends, but neither cleanup nor Finish runs.
 	lease.stop()
 	<-lease.done
+	// A crashed process loses its in-memory owner callbacks. Close only the
+	// remaining fixture resources; this is not a graceful helper shutdown.
+	first.helperJournal.mu.Lock()
+	delete(first.helperJournal.running, lease.id)
+	first.helperJournal.mu.Unlock()
 	first.Close()
 	require.NoError(t, st.Close())
 	st, err = store.Open(ctx, path)
@@ -152,4 +157,26 @@ func TestHelperRecoveryCancelsWhenExplicitConnectionCloses(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, rows, 1)
 	require.Greater(t, rows[0].NextTry, s.now().UnixMilli())
+}
+
+func TestHelperJournalShutdownCancelsOwnersAndWaitsForDurableFinish(t *testing.T) {
+	s, _ := newService(t, newOpenable("a"))
+	ownerCtx, stop := context.WithCancel(context.Background())
+	defer stop()
+	raw, err := s.helperJournal.Begin(t.Context(), recoveryHelper(), stop)
+	require.NoError(t, err)
+	finished := make(chan error, 1)
+	go func() {
+		<-ownerCtx.Done()
+		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+		defer cancel()
+		finished <- raw.Finish(ctx, true)
+	}()
+	s.Close()
+	require.NoError(t, <-finished)
+	rows, err := s.store.DueHelpers(t.Context(), "k", "a", time.Now().Add(24*time.Hour).UnixMilli())
+	require.NoError(t, err)
+	require.Empty(t, rows)
+	_, err = s.helperJournal.Begin(t.Context(), recoveryHelper(), func() {})
+	require.ErrorContains(t, err, "closing")
 }

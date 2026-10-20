@@ -44,3 +44,24 @@ func detachedLogScreen(platform string, current *application.Screen, screens []*
 	}
 	return primary
 }
+
+// Shell opens as a normal modest window; it never fills or maximizes a screen.
+func detachedToolSize(screen *application.Screen, kind string) (int, int) {
+	width, height := 1200, 800
+	if kind == "shell" {
+		width, height = 960, 600
+	}
+	if screen != nil {
+		area := screen.WorkArea
+		if area.Width <= 0 || area.Height <= 0 {
+			area = screen.Bounds
+		}
+		if area.Width > 0 {
+			width = min(width, max(1, area.Width*90/100))
+		}
+		if area.Height > 0 {
+			height = min(height, max(1, area.Height*90/100))
+		}
+	}
+	return width, height
+}

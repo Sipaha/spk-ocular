@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { discardEdits, editsHeld, holdEdits, keepEditing, mayLeave, resetGuard } from './guard'
+import { discardEdits, editsHeld, holdEdits, keepEditing, mayLeave, mayLeaveMatching, workspaceEditsHeld, resetGuard } from './guard'
 
 beforeEach(resetGuard)
 
@@ -106,4 +106,26 @@ describe('guard', () => {
     releaseA()
     expect(go).toHaveBeenCalledTimes(1)
   })
+})
+
+
+it('closing one dock scope preserves unrelated unsaved editors',()=>{
+ const a={scope:'files-a',dirty:()=>true,discard:vi.fn(),focus:vi.fn()}
+ const b={scope:'files-b',dirty:()=>true,discard:vi.fn(),focus:vi.fn()}
+ holdEdits(a);holdEdits(b)
+ const go=vi.fn();mayLeaveMatching(go,h=>h.scope==='files-a');keepEditing()
+ expect(a.focus).toHaveBeenCalledOnce();expect(b.focus).not.toHaveBeenCalled()
+ mayLeaveMatching(go,h=>h.scope==='files-a');discardEdits()
+ expect(a.discard).toHaveBeenCalledOnce();expect(b.discard).not.toHaveBeenCalled()
+ expect(go).toHaveBeenCalledOnce();expect(editsHeld()).toBe(true)
+})
+
+
+it('workspace navigation retains scoped dock drafts while tab closure still asks',()=>{
+ const discard=vi.fn(),go=vi.fn()
+ holdEdits({scope:'files',dirty:()=>true,discard})
+ expect(editsHeld()).toBe(true);expect(workspaceEditsHeld()).toBe(false)
+ mayLeave(go);expect(go).toHaveBeenCalledOnce();expect(discard).not.toHaveBeenCalled()
+ const close=vi.fn();mayLeaveMatching(close,h=>h.scope==='files');expect(close).not.toHaveBeenCalled()
+ discardEdits();expect(discard).toHaveBeenCalledOnce();expect(close).toHaveBeenCalledOnce()
 })

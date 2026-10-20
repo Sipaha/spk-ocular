@@ -26,13 +26,13 @@ test('Node Shell reviews privileged access, streams through Kubernetes and delet
     expect(run.fixture.pods.size).toBe(1);const p=[...run.fixture.pods.values()][0];expect(p.spec.nodeName).toBe('worker-01');expect(p.spec.hostPID).toBe(true);expect(p.spec.containers[0].securityContext.privileged).toBe(true);expect(p.spec.automountServiceAccountToken).toBe(false)
     await focusTerminal(page);await page.keyboard.type('hello-node');await page.keyboard.press('Enter');await expectScreen(page,'fixture echo: hello-node')
     await page.screenshot({path:join(run.root,'terminal-en.png')})
-    await page.keyboard.type('exit');await page.keyboard.press('Enter');await expect.poll(()=>run.fixture.pods.size).toBe(0);await expect(activePanel(page).getByRole('alert').filter({hasText:'review Node Shell again'})).toContainText('process exited with code 0');await expect(activePanel(page).getByRole('button',{name:'Reconnect',exact:true})).toHaveCount(0)
+    await page.keyboard.type('exit');await page.keyboard.press('Enter');expect(run.fixture.pods.size).toBe(1);await expect(activePanel(page).getByRole('alert').filter({hasText:'open Node Shell again'})).toContainText('process exited with code 0');await expect(activePanel(page).getByRole('button',{name:'Reconnect',exact:true})).toHaveCount(0)
     expect(run.fixture.execs).toBe(1)
-    // Close the ended tab before another independent, explicitly reviewed shell.
+    // Reopen during grace: a new shell uses the existing reviewed helper without a new launch dialog.
     await page.getByRole('tab',{name:/Node Shell · worker-01/}).getByRole('button',{name:'Close tab',exact:true}).click()
-    const second=await openReview(page);await second.getByRole('button',{name:'Node Shell',exact:true}).click();await expect.poll(()=>run.fixture.execs).toBe(2);await expect.poll(()=>run.fixture.pods.size).toBe(1)
-    await page.getByRole('tab',{name:/Node Shell · worker-01/}).getByRole('button',{name:'Close tab',exact:true}).click();await expect.poll(()=>run.fixture.pods.size).toBe(0)
-    expect(run.fixture.calls.filter(c=>c.method==='POST'&&c.path.endsWith('/pods'))).toHaveLength(2);expect(errors).toEqual([])
+    await page.locator('[data-area=details]').getByRole('button',{name:'Node Shell',exact:true}).click();await expect(page.getByRole('dialog',{name:'Node Shell worker-01',exact:true})).toHaveCount(0);await expect.poll(()=>run.fixture.execs).toBe(2);await expect.poll(()=>run.fixture.pods.size).toBe(1)
+    await page.getByRole('tab',{name:/Node Shell · worker-01/}).getByRole('button',{name:'Close tab',exact:true}).click();await expect.poll(()=>run.fixture.pods.size,{timeout:10000}).toBe(0)
+    expect(run.fixture.calls.filter(c=>c.method==='POST'&&c.path.endsWith('/pods'))).toHaveLength(1);expect(errors).toEqual([])
   }finally{await run.close()}
 })
 
@@ -52,11 +52,11 @@ test('Node Shell cleans up after a lost Kubernetes stream and normal application
   const run=await launch(page)
   try{
     let d=await openReview(page);await d.getByRole('button',{name:'Node Shell',exact:true}).click();await expectScreen(page,'fixture node worker-01 (root)')
-    run.fixture.dropExecs();await expect.poll(()=>run.fixture.pods.size).toBe(0)
+    run.fixture.dropExecs();await expect.poll(()=>run.fixture.pods.size,{timeout:10000}).toBe(0)
     await expect(activePanel(page).getByRole('button',{name:'Reconnect',exact:true})).toHaveCount(0)
     await page.getByRole('tab',{name:/Node Shell · worker-01/}).getByRole('button',{name:'Close tab',exact:true}).click()
     d=await openReview(page);await d.getByRole('button',{name:'Node Shell',exact:true}).click();await expect.poll(()=>run.fixture.pods.size).toBe(1)
-    await stop(run.app);await expect.poll(()=>run.fixture.pods.size).toBe(0)
+    await stop(run.app);await expect.poll(()=>run.fixture.pods.size,{timeout:10000}).toBe(0)
     expect(run.fixture.calls.filter(c=>c.method==='POST'&&c.path.endsWith('/pods'))).toHaveLength(2)
   }finally{await run.close()}
 })
@@ -84,7 +84,7 @@ test('Node Shell review uses all eight local catalogues and keeps root access ab
 })
 
 
-test('a failed helper deletion remains visible after closing its terminal tab',async({page})=>{
+test('a failed background helper deletion retains recovery state without a notification',async({page})=>{
   const run=await launch(page)
   try{
     const d=await openReview(page);await d.getByRole('button',{name:'Node Shell',exact:true}).click();await expectScreen(page,'fixture node worker-01 (root)')
@@ -92,7 +92,8 @@ test('a failed helper deletion remains visible after closing its terminal tab',a
     run.fixture.denyDelete(true)
     await page.getByRole('tab',{name:/Node Shell · worker-01/}).getByRole('button',{name:'Close tab',exact:true}).click()
     await expect(page.getByRole('tab',{name:/Node Shell · worker-01/})).toHaveCount(0)
-    await expect(page.getByRole('status').filter({hasText:'Could not confirm cleanup'})).toContainText(helper)
+    await expect.poll(()=>run.fixture.calls.filter(c=>c.method==='DELETE'&&c.path.endsWith('/'+helper)).length,{timeout:10000}).toBe(1)
+    await expect(page.getByRole('status').filter({hasText:'Could not confirm cleanup'})).toHaveCount(0)
     expect(run.fixture.pods.size).toBe(1)
     const records=run.helperRows();expect(records).toHaveLength(1);expect(records[0].delay_ms).toBe(120000);expect(records[0].next_try).toBeGreaterThan(Date.now())
     expect(run.fixture.calls.filter(c=>c.method==='DELETE'&&c.path.endsWith('/'+helper))).toHaveLength(1)

@@ -166,6 +166,9 @@ func (s *Service) Close() {
 	s.streams.Close()
 	s.terms.closeAll()
 	s.fileSessions.closeAll()
+	helperCleanup, cancelHelpers := context.WithTimeout(context.Background(), 12*time.Second)
+	s.helperJournal.close(helperCleanup)
+	cancelHelpers()
 	s.fwd.Close()
 	s.sessMu.Lock()
 	if s.reaper != nil {

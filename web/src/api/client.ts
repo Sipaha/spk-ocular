@@ -142,13 +142,13 @@ const CodeInternal = 'internal'
 
 const tokenMeta = () => document.querySelector('meta[name="spk-ocular-api-token"]')?.getAttribute('content') ?? ''
 
-async function post<T>(method: string, body: unknown, signal?: AbortSignal): Promise<T> {
+async function post<T>(method: string, body: unknown, signal?: AbortSignal, keepalive=false): Promise<T> {
   const headers: Record<string, string> = { 'content-type': 'application/json' }
   const token = tokenMeta()
   if (token) headers.Authorization = `Bearer ${token}`
   let r: Response
   try {
-    r = await fetch(`/api/${method}`, { method: 'POST', headers, body: JSON.stringify(body ?? {}), signal })
+    r = await fetch(`/api/${method}`, { method: 'POST', headers, body: JSON.stringify(body ?? {}), signal, keepalive })
   } catch (e) {
     if (signal?.aborted) throw e // the caller's own abort, not a transport failure
     throw new ApiError(CodeInternal, e instanceof Error ? e.message : String(e), true)
@@ -213,7 +213,7 @@ export const httpClient: Client = {
   logInfo: (ref) => post('LogInfo', ref),
   openLogStream: (ref, query) => post('OpenLogStream', { ref, query }),
   openLogHistory: (ref,channel,previous,signal) => post('OpenLogHistory',{ref,channel,previous},signal),
-  files: (req) => post('Files', req),
+  files: (req) => post('Files', req, undefined, req.command==='close'),
   execInfo: (ref) => post('ExecInfo', ref),
   openTerminal: (req) => post('OpenTerminal', req),
   reopenTerminal: (terminalId, cols, rows) => post('ReopenTerminal', { terminalId, cols, rows }),

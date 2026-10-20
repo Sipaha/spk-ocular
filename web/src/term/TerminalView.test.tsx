@@ -1,3 +1,5 @@
+import type {ToolWindowBridge} from '../tools/windowBridge'
+import type {WindowMessage} from '../logs/windowBridge'
 import { StrictMode } from 'react'
 import { act, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -327,7 +329,7 @@ describe('a debugger’s tab (attach)', () => {
   })
 })
 
-it('adopts a reviewed one-shot terminal once in StrictMode and requires a new review after it ends', async () => {
+it('adopts a reviewed one-shot terminal once in StrictMode and requires another explicit open after it ends', async () => {
   const client = fakeClient()
   const prepared: TermTab = {...tab, open:{ref:{...tab.open.ref,kind:'nodes',name:'worker'},preparedId:'reviewed-7'}}
   const view = render(<StrictMode><TerminalView client={client as unknown as Client} tab={prepared} active mode="browser" /></StrictMode>)
@@ -337,7 +339,7 @@ it('adopts a reviewed one-shot terminal once in StrictMode and requires a new re
   act(() => h.conns[0].end({reason:'done',code:0}))
   expect(screen.queryByRole('button',{name:'Reconnect'})).not.toBeInTheDocument()
   expect(screen.queryByRole('button',{name:'Open a new terminal'})).not.toBeInTheDocument()
-  expect(screen.getByRole('alert')).toHaveTextContent('review Node Shell again')
+  expect(screen.getByRole('alert')).toHaveTextContent('open Node Shell again')
   view.unmount()
   expect(client.forgetTerminal).toHaveBeenCalledWith('reviewed-7')
 })
@@ -350,4 +352,17 @@ it('reports a helper cleanup failure globally after its terminal tab unmounts', 
   view.unmount()
   await waitFor(()=>expect(useStore.getState().notice).toContain('prod · cleanup failed: tools/ocular-node-shell-1'))
   useStore.setState({notice:null})
+})
+
+
+it('a detached gone terminal sends Open New to its owner without creating a local stream',async()=>{
+ let receive:((message:WindowMessage)=>void)|undefined
+ const post=vi.fn(async()=>{})
+ const bridge={role:'guest',post,bindTerminalFlush:()=>()=>{},listen:(f:(message:WindowMessage)=>void)=>{receive=f;return()=>{receive=undefined}}} as unknown as ToolWindowBridge
+ const client=fakeClient()
+ render(<TerminalView client={client as unknown as Client} tab={tab} active mode="browser" bridge={bridge}/>)
+ act(()=>receive?.({id:'window',sender:'owner',type:'terminal-status',payload:{phase:'ended',ended:null,notice:null,openError:{code:'gone',text:'gone'}}}))
+ act(()=>screen.getByRole('button',{name:'Open a new terminal'}).click())
+ expect(post).toHaveBeenCalledWith('terminal-new')
+ expect(client.openTerminal).not.toHaveBeenCalled();expect(client.reopenTerminal).not.toHaveBeenCalled()
 })

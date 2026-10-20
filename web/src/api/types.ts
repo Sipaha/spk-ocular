@@ -295,6 +295,7 @@ export interface Message {
 
 /** What an action would do, read without changing anything. */
 export interface ActionPlan {
+  reuse?: boolean
   /** the target (title, endpoint, configRev) and the object with its UID as read now */
   where: LiveTarget
   action: ActionDescriptor

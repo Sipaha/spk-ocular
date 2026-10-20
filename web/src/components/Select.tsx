@@ -347,7 +347,6 @@ export function SelectList({ value, options, label, search, searchAction, anchor
             role="option"
             aria-label={o.label}
             aria-describedby={o.description ? `${optId(i)}-description` : undefined}
-            title={o.description ? `${o.label} — ${o.description}` : undefined}
             aria-selected={multiple ? (o.pinned ? value === '' : multiple.selected.includes(o.value)) : i === active}
             aria-disabled={o.disabled || undefined}
             onMouseDown={(e) => e.preventDefault()}
@@ -372,7 +371,7 @@ export function SelectList({ value, options, label, search, searchAction, anchor
             ) : (
               <span aria-hidden="true" className="w-4 shrink-0 text-accent">{o.value === value ? '✓' : ''}</span>
             )}
-            <span className="min-w-0"><span className="block truncate">{o.label}</span>{o.description && <span id={`${optId(i)}-description`} className="block whitespace-normal break-words text-xs text-fg-muted">{o.description}</span>}</span>
+            <span className="min-w-0"><span className={`block truncate ${o.description&&!o.disabled?'text-fg':''}`}>{o.label}</span>{o.description && <span id={`${optId(i)}-description`} className="block whitespace-normal break-words text-xs text-fg-muted">{o.description}</span>}</span>
           </div>
         ))}
         {!items.length && (

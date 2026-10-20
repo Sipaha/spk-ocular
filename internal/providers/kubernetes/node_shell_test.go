@@ -35,6 +35,14 @@ func nodeShellSession(t *testing.T) (*session, *dynamicfake.FakeDynamicClient) {
 	c := dynamicfake.NewSimpleDynamicClientWithCustomListKinds(kruntime.NewScheme(), map[schema.GroupVersionResource]string{podGVR: "PodList", nodeGVR: "NodeList", namespaceGV: "NamespaceList"}, n, ns)
 	s := newSession("ctx", "h", c, false)
 	t.Cleanup(s.Close)
+	clock := newHelperTestClock()
+	s.conn.helpers.now = clock.Now
+	s.conn.helpers.after = clock.After
+	t.Cleanup(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 12*time.Second)
+		defer cancel()
+		s.conn.helpers.close(ctx)
+	})
 	ssarAnswer(c, true, nil)
 	s.conn.startWait = 50 * time.Millisecond
 	return s, c
@@ -51,9 +59,10 @@ func nodeShellRun(p core.ActionPlan) provider.ActionRun {
 }
 func shellHandle(t *testing.T, s *session) *nodeShellHandle {
 	t.Helper()
-	h, err := s.PrepareTerminalAction(t.Context(), nodeShellRun(nodeShellPlan(t, s)))
+	// This helper targets the single Pod owner's startup/cleanup primitives.
+	h, err := s.prepareNodeHelper(t.Context(), nodeShellRun(nodeShellPlan(t, s)))
 	require.NoError(t, err)
-	return h.(*nodeShellHandle)
+	return h
 }
 func readyShells(c *dynamicfake.FakeDynamicClient) {
 	c.PrependReactor("create", "pods", func(a k8stesting.Action) (bool, kruntime.Object, error) {

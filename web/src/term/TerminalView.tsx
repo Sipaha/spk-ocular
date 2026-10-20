@@ -1,3 +1,7 @@
+import {SerializeAddon} from '../../vendor/addon-serialize/addon-serialize.mjs'
+import {ToolWindowBridge} from '../tools/windowBridge'
+import {ActionIconButton} from '../components/ActionIconButton'
+import {WindowActionIcon} from '../components/icons'
 import { layoutResizing, useLayoutResizing } from '../components/layoutResize'
 import { useEffect, useRef, useState } from 'react'
 import { Terminal, type ITheme } from '@xterm/xterm'
@@ -54,6 +58,9 @@ export interface Props {
   tab: TermTab
   active: boolean
   mode: 'desktop' | 'browser'
+  bridge?:ToolWindowBridge
+  detached?:boolean
+  onWindowAction?:()=>void
 }
 
 const errText = (e: unknown) => (e instanceof ApiError ? `${classLabel(e.code)}: ${errorDetail(e)}` : errorDetail(e))
@@ -72,12 +79,12 @@ function describe(info: TerminalInfo): string {
  * title changes. Copy is the selection + Ctrl+Shift+C; paste Ctrl+Shift+V
  * or the native paste (bracketed when the program asks for it).
  */
-export default function TerminalView({ client, tab, active, mode }: Props) {
+export default function TerminalView({ client, tab, active, mode, bridge, detached=false, onWindowAction }: Props) {
   const resizing = useLayoutResizing()
   const hostRef = useRef<HTMLDivElement>(null)
   const termRef = useRef<Terminal | null>(null)
   const fitRef = useRef<FitAddon | null>(null)
-  const connRef = useRef<TermConnection | null>(null)
+  const connRef = useRef<Pick<TermConnection,'input'|'interrupt'|'resize'|'close'|'live'> | null>(null)
   const idRef = useRef<string | null>(null)
   // Every (re)connect is a generation: late answers and callbacks of an
   // older one never touch the newer.
@@ -87,6 +94,10 @@ export default function TerminalView({ client, tab, active, mode }: Props) {
   const [openError, setOpenError] = useState<{ text: string; code?: string } | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
   const [confirmAgain, setConfirmAgain] = useState(false)
+  const detachedRef=useRef(detached)
+  useEffect(()=>{detachedRef.current=detached},[detached])
+  const statusRef=useRef({phase,ended,notice,openError})
+  useEffect(()=>{statusRef.current={phase,ended,notice,openError}},[phase,ended,notice,openError])
   const custom = !!tab.open.command?.length
 
   const connectRef = useRef<(again: boolean) => Promise<void>>(async () => {})
@@ -102,7 +113,17 @@ export default function TerminalView({ client, tab, active, mode }: Props) {
         if (tab.open.preparedId) showNotice(`${tab.targetTitle} · ${errText(e)}`, 30_000)
       })
     }
+    let peer=false,sequence=0
+    const waiting=new Map<number,()=>void>()
+    const releasePeer=()=>{peer=false;if(bridge?.role==='owner'&&termRef.current)termRef.current.options.disableStdin=false;for(const done of waiting.values())done();waiting.clear()}
+    const publish=(data:Uint8Array,done:()=>void)=>{
+      if(!peer||!bridge){done();return}
+      const seq=++sequence;waiting.set(seq,done)
+      void bridge.post('terminal-output',{seq,data:Array.from(data)}).catch(e=>{releasePeer();setNotice(String(e))})
+    }
+    const write=(term:Terminal,data:string|Uint8Array,done:()=>void=()=>{})=>term.write(data,()=>publish(typeof data==='string'?new TextEncoder().encode(data):data,done))
     const connect = async (again: boolean) => {
+      if(bridge?.role==='guest'){await bridge.post('terminal-reconnect',{again});return}
       const term = termRef.current
       if (!term) return
       const gen = ++genRef.current
@@ -144,15 +165,15 @@ export default function TerminalView({ client, tab, active, mode }: Props) {
         return
       }
       if (gen !== genRef.current || !alive) return
-      if (again) term.write(`\r\n${DIM(`──── ${t('term.reconnected')} ────`)}\r\n`)
+      if (again) write(term,`\r\n${DIM(`──── ${t('term.reconnected')} ────`)}\r\n`)
       const conn = new TermConnection(`${base}/term/${encodeURIComponent(info.streamId)}`, {
-        output: (data, done) => (gen === genRef.current ? term.write(data, done) : done()),
+        output: (data, done) => (gen === genRef.current ? write(term,data,done) : done()),
         phase: (p) => gen === genRef.current && setPhase(p),
         notice: (m) => gen === genRef.current && setNotice(messageText(m)),
         end: (e) => {
           if (gen !== genRef.current) return
           setEnded(e)
-          term.write(`\r\n${DIM(`[${endText(e)}]`)}\r\n`)
+          write(term,`\r\n${DIM(`[${endText(e)}]`)}\r\n`)
         },
       })
       connRef.current = conn
@@ -171,6 +192,8 @@ export default function TerminalView({ client, tab, active, mode }: Props) {
       linkHandler: { activate: () => {} },
     })
     const fit = new FitAddon()
+    const serialize=new SerializeAddon()
+    term.loadAddon(serialize)
     term.loadAddon(fit)
     term.open(host)
     const clearInput = term.textarea ? clearDeliveredInput(term.textarea, () => !!term.options.screenReaderMode) : () => {}
@@ -225,7 +248,7 @@ export default function TerminalView({ client, tab, active, mode }: Props) {
         }
         void readText(mode).then((text) => {
           if (!text || !alive) return
-          if (genRef.current !== gen || connRef.current !== conn || !conn.live) {
+          if (genRef.current !== gen || connRef.current !== conn || !conn.live || (bridge?.role==='owner'&&peer)) {
             setNotice(t('term.pasteDropped'))
             return
           }
@@ -242,24 +265,68 @@ export default function TerminalView({ client, tab, active, mode }: Props) {
       return true
     })
 
+    const flushTerminal=()=>new Promise<void>(resolve=>term.write('',resolve))
+    const clearTerminalFlush=bridge?.role==='guest'?bridge.bindTerminalFlush(flushTerminal):undefined
+    const offBridge=bridge?.listen(message=>{
+      if(bridge.role==='owner'){
+        if(message.type==='terminal-ready'){
+          releasePeer()
+          term.write('',()=>{
+            const boot={text:serialize.serialize({scrollback:5000}),cols:term.cols,rows:term.rows,status:statusRef.current}
+            peer=true
+            // Only the visible parser answers DA/DSR/OSC queries. The owner
+            // still parses output, but must not generate a duplicate PTY reply.
+            term.options.disableStdin=true
+            void bridge.post('terminal-snapshot',boot).catch(e=>{releasePeer();setNotice(String(e))})
+          })
+        }
+        if(message.type==='terminal-ack'){const seq=Number(message.payload);waiting.get(seq)?.();waiting.delete(seq)}
+        if(message.type==='terminal-input'&&peer)send(String(message.payload))
+        if(message.type==='terminal-binary'&&peer)connRef.current?.input(Uint8Array.from(message.payload as number[]))
+        if(message.type==='terminal-resize'){const size=message.payload as {cols:number;rows:number};if(Number.isInteger(size.cols)&&Number.isInteger(size.rows)&&size.cols>0&&size.rows>0&&size.cols<=1000&&size.rows<=1000)term.resize(size.cols,size.rows)}
+        if(message.type==='terminal-reconnect')void connect(true)
+        if(message.type==='terminal-new')dock.openTerminal(tab.target,tab.targetTitle,{...tab.open,instance:undefined})
+        if(['return','closed'].includes(message.type))releasePeer()
+      }else{
+        if(message.type==='terminal-snapshot'){
+          const boot=message.payload as {text:string;cols:number;rows:number;status:typeof statusRef.current}
+          term.resize(boot.cols,boot.rows);term.reset();term.write(boot.text,()=>{fit.fit();term.focus()})
+          setPhase(boot.status.phase);setEnded(boot.status.ended);setNotice(boot.status.notice);setOpenError(boot.status.openError)
+        }
+        if(message.type==='terminal-output'){
+          const frame=message.payload as {seq:number;data:number[]}
+          term.write(Uint8Array.from(frame.data),()=>void bridge.post('terminal-ack',frame.seq))
+        }
+        if(message.type==='terminal-status'){
+          const status=message.payload as typeof statusRef.current
+          setPhase(status.phase);setEnded(status.ended);setNotice(status.notice);setOpenError(status.openError)
+        }
+      }
+    })
+    if(bridge?.role==='guest'){
+      const remote=(type:string,payload:unknown)=>{void bridge.post(type,payload).catch(e=>setNotice(String(e)))}
+      connRef.current={live:true,input:data=>{remote(typeof data==='string'?'terminal-input':'terminal-binary',typeof data==='string'?data:Array.from(data))},interrupt:()=>{remote('terminal-input','\x03')},resize:(cols,rows)=>{remote('terminal-resize',{cols,rows})},close:()=>{}}
+    }
     // Fit only to a real size: a hidden tab keeps its last valid geometry.
     let timer: ReturnType<typeof setTimeout> | null = null
     const ro = new ResizeObserver(() => {
       if (timer) clearTimeout(timer)
       timer = setTimeout(() => {
         timer = null
-        if (!layoutResizing() && host.clientWidth > 0 && host.clientHeight > 0) fit.fit()
+        if (!detachedRef.current && !layoutResizing() && host.clientWidth > 0 && host.clientHeight > 0) fit.fit()
       }, 50)
     })
     ro.observe(host)
 
     // StrictMode's discarded mount must not consume a reviewed one-shot
     // terminal. Ordinary terminals keep their independent-open behavior.
-    const initial = tab.open.preparedId ? setTimeout(() => void connect(false), 0) : null
-    if (!tab.open.preparedId) void connect(false)
+    const initial = bridge?.role==='guest'?setTimeout(()=>void bridge.post('terminal-ready'),0):tab.open.preparedId ? setTimeout(() => void connect(false), 0) : null
+    if (bridge?.role!=='guest'&&!tab.open.preparedId) void connect(false)
     return () => {
       if (initial !== null) clearTimeout(initial)
       alive = false
+      offBridge?.();releasePeer()
+      clearTerminalFlush?.()
       gens.current++
       ro.disconnect()
       if (timer) clearTimeout(timer)
@@ -277,14 +344,16 @@ export default function TerminalView({ client, tab, active, mode }: Props) {
 
   // Activation: one fit (the size may have changed while hidden) and focus.
   useEffect(() => {
-    if (!active || resizing) return
+    if (!active || resizing || detached) return
     const id = requestAnimationFrame(() => {
       const host = hostRef.current
       if (host && host.clientWidth > 0 && host.clientHeight > 0) fitRef.current?.fit()
       termRef.current?.focus()
     })
     return () => cancelAnimationFrame(id)
-  }, [active, resizing])
+  }, [active, resizing, detached])
+
+  useEffect(()=>{if(bridge?.role==='owner'&&bridge.opened)void bridge.update('terminal-status',{phase,ended,notice,openError}).catch(()=>{})},[bridge,phase,ended,notice,openError])
 
   const again = () => {
     if (custom && !confirmAgain) {
@@ -294,11 +363,12 @@ export default function TerminalView({ client, tab, active, mode }: Props) {
     void connectRef.current(true)
     termRef.current?.focus()
   }
-  const openNew = () => dock.openTerminal(tab.target, tab.targetTitle, { ...tab.open, instance: undefined })
+  const openNew = () => {if(bridge?.role==='guest')void bridge.post('terminal-new').catch(e=>setNotice(String(e)));else dock.openTerminal(tab.target,tab.targetTitle,{...tab.open,instance:undefined})}
 
   const gone = openError?.code === 'gone' || ended?.class === 'gone'
   return (
     <div className="flex h-full min-h-0 flex-col" data-terminal>
+      {onWindowAction&&<header className="flex h-[30px] shrink-0 justify-end border-b border-line px-2"><ActionIconButton label={t(bridge?.role==='guest'?'logs.returnWindow':'logs.detachWindow')} description={t(bridge?.role==='guest'?'logs.returnWindow':'logs.detachWindow')} onClick={onWindowAction}><WindowActionIcon returning={bridge?.role==='guest'} className="h-4 w-4"/></ActionIconButton></header>}
       {(phase === 'opening' || phase === 'connecting') && !openError && (
         <div className="shrink-0 border-b border-line px-3 py-0.5 text-[12px] text-fg-subtle" role="status">
           {t('term.connecting')}

@@ -160,6 +160,9 @@ type Rights struct {
 // ActionPlan is what an action would do, read without changing anything:
 // the confirmation shows it, the run carries Expect back.
 type ActionPlan struct {
+	// Reuse admits a UI-only consumer of an already running, reviewed helper.
+	// Its signed Expect must refuse creation if that exact helper disappears.
+	Reuse bool `json:"reuse,omitempty"`
 	// Where: the target (title, endpoint, revision) and the object, its
 	// UID as read now.
 	Where  LiveTarget       `json:"where"`

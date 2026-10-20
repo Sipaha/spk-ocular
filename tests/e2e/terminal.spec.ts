@@ -1,6 +1,7 @@
 import {selectConnection} from './fixtures'
 import { expect, type Page } from '@playwright/test'
-import { test } from './fixtures'
+import { test, scratchRoot } from './fixtures'
+import {join} from 'node:path'
 import { activePanel, expectScreen, focusTerminal, screen, selectObject, since, stats } from './synth'
 import { pickOption, selects } from './fixtures'
 
@@ -246,6 +247,11 @@ test('instance details remain readable in quick and setup pickers after a narrow
   await page.getByRole('button',{name:'Terminal',exact:true}).click()
   const list=page.getByRole('listbox')
   await expect(list.getByRole('option',{name:'worker-2',exact:true})).toHaveAccessibleDescription(/Current revision 194/)
+  const pod=list.getByRole('option',{name:'worker-2',exact:true})
+  await expect(pod).not.toHaveAttribute('title');await expect(pod.locator('[title]')).toHaveCount(0)
+  expect(await pod.getByText('worker-2',{exact:true}).evaluate(el=>{const probe=document.createElement('span');probe.style.color='var(--color-fg)';document.body.append(probe);const same=getComputedStyle(el).color===getComputedStyle(probe).color;probe.remove();return same})).toBe(true)
+  await page.mouse.move(0,0);await page.screenshot({path:join(scratchRoot,'pod-picker-hierarchy.png')})
+
   for(const width of [375,768,1440]){
     // Close before resizing: ancestor scroll intentionally dismisses open menus.
     await page.keyboard.press('Escape')

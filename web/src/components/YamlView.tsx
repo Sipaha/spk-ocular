@@ -1,6 +1,6 @@
 // YAML viewer and editor (CodeMirror 6). Loaded lazily: CodeMirror must
 // never be in the entry chunk (scripts/check-bundle.mjs).
-import { defaultKeymap, history, historyKeymap } from '@codemirror/commands'
+import { defaultKeymap, history, historyField, historyKeymap } from '@codemirror/commands'
 import { yaml } from '@codemirror/lang-yaml'
 import { LanguageDescription, HighlightStyle, syntaxHighlighting } from '@codemirror/language'
 import { highlightSelectionMatches, search, searchKeymap } from '@codemirror/search'
@@ -34,7 +34,10 @@ const highlight = HighlightStyle.define([
   { tag: [tags.meta, tags.punctuation], color: 'var(--color-fg-muted)' },
 ])
 
+export interface EditorSession {text:string;state:ReturnType<EditorState['toJSON']>;scrollTop:number;scrollLeft:number}
 interface Props {
+  session?:EditorSession
+  onSession?:(session:EditorSession)=>void
   /** Read-only document identity; changing it resets navigation, not the view. */
   documentId?: string
   filename?: string
@@ -50,21 +53,18 @@ interface Props {
   label?: string
 }
 
-export default function YamlView({ text, editable, onChange, onSubmit, autoFocus, label, filename, language, documentId }: Props) {
+export default function YamlView({ text, editable, onChange, onSubmit, autoFocus, label, filename, language, documentId, session, onSession }: Props) {
   const syntax = useRef(new Compartment())
   const host = useRef<HTMLDivElement>(null)
   const view = useRef<EditorView | null>(null)
   const previousDocument = useRef(documentId)
-  const calls = useRef({ onChange, onSubmit })
+  const calls = useRef({ onChange, onSubmit, onSession })
   useEffect(() => {
-    calls.current = { onChange, onSubmit }
+    calls.current = { onChange, onSubmit, onSession }
   })
   useEffect(() => {
-    view.current = new EditorView({
-      parent: host.current!,
-      state: EditorState.create({
-        doc: text,
-        extensions: [
+    const capture=()=>{const v=view.current;if(v)calls.current.onSession?.({text:v.state.sliceDoc(),state:v.state.toJSON({history:historyField}),scrollTop:v.scrollDOM.scrollTop,scrollLeft:v.scrollDOM.scrollLeft})}
+    const extensions = [
           editable
             ? [
                 history(),
@@ -72,6 +72,7 @@ export default function YamlView({ text, editable, onChange, onSubmit, autoFocus
                 keymap.of([{ key: 'Mod-Enter', run: () => (calls.current.onSubmit?.(), true) }, ...historyKeymap]),
                 EditorView.updateListener.of((u) => {
                   if (u.docChanged) calls.current.onChange?.(u.state.sliceDoc())
+                  if(u.docChanged||u.selectionSet)capture()
                 }),
               ]
             : EditorState.readOnly.of(true),
@@ -84,12 +85,14 @@ export default function YamlView({ text, editable, onChange, onSubmit, autoFocus
           highlightSelectionMatches(),
           keymap.of([...searchKeymap, ...defaultKeymap]),
           theme,
-        ],
-      }),
-    })
+        ]
+    view.current = new EditorView({parent:host.current!,state:session?EditorState.fromJSON(session.state,{extensions},{history:historyField}):EditorState.create({doc:text,extensions})})
+    if(session){view.current.scrollDOM.scrollTop=session.scrollTop;view.current.scrollDOM.scrollLeft=session.scrollLeft}
+    const scroller=view.current.scrollDOM
+    scroller.addEventListener('scroll',capture)
     const unbindKeys = bindPhysicalEditorKeys(view.current)
     if (autoFocus) view.current.focus()
-    return () => { unbindKeys(); view.current?.destroy() }
+    return () => { capture();scroller.removeEventListener('scroll',capture);unbindKeys(); view.current?.destroy() }
     // text updates are applied below without recreating the editor
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])

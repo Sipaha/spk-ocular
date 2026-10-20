@@ -2,7 +2,7 @@ import { useMemo, type ReactNode } from 'react'
 import { t } from '../i18n'
 import type { ScopeSel } from '../api/types'
 import { scopeSet, selectedScopes } from '../scopes'
-import { editsHeld } from '../edit/guard'
+import { workspaceEditsHeld as editsHeld } from '../edit/guard'
 import { Select, type SelectMemory } from './Select'
 
 interface Props {

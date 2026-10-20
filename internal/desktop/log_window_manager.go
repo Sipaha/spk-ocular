@@ -28,12 +28,21 @@ type LogWindows struct {
 	mu            sync.Mutex
 	openMu        sync.Mutex
 	windows       map[string]*application.WebviewWindow
+	toolClosing   map[string]bool
+	toolEpoch     map[string]string
 	exports       map[string]*nativeLogExport
 	exportsClosed bool
 	history       *downloadHistory
 }
 
-func (m *LogWindows) Open(id, title string) error {
+func (m *LogWindows) Open(id, title string) error { return m.openWindow(id, title, "", "") }
+func (m *LogWindows) OpenTool(id, title, kind, epoch string) error {
+	if !logWindowID.MatchString(epoch) || (kind != "files" && kind != "shell") {
+		return errors.New("invalid tool window kind")
+	}
+	return m.openWindow(id, title, kind, epoch)
+}
+func (m *LogWindows) openWindow(id, title, kind, epoch string) error {
 	if !logWindowID.MatchString(id) || len(title) > 512 {
 		return errors.New("invalid log window")
 	}
@@ -57,17 +66,48 @@ func (m *LogWindows) Open(id, title string) error {
 	}
 	screen = detachedLogScreen(runtime.GOOS, screen, m.app.Screen.GetAll(), m.app.Screen.GetPrimary())
 	width, height := detachedLogSize(screen)
-	w := m.app.Window.NewWithOptions(application.WebviewWindowOptions{Name: "logs-" + id, Title: title + " · SPK Ocular", Hidden: true, Width: width, Height: height, MinWidth: min(480, width), MinHeight: min(280, height), Screen: screen, InitialPosition: application.WindowCentered, URL: "/?logsWindow=" + id, BackgroundColour: application.NewRGBA(21, 24, 30, 255), DevToolsEnabled: devToolsEnabled, Linux: application.LinuxWindow{WebviewGpuPolicy: webviewGPUPolicy(os.Getenv("SPK_OCULAR_GPU"))}})
+	route := "/?logsWindow=" + id
+	if kind != "" {
+		width, height = detachedToolSize(screen, kind)
+		route = "/?toolWindow=" + id + "&toolKind=" + kind + "&toolEpoch=" + epoch
+	}
+	w := m.app.Window.NewWithOptions(application.WebviewWindowOptions{Name: "logs-" + id, Title: title + " · SPK Ocular", Hidden: true, Width: width, Height: height, MinWidth: min(480, width), MinHeight: min(280, height), Screen: screen, InitialPosition: application.WindowCentered, URL: route, BackgroundColour: application.NewRGBA(21, 24, 30, 255), DevToolsEnabled: devToolsEnabled, Linux: application.LinuxWindow{WebviewGpuPolicy: webviewGPUPolicy(os.Getenv("SPK_OCULAR_GPU"))}})
 	configureWindowIcons(w)
-	w.OnWindowEvent(events.Common.WindowClosing, func(_ *application.WindowEvent) {
+	w.RegisterHook(events.Common.WindowClosing, func(e *application.WindowEvent) {
+		if kind != "" {
+			m.mu.Lock()
+			approved := m.toolClosing[id]
+			m.mu.Unlock()
+			if !approved {
+				e.Cancel()
+				m.app.Event.Emit("ocular_tool_window", map[string]any{"id": id, "sender": "host", "type": "request-close", "epoch": epoch})
+				return
+			}
+		}
 		m.abortWindowExports(id)
 		m.mu.Lock()
 		delete(m.windows, id)
+		delete(m.toolClosing, id)
+		delete(m.toolEpoch, id)
 		m.mu.Unlock()
-		m.app.Event.Emit(logWindowEvent, map[string]any{"id": id, "sender": "host", "type": "closed"})
+		event := logWindowEvent
+		if kind != "" {
+			event = "ocular_tool_window"
+		}
+		m.app.Event.Emit(event, map[string]any{"id": id, "sender": "host", "type": "closed", "epoch": epoch})
 	})
 	m.mu.Lock()
 	m.windows[id] = w
+	if kind != "" {
+		if m.toolClosing == nil {
+			m.toolClosing = map[string]bool{}
+		}
+		m.toolClosing[id] = false
+		if m.toolEpoch == nil {
+			m.toolEpoch = map[string]string{}
+		}
+		m.toolEpoch[id] = epoch
+	}
 	m.mu.Unlock()
 	w.Show()
 	w.Focus()
@@ -128,4 +168,31 @@ func (m *LogWindows) ExportLogs(_ string, name, title, button, text string) (str
 	m.history.progress(downloadID, int64(len(text)))
 	m.history.finish(downloadID, destination, "complete")
 	return destination, nil
+}
+
+// CloseTool is called after the guest has flushed edits/input to its owner.
+func (m *LogWindows) CloseTool(id, epoch string) error {
+	m.mu.Lock()
+	if m.windows[id] == nil || m.toolEpoch[id] != epoch {
+		m.mu.Unlock()
+		return nil
+	}
+	if _, ok := m.toolClosing[id]; !ok {
+		m.mu.Unlock()
+		return errors.New("not a tool window")
+	}
+	m.toolClosing[id] = true
+	m.mu.Unlock()
+	return m.Close(id)
+}
+func (m *LogWindows) SendTool(id, sender, kind, epoch, payload string) error {
+	if !logWindowID.MatchString(id) || !logWindowID.MatchString(epoch) || len(sender) > 80 || len(kind) > 40 || len(payload) > 16<<20 {
+		return errors.New("invalid tool window message")
+	}
+	var data any
+	if err := json.Unmarshal([]byte(payload), &data); err != nil {
+		return err
+	}
+	m.app.Event.Emit("ocular_tool_window", map[string]any{"id": id, "sender": sender, "type": kind, "payload": data, "epoch": epoch})
+	return nil
 }

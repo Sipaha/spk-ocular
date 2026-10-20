@@ -39,7 +39,7 @@ not collect telemetry. Helm is embedded; a separate Helm CLI is not required.
 - Logs in the bottom panel or a separate OS window, interactive terminals, and local Kubernetes port forwarding.
 - Reviewed [node Files](docs/usage.md#node-files) for host browsing, download and text editing.
 - Reviewed [Linux Node Shell](docs/usage.md#node-shell) through the Kubernetes API,
-  with temporary privileged helpers and explicit cleanup reporting.
+  with shared temporary privileged helpers and durable cleanup recovery.
 - Container folders and UTF-8 file editing with syntax highlighting (up to 2 MiB).
 - Shared Downloads history for UI file/folder copies and log exports; desktop
   entries can open the saved item, show its folder or copy its path, dismiss

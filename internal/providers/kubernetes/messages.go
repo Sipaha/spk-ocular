@@ -11,19 +11,24 @@ import (
 // (web/src/i18n.ts, providerTexts) with the same parameters, the rest in
 // this English.
 var messageTexts = map[string]string{
+	"nodeShell.reuse":        "Reuse running helper Pod {namespace}/{name}; no new Pod is created.",
+	"nodeShell.sharedConfig": "The shared helper already uses namespace {namespace} and image {image}. Close its consumers and wait for cleanup before choosing another configuration.",
+	"nodeShell.closing":      "Helper Pod {namespace}/{name} is closing or awaiting cleanup. Retry after its cleanup is confirmed.",
+	"nodeShell.helperLimit":  "At most 128 node helpers may be retained by one connection.",
+
 	"nodeShell.agentDenied":    "Node Shell helpers are UI-only; container exec grants do not authorize commands in them.",
 	"nodeShell.namespace":      "Helper namespace",
 	"nodeShell.linux":          "Node Shell requires a Linux node with a known operating system.",
 	"nodeShell.invalid":        "Choose a valid namespace and an image without spaces.",
 	"nodeShell.namespaceError": "Namespace {namespace} is unavailable, unreadable or has changed; review again.",
 	"nodeFiles.effect":         "Create a temporary Pod in {namespace} on node {name}, using image {image}, then browse, download and edit the host filesystem.",
-	"nodeFiles.cleanup":        "The helper is deleted when Files closes or Ocular exits normally. Maximum session: 1 hour. Unfinished cleanup is recorded locally and retried silently on connected clusters, including after restart, with exponential delays up to 24 hours. The deadline stops the helper but does not delete its Pod.",
+	"nodeFiles.cleanup":        "Shell and Files share one helper. It is retained for 5 seconds after the last consumer closes, then deleted. Normal application exit requests immediate cleanup. Maximum helper lifetime: 1 hour. Unfinished cleanup is recorded locally and retried silently on connected clusters, including after restart, with exponential delays up to 24 hours. The deadline stops the helper but does not delete its Pod.",
 	"nodeShell.effect":         "Create a temporary Pod in {namespace} on node {name}, using image {image}, then open the host shell.",
-	"nodeShell.cleanup":        "The helper is deleted when the shell ends, its connection is lost, its tab closes or Ocular exits normally. Maximum session: 1 hour. Unfinished cleanup is recorded locally and retried silently on connected clusters, including after restart, with exponential delays up to 24 hours. The deadline stops the helper but does not delete its Pod.",
+	"nodeShell.cleanup":        "Shell and Files share one helper. It is retained for 5 seconds after the last consumer closes, then deleted. Normal application exit requests immediate cleanup. Maximum helper lifetime: 1 hour. Unfinished cleanup is recorded locally and retried silently on connected clusters, including after restart, with exponential delays up to 24 hours. The deadline stops the helper but does not delete its Pod.",
 	"nodeShell.privileged":     "This grants root access to the host filesystem, processes and network. Commands can change or damage the node and its workloads.",
 	"nodeShell.requirements":   "Requires Pod create/get/watch/delete and pods/exec access. Namespace admission must allow privileged host namespaces. The image needs sleep and nsenter; the host needs /bin/sh.",
 	"nodeShell.policy":         "Namespace {namespace} enforces Pod Security baseline/restricted. Admission may reject this helper unless the request is exempt.",
-	"nodeShell.ended":          "This Node Shell is one-shot; review Node Shell again to open another.",
+	"nodeShell.ended":          "This Node Shell is one-shot; open Node Shell again for another session.",
 	"nodeShell.waiting":        "Waiting for the Node Shell helper to start…",
 	"nodeShell.startFailed":    "Node Shell helper could not start: {reason}",
 	"nodeShell.changed":        "The Node Shell helper identity changed; no shell was opened.",

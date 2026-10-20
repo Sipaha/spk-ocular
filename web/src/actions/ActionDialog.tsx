@@ -409,7 +409,7 @@ export function ActionDialog({ client, req, onClose, onTerminal, onFiles, runTim
                 ref={textRef}
                 value={text ?? ''}
                 placeholder={textDesc.default}
-                disabled={busy === 'run' || sent}
+                disabled={busy === 'run' || sent || (!plan && busy === 'prepare')}
                 spellCheck={false}
                 autoComplete="off"
                 onChange={(e) => {
@@ -427,7 +427,7 @@ export function ActionDialog({ client, req, onClose, onTerminal, onFiles, runTim
           {choosing && param?.custom && (
             <label className="flex items-center gap-2 text-xs text-fg-muted">
               {param.title ? messageText(param.title) : t('action.choices')}
-              <input value={chosen ?? ''} disabled={busy === 'run' || sent} spellCheck={false} autoComplete="off"
+              <input value={chosen ?? ''} disabled={busy === 'run' || sent || (!plan && busy === 'prepare')} spellCheck={false} autoComplete="off"
                 onChange={e => { chosenTouched.current = true; setChosen(e.target.value) }}
                 className="min-w-0 flex-1 rounded-md border border-line bg-app px-2 py-1 font-mono text-sm text-fg outline-none focus:border-accent" />
             </label>

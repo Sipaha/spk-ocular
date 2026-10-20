@@ -9,7 +9,7 @@ import { useCallback, useEffect, useRef, useState, type ComponentProps, type Rea
 import type { Client } from '../api/client'
 import type { ClusterGraph, Ref } from '../api/types'
 import { t } from '../i18n'
-import { editsHeld, mayLeave, useEditHolder } from '../edit/guard'
+import { workspaceEditsHeld as editsHeld, mayLeave, useEditHolder } from '../edit/guard'
 import { ResourceDrawer } from '../components/ResourceDrawer'
 import { GraphCanvas } from './canvas'
 import type { Layout, PlacedNode } from './model'

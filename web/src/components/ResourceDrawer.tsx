@@ -17,7 +17,7 @@ import { DetailsPanel } from './DetailsPanel'
 import { PodContainers, podContainerFacts } from './PodContainers'
 import { lazy, Suspense, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { ApiError, type Client } from '../api/client'
-import type { ActionDescriptor, EditDoc, ExecInstance, Relation, Ref, Resource } from '../api/types'
+import type { ActionDescriptor, EditDoc, Relation, Ref, Resource } from '../api/types'
 import { Menu } from '../actions/Menu'
 import { EditDialog, type EditReview } from '../edit/EditDialog'
 import { holdEdits, mayLeave } from '../edit/guard'
@@ -34,7 +34,6 @@ import { HealthDot, ResourceTable, healthText } from './ResourceTable'
 import { errorDetail } from '../errors'
 
 const RbacDialog = lazy(() => import('../rbac/RbacDialog'))
-const FileBrowser = lazy(() => import('../files/FileBrowser'))
 const loadYamlView = () => import('./YamlView')
 const YamlView = lazy(loadYamlView)
 const preloadYamlView = () => { void loadYamlView().catch(() => {}) }
@@ -84,9 +83,9 @@ type Tab = 'details' | 'yaml'
 
 export function ResourceDrawer({ hidden = false, embedded = false, client, hub, target, subject, initialTab, onTab, onClose, hasLogs, onLogs, hasExec, onTerminal, hasForward, actionsOf, onAction, eventsKindOf, editableOf, valuesOf, kindTitleOf }: Props) {
   const leave=(run:()=>void)=>embedded?run():mayLeave(run)
+  const filesTargetTitle=useStore(s=>s.view?.groups.flatMap(g=>g.targets).find(t=>t.provider===target.provider&&t.id===target.id)?.title??target.id)
   const workspaceReady=useWorkspaceStatus(s=>s.ready)
   const [access,setAccess]=useState<{subject?:Ref;failedRef?:Ref}|null>(null)
-  const [filesOpen, setFilesOpen] = useState<{subject:Ref; instance:ExecInstance} | null>(null)
   const [filesDialog, setFilesDialog] = useState<Ref | null>(null)
   const panelRef = useRef<HTMLElement>(null)
   const rootKey = `${target.provider}/${target.id}/${subject.kind}/${subject.scope ?? ''}/${subject.name}/${subject.uid ?? ''}`
@@ -325,7 +324,7 @@ export function ResourceDrawer({ hidden = false, embedded = false, client, hub, 
             )}
             {!embedded&&hasExec?.(displayKind) && <ActionIconButton label={t('files.title')} description={t('tools.filesHint')}
               onContextMenu={event=>{event.preventDefault();event.stopPropagation();event.currentTarget.focus();cancelFilesPicker(false);leave(()=>setFilesDialog(filesSubject))}}
-              onClick={() => leave(() => pickExec(filesSubject, instance => leave(() => setFilesOpen({subject:filesSubject,instance}))))}><ActionIcon name="files"/></ActionIconButton>}
+              onClick={() => leave(() => pickExec(filesSubject, instance => leave(() => dock.openFiles(target,filesTargetTitle,filesSubject,instance))))}><ActionIcon name="files"/></ActionIconButton>}
             {editableOf?.(displayKind) && (
               <ActionIconButton disabled={!(loading ? !!editableOf?.(displayKind)&&!!r?.ref.uid&&!presentation?.gone : canEdit) || !!editing || loadingEdit} onClick={startEdit} label={t('edit.open')} description={t('edit.openHint')}>
                 <ActionIcon name="edit"/>
@@ -466,8 +465,7 @@ export function ResourceDrawer({ hidden = false, embedded = false, client, hub, 
       )}
       {access&&<Suspense fallback={null}><RbacDialog client={client} target={target} {...access} onClose={()=>setAccess(null)} onResource={ref=>{setAccess(null);go(ref)}}/></Suspense>}
       {filesPicker}
-      {filesDialog && <ToolDialog client={client} subject={filesDialog} mode="files" onClose={()=>setFilesDialog(null)} onOpen={selection=>{setFilesDialog(null);if(selection.instance) leave(()=>setFilesOpen({subject:selection.ref,instance:{...selection.instance!,defaultChannel:selection.channel ?? ''}}))}}/>}
-      {filesOpen && <Suspense fallback={null}><FileBrowser client={client} subject={filesOpen.subject} selectedInstance={filesOpen.instance} onClose={() => setFilesOpen(null)} /></Suspense>}
+      {filesDialog && <ToolDialog client={client} subject={filesDialog} mode="files" onClose={()=>setFilesDialog(null)} onOpen={selection=>{setFilesDialog(null);if(selection.instance) leave(()=>dock.openFiles(target,filesTargetTitle,selection.ref,{...selection.instance!,defaultChannel:selection.channel ?? ''}))}}/>}
     </DetailsPanel>
   )
 }

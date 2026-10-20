@@ -17,13 +17,17 @@ import (
 const helperLeaseDuration = 5 * time.Minute
 
 type helperJournal struct {
-	store  *store.Store
-	now    func() time.Time
-	mu     sync.Mutex
-	active map[string]bool
+	store   *store.Store
+	now     func() time.Time
+	mu      sync.Mutex
+	active  map[string]bool
+	running map[string]*helperLease
+	closed  bool
 }
 type helperLease struct {
 	journal   *helperJournal
+	stopRun   context.CancelFunc
+	finished  chan struct{}
 	id, owner string
 	stop      context.CancelFunc
 	done      chan struct{}
@@ -43,6 +47,10 @@ func (j *helperJournal) Begin(ctx context.Context, h core.OwnedHelper, stopRun c
 	h.CreatedAt = now.UnixMilli()
 	owner := newHelperOwner()
 	j.mu.Lock()
+	if j.closed {
+		j.mu.Unlock()
+		return nil, errors.New("helper ownership journal is closing; no Pod created")
+	}
 	err := j.store.InsertHelper(ctx, store.HelperRecord{Helper: h, Owner: owner, LeaseUntil: now.Add(helperLeaseDuration).UnixMilli(), NextTry: now.UnixMilli(), Delay: time.Minute.Milliseconds()})
 	if err == nil {
 		if j.active == nil {
@@ -50,12 +58,17 @@ func (j *helperJournal) Begin(ctx context.Context, h core.OwnedHelper, stopRun c
 		}
 		j.active[h.ID] = true
 	}
-	j.mu.Unlock()
 	if err != nil {
+		j.mu.Unlock()
 		return nil, fmt.Errorf("cannot persist helper intent; no Pod created: %w", err)
 	}
 	hbctx, cancel := context.WithCancel(context.Background())
-	lease := &helperLease{journal: j, id: h.ID, owner: owner, stop: cancel, done: make(chan struct{})}
+	lease := &helperLease{journal: j, id: h.ID, owner: owner, stop: cancel, done: make(chan struct{}), stopRun: stopRun, finished: make(chan struct{})}
+	if j.running == nil {
+		j.running = map[string]*helperLease{}
+	}
+	j.running[h.ID] = lease
+	j.mu.Unlock()
 	go func() {
 		defer close(lease.done)
 		ticker := time.NewTicker(time.Minute)
@@ -85,15 +98,40 @@ func (l *helperLease) PinUID(ctx context.Context, uid string) error {
 }
 func (l *helperLease) Finish(ctx context.Context, clean bool) error {
 	l.once.Do(func() {
+		defer close(l.finished)
 		l.stop()
 		<-l.done
 		l.journal.mu.Lock()
 		defer l.journal.mu.Unlock()
 		l.err = l.journal.store.FinishHelper(ctx, l.id, l.owner, clean, l.journal.now().UnixMilli())
 		delete(l.journal.active, l.id)
+		delete(l.journal.running, l.id)
 	})
 	return l.err
 }
+
+// Graceful application shutdown bypasses idle grace, but still lets each Pod
+// owner complete its independent cleanup and durable Finish operation.
+func (j *helperJournal) close(ctx context.Context) {
+	j.mu.Lock()
+	j.closed = true
+	leases := make([]*helperLease, 0, len(j.running))
+	for _, l := range j.running {
+		leases = append(leases, l)
+	}
+	j.mu.Unlock()
+	for _, l := range leases {
+		l.stopRun()
+	}
+	for _, l := range leases {
+		select {
+		case <-l.finished:
+		case <-ctx.Done():
+			return
+		}
+	}
+}
+
 func (j *helperJournal) claim(ctx context.Context, r store.HelperRecord) (string, bool, error) {
 	j.mu.Lock()
 	defer j.mu.Unlock()

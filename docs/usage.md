@@ -647,7 +647,7 @@ revisionHistoryLimit. This section adds no rollback control.
 
 ## Logs, terminals, and tunnels
 
-Right-click a bottom-panel tab (logs, terminal or pinned properties), or press
+Right-click a bottom-panel tab (logs, terminal, Files or pinned properties), or press
 Shift+F10 on its title, for Close, Close all, Close all to the left and Close all
 to the right. Side actions follow visible tab order and are disabled when that
 side is empty. The clicked tab stays open for side actions; unrelated active
@@ -924,7 +924,16 @@ The compact header bars use explicit 4 px top and bottom padding around their
 26 px controls; their total 35 px height includes the 1 px bottom border.
 Errors appear in a dismissible overlay above the footer without moving or resizing
 the tree and editor. Dismissing an error preserves the open draft.
-The inspector occupies the window with 12 px edge margins, up to 1800 px wide.
+Files opens in the bottom panel for containers, Pods and nodes. Inactive tabs keep
+their directory cache and drafts, and survive target/card switches. The header's
+**Open in window** icon transfers the same session into a normal separate window;
+**Return to bottom panel**, or closing that window, returns it. The transfer keeps
+the selected container, directory/tree, captured file version, draft, editor
+selection, Undo/Redo and scroll position. It performs no new helper creation or
+implicit file read. Transfers wait until current operations finish. Closing the
+actual Files tab protects unsaved edits and blocks while a write is running;
+pending reads are cancelled on close.
+Files tabs and their contents are memory-only and cannot be pinned for restart.
 The status footer is 27 px high, with centered text and a 22 px file-type picker.
 Drag the boundary between the tree and editor to resize the tree; the width is
 kept while the inspector remains open. The focused separator also supports arrow
@@ -1020,7 +1029,7 @@ The log toolbar's **Open in window** opens a separate OS window in desktop mode
 lines. Sources, history options, search and display preferences stay synchronized.
 Use **Return to bottom panel**, or close the secondary window, to restore the
 original tab. Closing its main tab also closes the secondary window; closing the
-main application exits all its windows. Up to eight log windows can be detached.
+main application exits all its windows. Up to eight tool/log windows can be detached.
 Detached windows have no Downloads history button or extra header; their log
 export action remains available and records exports in the main window history.
 
@@ -1202,17 +1211,23 @@ admission exemptions, so the server makes the final decision. Other admission,
 quota and registry failures remain server errors. It never changes namespace
 policy or grants. No ServiceAccount token is mounted in the helper.
 
-The helper is created only when the terminal stream opens. Node/namespace UID,
+Shell and Files share one helper for the reviewed node and connection. It is
+created only when the first terminal stream or file command starts. Node/namespace UID,
 review expiry, session incarnation and connection revision are checked; the
 terminal retains its reviewed connection snapshot across target switching.
 Startup waits at most two minutes. The whole helper has a one-hour active
 deadline. Each confirmed shell starts once: exit, startup failure or connection
-loss requires another explicit Node Shell review, with no automatic creation retry.
+loss requires another explicit Node Shell open, with no automatic creation retry.
+If the existing helper is running, the action reuses it without a launch dialog.
+Otherwise, a new helper requires review. A stale reuse never silently creates a
+replacement.
 
-When the command ends, its stream disconnects, its tab closes or Ocular exits
-normally, Ocular requests immediate helper deletion with a UID precondition and
-checks disappearance. An immediate cleanup failure names the exact namespace/Pod. Its durable record
-remains for silent retries; repeated background failures produce no notifications.
+Closing a Shell tab or Files inspector releases its helper lease and cancels
+its own commands. Other consumers continue using the same helper. After the
+last consumer closes, the helper remains for 5 seconds and is then deleted
+with a UID precondition; a new consumer cancels idle deletion. Normal Ocular
+exit requests immediate cleanup. Cleanup failure leaves the durable record
+for silent retries; repeated background failures produce no notifications.
 Never delete a same-named replacement blindly. After an application crash,
 network failure or revoked deletion rights, a helper may remain. Its deadline
 stops it when the kubelet can enforce it, but does not delete the Pod. The Node
@@ -1224,17 +1239,20 @@ Node Shell is UI-only and is not included in agent exec/action grants.
 
 Select a Linux node and click the Files icon beside Node Shell at the left of
 its action toolbar. Review the connection, node, helper namespace and image
-before opening the host filesystem. This is root access: saving a file can
+before first opening the host filesystem. A running shared helper is reused
+without another launch confirmation. This is root access: saving a file can
 change the node and its workloads. The existing file tree, UTF-8 editor
 (up to 2 MiB), version-conflict checks and native downloads are reused.
 
-A separate temporary helper Pod serves each reviewed Files session. Its exec
+The reviewed node helper is shared with Shell and other Files sessions. Its exec
 commands enter the host namespaces and root before running the host POSIX shell
 and file utilities; the helper image needs sleep/nsenter, and the host needs
 the utilities required by each operation (including tar for downloads).
 Opening or reviewing the action creates no Pod; the first file operation starts
-one. Closing Files cancels its commands and requests UID-guarded helper deletion.
-Normal application exit and the one-hour session limit also trigger cleanup.
+one if no shared helper exists. Closing Files cancels only its commands and
+releases its consumer; deletion follows 5 seconds after the last consumer closes.
+The shared helper lifetime is at most one hour and is not extended by new consumers.
+Normal application exit requests immediate cleanup.
 Failed startup never recreates the helper automatically. As with Node Shell,
 a crash, unreachable API or revoked deletion rights can leave a helper object.
 Files session capabilities are memory-only, UI-only and never included in agent
@@ -1258,3 +1276,15 @@ Active sessions hold a renewable five-minute lease; a crashed process's lease mu
 expire before another process can recover its helper. No cluster is connected
 automatically for cleanup. An offline app, unavailable API or revoked deletion
 rights can postpone cleanup indefinitely; records remain for later attempts.
+
+
+## Detached Shell windows
+
+The terminal header's **Open in window** icon transfers its view into a separate
+window. Shell starts at 960×600 logical pixels, bounded by the screen work area;
+it never maximizes or requests fullscreen. Closing that window, or choosing
+**Return to bottom panel**, returns the existing terminal. The same PTY, command,
+working directory, screen/history, colors, cursor and alternate buffer continue;
+no new shell or helper is created. Input, paste, interrupt and resize go to the
+original stream, and output keeps its processing credits. Closing the actual
+terminal tab ends its command. Separate windows close when their main owner exits.

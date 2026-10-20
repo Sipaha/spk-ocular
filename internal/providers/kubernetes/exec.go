@@ -46,6 +46,7 @@ const maxInstances = 50
 // tunnels) keep after the session itself is closed. It holds no session
 // context or cache.
 type conn struct {
+	helpers     *nodeHelperPool
 	cfg         *rest.Config // a private copy
 	dyn         dynamic.Interface
 	target      string
@@ -60,7 +61,7 @@ type conn struct {
 }
 
 func newConn(cfg *rest.Config, dyn dynamic.Interface, target, title, hash string) *conn {
-	c := &conn{cfg: rest.CopyConfig(cfg), dyn: dyn, target: target, targetTitle: title, hash: hash}
+	c := &conn{helpers: &nodeHelperPool{}, cfg: rest.CopyConfig(cfg), dyn: dyn, target: target, targetTitle: title, hash: hash}
 	if u, err := serverURL(cfg.Host); err == nil {
 		c.endpoint = u.Host
 	}

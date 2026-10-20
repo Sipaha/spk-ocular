@@ -18,7 +18,8 @@ const LogHost = lazy(() => import('../logs/LogHost').then(module=>({default:modu
 const RestoredLogs=lazy(()=>import('../workspace/RestoredLogs'))
 const PropertiesHost=lazy(()=>import('../workspace/PropertiesHost'))
 const RestoredTerminal=lazy(()=>import('../workspace/PropertiesHost').then(module=>({default:module.RestoredTerminal})))
-const TerminalView = lazy(() => import('../term/TerminalView'))
+const FilesHost=lazy(()=>import('../files/FilesHost'))
+const TerminalHost = lazy(() => import('../term/TerminalHost'))
 
 interface Props {
   client: Client
@@ -61,10 +62,10 @@ export function Dock({ client, hub, current, mode, onHeightDone }: Props) {
             <LocationStatusScope active={tb.id === active}>
             {(tb.kind !== 'logs' || tb.dormant) && <LocationStatus><span>{tb.title}</span></LocationStatus>}
             <Suspense fallback={<p className="p-3 text-fg-subtle">{t('app.loading')}</p>}>
-              {tb.kind === 'properties'? <PropertiesHost key={tb.openEpoch??0} client={client} hub={hub} tab={tb}/> : tb.kind==='term-restored'? <RestoredTerminal client={client} tab={tb}/> : tb.kind === 'logs' ? (
+              {tb.kind === 'files'? <FilesHost client={client} tab={tb}/> : tb.kind === 'properties'? <PropertiesHost key={tb.openEpoch??0} client={client} hub={hub} tab={tb}/> : tb.kind==='term-restored'? <RestoredTerminal client={client} tab={tb}/> : tb.kind === 'logs' ? (
                 tb.dormant ? <RestoredLogs client={client} tab={tb}/> : <LogHost client={client} tab={tb} active={tb.id === active} />
               ) : (
-                <TerminalView client={client} tab={tb} active={tb.id === active} mode={mode} />
+                <TerminalHost client={client} tab={tb} active={tb.id === active} mode={mode} />
               )}
             </Suspense>
             </LocationStatusScope>
@@ -81,7 +82,7 @@ function TabHandle({ tab, targetTitle, active, foreign, stale }: { tab: DockTab;
   const [menu,setMenu]=useState<{x:number;y:number}|null>(null)
   const tabs=useDock(s=>s.tabs),index=tabs.findIndex(item=>item.id===tab.id)
   const openMenu=(at:{x:number;y:number})=>{titleRef.current?.focus({preventScroll:true});setMenu(at)}
-  const tip = [tab.kind==='properties'?t('workspace.propertiesLabel'):tab.kind==='logs'?t('logs.open'):t('term.open'),tab.kind === 'term' ? tab.hint : undefined, tab.title].filter(Boolean).join('\n')
+  const tip = [tab.kind==='files'?t('files.title'):tab.kind==='properties'?t('workspace.propertiesLabel'):tab.kind==='logs'?t('logs.open'):t('term.open'),tab.kind === 'term' ? tab.hint : undefined, tab.title].filter(Boolean).join('\n')
   return (
     <>
     <div
@@ -110,7 +111,7 @@ function TabHandle({ tab, targetTitle, active, foreign, stale }: { tab: DockTab;
         </span>
       )}
       {stale && <Reconfigured />}
-      <button className={`flex h-6 w-6 shrink-0 items-center justify-center rounded hover:bg-hover ${tab.pinned?'text-accent':'text-fg-muted'}`} disabled={!ready||!(tab.kind==='term'?tab.open.ref.uid:tab.ref.uid)} aria-label={t('workspace.keep')} aria-pressed={!!tab.pinned} title={tab.pinned?t('workspace.unpin'):t('workspace.keep')} onClick={e=>{e.stopPropagation();if(!dock.pin(tab.id))showNotice(t('workspace.limit'))}}><svg aria-hidden width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4"><path d="M5 2h6l-1 5 3 3H3l3-3-1-5ZM8 10v4"/></svg></button>
+      {tab.kind!=='files'&&<button className={`flex h-6 w-6 shrink-0 items-center justify-center rounded hover:bg-hover ${tab.pinned?'text-accent':'text-fg-muted'}`} disabled={!ready||!(tab.kind==='term'?tab.open.ref.uid:tab.ref.uid)} aria-label={t('workspace.keep')} aria-pressed={!!tab.pinned} title={tab.pinned?t('workspace.unpin'):t('workspace.keep')} onClick={e=>{e.stopPropagation();if(!dock.pin(tab.id))showNotice(t('workspace.limit'))}}><svg aria-hidden width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4"><path d="M5 2h6l-1 5 3 3H3l3-3-1-5ZM8 10v4"/></svg></button>}
       <button className="flex h-6 w-6 shrink-0 items-center justify-center rounded text-fg-muted hover:bg-hover hover:text-fg" onClick={(e) => { e.stopPropagation(); dock.close(tab.id) }} aria-label={t('logs.closeTab')} title={t('logs.closeTab')}>
         <CloseIcon className="h-4 w-4" />
       </button>

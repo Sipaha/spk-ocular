@@ -881,3 +881,16 @@ it('requires a fresh review after typing a namespace for a privileged terminal a
   await waitFor(()=>expect(f.client.runAction).toHaveBeenCalledOnce())
   expect((f.client.runAction as ReturnType<typeof vi.fn>).mock.calls[0][0].params.choice).toBe('private-tools')
 })
+
+
+it('waits for the initial custom namespace before editing so a late default cannot splice into typed input',async()=>{
+ const action:ActionDescriptor={id:'node-shell',title:'Node Shell',param:{kind:'choice',min:0,max:0,custom:true,title:{text:'Helper namespace'}}}
+ const initial=deferred<ActionPlan>()
+ const {dialog}=setup(action,()=>initial.promise)
+ const input=within(dialog).getByRole('textbox',{name:'Helper namespace'})
+ expect(input).toBeDisabled()
+ await act(async()=>initial.resolve(planOf(action,{choice:'kube-system'})))
+ expect(input).toBeEnabled();expect(input).toHaveValue('kube-system')
+ await userEvent.clear(input);await userEvent.type(input,'blocked')
+ expect(input).toHaveValue('blocked')
+})

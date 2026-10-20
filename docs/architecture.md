@@ -907,9 +907,12 @@ IDs are memory-only and are never restored or replayed from workspace persistenc
 
 Kubernetes Node Shell signs node Ref/UID, namespace/UID, image, helper name,
 nonce, session incarnation and expiry. Admission consumes the nonce before
-registration; stream Run independently checks expiry and identities, then uses
-one non-retrying CREATE. A shared atomic start guard prevents reconnection from
-creating another helper. The helper has no mounted API token, uses the selected
+registration. A connection-snapshot pool shares one helper for a node UID across
+Shell and Files consumers; only its owner performs one non-retrying CREATE.
+A one-shot terminal prototype transfers its reservation to its active stream,
+so evicting the prototype cannot cancel that stream and an ended tab cannot
+retain an otherwise unused helper. A shared atomic
+start guard still prevents replaying a terminal command. The helper has no mounted API token, uses the selected
 nodeName and host namespaces, runs privileged as UID 0 and has a one-hour active
 deadline. After bounded startup, the existing exec transport runs `nsenter` into
 host PID 1's mount/UTS/IPC/network/PID namespaces, root and working directory,
@@ -917,6 +920,9 @@ followed by `/bin/sh -l`.
 Node identity is checked again after startup; normal terminal credits, input,
 resize and transport guards apply.
 
+After the last consumer closes, a generation-guarded 5-second idle timer requests
+cleanup; a new consumer cancels that timer. The one-hour helper deadline never
+resets. Startup failure and normal application shutdown bypass idle grace.
 Cleanup runs under an independent ten-second deadline, including after startup
 failure or an ambiguous create result. The create response pins the server-assigned Pod UID; even a replacement with
 copied ownership labels cannot inherit cleanup. For an ambiguous create without
@@ -924,10 +930,12 @@ a returned UID, the random ownership marker and nodeName identify a helper befor
 a UID-conditional DELETE. CREATE never retries; persisted cleanup may retry only
 against the owned helper UID. A read confirms
 disappearance, so admission-added finalizers do not become silent cleanup
-success. Foreign/replaced Pods are not deleted. Failures include the precise
-helper identity in a terminal notice/error. An optional `TerminalCleanup` handle
-lets `ForgetTerminal` await the cleanup result after revoking the stream; the
-frontend reports its failure globally even after the terminal tab has unmounted.
+success. Foreign/replaced Pods are not deleted. A failed cleanup retains a pool
+tombstone until a read proves absence or a different UID; a fresh launch cannot
+overlap unfinished cleanup on that connection/node. Active consumers can receive
+a cleanup failure notice; cleanup after idle expiry has no remaining listener and
+uses the silent durable recovery path. `ForgetTerminal` revokes its consumer
+without waiting through idle grace.
 Application logs retain a warning with target/helper identity, without command
 output or credential details. Unavailable API/kubelet, process
 crashes and revoked rights can leave a helper; the active deadline bounds its
@@ -953,12 +961,14 @@ and is never persisted. The ordinary node Exec capability remains unavailable,
 so existing agent grants do not acquire host access. The signed helper grant
 includes the action ID; terminal and file reviews cannot be exchanged.
 
-The provider shares Node Shell startup/identity/cleanup logic. A file session
-starts one helper lazily and runs bounded raw exec commands through nsenter into
-the host root. It retains the reviewed connection snapshot, rechecks node and
-namespace identity on each command, and never automatically recreates a failed
-helper. Closing, registry expiry (one hour), or normal application exit cancels
-commands and awaits bounded UID-guarded cleanup. StrictMode discarded mounts do
+The provider shares Node Shell startup/identity/cleanup logic and its pooled
+helper. The first consumer starts it lazily; individual file commands run bounded
+raw exec through nsenter into the host root. Each Files session holds one lease
+and has its own command cancellation. Closing it does not cancel another consumer.
+It retains the reviewed connection snapshot and rechecks node, namespace, Pod UID,
+ownership marker and node owner on each command. Failed helpers are not recreated
+automatically. Closing or registry expiry (one hour) cancels its own commands and
+releases its lease; actual deletion follows the last consumer’s idle grace. StrictMode discarded mounts do
 not revoke a live file inspector. Late/unadopted action results are released.
 
 Shared Files create uses a pinned connection revision, argv path operands and
@@ -982,6 +992,17 @@ document paths are rekeyed only after success. There is no atomic remote source
 inode precondition across the final stat-to-move interval; an external filesystem
 change can still race it. Failures/unknown outcomes are never retried implicitly.
 
+## Shared helper admission
+
+A ready pool entry is probed against the actual API object before returning an
+`ActionPlan.reuse` hint. The signed admission includes the helper generation;
+RunAction rechecks node/namespace/Pod ownership and reserves that exact entry.
+A stale reuse token never falls back to CREATE. Read-only preparation neither
+retains a helper nor extends idle grace. A helper's namespace/image stay fixed
+until its consumers close and cleanup is confirmed. Separate connection snapshots
+and node UIDs cannot inherit one another's helpers. At most 128 helper entries
+are retained by one connection, including cleanup tombstones.
+
 ## Durable helper recovery
 
 SQLite owned_helpers stores non-secret intent before CREATE: provider/target,
@@ -993,7 +1014,10 @@ turns a repointed kubeconfig into permission to delete elsewhere. No credentials
 or configuration hashes are stored.
 
 The app injects a HelperJournal into tracked terminal/file handles before they
-are registered. Leases renew once per minute for five minutes; a failed renewal
+are registered. All consumers of a pool entry share one durable owner lease,
+which remains active during idle grace. Graceful shutdown cancels those owners
+and waits for their bounded cleanup/Finish before closing storage; no late Begin
+can create a helper after journal shutdown. Leases renew once per minute for five minutes; a failed renewal
 cancels host access. The current process also excludes active helpers from its
 reaper, including across a wall-clock jump. Recovery claims an expired lease by
 an atomic SQL condition before work; stale owners cannot renew or pin another UID.
@@ -1030,3 +1054,38 @@ between stat and removal or snapshot recursive contents; errors may leave partia
 results. The UI permits no repeat submission after failure until a fresh review.
 Cancel initially receives focus, dirty editors use mayLeave, and cached branches
 and affected documents are removed only on confirmed success.
+
+
+## Detachable Files and Shell views
+
+Files uses ephemeral bottom-panel tabs for every supported target. A FilesHost
+owns one reviewed capability and closes it only on logical tab removal or owner
+page exit. The dock and guest window transfer a memory-only snapshot containing
+container identity, captured revision, cached tree, open document/base version,
+draft and CodeMirror state/history/selection/scroll. Editor callbacks are bound
+to document path and generation, so an old unmount cannot overwrite a replacement
+draft. The guest does not acquire
+another helper consumer or reread the document on transfer. Dirty guards are
+scoped to the tabs actually being closed; group closure captures exact tab IDs,
+flushes detached state and refuses an in-flight write. Browser capability close
+uses keepalive on pagehide. Snapshot transport is bounded to16MiB and coalesces
+pending snapshots until the receiving renderer acknowledges processing; oversize transfer fails visibly without discarding the source.
+
+A TerminalHost permanently retains its TerminalView, xterm parser and credit-based
+WebSocket. A guest terminal gets a bounded xterm serialize0.14.0 snapshot, then
+ordered output frames; server credit is returned only after both parsers consume
+the frame. Only the visible parser may generate PTY replies: the hidden owner disables
+xterm stdin while detached, so DA/DSR/OSC queries are not answered twice. A normal
+return flushes the guest parser before restoring owner input. Guest closure
+releases pending mirror acknowledgments. Input/interrupt
+and resize route to the original owner; hidden owner geometry never overrides the
+guest. The published MIT addon matches xterm6.0.0, is integrity-verified and vendored
+without dependency/lockfile mutation; the license collector includes its upstream
+license. Untrusted terminal clipboard/link/title behavior remains disabled.
+
+The UI-only native LogWindows service also admits whitelisted files/shell routes,
+sharing the existing eight-window cap. Shell uses normal960×600 sizing bounded
+by logical work area; no maximize/fullscreen operation exists. A synchronous Wails
+WindowClosing hook waits for guest state/input flush before approved closure.
+Per-opening epochs reject messages and close requests from an older window.
+Wails events and browser BroadcastChannel carry memory-only data; owner page exit and the browser opener lifetime end orphan guests. No tool window is exposed through agent grants.

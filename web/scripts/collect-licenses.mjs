@@ -39,6 +39,7 @@ for (const name of [...Object.keys(pkg.dependencies), 'tailwindcss'].sort()) col
 const vite = resolveDependency('vite', root)
 collect(vite, false)
 collect(resolveDependency('rolldown', vite), false)
+collect(join(root,'vendor/addon-serialize'),false)
 const packages = [...seen.values()].sort((a, b) => a.name.localeCompare(b.name, 'en'))
 writeFileSync('license-inputs.json', JSON.stringify({ schema: 1, packages }, null, 2) + '\n')
 console.log(`licenses: collected ${packages.length} frontend components`)

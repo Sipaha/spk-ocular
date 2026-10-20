@@ -1,6 +1,7 @@
+import {mayLeaveMatching} from '../edit/guard'
 import {fitsPins, type WorkspaceSnapshot} from '../workspace/snapshot'
 import { create } from 'zustand'
-import type { Ref, TargetRef } from '../api/types'
+import type { Ref, TargetRef, ExecInstance } from '../api/types'
 import { refTitle } from '../refs'
 
 // The bottom panel's tabs live above the per-target Workspace: log tabs
@@ -49,7 +50,8 @@ export interface TermTab extends TabBase {
 
 export interface PropertiesTab extends TabBase {kind:'properties';ref:Ref;detailsTab?:'details'|'yaml';openEpoch?:number}
 export interface RestoredTerminalTab extends TabBase {kind:'term-restored';ref:Ref}
-export type DockTab = LogsTab | TermTab | PropertiesTab | RestoredTerminalTab
+export interface FilesTab extends TabBase {kind:'files';ref:Ref;selectedInstance?:ExecInstance;preparedId?:string}
+export type DockTab = LogsTab | TermTab | PropertiesTab | RestoredTerminalTab | FilesTab
 
 export interface DockState {
   tabs: DockTab[]
@@ -72,11 +74,20 @@ function activate(tab: DockTab) {
 
 export type TabCloseScope = 'one' | 'all' | 'left' | 'right'
 
-function closeTabs(id: string, scope: TabCloseScope) {
+const closeBlocks=new Map<string,()=>boolean|Promise<boolean>>()
+export function holdDockClose(id:string,blocked:()=>boolean|Promise<boolean>){closeBlocks.set(id,blocked);return()=>{if(closeBlocks.get(id)===blocked)closeBlocks.delete(id)}}
+function closeTabs(id:string,scope:TabCloseScope){
+  const tabs=useDock.getState().tabs,anchor=tabs.findIndex(t=>t.id===id)
+  if(anchor<0)return
+  const ids=new Set(tabs.filter((_,i)=>scope==='one'?i===anchor:scope==='left'?i<anchor:scope==='right'?i>anchor:true).map(t=>t.id))
+  const results=[...ids].map(id=>closeBlocks.get(id)?.())
+  const finish=(blocked:(boolean|undefined)[])=>{if(!blocked.some(Boolean))mayLeaveMatching(()=>removeTabs(ids),h=>!!h.scope&&ids.has(h.scope))}
+  if(results.some(r=>r instanceof Promise))return Promise.all(results).then(finish)
+  finish(results as (boolean|undefined)[])
+}
+function removeTabs(ids:ReadonlySet<string>) {
   useDock.setState(state => {
-    const anchor = state.tabs.findIndex(tab => tab.id === id)
-    if (anchor < 0) return state
-    const tabs = state.tabs.filter((_, index) => scope === 'one' ? index !== anchor : scope === 'left' ? index >= anchor : scope === 'right' ? index <= anchor : false)
+    const tabs = state.tabs.filter(tab=>!ids.has(tab.id))
     if (tabs.length === state.tabs.length) return state
     const activeIndex = state.tabs.findIndex(tab => tab.id === state.active)
     const active = tabs.some(tab => tab.id === state.active) ? state.active : (tabs.find(tab => state.tabs.indexOf(tab) >= activeIndex) ?? tabs.at(-1))?.id ?? null
@@ -86,7 +97,7 @@ function closeTabs(id: string, scope: TabCloseScope) {
 
 export const dock = {
   pin(id:string):boolean {
-    const state=useDock.getState();const tabs=state.tabs.map(t=>t.id===id?{...t,pinned:!t.pinned}:t);if(!fitsPins(tabs))return false;useDock.setState({tabs});return true
+    const state=useDock.getState();if(state.tabs.find(t=>t.id===id)?.kind==='files')return false;const tabs=state.tabs.map(t=>t.id===id?{...t,pinned:!t.pinned}:t);if(!fitsPins(tabs))return false;useDock.setState({tabs});return true
   },
   openProperties(target:TargetRef,targetTitle:string,ref:Ref,detailsTab:'details'|'yaml'='details'):boolean {
     const tab:PropertiesTab={kind:'properties',id:`properties:${targetKey(target)}:${refKey(ref)}`,target,targetTitle,ref:{...ref,provider:target.provider,target:target.id},title:`${ref.kind.split('/').pop()}/${refTitle(ref)}`,detailsTab,pinned:true};
@@ -104,6 +115,10 @@ export const dock = {
     const previous = useDock.getState().tabs.find(tab => tab.id === id)
     activate({ kind: 'logs', id, focusEpoch: (previous?.kind === 'logs' ? previous.focusEpoch ?? 0 : 0) + 1, target, targetTitle, ref:{...ref,provider:target.provider,target:target.id}, channel, title: `${ref.kind.split('/').pop()}/${refTitle(ref)}` })
   },
+  /** Files capabilities and editor contents remain memory-only. */
+  openFiles(target:TargetRef,targetTitle:string,ref:Ref,selectedInstance?:ExecInstance,preparedId?:string) {
+    activate({kind:'files',id:`files:${targetKey(target)}:${++termSeq}`,target,targetTitle,ref:{...ref,provider:target.provider,target:target.id},selectedInstance,preparedId,title:`${ref.kind.split('/').pop()}/${refTitle(ref)}`})
+  },
   /** Every open is a new terminal (two shells in one pod are normal). */
   openTerminal(target: TargetRef, targetTitle: string, open: TermOpen, title = refTitle(open.ref)) {
     termSeq++
@@ -115,8 +130,8 @@ export const dock = {
   activate(id: string) {
     useDock.setState({ active: id })
   },
-  close(id: string) { closeTabs(id, 'one') },
-  closeGroup(id: string, scope: TabCloseScope) { closeTabs(id, scope) },
+  close(id: string) { return closeTabs(id, 'one') },
+  closeGroup(id: string, scope: TabCloseScope) { return closeTabs(id, scope) },
   setHeight(h: number) {
     useDock.setState({ height: h })
   },

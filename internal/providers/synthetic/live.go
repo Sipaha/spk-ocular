@@ -337,6 +337,12 @@ func (sh *echoShell) exec(ctx context.Context, line string) (code int, exited, i
 	switch {
 	case len(f) == 0:
 		return 0, false, false, nil
+	case f[0] == "screen-demo":
+		_, err = io.WriteString(sh.out, "\x1b[?1049h\x1b[2J\x1b[H\x1b[31;1mALT wide 界\x1b[0m\r\n\x1b[?2004h")
+		return 0, false, false, err
+	case f[0] == "screen-normal":
+		_, err = io.WriteString(sh.out, "\x1b[?2004l\x1b[?1049l")
+		return 0, false, false, err
 	case f[0] == "exit":
 		if len(f) > 1 {
 			code, _ = strconv.Atoi(f[1])

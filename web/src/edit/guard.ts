@@ -5,6 +5,9 @@
 import { useSyncExternalStore } from 'react'
 
 export interface EditHolder {
+  /** Persistent dock scope; workspace navigation does not discard this holder. */
+  scope?:string
+  retainedOnUnload?:()=>boolean
   /** There are edits not written. */
   dirty: () => boolean
   /** The edits are dropped: leave edit mode. */
@@ -16,6 +19,7 @@ export interface EditHolder {
 interface Pending {
   go: () => void
   stay?: () => void
+  includes:(holder:EditHolder)=>boolean
 }
 
 // Replaced, never changed in place: its identity is useEditHolder's snapshot.
@@ -34,7 +38,7 @@ export function holdEdits(h: EditHolder): () => void {
     if (!holders.includes(h)) return
     holders = holders.filter((x) => x !== h)
     emit()
-    if (pending && !anyDirty()) {
+    if (pending && !holders.some(h=>pending!.includes(h)&&h.dirty())) {
       // The editors went on their own (the object was deleted, say): nothing to ask.
       const p = pending
       pending = null
@@ -49,28 +53,34 @@ export const leaveAsked = () => pending !== null
 
 /** Unsaved edits are held now. */
 export const editsHeld = anyDirty
+export const workspaceEditsHeld=()=>holders.some(h=>!h.scope&&h.dirty())
 
 /**
  * Runs go now when no edits would be lost; else asks, and runs go only if
  * the user discards them (stay, if given, when they keep editing).
  */
 export function mayLeave(go: () => void, stay?: () => void): void {
-  if (!anyDirty()) {
+  mayLeaveMatching(go,h=>!h.scope,stay)
+}
+
+/** Ask only about editors whose state this operation would discard. */
+export function mayLeaveMatching(go:()=>void,includes:(holder:EditHolder)=>boolean,stay?:()=>void):void {
+  if (!holders.some(h=>includes(h)&&h.dirty())) {
     go()
     return
   }
   // A second request while asking replaces the first: the latest choice wins.
   pending?.stay?.()
-  pending = { go, stay }
+  pending = { go, stay, includes }
   emit()
 }
 
 /** The prompt's answer: drop the edits (of every editor) and go on. */
 export function discardEdits() {
   const p = pending
-  const hs = holders
+  const hs = holders.filter(h=>!p||p.includes(h))
   pending = null
-  holders = []
+  holders = holders.filter(h=>!hs.includes(h))
   emit()
   for (const h of hs) h.discard()
   p?.go()
@@ -83,7 +93,7 @@ export function keepEditing() {
   emit()
   p?.stay?.()
   // The latest editor with edits: the one the question was about.
-  const latest = [...holders].reverse().find((h) => h.dirty())
+  const latest = [...holders].reverse().find((h) => (!p||p.includes(h))&&h.dirty())
   latest?.focus?.()
 }
 
@@ -109,6 +119,6 @@ export function resetGuard() {
 // Browser mode: a reload or closing the tab asks too.
 if (typeof window !== 'undefined') {
   window.addEventListener('beforeunload', (e) => {
-    if (editsHeld()) e.preventDefault()
+    if (holders.some(h=>h.dirty()&&!h.retainedOnUnload?.())) e.preventDefault()
   })
 }

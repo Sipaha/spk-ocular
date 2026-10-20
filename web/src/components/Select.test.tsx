@@ -38,6 +38,7 @@ describe('Select', () => {
     await user.click(screen.getByRole('button',{name:'Pod'}))
     await user.type(screen.getByRole('combobox'),'194')
     expect(screen.queryByRole('option',{name:'web-old'})).not.toBeInTheDocument()
+    expect(screen.getByRole('option',{name:'web-new'})).not.toHaveAttribute('title')
     expect(screen.getByRole('option',{name:'web-new'})).toHaveAccessibleDescription('Current revision 194 · Not ready · Containers 0/1 · ContainerCreating')
     await user.keyboard('{Enter}')
     expect(onChange).toHaveBeenCalledExactlyOnceWith('new-uid')

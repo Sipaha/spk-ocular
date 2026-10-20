@@ -81,6 +81,8 @@ func TestNodeFilesReusesOnePinnedHelperAndClosesIt(t *testing.T) {
 	require.Equal(t, 1, countShellWrites(c, "create"))
 	require.Zero(t, countShellWrites(c, "delete"))
 	require.NoError(t, f.Close())
+	require.Zero(t, countShellWrites(c, "delete"))
+	finishHelperIdle(t, s)
 	require.Equal(t, 1, countShellWrites(c, "delete"))
 	command, _ := f.PrepareCommand(t.Context(), []string{"sh", "-c", "true"})
 	_, err = command.Run(t.Context(), provider.Terminal{})
@@ -129,6 +131,8 @@ func TestNodeFilesCloseCancelsRunningCommandAndCleansHelper(t *testing.T) {
 	<-started
 	require.NoError(t, f.Close())
 	require.Error(t, <-ended)
+	require.Zero(t, countShellWrites(c, "delete"))
+	finishHelperIdle(t, s)
 	require.Equal(t, 1, countShellWrites(c, "create"))
 	require.Equal(t, 1, countShellWrites(c, "delete"))
 }

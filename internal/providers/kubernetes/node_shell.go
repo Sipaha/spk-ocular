@@ -40,6 +40,7 @@ var actNodeShell = core.ActionDescriptor{
 }
 
 type nodeShellGrant struct {
+	Shared       string    `json:"shared,omitempty"`
 	Action       string    `json:"action"`
 	Ref          core.Ref  `json:"ref"`
 	Namespace    string    `json:"ns"`
@@ -94,8 +95,24 @@ func nodeShellUnavailable(u *unstructured.Unstructured) *core.Message {
 }
 
 func (s *session) prepareNodeShell(ctx context.Context, plan core.ActionPlan, node *unstructured.Unstructured) core.ActionPlan {
+	plan.Expect = ""
 	ctx, cancel := context.WithTimeout(ctx, prepareExtrasTimeout)
 	defer cancel()
+	if why := nodeShellUnavailable(node); why != nil {
+		plan.Unavailable = why
+		return plan
+	}
+	if reused, err := s.conn.helpers.reusable(ctx, plan.Where.Ref); err != nil {
+		why := core.Message{Text: err.Error()}
+		var pe *provider.Error
+		if errors.As(err, &pe) && pe.Why != nil {
+			why = *pe.Why
+		}
+		plan.Unavailable = &why
+		return plan
+	} else if reused != nil {
+		return s.prepareWarmNodeHelper(ctx, plan, reused)
+	}
 	image, ns := nodeShellImage, "kube-system"
 	if plan.Params.Text != nil {
 		image = *plan.Params.Text
@@ -138,10 +155,35 @@ func (s *session) prepareNodeShell(ctx context.Context, plan core.ActionPlan, no
 	return plan
 }
 
+func (s *session) prepareWarmNodeHelper(ctx context.Context, plan core.ActionPlan, e *nodeHelperEntry) core.ActionPlan {
+	g := e.owner.g
+	if (plan.Params.Text != nil && *plan.Params.Text != g.Image) || (plan.Params.Choice != nil && *plan.Params.Choice != g.Namespace) {
+		plan.Unavailable = msgp("nodeShell.sharedConfig", "namespace", g.Namespace, "image", g.Image)
+		return plan
+	}
+	g.Shared, g.Action, g.Nonce, g.Inc, g.Exp = e.owner.g.Nonce, plan.Action.ID, randomHex(16), s.incarnation, s.now().Add(runGrantTTL).UnixMilli()
+	image, namespace := g.Image, g.Namespace
+	plan.Params = core.ActionParams{Text: &image, Choice: &namespace}
+	plan.Reuse = true
+	plan.Expect = g.token()
+	plan.Effects = []core.Message{msg("nodeShell.reuse", "namespace", g.Namespace, "name", g.Name)}
+	plan.Warnings = []core.Message{msg("nodeShell.privileged")}
+	plan.Choices = []core.ActionChoice{{Value: g.Namespace, Title: core.Message{Text: g.Namespace}}}
+	plan.Rights = s.nodeHelperRights(ctx, g.Namespace, g.Name, true)
+	return plan
+}
+
 func (s *session) nodeShellRights(ctx context.Context, ns, name string) core.Rights {
+	return s.nodeHelperRights(ctx, ns, name, false)
+}
+func (s *session) nodeHelperRights(ctx context.Context, ns, name string, reuse bool) core.Rights {
 	u := &unstructured.Unstructured{}
 	u.SetNamespace(ns)
-	for _, q := range []struct{ verb, sub string }{{"create", ""}, {"get", ""}, {"watch", ""}, {"delete", ""}, {"create", "exec"}, {"get", "exec"}} {
+	rights := []struct{ verb, sub string }{{"get", ""}, {"create", "exec"}, {"get", "exec"}}
+	if !reuse {
+		rights = append(rights, struct{ verb, sub string }{"create", ""}, struct{ verb, sub string }{"watch", ""}, struct{ verb, sub string }{"delete", ""})
+	}
+	for _, q := range rights {
 		attrs := map[string]any{"verb": q.verb, "group": "", "resource": "pods", "namespace": ns}
 		if q.verb != "create" || q.sub != "" {
 			attrs["name"] = name
@@ -163,7 +205,15 @@ func (s *session) PrepareTerminalAction(ctx context.Context, run provider.Action
 	if run.Action != actNodeShell.ID {
 		return nil, invalid("Node Shell requires a shell review")
 	}
-	return s.prepareNodeHelper(ctx, run)
+	h, err := s.prepareNodeHelper(ctx, run)
+	if err != nil {
+		return nil, err
+	}
+	lease, err := s.conn.helpers.acquire(ctx, h)
+	if err != nil {
+		return nil, err
+	}
+	return &sharedNodeShellHandle{lease: lease, started: &atomic.Bool{}}, nil
 }
 func (s *session) prepareNodeHelper(ctx context.Context, run provider.ActionRun) (*nodeShellHandle, error) {
 	if s.kind(run.Ref.Kind) != nodesKind {
@@ -231,6 +281,7 @@ type nodeShellState struct {
 	done    chan struct{}
 	// Published by closing done; read only after receiving from done.
 	cleanupError error
+	helperUID    types.UID
 }
 
 type resultCreator interface {
@@ -347,6 +398,7 @@ func (h *nodeShellHandle) run(ctx context.Context, t provider.Terminal, command 
 		return status, provider.Said(provider.ClassConflict, msg("nodeShell.changed"))
 	}
 	uid = created.GetUID()
+	h.state.helperUID = uid
 	if lease != nil {
 		if err = lease.PinUID(ctx, string(uid)); err != nil {
 			return status, err
@@ -407,7 +459,18 @@ func (h *nodeShellHandle) run(ctx context.Context, t provider.Terminal, command 
 }
 func isAPIStatus(err error) bool { var se apierrors.APIStatus; return errors.As(err, &se) }
 func (h *nodeShellHandle) owns(p *unstructured.Unstructured) bool {
-	return p.GetUID() != "" && p.GetLabels()[nodeShellLabel] == h.g.Nonce && str(p.Object, "spec", "nodeName") == h.g.Ref.Name
+	if p.GetUID() == "" || p.GetLabels()[nodeShellLabel] != h.g.Nonce || str(p.Object, "spec", "nodeName") != h.g.Ref.Name {
+		return false
+	}
+	if h.g.Ref.UID != "" {
+		for _, owner := range p.GetOwnerReferences() {
+			if owner.APIVersion == "v1" && owner.Kind == "Node" && owner.Name == h.g.Ref.Name && string(owner.UID) == h.g.Ref.UID {
+				return true
+			}
+		}
+		return false
+	}
+	return true
 }
 func (h *nodeShellHandle) cleanup(expected types.UID) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
