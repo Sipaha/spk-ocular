@@ -895,7 +895,11 @@ dependency; their UID-scoped objects exist only in renderer memory. Path actions
 carry a module/generation/step token; reset and task advancement reject stale
 actions. Each task gates repair on inspected evidence, diagnosis and an authored
 field change, then gates advancement on result inspection. Independent stages
-change names and scenario values and disable hints. Per-module state and the
+use neutral per-module symptoms, change names/values and case order, disable hints
+and require selecting decisive observations. Supporting choices separate supplied
+scenario observations from API paths and log/event excerpts. Wrong-repair feedback
+is keyed to the selected bounded change; all copy is local in eight languages.
+Per-module state and the
 introductory completion flag belong to the open library and disappear on close.
 Shared ResourceTable and read-only YamlView retain familiar navigation without
 exposing live actions, comparison pins or writes. Secret snapshots contain key

@@ -22,14 +22,16 @@
     "observe": "修正後の Pod またはエンドポイントのプロパティを確認してください。",
     "evidenceError": "必要な証拠が未確認です。指定されたオブジェクトのビューを開いてください。",
     "diagnosisError": "選択した説明は観察結果に合いません。証拠を再確認してください。",
-    "repairError": "この変更では原因を解消できません。フィールドと値を証拠と比較してください。",
-    "complete": "ヒントなしで新しい二つのケースを診断し、修正しました。",
+    "complete": "両方の独立ケースを完了しました。証拠の確認、診断の根拠の選択、修正、結果の確認が済みました。",
     "noEvents": "この教材スナップショットにイベントはありません。",
     "noLogs": "このスナップショットにはコンテナーのログがありません。まだ起動していない可能性があります。",
     "noSecrets": "Secret の値は含まれません。参照名とキー名だけを表示します。",
     "memory": "進捗はこの学習画面を開いている間だけ保持されます。閉じるとリセットされます。",
     "more": "関連リソースの説明を読む",
-    "observations": "提示されたシナリオの観察値 · Kubernetes API フィールドではありません"
+    "observations": "提示されたシナリオの観察値 · Kubernetes API フィールドではありません",
+    "support": "選んだ診断を他の原因と区別できる観測データはどれですか？",
+    "templateChange": "Pod テンプレートの変更",
+    "podReplacement": "置き換え後の Pod UID"
   },
   "topics": {
     "network": "Service の通信：セレクターとポート",
@@ -57,52 +59,62 @@
     "selector": {
       "goal": "アプリケーションを変更せず通信を復旧します。Service、Pod、EndpointSlice を比較してください。",
       "hint": "spec.selector と metadata.labels を比較し、準備済みエンドポイントがない理由を確認します。",
-      "why": "対象 Pod のラベルとの一致でバックエンドを得られます。Service は Pod を作成しません。"
+      "why": "対象 Pod のラベルとの一致でバックエンドを得られます。Service は Pod を作成しません。",
+      "supportWhy": "準備完了や正しいポートだけでは selector の一致は証明できません。Service selector と対象 Pod のラベルを比較してください。"
     },
     "port": {
       "goal": "準備済みバックエンドがある状態で通信を復旧します。Service と待受ポートを確認してください。",
       "hint": "準備済みアドレスだけでは不十分です。targetPort とアプリケーションのポートを比較します。",
-      "why": "targetPort はバックエンドのポートです。準備済みエンドポイントは通信全体の到達性を保証しません。"
+      "why": "targetPort はバックエンドのポートです。準備済みエンドポイントは通信全体の到達性を保証しません。",
+      "supportWhy": "ラベルの一致と準備完了のアドレスだけではポートの一致は証明できません。targetPort と待受ポートを比較してください。"
     },
     "readiness": {
       "goal": "再起動を増やさず、実行中のアプリケーションを Service の通信に対して準備済みにします。",
       "hint": "Readiness の HTTP パスをログと比較します。Liveness と Readiness の目的は異なります。",
-      "why": "Readiness は通常の Service 対象を制御します。その失敗だけではコンテナーを再起動しません。"
+      "why": "Readiness は通常の Service 対象を制御します。その失敗だけではコンテナーを再起動しません。",
+      "supportWhy": "Running と正常な liveness だけでは readiness を証明できません。readiness のパスと HTTP 結果を比較してください。"
     },
     "startup": {
       "goal": "Liveness の保護を保ち、提示された遅い初期化を完了させます。",
       "hint": "初期化時間とプローブの猶予を比較します。Startup 成功までは Liveness と Readiness が遅延します。",
-      "why": "この教材の起動猶予は観察した起動時間を満たします。汎用的な設定例ではありません。"
+      "why": "この教材の起動猶予は観察した起動時間を満たします。汎用的な設定例ではありません。",
+      "supportWhy": "イメージ名と Running は初期化中の再起動を説明しません。liveness の猶予と起動時間を比較してください。"
     },
     "image": {
       "goal": "提示されたカタログに存在するイメージでアプリケーションを起動します。",
       "hint": "取得失敗の理由と承認済みタグを確認します。未起動コンテナーのログを捏造しません。",
-      "why": "存在しない manifest は参照先の修正で対処します。同じ存在しないタグを繰り返し取得しても直りません。"
+      "why": "存在しない manifest は参照先の修正で対処します。同じ存在しないタグを繰り返し取得しても直りません。",
+      "supportWhy": "Pending と再起動ゼロだけではタグの欠落は証明できません。要求イメージ、承認された参照、取得イベントを比較してください。"
     },
     "command": {
       "goal": "取得済みイメージが終了する原因を調べ、起動引数を修正します。",
       "hint": "前のコンテナーのログと引数を比較します。CrashLoopBackOff は症状であり根本原因ではありません。",
-      "why": "無効なオプションが終了原因です。同じ引数で再起動しても失敗が繰り返されます。"
+      "why": "無効なオプションが終了原因です。同じ引数で再起動しても失敗が繰り返されます。",
+      "supportWhy": "取得成功や再起動回数だけでは引数の誤りは証明できません。args と前のコンテナログを比較してください。"
     },
     "environment": {
       "goal": "現在の ConfigMap 値を環境変数で使います。参照と実行中の状態を比較してください。",
-      "hint": "既存プロセスは取得済みの環境変数を保持します。このシナリオではテンプレート変更で新しいコンテナーを作ります。",
-      "why": "ConfigMap の環境変数更新には新しいコンテナーが必要です。マウントファイルの更新やアプリの再読込とは仕組みが異なります。"
+      "hint": "lesson-revision は任意の annotation 名で、Kubernetes の再起動コマンドではありません。spec.template 内の変更は Deployment の Pod テンプレートを変え、rollout を開始します。テンプレート外の Deployment metadata だけの変更では開始しません。 新しい Pod は新しい UID を取得し、コンテナは作成時に ConfigMap の環境変数を読みます。実行中のプロセスは古い環境を保持します。修正後にテンプレート、新しい Pod UID、MODE を確認してください。マウントされたファイルとアプリの再読み込みは別の仕組みです。",
+      "why": "lesson-revision は任意の annotation 名で、Kubernetes の再起動コマンドではありません。spec.template 内の変更は Deployment の Pod テンプレートを変え、rollout を開始します。テンプレート外の Deployment metadata だけの変更では開始しません。 新しい Pod は新しい UID を取得し、コンテナは作成時に ConfigMap の環境変数を読みます。実行中のプロセスは古い環境を保持します。修正後にテンプレート、新しい Pod UID、MODE を確認してください。マウントされたファイルとアプリの再読み込みは別の仕組みです。",
+      "supportWhy": "Running と UID だけでは古い環境を証明できません。ConfigMap、取得した MODE、更新時点を比較してください。"
     },
     "secret": {
       "goal": "Secret 値を読んだり作ったりせず、必須の参照を修正します。",
       "hint": "secretKeyRef.key、キー名、起動イベントを比較します。任意の参照に変えても必須値は得られません。",
-      "why": "修正した参照は既存キーを使います。キー名は Secret 値もアクセス許可も示しません。"
+      "why": "修正した参照は既存キーを使います。キー名は Secret 値もアクセス許可も示しません。",
+      "supportWhy": "Opaque と UID だけでは欠落キーは分かりません。secretKeyRef.key、存在するキー名、イベントを比較してください。"
     },
     "requests": {
       "goal": "提示された検証済み CPU 要求で、要求予算を超えずに配置します。",
       "hint": "allocatable から割当済み要求を引いた残りと比較します。現在の CPU 使用量はその予算ではありません。",
-      "why": "検証済み要求は残り予算に収まります。CPU 制限を増やすだけでは過大な要求を配置できません。"
+      "why": "検証済み要求は残り予算に収まります。CPU 制限を増やすだけでは過大な要求を配置できません。",
+      "supportWhy": "使用率と CPU limit だけでは配置可能か分かりません。request、残りの予算、検証済み request を比較してください。"
     },
     "memory": {
       "goal": "承認済みメモリ予算内で記録された OOMKilled を解消します。",
       "hint": "終了理由、制限、検証済みワーキングセット、Node の残り予算を比較します。",
-      "why": "この制限は提示したワーキングセットを収容します。終了コードだけでは OOMKilled を証明できず、必要なメモリはアプリごとに異なります。"
+      "why": "この制限は提示したワーキングセットを収容します。終了コードだけでは OOMKilled を証明できず、必要なメモリはアプリごとに異なります。",
+      "supportWhy": "正常な Node と Running は前回の終了を説明しません。OOMKilled、メモリ limit、提示されたワーキングセットを比較してください。"
     }
   },
   "observations": {
@@ -122,5 +134,44 @@
     "approvedMemory": "承認済みのアプリケーションメモリ予算",
     "remainingMemory": "残りのメモリ要求予算",
     "startedPath": "アプリケーションの起動完了パス"
+  },
+  "checks": {
+    "network": "アプリケーションへの要求が失敗します。観測データから原因を特定し、通信を復旧してください。",
+    "probes": "アプリケーションを安定して利用できません。観測データから原因を特定し、可用性を回復してください。",
+    "runtime": "ワークロードが安定稼働しません。観測データから原因を特定して修正してください。",
+    "config": "アプリケーションが必要な設定で動作していません。原因を特定して修正してください。",
+    "resources": "ワークロードが安定しません。観測データとアプリケーション要件を根拠に修正を選んでください。"
+  },
+  "guides": {
+    "probes": {
+      "title": "3 種類のプローブの違い",
+      "readiness": "Readiness はコンテナが通信を受け付けられるか確認します。失敗すると Pod が通常の Service 通信から外れますが、それだけではコンテナは再起動しません。",
+      "liveness": "Liveness はコンテナの異常を検出します。失敗が続くとコンテナが再起動されることがあります。プロセスの実行中というだけでは準備完了を証明できません。",
+      "startup": "Startup は遅い初期化を保護します。成功するまで liveness と readiness は待機します。periodSeconds=5、failureThreshold=12 なら猶予は約 60 秒です。文書化された起動時間と比較してください。汎用の設定値ではありません。"
+    },
+    "rollout": {
+      "title": "テンプレートの annotation が Pod を置き換える理由",
+      "change": "lesson-revision は任意の annotation 名で、Kubernetes の再起動コマンドではありません。spec.template 内の変更は Deployment の Pod テンプレートを変え、rollout を開始します。テンプレート外の Deployment metadata だけの変更では開始しません。",
+      "environment": "新しい Pod は新しい UID を取得し、コンテナは作成時に ConfigMap の環境変数を読みます。実行中のプロセスは古い環境を保持します。修正後にテンプレート、新しい Pod UID、MODE を確認してください。マウントされたファイルとアプリの再読み込みは別の仕組みです。"
+    }
+  },
+  "repairFeedback": {
+    "replicas": "レプリカを増やしても同じ設定が複製されるだけで、誤ったフィールドは直りません。",
+    "sameSelector": "selector は既に一致しています。再設定しても誤った targetPort は残ります。",
+    "samePort": "targetPort は既に一致しています。再設定しても selector は直りません。",
+    "liveness": "/wrong は404を返します。この liveness は readiness を直さず、正常なコンテナを再起動するおそれがあります。",
+    "readiness": "Readiness は liveness を停止しません。初期化完了前に再起動される可能性が残ります。",
+    "threshold": "failureThreshold=1 は liveness の猶予を短くし、早期再起動の可能性を高めます。",
+    "pullPolicy": "Always は同じ参照を再取得します。欠落タグを作成したり、引数を修正したりはしません。",
+    "credentials": "取得イベントは認証エラーではなく manifest unknown です。認証情報は欠落タグを作成しません。",
+    "sameConfig": "ConfigMap は既にその値です。再度書いても実行中の環境は更新されません。",
+    "containerPort": "containerPort は環境を再読み込みせず、新しいプロセスも作成しません。",
+    "optional": "参照を任意にしても必要な値は欠落したままで、キー名は直りません。",
+    "cpuLimit": "CPU limit はスケジューラの request を減らしません。過大な request は依然として収まりません。",
+    "increaseCPU": "request を増やすと予算をさらに消費します。検証済みの値と比較してください。",
+    "memoryCPU": "CPU limit は OOMKilled を引き起こしたメモリ limit を増やしません。",
+    "reduceMemory": "メモリ limit を提示されたワーキングセット未満に下げると不足が悪化します。",
+    "secretCredentials": "imagePullSecrets はレジストリ認証を設定します。アプリ環境の secretKeyRef.key は修正しません。",
+    "pullArguments": "イメージは取得済みです。再取得しても前のコンテナログにある無効な引数は直りません。"
   }
 }

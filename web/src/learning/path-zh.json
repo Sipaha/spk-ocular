@@ -22,14 +22,16 @@
     "observe": "请在属性中检查修复后的 Pod 或端点。",
     "evidenceError": "还有必要证据未查看。请先打开指定对象的视图。",
     "diagnosisError": "所选解释与观察不符。请重新检查证据。",
-    "repairError": "这项修改不能解决原因。请将字段和值与证据进行比较。",
-    "complete": "你已在无提示下诊断并修复了两个新案例。",
+    "complete": "两个独立案例均已完成：已查看证据、说明诊断依据、应用修复并检查结果。",
     "noEvents": "此教学快照没有事件。",
     "noLogs": "此快照没有容器日志；容器可能尚未启动。",
     "noSecrets": "课程不包含 Secret 值，只显示引用名称和键名。",
     "memory": "进度仅在此学习窗口打开期间保留，关闭后课程状态会重置。",
     "more": "阅读相关资源说明",
-    "observations": "给定场景观察值 · 不是 Kubernetes API 字段"
+    "observations": "给定场景观察值 · 不是 Kubernetes API 字段",
+    "support": "哪些观察能将所选诊断与其他解释区分开？",
+    "templateChange": "Pod 模板变更",
+    "podReplacement": "替换 Pod 的 UID"
   },
   "topics": {
     "network": "Service 流量：选择器与端口",
@@ -57,52 +59,62 @@
     "selector": {
       "goal": "恢复流量而不修改应用。比较 Service、Pod 和 EndpointSlice。",
       "hint": "比较 spec.selector 与 metadata.labels，解释为何没有就绪端点。",
-      "why": "匹配目标 Pod 标签才能提供后端；Service 不会创建 Pod。"
+      "why": "匹配目标 Pod 标签才能提供后端；Service 不会创建 Pod。",
+      "supportWhy": "就绪和正确端口不能证明选择器匹配。请比较 Service 选择器与目标 Pod 标签。"
     },
     "port": {
       "goal": "已有就绪后端但仍需恢复流量。检查 Service 端口与应用监听端口。",
       "hint": "就绪地址还不够：比较 targetPort 与应用端口。",
-      "why": "targetPort 是后端端口。就绪端点不代表端到端可达。"
+      "why": "targetPort 是后端端口。就绪端点不代表端到端可达。",
+      "supportWhy": "标签匹配和地址就绪不能证明端口匹配。请比较 targetPort 与应用监听端口。"
     },
     "readiness": {
       "goal": "让正在运行的应用就绪并接收 Service 流量，不增加重启。",
       "hint": "比较就绪探针 HTTP 路径与日志。存活和就绪检查用途不同。",
-      "why": "就绪检查控制常规 Service 后端资格；仅就绪失败不会重启容器。"
+      "why": "就绪检查控制常规 Service 后端资格；仅就绪失败不会重启容器。",
+      "supportWhy": "Running 和正常的 liveness 不能证明 readiness。请比较 readiness 路径与 HTTP 观察结果。"
     },
     "startup": {
       "goal": "在保留存活保护的同时，允许已说明的慢速初始化完成。",
       "hint": "比较初始化时间与探针窗口。启动探针成功前会推迟存活和就绪检查。",
-      "why": "本练习的启动预算覆盖了观察到的冷启动时间，并非通用探针配置。"
+      "why": "本练习的启动预算覆盖了观察到的冷启动时间，并非通用探针配置。",
+      "supportWhy": "镜像名和 Running 不能解释初始化重启。请比较 liveness 时间窗口与文档中的冷启动时间。"
     },
     "image": {
       "goal": "使用给定目录中存在的镜像启动应用。",
       "hint": "查看拉取失败原因和批准的标签。不要编造从未启动容器的日志。",
-      "why": "缺失的 manifest 应通过已检查的镜像引用修复，而不是反复拉取相同的缺失标签。"
+      "why": "缺失的 manifest 应通过已检查的镜像引用修复，而不是反复拉取相同的缺失标签。",
+      "supportWhy": "Pending 和零重启不能证明标签缺失。请比较请求的镜像、批准的引用与拉取事件。"
     },
     "command": {
       "goal": "找出镜像拉取后仍然退出的原因，并修复启动参数。",
       "hint": "比较前一个容器的日志与工作负载参数。CrashLoopBackOff 是症状，不是根因。",
-      "why": "退出由无效参数导致，使用相同参数重启仍会失败。"
+      "why": "退出由无效参数导致，使用相同参数重启仍会失败。",
+      "supportWhy": "拉取成功和重启次数不能证明参数错误。请比较 args 与上一容器日志。"
     },
     "environment": {
       "goal": "让应用环境使用当前 ConfigMap 值。比较引用与正在运行的快照。",
-      "hint": "现有进程保留启动时的环境；本场景中修改模板会创建新容器。",
-      "why": "ConfigMap 环境变量更新需要新容器。挂载文件更新和应用重载是不同机制。"
+      "hint": "lesson-revision 是任意选取的注解名，不是 Kubernetes 重启命令。修改 spec.template 下的注解会改变 Deployment 的 Pod 模板并触发 rollout。仅修改模板之外的 Deployment metadata 不会触发此过程。 新 Pod 会获得新 UID；容器创建时读取 ConfigMap 环境变量。运行中的进程保留旧环境。修复后检查模板变化、新 Pod UID 和 MODE。挂载文件更新与应用重载是不同机制。",
+      "why": "lesson-revision 是任意选取的注解名，不是 Kubernetes 重启命令。修改 spec.template 下的注解会改变 Deployment 的 Pod 模板并触发 rollout。仅修改模板之外的 Deployment metadata 不会触发此过程。 新 Pod 会获得新 UID；容器创建时读取 ConfigMap 环境变量。运行中的进程保留旧环境。修复后检查模板变化、新 Pod UID 和 MODE。挂载文件更新与应用重载是不同机制。",
+      "supportWhy": "Running 和 Pod UID 不能证明环境过期。请比较当前 ConfigMap、捕获的 MODE 与更新时间。"
     },
     "secret": {
       "goal": "修复必需的 Secret 引用，不读取或编造其值。",
       "hint": "将 secretKeyRef.key 与键名和启动事件比较。将引用设为可选不会提供必需值。",
-      "why": "正确引用使用现有键。键名不泄露 Secret 值，也不能证明访问已授权。"
+      "why": "正确引用使用现有键。键名不泄露 Secret 值，也不能证明访问已授权。",
+      "supportWhy": "Opaque 和 Pod UID 不能表明缺少哪个键。请比较 secretKeyRef.key、现有键名与事件。"
     },
     "requests": {
       "goal": "使用给定的已验证 CPU 请求调度工作负载，不超出请求预算。",
       "hint": "比较 allocatable 减去已分配请求后的余额。当前 CPU 用量不等于该预算。",
-      "why": "已验证的请求适合剩余预算；只提高 CPU 限制无法让过大的请求被调度。"
+      "why": "已验证的请求适合剩余预算；只提高 CPU 限制无法让过大的请求被调度。",
+      "supportWhy": "使用率和 CPU 限制不能证明可调度。请比较请求、剩余请求预算与已验证的应用请求。"
     },
     "memory": {
       "goal": "在给定的批准内存预算内解决已记录的 OOMKilled。",
       "hint": "比较终止原因、限制、已验证工作集和节点剩余预算。",
-      "why": "此限制能容纳给定工作集。仅退出码不能证明 OOMKilled，内存需求取决于应用。"
+      "why": "此限制能容纳给定工作集。仅退出码不能证明 OOMKilled，内存需求取决于应用。",
+      "supportWhy": "健康 Node 和 Running 不能解释上次终止。请比较 OOMKilled、内存限制与给出的工作集。"
     }
   },
   "observations": {
@@ -122,5 +134,44 @@
     "approvedMemory": "批准的应用内存预算",
     "remainingMemory": "剩余内存请求预算",
     "startedPath": "应用完成启动的检查路径"
+  },
+  "checks": {
+    "network": "应用请求失败。根据给出的观察确定原因并恢复流量。",
+    "probes": "应用无法稳定提供服务。根据观察诊断原因并恢复可用性。",
+    "runtime": "工作负载无法稳定运行。根据观察诊断并修复原因。",
+    "config": "应用未按所需配置运行。找出并修复原因。",
+    "resources": "工作负载运行不稳定。根据观察和应用需求选择有依据的修复。"
+  },
+  "guides": {
+    "probes": {
+      "title": "三种探针的区别",
+      "readiness": "Readiness 检查容器能否接收流量。失败会使 Pod 退出普通 Service 流量，但本身不会重启容器。",
+      "liveness": "Liveness 检测不健康的容器。连续失败可能重启容器；进程正在运行并不证明已就绪。",
+      "startup": "Startup 保护较慢的初始化：liveness 和 readiness 等待它成功。periodSeconds=5、failureThreshold=12 对应约 60 秒的预算。应与文档中的冷启动时间比较；这些不是通用配置。"
+    },
+    "rollout": {
+      "title": "为什么模板注解会替换 Pod",
+      "change": "lesson-revision 是任意选取的注解名，不是 Kubernetes 重启命令。修改 spec.template 下的注解会改变 Deployment 的 Pod 模板并触发 rollout。仅修改模板之外的 Deployment metadata 不会触发此过程。",
+      "environment": "新 Pod 会获得新 UID；容器创建时读取 ConfigMap 环境变量。运行中的进程保留旧环境。修复后检查模板变化、新 Pod UID 和 MODE。挂载文件更新与应用重载是不同机制。"
+    }
+  },
+  "repairFeedback": {
+    "replicas": "更多副本会复制同样的配置，无法修正不匹配的字段。",
+    "sameSelector": "选择器已经匹配 Pod。重新设置它不会修复错误的 targetPort。",
+    "samePort": "targetPort 已匹配监听端口。重新设置它不会修复选择器。",
+    "liveness": "/wrong 返回404。这样的 liveness 无法修复 readiness，还可能重启健康容器。",
+    "readiness": "Readiness 不会暂停 liveness。初始化完成前仍可能被重启。",
+    "threshold": "将 failureThreshold 降为1会缩短 liveness 窗口，更容易提前重启。",
+    "pullPolicy": "Always 再次拉取同一引用，无法创建缺失标签或修正应用参数。",
+    "credentials": "拉取事件是 manifest unknown，并非未授权。仓库凭据不会创建缺失的标签。",
+    "sameConfig": "ConfigMap 已有该值。再次写入不会更新运行进程的环境。",
+    "containerPort": "containerPort 不会重读环境变量或创建新的应用进程。",
+    "optional": "将引用设为可选仍会缺少所需值，并未修正键名。",
+    "cpuLimit": "CPU limit 不会减小调度器使用的 request。过大的请求仍无法放入预算。",
+    "increaseCPU": "增大 request 会消耗更多剩余预算。请与已验证的应用请求比较。",
+    "memoryCPU": "CPU limit 不会提高引起 OOMKilled 的内存限制。",
+    "reduceMemory": "将内存限制降到给定工作集以下会加剧内存不足。",
+    "secretCredentials": "imagePullSecrets 配置镜像仓库认证，不会修复应用环境中的 secretKeyRef.key。",
+    "pullArguments": "镜像已经拉取。再次拉取不会修复上一容器日志中不支持的参数。"
   }
 }

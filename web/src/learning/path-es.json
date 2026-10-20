@@ -22,14 +22,16 @@
     "observe": "Examina el Pod resultante o los endpoints en Propiedades.",
     "evidenceError": "Faltan pruebas por examinar. Abre primero las vistas de objetos indicadas.",
     "diagnosisError": "La explicación no coincide con las observaciones. Revisa las pruebas.",
-    "repairError": "Ese cambio no resuelve la causa. Compara el campo y el valor con las pruebas.",
-    "complete": "Has diagnosticado y corregido ambos casos nuevos sin pistas.",
+    "complete": "Ambos casos independientes están completos: datos examinados, diagnóstico justificado, corrección aplicada y resultado comprobado.",
     "noEvents": "No hay eventos en esta instantánea didáctica.",
     "noLogs": "No hay logs del contenedor en esta instantánea. Es posible que aún no haya arrancado.",
     "noSecrets": "Nunca se incluyen valores de Secret. Solo se muestran nombres de referencias y claves.",
     "memory": "El progreso dura mientras esta biblioteca esté abierta. Cerrarla reinicia las lecciones.",
     "more": "Leer ayuda sobre recursos relacionados",
-    "observations": "Observaciones del escenario · no son campos de la API de Kubernetes"
+    "observations": "Observaciones del escenario · no son campos de la API de Kubernetes",
+    "support": "¿Qué observaciones distinguen su diagnóstico de las alternativas?",
+    "templateChange": "Cambio de la plantilla de Pod",
+    "podReplacement": "UID del Pod de reemplazo"
   },
   "topics": {
     "network": "Tráfico de Service: selectores y puertos",
@@ -57,52 +59,62 @@
     "selector": {
       "goal": "Restaura el tráfico sin cambiar la aplicación. Compara Service, Pod y EndpointSlice.",
       "hint": "Compara spec.selector con metadata.labels y explica por qué no hay endpoints preparados.",
-      "why": "Las etiquetas correctas proporcionan los backends previstos; Service no crea Pods."
+      "why": "Las etiquetas correctas proporcionan los backends previstos; Service no crea Pods.",
+      "supportWhy": "La disponibilidad y un puerto correcto no prueban que el selector coincida. Compare el selector del Service y las etiquetas del Pod."
     },
     "port": {
       "goal": "Restaura el tráfico con backends ya preparados. Examina los puertos de Service y de la aplicación.",
       "hint": "Una dirección preparada no basta: compara targetPort con el puerto de la aplicación.",
-      "why": "targetPort es el puerto del backend. Un endpoint preparado no demuestra conectividad de extremo a extremo."
+      "why": "targetPort es el puerto del backend. Un endpoint preparado no demuestra conectividad de extremo a extremo.",
+      "supportWhy": "Las etiquetas coincidentes y una dirección lista no prueban que coincidan los puertos. Compare targetPort y el puerto de escucha."
     },
     "readiness": {
       "goal": "Prepara la aplicación en ejecución para el tráfico de Service sin añadir reinicios.",
       "hint": "Compara la ruta HTTP de readiness con los logs. Liveness y readiness comprueban cosas distintas.",
-      "why": "Readiness controla la inclusión normal en Service; su fallo por sí solo no reinicia el contenedor."
+      "why": "Readiness controla la inclusión normal en Service; su fallo por sí solo no reinicia el contenedor.",
+      "supportWhy": "Running y una liveness correcta no prueban readiness. Compare su ruta con los resultados HTTP."
     },
     "startup": {
       "goal": "Permite finalizar la inicialización lenta documentada conservando la protección de liveness.",
       "hint": "Compara el tiempo de inicio con la ventana de sonda. Startup retrasa liveness y readiness hasta tener éxito.",
-      "why": "El presupuesto de startup del ejercicio cubre el arranque observado. No es una configuración universal."
+      "why": "El presupuesto de startup del ejercicio cubre el arranque observado. No es una configuración universal.",
+      "supportWhy": "El nombre de imagen y Running no explican reinicios durante el inicio. Compare el margen de liveness y el tiempo de arranque."
     },
     "image": {
       "goal": "Arranca la aplicación con una imagen del catálogo proporcionado.",
       "hint": "Lee el error de descarga y la etiqueta aprobada. No inventes logs de un contenedor que nunca arrancó.",
-      "why": "Un manifest ausente se corrige con la referencia revisada, no descargando repetidamente la misma etiqueta ausente."
+      "why": "Un manifest ausente se corrige con la referencia revisada, no descargando repetidamente la misma etiqueta ausente.",
+      "supportWhy": "Pending y cero reinicios no prueban que falte un tag. Compare la imagen solicitada, la referencia aprobada y el evento de descarga."
     },
     "command": {
       "goal": "Averigua por qué una imagen descargada termina y corrige los argumentos de arranque.",
       "hint": "Compara los logs del contenedor anterior con los argumentos. CrashLoopBackOff es un síntoma, no una causa.",
-      "why": "Una opción no válida causó la salida. Reiniciar con los mismos argumentos repetiría el fallo."
+      "why": "Una opción no válida causó la salida. Reiniciar con los mismos argumentos repetiría el fallo.",
+      "supportWhy": "Una descarga correcta y los reinicios no prueban un error de argumentos. Compare args y el log del contenedor anterior."
     },
     "environment": {
       "goal": "Usa el valor actual de ConfigMap en el entorno de la aplicación. Compara referencia e instantánea en ejecución.",
-      "hint": "El proceso existente conserva su entorno. El cambio revisado de plantilla crea aquí un nuevo contenedor.",
-      "why": "Los valores de entorno de ConfigMap requieren contenedores nuevos. Las actualizaciones de archivos montados y su recarga son mecanismos distintos."
+      "hint": "lesson-revision es un nombre de anotación arbitrario, no un comando de reinicio de Kubernetes. Cambiarlo bajo spec.template modifica la plantilla de Pod del Deployment e inicia un rollout. Cambiar solo metadata del Deployment fuera de la plantilla no lo hace. Los nuevos Pods reciben nuevos UID; los contenedores leen el entorno de ConfigMap al crearse. Un proceso en ejecución conserva el entorno anterior. Inspeccione la plantilla, el nuevo UID y MODE tras la corrección. Los archivos montados y la recarga de la aplicación son otros mecanismos.",
+      "why": "lesson-revision es un nombre de anotación arbitrario, no un comando de reinicio de Kubernetes. Cambiarlo bajo spec.template modifica la plantilla de Pod del Deployment e inicia un rollout. Cambiar solo metadata del Deployment fuera de la plantilla no lo hace. Los nuevos Pods reciben nuevos UID; los contenedores leen el entorno de ConfigMap al crearse. Un proceso en ejecución conserva el entorno anterior. Inspeccione la plantilla, el nuevo UID y MODE tras la corrección. Los archivos montados y la recarga de la aplicación son otros mecanismos.",
+      "supportWhy": "Running y el UID no prueban un entorno antiguo. Compare ConfigMap, MODE capturado y el momento de actualización."
     },
     "secret": {
       "goal": "Corrige la referencia obligatoria a Secret sin leer ni inventar su valor.",
       "hint": "Compara secretKeyRef.key, las claves y el evento de arranque. Una referencia opcional no proporciona el valor requerido.",
-      "why": "La referencia corregida usa una clave existente. Su nombre no revela el valor ni demuestra autorización de acceso."
+      "why": "La referencia corregida usa una clave existente. Su nombre no revela el valor ni demuestra autorización de acceso.",
+      "supportWhy": "Opaque y el UID no identifican la clave ausente. Compare secretKeyRef.key, las claves disponibles y el evento."
     },
     "requests": {
       "goal": "Planifica la carga con la solicitud validada de CPU indicada, dentro del presupuesto de requests.",
       "hint": "Compara allocatable menos requests asignados con la solicitud. El uso actual de CPU no es ese presupuesto.",
-      "why": "La solicitud validada cabe en el presupuesto restante. Aumentar solo el límite de CPU no permite planificar una solicitud excesiva."
+      "why": "La solicitud validada cabe en el presupuesto restante. Aumentar solo el límite de CPU no permite planificar una solicitud excesiva.",
+      "supportWhy": "El uso y los límites CPU no prueban que se pueda programar. Compare request, presupuesto restante y request validado."
     },
     "memory": {
       "goal": "Resuelve el OOMKilled registrado dentro del presupuesto de memoria aprobado.",
       "hint": "Compara el motivo de terminación, el límite, el conjunto de trabajo validado y el presupuesto restante del Node.",
-      "why": "El límite ajustado admite el conjunto de trabajo indicado. El código de salida solo no prueba OOMKilled; la memoria necesaria depende de la aplicación."
+      "why": "El límite ajustado admite el conjunto de trabajo indicado. El código de salida solo no prueba OOMKilled; la memoria necesaria depende de la aplicación.",
+      "supportWhy": "Un Node sano y Running no explican la terminación anterior. Compare OOMKilled, el límite y el conjunto de trabajo documentado."
     }
   },
   "observations": {
@@ -122,5 +134,44 @@
     "approvedMemory": "Presupuesto de memoria aprobado de la aplicación",
     "remainingMemory": "Presupuesto restante de requests de memoria",
     "startedPath": "Ruta de finalización del arranque de la aplicación"
+  },
+  "checks": {
+    "network": "Las solicitudes a la aplicación fallan. Determine la causa con los datos y restablezca el tráfico.",
+    "probes": "La aplicación no está disponible de forma estable. Diagnostique los datos y restablezca la disponibilidad.",
+    "runtime": "La carga no alcanza un funcionamiento estable. Diagnostique los datos y repárela.",
+    "config": "La aplicación no funciona con la configuración requerida. Encuentre y corrija la causa.",
+    "resources": "La carga no funciona de forma fiable. Justifique una corrección con los datos y los requisitos de la aplicación."
+  },
+  "guides": {
+    "probes": {
+      "title": "Diferencias entre las tres sondas",
+      "readiness": "Readiness comprueba si el contenedor puede aceptar tráfico. Un fallo excluye al Pod del tráfico normal de Service sin reiniciar por sí mismo el contenedor.",
+      "liveness": "Liveness detecta un contenedor en mal estado. Los fallos repetidos pueden reiniciarlo; un proceso en ejecución no demuestra disponibilidad.",
+      "startup": "Startup protege una inicialización lenta: liveness y readiness esperan a que tenga éxito. Con periodSeconds=5 y failureThreshold=12 el margen aproximado es de 60 segundos. Compárelo con el tiempo de inicio documentado; no son ajustes universales."
+    },
+    "rollout": {
+      "title": "Por qué una anotación de plantilla reemplaza Pods",
+      "change": "lesson-revision es un nombre de anotación arbitrario, no un comando de reinicio de Kubernetes. Cambiarlo bajo spec.template modifica la plantilla de Pod del Deployment e inicia un rollout. Cambiar solo metadata del Deployment fuera de la plantilla no lo hace.",
+      "environment": "Los nuevos Pods reciben nuevos UID; los contenedores leen el entorno de ConfigMap al crearse. Un proceso en ejecución conserva el entorno anterior. Inspeccione la plantilla, el nuevo UID y MODE tras la corrección. Los archivos montados y la recarga de la aplicación son otros mecanismos."
+    }
+  },
+  "repairFeedback": {
+    "replicas": "Más réplicas copian la misma configuración. No corrigen el campo incorrecto.",
+    "sameSelector": "El selector ya coincide. Repetirlo deja targetPort incorrecto.",
+    "samePort": "targetPort ya coincide. Repetirlo no corrige el selector.",
+    "liveness": "/wrong devuelve 404. Esta liveness no corrige readiness y puede reiniciar un contenedor sano.",
+    "readiness": "Readiness no suspende liveness. El contenedor aún puede reiniciarse antes de terminar el inicio.",
+    "threshold": "failureThreshold=1 acorta el margen de liveness y favorece un reinicio prematuro.",
+    "pullPolicy": "Always descarga la misma referencia. No crea un tag ausente ni corrige argumentos.",
+    "credentials": "El evento indica manifest unknown, no falta de autorización. Las credenciales no crean el tag ausente.",
+    "sameConfig": "ConfigMap ya contiene ese valor. Reescribirlo no actualiza el entorno del proceso.",
+    "containerPort": "containerPort no recarga el entorno ni crea un nuevo proceso de aplicación.",
+    "optional": "Una referencia opcional deja ausente el valor requerido; no corrige el nombre de clave.",
+    "cpuLimit": "Un límite CPU no reduce el request del planificador. El request excesivo sigue sin caber.",
+    "increaseCPU": "Aumentar el request consume más presupuesto. Compárelo con el request validado.",
+    "memoryCPU": "Un límite CPU no aumenta el límite de memoria que causó OOMKilled.",
+    "reduceMemory": "Reducir la memoria por debajo del conjunto de trabajo empeora la falta de memoria.",
+    "secretCredentials": "imagePullSecrets configura acceso al registro, no corrige secretKeyRef.key del entorno de la aplicación.",
+    "pullArguments": "La imagen ya se descargó. Repetirlo no corrige el argumento no admitido del log anterior."
   }
 }

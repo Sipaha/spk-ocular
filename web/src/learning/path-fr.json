@@ -22,14 +22,16 @@
     "observe": "Consultez les propriétés du Pod ou des endpoints résultants.",
     "evidenceError": "Des éléments requis manquent. Ouvrez les vues des objets indiquées.",
     "diagnosisError": "Cette explication ne correspond pas aux observations. Vérifiez les éléments.",
-    "repairError": "Cette modification ne corrige pas la cause. Comparez le champ et sa valeur aux observations.",
-    "complete": "Vous avez diagnostiqué et corrigé les deux nouveaux cas sans indices.",
+    "complete": "Les deux cas autonomes sont terminés : observations examinées, diagnostic justifié, correction appliquée et résultat vérifié.",
     "noEvents": "Aucun événement dans cet instantané pédagogique.",
     "noLogs": "Les logs du conteneur sont indisponibles ici. Il n’a peut-être pas encore démarré.",
     "noSecrets": "Aucune valeur de Secret n’est incluse. Seuls les noms des références et des clés sont visibles.",
     "memory": "La progression dure tant que cette bibliothèque reste ouverte. La fermer réinitialise les leçons.",
     "more": "Lire l’aide sur les ressources liées",
-    "observations": "Observations du scénario · pas des champs de l’API Kubernetes"
+    "observations": "Observations du scénario · pas des champs de l’API Kubernetes",
+    "support": "Quelles observations distinguent votre diagnostic des autres explications ?",
+    "templateChange": "Modification du modèle de Pod",
+    "podReplacement": "UID du Pod de remplacement"
   },
   "topics": {
     "network": "Trafic Service : sélecteurs et ports",
@@ -57,52 +59,62 @@
     "selector": {
       "goal": "Rétablissez le trafic sans modifier l’application. Comparez Service, Pod et EndpointSlice.",
       "hint": "Comparez spec.selector et metadata.labels et expliquez l’absence d’endpoints prêts.",
-      "why": "Les labels appropriés fournissent les backends attendus ; un Service ne crée pas de Pods."
+      "why": "Les labels appropriés fournissent les backends attendus ; un Service ne crée pas de Pods.",
+      "supportWhy": "La disponibilité et un port correct ne prouvent pas la correspondance du sélecteur. Comparez sélecteur et labels du Pod."
     },
     "port": {
       "goal": "Rétablissez le trafic avec des backends déjà prêts. Vérifiez les ports du Service et de l’application.",
       "hint": "Une adresse prête ne suffit pas : comparez targetPort au port applicatif.",
-      "why": "targetPort est le port du backend. Un endpoint prêt ne prouve pas la connectivité de bout en bout."
+      "why": "targetPort est le port du backend. Un endpoint prêt ne prouve pas la connectivité de bout en bout.",
+      "supportWhy": "Des labels correspondants et une adresse prête ne prouvent pas la correspondance des ports. Comparez targetPort et le port d’écoute."
     },
     "readiness": {
       "goal": "Rendez l’application en cours disponible au trafic Service sans ajouter de redémarrages.",
       "hint": "Comparez le chemin HTTP readiness aux logs. Liveness et readiness ont des rôles différents.",
-      "why": "Readiness règle l’éligibilité normale au Service ; son échec seul ne redémarre pas le conteneur."
+      "why": "Readiness règle l’éligibilité normale au Service ; son échec seul ne redémarre pas le conteneur.",
+      "supportWhy": "Running et une liveness fonctionnelle ne prouvent pas readiness. Comparez son chemin et les réponses HTTP."
     },
     "startup": {
       "goal": "Laissez finir l’initialisation lente documentée en gardant la protection liveness.",
       "hint": "Comparez durée d’initialisation et fenêtre de sonde. Startup retarde liveness et readiness jusqu’à sa réussite.",
-      "why": "Le budget startup de cet exercice couvre le démarrage observé. Ce n’est pas une configuration universelle."
+      "why": "Le budget startup de cet exercice couvre le démarrage observé. Ce n’est pas une configuration universelle.",
+      "supportWhy": "Le nom d’image et Running n’expliquent pas les redémarrages à l’initialisation. Comparez délai liveness et démarrage documenté."
     },
     "image": {
       "goal": "Démarrez l’application avec une image du catalogue fourni.",
       "hint": "Lisez l’erreur de téléchargement et le tag approuvé. N’inventez pas de logs pour un conteneur jamais démarré.",
-      "why": "Un manifest absent se corrige par la référence vérifiée, pas par des téléchargements répétés du même tag absent."
+      "why": "Un manifest absent se corrige par la référence vérifiée, pas par des téléchargements répétés du même tag absent.",
+      "supportWhy": "Pending et zéro redémarrage ne prouvent pas un tag absent. Comparez image demandée, référence approuvée et événement de téléchargement."
     },
     "command": {
       "goal": "Trouvez pourquoi une image téléchargée quitte et corrigez les arguments de lancement.",
       "hint": "Comparez les logs du conteneur précédent aux arguments. CrashLoopBackOff est un symptôme, pas une cause.",
-      "why": "Une option incorrecte a provoqué la sortie. Des arguments inchangés reproduiraient l’erreur."
+      "why": "Une option incorrecte a provoqué la sortie. Des arguments inchangés reproduiraient l’erreur.",
+      "supportWhy": "Un téléchargement réussi et le compteur ne prouvent pas une erreur d’arguments. Comparez args et le log du conteneur précédent."
     },
     "environment": {
       "goal": "Utilisez la valeur actuelle du ConfigMap dans l’environnement. Comparez référence et état du conteneur actif.",
-      "hint": "Le processus actif conserve son environnement. La modification vérifiée du modèle crée ici un nouveau conteneur.",
-      "why": "Les variables ConfigMap exigent de nouveaux conteneurs. Les mises à jour des fichiers montés et le rechargement applicatif sont différents."
+      "hint": "lesson-revision est un nom d’annotation arbitraire, pas une commande de redémarrage Kubernetes. Le modifier sous spec.template change le modèle de Pod du Deployment et déclenche un rollout. Modifier uniquement metadata du Deployment hors du modèle ne le fait pas. Les nouveaux Pods reçoivent de nouveaux UID ; les conteneurs lisent l’environnement du ConfigMap à leur création. Un processus en cours conserve son ancien environnement. Vérifiez le modèle, le nouvel UID et MODE après correction. Les fichiers montés et le rechargement applicatif sont d’autres mécanismes.",
+      "why": "lesson-revision est un nom d’annotation arbitraire, pas une commande de redémarrage Kubernetes. Le modifier sous spec.template change le modèle de Pod du Deployment et déclenche un rollout. Modifier uniquement metadata du Deployment hors du modèle ne le fait pas. Les nouveaux Pods reçoivent de nouveaux UID ; les conteneurs lisent l’environnement du ConfigMap à leur création. Un processus en cours conserve son ancien environnement. Vérifiez le modèle, le nouvel UID et MODE après correction. Les fichiers montés et le rechargement applicatif sont d’autres mécanismes.",
+      "supportWhy": "Running et l’UID ne prouvent pas un environnement périmé. Comparez ConfigMap, MODE capturé et date de mise à jour."
     },
     "secret": {
       "goal": "Corrigez la référence obligatoire au Secret sans lire ni inventer sa valeur.",
       "hint": "Comparez secretKeyRef.key, les noms des clés et l’événement de démarrage. Une référence optionnelle ne fournit pas la valeur requise.",
-      "why": "La référence corrigée utilise une clé existante. Son nom ne révèle ni la valeur ni une autorisation d’accès."
+      "why": "La référence corrigée utilise une clé existante. Son nom ne révèle ni la valeur ni une autorisation d’accès.",
+      "supportWhy": "Opaque et l’UID n’identifient pas la clé absente. Comparez secretKeyRef.key, les clés disponibles et l’événement."
     },
     "requests": {
       "goal": "Placez la charge avec la demande CPU validée fournie, sans dépasser le budget de requests.",
       "hint": "Comparez allocatable moins les requests allouées à la demande. L’utilisation CPU actuelle n’est pas ce budget.",
-      "why": "La demande validée tient dans le budget restant. Augmenter seulement la limite CPU ne rend pas une demande excessive plaçable."
+      "why": "La demande validée tient dans le budget restant. Augmenter seulement la limite CPU ne rend pas une demande excessive plaçable.",
+      "supportWhy": "L’usage et les limites CPU ne prouvent pas la possibilité de placement. Comparez request, budget restant et request validée."
     },
     "memory": {
       "goal": "Corrigez le OOMKilled enregistré dans le budget mémoire approuvé.",
       "hint": "Comparez motif de fin, limite, besoin mémoire validé et budget restant du Node.",
-      "why": "Cette limite couvre le besoin documenté. Le seul code de sortie ne prouve pas OOMKilled ; les besoins dépendent de l’application."
+      "why": "Cette limite couvre le besoin documenté. Le seul code de sortie ne prouve pas OOMKilled ; les besoins dépendent de l’application.",
+      "supportWhy": "Un Node sain et Running n’expliquent pas l’arrêt précédent. Comparez OOMKilled, limite mémoire et besoin documenté."
     }
   },
   "observations": {
@@ -122,5 +134,44 @@
     "approvedMemory": "Budget mémoire approuvé de l’application",
     "remainingMemory": "Budget de requests mémoire restant",
     "startedPath": "Chemin de fin du démarrage applicatif"
+  },
+  "checks": {
+    "network": "Les requêtes vers l’application échouent. Identifiez la cause à partir des observations et rétablissez le trafic.",
+    "probes": "L’application n’est pas disponible de façon stable. Analysez les observations et rétablissez sa disponibilité.",
+    "runtime": "La charge n’atteint pas un fonctionnement stable. Analysez les observations et corrigez la cause.",
+    "config": "L’application ne fonctionne pas avec la configuration requise. Trouvez et corrigez la cause.",
+    "resources": "La charge ne fonctionne pas de façon fiable. Justifiez une correction avec les observations et les exigences de l’application."
+  },
+  "guides": {
+    "probes": {
+      "title": "Différences entre les trois sondes",
+      "readiness": "Readiness vérifie si le conteneur peut accepter du trafic. Un échec exclut le Pod du trafic normal du Service sans redémarrer le conteneur.",
+      "liveness": "Liveness détecte un conteneur défaillant. Des échecs répétés peuvent le redémarrer ; un processus en cours ne prouve pas qu’il est prêt.",
+      "startup": "Startup protège une initialisation lente : liveness et readiness attendent son succès. Avec periodSeconds=5 et failureThreshold=12, le délai est d’environ 60 secondes. Comparez-le au démarrage documenté ; ces valeurs ne sont pas universelles."
+    },
+    "rollout": {
+      "title": "Pourquoi une annotation du modèle remplace les Pods",
+      "change": "lesson-revision est un nom d’annotation arbitraire, pas une commande de redémarrage Kubernetes. Le modifier sous spec.template change le modèle de Pod du Deployment et déclenche un rollout. Modifier uniquement metadata du Deployment hors du modèle ne le fait pas.",
+      "environment": "Les nouveaux Pods reçoivent de nouveaux UID ; les conteneurs lisent l’environnement du ConfigMap à leur création. Un processus en cours conserve son ancien environnement. Vérifiez le modèle, le nouvel UID et MODE après correction. Les fichiers montés et le rechargement applicatif sont d’autres mécanismes."
+    }
+  },
+  "repairFeedback": {
+    "replicas": "Davantage de réplicas recopient la même configuration sans corriger le champ erroné.",
+    "sameSelector": "Le sélecteur correspond déjà. Le réappliquer laisse targetPort erroné.",
+    "samePort": "targetPort correspond déjà. Le réappliquer ne corrige pas le sélecteur.",
+    "liveness": "/wrong renvoie 404. Cette liveness ne corrige pas readiness et peut redémarrer un conteneur sain.",
+    "readiness": "Readiness ne suspend pas liveness. Le conteneur peut redémarrer avant la fin de l’initialisation.",
+    "threshold": "failureThreshold=1 réduit le délai liveness et favorise un redémarrage précoce.",
+    "pullPolicy": "Always télécharge la même référence. Cela ne crée pas un tag absent et ne corrige pas les arguments.",
+    "credentials": "L’événement indique manifest unknown, pas un accès refusé. Les identifiants ne créent pas le tag absent.",
+    "sameConfig": "Le ConfigMap contient déjà cette valeur. La réécrire ne modifie pas l’environnement du processus.",
+    "containerPort": "containerPort ne recharge pas l’environnement et ne crée pas de nouveau processus.",
+    "optional": "Une référence facultative laisse la valeur requise absente sans corriger le nom de clé.",
+    "cpuLimit": "Une limite CPU ne réduit pas la request du planificateur. La request excessive ne tient toujours pas.",
+    "increaseCPU": "Augmenter la request consomme plus de budget. Comparez-la à la request validée.",
+    "memoryCPU": "Une limite CPU n’augmente pas la limite mémoire à l’origine de OOMKilled.",
+    "reduceMemory": "Réduire la mémoire sous le besoin documenté aggrave le manque.",
+    "secretCredentials": "imagePullSecrets configure l’accès au registre, pas secretKeyRef.key de l’environnement applicatif.",
+    "pullArguments": "L’image est déjà téléchargée. La télécharger encore ne corrige pas l’argument invalide du log précédent."
   }
 }

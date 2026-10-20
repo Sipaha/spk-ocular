@@ -22,14 +22,16 @@
     "observe": "Prüfen Sie den resultierenden Pod oder die Endpunkte unter Eigenschaften.",
     "evidenceError": "Erforderliche Nachweise fehlen. Öffnen Sie zuerst die angegebenen Objektansichten.",
     "diagnosisError": "Die Erklärung passt nicht zu den Beobachtungen. Prüfen Sie die Nachweise erneut.",
-    "repairError": "Diese Änderung behebt die Ursache nicht. Vergleichen Sie Feld und Wert mit den Nachweisen.",
-    "complete": "Sie haben beide neuen Fälle ohne Hinweise diagnostiziert und behoben.",
+    "complete": "Beide selbstständigen Fälle sind abgeschlossen: Nachweise geprüft, Diagnose begründet, Korrektur angewendet und Ergebnis kontrolliert.",
     "noEvents": "Dieser Übungsstand enthält keine Ereignisse.",
     "noLogs": "Für diesen Stand sind keine Containerlogs verfügbar. Der Container wurde möglicherweise noch nicht gestartet.",
     "noSecrets": "Secret-Werte sind nie enthalten. Nur Referenznamen und Schlüsselnamen werden gezeigt.",
     "memory": "Der Fortschritt bleibt während dieser geöffneten Bibliothek erhalten. Schließen setzt die Lektionen zurück.",
     "more": "Hilfe zu verwandten Ressourcen lesen",
-    "observations": "Vorgegebene Beobachtungen · keine Kubernetes-API-Felder"
+    "observations": "Vorgegebene Beobachtungen · keine Kubernetes-API-Felder",
+    "support": "Welche Beobachtungen unterscheiden Ihre Diagnose von den Alternativen?",
+    "templateChange": "Änderung der Pod-Vorlage",
+    "podReplacement": "UID des Ersatz-Pods"
   },
   "topics": {
     "network": "Service-Verkehr: Selektoren und Ports",
@@ -57,52 +59,62 @@
     "selector": {
       "goal": "Stellen Sie den Verkehr ohne Anwendungsänderung wieder her. Vergleichen Sie Service, Pod und EndpointSlice.",
       "hint": "Vergleichen Sie spec.selector mit metadata.labels und erklären Sie die fehlenden bereiten Endpunkte.",
-      "why": "Passende Labels liefern die vorgesehenen Backends; ein Service erstellt keine Pods."
+      "why": "Passende Labels liefern die vorgesehenen Backends; ein Service erstellt keine Pods.",
+      "supportWhy": "Bereitschaft und ein korrekter Port beweisen keine Selektorübereinstimmung. Vergleichen Sie Service-Selektor und Pod-Labels."
     },
     "port": {
       "goal": "Stellen Sie den Verkehr trotz vorhandener bereiter Backends wieder her. Prüfen Sie Service-Ports und Listener.",
       "hint": "Eine bereite Adresse reicht nicht: Vergleichen Sie targetPort mit dem Anwendungsport.",
-      "why": "targetPort ist der Backend-Port. Ein bereiter Endpunkt beweist keine durchgängige Erreichbarkeit."
+      "why": "targetPort ist der Backend-Port. Ein bereiter Endpunkt beweist keine durchgängige Erreichbarkeit.",
+      "supportWhy": "Passende Labels und eine bereite Adresse beweisen keine passenden Ports. Vergleichen Sie targetPort und Listener."
     },
     "readiness": {
       "goal": "Machen Sie die laufende Anwendung ohne zusätzliche Neustarts für Service-Verkehr bereit.",
       "hint": "Vergleichen Sie den Readiness-HTTP-Pfad mit den Logs. Liveness und Readiness prüfen Verschiedenes.",
-      "why": "Readiness steuert die normale Service-Eignung; ihr Fehlschlag allein startet keinen Container neu."
+      "why": "Readiness steuert die normale Service-Eignung; ihr Fehlschlag allein startet keinen Container neu.",
+      "supportWhy": "Running und funktionierende Liveness beweisen keine Readiness. Vergleichen Sie Readiness-Pfad und HTTP-Ergebnisse."
     },
     "startup": {
       "goal": "Ermöglichen Sie die dokumentierte langsame Initialisierung bei erhaltener Liveness-Prüfung.",
       "hint": "Vergleichen Sie Initialisierungszeit und Prüffenster. Startup verzögert Liveness und Readiness bis zum Erfolg.",
-      "why": "Das Übungsbudget deckt den beobachteten Kaltstart. Es ist keine allgemeine Probe-Empfehlung."
+      "why": "Das Übungsbudget deckt den beobachteten Kaltstart. Es ist keine allgemeine Probe-Empfehlung.",
+      "supportWhy": "Image-Name und Running erklären keine Neustarts bei der Initialisierung. Vergleichen Sie Liveness-Zeitfenster und Startzeit."
     },
     "image": {
       "goal": "Starten Sie die Anwendung mit einem Image aus dem vorgegebenen Katalog.",
       "hint": "Lesen Sie Abruffehler und freigegebenen Tag. Erfinden Sie keine Logs für nie gestartete Container.",
-      "why": "Ein fehlendes Manifest erfordert die geprüfte Image-Referenz, nicht wiederholtes Abrufen desselben fehlenden Tags."
+      "why": "Ein fehlendes Manifest erfordert die geprüfte Image-Referenz, nicht wiederholtes Abrufen desselben fehlenden Tags.",
+      "supportWhy": "Pending und null Neustarts beweisen keinen fehlenden Tag. Vergleichen Sie angefordertes Image, freigegebene Referenz und Pull-Ereignis."
     },
     "command": {
       "goal": "Ermitteln Sie den Fehler nach erfolgreichem Image-Abruf und korrigieren Sie die Startargumente.",
       "hint": "Vergleichen Sie die Logs des vorherigen Containers mit den Argumenten. CrashLoopBackOff ist ein Symptom.",
-      "why": "Eine ungültige Option verursachte das Beenden. Unveränderte Argumente würden denselben Fehler wiederholen."
+      "why": "Eine ungültige Option verursachte das Beenden. Unveränderte Argumente würden denselben Fehler wiederholen.",
+      "supportWhy": "Erfolgreicher Pull und Neustartzähler beweisen keinen Argumentfehler. Vergleichen Sie args und das Log des vorherigen Containers."
     },
     "environment": {
       "goal": "Übernehmen Sie den aktuellen ConfigMap-Wert in die Anwendungsumgebung. Vergleichen Sie Referenz und laufenden Stand.",
-      "hint": "Ein laufender Prozess behält seine Umgebung. Die geprüfte Vorlagenänderung erstellt hier einen neuen Container.",
-      "why": "ConfigMap-Umgebungswerte brauchen neue Container. Aktualisierte Volume-Dateien und Anwendungsneuladen funktionieren anders."
+      "hint": "lesson-revision ist ein frei gewählter Annotationsname, kein Kubernetes-Neustartbefehl. Eine Änderung unter spec.template ändert die Pod-Vorlage des Deployment und löst einen Rollout aus. Eine Änderung nur an Deployment-Metadaten außerhalb der Vorlage tut dies nicht. Neue Pods erhalten neue UIDs; Container lesen ConfigMap-Umgebungswerte bei der Erstellung. Ein laufender Prozess behält seine alte Umgebung. Prüfen Sie danach Vorlage, neue Pod-UID und MODE. Volume-Dateien und das Neuladen durch die Anwendung sind andere Mechanismen.",
+      "why": "lesson-revision ist ein frei gewählter Annotationsname, kein Kubernetes-Neustartbefehl. Eine Änderung unter spec.template ändert die Pod-Vorlage des Deployment und löst einen Rollout aus. Eine Änderung nur an Deployment-Metadaten außerhalb der Vorlage tut dies nicht. Neue Pods erhalten neue UIDs; Container lesen ConfigMap-Umgebungswerte bei der Erstellung. Ein laufender Prozess behält seine alte Umgebung. Prüfen Sie danach Vorlage, neue Pod-UID und MODE. Volume-Dateien und das Neuladen durch die Anwendung sind andere Mechanismen.",
+      "supportWhy": "Running und Pod-UID beweisen keine veraltete Umgebung. Vergleichen Sie ConfigMap, erfasstes MODE und Aktualisierungszeitpunkt."
     },
     "secret": {
       "goal": "Korrigieren Sie die Pflichtreferenz auf ein Secret, ohne einen Wert zu lesen oder zu erfinden.",
       "hint": "Vergleichen Sie secretKeyRef.key, Schlüsselnamen und Startereignis. Eine optionale Referenz liefert keinen Pflichtwert.",
-      "why": "Die korrigierte Referenz nutzt einen vorhandenen Schlüssel. Sein Name zeigt weder Secret-Wert noch Zugriffsberechtigung."
+      "why": "Die korrigierte Referenz nutzt einen vorhandenen Schlüssel. Sein Name zeigt weder Secret-Wert noch Zugriffsberechtigung.",
+      "supportWhy": "Opaque und Pod-UID zeigen keinen fehlenden Schlüssel. Vergleichen Sie secretKeyRef.key, verfügbare Schlüssel und Ereignis."
     },
     "requests": {
       "goal": "Planen Sie die Anwendung mit der vorgegebenen validierten CPU-Anforderung innerhalb des Request-Budgets.",
       "hint": "Vergleichen Sie allocatable abzüglich belegter Requests mit der Anforderung. Momentane CPU-Nutzung ist nicht dieses Budget.",
-      "why": "Der validierte Request passt ins Restbudget. Ein höheres CPU-Limit allein macht zu große Requests nicht planbar."
+      "why": "Der validierte Request passt ins Restbudget. Ein höheres CPU-Limit allein macht zu große Requests nicht planbar.",
+      "supportWhy": "Auslastung und CPU-Limits beweisen keine Planbarkeit. Vergleichen Sie Request, Restbudget und validierten Anwendungsrequest."
     },
     "memory": {
       "goal": "Beheben Sie das protokollierte OOMKilled innerhalb des freigegebenen Speicherbudgets.",
       "hint": "Vergleichen Sie Beendigungsgrund, Limit, validierten Working Set und verbleibendes Node-Budget.",
-      "why": "Das angepasste Limit deckt den bekannten Working Set. Der Exitcode allein beweist kein OOMKilled; Speicherbedarf ist anwendungsspezifisch."
+      "why": "Das angepasste Limit deckt den bekannten Working Set. Der Exitcode allein beweist kein OOMKilled; Speicherbedarf ist anwendungsspezifisch.",
+      "supportWhy": "Ein gesunder Node und Running erklären keine frühere Beendigung. Vergleichen Sie OOMKilled, Speicherlimit und dokumentierten Bedarf."
     }
   },
   "observations": {
@@ -122,5 +134,44 @@
     "approvedMemory": "Freigegebenes Speicherbudget der Anwendung",
     "remainingMemory": "Verbleibendes Speicher-Request-Budget",
     "startedPath": "Pfad für den abgeschlossenen Anwendungsstart"
+  },
+  "checks": {
+    "network": "Anfragen an die Anwendung schlagen fehl. Ermitteln Sie die Ursache anhand der Beobachtungen und stellen Sie den Verkehr wieder her.",
+    "probes": "Die Anwendung ist nicht zuverlässig verfügbar. Ermitteln Sie die Ursache anhand der Beobachtungen und stellen Sie die Verfügbarkeit wieder her.",
+    "runtime": "Die Workload erreicht keinen stabilen Betrieb. Untersuchen und beheben Sie die Ursache anhand der Beobachtungen.",
+    "config": "Die Anwendung läuft nicht mit der erforderlichen Konfiguration. Finden und beheben Sie die Ursache.",
+    "resources": "Die Workload läuft nicht zuverlässig. Begründen Sie eine Korrektur mit den Beobachtungen und Anwendungsanforderungen."
+  },
+  "guides": {
+    "probes": {
+      "title": "Unterschiede der drei Probes",
+      "readiness": "Readiness prüft, ob der Container Verkehr annehmen kann. Ein Fehler schließt den Pod vom normalen Service-Verkehr aus, startet aber den Container nicht neu.",
+      "liveness": "Liveness erkennt einen fehlerhaften Container. Wiederholte Fehler können ihn neu starten; ein laufender Prozess beweist keine Bereitschaft.",
+      "startup": "Startup schützt eine langsame Initialisierung: Liveness und Readiness warten auf ihren Erfolg. periodSeconds=5 und failureThreshold=12 ergeben ungefähr 60 Sekunden. Vergleichen Sie dies mit der dokumentierten Startzeit; die Werte sind nicht allgemein gültig."
+    },
+    "rollout": {
+      "title": "Warum eine Vorlagenannotation Pods ersetzt",
+      "change": "lesson-revision ist ein frei gewählter Annotationsname, kein Kubernetes-Neustartbefehl. Eine Änderung unter spec.template ändert die Pod-Vorlage des Deployment und löst einen Rollout aus. Eine Änderung nur an Deployment-Metadaten außerhalb der Vorlage tut dies nicht.",
+      "environment": "Neue Pods erhalten neue UIDs; Container lesen ConfigMap-Umgebungswerte bei der Erstellung. Ein laufender Prozess behält seine alte Umgebung. Prüfen Sie danach Vorlage, neue Pod-UID und MODE. Volume-Dateien und das Neuladen durch die Anwendung sind andere Mechanismen."
+    }
+  },
+  "repairFeedback": {
+    "replicas": "Weitere Replikate übernehmen dieselbe Konfiguration. Sie korrigieren das fehlerhafte Feld nicht.",
+    "sameSelector": "Der Selektor passt bereits. Erneutes Setzen lässt den falschen targetPort unverändert.",
+    "samePort": "targetPort passt bereits zum Listener. Erneutes Setzen korrigiert den Selektor nicht.",
+    "liveness": "/wrong liefert404. Diese Liveness korrigiert Readiness nicht und kann einen gesunden Container neu starten.",
+    "readiness": "Readiness hält Liveness nicht an. Der Container kann vor Ende der Initialisierung neu starten.",
+    "threshold": "failureThreshold=1 verkürzt das Liveness-Zeitfenster und begünstigt frühe Neustarts.",
+    "pullPolicy": "Always lädt dieselbe Referenz erneut. Es erzeugt weder einen fehlenden Tag noch korrigiert es Argumente.",
+    "credentials": "Das Pull-Ereignis meldet manifest unknown, keinen Zugriffsfehler. Registry-Zugangsdaten erzeugen keinen fehlenden Tag.",
+    "sameConfig": "Die ConfigMap enthält den Wert bereits. Erneutes Schreiben ändert die Prozessumgebung nicht.",
+    "containerPort": "containerPort lädt keine Umgebung neu und erstellt keinen neuen Anwendungsprozess.",
+    "optional": "Eine optionale Referenz lässt den nötigen Wert fehlen; sie korrigiert den Schlüsselnamen nicht.",
+    "cpuLimit": "Ein CPU-Limit reduziert keinen Scheduler-Request. Der zu große Request passt weiterhin nicht.",
+    "increaseCPU": "Ein größerer Request verbraucht mehr Restbudget. Vergleichen Sie den validierten Anwendungsrequest.",
+    "memoryCPU": "Ein CPU-Limit erhöht nicht das Speicherlimit hinter dem aufgezeichneten OOMKilled.",
+    "reduceMemory": "Ein Speicherlimit unterhalb des dokumentierten Bedarfs verschärft den Mangel.",
+    "secretCredentials": "imagePullSecrets konfiguriert Registry-Anmeldung, nicht secretKeyRef.key für die Anwendungsumgebung.",
+    "pullArguments": "Das Image wurde bereits geladen. Erneutes Laden korrigiert das ungültige Argument aus dem vorherigen Containerlog nicht."
   }
 }

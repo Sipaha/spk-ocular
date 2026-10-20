@@ -66,7 +66,9 @@ remains open; resetting the introduction clears that completion.
 
 Choose **Learning path** in the library. Its overview contains the introduction
 and five further modules. Each module has two guided tasks, followed by two
-independent checks with new identities and changed scenario values. Modules can
+independent checks with new identities and changed scenario values. Checks use
+neutral symptoms shared by both causes and a different case order from practice;
+reset alternates the check order. Modules can
 be opened in any order; their current evidence, answers and progress survive
 module/reference/language switching in this open library. Closing the library
 clears them. There is no persisted certificate or learner account.
@@ -83,10 +85,22 @@ Use the ordinary resource table and Properties, YAML, Events and Logs tabs to
 inspect the listed local evidence. Choose both an explanation and a reviewed,
 bounded field change. A correct answer alone cannot pass: applying a repair
 requires the specified evidence views, correct diagnosis and appropriate change.
+In checks, also select the observations that distinguish that diagnosis from the
+alternatives; true but incidental facts do not pass. CPU scheduling evidence
+includes Pod Properties with the supplied validated application request. Wrong
+repairs explain why the chosen field/value cannot resolve the observed cause.
 Then inspect the resulting Pod or endpoint properties before advancing. The
 module is complete only after both independent checks pass. Hints and in-task
 resource-help controls are absent in checks. Reading the general reference is
 still available; completion is not proof of unaided learning in a study.
+
+Guided probe tasks include an offline comparison of readiness, liveness and
+startup, both before answering and in linked resource help. The configuration
+lesson explains that `lesson-revision` is an arbitrary annotation: changing it
+inside the Deployment Pod template triggers a rollout, whereas changing only
+top-level metadata does not. The result shows the template change and old/new
+Pod UIDs; the new container captures the current ConfigMap environment. Mounted
+files and application reloads remain separate mechanisms.
 
 YAML remains readable as plain read-only text if the optional editor/highlighting
 asset is unavailable; losing that asset cannot discard the lesson or its data.
@@ -114,5 +128,6 @@ The scenarios follow official Kubernetes documentation for
 [probes](https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/),
 [container lifecycle](https://kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle/),
 [ConfigMaps](https://kubernetes.io/docs/concepts/configuration/configmap/),
+[Deployment rollouts](https://kubernetes.io/docs/concepts/workloads/controllers/deployment/#updating-a-deployment),
 [Secrets](https://kubernetes.io/docs/concepts/configuration/secret/) and
 [resource management](https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/).

@@ -7,8 +7,8 @@ export const cases={network:['selector','port'],probes:['readiness','startup'],r
 export type CaseId=typeof cases[Topic][number]
 export type View='properties'|'yaml'|'events'|'logs'
 export type Diagnosis='selector'|'port'|'readiness'|'startup'|'image'|'command'|'environment'|'secret'|'requests'|'memory'|'credentials'|'usage'|'replicas'
-export interface ExerciseState {generation:number;step:number;selected:string|null;view:View;seen:string[];diagnosis:string;repair:string;fixed:boolean;hint:boolean;result:'evidence'|'diagnosis'|'repair'|'observe'|null;complete:boolean}
-export const initialExercise:ExerciseState={generation:0,step:0,selected:null,view:'properties',seen:[],diagnosis:'',repair:'',fixed:false,hint:false,result:null,complete:false}
+export interface ExerciseState {generation:number;step:number;selected:string|null;view:View;seen:string[];diagnosis:string;repair:string;support:string;fixed:boolean;hint:boolean;result:'evidence'|'diagnosis'|'repair'|'support'|'observe'|null;complete:boolean}
+export const initialExercise:ExerciseState={generation:0,step:0,selected:null,view:'properties',seen:[],diagnosis:'',repair:'',support:'',fixed:false,hint:false,result:null,complete:false}
 const observationKeys={
  'app.listenPort':'listener','endpoints.ready':'readyAddresses','simulation.request':'request','app.readinessPath':'readyPath','app.coldStartSeconds':'coldStart','app.startedPath':'startedPath',
  'container.startedBeforeConfigUpdate':'oldEnvironment','container.env.MODE':'environment','keys':'secretKeys','validated.app.cpuRequest':'validatedCPU',
@@ -17,15 +17,18 @@ const observationKeys={
 export type ObservationKey=typeof observationKeys[keyof typeof observationKeys]
 const fieldPaths:Record<string,string>={restartCount:'status.containerStatuses[0].restartCount','state.waiting.reason':'status.containerStatuses[0].state.waiting.reason','lastState.terminated.exitCode':'status.containerStatuses[0].lastState.terminated.exitCode','lastState.terminated.reason':'status.containerStatuses[0].lastState.terminated.reason','allocatable.cpu':'status.allocatable.cpu','conditions.ready':'endpoints[0].conditions.ready','status.conditions.Ready':'status.conditions[type=Ready].status','status.conditions.PodScheduled':'status.conditions[type=PodScheduled].status','conditions.MemoryPressure':'status.conditions[type=MemoryPressure].status'}
 export interface EvidenceObject {id:string;uid:string;name:string;kind:ConceptId;properties:[string,string][];observations:[ObservationKey,string][];yaml:string;events:string;logs:string|null}
-export interface Repair {id:string;patch:string}
-export interface Exercise {token:string;caseId:CaseId;check:boolean;name:string;objects:EvidenceObject[];resultEvidence:string;required:string[];diagnoses:Diagnosis[];repairs:Repair[];correctRepair:string}
-export type ExerciseAction={type:'reset'}|{type:'next';token:string}|{type:'select';token:string;id:string}|{type:'view';token:string;view:View}|{type:'diagnosis';token:string;value:string}|{type:'repair';token:string;value:string}|{type:'hint';token:string}|{type:'apply';token:string}
+export type RepairFeedback='replicas'|'sameSelector'|'samePort'|'liveness'|'readiness'|'threshold'|'pullPolicy'|'credentials'|'secretCredentials'|'pullArguments'|'sameConfig'|'containerPort'|'optional'|'cpuLimit'|'increaseCPU'|'memoryCPU'|'reduceMemory'
+export interface Repair {id:string;patch:string;feedback?:RepairFeedback}
+export interface Fact {source?:'logs'|'events';field?:string;observation?:ObservationKey;value:string}
+export interface Support {id:string;facts:Fact[]}
+export interface Exercise {token:string;caseId:CaseId;check:boolean;name:string;objects:EvidenceObject[];resultEvidence:string;required:string[];diagnoses:Diagnosis[];repairs:Repair[];correctRepair:string;supports:Support[];rollout?:{field:string;before:string;after:string;previousUID:string;nextUID:string}}
+export type ExerciseAction={type:'reset'}|{type:'next';token:string}|{type:'select';token:string;id:string}|{type:'view';token:string;view:View}|{type:'diagnosis';token:string;value:string}|{type:'repair';token:string;value:string}|{type:'support';token:string;value:string}|{type:'hint';token:string}|{type:'apply';token:string}
 const api=(kind:ConceptId)=>kind==='services'||kind==='pods'||kind==='configmaps'||kind==='secrets'||kind==='nodes'?'v1':kind==='discovery.k8s.io/endpointslices'?'discovery.k8s.io/v1':'apps/v1'
 const names:Partial<Record<ConceptId,string>>={services:'Service',pods:'Pod',configmaps:'ConfigMap',secrets:'Secret',nodes:'Node','apps/deployments':'Deployment','apps/replicasets':'ReplicaSet','discovery.k8s.io/endpointslices':'EndpointSlice'}
 function rotate<T>(items:readonly T[],shift:number):T[]{return [...items.slice(shift%items.length),...items.slice(0,shift%items.length)]}
 /** Bounded authored observations, not Kubernetes execution or network emulation. */
 export function exercise(topic:Topic,state:ExerciseState):Exercise {
- const caseId=cases[topic][state.step%2],check=state.step>=2,token=`${topic}:${state.generation}:${state.step}`
+ const check=state.step>=2,caseId=cases[topic][(state.step+(check?(state.generation%2===0?1:0):0))%2],token=`${topic}:${state.generation}:${state.step}`
  const root=check?'orders':'web',name=`${root}-${state.generation+1}`
  const objects:EvidenceObject[]=[],required:string[]=[]
  const object=(id:string,kind:ConceptId,title:string,body:string,properties:[string,string][],events='',logs:string|null=null)=>{
@@ -34,7 +37,7 @@ export function exercise(topic:Topic,state:ExerciseState):Exercise {
   const fields=properties.filter(([key])=>!Object.hasOwn(observationKeys,key)).map(([key,value])=>[fieldPaths[key]??key,value] as [string,string])
   const obj={id,uid,name:title,kind,properties:fields,observations,yaml:`apiVersion: ${api(kind)}\nkind: ${names[kind]}\nmetadata:\n  name: ${title}\n${kind==='nodes'?'':'  namespace: lesson\n'}  uid: ${uid}\n${body}`,events,logs};objects.push(obj);return obj
  }
- const repair=(id:string,patch:string):Repair=>({id,patch})
+ const repair=(id:string,patch:string,feedback?:RepairFeedback):Repair=>({id,patch,feedback})
  const fixed=state.fixed,app=name,port=check?9090:8080
  const readyPath=check?'/health/ready':'/ready',coldStart=check?55:40,imageTag=check?'release-7':'v2',argument=check?'--http':'--serve',badArgument=check?'--httpp':'--servve'
  const mode=check?'live':'production',oldMode=check?'canary':'staging',secretKey=check?'API_TOKEN':'PASSWORD',envKey=check?'LOGIN_TOKEN':'DB_PASSWORD'
@@ -54,54 +57,78 @@ export function exercise(topic:Topic,state:ExerciseState):Exercise {
    objects[1].yaml=objects[1].yaml.replace('spec:\n',`  labels: {app: ${app}}\nspec:\n`)
    object('endpoints','discovery.k8s.io/endpointslices',`${name}-slice`,`addressType: IPv4\nports: [{port: ${target}}]\nendpoints: ${selector===app?'[{addresses: ["192.0.2.10"], conditions: {ready: true}}]':'[]'}\n`,[['endpoints.ready',selector===app?'192.0.2.10':'[]'],['ports[0].port',String(target)],['simulation.request',fixed?'HTTP 200':'connection failed']])
    required.push('service:yaml','pod:yaml','endpoints:properties');diagnoses=['selector','port','replicas']
-   repairs=[repair('selector',`Service.spec.selector.app = ${app}`),repair('port',`Service.spec.ports[0].targetPort = ${port}`),repair('replicas','Deployment.spec.replicas = 3')];correctRepair=caseId
+   repairs=[repair('selector',`Service.spec.selector.app = ${app}`,caseId==='port'?'sameSelector':undefined),repair('port',`Service.spec.ports[0].targetPort = ${port}`,caseId==='selector'?'samePort':undefined),repair('replicas','Deployment.spec.replicas = 3','replicas')];correctRepair=caseId
    break
   }
   case 'readiness':{
    const path=fixed?readyPath:'/wrong'
    workload(`        image: example.invalid/app:v1\n        readinessProbe:\n          httpGet: {path: ${path}, port: ${port}}\n        livenessProbe:\n          httpGet: {path: /live, port: ${port}}\n`,[['status.phase','Running'],['status.conditions.Ready',fixed?'True':'False'],['restartCount','0'],['app.readinessPath',readyPath]],fixed?'Normal Ready':'Warning Unhealthy: readiness HTTP 404',`[simulation] ${readyPath} -> 200; /wrong -> 404; /live -> 200`)
    object('endpoints','discovery.k8s.io/endpointslices',`${name}-slice`,`addressType: IPv4\nports: [{port: ${port}}]\nendpoints:\n- addresses: ["192.0.2.10"]\n  conditions: {ready: ${fixed}}\n`,[['conditions.ready',String(fixed)]])
-   required.push('deployment:yaml','pod:events','pod:logs');diagnoses=['readiness','startup','replicas'];repairs=[repair('readiness',`${containerField}.readinessProbe.httpGet.path = ${readyPath}`),repair('liveness',`${containerField}.livenessProbe.httpGet.path = /wrong`),repair('replicas','Deployment.spec.replicas = 3')];correctRepair='readiness';break
+   required.push('deployment:yaml','pod:events','pod:logs');diagnoses=['readiness','startup','replicas'];repairs=[repair('readiness',`${containerField}.readinessProbe.httpGet.path = ${readyPath}`),repair('liveness',`${containerField}.livenessProbe.httpGet.path = /wrong`,'liveness'),repair('replicas','Deployment.spec.replicas = 3','replicas')];correctRepair='readiness';break
   }
   case 'startup':{
    workload(`        image: example.invalid/app:v1\n${fixed?'        startupProbe:\n          httpGet: {path: /started, port: '+port+'}\n          periodSeconds: 5\n          failureThreshold: 12\n':''}        livenessProbe:\n          httpGet: {path: /live, port: ${port}}\n          periodSeconds: 5\n          failureThreshold: 3\n`,[['status.phase','Running'],['restartCount',fixed?'0':'4'],['app.coldStartSeconds',String(coldStart)],['app.startedPath','/started']],fixed?`Normal Started: startup succeeded after ${coldStart}s`:'Warning Unhealthy: liveness failed during initialization; Killing',`[simulation] initialization requires ${coldStart}s; /started becomes 200 when initialized; /live unavailable before initialization`)
-   required.push('deployment:yaml','pod:events','pod:logs');diagnoses=['startup','readiness','image'];repairs=[repair('startup',`${containerField}.startupProbe = {httpGet: {path: /started, port: ${port}}, periodSeconds: 5, failureThreshold: 12}`),repair('readiness',`${containerField}.readinessProbe.httpGet.path = /started`),repair('threshold',`${containerField}.livenessProbe.failureThreshold = 1`)];correctRepair='startup';break
+   required.push('deployment:yaml','pod:events','pod:logs');diagnoses=['startup','readiness','image'];repairs=[repair('startup',`${containerField}.startupProbe = {httpGet: {path: /started, port: ${port}}, periodSeconds: 5, failureThreshold: 12}`),repair('readiness',`${containerField}.readinessProbe.httpGet.path = /started`,'readiness'),repair('threshold',`${containerField}.livenessProbe.failureThreshold = 1`,'threshold')];correctRepair='startup';break
   }
   case 'image':{
    const image=`example.invalid/${app}:${fixed?imageTag:'missing'}`
    workload(`        image: ${image}\n`,[['status.phase',fixed?'Running':'Pending'],['state.waiting.reason',fixed?'—':'ImagePullBackOff'],['restartCount','0']],fixed?'Normal Pulled; Started':'Warning Failed: manifest unknown; BackOff pulling image',fixed?'[simulation] app ready':null)
    object('catalog','configmaps','approved-images',`data:\n  image: example.invalid/${app}:${imageTag}\n`,[['data.image',`example.invalid/${app}:${imageTag}`]])
-   required.push('deployment:yaml','pod:events','catalog:properties');diagnoses=['image','command','credentials'];repairs=[repair('image',`${containerField}.image = example.invalid/${app}:${imageTag}`),repair('always',`${containerField}.imagePullPolicy = Always`),repair('credential','Deployment.spec.template.spec.imagePullSecrets = [{name: registry-token}]')];correctRepair='image';break
+   required.push('deployment:yaml','pod:events','catalog:properties');diagnoses=['image','command','credentials'];repairs=[repair('image',`${containerField}.image = example.invalid/${app}:${imageTag}`),repair('always',`${containerField}.imagePullPolicy = Always`,'pullPolicy'),repair('credential','Deployment.spec.template.spec.imagePullSecrets = [{name: registry-token}]','credentials')];correctRepair='image';break
   }
   case 'command':{
    workload(`        image: example.invalid/app:v2\n        args: ["${fixed?argument:badArgument}"]\n`,[['status.phase','Running'],['state.waiting.reason',fixed?'—':'CrashLoopBackOff'],['lastState.terminated.exitCode',fixed?'—':'2'],['restartCount',fixed?'0':'5']],fixed?'Normal Started':'Normal Pulled; Warning BackOff restarting failed container',fixed?'[simulation] app ready':`[previous container, simulation] unknown option ${badArgument}; supported option: ${argument}; exit 2`)
-   required.push('deployment:yaml','pod:events','pod:logs');diagnoses=['command','image','memory'];repairs=[repair('command',`${containerField}.args = ["${argument}"]`),repair('image',`${containerField}.imagePullPolicy = Always`),repair('restart','Deployment.spec.replicas = 3')];correctRepair='command';break
+   required.push('deployment:yaml','pod:events','pod:logs');diagnoses=['command','image','memory'];repairs=[repair('command',`${containerField}.args = ["${argument}"]`),repair('image',`${containerField}.imagePullPolicy = Always`,'pullArguments'),repair('restart','Deployment.spec.replicas = 3','replicas')];correctRepair='command';break
   }
   case 'environment':{
    workload(`        image: example.invalid/app:v2\n        env:\n        - name: MODE\n          valueFrom:\n            configMapKeyRef: {name: ${name}-config, key: mode}\n`,[['status.phase','Running'],['container.startedBeforeConfigUpdate',String(!fixed)],['container.env.MODE',fixed?mode:oldMode]],fixed?'Normal SuccessfulCreate: new container after reviewed rollout':'Normal Started: MODE captured before ConfigMap update',`[simulation] MODE=${fixed?mode:oldMode}`)
    object('config','configmaps',`${name}-config`,`data:\n  mode: ${mode}\n`,[['data.mode',mode]])
    if(fixed)objects[0].yaml=objects[0].yaml.replace('      labels:', '      annotations: {lesson-revision: "2"}\n      labels:')
-   required.push('deployment:yaml','config:yaml','pod:properties');diagnoses=['environment','secret','image'];repairs=[repair('rollout','Deployment.spec.template.metadata.annotations.lesson-revision = "2"'),repair('rewrite',`ConfigMap[${name}-config].data.mode = ${mode}`),repair('port',`${containerField}.ports = [{containerPort: 80}]`)];correctRepair='rollout';break
+   required.push('deployment:yaml','config:yaml','pod:properties');diagnoses=['environment','secret','image'];repairs=[repair('rollout','Deployment.spec.template.metadata.annotations.lesson-revision = "2"'),repair('rewrite',`ConfigMap[${name}-config].data.mode = ${mode}`,'sameConfig'),repair('port',`${containerField}.ports = [{containerPort: 80}]`,'containerPort')];correctRepair='rollout';break
   }
   case 'secret':{
    workload(`        image: example.invalid/app:v2\n        env:\n        - name: ${envKey}\n          valueFrom:\n            secretKeyRef: {name: ${name}-credentials, key: ${fixed?secretKey:envKey}}\n`,[['status.phase',fixed?'Running':'Pending'],['state.waiting.reason',fixed?'—':'CreateContainerConfigError']],fixed?'Normal Started':`Warning Failed: key ${envKey} not found in Secret`,fixed?'[simulation] configured; no Secret values recorded':null)
    object('secret','secrets',`${name}-credentials`,`type: Opaque\n# Key names: ${secretKey}. Values are not part of this lesson.\n`,[['type','Opaque'],['keys',secretKey]])
-   required.push('deployment:yaml','secret:properties','pod:events');diagnoses=['secret','credentials','environment'];repairs=[repair('secret',`${containerField}.env[${envKey}].valueFrom.secretKeyRef.key = ${secretKey}`),repair('optional',`${containerField}.env[${envKey}].valueFrom.secretKeyRef.optional = true`),repair('credential','Deployment.spec.template.spec.imagePullSecrets = [{name: registry-token}]')];correctRepair='secret';break
+   required.push('deployment:yaml','secret:properties','pod:events');diagnoses=['secret','credentials','environment'];repairs=[repair('secret',`${containerField}.env[${envKey}].valueFrom.secretKeyRef.key = ${secretKey}`),repair('optional',`${containerField}.env[${envKey}].valueFrom.secretKeyRef.optional = true`,'optional'),repair('credential','Deployment.spec.template.spec.imagePullSecrets = [{name: registry-token}]','secretCredentials')];correctRepair='secret';break
   }
   case 'requests':{
    workload(`        image: example.invalid/app:v2\n        resources:\n          requests: {cpu: ${fixed?cpuRequest:oversizedCpu}, memory: 128Mi}\n          limits: {cpu: "${check?4:2}", memory: 256Mi}\n`,[['status.phase',fixed?'Running':'Pending'],['status.conditions.PodScheduled',fixed?'True':'False'],['validated.app.cpuRequest',cpuRequest]],fixed?'Normal Scheduled':'Warning FailedScheduling: Insufficient cpu',fixed?'[simulation] app ready':null)
    object('node','nodes','lesson-node',`status:\n  allocatable: {cpu: "${check?4:2}", memory: 2Gi}\n`,[['allocatable.cpu',check?'4000m':'2000m'],['allocated.requests.cpu',check?'3250m':'1500m'],['remaining.requests.cpu',check?'750m':'500m'],['observed.usage.cpu','100m']])
-   required.push('deployment:yaml','pod:events','node:properties');diagnoses=['requests','usage','memory'];repairs=[repair('requests',`${containerField}.resources.requests.cpu = ${cpuRequest}`),repair('limit',`${containerField}.resources.limits.cpu = "4"`),repair('increase',`${containerField}.resources.requests.cpu = 3000m`)];correctRepair='requests';break
+   required.push('deployment:yaml','pod:events','pod:properties','node:properties');diagnoses=['requests','usage','memory'];repairs=[repair('requests',`${containerField}.resources.requests.cpu = ${cpuRequest}`),repair('limit',`${containerField}.resources.limits.cpu = "4"`,'cpuLimit'),repair('increase',`${containerField}.resources.requests.cpu = 3000m`,'increaseCPU')];correctRepair='requests';break
   }
   case 'memory':{
    workload(`        image: example.invalid/app:v2\n        resources:\n          requests: {cpu: 250m, memory: 64Mi}\n          limits: {cpu: "1", memory: ${fixed?memoryBudget:memoryLimit}}\n`,[['status.phase','Running'],['lastState.terminated.reason',fixed?'—':'OOMKilled'],['restartCount',fixed?'0':'3'],['validated.app.workingSet',workingSet],['approved.app.memoryBudget',memoryBudget]],fixed?'Normal Started':'Warning BackOff restarting container after OOMKilled',fixed?`[simulation] working set ${workingSet}; app ready`:`[previous container, simulation] working set ${workingSet} exceeds allowed ${memoryLimit}`)
    object('node','nodes','lesson-node','status:\n  allocatable: {memory: 2Gi}\n',[['remaining.requests.memory','512Mi'],['conditions.MemoryPressure','False']])
-   required.push('deployment:yaml','pod:properties','node:properties');diagnoses=['memory','requests','command'];repairs=[repair('memory',`${containerField}.resources.limits.memory = ${memoryBudget}`),repair('cpu',`${containerField}.resources.limits.cpu = "2"`),repair('reduce',`${containerField}.resources.limits.memory = 32Mi`)];correctRepair='memory';break
+   required.push('deployment:yaml','pod:properties','node:properties');diagnoses=['memory','requests','command'];repairs=[repair('memory',`${containerField}.resources.limits.memory = ${memoryBudget}`),repair('cpu',`${containerField}.resources.limits.cpu = "2"`,'memoryCPU'),repair('reduce',`${containerField}.resources.limits.memory = 32Mi`,'reduceMemory')];correctRepair='memory';break
   }
  }
+ // Evidence choices are observations, not alternative causes or another hint.
+ // A true but incidental observation must not justify the chosen diagnosis.
+ const field=(field:string,value:string):Fact=>({field,value})
+ const view=(source:'logs'|'events',value:string):Fact=>({source,value})
+ const observation=(observation:ObservationKey,value:string):Fact=>({observation,value})
+ const pod=objects.find(o=>o.id==='pod')!
+ const phase=field('Pod.status.phase',pod.properties.find(([key])=>key==='status.phase')?.[1]??'Running')
+ const identity=[field('Pod.metadata.name',pod.name),field('Pod.metadata.uid',pod.uid)]
+ const replica=field('Deployment.spec.replicas','1')
+ const facts:Record<CaseId,Fact[][]>={
+  selector:[[field('Service.spec.selector.app',fixed?app:'unrelated'),field('Pod.metadata.labels.app',app)],[field('Pod.status.conditions[type=Ready].status','True'),observation('listener',String(port))],[field('Service.spec.ports[0].port','80'),field('Service.spec.ports[0].targetPort',String(port))]],
+  port:[[field('Service.spec.ports[0].targetPort',String(fixed?port:port+1)),observation('listener',String(port))],[field('Service.spec.selector.app',app),field('Pod.metadata.labels.app',app)],[observation('readyAddresses','192.0.2.10'),field('Pod.status.conditions[type=Ready].status','True')]],
+  readiness:[[field('Deployment.spec.template.spec.containers[app].readinessProbe.httpGet.path',fixed?readyPath:'/wrong'),view('logs',`${readyPath} → 200; /wrong → 404`)],[phase,field('Pod.status.containerStatuses[0].restartCount','0')],[field('Deployment.spec.template.spec.containers[app].livenessProbe.httpGet.path','/live'),view('logs','/live → 200')]],
+  startup:[[field('Deployment.spec.template.spec.containers[app].livenessProbe','periodSeconds=5; failureThreshold=3'),observation('coldStart',String(coldStart))],[phase,replica],[field('Deployment.spec.template.spec.containers[app].image','example.invalid/app:v1'),field('Pod.metadata.name',pod.name)]],
+  image:[[field('Deployment.spec.template.spec.containers[app].image',imageReference()),field('ConfigMap[approved-images].data.image',`example.invalid/${app}:${imageTag}`)],[phase,field('Pod.status.containerStatuses[0].restartCount','0')],identity],
+  command:[[field('Deployment.spec.template.spec.containers[app].args',fixed?argument:badArgument),view('logs',`unknown option ${badArgument}; supported option: ${argument}`)],[view('events','Normal Pulled'),replica],[phase,field('Pod.status.containerStatuses[0].restartCount',fixed?'0':'5')]],
+  environment:[[field('ConfigMap.data.mode',mode),observation('environment',fixed?mode:oldMode),observation('oldEnvironment',String(!fixed))],[phase,replica],identity],
+  secret:[[field(`${containerField}.env[${envKey}].valueFrom.secretKeyRef.key`,fixed?secretKey:envKey),observation('secretKeys',secretKey)],[field('Secret.type','Opaque'),replica],identity],
+  requests:[[field('Deployment.spec.template.spec.containers[app].resources.requests.cpu',fixed?cpuRequest:oversizedCpu),observation('remainingCPU',check?'750m':'500m'),observation('validatedCPU',cpuRequest)],[observation('usageCPU','100m'),field('Node.status.allocatable.cpu',check?'4000m':'2000m')],[field('Deployment.spec.template.spec.containers[app].resources.limits.cpu',check?'4':'2'),replica]],
+  memory:[[field('Pod.status.containerStatuses[0].lastState.terminated.reason',fixed?'—':'OOMKilled'),field('Deployment.spec.template.spec.containers[app].resources.limits.memory',fixed?memoryBudget:memoryLimit),observation('workingSet',workingSet)],[field('Node.status.conditions[type=MemoryPressure].status','False'),observation('remainingMemory','512Mi')],[phase,field('Deployment.spec.template.spec.containers[app].resources.limits.cpu','1')]],
+ }
+ function imageReference(){return `example.invalid/${app}:${fixed?imageTag:'missing'}`}
+ const supports=rotate(facts[caseId].map((facts,index)=>({id:['cause','context','other'][index],facts})),topics.indexOf(topic)+state.generation+state.step+2)
+ const rollout=caseId==='environment'&&fixed?{field:'Deployment.spec.template.metadata.annotations.lesson-revision',before:'∅',after:'"2"',previousUID:`${token}:pod`,nextUID:pod.uid}:undefined
  // Workload changes produce a new local Pod identity, rather than teaching edits
  // to immutable live Pod fields. These authored steps do not run a controller.
- return {token,caseId,check,name,objects,resultEvidence:topic==='network'?'endpoints:properties':'pod:properties',required,diagnoses:rotate(diagnoses,state.generation+state.step),repairs:rotate(repairs,state.generation+state.step+1),correctRepair}
+ return {token,caseId,check,name,objects,resultEvidence:topic==='network'?'endpoints:properties':'pod:properties',required,diagnoses:rotate(diagnoses,state.generation+state.step),repairs:rotate(repairs,state.generation+state.step+1),correctRepair,supports,rollout}
 }
 export function exerciseRows(e:Exercise):Row[]{return e.objects.map(o=>({id:o.id,ref:{provider:'learning',target:'local-path',scope:'lesson',kind:o.kind,name:o.name,uid:o.uid},cells:[{text:o.name},{text:names[o.kind]??o.kind}],health:{state:'unknown'}}))}
 export function exerciseReducer(topic:Topic,state:ExerciseState,action:ExerciseAction):ExerciseState {
@@ -115,10 +142,12 @@ export function exerciseReducer(topic:Topic,state:ExerciseState,action:ExerciseA
   case 'hint':return current.check||state.fixed?state:{...state,hint:true}
   case 'diagnosis':return !state.fixed&&current.diagnoses.includes(action.value as Diagnosis)?{...state,diagnosis:action.value,result:null}:state
   case 'repair':return !state.fixed&&current.repairs.some(r=>r.id===action.value)?{...state,repair:action.value,result:null}:state
+  case 'support':return current.check&&!state.fixed&&current.supports.some(s=>s.id===action.value)?{...state,support:action.value,result:null}:state
   case 'apply':{
    if(state.fixed)return state
    if(!current.required.every(key=>state.seen.includes(key)))return {...state,result:'evidence'}
    if(state.diagnosis!==current.caseId)return {...state,result:'diagnosis'}
+   if(current.check&&state.support!=='cause')return {...state,result:'support'}
    if(state.repair!==current.correctRepair)return {...state,result:'repair'}
    return {...state,fixed:true,result:null,hint:false,selected:null,seen:[]}
   }

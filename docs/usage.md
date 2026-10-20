@@ -1192,6 +1192,9 @@ Deployment/ReplicaSet/Pod lesson. **Learning path** adds five practical modules
 covering Service routing, probes, image/application failures, ConfigMap/Secret
 references and resources/scheduling. Each has two guided tasks and two new
 checks: inspect evidence, choose a diagnosis and repair, and observe its result.
+Checks use neutral symptoms and also require choosing decisive observations.
+Guided tasks explain probe roles and configuration rollouts; wrong repairs
+receive specific explanations.
 All actions change only local lesson state. Progress survives switching modules,
 reference and language while this library is open; closing it clears progress.
 

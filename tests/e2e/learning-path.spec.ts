@@ -4,7 +4,7 @@ import {token} from './synth'
 import {join,resolve} from 'node:path'
 import {readFileSync} from 'node:fs'
 import {languages,languageNames,type Language} from '../../web/src/languages'
-const pathContent=Object.fromEntries(languages.map(lang=>[lang,JSON.parse(readFileSync(resolve(import.meta.dirname,`../../web/src/learning/path-${lang}.json`),'utf8'))])) as Record<Language,{ui:Record<string,string>;topics:Record<string,string>;diagnoses:Record<string,string>}>
+const pathContent=Object.fromEntries(languages.map(lang=>[lang,JSON.parse(readFileSync(resolve(import.meta.dirname,`../../web/src/learning/path-${lang}.json`),'utf8'))])) as Record<Language,typeof import('../../web/src/learning/path-en.json')>
 const learningContent=Object.fromEntries(languages.map(lang=>[lang,JSON.parse(readFileSync(resolve(import.meta.dirname,`../../web/src/learning/${lang}.json`),'utf8'))])) as Record<Language,{ui:Record<string,string>}>
 import {topics,type Topic,type CaseId} from '../../web/src/learning/pathModel'
 
@@ -14,7 +14,7 @@ const plans:Record<Topic,Array<{id:CaseId;repair:string;evidence:[string,string]
  probes:[{id:'readiness',repair:'readiness',evidence:[['deployment','YAML'],['pod','Events'],['pod','Logs']],result:'pod'},{id:'startup',repair:'startup',evidence:[['deployment','YAML'],['pod','Events'],['pod','Logs']],result:'pod'}],
  runtime:[{id:'image',repair:'image',evidence:[['deployment','YAML'],['pod','Events'],['catalog','Properties']],result:'pod'},{id:'command',repair:'command',evidence:[['deployment','YAML'],['pod','Events'],['pod','Logs']],result:'pod'}],
  config:[{id:'environment',repair:'rollout',evidence:[['deployment','YAML'],['config','YAML'],['pod','Properties']],result:'pod'},{id:'secret',repair:'secret',evidence:[['deployment','YAML'],['secret','Properties'],['pod','Events']],result:'pod'}],
- resources:[{id:'requests',repair:'requests',evidence:[['deployment','YAML'],['pod','Events'],['node','Properties']],result:'pod'},{id:'memory',repair:'memory',evidence:[['deployment','YAML'],['pod','Properties'],['node','Properties']],result:'pod'}],
+ resources:[{id:'requests',repair:'requests',evidence:[['deployment','YAML'],['pod','Events'],['pod','Properties'],['node','Properties']],result:'pod'},{id:'memory',repair:'memory',evidence:[['deployment','YAML'],['pod','Properties'],['node','Properties']],result:'pod'}],
 }
 const objectName=(id:string,root:string,fixed=false)=>id==='pod'?root+(fixed?'-new':'-a'):id==='endpoints'?root+'-slice':id==='config'?root+'-config':id==='secret'?root+'-credentials':id==='catalog'?'approved-images':id==='node'?'lesson-node':root
 async function visit(lab:Locator,id:string,view:string,root:string,fixed=false){
@@ -47,20 +47,29 @@ for(const topic of topics)test(`learning path ${topic}: evidence, repairs, obser
  const lab=dialog.locator(`[data-task-lesson=${topic}]`)
  await context.setOffline(true)
  for(let step=0;step<4;step++){
-  const plan=plans[topic][step%2],root=step>=2?'orders-1':'web-1'
+  const plan=plans[topic][step<2?step:3-step],root=step>=2?'orders-1':'web-1'
   await expect(lab).toHaveAttribute('data-case',plan.id);await expect(lab).toHaveAttribute('data-phase',step>=2?'check':'practice')
-  if(step>=2){await expect(lab.getByRole('button',{name:en.ui.hint,exact:true})).toHaveCount(0);await expect(lab.getByRole('button',{name:en.ui.more,exact:true})).toHaveCount(0)}
+  if(step>=2){await expect(lab).toContainText(en.checks[topic]);await expect(lab.locator('[data-concept-guide]')).toHaveCount(0);await expect(lab.getByRole('button',{name:en.ui.hint,exact:true})).toHaveCount(0);await expect(lab.getByRole('button',{name:en.ui.more,exact:true})).toHaveCount(0)}
   await lab.getByRole('radio',{name:en.diagnoses[plan.id],exact:true}).check()
   await lab.locator(`input[name$="-repair"][value="${plan.repair}"]`).check()
   if(step===0){await lab.getByRole('button',{name:en.ui.apply,exact:true}).click();await expect(lab.getByRole('alert')).toHaveText(en.ui.evidenceError)}
   for(const [id,view]of plan.evidence){await visit(lab,id,view,root);if(step===0&&id===plan.evidence[0][0])await page.screenshot({animations:'disabled',path:join(scratchRoot,`course-${topic}-evidence.png`)})}
-  await expect(lab.locator('[data-required-evidence] [data-inspected=true]')).toHaveCount(3)
+  await expect(lab.locator('[data-required-evidence] [data-inspected=true]')).toHaveCount(plan.evidence.length)
   if(step===0){
    await lab.locator(`input[name$="-diagnosis"]:not([value="${plan.id}"])`).first().check();await lab.getByRole('button',{name:en.ui.apply,exact:true}).click();await expect(lab.getByRole('alert')).toHaveText(en.ui.diagnosisError)
-   await lab.getByRole('radio',{name:en.diagnoses[plan.id],exact:true}).check();await lab.locator(`input[name$="-repair"]:not([value="${plan.repair}"])`).first().check();await lab.getByRole('button',{name:en.ui.apply,exact:true}).click();await expect(lab.getByRole('alert')).toHaveText(en.ui.repairError)
+   const wrong={network:['port','samePort'],probes:['liveness','liveness'],runtime:['always','pullPolicy'],config:['rewrite','sameConfig'],resources:['limit','cpuLimit']} as const
+   await lab.getByRole('radio',{name:en.diagnoses[plan.id],exact:true}).check();await lab.locator(`input[name$="-repair"][value="${wrong[topic][0]}"]`).check();await lab.getByRole('button',{name:en.ui.apply,exact:true}).click();await expect(lab.getByRole('alert')).toHaveText(en.repairFeedback[wrong[topic][1]])
+   await lab.getByRole('alert').scrollIntoViewIfNeeded();await page.screenshot({animations:'disabled',path:join(scratchRoot,`course-${topic}-wrong-repair.png`)})
    await lab.locator(`input[name$="-repair"][value="${plan.repair}"]`).check()
   }
+  if(step>=2){
+   await lab.getByRole('button',{name:en.ui.apply,exact:true}).click();await expect(lab.getByRole('alert')).toHaveText(en.cases[plan.id].supportWhy)
+   await lab.locator('input[name$="-support"][value=context]').check();await lab.getByRole('button',{name:en.ui.apply,exact:true}).click();await expect(lab.getByRole('alert')).toHaveText(en.cases[plan.id].supportWhy)
+   await lab.locator('input[name$="-support"][value=cause]').check()
+   if(step===2)await page.screenshot({animations:'disabled',path:join(scratchRoot,`course-${topic}-support.png`)})
+  }
   await lab.getByRole('button',{name:en.ui.apply,exact:true}).click();await expect(lab).toHaveAttribute('data-phase','fixed');await expect(lab).toBeFocused()
+  if(plan.id==='environment'){await expect(lab.locator('[data-rollout-result]')).toContainText('lesson-revision');await expect(lab.locator('[data-rollout-result]')).toContainText(':pod →');await expect(lab.locator('[data-rollout-result]')).toContainText(':pod:new')}
   const next=lab.getByRole('button',{name:step===3?en.ui.finish:en.ui.next,exact:true});await next.click();await expect(lab.getByRole('alert')).toHaveText(en.ui.observe)
   await visit(lab,plan.result,'Properties',root,topic!=='network')
   if(step===0)await page.screenshot({animations:'disabled',path:join(scratchRoot,`course-${topic}-result.png`)})
@@ -79,13 +88,22 @@ test('course locale switches, module navigation and help retain evidence; narrow
  await lab.getByRole('button',{name:en.ui.more,exact:true}).click();await lab.getByRole('navigation',{name:'Related concepts',exact:true}).getByRole('button',{name:'Pod',exact:true}).click();await expect(lab).toBeFocused()
  await dialog.getByRole('button',{name:en.ui.overview,exact:true}).click();await dialog.locator('[data-course-topic=config]').getByRole('button').click();await dialog.getByRole('button',{name:en.ui.overview,exact:true}).click();await dialog.locator('[data-course-topic=network]').getByRole('button').click()
  await expect(lab.locator('[data-evidence="service:yaml"]')).toHaveAttribute('data-inspected','true')
+ // Reach an independent case before locale QA, so the new reasoning control,
+ // neutral symptom and retained evidence are checked in every language.
+ for(const plan of plans.network){
+  for(const [id,view]of plan.evidence)await visit(lab,id,view,'web-1')
+  await lab.getByRole('radio',{name:en.diagnoses[plan.id],exact:true}).check();await lab.locator(`input[name$="-repair"][value="${plan.repair}"]`).check()
+  await lab.getByRole('button',{name:en.ui.apply,exact:true}).click();await visit(lab,'endpoints','Properties','web-1');await lab.getByRole('button',{name:en.ui.next,exact:true}).click()
+ }
+ await visit(lab,'service','YAML','orders-1')
+ await lab.locator('input[name$="-support"][value=context]').check()
  for(const language of languages){
   await dialog.locator('.language-menu button').click();await dialog.getByRole('option',{name:languageNames[language],exact:true}).click();await expect(page.locator('html')).toHaveAttribute('lang',language)
   await expect(lab.locator('[data-evidence="service:yaml"]')).toHaveAttribute('data-inspected','true')
   for(const width of [375,1440]){
    await page.setViewportSize({width,height:900});expect(await dialog.evaluate(el=>el.scrollWidth<=el.clientWidth)).toBe(true)
    const bounds=(await dialog.boundingBox())!;expect(bounds.x).toBeGreaterThanOrEqual(0);expect(bounds.x+bounds.width).toBeLessThanOrEqual(width)
-   await expect(lab.getByRole('button',{name:pathContent[language].ui.apply,exact:true})).toBeVisible()
+   await expect(lab.getByRole('button',{name:pathContent[language].ui.apply,exact:true})).toBeVisible();await expect(lab.locator('[data-support]')).toContainText(pathContent[language].ui.support);await expect(lab.locator('input[name$="-support"][value=context]')).toBeChecked();await lab.locator('[data-support]').scrollIntoViewIfNeeded();expect((await lab.locator('[data-support] code').filter({hasText:/^9091$/}).boundingBox())!.height).toBeLessThan(22)
    await page.screenshot({animations:'disabled',path:join(scratchRoot,`course-${language}-${width}.png`)})
   }
  }
@@ -94,4 +112,22 @@ test('course locale switches, module navigation and help retain evidence; narrow
  const language=languages.at(-1)!,ui=pathContent[language].ui
  await openAppMenu(page);await page.getByRole('button',{name:learningContent[language].ui.library,exact:true}).click();await dialog.getByRole('button',{name:ui.course,exact:true}).click();await dialog.locator('[data-course-topic=network]').getByRole('button').click()
  await expect(dialog.locator('[data-evidence="service:yaml"]')).toHaveAttribute('data-inspected','false')
+})
+
+
+test('probe concept explanations and linked help are local and readable in every language',async({page})=>{
+ const errors:string[]=[],calls:string[]=[];page.on('pageerror',e=>errors.push(e.message));page.on('request',r=>{if(/\/api\/(ConnectTarget|OpenView|GetResource|Prepare|Run|ListKinds|ListScopes)/.test(r.url()))calls.push(r.url())})
+ const dialog=await openCourse(page);await dialog.locator('[data-course-topic=probes]').getByRole('button').click();const lab=dialog.locator('[data-task-lesson=probes]')
+ await visit(lab,'pod','Properties','web-1');await lab.getByRole('button',{name:en.ui.more,exact:true}).click()
+ for(const language of languages){
+  await dialog.locator('.language-menu button').click();await dialog.getByRole('option',{name:languageNames[language],exact:true}).click();await expect(page.locator('html')).toHaveAttribute('lang',language)
+  const guides=lab.locator('[data-concept-guide=probes]');await expect(guides).toHaveCount(2)
+  const guide=guides.last();await expect(guide).toHaveAttribute('open','');await expect(guide).toContainText(pathContent[language].guides.probes.readiness);await expect(guide).toContainText(pathContent[language].guides.probes.liveness);await expect(guide).toContainText(pathContent[language].guides.probes.startup)
+  for(const width of [375,1440]){
+   await page.setViewportSize({width,height:900});expect(await dialog.evaluate(el=>el.scrollWidth<=el.clientWidth)).toBe(true)
+   const heading=lab.getByRole('heading',{name:'web-1-a',exact:true});expect((await heading.boundingBox())!.width).toBeGreaterThan(100);expect((await heading.boundingBox())!.height).toBeLessThan(40)
+   await guide.scrollIntoViewIfNeeded();await page.screenshot({animations:'disabled',path:join(scratchRoot,`course-probe-guide-${language}-${width}.png`)})
+  }
+ }
+ expect(calls).toEqual([]);expect(errors).toEqual([])
 })

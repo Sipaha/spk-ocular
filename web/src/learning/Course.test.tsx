@@ -42,3 +42,24 @@ it('keeps course evidence during language/reference switches and clears it on li
  fireEvent.click(screen.getByRole('button',{name:pathText('course')}));openNetwork()
  expect(document.querySelector('[data-evidence="service:yaml"]')).toHaveAttribute('data-inspected','false')
 })
+
+it('explains probe roles in linked help and gives specific feedback for the wrong liveness repair',()=>{
+ render(<Course introComplete={false} onIntro={()=>{}}/>);
+ fireEvent.click(screen.getByRole('button',{name:`${pathText('open')}: ${pathCopy().topics.probes}`}))
+ const guide=document.querySelector('[data-concept-guide=probes]')!
+ expect(guide).toHaveTextContent(pathCopy().guides.probes.readiness)
+ expect(guide).toHaveTextContent(pathCopy().guides.probes.liveness)
+ expect(guide).toHaveTextContent(pathCopy().guides.probes.startup)
+ fireEvent.click(screen.getByRole('gridcell',{name:'web-1-a'}))
+ fireEvent.click(screen.getByRole('button',{name:pathText('more')}))
+ expect(document.querySelectorAll('[data-concept-guide=probes]')).toHaveLength(2)
+ expect(document.querySelectorAll('[data-concept-guide=probes]')[1]).toHaveAttribute('open')
+ for(const [name,view]of [['web-1','YAML'],['web-1-a','Events'],['web-1-a','Logs']]){
+  fireEvent.click(screen.getByRole('gridcell',{name}));fireEvent.click(screen.getByRole('tab',{name:view}))
+ }
+ fireEvent.click(screen.getByRole('radio',{name:pathCopy().diagnoses.readiness}))
+ fireEvent.click(document.querySelector('input[name$="-repair"][value=liveness]')!)
+ fireEvent.click(screen.getByRole('button',{name:pathText('apply')}))
+ expect(screen.getByRole('alert')).toHaveTextContent(pathCopy().repairFeedback.liveness)
+ expect(document.querySelector('[data-task-lesson=probes]')).toHaveAttribute('data-phase','practice')
+})
