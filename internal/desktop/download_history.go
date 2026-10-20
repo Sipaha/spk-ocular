@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/gofrs/flock"
+	"github.com/spk/spk-ocular/internal/filemanager"
 	"github.com/spk/spk-ocular/internal/privatefs"
 )
 
@@ -64,10 +65,11 @@ type downloadHistory struct {
 	closed       bool
 	changed      func()
 	launch       func(context.Context, string, []string) error
+	reveal       func(context.Context, string) error
 }
 
 func newDownloadHistory(directory string) *downloadHistory {
-	h := &downloadHistory{records: []DownloadRecord{}, lastNotify: map[string]time.Time{}, deletes: map[string]downloadDeletePlan{}, launch: launchDownloadPath}
+	h := &downloadHistory{records: []DownloadRecord{}, lastNotify: map[string]time.Time{}, deletes: map[string]downloadDeletePlan{}, launch: launchDownloadPath, reveal: filemanager.Reveal}
 	if directory == "" {
 		return h
 	}
@@ -477,29 +479,23 @@ func (h *downloadHistory) open(ctx context.Context, id string, reveal bool) erro
 	if err != nil || !info.IsDir() && !info.Mode().IsRegular() {
 		return errors.New("downloaded item is missing or unavailable")
 	}
-	name, args := downloadCommand(runtime.GOOS, path, reveal)
+	if reveal {
+		return h.reveal(ctx, path)
+	}
+	name, args := downloadCommand(runtime.GOOS, path)
 	if name == "" {
 		return errors.New("file opening is unavailable on this platform")
 	}
 	return h.launch(ctx, name, args)
 }
 
-func downloadCommand(platform, path string, reveal bool) (string, []string) {
+func downloadCommand(platform, path string) (string, []string) {
 	switch platform {
 	case "linux":
-		if reveal {
-			path = filepath.Dir(path)
-		}
 		return "xdg-open", []string{path}
 	case "darwin":
-		if reveal {
-			return "open", []string{"-R", path}
-		}
 		return "open", []string{"--", path}
 	case "windows":
-		if reveal {
-			return "explorer.exe", []string{"/select," + path}
-		}
 		return "rundll32.exe", []string{"url.dll,FileProtocolHandler", path}
 	default:
 		return "", nil

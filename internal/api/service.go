@@ -35,6 +35,8 @@ type Options struct {
 
 // Service implements API.
 type Service struct {
+	revealLocalFile func(context.Context, string) error
+
 	helmRepos     *helm.Repositories
 	helmPlans     *helm.Plans
 	reg           *provider.Registry

@@ -92,7 +92,7 @@ func (s *Service) Files(ctx context.Context, req FilesRequest) (FilesResponse, e
 	case "read":
 		tools = "head"
 		script = `set -eu; [ -f "$1" ] || { echo 'Not a regular file' >&2; exit 1; }; head -c 2097153 "$1"`
-	case "rename-info":
+	case "rename-info", "delete-info":
 		tools = "stat"
 		script = `set -eu; stat -c '%d:%i:%f:%s:%Y:%Z' -- "$1"`
 	case "rename":
@@ -103,6 +103,15 @@ func (s *Service) Files(ctx context.Context, req FilesRequest) (FilesResponse, e
 		tools = "stat sha256sum uname mktemp base64 chmod rm"
 		script = `set -eu; [ -e "$1" ] || [ -L "$1" ] || { echo 'Source no longer exists' >&2; exit 1; }; if [ -e "$3" ] || [ -L "$3" ]; then echo 'Destination already exists; nothing overwritten' >&2; exit 1; fi; actual=$(stat -c '%d:%i:%f:%s:%Y:%Z' -- "$1" | sha256sum); [ "${actual%% *}" = "$2" ] || { echo 'Source changed; review the rename again' >&2; exit 1; }; ` + atomicRenameScript + `; if [ -e "$1" ] || [ -L "$1" ]; then echo 'Rename was not completed; nothing overwritten' >&2; exit 1; fi; [ -e "$3" ] || [ -L "$3" ] || { echo 'Rename outcome is unknown; inspect both paths before retrying' >&2; exit 1; }`
 		args = append(args, req.Expect, destination)
+	case "delete":
+		if out.Path == "/" || len(req.Expect) != 64 {
+			return out, coded(CodeBadRequest, errors.New("a reviewed non-root source is required"))
+		}
+		tools = "stat sha256sum rm"
+		script = `set -eu; # ocular-delete
+[ -e "$1" ] || [ -L "$1" ] || { echo 'Source no longer exists' >&2; exit 1; }; actual=$(stat -c '%d:%i:%f:%s:%Y:%Z' -- "$1" | sha256sum); [ "${actual%% *}" = "$2" ] || { echo 'Source changed; review deletion again' >&2; exit 1; }; rm -r -- "$1"; if [ -e "$1" ] || [ -L "$1" ]; then echo 'Deletion outcome is unknown; inspect the path before retrying' >&2; exit 1; fi`
+		args = append(args, req.Expect)
+
 	case "create":
 		if req.Text != "" || req.Expect != "" {
 			return out, coded(CodeBadRequest, errors.New("empty file creation takes no content or version"))
@@ -139,7 +148,7 @@ func (s *Service) Files(ctx context.Context, req FilesRequest) (FilesResponse, e
 	if req.ConfigRev != "" && req.ConfigRev != out.ConfigRev {
 		return out, coded(CodeConflict, errors.New("container connection changed; close and reopen Files"))
 	}
-	if (req.Command == "write" || req.Command == "create" || req.Command == "rename") && req.ConfigRev == "" {
+	if (req.Command == "write" || req.Command == "create" || req.Command == "rename" || req.Command == "delete") && req.ConfigRev == "" {
 		return out, coded(CodeBadRequest, errors.New("the original connection revision is required"))
 	}
 	stdout := &fileBuffer{limit: fileLimit}
@@ -156,7 +165,7 @@ func (s *Service) Files(ctx context.Context, req FilesRequest) (FilesResponse, e
 		return out, coded(CodeBadRequest, errors.New(detail))
 	}
 	switch req.Command {
-	case "rename-info":
+	case "rename-info", "delete-info":
 		out.Version = fileVersion(stdout.Bytes())
 	case "rename":
 		out.Path = args[2]

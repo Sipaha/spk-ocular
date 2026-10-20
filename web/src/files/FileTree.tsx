@@ -19,10 +19,11 @@ interface Props {
   onDownload: (path: string) => void
   canRename: boolean
   onRename: (path: string) => void
+  onDelete: (path: string) => void
   onFollowLink: (path: string, directory: boolean) => void
 }
 
-export function FileTree({ directories, expanded, selected, disabled, onSelect, onToggle, onOpen, onRefresh, onDownload, canRename, onRename, onFollowLink }: Props) {
+export function FileTree({ directories, expanded, selected, disabled, onSelect, onToggle, onOpen, onRefresh, onDownload, canRename, onRename, onDelete, onFollowLink }: Props) {
   const host = useRef<HTMLElement>(null)
   const id = useId()
   const [menu, setMenu] = useState<{ path: string; directory: boolean; symlink: boolean; x: number; y: number } | null>(null)
@@ -68,6 +69,7 @@ export function FileTree({ directories, expanded, selected, disabled, onSelect, 
         if (!event.shiftKey) return
         { const bounds = document.getElementById(rowID(row.path))?.getBoundingClientRect(); if (bounds) setMenu({path:row.path,directory:row.directory,symlink:row.symlink,x:bounds.x+30,y:bounds.bottom}) }
         break
+      case 'Delete': if(row.path==='/'||!canRename)return; onDelete(row.path); break
       case 'F2': if(row.path==='/'||!canRename)return; onRename(row.path); break
       case 'Enter': if (row.directory) onToggle(row.path); else onOpen(row.path); break
       default: return
@@ -112,7 +114,7 @@ export function FileTree({ directories, expanded, selected, disabled, onSelect, 
           )
         })}
       </div>
-      {menu && <Menu at={menu} label={menu.path} onClose={() => setMenu(null)} items={[...(menu.directory ? [{id:'refresh',label:t('files.refresh'),disabled,onSelect:()=>onRefresh(menu.path)}] : []), ...(menu.symlink ? [{id:'follow',label:t('files.followLink'),disabled,onSelect:()=>onFollowLink(menu.path,menu.directory)}] : []), ...(menu.path!=='/'?[{id:'rename',label:t('files.rename'),hint:'F2',disabled:disabled||!canRename,onSelect:()=>onRename(menu.path)}]:[]), {id:'download',label:t('files.download'),disabled,onSelect:()=>onDownload(menu.path)}]} />}
+      {menu && <Menu at={menu} label={menu.path} onClose={() => setMenu(null)} items={[...(menu.directory ? [{id:'refresh',label:t('files.refresh'),disabled,onSelect:()=>onRefresh(menu.path)}] : []), ...(menu.symlink ? [{id:'follow',label:t('files.followLink'),disabled,onSelect:()=>onFollowLink(menu.path,menu.directory)}] : []), ...(menu.path!=='/'?[{id:'rename',label:t('files.rename'),hint:'F2',disabled:disabled||!canRename,onSelect:()=>onRename(menu.path)}]:[]), {id:'download',label:t('files.download'),disabled,onSelect:()=>onDownload(menu.path)}, ...(menu.path!=='/'?[{id:'delete',label:t('files.delete'),hint:'Delete',danger:true,disabled:disabled||!canRename,onSelect:()=>onDelete(menu.path)}]:[])]} />}
     </nav>
   )
 }

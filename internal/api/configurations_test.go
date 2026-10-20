@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"errors"
 	"github.com/spk/spk-ocular/internal/providers/kubernetes"
 	"github.com/stretchr/testify/require"
 	"os"
@@ -44,21 +45,6 @@ func TestRemovingConfigurationClosesItsOpenSession(t *testing.T) {
 	require.NotContains(t, s.sessions, key)
 }
 
-func TestConfigurationFileManagerArguments(t *testing.T) {
-	for _, platform := range []string{"linux", "darwin", "windows"} {
-		name, args := configurationFileManager(platform, "/fixture/a name;$(no).yaml")
-		require.NotEmpty(t, name)
-		require.NotEmpty(t, args)
-		switch platform {
-		case "linux":
-			require.Equal(t, []string{"/fixture"}, args)
-		case "darwin":
-			require.Equal(t, []string{"-R", "/fixture/a name;$(no).yaml"}, args)
-		case "windows":
-			require.Equal(t, []string{"/select,/fixture/a name;$(no).yaml"}, args)
-		}
-	}
-}
 func TestConfigurationRevealRunsOnlyRegisteredSource(t *testing.T) {
 	if runtime.GOOS != "linux" {
 		t.Skip("Linux launcher fixture")
@@ -68,28 +54,28 @@ func TestConfigurationRevealRunsOnlyRegisteredSource(t *testing.T) {
 	require.NoError(t, os.MkdirAll(folder, 0700))
 	path := filepath.Join(folder, "config")
 	require.NoError(t, os.WriteFile(path, []byte("apiVersion: v1\nkind: Config\nclusters:\n- name: c\n  cluster:\n    server: https://127.0.0.1:1\ncontexts:\n- name: c\n  context:\n    cluster: c\n"), 0600))
-	tools := t.TempDir()
-	result := filepath.Join(tools, "called")
-	t.Setenv("OCULAR_FILE_MANAGER_RESULT", result)
-	require.NoError(t, os.WriteFile(filepath.Join(tools, "xdg-open"), []byte("#!/bin/sh\nprintf '%s' \"$1\" > \"$OCULAR_FILE_MANAGER_RESULT\"\n"), 0700))
-	t.Setenv("PATH", tools)
 	p, err := kubernetes.NewWith(func(string) string { return "" }, home).WithConfigurations(t.TempDir())
 	require.NoError(t, err)
 	s, _ := newService(t, p)
+	var revealed []string
+	s.revealLocalFile = func(_ context.Context, got string) error { revealed = append(revealed, got); return nil }
 	st, err := s.Configurations(UIContext(t.Context()), kubernetes.ConfigRequest{Command: "import", Paths: []string{path}})
 	require.NoError(t, err)
 	entry := st.Entries[0]
 	req := kubernetes.ConfigRequest{Command: "reveal", ID: entry.ID, Expect: entry.Revision}
 	_, err = s.Configurations(t.Context(), req)
 	require.Error(t, err)
-	_, err = os.Stat(result)
-	require.True(t, os.IsNotExist(err))
+
+	require.Empty(t, revealed)
 	_, err = s.Configurations(UIContext(t.Context()), req)
 	require.NoError(t, err)
-	b, err := os.ReadFile(result)
-	require.NoError(t, err)
-	require.Equal(t, folder, string(b))
-	require.NoError(t, os.Remove(filepath.Join(tools, "xdg-open")))
+	require.Equal(t, []string{path}, revealed)
+	req.Expect = "stale"
 	_, err = s.Configurations(UIContext(t.Context()), req)
-	require.ErrorContains(t, err, "could not open")
+	require.Error(t, err)
+	require.Len(t, revealed, 1)
+	req.Expect = entry.Revision
+	s.revealLocalFile = func(context.Context, string) error { return errors.New("could not select item") }
+	_, err = s.Configurations(UIContext(t.Context()), req)
+	require.ErrorContains(t, err, "could not select")
 }

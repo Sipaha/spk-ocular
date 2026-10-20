@@ -917,7 +917,7 @@ export interface AgentAuditEntry {
   count: number
 }
 
-export interface FilesRequest { preparedId?: string; newName?: string; configRev?: string; ref: Ref; instance: string; channel: string; command: 'list' | 'read' | 'write' | 'resolve' | 'close' | 'create' | 'rename-info' | 'rename'; path: string; text?: string; expect?: string }
+export interface FilesRequest { preparedId?: string; newName?: string; configRev?: string; ref: Ref; instance: string; channel: string; command: 'list' | 'read' | 'write' | 'resolve' | 'close' | 'create' | 'rename-info' | 'rename' | 'delete-info' | 'delete'; path: string; text?: string; expect?: string }
 export interface FilesResponse { configRev: string; path: string; entries?: { name: string; directory: boolean; symlink: boolean; target?: string }[]; text: string; version?: string }
 
 

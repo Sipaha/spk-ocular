@@ -335,8 +335,10 @@ Enter or Space activates one without selecting a connection behind the dialog.
 
 Right-click a Kubernetes connection, including the selected one, to **Edit kubeconfig**, rename the configuration or remove it. With a connection row focused, Shift+F10 opens its menu. The header
 switcher also offers Shift+F10 for the selected connection. Linked files also offer
-**Open in file manager**: Linux opens the parent folder; macOS and Windows select
-the source file. This action runs on the computer hosting Ocular, including
+**Open in file manager** selects the source file in its parent folder. Linux
+uses the session file manager's `org.freedesktop.FileManager1.ShowItems` interface;
+if selection is unavailable, the action reports an error instead of opening an
+unselected folder. This action runs on the computer hosting Ocular, including
 browser mode, and reports launcher failures beside the add action.
 
 The source editor provides syntax highlighting and search and uses nearly the full window; a compact header shows the source
@@ -1058,6 +1060,21 @@ overwriting rename is attempted. The helper is unlinked before execution. Rename
 paths update after confirmed success. Unsaved edits are protected before opening
 the dialog. An uncertain rename is never retried automatically.
 
+### Deleting entries
+
+Select an entry and press **Delete**, or use **Delete** in its context menu.
+The review shows the exact path and initially focuses Cancel. Deletion is
+permanent: directories include their contents; symbolic links are removed
+without following their targets. The filesystem root cannot be deleted.
+Ocular checks the captured connection revision and source stat identity before
+running `rm -r --` with the path as an argument. The final stat-to-delete interval
+is observational, not an atomic inode condition; recursive directory contents
+are not snapshotted. Failures can leave a partially deleted directory, so there
+is no automatic retry and an error requires closing the review and inspecting
+the path again. Unsaved edits are protected. Confirmed success removes cached
+branches and closes an affected editor. This action is shared by container,
+Pod and node Files and never grants agents file mutation permissions.
+
 ## Downloads
 
 The download button in the application header opens the Downloads popup, with
@@ -1101,7 +1118,9 @@ In desktop mode, click a completed row (or press Enter/Space on it) to open the
 file with the OS default application. Rows also offer **Show in folder** and
 **Copy path**. Successful file opening or folder reveal closes the popup; failed
 opening keeps it visible with the error. Folder
-opening selects the item on Windows/macOS and opens its parent folder on Linux.
+opening selects the item in its parent folder on Linux, Windows and macOS. Linux
+requires a session file manager implementing `FileManager1.ShowItems`; an
+unavailable or failed selection is reported.
 Moved or deleted items report an error. Nothing opens automatically. Interrupted
 or failed downloads do not expose an actionable destination as a complete file.
 

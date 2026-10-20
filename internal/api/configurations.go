@@ -4,10 +4,7 @@ import (
 	"context"
 	"errors"
 	"github.com/spk/spk-ocular/internal/configuration"
-	"os/exec"
-	"path/filepath"
-	"runtime"
-	"time"
+	"github.com/spk/spk-ocular/internal/filemanager"
 )
 
 func (s *Service) Configurations(ctx context.Context, req configuration.ConfigRequest) (configuration.ConfigState, error) {
@@ -27,15 +24,8 @@ func (s *Service) Configurations(ctx context.Context, req configuration.ConfigRe
 		if err != nil {
 			return configuration.ConfigState{}, coded(CodeBadRequest, err)
 		}
-		name, args := configurationFileManager(runtime.GOOS, path)
-		if name == "" {
-			return configuration.ConfigState{}, coded(CodeBadRequest, errors.New("file manager is unavailable on this platform"))
-		}
-		launchCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
-		defer cancel()
-		// Fixed executable and separate arguments: never execute a kubeconfig or a shell.
-		if err := exec.CommandContext(launchCtx, name, args...).Run(); err != nil {
-			return configuration.ConfigState{}, coded(CodeBadRequest, errors.New("could not open the file manager"))
+		if err := s.revealFile(ctx, path); err != nil {
+			return configuration.ConfigState{}, coded(CodeBadRequest, err)
 		}
 		req = configuration.ConfigRequest{Command: "status"}
 	}
@@ -49,15 +39,10 @@ func (s *Service) Configurations(ctx context.Context, req configuration.ConfigRe
 	return out, nil
 }
 
-func configurationFileManager(platform, path string) (string, []string) {
-	switch platform {
-	case "linux":
-		return "xdg-open", []string{filepath.Dir(path)}
-	case "darwin":
-		return "open", []string{"-R", path}
-	case "windows":
-		return "explorer.exe", []string{"/select," + path}
-	default:
-		return "", nil
+// The per-service hook allows UI admission tests without invoking a real desktop.
+func (s *Service) revealFile(ctx context.Context, path string) error {
+	if s.revealLocalFile != nil {
+		return s.revealLocalFile(ctx, path)
 	}
+	return filemanager.Reveal(ctx, path)
 }

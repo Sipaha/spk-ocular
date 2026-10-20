@@ -1168,7 +1168,9 @@
     "files.name": "Dateiname",
     "files.nameInvalid": "Dateiname mit höchstens 255 Bytes ohne /; . und .. sind nicht zulässig.",
     "files.savedHost": "Auf dem Host gespeichert",
-    "files.rename": "Umbenennen"
+    "files.rename": "Umbenennen",
+ "files.delete": "Löschen",
+ "files.deleteWarning": "Diesen Eintrag endgültig löschen? Verzeichnisse werden mit ihrem Inhalt entfernt. Symbolische Links werden entfernt, ohne ihre Ziele zu löschen. Dies kann nicht rückgängig gemacht werden."
   },
   "provider": {
     "kubernetes.rbac.source": "RBAC-Quelle konnte nicht gelesen werden ({class})",

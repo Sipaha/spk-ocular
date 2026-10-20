@@ -1168,7 +1168,9 @@
     "files.name": "文件名",
     "files.nameInvalid": "文件名不能超过 255 字节，不能包含 /，也不能为 . 或 ..。",
     "files.savedHost": "已保存到主机",
-    "files.rename": "重命名"
+    "files.rename": "重命名",
+ "files.delete": "删除",
+ "files.deleteWarning": "永久删除此项？目录及其内容将被删除。符号链接将被删除，但不会删除其目标。此操作无法撤销。"
   },
   "provider": {
     "kubernetes.rbac.source": "无法读取 RBAC 来源（{class}）",

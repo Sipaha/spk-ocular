@@ -1168,7 +1168,9 @@
     "files.name": "Nom du fichier",
     "files.nameInvalid": "Utilisez un nom de 255 octets maximum, sans / ; . et .. ne sont pas autorisés.",
     "files.savedHost": "Enregistré sur l’hôte",
-    "files.rename": "Renommer"
+    "files.rename": "Renommer",
+ "files.delete": "Supprimer",
+ "files.deleteWarning": "Supprimer définitivement cet élément ? Les dossiers et leur contenu seront supprimés. Les liens symboliques sont supprimés sans supprimer leurs cibles. Cette action est irréversible."
   },
   "provider": {
     "kubernetes.rbac.source": "Impossible de lire la source RBAC ({class})",

@@ -1168,7 +1168,9 @@
     "files.name": "ファイル名",
     "files.nameInvalid": "255 バイト以内で / を含まない名前を指定してください。. と .. は使えません。",
     "files.savedHost": "ホストに保存しました",
-    "files.rename": "名前を変更"
+    "files.rename": "名前を変更",
+ "files.delete": "削除",
+ "files.deleteWarning": "この項目を完全に削除しますか？ディレクトリは内容ごと削除されます。シンボリックリンクはリンク先を削除せずに削除されます。この操作は元に戻せません。"
   },
   "provider": {
     "kubernetes.rbac.source": "RBACの情報を取得できません（{class}）",

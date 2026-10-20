@@ -1005,3 +1005,23 @@ DELETE is followed by a read; an ambiguous result remains pending. CREATE ambigu
 without a returned UID is recovered only by the recorded namespace/marker/node
 owner, and the observed UID is persisted before deletion. A crash in that CREATE
 response window cannot provide a server UID that the client never received.
+
+
+## Local file reveal and Files deletion
+
+Local download and source-configuration reveal share `internal/filemanager`.
+Linux sends the escaped full file URI to `FileManager1.ShowItems` on the existing
+session bus and waits for acknowledgment; it never autostarts a bus or silently
+falls back to an unselected parent. macOS and Windows retain item-selection
+arguments. Linux/macOS selection requests carry a five-second deadline; Explorer
+is dispatched and reaped without tying its lifetime to the request. No shell
+interprets a path.
+
+Shared Files deletion reads the same stat digest as rename into a review,
+requires the original connection revision and source digest, rejects root, and
+passes the normalized absolute path to `rm -r --`. Symlinks are unlinked without
+following their targets. The source check cannot atomically exclude changes
+between stat and removal or snapshot recursive contents; errors may leave partial
+results. The UI permits no repeat submission after failure until a fresh review.
+Cancel initially receives focus, dirty editors use mayLeave, and cached branches
+and affected documents are removed only on confirmed success.

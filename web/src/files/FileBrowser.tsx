@@ -1,3 +1,4 @@
+import {FileDeleteDialog} from './FileDeleteDialog'
 import {FileNameDialog} from './FileNameDialog'
 import {ActionIconButton} from '../components/ActionIconButton'
 import {ActionIcon} from '../components/icons'
@@ -47,6 +48,7 @@ export default function FileBrowser({ client, subject, selectedInstance, prepare
   const [writing, setWriting] = useState(false)
   const [downloading, setDownloading] = useState(false)
   const [downloaded, setDownloaded] = useState('')
+  const [deleteSource,setDeleteSource]=useState<{path:string;version:string}|null>(null)
   const [renameSource,setRenameSource]=useState<{path:string;version:string}|null>(null)
   const [createDirectory,setCreateDirectory]=useState<string|null>(null)
   const [saved, setSaved] = useState(false)
@@ -256,6 +258,32 @@ export default function FileBrowser({ client, subject, selectedInstance, prepare
       revision.current=result.configRev;setRenameSource(null);setSaved(false)
     }finally{if(alive.current){setBusy(false);setWriting(false)}}
   }
+  const prepareDelete=(path:string)=>{
+    if(!container||busy||path==='/'||Object.values(directoryCache.current).some(item=>item.loading))return
+    mayLeave(()=>{void(async()=>{
+      setBusy(true);setError('')
+      try{
+        const info=await client.files({ref:source,preparedId,instance:container.instance,channel:container.channel,command:'delete-info',path,configRev:revision.current})
+        if(alive.current&&info.version)setDeleteSource({path,version:info.version})
+      }catch(e){if(alive.current)setError(errorText(e))}finally{if(alive.current)setBusy(false)}
+    })()})
+  }
+  const deleteFile=async()=>{
+    if(!container||busy||!deleteSource)throw new Error(t('app.loading'))
+    const path=deleteSource.path,parent=path.slice(0,path.lastIndexOf('/'))||'/',name=path.slice(path.lastIndexOf('/')+1)
+    const removed=(value:string)=>value===path||value.startsWith(path+'/')
+    setBusy(true);setWriting(true);setError('')
+    try{
+      const result=await client.files({ref:source,preparedId,instance:container.instance,channel:container.channel,command:'delete',path,expect:deleteSource.version,configRev:revision.current})
+      if(!alive.current)return
+      const next:Directories={}
+      for(const [key,entry]of Object.entries(directoryCache.current))if(!removed(key))next[key]=key===parent?{...entry,entries:entry.entries?.filter(item=>item.name!==name)}:entry
+      directoryCache.current=next;setDirectories(next);setExpanded(previous=>new Set([...previous].filter(key=>!removed(key))))
+      setSelected(parent);setDirectory(parent);setAddress(parent)
+      if(state.current.doc&&removed(state.current.doc.path)){setDoc(null);setText('')}
+      revision.current=result.configRev;setDeleteSource(null);setSaved(false)
+    }finally{if(alive.current){setBusy(false);setWriting(false)}}
+  }
   const openFile = (path: string) => { if (!busy) mayLeave(() => void requestFile('read', path)) }
   const close = () => { if (!writing) mayLeave(onClose) }
   const autoLanguage = doc ? LanguageDescription.matchFilename(languages, doc.path)?.name : undefined
@@ -264,7 +292,7 @@ export default function FileBrowser({ client, subject, selectedInstance, prepare
   return createPortal(
     <>
     <div data-file-overlay className="fixed inset-0 z-30 flex items-center justify-center bg-black/50 p-[12px]" onMouseDown={event => { if (event.target === event.currentTarget) close() }}>
-      <section ref={box} inert={createDirectory!==null||renameSource!==null} tabIndex={-1} role="dialog" aria-modal="true" aria-label={t('files.title')}
+      <section ref={box} inert={createDirectory!==null||renameSource!==null||deleteSource!==null} tabIndex={-1} role="dialog" aria-modal="true" aria-label={t('files.title')}
         className="relative flex h-[calc(100dvh-24px)] w-[min(1800px,calc(100vw-24px))] flex-col border border-line bg-panel"
         onKeyDown={event => {
           if (event.key === 'Tab') {
@@ -299,7 +327,7 @@ export default function FileBrowser({ client, subject, selectedInstance, prepare
         <div className="flex min-h-0 flex-1">
           <div className="relative min-h-0 shrink-0" style={{width:treeWidth,maxWidth:'65%'}} data-file-tree-panel>
           <FileTree directories={directories} expanded={expanded} selected={selected} disabled={writing || initializing || downloading || resolvingLink} onSelect={(path, folder) => { setSelected(path); const parent = folder ? path : path.slice(0, path.lastIndexOf('/')) || '/'; setDirectory(parent); setAddress(parent) }}
-            canRename={!busy&&!directoryLoading} onRename={prepareRename} onToggle={toggleDirectory} onOpen={openFile} onRefresh={refreshDirectory} onDownload={path => void download(path)} onFollowLink={followLink} />
+            canRename={!busy&&!directoryLoading} onRename={prepareRename} onDelete={prepareDelete} onToggle={toggleDirectory} onOpen={openFile} onRefresh={refreshDirectory} onDownload={path => void download(path)} onFollowLink={followLink} />
           <PanelResize label={t('files.resizeTree')} outside value={treeWidth} min={140} max={() => (box.current?.clientWidth ?? 1200)*0.65} onDone={setTreeWidth} />
           </div>
           <div className="relative flex min-w-0 flex-1 flex-col" data-file-editor-panel aria-busy={!!readingPath || undefined}>
@@ -324,6 +352,7 @@ export default function FileBrowser({ client, subject, selectedInstance, prepare
         </footer>
       </section>
     </div>
+    {deleteSource&&<FileDeleteDialog path={deleteSource.path} onDelete={deleteFile} onClose={()=>setDeleteSource(null)}/>}
     {createDirectory!==null&&<FileNameDialog directory={createDirectory} onSubmit={createFile} onClose={()=>setCreateDirectory(null)}/>}
     {renameSource&&<FileNameDialog mode="rename" directory={renameSource.path.slice(0,renameSource.path.lastIndexOf('/'))||'/'} initialName={renameSource.path.slice(renameSource.path.lastIndexOf('/')+1)} onSubmit={renameFile} onClose={()=>setRenameSource(null)}/>}
     </>, document.body,

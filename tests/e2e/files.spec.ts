@@ -615,3 +615,27 @@ test('Files renames a cached directory, updates its open document path and keeps
  await editor.click();await page.keyboard.type(' draft');await browser.getByRole('treeitem',{name:'config.txt',exact:true}).click();await page.keyboard.press('F2');const discard=page.getByRole('alertdialog');await expect(discard).toBeVisible();await discard.getByRole('button',{name:/keep editing/i}).click();await expect(rename).toHaveCount(0);await expect(editor).toContainText('draft')
  expect(calls.filter(c=>c.command==='rename')).toHaveLength(2);expect(calls.filter(c=>c.command==='rename-info')).toHaveLength(1)
 })
+
+
+test('Files deletion confirms exact path, cancels safely, clears deleted branches and never retries an uncertain result',async({page})=>{
+ let exists=true,fail=true,deletes=0
+ await page.route('**/api/Files',async route=>{
+  const req=route.request().postDataJSON()
+  if(req.command==='list')return route.fulfill({json:{path:req.path,configRev:'fixture',text:'',entries:req.path==='/'?(exists?[{name:'etc',directory:true,symlink:false}]:[]):[{name:'config.txt',directory:false,symlink:false}]}})
+  if(req.command==='delete-info')return route.fulfill({json:{path:req.path,configRev:'fixture',text:'',version:'reviewed-source'}})
+  if(req.command==='delete'){
+   deletes++;expect(req.path).toBe('/etc');expect(req.configRev).toBe('fixture');expect(req.expect).toBe('reviewed-source')
+   if(fail)return route.fulfill({status:409,json:{code:'conflict',detail:'Source changed; review deletion again'}})
+   exists=false;return route.fulfill({json:{path:req.path,configRev:'fixture',text:''}})
+  }
+  return route.fulfill({json:{path:req.path,configRev:'fixture',text:'original text',version:'content-version'}})
+ })
+ await selectObject(page,'api');await page.getByRole('button',{name:'Files',exact:true}).click();const files=page.getByRole('dialog',{name:'Files',exact:true})
+ await files.getByRole('treeitem',{name:'/',exact:true}).click({button:'right'});await expect(page.getByRole('menuitem',{name:'Delete',exact:true})).toHaveCount(0);await page.keyboard.press('Escape')
+ await files.getByRole('button',{name:'Expand /etc',exact:true}).click();await files.getByRole('treeitem',{name:'config.txt',exact:true}).dblclick();await expect(files.locator('.cm-content')).toContainText('original text')
+ const entry=files.getByRole('treeitem',{name:'etc',exact:true}),dialog=page.getByRole('alertdialog',{name:'Delete',exact:true})
+ await entry.click({button:'right'});await page.getByRole('menuitem',{name:'Delete',exact:true}).click();await expect(dialog).toContainText('/etc');await expect(dialog).toContainText('contents');await expect(dialog.getByRole('button',{name:'Cancel',exact:true})).toBeFocused();await dialog.getByRole('button',{name:'Cancel',exact:true}).click();expect(deletes).toBe(0)
+ await entry.click();await page.keyboard.press('Delete');await dialog.getByRole('button',{name:'Delete',exact:true}).click();await expect(dialog.getByRole('alert')).toContainText('Source changed');await expect(dialog.getByRole('button',{name:'Delete',exact:true})).toBeDisabled();await expect(dialog.getByRole('button',{name:'Cancel',exact:true})).toBeFocused();expect(deletes).toBe(1);await page.keyboard.press('Escape')
+ await files.locator('.cm-content').click();await page.keyboard.type('draft');await entry.click();await page.keyboard.press('Delete');const discard=page.getByRole('alertdialog',{name:'Discard edits?',exact:true});await expect(discard).toBeVisible();await discard.getByRole('button',{name:/keep editing/i}).click();await expect(dialog).toHaveCount(0);await expect(files.locator('.cm-content')).toContainText('draft')
+ await entry.click();await page.keyboard.press('Delete');await page.getByRole('alertdialog',{name:'Discard edits?',exact:true}).getByRole('button',{name:/discard/i}).click();await expect(dialog).toBeVisible();await page.screenshot({path:join(scratchRoot,'files-delete-directory.png')});fail=false;await dialog.getByRole('button',{name:'Delete',exact:true}).click();await expect(dialog).toHaveCount(0);await expect(entry).toHaveCount(0);await expect(files.getByRole('treeitem',{name:'config.txt',exact:true})).toHaveCount(0);await expect(files.locator('[data-file-document-header]')).toHaveCount(0);expect(deletes).toBe(2)
+})

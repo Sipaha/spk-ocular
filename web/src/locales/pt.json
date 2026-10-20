@@ -1168,7 +1168,9 @@
     "files.name": "Nome do arquivo",
     "files.nameInvalid": "Use um nome de até 255 bytes, sem /; . e .. não são válidos.",
     "files.savedHost": "Salvo no host",
-    "files.rename": "Renomear"
+    "files.rename": "Renomear",
+ "files.delete": "Excluir",
+ "files.deleteWarning": "Excluir esta entrada permanentemente? Os diretórios e seu conteúdo serão removidos. Links simbólicos são removidos sem excluir seus destinos. Esta ação não pode ser desfeita."
   },
   "provider": {
     "kubernetes.rbac.source": "Não foi possível ler a fonte RBAC ({class})",

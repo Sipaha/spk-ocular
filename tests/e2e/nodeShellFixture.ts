@@ -69,6 +69,11 @@ export async function nodeShellFixture() {
         if(filePath==='/')entries.set('etc',true)
         for(const path of files.keys())if(path.startsWith(prefix)){const rest=path.slice(prefix.length),slash=rest.indexOf('/');entries.set(slash<0?rest:rest.slice(0,slash),slash>=0)}
         output=Buffer.from([...entries].map(([name,dir])=>`${dir?'d':'f'}\0${0}\0${name}\0\0`).join(''))
+      }else if(script.includes('ocular-delete')){
+        const version=createHash('sha256').update('fixture-stat:'+filePath+'\n').digest('hex')
+        if(!files.has(filePath)&&filePath!=='/etc')error='Source no longer exists'
+        else if(host[5]!==version)error='Source changed; review deletion again'
+        else for(const path of files.keys())if(path===filePath||path.startsWith(filePath+'/'))files.delete(path)
       }else if(script.includes('ocular-atomic-rename')){
         const destination=host[6],before=files.get(filePath),version=createHash('sha256').update('fixture-stat:'+filePath+'\n').digest('hex')
         if(before===undefined)error='Source no longer exists'

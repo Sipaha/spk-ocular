@@ -59,20 +59,23 @@ func TestDownloadHistoryOnlyOpensKnownCompletedItems(t *testing.T) {
 	h.finish(id, file, "complete")
 	require.NoError(t, h.open(t.Context(), id, false))
 	require.Equal(t, 1, launches)
+	var revealed []string
+	h.reveal = func(_ context.Context, path string) error { revealed = append(revealed, path); return nil }
+	require.NoError(t, h.open(t.Context(), id, true))
+	require.Equal(t, []string{file}, revealed)
 	require.NoError(t, os.Remove(file))
 	require.Error(t, h.open(t.Context(), id, false))
 	require.Equal(t, 1, launches)
 	for _, test := range []struct {
-		os     string
-		reveal bool
-		name   string
-		args   []string
+		os   string
+		name string
+		args []string
 	}{
-		{"linux", false, "xdg-open", []string{file}}, {"linux", true, "xdg-open", []string{filepath.Dir(file)}},
-		{"darwin", false, "open", []string{"--", file}}, {"darwin", true, "open", []string{"-R", file}},
-		{"windows", false, "rundll32.exe", []string{"url.dll,FileProtocolHandler", file}}, {"windows", true, "explorer.exe", []string{"/select," + file}},
+		{"linux", "xdg-open", []string{file}},
+		{"darwin", "open", []string{"--", file}},
+		{"windows", "rundll32.exe", []string{"url.dll,FileProtocolHandler", file}},
 	} {
-		name, args := downloadCommand(test.os, file, test.reveal)
+		name, args := downloadCommand(test.os, file)
 		require.Equal(t, test.name, name)
 		require.Equal(t, test.args, args)
 	}
