@@ -113,11 +113,14 @@ limits and saved sizes are the same as pointer resizing. Focus stays in place,
 key repeat is supported, and a modal dialog cannot resize a panel behind it.
 Other arrow combinations retain their text/editor/terminal behavior.
 
-With focus in the active log viewer, **Alt+Shift+Enter** detaches it into a
-separate window. The same shortcut in that window returns it to the bottom
-panel. It uses the same single-stream handoff as the window button; key repeat
-does not open additional windows. Editors, terminals and open modal dialogs
-retain their own Enter shortcuts.
+With focus in the active Logs, Files or Terminal panel, **Alt+Shift+Enter**
+detaches it into a separate window. The same shortcut in that window returns it
+to the bottom panel. It uses the same session handoff as the window button and
+also works from the Files editor/address field and the terminal input without
+inserting a newline or sending Enter to the PTY. Key repeat does not open more
+windows; hidden panels, composing text and open modal dialogs/menus do not
+trigger a transfer. Files waits for current operations, just like its button.
+Other Enter combinations retain their editor/terminal behavior.
 
 Detached logs open at the available screen width and 90% of its working height,
 centered on the main window's monitor in desktop mode (or the primary monitor
@@ -907,7 +910,7 @@ UI-only: existing wildcard agent permissions do not expose Helm data or actions.
 
 Use **Files** in resource details for a resource that supports terminals. The
 selected instance/container is pinned for the inspector and displayed
-as read-only context in its header, ordered as namespace/scope, source object,
+as read-only context in its status footer (or modal header), ordered as namespace/scope, source object,
 instance/Pod, and container (without repeating the source when it is the instance). Browse the compact filesystem tree, including
 hidden entries, or enter an absolute directory path. Expand folders with their
 arrow or the keyboard; a single click selects a file and a double click or Enter
@@ -920,12 +923,15 @@ even while collapsed. Only explicit Refresh reloads the list and shows an animat
 indicator on the folder row while retaining its children. Opening a file shows
 an animated loading state in the editor pane. Double-clicking names selects the
 row, never the name text. The tree uses the editor's monospace font.
-The compact header bars use explicit 4 px top and bottom padding around their
-26 px controls; their total 35 px height includes the 1 px bottom border.
+The directory controls and open-file path/Save share one compact toolbar above
+the tree and editor. Its 26 px controls have 4 px vertical padding; the single
+row is 35 px including its bottom border and wraps on narrow windows. Tabbed
+Files has no duplicate title bar or close button: close it using its tab. Modal
+Files retains its title and close button.
 Errors appear in a dismissible overlay above the footer without moving or resizing
 the tree and editor. Dismissing an error preserves the open draft.
 Files opens in the bottom panel for containers, Pods and nodes. Inactive tabs keep
-their directory cache and drafts, and survive target/card switches. The header's
+their directory cache and drafts, and survive target/card switches. The toolbar's
 **Open in window** icon transfers the same session into a normal separate window;
 **Return to bottom panel**, or closing that window, returns it. The transfer keeps
 the selected container, directory/tree, captured file version, draft, editor

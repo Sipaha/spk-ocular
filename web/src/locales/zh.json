@@ -464,7 +464,7 @@
     "keys.logNext": "下一个/上一个匹配项",
     "keys.logSave": "另存为文件",
     "keys.logClear": "清除",
-    "keys.logWindow": "将日志移至独立窗口或返回底部面板",
+    "keys.logWindow": "将焦点所在的日志、文件或终端面板移至独立窗口或返回",
     "keys.termCopy": "复制选中内容",
     "keys.termPaste": "粘贴",
     "keys.termRest": "其他所有按键均传递给程序；命令面板可从面板工具栏打开",

@@ -52,3 +52,15 @@ export async function reconfigure(page: Page) {
   const res = await page.request.post('/api/_test/synthetic/reconfigure', { headers: { Authorization: `Bearer ${await token(page)}` } })
   expect(res.ok()).toBeTruthy()
 }
+
+
+/** Returning closes the page during Enter's keydown, sometimes before its CDP
+ * acknowledgement. Require that exact close; all other input errors still fail. */
+export async function returnWithWindowShortcut(popup: Page) {
+  const closed=popup.waitForEvent('close')
+  await popup.keyboard.down('Alt');await popup.keyboard.down('Shift')
+  const inputError=await popup.keyboard.down('Enter').then(()=>null,(error:unknown)=>error)
+  await closed
+  expect(popup.isClosed()).toBe(true)
+  if(inputError&&!(inputError instanceof Error&&inputError.message==='keyboard.down: Target page, context or browser has been closed'))throw inputError
+}

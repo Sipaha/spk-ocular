@@ -498,7 +498,7 @@
     "keys.logNext": "Siguiente / coincidencia anterior",
     "keys.logSave": "Guardar en un archivo",
     "keys.logClear": "Borrar",
-    "keys.logWindow": "Separar los registros o devolverlos al panel inferior",
+    "keys.logWindow": "Separar el panel enfocado de registros, archivos o terminal, o devolverlo",
     "keys.termCopy": "Copiar la selección",
     "keys.termPaste": "Pegar",
     "keys.termRest": "Todas las demás teclas van al programa; la paleta está en el panel",

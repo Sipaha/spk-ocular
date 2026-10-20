@@ -56,7 +56,7 @@ export const KEYS: KeyDef[] = [
   { id: 'editReview', scope: 'details', keys: 'Ctrl+Enter', help: 'keys.editReview' },
   { id: 'search', scope: 'logs', keys: 'Ctrl+F', help: 'keys.logSearch' },
   { id: 'next', scope: 'logs', keys: 'F3 Shift+F3', help: 'keys.logNext' },
-  { id: 'window', scope: 'logs', keys: 'Alt+Shift+Enter', help: 'keys.logWindow' },
+  { id: 'window', scope: 'global', keys: 'Alt+Shift+Enter', help: 'keys.logWindow' },
   { id: 'save', scope: 'logs', keys: 'Ctrl+S', help: 'keys.logSave' },
   { id: 'clear', scope: 'logs', keys: 'Ctrl+L', help: 'keys.logClear' },
   { id: 'follow', scope: 'logs', keys: 'End', help: 'logs.follow' },
@@ -75,6 +75,14 @@ export function isTyping(target: EventTarget | null): boolean {
  * their own keys — the rest must not act behind them). */
 export function overlayOpen(): boolean {
   return !!document.querySelector('[aria-modal="true"], [role="menu"]')
+}
+
+/** Reserved window chord, before CodeMirror/xterm consume or transmit Enter.
+ * Repeated keydowns are still consumed by the panel without another action. */
+export function toolWindowShortcut(e: KeyboardEvent): boolean {
+  return !consumed(e) && e.key === 'Enter' && e.altKey && e.shiftKey && !e.ctrlKey && !e.metaKey
+    && !e.getModifierState?.('AltGraph') && !overlayOpen()
+    && !(e.target instanceof Element && e.target.closest('[hidden], [inert]'))
 }
 
 /** The key was already handled by whom it was meant for (CodeMirror closing

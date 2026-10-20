@@ -498,7 +498,7 @@
     "keys.logNext": "次/前の一致",
     "keys.logSave": "ファイルに保存",
     "keys.logClear": "クリア",
-    "keys.logWindow": "ログを別ウィンドウに移す、または下部パネルに戻す",
+    "keys.logWindow": "フォーカス中のログ・ファイル・ターミナルパネルを別ウィンドウに移す、または戻す",
     "keys.termCopy": "選択範囲をコピー",
     "keys.termPaste": "貼り付け",
     "keys.termRest": "その他のキーはプログラムに送られます；パレットはパネルにあります",

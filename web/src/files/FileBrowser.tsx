@@ -14,7 +14,7 @@ import { runningChannel } from '../components/useInstancePicker'
 import { PanelResize } from '../components/PanelResize'
 import { Select } from '../components/Select'
 import { holdEdits, mayLeave, mayLeaveMatching } from '../edit/guard'
-import { focusMark, restoreFocus } from '../shortcuts'
+import { focusMark, restoreFocus, toolWindowShortcut } from '../shortcuts'
 import { isShortcut } from '../keyboard'
 import { t } from '../i18n'
 import { downloadContainerFiles } from './download'
@@ -311,6 +311,12 @@ export default function FileBrowser({ client, subject, selectedInstance, prepare
     <div data-file-overlay={inline?undefined:true} className={inline?"h-full min-h-0":"fixed inset-0 z-30 flex items-center justify-center bg-black/50 p-[12px]"} onMouseDown={event => { if (event.target === event.currentTarget) close() }}>
       <section data-file-browser ref={box} inert={createDirectory!==null||renameSource!==null||deleteSource!==null} tabIndex={-1} role={inline?"region":"dialog"} aria-modal={inline?undefined:true} aria-label={t('files.title')}
         className={inline?"relative flex h-full min-h-0 w-full flex-col bg-panel":"relative flex h-[calc(100dvh-24px)] w-[min(1800px,calc(100vw-24px))] flex-col border border-line bg-panel"}
+        onKeyDownCapture={event=>{
+          if(transfer?.onWindowAction&&toolWindowShortcut(event.nativeEvent)){
+            event.preventDefault();event.stopPropagation()
+            if(!event.repeat&&!transferBusy&&!initializing)transfer.onWindowAction()
+          }
+        }}
         onKeyDown={event => {
           if (!inline && event.key === 'Tab') {
             const controls = [...(box.current?.querySelectorAll<HTMLElement>('button:not(:disabled):not([tabindex="-1"]), input:not(:disabled), [tabindex="0"], [contenteditable="true"]') ?? [])]
@@ -322,20 +328,26 @@ export default function FileBrowser({ client, subject, selectedInstance, prepare
           if (!inline && event.key === 'Escape') { event.stopPropagation(); close() }
           if (!event.altKey && isShortcut(event, 'KeyS', { ctrl: true, shift: false })) { event.preventDefault(); if (doc && !busy) void requestFile('write', doc.path) }
         }}>
-        <header className="flex h-[35px] shrink-0 items-center gap-3 border-b border-line px-3 py-[4px]" data-file-header>
+        {!inline&&<header className="flex h-[35px] shrink-0 items-center gap-3 border-b border-line px-3 py-[4px]" data-file-header>
           <strong>{t('files.title')}</strong>
           <span className="min-w-0 flex-1 truncate text-sm text-fg-muted" data-file-context title={container?.title}>{container?.title ?? source.name}</span>
-          {transfer?.onWindowAction&&<ActionIconButton className="h-[26px] w-[26px]" disabled={transferBusy||initializing} label={t(transfer.returning?'logs.returnWindow':'logs.detachWindow')} description={t(transfer.returning?'logs.returnWindow':'logs.detachWindow')} onClick={transfer.onWindowAction}><WindowActionIcon returning={transfer.returning} className="h-4 w-4"/></ActionIconButton>}
           <button className={button} disabled={writing} onClick={close} aria-label={t('drawer.close')}>×</button>
-        </header>
-        <div className="flex h-[35px] shrink-0 items-center gap-2 border-b border-line px-3 py-[4px]" data-file-address>
-          <form className="flex flex-1 gap-2" onSubmit={event => { event.preventDefault(); void revealDirectory(address) }}>
-            <input disabled={initializing || writing} aria-label={t('files.path')} className="h-[26px] min-w-0 flex-1 border border-line bg-app px-2 font-mono text-[13px]"
-              value={address} onChange={event => setAddress(event.target.value)} />
-            <button className={button} disabled={initializing || writing}>{t('files.go')}</button>
-          </form>
-          <ActionIconButton className="h-[26px] w-[26px]" label={t('files.create')} description={t('files.create')} disabled={initializing||busy||writing||directoryLoading} onClick={()=>leave(()=>setCreateDirectory(directory))}><ActionIcon name="newFile"/></ActionIconButton>
-          <RefreshButton className="h-[26px] w-[26px]" busy={!!directories[directory]?.refreshing} disabled={initializing || writing || !!directories[directory]?.loading} onClick={() => refreshDirectory(directory)} />
+        </header>}
+        <div className="flex min-h-[35px] shrink-0 flex-wrap items-center border-b border-line" data-file-toolbar>
+          <div className="flex min-w-[210px] max-w-full grow basis-full items-center gap-2 px-3 py-[4px] sm:max-w-[65%] sm:grow-0 sm:basis-auto" style={{width:treeWidth}} data-file-address>
+            <form className="flex min-w-0 flex-1 gap-2" onSubmit={event => { event.preventDefault(); void revealDirectory(address) }}>
+              <input disabled={initializing || writing} aria-label={t('files.path')} className="h-[26px] min-w-0 flex-1 border border-line bg-app px-2 font-mono text-[13px]"
+                value={address} onChange={event => setAddress(event.target.value)} />
+              <button className={button} disabled={initializing || writing}>{t('files.go')}</button>
+            </form>
+            <ActionIconButton className="h-[26px] w-[26px] shrink-0" label={t('files.create')} description={t('files.create')} disabled={initializing||busy||writing||directoryLoading} onClick={()=>leave(()=>setCreateDirectory(directory))}><ActionIcon name="newFile"/></ActionIconButton>
+            <RefreshButton className="h-[26px] w-[26px] shrink-0" busy={!!directories[directory]?.refreshing} disabled={initializing || writing || !!directories[directory]?.loading} onClick={() => refreshDirectory(directory)} />
+          </div>
+          <div className="flex min-w-0 flex-1 items-center gap-2 px-3 py-[4px]" data-file-document-header={doc?true:undefined}>
+            <span className="min-w-0 flex-1 truncate font-mono text-sm" title={doc?.path}>{doc?.path}{doc&&text !== doc.text ? ' *' : ''}</span>
+            {doc&&<button className={button} disabled={busy || text === doc.text} onClick={() => void requestFile('write', doc.path)}>{t('files.save')}</button>}
+            {transfer?.onWindowAction&&<ActionIconButton className="h-[26px] w-[26px] shrink-0" disabled={transferBusy||initializing} label={t(transfer.returning?'logs.returnWindow':'logs.detachWindow')} description={`${t(transfer.returning?'logs.returnWindow':'logs.detachWindow')} (Alt+Shift+Enter)`} onClick={transfer.onWindowAction}><WindowActionIcon returning={transfer.returning} className="h-4 w-4"/></ActionIconButton>}
+          </div>
         </div>
         {error && <div role="alert" data-file-error className="absolute right-3 bottom-[39px] z-30 flex max-w-[min(600px,calc(100%-24px))] items-start gap-3 border border-danger/50 bg-panel px-3 py-2 text-sm text-danger shadow-lg">
           <p className="max-h-40 min-w-0 overflow-auto whitespace-pre-wrap break-words">{error}</p>
@@ -350,10 +362,6 @@ export default function FileBrowser({ client, subject, selectedInstance, prepare
           </div>
           <div className="relative flex min-w-0 flex-1 flex-col" data-file-editor-panel aria-busy={!!readingPath || undefined}>
             {doc ? <>
-              <div className="flex h-[35px] shrink-0 items-center gap-2 border-b border-line px-3 py-[4px]" data-file-document-header>
-                <span className="min-w-0 flex-1 truncate font-mono text-sm" title={doc.path}>{doc.path}{text !== doc.text ? ' *' : ''}</span>
-                <button className={button} disabled={busy || text === doc.text} onClick={() => void requestFile('write', doc.path)}>{t('files.save')}</button>
-              </div>
               <div className="min-h-0 flex-1" inert={busy}>
                 <Suspense fallback={<div className="flex h-full items-center justify-center"><Loading /></div>}><Editor key={`${doc.path}:${documentEpoch}`} filename={doc.path} language={language} text={text} session={initial?.editor?.path===doc.path&&initial.editor.epoch===documentEpoch?initial.editor.session:undefined} onSession={session=>{const current=lastSnapshot.current;if(current?.doc?.path!==doc.path||current.documentEpoch!==documentEpoch)return;editorSession.current={path:doc.path,epoch:documentEpoch,session};transfer?.capture?.({...current,text:session.text,editor:editorSession.current})}} editable onChange={setText} label={doc.path} /></Suspense>
               </div>
@@ -362,6 +370,7 @@ export default function FileBrowser({ client, subject, selectedInstance, prepare
           </div>
         </div>
         <footer className="flex h-[27px] shrink-0 items-center gap-3 border-t border-line px-3 py-[2px] text-[12px] leading-[18px] text-fg-muted" data-file-footer>
+          {inline&&<span className="min-w-0 max-w-[50%] shrink truncate" data-file-context title={container?.title}>{container?.title ?? source.name}</span>}
           <span className="min-w-0 flex-1 truncate" aria-live="polite">{busy || initializing || directoryLoading || downloading || resolvingLink ? t('app.loading') : downloaded ? t('files.downloaded', { path: downloaded }) : saved ? t(preparedId?'files.savedHost':'files.saved') : t('files.limit')}</span>
           {doc && <Select label={t('files.language')} className="file-footer-select text-[12px]" value={language} options={[
             { value: '', label: `${autoLanguage ?? t('files.plain')} · ${t('files.auto')}` },

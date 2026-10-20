@@ -498,7 +498,7 @@
     "keys.logNext": "Nächster / vorheriger Treffer",
     "keys.logSave": "In eine Datei speichern",
     "keys.logClear": "Löschen",
-    "keys.logWindow": "Protokolle auslagern oder ins untere Panel zurückholen",
+    "keys.logWindow": "Das fokussierte Protokoll-, Datei- oder Terminalpanel auslagern oder zurückholen",
     "keys.termCopy": "Auswahl kopieren",
     "keys.termPaste": "Einfügen",
     "keys.termRest": "Alle anderen Tasten gehen an das Programm; die Palette ist im Panel",

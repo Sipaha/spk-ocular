@@ -1,4 +1,4 @@
-import {stats as lifecycleStats} from './synth'
+import {stats as lifecycleStats,returnWithWindowShortcut} from './synth'
 import { selectConnection, openAppMenu } from './fixtures'
 import { connectSelected } from './fixtures'
 import { expect, type Page } from '@playwright/test'
@@ -961,10 +961,7 @@ test('Alt+Shift+Enter detaches and returns focused logs without a second stream 
  await popupViewport.dispatchEvent('keydown',{key:'Enter',code:'Enter',altKey:true,shiftKey:true,repeat:true})
  expect(popup.isClosed()).toBe(false)
  await popup.screenshot({path:join(scratchRoot,'logs-keyboard-detached.png')})
- const closed=popup.waitForEvent('close')
- // The Enter keydown closes this exact popup before a chord's keyup sequence.
- await popup.keyboard.down('Alt');await popup.keyboard.down('Shift');await popup.keyboard.down('Enter')
- await closed
+ await returnWithWindowShortcut(popup)
  await expect(viewport).toBeVisible();await expect(viewport).toBeFocused()
  expect((await stats(page)).streams).toBe(before.streams)
  expect(context.pages()).toHaveLength(1)

@@ -1,6 +1,6 @@
 import {expect} from '@playwright/test'
 import {test,scratchRoot,selectConnection} from './fixtures'
-import {selectObject,expectScreen,since,stats,focusTerminal} from './synth'
+import {selectObject,expectScreen,since,stats,focusTerminal,returnWithWindowShortcut} from './synth'
 import {join} from 'node:path'
 
 test('Shell detaches and returns with its original PTY, screen, input and ordinary window geometry',async({page})=>{
@@ -41,6 +41,20 @@ test('Files dock/window transfer keeps its directory, draft and captured save ve
  await files.getByRole('treeitem',{name:'note.txt',exact:true}).dblclick()
  const editor=files.locator('.cm-content');await expect(editor).toContainText('initial file')
  await editor.click();await page.keyboard.press('Control+End');await page.keyboard.type('draft before transfer')
+ await expect(files.locator('[data-file-header]')).toHaveCount(0)
+ await expect(files.getByRole('button',{name:'Close',exact:true})).toHaveCount(0)
+ const toolbar=files.locator('[data-file-toolbar]')
+ expect((await toolbar.boundingBox())!.height).toBe(35)
+ const top=await files.locator('[data-file-tree-panel], [data-file-editor-panel]').evaluateAll(els=>els.map(el=>el.getBoundingClientRect().top))
+ expect(top[0]).toBe(top[1]);expect(top[0]).toBe((await toolbar.boundingBox())!.y+35)
+ await page.screenshot({path:join(scratchRoot,'files-compact-wide.png')})
+ await page.setViewportSize({width:375,height:900})
+ expect(await files.evaluate(el=>el.scrollWidth<=el.clientWidth)).toBe(true)
+ for(const control of [files.getByRole('textbox',{name:'Container path',exact:true}),files.getByRole('button',{name:'Save',exact:true}),files.getByRole('button',{name:'Open in window',exact:true})]){
+  await expect(control).toBeVisible();const bounds=(await control.boundingBox())!;expect(bounds.x).toBeGreaterThanOrEqual(0);expect(bounds.x+bounds.width).toBeLessThanOrEqual(375)
+ }
+ await page.screenshot({path:join(scratchRoot,'files-compact-narrow.png')})
+ await page.setViewportSize({width:1280,height:720})
  const before=calls.length,popupWait=page.waitForEvent('popup')
  await files.getByRole('button',{name:'Open in window',exact:true}).click();const popup=await popupWait
  const remote=popup.getByRole('region',{name:'Files',exact:true})
@@ -152,4 +166,65 @@ test('a detached Shell answers each terminal cursor query once',async({page})=>{
  await page.keyboard.type('QUERYMARK');await page.keyboard.press('Enter')
  await expect.poll(()=>queryEnd>0&&acked>=queryEnd).toBe(true)
  expect(reports).toHaveLength(1)
+})
+
+test('Files Alt+Shift+Enter moves the focused editor/address without new reads, repeats or actions behind dialogs',async({page,context})=>{
+ const calls:Record<string,unknown>[]=[]
+ await context.route('**/api/Files',async route=>{
+  const request=route.request().postDataJSON();calls.push(request)
+  await route.fulfill({json:{path:request.path,text:request.command==='read'?'keyboard draft\n':'',version:'original',configRev:'original',entries:[{name:'note.txt',directory:false,symlink:false}]}})
+ })
+ await selectObject(page,'api');await page.getByRole('button',{name:'Files',exact:true}).click()
+ const files=page.getByRole('region',{name:'Files',exact:true}),address=files.getByRole('textbox',{name:'Container path',exact:true})
+ await files.getByRole('treeitem',{name:'note.txt',exact:true}).dblclick()
+ const editor=files.locator('.cm-content');await expect(editor).toContainText('keyboard draft')
+ await editor.click();await page.keyboard.press('Control+End');await page.keyboard.type('unsaved')
+ await editor.dispatchEvent('keydown',{key:'Enter',code:'Enter',altKey:true,shiftKey:true,repeat:true})
+ expect(context.pages()).toHaveLength(1)
+ await files.getByRole('button',{name:'New empty file',exact:true}).click()
+ const discard=page.getByRole('alertdialog');await expect(discard).toBeVisible()
+ await editor.dispatchEvent('keydown',{key:'Enter',code:'Enter',altKey:true,shiftKey:true})
+ expect(context.pages()).toHaveLength(1)
+ await discard.getByRole('button',{name:'Keep editing',exact:true}).click()
+ const before=calls.length,popupWait=page.waitForEvent('popup')
+ await editor.press('Alt+Shift+Enter');const popup=await popupWait
+ const remote=popup.getByRole('region',{name:'Files',exact:true}),remoteEditor=remote.locator('.cm-content')
+ await expect(remoteEditor).toContainText('unsaved');expect(calls).toHaveLength(before)
+ await remoteEditor.dispatchEvent('keydown',{key:'Enter',code:'Enter',altKey:true,shiftKey:true,repeat:true})
+ expect(popup.isClosed()).toBe(false)
+ await remoteEditor.click();await popup.keyboard.press('Control+End');await popup.keyboard.type(' returned')
+ await popup.screenshot({path:join(scratchRoot,'files-keyboard-detached.png')})
+ await returnWithWindowShortcut(popup)
+ await expect(editor).toContainText('unsaved returned');expect(calls).toHaveLength(before)
+ await address.fill('/typed-but-not-opened')
+ const secondWait=page.waitForEvent('popup');await address.press('Alt+Shift+Enter');const second=await secondWait
+ await expect(second.getByRole('textbox',{name:'Container path',exact:true})).toHaveValue('/typed-but-not-opened');expect(calls).toHaveLength(before)
+ await second.getByRole('button',{name:'Return to bottom panel',exact:true}).click();await expect.poll(()=>second.isClosed()).toBe(true)
+ await expect(address).toHaveValue('/typed-but-not-opened')
+ await page.screenshot({path:join(scratchRoot,'files-keyboard-returned.png')})
+ await page.getByRole('grid',{name:'resources',exact:true}).getByRole('gridcell',{name:'api',exact:true}).click();await page.keyboard.press('s');await expectScreen(page,'synthetic terminal on api')
+ await page.locator('[data-file-browser] .cm-content').dispatchEvent('keydown',{key:'Enter',code:'Enter',altKey:true,shiftKey:true});expect(context.pages()).toHaveLength(1)
+})
+
+test('Shell Alt+Shift+Enter keeps pending PTY input without sending Enter or reacting from hidden panels',async({page,context})=>{
+ await selectObject(page,'api');const base=await stats(page);await page.keyboard.press('s');await expectScreen(page,'synthetic terminal on api')
+ const input=page.locator('.xterm-helper-textarea');await input.focus();await page.keyboard.type('pending-detach')
+ await input.dispatchEvent('keydown',{key:'Enter',code:'Enter',altKey:true,shiftKey:true,repeat:true})
+ expect(context.pages()).toHaveLength(1)
+ const popupWait=page.waitForEvent('popup');await input.press('Alt+Shift+Enter');const popup=await popupWait
+ await expect(popup.locator('.xterm-rows')).toContainText('pending-detach')
+ await expect(popup.locator('.xterm-rows')).not.toContainText('you said: pending-detach')
+ await input.dispatchEvent('keydown',{key:'Enter',code:'Enter',altKey:true,shiftKey:true})
+ expect(context.pages()).toHaveLength(2)
+ const guest=popup.locator('.xterm-helper-textarea');await guest.focus();await popup.keyboard.type('-continued');await popup.keyboard.press('Enter')
+ await expect(popup.locator('.xterm-rows')).toContainText('you said: pending-detach-continued')
+ await popup.keyboard.type('pending-return')
+ await guest.dispatchEvent('keydown',{key:'Enter',code:'Enter',altKey:true,shiftKey:true,repeat:true})
+ expect(popup.isClosed()).toBe(false)
+ await popup.screenshot({path:join(scratchRoot,'shell-keyboard-detached.png')})
+ await returnWithWindowShortcut(popup)
+ await expect(input).toBeFocused();await expectScreen(page,'pending-return');await expect(page.locator('.xterm-rows')).not.toContainText('you said: pending-return')
+ await page.keyboard.press('Enter');await expectScreen(page,'you said: pending-return')
+ expect(await since(page,base)).toMatchObject({terminals:1,syn_execs:1});expect(context.pages()).toHaveLength(1)
+ await page.screenshot({path:join(scratchRoot,'shell-keyboard-returned.png')})
 })

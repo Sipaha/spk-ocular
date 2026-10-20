@@ -498,7 +498,7 @@
     "keys.logNext": "Match suivant / précédent",
     "keys.logSave": "Enregistrer dans un fichier",
     "keys.logClear": "Effacer",
-    "keys.logWindow": "Détacher les journaux ou les ramener au panneau inférieur",
+    "keys.logWindow": "Détacher le panneau actif de journaux, fichiers ou terminal, ou le ramener",
     "keys.termCopy": "Copier la sélection",
     "keys.termPaste": "Coller",
     "keys.termRest": "Toutes les autres touches sont envoyées au programme ; la palette est sur le panneau",

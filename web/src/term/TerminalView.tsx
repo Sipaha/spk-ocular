@@ -12,6 +12,7 @@ import { ApiError } from '../api/client'
 import type { TerminalInfo } from '../api/types'
 import { classLabel, messageText, t } from '../i18n'
 import { isShortcut } from '../keyboard'
+import { toolWindowShortcut } from '../shortcuts'
 import { dock, type TermTab } from '../dock/store'
 import { formatArgv } from './argv'
 import { copyText, readText } from './clipboard'
@@ -367,8 +368,13 @@ export default function TerminalView({ client, tab, active, mode, bridge, detach
 
   const gone = openError?.code === 'gone' || ended?.class === 'gone'
   return (
-    <div className="flex h-full min-h-0 flex-col" data-terminal>
-      {onWindowAction&&<header className="flex h-[30px] shrink-0 justify-end border-b border-line px-2"><ActionIconButton label={t(bridge?.role==='guest'?'logs.returnWindow':'logs.detachWindow')} description={t(bridge?.role==='guest'?'logs.returnWindow':'logs.detachWindow')} onClick={onWindowAction}><WindowActionIcon returning={bridge?.role==='guest'} className="h-4 w-4"/></ActionIconButton></header>}
+    <div className="flex h-full min-h-0 flex-col" data-terminal onKeyDownCapture={event=>{
+      if(active&&!detached&&onWindowAction&&toolWindowShortcut(event.nativeEvent)){
+        event.preventDefault();event.stopPropagation()
+        if(!event.repeat)onWindowAction()
+      }
+    }}>
+      {onWindowAction&&<header className="flex h-[30px] shrink-0 justify-end border-b border-line px-2"><ActionIconButton label={t(bridge?.role==='guest'?'logs.returnWindow':'logs.detachWindow')} description={`${t(bridge?.role==='guest'?'logs.returnWindow':'logs.detachWindow')} (Alt+Shift+Enter)`} onClick={onWindowAction}><WindowActionIcon returning={bridge?.role==='guest'} className="h-4 w-4"/></ActionIconButton></header>}
       {(phase === 'opening' || phase === 'connecting') && !openError && (
         <div className="shrink-0 border-b border-line px-3 py-0.5 text-[12px] text-fg-subtle" role="status">
           {t('term.connecting')}

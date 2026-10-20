@@ -498,7 +498,7 @@
     "keys.logNext": "Próximo / correspondência anterior",
     "keys.logSave": "Salvar em um arquivo",
     "keys.logClear": "Limpar",
-    "keys.logWindow": "Abrir logs em outra janela ou voltar ao painel inferior",
+    "keys.logWindow": "Destacar o painel em foco de logs, arquivos ou terminal, ou trazê-lo de volta",
     "keys.termCopy": "Copiar a seleção",
     "keys.termPaste": "Colar",
     "keys.termRest": "Todas as outras teclas vão para o programa; a paleta está no painel",

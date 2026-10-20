@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest'
-import { KEYS, cycleArea, globalShortcut } from './shortcuts'
+import { KEYS, cycleArea, globalShortcut, toolWindowShortcut } from './shortcuts'
 
 type Init = Partial<KeyboardEventInit> & { target?: Element; composing?: boolean; altGraph?: boolean }
 
@@ -124,4 +124,26 @@ describe('cycleArea', () => {
     cycleArea(-1)
     expect(document.activeElement).toBe(dock.btn)
   })
+})
+
+
+describe('toolWindowShortcut',()=>{
+ it('reserves only the exact chord, including repeat suppression at the panel',()=>{
+  const chord={key:'Enter',altKey:true,shiftKey:true}
+  expect(toolWindowShortcut(ev(chord))).toBe(true)
+  expect(toolWindowShortcut(ev({...chord,repeat:true}))).toBe(true)
+  for(const change of [{altKey:false},{shiftKey:false},{ctrlKey:true},{metaKey:true},{composing:true},{altGraph:true}])expect(toolWindowShortcut(ev({...chord,...change}))).toBe(false)
+  const handled=ev(chord);handled.preventDefault();expect(toolWindowShortcut(handled)).toBe(false)
+ })
+ it('does not act behind overlays or from hidden/inert panels',()=>{
+  const panel=document.body.appendChild(document.createElement('div')),input=panel.appendChild(document.createElement('textarea'))
+  const event=()=>ev({key:'Enter',altKey:true,shiftKey:true,target:input})
+  panel.hidden=true;expect(toolWindowShortcut(event())).toBe(false);panel.hidden=false
+  panel.setAttribute('inert','');expect(toolWindowShortcut(event())).toBe(false);panel.removeAttribute('inert')
+  for(const attr of [{'aria-modal':'true'},{role:'menu'}]){
+   const overlay=document.body.appendChild(document.createElement('div'));for(const [k,v]of Object.entries(attr))overlay.setAttribute(k,v)
+   expect(toolWindowShortcut(event())).toBe(false);overlay.remove()
+  }
+  expect(toolWindowShortcut(event())).toBe(true)
+ })
 })

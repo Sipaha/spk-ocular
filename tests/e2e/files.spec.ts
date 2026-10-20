@@ -43,7 +43,7 @@ test('container files: directories, highlighted editing, save, conflict and disc
  await dialog.getByRole('button',{name:'Dismiss error',exact:true}).click()
  await expect(dialog.getByRole('alert')).toHaveCount(0)
  await expect(editor).toContainText('new: value')
- await dialog.getByRole('button',{name:'Close',exact:true}).click()
+ await page.locator('[data-tab-kind=files][aria-selected=true]').getByRole('button',{name:'Close tab',exact:true}).click()
  const discard=page.getByRole('alertdialog')
  await expect(discard).toBeVisible()
  await discard.getByRole('button',{name:/keep editing/i}).click()
@@ -194,17 +194,16 @@ test('first folder load, retained cache, explicit refresh, file loading and syml
  await page.getByRole('menu',{name:'/etc-link',exact:true}).getByRole('menuitem',{name:'Go to target',exact:true}).click()
  await expect(folder).toHaveAttribute('aria-selected','true')
  expect(lists).toBe(2)
- const sizes=await dialog.evaluate(el=>Object.fromEntries(['header','address','document-header'].map(key=>[key,el.querySelector(`[data-file-${key}]`)?.getBoundingClientRect().height])))
- expect(sizes).toEqual({header:35,address:35,'document-header':35})
- const gutters=await dialog.evaluate(el=>['header','address','document-header'].flatMap(key=>{
-  const bar=el.querySelector<HTMLElement>(`[data-file-${key}]`)!
-  const bounds=bar.getBoundingClientRect()
-  const border=parseFloat(getComputedStyle(bar).borderBottomWidth)
+ await expect(dialog.locator('[data-file-header]')).toHaveCount(0)
+ const sizes=await dialog.evaluate(el=>Object.fromEntries(['toolbar','address','document-header'].map(key=>[key,el.querySelector(`[data-file-${key}]`)?.getBoundingClientRect().height])))
+ expect(sizes).toEqual({toolbar:35,address:34,'document-header':34})
+ const gutters=await dialog.locator('[data-file-toolbar]').evaluate(bar=>{
+  const bounds=bar.getBoundingClientRect(),border=parseFloat(getComputedStyle(bar).borderBottomWidth)
   return [...bar.querySelectorAll('button,input')].map(control=>{
    const rect=control.getBoundingClientRect()
    return [rect.top-bounds.top,bounds.bottom-border-rect.bottom]
   })
- }))
+ })
  for(const gutter of gutters) expect(gutter).toEqual([4,4])
  const fonts=await file.evaluate(el=>getComputedStyle(el).fontFamily)
  expect(fonts).toBe(await dialog.locator('.cm-scroller').evaluate(el=>getComputedStyle(el).fontFamily))
@@ -255,7 +254,7 @@ test('tree resize, edge scrollbar and compact centered footer preserve the draft
  })
  expect(centered.height).toBe(27)
  for(const [top,bottom] of centered.gaps) expect(top).toBeCloseTo(bottom,4)
- expect(centered.gaps).toEqual([[4,4],[2,2]])
+ expect(centered.gaps).toEqual([[4,4],[4,4],[2,2]])
  const scroll=await tree.evaluate(el=>({width:el.getBoundingClientRect().width-el.clientWidth-parseFloat(getComputedStyle(el).borderRightWidth),height:el.scrollHeight,viewport:el.clientHeight}))
  expect(scroll.height).toBeGreaterThan(scroll.viewport)
  expect(scroll.width).toBe(8)
@@ -343,7 +342,7 @@ test('multiple Pods require a dropdown choice for Files, Terminal and Logs', asy
  await expect(dialog.locator('[data-file-context]')).toHaveText('workers / worker-2 / main')
  await expect.poll(()=>fileCalls.length).toBe(1)
  expect(fileCalls[0].instance).toBe('worker-2');expect(fileCalls[0].channel).toBe('main')
- await dialog.getByRole('button',{name:'Close',exact:true}).click()
+ await page.locator('[data-tab-kind=files][aria-selected=true]').getByRole('button',{name:'Close tab',exact:true}).click()
  await page.getByRole('button',{name:'Terminal',exact:true}).click()
  await expect(pods.getByRole('option',{name:'worker-2',exact:true})).toBeVisible()
  expect(terminalCalls).toHaveLength(0)
@@ -385,7 +384,7 @@ test('concrete Pod tools open the running default directly and right-click retai
  const inspector=page.getByRole('region',{name:'Files',exact:true})
  await expect(inspector.locator('[data-file-context]')).toContainText('main')
  await expect.poll(()=>files[0]?.channel).toBe('main')
- await inspector.getByRole('button',{name:'Close',exact:true}).click()
+ await page.locator('[data-tab-kind=files][aria-selected=true]').getByRole('button',{name:'Close tab',exact:true}).click()
  for(const [button,title] of [['Terminal','Open a terminal'],['Files','Open files'],['Logs','Open logs']]) {
   await page.getByRole('button',{name:button,exact:true}).click({button:'right'})
   const setup=page.getByRole('dialog',{name:title,exact:true})
@@ -400,7 +399,7 @@ test('concrete Pod tools open the running default directly and right-click retai
    await setup.getByRole('button',{name:'Open',exact:true}).click()
    await expect(inspector.locator('[data-file-context]')).toContainText('sidecar')
    await expect.poll(()=>files.at(-1)?.channel).toBe('sidecar')
-   await inspector.getByRole('button',{name:'Close',exact:true}).click()
+   await page.locator('[data-tab-kind=files][aria-selected=true]').getByRole('button',{name:'Close tab',exact:true}).click()
   } else await setup.getByRole('button',{name:'Cancel',exact:true}).click()
  }
 })
