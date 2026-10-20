@@ -1,0 +1,126 @@
+{
+  "ui": {
+    "course": "Trilha de aprendizagem",
+    "overview": "Visão das lições",
+    "scope": "Cenários locais predefinidos. Nenhum cluster, rede, escalonador ou controlador real é executado. As alterações afetam apenas a lição.",
+    "progress": "{done} de {total} lições concluídas",
+    "notStarted": "Não iniciada",
+    "inProgress": "Em andamento",
+    "completed": "Concluída",
+    "open": "Abrir lição",
+    "practice": "Prática guiada",
+    "check": "Verificação independente · sem dicas",
+    "step": "Tarefa {step} de {total}",
+    "hint": "Mostrar dica",
+    "apply": "Aplicar correção simulada",
+    "next": "Próxima tarefa",
+    "finish": "Concluir lição",
+    "diagnosis": "Qual causa explica as observações?",
+    "repair": "Qual alteração revisada resolve a causa?",
+    "evidence": "Examine as evidências listadas antes de aplicar uma correção.",
+    "fixed": "A correção local foi aplicada. Examine o resultado antes de continuar.",
+    "observe": "Abra as propriedades do Pod ou dos endpoints resultantes.",
+    "evidenceError": "Faltam evidências. Abra primeiro as visualizações dos objetos indicados.",
+    "diagnosisError": "A explicação não corresponde às observações. Revise as evidências.",
+    "repairError": "Essa alteração não resolve a causa. Compare campo e valor com as evidências.",
+    "complete": "Você diagnosticou e corrigiu os dois casos novos sem dicas.",
+    "noEvents": "Não há eventos neste estado didático.",
+    "noLogs": "Os logs do contêiner estão indisponíveis aqui. Talvez ele ainda não tenha iniciado.",
+    "noSecrets": "Valores de Secret nunca são incluídos. Apenas nomes de referências e chaves são exibidos.",
+    "memory": "O progresso dura enquanto esta biblioteca está aberta. Fechá-la reinicia as lições.",
+    "more": "Ler ajuda sobre recursos relacionados",
+    "observations": "Observações do cenário · não são campos da API Kubernetes"
+  },
+  "topics": {
+    "network": "Tráfego de Service: seletores e portas",
+    "probes": "Readiness, liveness e inicialização",
+    "runtime": "Download de imagens e falhas da aplicação",
+    "config": "Referências a ConfigMap e Secret",
+    "resources": "Requests, limites e escalonamento"
+  },
+  "diagnoses": {
+    "selector": "O seletor do Service não corresponde aos rótulos do Pod da aplicação.",
+    "port": "O Service encaminha para uma porta diferente da escutada pela aplicação.",
+    "readiness": "A sonda de readiness verifica um caminho não servido pela aplicação.",
+    "startup": "Liveness reinicia o contêiner antes do fim da inicialização lenta.",
+    "image": "A tag de imagem solicitada não consta no catálogo fornecido.",
+    "command": "A aplicação encerra por argumentos inválidos.",
+    "environment": "O valor de ambiente foi capturado antes da alteração do ConfigMap.",
+    "secret": "O nome de chave obrigatório não existe no Secret.",
+    "requests": "A solicitação de CPU não cabe no orçamento restante de requests.",
+    "memory": "O contêiner excedeu o limite de memória; o motivo registrado é OOMKilled.",
+    "credentials": "O registro de imagens exige outras credenciais.",
+    "usage": "Baixo uso observado de CPU significa que qualquer solicitação cabe.",
+    "replicas": "Aumentar as réplicas basta para corrigir esta configuração."
+  },
+  "cases": {
+    "selector": {
+      "goal": "Restaure o tráfego sem alterar a aplicação. Compare Service, Pod e EndpointSlice.",
+      "hint": "Compare spec.selector com metadata.labels e explique a ausência de endpoints prontos.",
+      "why": "Rótulos correspondentes fornecem os backends previstos; Service não cria Pods."
+    },
+    "port": {
+      "goal": "Restaure o tráfego com backends já prontos. Confira as portas do Service e da aplicação.",
+      "hint": "Um endereço pronto não basta: compare targetPort com a porta da aplicação.",
+      "why": "targetPort é a porta do backend. Um endpoint pronto não prova conectividade de ponta a ponta."
+    },
+    "readiness": {
+      "goal": "Deixe a aplicação em execução pronta para tráfego do Service sem adicionar reinícios.",
+      "hint": "Compare o caminho HTTP de readiness com os logs. Liveness e readiness têm funções diferentes.",
+      "why": "Readiness controla a inclusão normal no Service; sua falha isolada não reinicia o contêiner."
+    },
+    "startup": {
+      "goal": "Permita concluir a inicialização lenta documentada mantendo a proteção de liveness.",
+      "hint": "Compare a inicialização com a janela da sonda. Startup adia liveness e readiness até ter sucesso.",
+      "why": "O orçamento de startup do exercício cobre o início observado. Não é uma configuração universal."
+    },
+    "image": {
+      "goal": "Inicie a aplicação com uma imagem do catálogo fornecido.",
+      "hint": "Leia o erro de download e a tag aprovada. Não invente logs de um contêiner que nunca iniciou.",
+      "why": "Um manifest ausente se corrige com a referência revisada, não baixando repetidamente a mesma tag ausente."
+    },
+    "command": {
+      "goal": "Descubra por que uma imagem baixada encerra e corrija seus argumentos de execução.",
+      "hint": "Compare os logs do contêiner anterior com os argumentos. CrashLoopBackOff é um sintoma, não a causa.",
+      "why": "Uma opção inválida causou o encerramento. Reiniciar os mesmos argumentos repetiria a falha."
+    },
+    "environment": {
+      "goal": "Use o valor atual do ConfigMap no ambiente da aplicação. Compare referência e estado em execução.",
+      "hint": "O processo atual mantém seu ambiente. A alteração revisada do modelo cria um novo contêiner neste cenário.",
+      "why": "Valores de ConfigMap no ambiente exigem novos contêineres. Atualizações de arquivos montados e recarga da aplicação são mecanismos distintos."
+    },
+    "secret": {
+      "goal": "Corrija a referência obrigatória ao Secret sem ler nem inventar seu valor.",
+      "hint": "Compare secretKeyRef.key, nomes de chaves e o evento de início. Tornar a referência opcional não fornece o valor exigido.",
+      "why": "A referência corrigida usa uma chave existente. Seu nome não revela o valor nem prova autorização de acesso."
+    },
+    "requests": {
+      "goal": "Escale a aplicação com a solicitação validada de CPU fornecida, dentro do orçamento de requests.",
+      "hint": "Compare allocatable menos requests alocados com a solicitação. O uso atual de CPU não é esse orçamento.",
+      "why": "A solicitação validada cabe no saldo. Aumentar só o limite de CPU não torna uma solicitação excessiva escalonável."
+    },
+    "memory": {
+      "goal": "Resolva o OOMKilled registrado dentro do orçamento aprovado de memória.",
+      "hint": "Compare motivo de término, limite, conjunto de trabalho validado e saldo do Node.",
+      "why": "O limite ajustado comporta o conjunto documentado. Só o código de saída não prova OOMKilled; a memória necessária depende da aplicação."
+    }
+  },
+  "observations": {
+    "listener": "Porta de escuta da aplicação",
+    "readyAddresses": "Endereços de backends prontos",
+    "request": "Resultado simulado da requisição",
+    "readyPath": "Caminho de readiness da aplicação",
+    "coldStart": "Inicialização a frio documentada (segundos)",
+    "oldEnvironment": "Contêiner iniciado antes da atualização do ConfigMap",
+    "environment": "Ambiente em execução: MODE",
+    "secretKeys": "Nomes das chaves disponíveis no Secret",
+    "validatedCPU": "Solicitação de CPU validada da aplicação",
+    "allocatedCPU": "Requests de CPU já alocados",
+    "remainingCPU": "Orçamento restante de requests de CPU",
+    "usageCPU": "Uso observado de CPU",
+    "workingSet": "Conjunto de trabalho validado da aplicação",
+    "approvedMemory": "Orçamento de memória aprovado da aplicação",
+    "remainingMemory": "Orçamento restante de requests de memória",
+    "startedPath": "Caminho de conclusão da inicialização da aplicação"
+  }
+}

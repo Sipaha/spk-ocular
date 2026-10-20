@@ -1188,7 +1188,12 @@ included from 1.2.0.
 The application menu opens [Kubernetes learning](learning.md) without a cluster.
 The What is this? button beside a Kubernetes kind opens offline, localized
 resource help. The same library includes an explicitly simulated introductory
-Deployment/ReplicaSet/Pod lesson. Its actions change only local lesson state.
+Deployment/ReplicaSet/Pod lesson. **Learning path** adds five practical modules
+covering Service routing, probes, image/application failures, ConfigMap/Secret
+references and resources/scheduling. Each has two guided tasks and two new
+checks: inspect evidence, choose a diagnosis and repair, and observe its result.
+All actions change only local lesson state. Progress survives switching modules,
+reference and language while this library is open; closing it clears progress.
 
 ## Node Shell
 

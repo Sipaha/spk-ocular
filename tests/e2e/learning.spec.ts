@@ -22,6 +22,7 @@ test.beforeEach(async({page})=>{
  await selectConnection(page,/^prod\b/);await page.reload()
  await expect(page.getByRole('button',{name:'Connect',exact:true})).toBeVisible()
 })
+const dialogForCourse=(page:Page)=>page.locator('[data-learning]')
 async function library(page:Page){await openAppMenu(page);await page.getByRole('button',{name:'Kubernetes learning',exact:true}).click();const dialog=page.locator('[data-learning]');await expect(dialog).toBeVisible();return dialog}
 async function lesson(page:Page){const dialog=await library(page);await dialog.getByRole('button',{name:'Why did the Pod come back?',exact:true}).click();return dialog.locator('[data-lesson]')}
 async function replace(page:Page){const lab=await lesson(page);await lab.getByRole('gridcell',{name:'web-7db9-a',exact:true}).click();await lab.getByRole('button',{name:'Delete simulated Pod',exact:true}).click();await expect(lab).toHaveAttribute('data-phase','deleted');await expect(lab.getByRole('grid')).toHaveAttribute('aria-rowcount','3');await lab.getByRole('button',{name:'Advance simulated controller',exact:true}).click();await expect(lab).toHaveAttribute('data-phase','replaced');return lab}
@@ -57,8 +58,10 @@ test('lesson observes deletion and new identity, navigates properties YAML event
  await lab.getByRole('gridcell',{name:'orders-7db9-a',exact:true}).click();await lab.locator('[data-lesson-owner]').click();await lab.locator('[data-lesson-owner]').click();await expect(lab.getByRole('heading',{name:'orders',exact:true})).toBeVisible()
  await lab.getByRole('radio',{name:learningContent.en.ui.answerRestart,exact:true}).check();await lab.getByRole('button',{name:'Check explanation',exact:true}).click();await expect(lab.getByRole('alert')).toContainText('does not explain')
  await lab.getByRole('radio',{name:learningContent.en.ui.answerController,exact:true}).check();await lab.getByRole('button',{name:'Check explanation',exact:true}).click();await expect(lab).toHaveAttribute('data-phase','complete');await expect(lab).toBeFocused()
+ await dialogForCourse(page).getByRole('button',{name:'Learning path',exact:true}).click();await expect(page.locator('[data-course-progress]')).toHaveText('1 of 6 lessons complete');await dialogForCourse(page).getByRole('button',{name:'Why did the Pod come back?',exact:true}).click()
  await page.screenshot({path:join(scratchRoot,'learning-check-complete-en.png')})
  await lab.getByRole('button',{name:'Reset lesson',exact:true}).click();await expect(lab).toHaveAttribute('data-phase','observe');await expect(lab.getByRole('grid')).toHaveAttribute('aria-rowcount','4')
+ await dialogForCourse(page).getByRole('button',{name:'Learning path',exact:true}).click();await expect(page.locator('[data-course-progress]')).toHaveText('0 of 6 lessons complete')
  expect(forbidden).toEqual([])
 })
 

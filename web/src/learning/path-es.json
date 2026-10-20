@@ -1,0 +1,126 @@
+{
+  "ui": {
+    "course": "Ruta de aprendizaje",
+    "overview": "Resumen de lecciones",
+    "scope": "Escenarios locales predefinidos. No se ejecuta ningún clúster, red, planificador ni controlador real. Los cambios solo afectan a la lección.",
+    "progress": "{done} de {total} lecciones completadas",
+    "notStarted": "Sin empezar",
+    "inProgress": "En curso",
+    "completed": "Completada",
+    "open": "Abrir lección",
+    "practice": "Práctica guiada",
+    "check": "Prueba independiente · sin pistas",
+    "step": "Tarea {step} de {total}",
+    "hint": "Mostrar una pista",
+    "apply": "Aplicar corrección simulada",
+    "next": "Siguiente tarea",
+    "finish": "Terminar lección",
+    "diagnosis": "¿Qué causa explica las observaciones?",
+    "repair": "¿Qué cambio revisado la resuelve?",
+    "evidence": "Examina las pruebas indicadas antes de aplicar una corrección.",
+    "fixed": "La corrección local está aplicada. Examina el resultado antes de continuar.",
+    "observe": "Examina el Pod resultante o los endpoints en Propiedades.",
+    "evidenceError": "Faltan pruebas por examinar. Abre primero las vistas de objetos indicadas.",
+    "diagnosisError": "La explicación no coincide con las observaciones. Revisa las pruebas.",
+    "repairError": "Ese cambio no resuelve la causa. Compara el campo y el valor con las pruebas.",
+    "complete": "Has diagnosticado y corregido ambos casos nuevos sin pistas.",
+    "noEvents": "No hay eventos en esta instantánea didáctica.",
+    "noLogs": "No hay logs del contenedor en esta instantánea. Es posible que aún no haya arrancado.",
+    "noSecrets": "Nunca se incluyen valores de Secret. Solo se muestran nombres de referencias y claves.",
+    "memory": "El progreso dura mientras esta biblioteca esté abierta. Cerrarla reinicia las lecciones.",
+    "more": "Leer ayuda sobre recursos relacionados",
+    "observations": "Observaciones del escenario · no son campos de la API de Kubernetes"
+  },
+  "topics": {
+    "network": "Tráfico de Service: selectores y puertos",
+    "probes": "Readiness, liveness y arranque",
+    "runtime": "Descarga de imágenes y fallos de aplicación",
+    "config": "Referencias a ConfigMap y Secret",
+    "resources": "Requests, límites y planificación"
+  },
+  "diagnoses": {
+    "selector": "El selector de Service no coincide con las etiquetas del Pod de la aplicación.",
+    "port": "Service reenvía a un puerto distinto del que escucha la aplicación.",
+    "readiness": "La sonda de readiness consulta una ruta que la aplicación no ofrece.",
+    "startup": "Liveness reinicia el contenedor antes de finalizar la inicialización lenta.",
+    "image": "La etiqueta de imagen solicitada no figura en el catálogo proporcionado.",
+    "command": "La aplicación termina por argumentos no válidos.",
+    "environment": "El valor del entorno se capturó antes del cambio de ConfigMap.",
+    "secret": "No existe el nombre de clave requerido en Secret.",
+    "requests": "La solicitud de CPU no cabe en el presupuesto restante de requests.",
+    "memory": "El contenedor superó su límite de memoria; el motivo registrado es OOMKilled.",
+    "credentials": "El registro de imágenes necesita otras credenciales.",
+    "usage": "Un uso observado de CPU bajo significa que cabe cualquier solicitud.",
+    "replicas": "Aumentar las réplicas basta para corregir esta configuración."
+  },
+  "cases": {
+    "selector": {
+      "goal": "Restaura el tráfico sin cambiar la aplicación. Compara Service, Pod y EndpointSlice.",
+      "hint": "Compara spec.selector con metadata.labels y explica por qué no hay endpoints preparados.",
+      "why": "Las etiquetas correctas proporcionan los backends previstos; Service no crea Pods."
+    },
+    "port": {
+      "goal": "Restaura el tráfico con backends ya preparados. Examina los puertos de Service y de la aplicación.",
+      "hint": "Una dirección preparada no basta: compara targetPort con el puerto de la aplicación.",
+      "why": "targetPort es el puerto del backend. Un endpoint preparado no demuestra conectividad de extremo a extremo."
+    },
+    "readiness": {
+      "goal": "Prepara la aplicación en ejecución para el tráfico de Service sin añadir reinicios.",
+      "hint": "Compara la ruta HTTP de readiness con los logs. Liveness y readiness comprueban cosas distintas.",
+      "why": "Readiness controla la inclusión normal en Service; su fallo por sí solo no reinicia el contenedor."
+    },
+    "startup": {
+      "goal": "Permite finalizar la inicialización lenta documentada conservando la protección de liveness.",
+      "hint": "Compara el tiempo de inicio con la ventana de sonda. Startup retrasa liveness y readiness hasta tener éxito.",
+      "why": "El presupuesto de startup del ejercicio cubre el arranque observado. No es una configuración universal."
+    },
+    "image": {
+      "goal": "Arranca la aplicación con una imagen del catálogo proporcionado.",
+      "hint": "Lee el error de descarga y la etiqueta aprobada. No inventes logs de un contenedor que nunca arrancó.",
+      "why": "Un manifest ausente se corrige con la referencia revisada, no descargando repetidamente la misma etiqueta ausente."
+    },
+    "command": {
+      "goal": "Averigua por qué una imagen descargada termina y corrige los argumentos de arranque.",
+      "hint": "Compara los logs del contenedor anterior con los argumentos. CrashLoopBackOff es un síntoma, no una causa.",
+      "why": "Una opción no válida causó la salida. Reiniciar con los mismos argumentos repetiría el fallo."
+    },
+    "environment": {
+      "goal": "Usa el valor actual de ConfigMap en el entorno de la aplicación. Compara referencia e instantánea en ejecución.",
+      "hint": "El proceso existente conserva su entorno. El cambio revisado de plantilla crea aquí un nuevo contenedor.",
+      "why": "Los valores de entorno de ConfigMap requieren contenedores nuevos. Las actualizaciones de archivos montados y su recarga son mecanismos distintos."
+    },
+    "secret": {
+      "goal": "Corrige la referencia obligatoria a Secret sin leer ni inventar su valor.",
+      "hint": "Compara secretKeyRef.key, las claves y el evento de arranque. Una referencia opcional no proporciona el valor requerido.",
+      "why": "La referencia corregida usa una clave existente. Su nombre no revela el valor ni demuestra autorización de acceso."
+    },
+    "requests": {
+      "goal": "Planifica la carga con la solicitud validada de CPU indicada, dentro del presupuesto de requests.",
+      "hint": "Compara allocatable menos requests asignados con la solicitud. El uso actual de CPU no es ese presupuesto.",
+      "why": "La solicitud validada cabe en el presupuesto restante. Aumentar solo el límite de CPU no permite planificar una solicitud excesiva."
+    },
+    "memory": {
+      "goal": "Resuelve el OOMKilled registrado dentro del presupuesto de memoria aprobado.",
+      "hint": "Compara el motivo de terminación, el límite, el conjunto de trabajo validado y el presupuesto restante del Node.",
+      "why": "El límite ajustado admite el conjunto de trabajo indicado. El código de salida solo no prueba OOMKilled; la memoria necesaria depende de la aplicación."
+    }
+  },
+  "observations": {
+    "listener": "Puerto de escucha de la aplicación",
+    "readyAddresses": "Direcciones de backend preparadas",
+    "request": "Resultado de petición simulado",
+    "readyPath": "Ruta de readiness de la aplicación",
+    "coldStart": "Arranque en frío documentado (segundos)",
+    "oldEnvironment": "Contenedor iniciado antes del cambio de ConfigMap",
+    "environment": "Entorno en ejecución: MODE",
+    "secretKeys": "Nombres de claves disponibles en Secret",
+    "validatedCPU": "Solicitud de CPU validada de la aplicación",
+    "allocatedCPU": "Requests de CPU ya asignados",
+    "remainingCPU": "Presupuesto restante de requests de CPU",
+    "usageCPU": "Uso observado de CPU",
+    "workingSet": "Conjunto de trabajo validado de la aplicación",
+    "approvedMemory": "Presupuesto de memoria aprobado de la aplicación",
+    "remainingMemory": "Presupuesto restante de requests de memoria",
+    "startedPath": "Ruta de finalización del arranque de la aplicación"
+  }
+}

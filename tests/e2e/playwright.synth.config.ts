@@ -19,7 +19,7 @@ const bin = process.env.E2E_BIN ?? '../../build/bin/spk-ocular'
 export default defineConfig({
   testDir: '.',
   outputDir: join(scratchRoot, 'playwright-synth'),
-  testMatch: ['tool-windows.spec.ts','node-helper-shared.spec.ts','node-files.spec.ts','node-shell.spec.ts','learning.spec.ts','yaml-first-paint.spec.ts','workspace-presentation.spec.ts','connection-switcher.spec.ts','downloads.spec.ts', 'security.spec.ts', 'workspace.spec.ts', 'compare.spec.ts', 'rbac.spec.ts', 'timeline.spec.ts', 'graph.spec.ts', 'files.spec.ts', 'about.spec.ts', 'helm.spec.ts', 'logs.spec.ts', 'agents.spec.ts', 'connections.spec.ts', 'terminal.spec.ts', 'tunnels.spec.ts', 'actions.spec.ts', 'problems.spec.ts', 'palette.spec.ts', 'keyboard.spec.ts', 'generic.spec.ts', 'warm.spec.ts', 'languages.spec.ts'],
+  testMatch: ['learning-path.spec.ts','tool-windows.spec.ts','node-helper-shared.spec.ts','node-files.spec.ts','node-shell.spec.ts','learning.spec.ts','yaml-first-paint.spec.ts','workspace-presentation.spec.ts','connection-switcher.spec.ts','downloads.spec.ts', 'security.spec.ts', 'workspace.spec.ts', 'compare.spec.ts', 'rbac.spec.ts', 'timeline.spec.ts', 'graph.spec.ts', 'files.spec.ts', 'about.spec.ts', 'helm.spec.ts', 'logs.spec.ts', 'agents.spec.ts', 'connections.spec.ts', 'terminal.spec.ts', 'tunnels.spec.ts', 'actions.spec.ts', 'problems.spec.ts', 'palette.spec.ts', 'keyboard.spec.ts', 'generic.spec.ts', 'warm.spec.ts', 'languages.spec.ts'],
   workers: 1,
   use: { baseURL: `http://127.0.0.1:${port}`, locale: 'en-US', screenshot: 'only-on-failure', permissions: ['clipboard-read', 'clipboard-write'], launchOptions: { ignoreDefaultArgs: ['--hide-scrollbars'] } },
   webServer: {

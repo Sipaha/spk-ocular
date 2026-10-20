@@ -1,17 +1,18 @@
-import {lazy,Suspense,useReducer,useRef,useState} from 'react'
+import {useReducer,useRef,useState,useEffect} from 'react'
 import {t} from '../i18n'
 import {ResourceTable} from '../components/ResourceTable'
 import {concept} from './catalog'
 import {learn} from './content'
 import {initialLesson,labObjects,labYAML,lessonReducer,lessonRows} from './model'
 import {ResourceExplanation} from './ResourceHelp'
-const YamlView=lazy(()=>import('../components/YamlView'))
+import {LearningYaml} from './LearningYaml'
 const button='rounded border border-line px-3 py-1.5 text-xs hover:bg-hover disabled:opacity-40'
 /** Authored local state machine. No Client, provider, transport or target access. */
-export function Lesson(){
+export function Lesson({onComplete}:{onComplete?:(complete:boolean)=>void}={}){
  const [state,dispatch]=useReducer(lessonReducer,initialLesson),[tab,setTab]=useState('properties'),[help,setHelp]=useState(false)
  const focus=useRef<HTMLDivElement>(null),details=useRef<HTMLElement>(null)
  const objects=labObjects(state),selected=objects.find(o=>o.uid===state.selected),owner=objects.find(o=>o.uid===selected?.owner)
+ useEffect(()=>{onComplete?.(state.phase==='complete')},[state.phase,onComplete])
  const challenge=state.phase==='challenge'||state.phase==='complete'
  const navigate=(uid:string)=>{dispatch({type:'select',uid});setHelp(false)}
  const rows=lessonRows(state)
@@ -43,7 +44,7 @@ export function Lesson(){
       }} className="mb-3 flex flex-wrap gap-2">{(['properties','yaml','events','logs'] as const).map(key=><button role="tab" tabIndex={tab===key?0:-1} aria-selected={tab===key} key={key} className={button+(tab===key?' bg-active text-accent':'')} onClick={()=>setTab(key)}>{key==='yaml'?'YAML':learn(key)}</button>)}</div>
       <div role="tabpanel" aria-label={tab==='yaml'?'YAML':learn(tab as 'properties'|'events'|'logs')} className="min-h-[180px] min-w-0 flex-1 text-sm">
        {tab==='properties'&&<dl className="grid grid-cols-[max-content_minmax(0,1fr)] gap-x-4 gap-y-2"><dt className="text-fg-muted">UID</dt><dd className="break-all font-mono text-xs">{selected.uid}</dd><dt className="text-fg-muted">{learn('owner')}</dt><dd>{owner?<button className="break-all text-left text-accent underline-offset-4 hover:underline" data-lesson-owner onClick={()=>{details.current?.focus();dispatch({type:'owner'});setHelp(false)}}>{concept(owner.kind)?.[1]} / {owner.name}</button>:learn('noOwner')}</dd><dt className="text-fg-muted">{selected.kind==='pods'?'status.phase':'spec.replicas'}</dt><dd className="font-mono text-xs">{selected.kind==='pods'?'Running':2}</dd></dl>}
-       {tab==='yaml'&&<Suspense fallback={<p>{t('app.loading')}</p>}><div className="h-64 min-w-0 overflow-hidden"><YamlView text={labYAML(selected,objects)} label={`${selected.name} YAML`} documentId={selected.uid}/></div></Suspense>}
+       {tab==='yaml'&&<div className="h-64 min-w-0 overflow-hidden"><LearningYaml text={labYAML(selected,objects)} label={`${selected.name} YAML`} documentId={selected.uid}/></div>}
        {tab==='events'&&<ul className="space-y-2 font-mono text-xs"><li>Normal · {selected.kind==='pods'?'Started':selected.kind==='apps/replicasets'?'SuccessfulCreate':'ScalingReplicaSet'} · {selected.name}</li>{state.deleted&&<li>SimulatedDelete · {state.deleted}</li>}{state.phase==='replaced'&&<li>SuccessfulCreate · pod-new-{state.generation}</li>}</ul>}
        {tab==='logs'&&(selected.kind==='pods'?<pre className="whitespace-pre-wrap break-all text-xs">{`[simulation] ${selected.name}\napp: started\napp: ready to serve\n`}</pre>:<p className="text-fg-muted">{learn('noLogs')}</p>)}
       </div>

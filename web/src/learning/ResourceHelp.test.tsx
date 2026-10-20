@@ -43,3 +43,12 @@ it('keeps keyboard ownership after a related concept replaces its trigger',()=>{
  expect(screen.getByRole('dialog')).toHaveFocus();fireEvent.keyDown(screen.getByRole('dialog'),{key:'Escape'})
  expect(screen.queryByRole('dialog')).toBeNull()
 })
+
+
+it('recovers modal focus after a language change blurs its disabled trigger',()=>{
+ useLearning.getState().open();render(<LearningDialog languageMenu={null}/>);
+ const transient=document.body.appendChild(document.createElement('button'));transient.focus();transient.remove()
+ expect(document.activeElement).toBe(document.body)
+ act(()=>{setLanguage('de');useStore.setState({info:{...useStore.getState().info,language:'de'} as NonNullable<ReturnType<typeof useStore.getState>['info']>})})
+ expect(screen.getByRole('dialog')).toHaveFocus();fireEvent.keyDown(screen.getByRole('dialog'),{key:'Escape'});expect(screen.queryByRole('dialog')).toBeNull()
+})

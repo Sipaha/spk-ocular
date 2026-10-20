@@ -1,0 +1,126 @@
+{
+  "ui": {
+    "course": "Learning path",
+    "overview": "Lesson overview",
+    "scope": "Authored local scenarios. No real cluster, network, scheduler or controller is run. Repairs affect only this lesson.",
+    "progress": "{done} of {total} lessons complete",
+    "notStarted": "Not started",
+    "inProgress": "In progress",
+    "completed": "Complete",
+    "open": "Open lesson",
+    "practice": "Guided practice",
+    "check": "Independent check · no hints",
+    "step": "Task {step} of {total}",
+    "hint": "Show a hint",
+    "apply": "Apply simulated repair",
+    "next": "Next task",
+    "finish": "Finish lesson",
+    "diagnosis": "What explains the evidence?",
+    "repair": "Which reviewed change addresses it?",
+    "evidence": "Inspect the listed evidence before applying a repair.",
+    "fixed": "The local repair has been applied. Inspect the resulting state before continuing.",
+    "observe": "Inspect the resulting Pod or endpoints in Properties.",
+    "evidenceError": "Some required evidence has not been inspected. Open the listed object views first.",
+    "diagnosisError": "The selected explanation does not match the observations. Recheck the evidence.",
+    "repairError": "That change does not resolve the observed cause. Compare its field and value with the evidence.",
+    "complete": "You diagnosed and repaired both new cases without hints.",
+    "noEvents": "No events in this authored snapshot.",
+    "noLogs": "No container logs are available in this snapshot. The container may not have started.",
+    "noSecrets": "Secret values are never included. Only reference names and key names are shown.",
+    "memory": "Progress lasts while this library is open. Closing it clears lesson state.",
+    "more": "Read related resource help",
+    "observations": "Given scenario observations · not Kubernetes API fields"
+  },
+  "topics": {
+    "network": "Service traffic: selectors and ports",
+    "probes": "Readiness, liveness and startup",
+    "runtime": "Image pulls and application crashes",
+    "config": "ConfigMap and Secret references",
+    "resources": "Requests, limits and scheduling"
+  },
+  "diagnoses": {
+    "selector": "The Service selector does not match the application Pod labels.",
+    "port": "The Service forwards to a different port from the application listener.",
+    "readiness": "The readiness probe checks a path that the application does not serve.",
+    "startup": "Liveness restarts the container before slow initialization can finish.",
+    "image": "The requested image tag is absent from the supplied image catalogue.",
+    "command": "The application exits because its arguments are invalid.",
+    "environment": "The environment value was captured before the ConfigMap changed.",
+    "secret": "The required Secret key name does not exist.",
+    "requests": "The CPU request does not fit the remaining request budget.",
+    "memory": "The container exceeded its memory limit; the recorded reason is OOMKilled.",
+    "credentials": "The image registry requires different credentials.",
+    "usage": "Low observed CPU usage means any CPU request will fit.",
+    "replicas": "More replicas alone will repair this configuration."
+  },
+  "cases": {
+    "selector": {
+      "goal": "Restore traffic without changing the application. Compare Service, Pod and EndpointSlice.",
+      "hint": "Compare spec.selector with metadata.labels; an empty ready endpoint set needs an explanation.",
+      "why": "Matching the intended Pod labels supplies backends; a Service does not create Pods."
+    },
+    "port": {
+      "goal": "Restore traffic when ready backends already exist. Check both Service ports and the listener.",
+      "hint": "A ready address alone is not enough: compare targetPort with the application port.",
+      "why": "targetPort is the backend port. A ready endpoint does not prove end-to-end reachability."
+    },
+    "readiness": {
+      "goal": "Make a running application ready for Service traffic without adding restarts.",
+      "hint": "Compare the readiness HTTP path with logs. The live endpoint and readiness endpoint serve different checks.",
+      "why": "Readiness controls normal Service eligibility; a failed readiness check alone does not restart a container."
+    },
+    "startup": {
+      "goal": "Allow the documented slow initialization while retaining liveness protection.",
+      "hint": "Compare initialization time with the probe window. A startup probe delays liveness and readiness until it succeeds.",
+      "why": "The authored startup budget covers the observed cold start. It is not a universal probe configuration."
+    },
+    "image": {
+      "goal": "Start the application using an image present in the supplied catalogue.",
+      "hint": "Read the pull failure reason and the approved tag. Do not invent logs for a container that never started.",
+      "why": "A missing manifest is addressed by the reviewed image reference, not by repeatedly pulling the same missing tag."
+    },
+    "command": {
+      "goal": "Find why a pulled image still exits and fix the application launch arguments.",
+      "hint": "Compare previous-container logs with the workload arguments. CrashLoopBackOff is a symptom, not a root cause.",
+      "why": "The observed exit was caused by an invalid option. Restarting unchanged arguments would repeat that failure."
+    },
+    "environment": {
+      "goal": "Use the current ConfigMap value in the application environment. Compare the reference and the running snapshot.",
+      "hint": "An existing process keeps its captured environment. A reviewed template change creates a new container in this scenario.",
+      "why": "ConfigMap environment values require new containers. Mounted-file updates and application reloads are different mechanisms."
+    },
+    "secret": {
+      "goal": "Resolve the required Secret reference without reading or inventing a Secret value.",
+      "hint": "Compare secretKeyRef.key with the listed key names and the startup event. Making the reference optional does not supply the required value.",
+      "why": "The corrected reference uses an existing key. Key names do not reveal the Secret value or prove that access is authorized."
+    },
+    "requests": {
+      "goal": "Schedule the workload using its supplied validated CPU request, without overcommitting the request budget.",
+      "hint": "Compare allocatable minus already allocated requests with this request. Current CPU use is not that budget.",
+      "why": "The validated request fits the given remaining budget. A higher CPU limit alone cannot make an oversized request schedulable."
+    },
+    "memory": {
+      "goal": "Resolve the recorded OOMKilled condition within the supplied approved memory budget.",
+      "hint": "Compare the recorded termination reason, workload limit, validated working set and remaining node budget.",
+      "why": "The scoped limit change accommodates the documented working set. Exit code alone would not prove OOMKilled; memory requirements are workload-specific."
+    }
+  },
+  "observations": {
+    "listener": "Application listener port",
+    "readyAddresses": "Ready backend addresses",
+    "request": "Authored request result",
+    "readyPath": "Application readiness path",
+    "coldStart": "Documented cold start (seconds)",
+    "oldEnvironment": "Container started before ConfigMap update",
+    "environment": "Running environment: MODE",
+    "secretKeys": "Available Secret key names",
+    "validatedCPU": "Validated application CPU request",
+    "allocatedCPU": "Already allocated CPU requests",
+    "remainingCPU": "Remaining CPU request budget",
+    "usageCPU": "Observed CPU use",
+    "workingSet": "Validated application working set",
+    "approvedMemory": "Approved application memory budget",
+    "remainingMemory": "Remaining memory request budget",
+    "startedPath": "Application startup-completion path"
+  }
+}

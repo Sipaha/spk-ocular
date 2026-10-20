@@ -1,0 +1,126 @@
+{
+  "ui": {
+    "course": "Lernpfad",
+    "overview": "Lektionsübersicht",
+    "scope": "Vorgegebene lokale Szenarien. Es laufen kein echter Cluster, kein Netzwerk, Scheduler oder Controller. Änderungen gelten nur hier.",
+    "progress": "{done} von {total} Lektionen abgeschlossen",
+    "notStarted": "Nicht begonnen",
+    "inProgress": "In Bearbeitung",
+    "completed": "Abgeschlossen",
+    "open": "Lektion öffnen",
+    "practice": "Geführte Übung",
+    "check": "Selbstständige Prüfung · ohne Hinweise",
+    "step": "Aufgabe {step} von {total}",
+    "hint": "Hinweis anzeigen",
+    "apply": "Simulierte Korrektur anwenden",
+    "next": "Nächste Aufgabe",
+    "finish": "Lektion abschließen",
+    "diagnosis": "Welche Ursache erklärt die Beobachtungen?",
+    "repair": "Welche geprüfte Änderung behebt sie?",
+    "evidence": "Prüfen Sie vor einer Änderung die aufgeführten Nachweise.",
+    "fixed": "Die lokale Korrektur wurde angewendet. Prüfen Sie das Ergebnis vor dem Fortfahren.",
+    "observe": "Prüfen Sie den resultierenden Pod oder die Endpunkte unter Eigenschaften.",
+    "evidenceError": "Erforderliche Nachweise fehlen. Öffnen Sie zuerst die angegebenen Objektansichten.",
+    "diagnosisError": "Die Erklärung passt nicht zu den Beobachtungen. Prüfen Sie die Nachweise erneut.",
+    "repairError": "Diese Änderung behebt die Ursache nicht. Vergleichen Sie Feld und Wert mit den Nachweisen.",
+    "complete": "Sie haben beide neuen Fälle ohne Hinweise diagnostiziert und behoben.",
+    "noEvents": "Dieser Übungsstand enthält keine Ereignisse.",
+    "noLogs": "Für diesen Stand sind keine Containerlogs verfügbar. Der Container wurde möglicherweise noch nicht gestartet.",
+    "noSecrets": "Secret-Werte sind nie enthalten. Nur Referenznamen und Schlüsselnamen werden gezeigt.",
+    "memory": "Der Fortschritt bleibt während dieser geöffneten Bibliothek erhalten. Schließen setzt die Lektionen zurück.",
+    "more": "Hilfe zu verwandten Ressourcen lesen",
+    "observations": "Vorgegebene Beobachtungen · keine Kubernetes-API-Felder"
+  },
+  "topics": {
+    "network": "Service-Verkehr: Selektoren und Ports",
+    "probes": "Readiness, Liveness und Start",
+    "runtime": "Image-Abruf und Anwendungsabstürze",
+    "config": "ConfigMap- und Secret-Referenzen",
+    "resources": "Requests, Limits und Scheduling"
+  },
+  "diagnoses": {
+    "selector": "Der Service-Selektor passt nicht zu den Labels der Anwendungs-Pods.",
+    "port": "Der Service leitet an einen anderen Port als den Listener der Anwendung weiter.",
+    "readiness": "Die Readiness-Probe prüft einen nicht angebotenen Pfad.",
+    "startup": "Liveness startet den Container vor Abschluss der langsamen Initialisierung neu.",
+    "image": "Der angeforderte Image-Tag fehlt im vorgegebenen Katalog.",
+    "command": "Die Anwendung beendet sich wegen ungültiger Argumente.",
+    "environment": "Der Umgebungswert wurde vor der ConfigMap-Änderung übernommen.",
+    "secret": "Der erforderliche Schlüsselname fehlt im Secret.",
+    "requests": "Die CPU-Anforderung passt nicht ins verbleibende Request-Budget.",
+    "memory": "Der Container überschritt sein Speicherlimit; die erfasste Ursache lautet OOMKilled.",
+    "credentials": "Die Image-Registry benötigt andere Zugangsdaten.",
+    "usage": "Niedrige gemessene CPU-Nutzung bedeutet, dass jede Anforderung passt.",
+    "replicas": "Mehr Replikate allein beheben diese Konfiguration."
+  },
+  "cases": {
+    "selector": {
+      "goal": "Stellen Sie den Verkehr ohne Anwendungsänderung wieder her. Vergleichen Sie Service, Pod und EndpointSlice.",
+      "hint": "Vergleichen Sie spec.selector mit metadata.labels und erklären Sie die fehlenden bereiten Endpunkte.",
+      "why": "Passende Labels liefern die vorgesehenen Backends; ein Service erstellt keine Pods."
+    },
+    "port": {
+      "goal": "Stellen Sie den Verkehr trotz vorhandener bereiter Backends wieder her. Prüfen Sie Service-Ports und Listener.",
+      "hint": "Eine bereite Adresse reicht nicht: Vergleichen Sie targetPort mit dem Anwendungsport.",
+      "why": "targetPort ist der Backend-Port. Ein bereiter Endpunkt beweist keine durchgängige Erreichbarkeit."
+    },
+    "readiness": {
+      "goal": "Machen Sie die laufende Anwendung ohne zusätzliche Neustarts für Service-Verkehr bereit.",
+      "hint": "Vergleichen Sie den Readiness-HTTP-Pfad mit den Logs. Liveness und Readiness prüfen Verschiedenes.",
+      "why": "Readiness steuert die normale Service-Eignung; ihr Fehlschlag allein startet keinen Container neu."
+    },
+    "startup": {
+      "goal": "Ermöglichen Sie die dokumentierte langsame Initialisierung bei erhaltener Liveness-Prüfung.",
+      "hint": "Vergleichen Sie Initialisierungszeit und Prüffenster. Startup verzögert Liveness und Readiness bis zum Erfolg.",
+      "why": "Das Übungsbudget deckt den beobachteten Kaltstart. Es ist keine allgemeine Probe-Empfehlung."
+    },
+    "image": {
+      "goal": "Starten Sie die Anwendung mit einem Image aus dem vorgegebenen Katalog.",
+      "hint": "Lesen Sie Abruffehler und freigegebenen Tag. Erfinden Sie keine Logs für nie gestartete Container.",
+      "why": "Ein fehlendes Manifest erfordert die geprüfte Image-Referenz, nicht wiederholtes Abrufen desselben fehlenden Tags."
+    },
+    "command": {
+      "goal": "Ermitteln Sie den Fehler nach erfolgreichem Image-Abruf und korrigieren Sie die Startargumente.",
+      "hint": "Vergleichen Sie die Logs des vorherigen Containers mit den Argumenten. CrashLoopBackOff ist ein Symptom.",
+      "why": "Eine ungültige Option verursachte das Beenden. Unveränderte Argumente würden denselben Fehler wiederholen."
+    },
+    "environment": {
+      "goal": "Übernehmen Sie den aktuellen ConfigMap-Wert in die Anwendungsumgebung. Vergleichen Sie Referenz und laufenden Stand.",
+      "hint": "Ein laufender Prozess behält seine Umgebung. Die geprüfte Vorlagenänderung erstellt hier einen neuen Container.",
+      "why": "ConfigMap-Umgebungswerte brauchen neue Container. Aktualisierte Volume-Dateien und Anwendungsneuladen funktionieren anders."
+    },
+    "secret": {
+      "goal": "Korrigieren Sie die Pflichtreferenz auf ein Secret, ohne einen Wert zu lesen oder zu erfinden.",
+      "hint": "Vergleichen Sie secretKeyRef.key, Schlüsselnamen und Startereignis. Eine optionale Referenz liefert keinen Pflichtwert.",
+      "why": "Die korrigierte Referenz nutzt einen vorhandenen Schlüssel. Sein Name zeigt weder Secret-Wert noch Zugriffsberechtigung."
+    },
+    "requests": {
+      "goal": "Planen Sie die Anwendung mit der vorgegebenen validierten CPU-Anforderung innerhalb des Request-Budgets.",
+      "hint": "Vergleichen Sie allocatable abzüglich belegter Requests mit der Anforderung. Momentane CPU-Nutzung ist nicht dieses Budget.",
+      "why": "Der validierte Request passt ins Restbudget. Ein höheres CPU-Limit allein macht zu große Requests nicht planbar."
+    },
+    "memory": {
+      "goal": "Beheben Sie das protokollierte OOMKilled innerhalb des freigegebenen Speicherbudgets.",
+      "hint": "Vergleichen Sie Beendigungsgrund, Limit, validierten Working Set und verbleibendes Node-Budget.",
+      "why": "Das angepasste Limit deckt den bekannten Working Set. Der Exitcode allein beweist kein OOMKilled; Speicherbedarf ist anwendungsspezifisch."
+    }
+  },
+  "observations": {
+    "listener": "Listener-Port der Anwendung",
+    "readyAddresses": "Bereite Backend-Adressen",
+    "request": "Vorgegebenes Anfrageergebnis",
+    "readyPath": "Readiness-Pfad der Anwendung",
+    "coldStart": "Dokumentierter Kaltstart (Sekunden)",
+    "oldEnvironment": "Containerstart vor ConfigMap-Änderung",
+    "environment": "Laufende Umgebung: MODE",
+    "secretKeys": "Vorhandene Secret-Schlüsselnamen",
+    "validatedCPU": "Validierte CPU-Anforderung der Anwendung",
+    "allocatedCPU": "Bereits zugewiesene CPU-Requests",
+    "remainingCPU": "Verbleibendes CPU-Request-Budget",
+    "usageCPU": "Beobachtete CPU-Nutzung",
+    "workingSet": "Validierter Working Set der Anwendung",
+    "approvedMemory": "Freigegebenes Speicherbudget der Anwendung",
+    "remainingMemory": "Verbleibendes Speicher-Request-Budget",
+    "startedPath": "Pfad für den abgeschlossenen Anwendungsstart"
+  }
+}

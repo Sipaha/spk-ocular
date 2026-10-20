@@ -1,4 +1,4 @@
-import {useId,useRef,useState,type ReactNode} from 'react'
+import {useId,useRef,useState,useEffect,type ReactNode} from 'react'
 import {createPortal} from 'react-dom'
 import {getLanguage,t} from '../i18n'
 import {useStore} from '../store'
@@ -8,6 +8,8 @@ import {concept,concepts,documentation,type ConceptId} from './catalog'
 import {explanation,learn} from './content'
 import {useLearning} from './store'
 import {Lesson} from './Lesson'
+import {Course} from './Course'
+import {pathText} from './pathContent'
 
 export function ResourceHelpButton({provider,kind}:{provider:string;kind:string}) {
  const language=useStore(s=>s.info?.language)
@@ -39,22 +41,29 @@ export function LearningDialog({languageMenu}:{languageMenu:ReactNode}) {
  return <Library key={request.kind??'library'} initialKind={request.kind} onClose={close} languageMenu={languageMenu}/>
 }
 function Library({initialKind,onClose,languageMenu}:{initialKind?:string;onClose:()=>void;languageMenu:ReactNode}) {
- const [kind,setKind]=useState(initialKind??'apps/replicasets'),[query,setQuery]=useState(''),[lesson,setLesson]=useState(false),[started,setStarted]=useState(false)
+ const [kind,setKind]=useState(initialKind??'apps/replicasets'),[query,setQuery]=useState(''),[view,setView]=useState<'reference'|'intro'|'path'>('reference'),[started,setStarted]=useState(false),[courseStarted,setCourseStarted]=useState(false),[introComplete,setIntroComplete]=useState(false)
  const box=useRef<HTMLElement>(null),title=useId(),modalKey=useModalFocus(box,onClose)
  const language=useStore(s=>s.info?.language)
- void language
+ // Disabling the language trigger during an async preference write can leave
+ // body focused. Preserve an editor focus, but recover the modal's lost focus.
+ useEffect(()=>{if(document.activeElement===document.body)box.current?.focus()},[language])
  const matches=concepts.filter(c=>(c[0]+' '+c[1]+' '+explanation(c[0]).purpose).toLocaleLowerCase(getLanguage()).includes(query.toLocaleLowerCase(getLanguage())))
  return createPortal(<div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-2 sm:p-6" onMouseDown={e=>{if(e.target===e.currentTarget)onClose()}}>
   <section ref={box} tabIndex={-1} role="dialog" aria-modal="true" aria-labelledby={title} onKeyDown={modalKey} className="flex h-[min(880px,94dvh)] w-[min(1060px,100%)] min-w-0 flex-col overflow-hidden rounded-lg border border-line bg-panel text-fg shadow-2xl outline-none" data-learning>
-   <header className="flex shrink-0 flex-wrap items-center gap-2 border-b border-line px-4 py-3"><div className="min-w-0 flex-1"><h2 id={title} className="font-semibold">{learn('library')}</h2><p className="text-xs text-fg-muted">{lesson?learn('lab'):learn('offline')}</p></div>{languageMenu}<ModalCloseButton onClick={onClose} label={t('action.close')}/></header>
-   <nav className="flex shrink-0 flex-wrap gap-2 border-b border-line p-2" aria-label={learn('library')}><button aria-pressed={!lesson} className={'rounded px-3 py-1 text-sm '+(!lesson?'bg-active text-accent':'hover:bg-hover')} onClick={()=>setLesson(false)}>{learn('concepts')}</button><button aria-pressed={lesson} className={'rounded px-3 py-1 text-sm '+(lesson?'bg-active text-accent':'hover:bg-hover')} onClick={()=>{setStarted(true);setLesson(true)}}>{learn('lesson')}</button></nav>
-   <div hidden={lesson} className="min-h-0 flex-1 overflow-hidden">
+   <header className="flex shrink-0 flex-wrap items-center gap-2 border-b border-line px-4 py-3"><div className="min-w-0 flex-1"><h2 id={title} className="font-semibold">{learn('library')}</h2><p className="text-xs text-fg-muted">{view!=='reference'?learn('lab'):learn('offline')}</p></div>{languageMenu}<ModalCloseButton onClick={onClose} label={t('action.close')}/></header>
+   <nav className="flex shrink-0 flex-wrap gap-2 border-b border-line p-2" aria-label={learn('library')}>
+    <button aria-pressed={view==='reference'} className={'rounded px-3 py-1 text-sm '+(view==='reference'?'bg-active text-accent':'hover:bg-hover')} onClick={()=>setView('reference')}>{learn('concepts')}</button>
+    <button aria-pressed={view==='intro'} className={'rounded px-3 py-1 text-sm '+(view==='intro'?'bg-active text-accent':'hover:bg-hover')} onClick={()=>{setStarted(true);setView('intro')}}>{learn('lesson')}</button>
+    <button aria-pressed={view==='path'} className={'rounded px-3 py-1 text-sm '+(view==='path'?'bg-active text-accent':'hover:bg-hover')} onClick={()=>{setCourseStarted(true);setView('path')}}>{pathText('course')}</button>
+   </nav>
+   <div hidden={view!=='reference'} className="min-h-0 flex-1 overflow-hidden">
     <div className="grid h-full min-h-0 grid-cols-1 grid-rows-[auto_minmax(0,1fr)] sm:grid-cols-[230px_minmax(0,1fr)] sm:grid-rows-1">
      <aside className="flex min-h-0 flex-col border-b border-line p-3 sm:border-r sm:border-b-0"><input className="w-full rounded border border-line bg-app px-2 py-1 text-sm" aria-label={learn('search')} placeholder={learn('search')} value={query} onChange={e=>setQuery(e.target.value)}/><nav aria-label={learn('concepts')} className="mt-2 max-h-40 min-h-0 overflow-auto sm:max-h-none sm:flex-1">{matches.map(c=><button key={c[0]} aria-current={kind===c[0]?'page':undefined} className={'block w-full truncate rounded px-2 py-1 text-left text-sm '+(kind===c[0]?'bg-selected text-accent':'hover:bg-hover')} onClick={()=>setKind(c[0])}>{c[1]}</button>)}{!matches.length&&<p role="status" className="p-2 text-sm text-fg-muted">{learn('noMatches')}</p>}</nav></aside>
      <div className="min-h-0 min-w-0 overflow-auto p-4 sm:p-6"><ResourceExplanation key={kind} kind={kind} onConcept={id=>{setKind(id);setQuery('');box.current?.focus()}}/></div>
     </div>
    </div>
-   <div hidden={!lesson} className="min-h-0 flex-1 overflow-auto">{started&&<Lesson/>}</div>
+   <div hidden={view!=='intro'} className="min-h-0 flex-1 overflow-auto">{started&&<Lesson onComplete={setIntroComplete}/>}</div>
+   <div hidden={view!=='path'} className="min-h-0 flex-1 overflow-auto">{courseStarted&&<Course introComplete={introComplete} onIntro={()=>{box.current?.focus();setStarted(true);setView('intro')}}/>}</div>
   </section>
  </div>,document.body)
 }

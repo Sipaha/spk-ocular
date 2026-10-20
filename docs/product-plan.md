@@ -115,10 +115,11 @@ Narrow public demand signals support testing manifest review, configurable colum
 
 ## Kubernetes learning and contextual help
 
-The owner selected localized resource help and the first interactive lesson.
-Their current local implementation is documented in [learning](learning.md).
-Broader lessons and the resource builder remain proposals; the priorities below
-record direction rather than delivery dates.
+Localized resource help, the introductory lesson and the bounded task-based
+learning path are implemented; current behavior is documented in
+[learning](learning.md). The resource builder remains a proposal. Independent
+learner studies and native-speaker review have not been performed; implemented
+checks do not establish production competence or validated educational outcomes.
 
 The recommended sequence is diagnosis and configuration/reliability checks, then
 localized resource help, then one introductory interactive lesson. Help precedes
@@ -130,9 +131,9 @@ lead the roadmap. No market-wide frequency of manual creation has been measured.
 
 | Priority | Planned outcome | Boundary and validation |
 | --- | --- | --- |
-| P1 | Offline contextual help for built-in Kubernetes resource types, in all eight application languages | A “What is this?” entry beside the kind explains purpose, relationships, common misconceptions and key fields, with links to related concepts and official documentation. Preserve technical identifiers. Validate understanding and locale completeness. |
-| P1 | One interactive introduction: Deployment, ReplicaSet, Pod and reconciliation | Start without kubeconfig, Docker, cloud accounts or a real cluster. Use clearly labeled synthetic data through familiar Ocular views. Delete a simulated Pod, observe replacement and find its controller. Success means independently explaining and navigating the relationship, not merely clicking through. |
-| P2 | Broader task-based learning path | After validating the first lesson: labels/Service/endpoints and broken selectors; readiness/liveness/startup; image pull/CrashLoop/events/logs; ConfigMap/Secret references; requests/limits and scheduling. Avoid implementing a general Kubernetes simulator. |
+| Implemented | Offline contextual help for built-in Kubernetes resource types, in all eight application languages | A “What is this?” entry beside the kind explains purpose, relationships, common misconceptions and key fields, with links to related concepts and official documentation. Preserve technical identifiers. Validate understanding and locale completeness. |
+| Implemented | One interactive introduction: Deployment, ReplicaSet, Pod and reconciliation | Start without kubeconfig, Docker, cloud accounts or a real cluster. Use clearly labeled synthetic data through familiar Ocular views. Delete a simulated Pod, observe replacement and find its controller. Success means independently explaining and navigating the relationship, not merely clicking through. |
+| Implemented | Bounded task-based learning path | Five modules cover selectors/ports, readiness/startup, image pull/CrashLoop, ConfigMap/Secret references and requests/limits/scheduling. Each has two guided tasks and two new checks requiring evidence, diagnosis, repair and observed result. Authored snapshots are not a general Kubernetes simulator; independent learning outcomes remain unverified. |
 | P2 | Small resource builder and manifest preparation | Optional Deployment plus Service form, YAML preview and export for a project; reviewed cluster application is separate. Do not prioritize a large visual editor without demonstrated demand. |
 
 Help content ships locally without mandatory AI or runtime translation. Built-in
