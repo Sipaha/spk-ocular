@@ -8,6 +8,7 @@ const loaders = {
 }
 
 const en = {
+ "act.node-files": "Files",
  "act.node-shell": "Node Shell",
  "term.reviewNodeShell": "To open another host shell, select the node and review Node Shell again.",
 
@@ -359,6 +360,10 @@ const en = {
  "logs.pod": "Pod",
  "logs.allPods": "All Pods",
  "files.title": "Files",
+ "files.create": "New empty file",
+ "files.rename": "Rename",
+ "files.name": "File name",
+ "files.nameInvalid": "Use a file name up to 255 bytes, without /; . and .. are not file names.",
  "files.path": "Container path",
  "files.go": "Open",
  "files.refresh": "Refresh",
@@ -368,6 +373,7 @@ const en = {
  "files.plain": "Plain text",
  "files.save": "Save",
  "files.saved": "Saved to container",
+ "files.savedHost": "Saved to host",
  "files.choose": "Select a text file to edit",
  "files.limit": "UTF-8 text \u00b7 up to 2 MiB \u00b7 Ctrl+S to save",
 
@@ -1193,6 +1199,7 @@ const en = {
 export type MessageKey = keyof typeof en
 
 const ru: Record<MessageKey, string> = {
+ "act.node-files": "Файлы",
  "act.node-shell": "Терминал ноды",
  "term.reviewNodeShell": "Чтобы открыть новую оболочку хоста, выберите ноду и заново подтвердите «Терминал ноды».",
  "appearance.retry": "Повторить",
@@ -1543,6 +1550,10 @@ const ru: Record<MessageKey, string> = {
  "logs.pod": "Pod",
  "logs.allPods": "Все Pod’ы",
  "files.title": "Файлы",
+ "files.create": "Новый пустой файл",
+ "files.rename": "Переименовать",
+ "files.name": "Имя файла",
+ "files.nameInvalid": "Укажите имя до 255 байт без /; . и .. не подходят.",
  "files.path": "Путь в контейнере",
  "files.go": "Открыть",
  "files.refresh": "Обновить",
@@ -1552,6 +1563,7 @@ const ru: Record<MessageKey, string> = {
  "files.plain": "Обычный текст",
  "files.save": "Сохранить",
  "files.saved": "Сохранено в контейнере",
+ "files.savedHost": "Сохранено на хосте",
  "files.choose": "Выберите текстовый файл для редактирования",
  "files.limit": "Текст UTF-8 · до 2 МиБ · Ctrl+S для сохранения",
 
@@ -2414,8 +2426,10 @@ const providerTexts: Partial<Record<Language, Record<string, string>>> = {
  'kubernetes.nodeShell.linux': 'Для Node Shell нужна Linux-нода с известной операционной системой.',
  'kubernetes.nodeShell.invalid': 'Выберите корректный namespace и образ без пробелов.',
  'kubernetes.nodeShell.namespaceError': 'Namespace {namespace} недоступен, не читается или изменился; проверьте заново.',
+ 'kubernetes.nodeFiles.effect': 'Создать временный Pod в {namespace} на ноде {name} с образом {image} для просмотра, скачивания и редактирования файловой системы хоста.',
+ 'kubernetes.nodeFiles.cleanup': 'Служебный Pod удаляется при закрытии файлового браузера или штатном выходе из Ocular. Сеанс — до 1 часа. Незавершённая очистка сохраняется локально и тихо повторяется в подключённых кластерах, в том числе после перезапуска, с экспоненциальной задержкой до 24 часов. Срок действия останавливает Pod, но не удаляет его.',
  'kubernetes.nodeShell.effect': 'Создать временный Pod в {namespace} на ноде {name} с образом {image} и открыть оболочку хоста.',
- 'kubernetes.nodeShell.cleanup': 'Служебный Pod удаляется при завершении оболочки, потере соединения, закрытии вкладки или штатном выходе из Ocular. Сеанс — до 1 часа. После сбоя приложения или ошибки удаления Pod может остаться: срок действия останавливает его, но не удаляет.',
+ 'kubernetes.nodeShell.cleanup': 'Служебный Pod удаляется при завершении оболочки, потере соединения, закрытии вкладки или штатном выходе из Ocular. Сеанс — до 1 часа. Незавершённая очистка сохраняется локально и тихо повторяется в подключённых кластерах, в том числе после перезапуска, с экспоненциальной задержкой до 24 часов. Срок действия останавливает Pod, но не удаляет его.',
  'kubernetes.nodeShell.privileged': 'Это даёт root-доступ к файловой системе, процессам и сети хоста. Команды могут изменить или повредить ноду и её нагрузки.',
  'kubernetes.nodeShell.requirements': 'Нужны права create/get/watch/delete для Pod и доступ к pods/exec. Политики namespace должны разрешать привилегированный доступ к пространствам имён хоста. В образе нужны sleep и nsenter, на хосте — /bin/sh.',
  'kubernetes.nodeShell.policy': 'Namespace {namespace} применяет Pod Security baseline/restricted. Admission может отклонить служебный Pod, если для запроса нет исключения.',
@@ -2424,7 +2438,7 @@ const providerTexts: Partial<Record<Language, Record<string, string>>> = {
  'kubernetes.nodeShell.startFailed': 'Не удалось запустить служебный Pod для Node Shell: {reason}',
  'kubernetes.nodeShell.changed': 'Идентичность служебного Pod изменилась; оболочка не открыта.',
  'kubernetes.nodeShell.createUnknown': 'Результат создания Pod {namespace}/{name} неизвестен. Выполняется попытка очистки; проверьте этот Pod перед открытием нового сеанса.',
- 'kubernetes.nodeShell.cleanupFailed': 'Не удалось подтвердить удаление Pod {namespace}/{name}: {detail}. Проверьте его и удалите вручную, если он остался.',
+ 'kubernetes.nodeShell.cleanupFailed': 'Не удалось подтвердить удаление Pod {namespace}/{name}: {detail}. Очистка будет тихо повторяться, когда этот кластер подключён.',
 
     'kubernetes.instance.revision': 'Ревизия {revision}',
     'kubernetes.instance.current': 'Текущая ревизия {revision}',

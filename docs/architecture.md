@@ -916,7 +916,8 @@ Cleanup runs under an independent ten-second deadline, including after startup
 failure or an ambiguous create result. The create response pins the server-assigned Pod UID; even a replacement with
 copied ownership labels cannot inherit cleanup. For an ambiguous create without
 a returned UID, the random ownership marker and nodeName identify a helper before
-a UID-conditional DELETE; writes never retry. A read confirms
+a UID-conditional DELETE. CREATE never retries; persisted cleanup may retry only
+against the owned helper UID. A read confirms
 disappearance, so admission-added finalizers do not become silent cleanup
 success. Foreign/replaced Pods are not deleted. Failures include the precise
 helper identity in a terminal notice/error. An optional `TerminalCleanup` handle
@@ -936,3 +937,71 @@ marker, even through broad namespace-wide container exec grants. Editing helper
 labels does not make a reserved helper name eligible for agent exec. UI terminals
 retain their ordinary container behavior; this does not add an agent host-shell
 permission.
+
+
+## Reviewed node file sessions
+
+A UI-only FilesActioner admits a signed, single-object Files review into a bounded
+memory registry; RunAction performs no remote writes. Its preparedId is required
+for every node file operation and download, is bound to the reviewed Ref/UID,
+and is never persisted. The ordinary node Exec capability remains unavailable,
+so existing agent grants do not acquire host access. The signed helper grant
+includes the action ID; terminal and file reviews cannot be exchanged.
+
+The provider shares Node Shell startup/identity/cleanup logic. A file session
+starts one helper lazily and runs bounded raw exec commands through nsenter into
+the host root. It retains the reviewed connection snapshot, rechecks node and
+namespace identity on each command, and never automatically recreates a failed
+helper. Closing, registry expiry (one hour), or normal application exit cancels
+commands and awaits bounded UID-guarded cleanup. StrictMode discarded mounts do
+not revoke a live file inspector. Late/unadopted action results are released.
+
+Shared Files create uses a pinned connection revision, argv path operands and
+POSIX shell noclobber; it refuses existing entries and returns a versioned empty
+document. The UI protects unsaved edits and updates its directory cache after
+confirmed creation. Regular reads, writes, downloads and their existing limits
+remain shared across container and node file inspectors.
+
+Rename first reads a digest of lstat-style device/inode/type/size/timestamps.
+The confirmed operation compares that digest and the connection revision,
+refuses an existing destination, then invokes a tiny libc-free Linux amd64/arm64 program with
+`renameat2(RENAME_NOREPLACE)`. Paths stay argv operands. The readable assembler
+sources and deterministic generator live beside the embedded programs; tests
+check ELF architecture, source hashes and a non-executable stack. The shell
+stages the helper using ordinary BusyBox/POSIX tools, opens and unlinks it,
+then executes its inherited `/proc/self/fd/3`. No installed utility remains.
+An unsupported syscall, architecture or noexec temporary directory fails safely;
+there is no plain rename fallback. This avoids BusyBox mv -n's verified
+check-to-rename destination race. Directory caches and any open
+document paths are rekeyed only after success. There is no atomic remote source
+inode precondition across the final stat-to-move interval; an external filesystem
+change can still race it. Failures/unknown outcomes are never retried implicitly.
+
+## Durable helper recovery
+
+SQLite owned_helpers stores non-secret intent before CREATE: provider/target,
+namespace UID, helper name/random marker, node owner UID and creation time. The
+server Pod UID is pinned before any host command. A cleanup record is removed
+only after confirmed disappearance (or proof the same-named UID is a replacement).
+A namespace UID mismatch retains the record for the original cluster; it never
+turns a repointed kubeconfig into permission to delete elsewhere. No credentials
+or configuration hashes are stored.
+
+The app injects a HelperJournal into tracked terminal/file handles before they
+are registered. Leases renew once per minute for five minutes; a failed renewal
+cancels host access. The current process also excludes active helpers from its
+reaper, including across a wall-clock jump. Recovery claims an expired lease by
+an atomic SQL condition before work; stale owners cannot renew or pin another UID.
+The reaper runs off the UI thread, wakes on explicit connection readiness and
+otherwise scans local due metadata every 30 seconds. It uses only current explicit
+sessions and cancels with their lifetime. No discovery, separate credential resolution,
+implicit connection or UI notification is triggered by recovery. At most four
+due helpers per connection are attempted in one pass.
+
+On failure next_try = attempt completion + delay_ms, then delay_ms doubles to
+86,400,000 ms. The initial delay is 60,000 ms. Backoff persists across restart
+and reconnect, with no jitter or replay of missed intervals. UID-conditional
+DELETE is followed by a read; an ambiguous result remains pending. CREATE ambiguity
+without a returned UID is recovered only by the recorded namespace/marker/node
+owner, and the observed UID is persisted before deletion. A crash in that CREATE
+response window cannot provide a server UID that the client never received.

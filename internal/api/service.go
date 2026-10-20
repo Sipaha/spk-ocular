@@ -44,12 +44,15 @@ type Service struct {
 	favoritesMu   sync.Mutex
 	navSectionsMu sync.Mutex
 
-	loading    viewLoading
-	views      *views.Manager
-	streams    *streams.Registry
-	streamBase func() (string, error)
-	terms      termProtos
-	fwd        *forwards.Manager
+	loading       viewLoading
+	views         *views.Manager
+	streams       *streams.Registry
+	streamBase    func() (string, error)
+	terms         termProtos
+	fileSessions  filesSessions
+	helperJournal *helperJournal
+	helperWake    chan struct{}
+	fwd           *forwards.Manager
 
 	sessMu        sync.Mutex
 	sessions      map[string]*sessionEntry // by ownerKey
@@ -96,7 +99,10 @@ func NewService(reg *provider.Registry, st *store.Store, em *events.Emitter, o O
 	if _, err := rand.Read(key); err != nil {
 		panic(err) // crypto/rand does not fail on supported platforms
 	}
-	return &Service{helmRepos: helm.NewRepositories(helm.SettingsDirectory(o.DataDir)), helmPlans: helm.NewPlans(), reg: reg, store: st, em: em, opts: o, views: views.NewManager(em), streams: streams.NewRegistry(), fwd: newForwards(em), sessions: map[string]*sessionEntry{}, connections: map[string]*connectionAttempt{}, left: map[string]time.Time{}, now: time.Now, revKey: key, agentWatches: make(chan struct{}, maxAgentWatches)}
+	s := &Service{helmRepos: helm.NewRepositories(helm.SettingsDirectory(o.DataDir)), helmPlans: helm.NewPlans(), reg: reg, store: st, em: em, opts: o, views: views.NewManager(em), streams: streams.NewRegistry(), fwd: newForwards(em), sessions: map[string]*sessionEntry{}, connections: map[string]*connectionAttempt{}, left: map[string]time.Time{}, now: time.Now, revKey: key, agentWatches: make(chan struct{}, maxAgentWatches)}
+	s.helperWake = make(chan struct{}, 1)
+	s.helperJournal = &helperJournal{store: st, now: func() time.Time { return s.now() }}
+	return s
 }
 
 // configRev is the opaque revision of a configuration hash ("" for none).
@@ -119,6 +125,7 @@ func (s *Service) live(t core.LiveTarget) core.LiveTarget {
 // It never blocks on the network.
 func (s *Service) Start(ctx context.Context) {
 	ctx, s.cancel = context.WithCancel(ctx)
+	s.startHelperRecovery(ctx)
 	for _, p := range s.reg.All() {
 		w, ok := p.(provider.TargetWatcher)
 		if !ok {
@@ -156,6 +163,7 @@ func (s *Service) Close() {
 	s.views.CloseAll()
 	s.streams.Close()
 	s.terms.closeAll()
+	s.fileSessions.closeAll()
 	s.fwd.Close()
 	s.sessMu.Lock()
 	if s.reaper != nil {

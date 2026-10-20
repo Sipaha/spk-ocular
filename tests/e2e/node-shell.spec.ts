@@ -1,29 +1,10 @@
 import {test,expect} from '@playwright/test'
-import {spawn} from 'node:child_process'
-import {mkdtempSync,mkdirSync,writeFileSync,readFileSync,openSync,closeSync} from 'node:fs'
+import {readFileSync} from 'node:fs'
 import {join,resolve} from 'node:path'
-import {scratchRoot,noDockerEnv} from './fixtures'
-import {freePort,stop} from './restartApp'
-import {nodeShellFixture} from './nodeShellFixture'
+import {stop} from './restartApp'
+import {launchNodeTools as launch} from './nodeToolsApp'
 import {activePanel,expectScreen,focusTerminal} from './synth'
 
-async function launch(page:import('@playwright/test').Page){
-  const root=mkdtempSync(join(scratchRoot,'node-shell-')),fixture=await nodeShellFixture(),port=await freePort()
-  const home=join(root,'home');mkdirSync(home)
-  const kube=join(root,'config.json');writeFileSync(kube,JSON.stringify({apiVersion:'v1',kind:'Config','current-context':'node-fixture',clusters:[{name:'fixture',cluster:{server:fixture.url}}],users:[{name:'fixture',user:{}}],contexts:[{name:'node-fixture',context:{cluster:'fixture',user:'fixture'}}]}))
-  const fd=openSync(join(root,'app.log'),'w'),app=spawn(process.env.E2E_BIN??'../../build/bin/spk-ocular',['--browser','--port',String(port)],{env:{...process.env,HOME:home,SPK_OCULAR_HOME:join(root,'data'),KUBECONFIG:kube,...noDockerEnv,HTTP_PROXY:'',HTTPS_PROXY:'',ALL_PROXY:'',http_proxy:'',https_proxy:'',all_proxy:'',DISPLAY:'',WAYLAND_DISPLAY:'',LANGUAGE:'en',LANG:'en_US.UTF-8'},stdio:['ignore',fd,fd]});closeSync(fd)
-  const url=`http://127.0.0.1:${port}`
-  try{
-    await expect.poll(async()=>{try{return(await fetch(url)).ok}catch{return false}},{timeout:20000}).toBe(true)
-    const html=await(await fetch(url)).text(),token=html.match(/spk-ocular-api-token" content="([^"]+)"/)![1]
-    const rpc=async(method:string,data:unknown={})=>{const r=await page.request.post(`${url}/api/${method}`,{headers:{Authorization:`Bearer ${token}`,Origin:url},data});expect(r.ok(),`${method}: ${await r.text()}`).toBeTruthy();return r.json()}
-    await rpc('Configurations',{command:'import',paths:[kube]})
-    const groups=(await rpc('ListTargets')).groups,target=groups.find((g:{provider:string})=>g.provider==='kubernetes').targets[0]
-    await rpc('SelectTarget',{provider:'kubernetes',id:target.id});await rpc('SetTargetState',{provider:'kubernetes',target:target.id,key:'kind',value:JSON.stringify('nodes')});await rpc('ConnectTarget',{provider:'kubernetes',id:target.id})
-    await page.goto(url);const grid=page.getByRole('grid',{name:'resources',exact:true});await expect(grid.getByRole('gridcell',{name:'worker-01',exact:true})).toBeVisible()
-    return {root,fixture,app,rpc,async close(){await stop(app);await fixture.close()}}
-  }catch(error){await stop(app);await fixture.close();throw error}
-}
 async function openReview(page:import('@playwright/test').Page,language='en'){
   await page.getByRole('gridcell',{name:'worker-01',exact:true}).click()
   const drawer=page.locator('[data-area=details]'),shell=drawer.getByRole('button',{name:language==='ru'?'Терминал ноды':'Node Shell',exact:true})
@@ -113,6 +94,7 @@ test('a failed helper deletion remains visible after closing its terminal tab',a
     await expect(page.getByRole('tab',{name:/Node Shell · worker-01/})).toHaveCount(0)
     await expect(page.getByRole('status').filter({hasText:'Could not confirm cleanup'})).toContainText(helper)
     expect(run.fixture.pods.size).toBe(1)
+    const records=run.helperRows();expect(records).toHaveLength(1);expect(records[0].delay_ms).toBe(120000);expect(records[0].next_try).toBeGreaterThan(Date.now())
     expect(run.fixture.calls.filter(c=>c.method==='DELETE'&&c.path.endsWith('/'+helper))).toHaveLength(1)
     await page.screenshot({path:join(run.root,'cleanup-failure-after-close.png')})
   }finally{await run.close()}

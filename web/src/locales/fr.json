@@ -1162,7 +1162,13 @@
     "class.scope_limit": "sélectionnez des namespaces",
     "compare.noBaseline": "Aucune base de comparaison sélectionnée. Ouvrez les propriétés d’une ressource et cliquez sur « {pin} ». Ouvrez ensuite une autre ressource et cliquez sur « {compare} » pour comparer leur YAML.",
     "act.node-shell": "Shell du nœud",
-    "term.reviewNodeShell": "Pour une autre session, sélectionnez le nœud et confirmez à nouveau Shell du nœud."
+    "term.reviewNodeShell": "Pour une autre session, sélectionnez le nœud et confirmez à nouveau Shell du nœud.",
+    "act.node-files": "Fichiers",
+    "files.create": "Nouveau fichier vide",
+    "files.name": "Nom du fichier",
+    "files.nameInvalid": "Utilisez un nom de 255 octets maximum, sans / ; . et .. ne sont pas autorisés.",
+    "files.savedHost": "Enregistré sur l’hôte",
+    "files.rename": "Renommer"
   },
   "provider": {
     "kubernetes.rbac.source": "Impossible de lire la source RBAC ({class})",
@@ -1491,7 +1497,7 @@
     "kubernetes.nodeShell.invalid": "Choisissez un namespace valide et une image sans espaces.",
     "kubernetes.nodeShell.namespaceError": "Le namespace {namespace} est indisponible, illisible ou a changé ; vérifiez à nouveau.",
     "kubernetes.nodeShell.effect": "Créer un Pod temporaire dans {namespace} sur le nœud {name} avec l’image {image}, puis ouvrir le shell de l’hôte.",
-    "kubernetes.nodeShell.cleanup": "Le Pod auxiliaire est supprimé à la fin du shell, à la perte de connexion, à la fermeture de l’onglet ou à l’arrêt normal d’Ocular. Durée maximale : 1 heure. Après un plantage ou un échec de suppression, le Pod peut rester ; son délai l’arrête sans le supprimer.",
+    "kubernetes.nodeShell.cleanup": "Le Pod auxiliaire est supprimé à la fin du shell, à la perte de connexion, à la fermeture de l’onglet ou à la sortie normale d’Ocular. Durée maximale : 1 heure. Le nettoyage incomplet est enregistré localement et réessayé silencieusement sur les clusters connectés, même après redémarrage, avec des délais exponentiels jusqu’à 24 heures. L’échéance arrête le Pod sans le supprimer.",
     "kubernetes.nodeShell.privileged": "Cela donne un accès root aux fichiers, processus et réseau de l’hôte. Les commandes peuvent modifier ou endommager le nœud et ses charges de travail.",
     "kubernetes.nodeShell.requirements": "Nécessite create/get/watch/delete sur les Pods et l’accès à pods/exec. L’admission du namespace doit autoriser les espaces de noms hôte privilégiés. L’image doit fournir sleep et nsenter, et l’hôte /bin/sh.",
     "kubernetes.nodeShell.policy": "Le namespace {namespace} impose Pod Security baseline/restricted. L’admission peut refuser ce Pod auxiliaire si la requête n’est pas exemptée.",
@@ -1500,7 +1506,9 @@
     "kubernetes.nodeShell.startFailed": "Impossible de démarrer le Pod auxiliaire Node Shell : {reason}",
     "kubernetes.nodeShell.changed": "L’identité du Pod auxiliaire Node Shell a changé ; aucun shell ouvert.",
     "kubernetes.nodeShell.createUnknown": "Le résultat de la création du Pod {namespace}/{name} est inconnu. Un nettoyage est tenté ; vérifiez ce Pod avant une autre session.",
-    "kubernetes.nodeShell.cleanupFailed": "Impossible de confirmer le nettoyage du Pod {namespace}/{name} : {detail}. Vérifiez-le et supprimez-le manuellement s’il reste.",
-    "kubernetes.nodeShell.agentDenied": "Les Pods auxiliaires du shell de nœud sont réservés à l’interface ; les droits exec de conteneur n’y autorisent pas de commandes."
+    "kubernetes.nodeShell.cleanupFailed": "Le nettoyage du Pod {namespace}/{name} n’est pas confirmé : {detail}. Il sera réessayé silencieusement lorsque ce cluster sera connecté.",
+    "kubernetes.nodeShell.agentDenied": "Les Pods auxiliaires du shell de nœud sont réservés à l’interface ; les droits exec de conteneur n’y autorisent pas de commandes.",
+    "kubernetes.nodeFiles.effect": "Créer un Pod temporaire dans {namespace} sur le nœud {name}, avec l’image {image}, pour parcourir, télécharger et modifier le système de fichiers de l’hôte.",
+    "kubernetes.nodeFiles.cleanup": "Le Pod auxiliaire est supprimé à la fermeture du navigateur de fichiers ou à la sortie normale d’Ocular. Durée maximale : 1 heure. Le nettoyage incomplet est enregistré localement et réessayé silencieusement sur les clusters connectés, même après redémarrage, avec des délais exponentiels jusqu’à 24 heures. L’échéance arrête le Pod sans le supprimer."
   }
 }

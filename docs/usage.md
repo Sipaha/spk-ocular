@@ -1037,6 +1037,27 @@ remainder, so repeated rounding cannot accumulate into a visible history drift.
 Wheel input releases a stale selection drag if WebKit missed
 mouseup, and stops caret correction from pulling the scroll position back.
 
+### Creating and renaming files
+
+All supported Files inspectors, including containers, Pods and nodes, offer
+**New empty file** in the address toolbar. Enter a single file name for the
+current directory. The connection revision is checked before creation, and
+existing files, directories and symbolic links are refused without overwriting.
+Names and paths are passed as arguments, never shell source. The created file
+is empty and opens immediately in the editor; Save uses its original digest
+as usual. Creating a file never retries automatically after an uncertain result.
+
+Select an entry and press **F2**, or right-click it and choose **Rename**.
+Files, directories and symbolic links can be renamed within the same parent
+directory; the filesystem root cannot. Ocular reads the source identity before
+showing the name dialog and checks it again before moving. Existing destination
+entries are refused without overwriting. The operation requires a Linux amd64/arm64 kernel with `renameat2`, Linux
+`stat -c`, ordinary shell utilities, `/proc` and executable temporary storage.
+An embedded, libc-free helper requests `RENAME_NOREPLACE`; no fallback to an
+overwriting rename is attempted. The helper is unlinked before execution. Renamed cached branches and open document
+paths update after confirmed success. Unsaved edits are protected before opening
+the dialog. An uncertain rename is never retried automatically.
+
 ## Downloads
 
 The download button in the application header opens the Downloads popup, with
@@ -1171,9 +1192,50 @@ loss requires another explicit Node Shell review, with no automatic creation ret
 
 When the command ends, its stream disconnects, its tab closes or Ocular exits
 normally, Ocular requests immediate helper deletion with a UID precondition and
-checks disappearance. Cleanup failures name the exact namespace/Pod to inspect;
-never delete a same-named replacement blindly. After an application crash,
+checks disappearance. An immediate cleanup failure names the exact namespace/Pod. Its durable record
+remains for silent retries; repeated background failures produce no notifications.
+Never delete a same-named replacement blindly. After an application crash,
 network failure or revoked deletion rights, a helper may remain. Its deadline
 stops it when the kubelet can enforce it, but does not delete the Pod. The Node
 owner reference permits garbage collection when that node object is deleted.
 Node Shell is UI-only and is not included in agent exec/action grants.
+
+
+## Node Files
+
+Select a Linux node and click the Files icon beside Node Shell at the left of
+its action toolbar. Review the connection, node, helper namespace and image
+before opening the host filesystem. This is root access: saving a file can
+change the node and its workloads. The existing file tree, UTF-8 editor
+(up to 2 MiB), version-conflict checks and native downloads are reused.
+
+A separate temporary helper Pod serves each reviewed Files session. Its exec
+commands enter the host namespaces and root before running the host POSIX shell
+and file utilities; the helper image needs sleep/nsenter, and the host needs
+the utilities required by each operation (including tar for downloads).
+Opening or reviewing the action creates no Pod; the first file operation starts
+one. Closing Files cancels its commands and requests UID-guarded helper deletion.
+Normal application exit and the one-hour session limit also trigger cleanup.
+Failed startup never recreates the helper automatically. As with Node Shell,
+a crash, unreachable API or revoked deletion rights can leave a helper object.
+Files session capabilities are memory-only, UI-only and never included in agent
+grants. Helper ownership and unfinished cleanup are persisted as described below.
+
+## Recovering node helper cleanup
+
+Node Shell and node Files persist helper intent before creating a Pod and record
+the returned UID before host access. A failed database write prevents creation.
+After a crash or failed deletion, Ocular checks this registry in the background
+only through explicitly connected clusters. It verifies the namespace incarnation,
+helper marker, node owner and Pod UID, and never deletes a same-named replacement.
+Confirmed absence removes the local record. Unrecorded matching Pods are not scanned.
+
+Retries are silent, without repeated notifications. After failure the delay starts
+at one minute, doubles on each attempt, and caps at 24 hours; subsequent attempts
+remain daily. The next attempt time is the last attempt's completion plus its delay.
+The schedule is persisted, has no jitter and is not reset by reconnecting or
+restarting Ocular. Downtime leads to one overdue attempt, not a catch-up burst.
+Active sessions hold a renewable five-minute lease; a crashed process's lease must
+expire before another process can recover its helper. No cluster is connected
+automatically for cleanup. An offline app, unavailable API or revoked deletion
+rights can postpone cleanup indefinitely; records remain for later attempts.

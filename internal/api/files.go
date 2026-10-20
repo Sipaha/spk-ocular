@@ -20,14 +20,16 @@ import (
 const fileLimit = 2 << 20
 
 type FilesRequest struct {
-	ConfigRev string   `json:"configRev"`
-	Ref       core.Ref `json:"ref"`
-	Instance  string   `json:"instance"`
-	Channel   string   `json:"channel"`
-	Command   string   `json:"command"`
-	Path      string   `json:"path"`
-	Text      string   `json:"text"`
-	Expect    string   `json:"expect"`
+	PreparedID string   `json:"preparedId,omitempty"`
+	NewName    string   `json:"newName,omitempty"`
+	ConfigRev  string   `json:"configRev"`
+	Ref        core.Ref `json:"ref"`
+	Instance   string   `json:"instance"`
+	Channel    string   `json:"channel"`
+	Command    string   `json:"command"`
+	Path       string   `json:"path"`
+	Text       string   `json:"text"`
+	Expect     string   `json:"expect"`
 }
 type FileEntry struct {
 	Name      string `json:"name"`
@@ -66,6 +68,12 @@ func (s *Service) Files(ctx context.Context, req FilesRequest) (FilesResponse, e
 	if !fromUI(ctx) {
 		return out, coded("forbidden", errors.New("container files are available only to the application UI"))
 	}
+	if req.Command == "close" {
+		if req.PreparedID == "" {
+			return out, coded(CodeBadRequest, errors.New("a reviewed file session is required"))
+		}
+		return out, s.fileSessions.forget(req.PreparedID, req.Ref)
+	}
 	if !strings.HasPrefix(req.Path, "/") || strings.ContainsRune(req.Path, 0) || len(req.Path) > 4096 {
 		return out, coded(CodeBadRequest, errors.New("an absolute container path is required"))
 	}
@@ -84,6 +92,25 @@ func (s *Service) Files(ctx context.Context, req FilesRequest) (FilesResponse, e
 	case "read":
 		tools = "head"
 		script = `set -eu; [ -f "$1" ] || { echo 'Not a regular file' >&2; exit 1; }; head -c 2097153 "$1"`
+	case "rename-info":
+		tools = "stat"
+		script = `set -eu; stat -c '%d:%i:%f:%s:%Y:%Z' -- "$1"`
+	case "rename":
+		if out.Path == "/" || len(req.Expect) != 64 || req.NewName == "" || req.NewName == "." || req.NewName == ".." || len(req.NewName) > 255 || !utf8.ValidString(req.NewName) || strings.ContainsAny(req.NewName, "/\x00") {
+			return out, coded(CodeBadRequest, errors.New("a reviewed source and a single new file name are required"))
+		}
+		destination := path.Join(path.Dir(out.Path), req.NewName)
+		tools = "stat sha256sum uname mktemp base64 chmod rm"
+		script = `set -eu; [ -e "$1" ] || [ -L "$1" ] || { echo 'Source no longer exists' >&2; exit 1; }; if [ -e "$3" ] || [ -L "$3" ]; then echo 'Destination already exists; nothing overwritten' >&2; exit 1; fi; actual=$(stat -c '%d:%i:%f:%s:%Y:%Z' -- "$1" | sha256sum); [ "${actual%% *}" = "$2" ] || { echo 'Source changed; review the rename again' >&2; exit 1; }; ` + atomicRenameScript + `; if [ -e "$1" ] || [ -L "$1" ]; then echo 'Rename was not completed; nothing overwritten' >&2; exit 1; fi; [ -e "$3" ] || [ -L "$3" ] || { echo 'Rename outcome is unknown; inspect both paths before retrying' >&2; exit 1; }`
+		args = append(args, req.Expect, destination)
+	case "create":
+		if req.Text != "" || req.Expect != "" {
+			return out, coded(CodeBadRequest, errors.New("empty file creation takes no content or version"))
+		}
+		if out.Path == "/" || strings.HasSuffix(req.Path, "/") {
+			return out, coded(CodeBadRequest, errors.New("a file name is required"))
+		}
+		script = `set -eu; if [ -e "$1" ] || [ -L "$1" ]; then echo 'File already exists; nothing overwritten' >&2; exit 1; fi; set -C; : > "$1"`
 	case "write":
 		tools = "head mktemp sha256sum wc tr cat rm"
 		if len(req.Expect) != 64 {
@@ -94,20 +121,16 @@ func (s *Service) Files(ctx context.Context, req FilesRequest) (FilesResponse, e
 	default:
 		return out, coded(CodeBadRequest, errors.New("unknown file operation"))
 	}
-	if req.Instance == "" {
+	if req.Instance == "" && req.PreparedID == "" {
 		return out, coded(CodeBadRequest, errors.New("select a container instance first"))
 	}
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
-	ex, err := s.execer(ctx, req.Ref)
-	if err != nil {
-		return out, err
-	}
 	if tools != "" {
 		script = `for tool in ` + tools + `; do command -v "$tool" >/dev/null 2>&1 || { printf 'Container Files: required utility %s is missing from this image\n' "$tool" >&2; exit 127; }; done; ` + script
 	}
 	argv := append([]string{"sh", "-c", script, "ocular-files"}, args...)
-	h, err := ex.PrepareExec(ctx, req.Ref, provider.ExecRequest{Instance: req.Instance, Channel: req.Channel, Command: argv})
+	h, err := s.prepareFileCommand(ctx, req, argv)
 	if err != nil {
 		return out, fromProvider(err)
 	}
@@ -116,7 +139,7 @@ func (s *Service) Files(ctx context.Context, req FilesRequest) (FilesResponse, e
 	if req.ConfigRev != "" && req.ConfigRev != out.ConfigRev {
 		return out, coded(CodeConflict, errors.New("container connection changed; close and reopen Files"))
 	}
-	if req.Command == "write" && req.ConfigRev == "" {
+	if (req.Command == "write" || req.Command == "create" || req.Command == "rename") && req.ConfigRev == "" {
 		return out, coded(CodeBadRequest, errors.New("the original connection revision is required"))
 	}
 	stdout := &fileBuffer{limit: fileLimit}
@@ -133,6 +156,10 @@ func (s *Service) Files(ctx context.Context, req FilesRequest) (FilesResponse, e
 		return out, coded(CodeBadRequest, errors.New(detail))
 	}
 	switch req.Command {
+	case "rename-info":
+		out.Version = fileVersion(stdout.Bytes())
+	case "rename":
+		out.Path = args[2]
 	case "list":
 		parts := bytes.Split(stdout.Bytes(), []byte{0})
 		out.Entries = []FileEntry{}
@@ -158,7 +185,7 @@ func (s *Service) Files(ctx context.Context, req FilesRequest) (FilesResponse, e
 		}
 		out.Text = string(b)
 		out.Version = fileVersion(b)
-	case "write":
+	case "create", "write":
 		out.Text = req.Text
 		out.Version = fileVersion([]byte(req.Text))
 	}

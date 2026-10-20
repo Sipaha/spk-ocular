@@ -1,7 +1,7 @@
 import { isoDateTime } from '../dates'
 import { useEffect, useLayoutEffect, useId, useRef, useState } from 'react'
 import type { Client } from '../api/client'
-import type { ActionChoice, ActionDescriptor, ActionParams, ActionPlan, ActionResult, Message, Ref, TerminalOpen } from '../api/types'
+import type { ActionChoice, ActionDescriptor, ActionParams, ActionPlan, ActionResult, Message, Ref, TerminalOpen, FilesOpen } from '../api/types'
 import { actionLabel, classLabel, messageText, t } from '../i18n'
 import { refTitle } from '../refs'
 import { useScopeWords } from '../scopeNames'
@@ -28,6 +28,7 @@ interface Props {
   onClose: () => void
   /** A done run asks for a terminal (a debug container's). */
   onTerminal?: (open: TerminalOpen) => void
+  onFiles?: (open: FilesOpen) => void
   /** How long a run may take before its outcome is called unknown. */
   runTimeoutMs?: number
 }
@@ -46,7 +47,7 @@ const RUN_TIMEOUT_MS = 60_000
  * first and reviewed before it can run (a choice is reviewed as it is made). One run per confirmation; while it runs the
  * dialog stays.
  */
-export function ActionDialog({ client, req, onClose, onTerminal, runTimeoutMs = RUN_TIMEOUT_MS }: Props) {
+export function ActionDialog({ client, req, onClose, onTerminal, onFiles, runTimeoutMs = RUN_TIMEOUT_MS }: Props) {
   const { ref, action, kindTitle } = req
   const connectionName = useStore(state => state.view?.groups.flatMap(group => group.targets).find(target => target.provider === ref.provider && target.id === ref.target)?.title)
   const countId = useId()
@@ -162,7 +163,7 @@ export function ActionDialog({ client, req, onClose, onTerminal, runTimeoutMs = 
     textReviewed && (!param || (choosing ? chosen !== null && plan?.params.choice === chosen : planned !== undefined && count.trim() === String(planned)))
   const canRun = !!plan && reviewed && !busy && !sent && !plan.unavailable && plan.rights.state !== 'denied'
   const destructive = !!plan?.destructive
-  const cancelInitially = destructive || !!plan?.action.terminal
+  const cancelInitially = destructive || !!plan?.action.terminal || !!plan?.action.files
 
   // Focus: the count while choosing it; on a reviewed plan the confirmation,
   // or Cancel for destructive plans and privileged terminal admission.
@@ -267,9 +268,10 @@ export function ActionDialog({ client, req, onClose, onTerminal, runTimeoutMs = 
       } else showNotice(`${where}${out.type === 'lateDone' ? out.text : `${actionLabel(action)} ${refTitle(plan.where.ref)}: ${out.text}`}`, 10_000)
     }
     // What a result says, for a notice: the sum of its parts or its message.
-    const told = (res: ActionResult) => (res.terminal?.preparedId ? `${actionLabel(action)} · ${refTitle(plan.where.ref)}` : res.parts?.length ? `${actionLabel(action)} ${refTitle(plan.where.ref)}: ${partsSummary(res.parts)}` : messageText(res.message))
+    const told = (res: ActionResult) => ((res.terminal?.preparedId || res.files?.preparedId) ? `${actionLabel(action)} · ${refTitle(plan.where.ref)}` : res.parts?.length ? `${actionLabel(action)} ${refTitle(plan.where.ref)}: ${partsSummary(res.parts)}` : messageText(res.message))
     answer.then(
       (res) => {
+        if(res.files&&(timedOut||!live.current))void client.files({ref:res.files.ref,preparedId:res.files.preparedId,instance:'',channel:'',command:'close',path:'/'}).catch(()=>{})
         const partial = partialOf(res)
         if (!partial) return lateAnswer({ type: 'lateDone', text: t('action.lateDone', { message: told(res) }) }, told(res))
         if (!timedOut) return
@@ -306,6 +308,7 @@ export function ActionDialog({ client, req, onClose, onTerminal, runTimeoutMs = 
         }
         onClose()
         if (res.terminal) onTerminal?.(res.terminal)
+        if (res.files) onFiles?.(res.files)
       }
     } catch (e) {
       const out: Outcome = e instanceof RunTimeout ? { type: 'unknown', text: t('action.timeout', { sec: Math.round(runTimeoutMs / 1000) }) } : outcomeOf(e)

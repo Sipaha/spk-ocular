@@ -105,6 +105,7 @@ const actionPaths = {
   permissions: 'M12 3 4 6v6c0 5 8 9 8 9s8-4 8-9V6ZM9 12l2 2 4-4',
   logs: 'M4 4h16v16H4ZM8 8h8M8 12h8M8 16h5',
   terminal: 'M3 4h18v16H3ZM7 9l3 3-3 3m6 0h4',
+  newFile: 'M4 3h10l6 6v12H4ZM14 3v6h6M8 15h8m-4-4v8',
   files: 'M3 7V5h6l2 3h10v12H3ZM3 8h8',
   edit: 'm4 16 12-12 4 4L8 20H4ZM13 7l4 4',
   actions: 'M5 12h.01M12 12h.01M19 12h.01',

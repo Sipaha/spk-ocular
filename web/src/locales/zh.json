@@ -1162,7 +1162,13 @@
     "class.scope_limit": "请选择 namespace",
     "compare.noBaseline": "尚未选择比较基准。打开一个资源的属性，点击“{pin}”。然后打开另一个资源，点击“{compare}”以比较两者的 YAML。",
     "act.node-shell": "节点 Shell",
-    "term.reviewNodeShell": "要打开新的主机 shell，请选择节点并重新确认节点 Shell。"
+    "term.reviewNodeShell": "要打开新的主机 shell，请选择节点并重新确认节点 Shell。",
+    "act.node-files": "文件",
+    "files.create": "新建空文件",
+    "files.name": "文件名",
+    "files.nameInvalid": "文件名不能超过 255 字节，不能包含 /，也不能为 . 或 ..。",
+    "files.savedHost": "已保存到主机",
+    "files.rename": "重命名"
   },
   "provider": {
     "kubernetes.rbac.source": "无法读取 RBAC 来源（{class}）",
@@ -1491,7 +1497,7 @@
     "kubernetes.nodeShell.invalid": "请选择有效的命名空间和不含空格的镜像。",
     "kubernetes.nodeShell.namespaceError": "命名空间 {namespace} 不可用、无法读取或已更改；请重新检查。",
     "kubernetes.nodeShell.effect": "在节点 {name} 的命名空间 {namespace} 中使用镜像 {image} 创建临时 Pod，然后打开主机 shell。",
-    "kubernetes.nodeShell.cleanup": "shell 结束、连接中断、标签页关闭或 Ocular 正常退出时会删除辅助 Pod。会话最长 1 小时。应用崩溃或删除失败后 Pod 可能保留；到期会停止它，但不会删除它。",
+    "kubernetes.nodeShell.cleanup": "Shell 结束、连接断开、标签页关闭或正常退出 Ocular 时会删除辅助 Pod。会话最长为 1 小时。未完成的清理会保存在本地，并在已连接的集群中静默重试，重启后仍会继续，重试间隔按指数增加，最长为 24 小时。截止时间会停止 Pod，但不会删除它。",
     "kubernetes.nodeShell.privileged": "这将授予对主机文件系统、进程和网络的 root 访问权限。命令可能更改或损坏节点及其工作负载。",
     "kubernetes.nodeShell.requirements": "需要 Pod 的 create/get/watch/delete 权限和 pods/exec 访问权限。命名空间准入必须允许特权主机命名空间。镜像需要 sleep 和 nsenter；主机需要 /bin/sh。",
     "kubernetes.nodeShell.policy": "命名空间 {namespace} 强制实施 Pod Security baseline/restricted。除非请求被豁免，否则准入可能拒绝此辅助 Pod。",
@@ -1500,7 +1506,9 @@
     "kubernetes.nodeShell.startFailed": "Node Shell 辅助 Pod 无法启动：{reason}",
     "kubernetes.nodeShell.changed": "Node Shell 辅助 Pod 的身份已更改；未打开 shell。",
     "kubernetes.nodeShell.createUnknown": "创建 Pod {namespace}/{name} 的结果未知。将尝试清理；开启新会话前请检查该 Pod。",
-    "kubernetes.nodeShell.cleanupFailed": "无法确认 Pod {namespace}/{name} 的清理结果：{detail}。请检查它，若仍存在则手动删除。",
-    "kubernetes.nodeShell.agentDenied": "节点 Shell 辅助 Pod 仅供界面使用；容器 exec 授权不允许在其中执行命令。"
+    "kubernetes.nodeShell.cleanupFailed": "无法确认 Pod {namespace}/{name} 的清理：{detail}。此集群连接时将静默重试清理。",
+    "kubernetes.nodeShell.agentDenied": "节点 Shell 辅助 Pod 仅供界面使用；容器 exec 授权不允许在其中执行命令。",
+    "kubernetes.nodeFiles.effect": "在节点 {name} 的 {namespace} 中使用镜像 {image} 创建临时 Pod，以浏览、下载和编辑主机文件系统。",
+    "kubernetes.nodeFiles.cleanup": "关闭文件浏览器或正常退出 Ocular 时会删除辅助 Pod。会话最长为 1 小时。未完成的清理会保存在本地，并在已连接的集群中静默重试，重启后仍会继续，重试间隔按指数增加，最长为 24 小时。截止时间会停止 Pod，但不会删除它。"
   }
 }

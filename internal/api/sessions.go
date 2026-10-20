@@ -177,6 +177,7 @@ func (s *Service) closeSessionWhyLocked(key string, why *core.Message) {
 	}
 	delete(s.sessions, key)
 	if a := s.connections[key]; a != nil && a.owner == e.owner && a.status.State == "connected" {
+		a.stopLive()
 		a.status.State, a.status.Phase = "disconnected", "closed"
 		a.status.FinishedAt = s.now().UnixMilli()
 	}
@@ -208,6 +209,7 @@ func (s *Service) CloseTarget(ctx context.Context, providerID, id string) error 
 	case len(e.agentCalls) > 0:
 		e.closing = true
 		if a := s.connections[key]; a != nil && a.owner == e.owner {
+			a.stopLive()
 			a.status.State, a.status.Phase = "disconnected", "closed"
 			a.status.FinishedAt = s.now().UnixMilli()
 		}

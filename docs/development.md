@@ -434,3 +434,14 @@ memoization must not cache. Keep virtualizer reads local to that component.
 The current Vite build does not enable React Compiler; its ESLint compatibility
 rule still runs and requires a documented, call-local exception even with the
 directive. Keep that exception narrow; do not disable the rule globally.
+
+## Atomic Files rename helper
+
+`python3 scripts/gen-rename-helper.py` uses clang's integrated assembler to
+regenerate the embedded, libc-free Linux amd64/arm64 `renameat2` programs from
+`internal/api/renamehelper/*.S`. Generated programs are checked in; normal builds
+and runtime need neither clang nor libc in the target. Go tests verify source
+hashes, ELF machine IDs, no interpreter and a non-executable stack, and exercise
+the native Linux kernel's no-replace behavior. The remote shell stages and unlinks
+the program before executing its open descriptor; a noexec temporary directory,
+missing `/proc` or unsupported kernel fails without a rename fallback.

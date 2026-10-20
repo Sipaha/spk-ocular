@@ -95,7 +95,7 @@ func TestEveryActionHasItsDoneText(t *testing.T) {
 	ids := map[string]bool{}
 	for _, a := range acts {
 		ids[a.ID] = true
-		if !a.Terminal { // Terminal actions prepare a handle; no remote write is reported done.
+		if !a.Terminal && !a.Files { // Reviewed tool actions prepare a handle; no remote write is reported done.
 			_, ok := messageTexts["done."+a.ID]
 			assert.True(t, ok, "no done.%s", a.ID)
 		} else {
@@ -104,8 +104,8 @@ func TestEveryActionHasItsDoneText(t *testing.T) {
 		}
 	}
 	// Every action write and the drain, run paths handle is enumerated.
-	assert.Len(t, ids, 14)
-	for _, id := range []string{"node-shell", "restart", "scale", "undo", "pause", "debug", "delete", "forceDelete", "cordon", "uncordon", "drain", "suspend", "resume", "run"} {
+	assert.Len(t, ids, 15)
+	for _, id := range []string{"node-shell", "node-files", "restart", "scale", "undo", "pause", "debug", "delete", "forceDelete", "cordon", "uncordon", "drain", "suspend", "resume", "run"} {
 		assert.True(t, ids[id], id)
 	}
 }
@@ -126,7 +126,7 @@ func TestEveryChoiceHasItsTitle(t *testing.T) {
 			}
 		}
 	}
-	assert.Equal(t, 3, n, "debug, undo and node-shell")
+	assert.Equal(t, 4, n, "debug, undo, node-shell and node-files")
 }
 
 // A drain goes one node at a time (as kubectl drain of several nodes): the
@@ -140,7 +140,7 @@ func TestNodeTerminalAndDrainAreSingle(t *testing.T) {
 			}
 		}
 	}
-	assert.Equal(t, []string{"node-shell", "drain"}, single)
+	assert.Equal(t, []string{"node-shell", "node-files", "drain"}, single)
 }
 
 // A reason without its "nothing was written" form is said as text rather

@@ -40,6 +40,7 @@ var actNodeShell = core.ActionDescriptor{
 }
 
 type nodeShellGrant struct {
+	Action       string    `json:"action"`
 	Ref          core.Ref  `json:"ref"`
 	Namespace    string    `json:"ns"`
 	NamespaceUID types.UID `json:"nsUID"`
@@ -64,7 +65,7 @@ func (g nodeShellGrant) token() string {
 func readNodeShellGrant(run provider.ActionRun) (nodeShellGrant, error) {
 	var g nodeShellGrant
 	bad := provider.Said(provider.ClassInvalid, msg("run.invalid"))
-	if len(run.Expect) > maxGrantLen || run.Action != actNodeShell.ID || run.Params.Text == nil || run.Params.Choice == nil {
+	if len(run.Expect) > maxGrantLen || (run.Action != actNodeShell.ID && run.Action != actNodeFiles.ID) || run.Params.Text == nil || run.Params.Choice == nil {
 		return g, bad
 	}
 	enc, sig, ok := strings.Cut(run.Expect, ".")
@@ -75,7 +76,7 @@ func readNodeShellGrant(run provider.ActionRun) (nodeShellGrant, error) {
 	if err != nil || !hmac.Equal([]byte(sig), []byte(nodeShellSignature(b))) || json.Unmarshal(b, &g) != nil {
 		return g, bad
 	}
-	if g.Ref != run.Ref || g.Image != *run.Params.Text || g.Namespace != *run.Params.Choice || g.Nonce == "" {
+	if g.Action != run.Action || g.Ref != run.Ref || g.Image != *run.Params.Text || g.Namespace != *run.Params.Choice || g.Nonce == "" {
 		return g, bad
 	}
 	return g, nil
@@ -120,6 +121,9 @@ func (s *session) prepareNodeShell(ctx context.Context, plan core.ActionPlan, no
 		plan.Unavailable = &m
 	}
 	plan.Effects = []core.Message{msg("nodeShell.effect", "name", node.GetName(), "namespace", ns, "image", image), msg("nodeShell.cleanup")}
+	if plan.Action.Files {
+		plan.Effects = []core.Message{msg("nodeFiles.effect", "name", node.GetName(), "namespace", ns, "image", image), msg("nodeFiles.cleanup")}
+	}
 	plan.Warnings = []core.Message{msg("nodeShell.privileged"), msg("debug.registry"), msg("nodeShell.requirements")}
 	if n != nil && (n.GetLabels()[enforceKey] == "baseline" || n.GetLabels()[enforceKey] == "restricted") {
 		plan.Warnings = append(plan.Warnings, msg("nodeShell.policy", "namespace", ns))
@@ -128,7 +132,7 @@ func (s *session) prepareNodeShell(ctx context.Context, plan core.ActionPlan, no
 		plan.Expect = ""
 		return plan
 	}
-	g := nodeShellGrant{Ref: plan.Where.Ref, Namespace: ns, NamespaceUID: n.GetUID(), Policy: n.GetLabels()[enforceKey], Image: image, Name: "ocular-node-shell-" + randomHex(8), Nonce: randomHex(16), Inc: s.incarnation, Exp: s.now().Add(runGrantTTL).UnixMilli()}
+	g := nodeShellGrant{Action: plan.Action.ID, Ref: plan.Where.Ref, Namespace: ns, NamespaceUID: n.GetUID(), Policy: n.GetLabels()[enforceKey], Image: image, Name: "ocular-node-shell-" + randomHex(8), Nonce: randomHex(16), Inc: s.incarnation, Exp: s.now().Add(runGrantTTL).UnixMilli()}
 	plan.Expect = g.token()
 	plan.Rights = s.nodeShellRights(ctx, ns, g.Name)
 	return plan
@@ -156,6 +160,12 @@ func (s *session) nodeShellRights(ctx context.Context, ns, name string) core.Rig
 // PrepareTerminalAction admits a signed review, without creating a Pod.
 // A handle retains the reviewed connection even after target switching.
 func (s *session) PrepareTerminalAction(ctx context.Context, run provider.ActionRun) (provider.ExecHandle, error) {
+	if run.Action != actNodeShell.ID {
+		return nil, invalid("Node Shell requires a shell review")
+	}
+	return s.prepareNodeHelper(ctx, run)
+}
+func (s *session) prepareNodeHelper(ctx context.Context, run provider.ActionRun) (*nodeShellHandle, error) {
 	if s.kind(run.Ref.Kind) != nodesKind {
 		return nil, invalid("Node Shell requires a node")
 	}
@@ -208,11 +218,12 @@ func validateNodeShell(ctx context.Context, c *conn, g nodeShellGrant) error {
 }
 
 type nodeShellHandle struct {
-	conn   *conn
-	writer actionWriter
-	g      nodeShellGrant
-	state  *nodeShellState
-	now    func() time.Time
+	journal provider.HelperJournal
+	conn    *conn
+	writer  actionWriter
+	g       nodeShellGrant
+	state   *nodeShellState
+	now     func() time.Time
 }
 
 type nodeShellState struct {
@@ -236,7 +247,8 @@ func (h *nodeShellHandle) Again() (provider.ExecHandle, error) {
 	c := *h
 	return &c, nil
 }
-func (h *nodeShellHandle) Close() {}
+func (h *nodeShellHandle) Close()                                    {}
+func (h *nodeShellHandle) SetHelperJournal(j provider.HelperJournal) { h.journal = j }
 
 func (h *nodeShellHandle) WaitCleanup(ctx context.Context) error {
 	if !h.state.started.Load() {
@@ -262,11 +274,16 @@ func (g nodeShellGrant) pod() *unstructured.Unstructured {
 	}}
 }
 
-func (h *nodeShellHandle) Run(ctx context.Context, t provider.Terminal) (status provider.ExitStatus, err error) {
+func (h *nodeShellHandle) Run(ctx context.Context, t provider.Terminal) (provider.ExitStatus, error) {
+	return h.run(ctx, t, func(ctx context.Context, e *execHandle) (provider.ExitStatus, error) { return e.Run(ctx, t) })
+}
+func (h *nodeShellHandle) run(ctx context.Context, t provider.Terminal, command func(context.Context, *execHandle) (provider.ExitStatus, error)) (status provider.ExitStatus, err error) {
 	if !h.state.started.CompareAndSwap(false, true) {
 		return status, provider.Said(provider.ClassGone, msg("nodeShell.ended"))
 	}
 	defer close(h.state.done)
+	ctx, stopRun := context.WithCancel(ctx)
+	defer stopRun()
 	if !h.now().Before(time.UnixMilli(h.g.Exp)) {
 		return status, provider.Said(provider.ClassConflict, msg("run.expired"))
 	}
@@ -282,22 +299,38 @@ func (h *nodeShellHandle) Run(ctx context.Context, t provider.Terminal) (status 
 	}
 	var uid types.UID
 	needsCleanup := false
+	var lease provider.HelperLease
 	// Cleanup uses an independent deadline even after tab cancellation. The
 	// random ownership marker and UID guard also cover an ambiguous CREATE.
 	defer func() {
-		if !needsCleanup {
-			return // A definitive refusal proves this attempt created no Pod.
-		}
-		if cleanErr := h.cleanup(uid); cleanErr != nil {
-			m := msg("nodeShell.cleanupFailed", "namespace", h.g.Namespace, "name", h.g.Name, "detail", cleanErr.Error())
-			if t.Notice != nil {
-				t.Notice(m)
+		clean := true
+		if needsCleanup {
+			if cleanErr := h.cleanup(uid); cleanErr != nil {
+				clean = false
+				m := msg("nodeShell.cleanupFailed", "namespace", h.g.Namespace, "name", h.g.Name, "detail", cleanErr.Error())
+				if t.Notice != nil {
+					t.Notice(m)
+				}
+				h.state.cleanupError = provider.Said(provider.ClassUnknown, m)
+				slog.Warn("Node Shell helper cleanup not confirmed", "target", h.conn.target, "namespace", h.g.Namespace, "pod", h.g.Name)
+				err = errors.Join(err, h.state.cleanupError)
 			}
-			h.state.cleanupError = provider.Said(provider.ClassUnknown, m)
-			slog.Warn("Node Shell helper cleanup not confirmed", "target", h.conn.target, "namespace", h.g.Namespace, "pod", h.g.Name)
-			err = errors.Join(err, h.state.cleanupError)
+		}
+		if lease != nil {
+			finish, cancel := context.WithTimeout(context.Background(), time.Second)
+			finishErr := lease.Finish(finish, clean)
+			cancel()
+			if finishErr != nil {
+				err = errors.Join(err, fmt.Errorf("cannot finalize helper recovery record: %w", finishErr))
+			}
 		}
 	}()
+	if h.journal != nil {
+		lease, err = h.journal.Begin(ctx, core.OwnedHelper{ID: h.g.Nonce, Provider: ProviderID, Target: h.conn.target, Namespace: h.g.Namespace, NamespaceUID: string(h.g.NamespaceUID), Name: h.g.Name, NodeName: h.g.Ref.Name, NodeUID: h.g.Ref.UID}, stopRun)
+		if err != nil {
+			return status, err
+		}
+	}
 	cctx, cancel := context.WithTimeout(ctx, getTimeout)
 	created, err := creator.createResult(cctx, podsKind.gvr, h.g.Namespace, h.g.pod())
 	cancel()
@@ -314,6 +347,11 @@ func (h *nodeShellHandle) Run(ctx context.Context, t provider.Terminal) (status 
 		return status, provider.Said(provider.ClassConflict, msg("nodeShell.changed"))
 	}
 	uid = created.GetUID()
+	if lease != nil {
+		if err = lease.PinUID(ctx, string(uid)); err != nil {
+			return status, err
+		}
+	}
 	p, err := h.conn.getPod(ctx, h.g.Namespace, h.g.Name)
 	if err != nil {
 		return status, err
@@ -365,7 +403,7 @@ func (h *nodeShellHandle) Run(ctx context.Context, t provider.Terminal) (status 
 	if err = validateNodeShell(ctx, h.conn, h.g); err != nil {
 		return status, err
 	}
-	return e.Run(ctx, t)
+	return command(ctx, e)
 }
 func isAPIStatus(err error) bool { var se apierrors.APIStatus; return errors.As(err, &se) }
 func (h *nodeShellHandle) owns(p *unstructured.Unstructured) bool {
@@ -374,6 +412,9 @@ func (h *nodeShellHandle) owns(p *unstructured.Unstructured) bool {
 func (h *nodeShellHandle) cleanup(expected types.UID) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
+	return h.cleanupWith(ctx, expected)
+}
+func (h *nodeShellHandle) cleanupWith(ctx context.Context, expected types.UID) error {
 	p, err := h.conn.dyn.Resource(podsKind.gvr).Namespace(h.g.Namespace).Get(ctx, h.g.Name, metav1.GetOptions{})
 	if apierrors.IsNotFound(err) {
 		return nil

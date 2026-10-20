@@ -1162,7 +1162,13 @@
     "class.scope_limit": "selecciona namespaces",
     "compare.noBaseline": "No se ha seleccionado una base de comparación. Abre las propiedades de un recurso y haz clic en «{pin}». Después abre otro recurso y haz clic en «{compare}» para comparar su YAML.",
     "act.node-shell": "Shell del nodo",
-    "term.reviewNodeShell": "Para otra sesión, seleccione el nodo y confirme de nuevo Shell del nodo."
+    "term.reviewNodeShell": "Para otra sesión, seleccione el nodo y confirme de nuevo Shell del nodo.",
+    "act.node-files": "Archivos",
+    "files.create": "Nuevo archivo vacío",
+    "files.name": "Nombre del archivo",
+    "files.nameInvalid": "Use un nombre de hasta 255 bytes, sin /; . y .. no son válidos.",
+    "files.savedHost": "Guardado en el host",
+    "files.rename": "Renombrar"
   },
   "provider": {
     "kubernetes.rbac.source": "No se pudo leer la fuente RBAC ({class})",
@@ -1491,7 +1497,7 @@
     "kubernetes.nodeShell.invalid": "Elija un namespace válido y una imagen sin espacios.",
     "kubernetes.nodeShell.namespaceError": "El namespace {namespace} no está disponible, no se puede leer o ha cambiado; revíselo de nuevo.",
     "kubernetes.nodeShell.effect": "Crear un Pod temporal en {namespace} en el nodo {name} con la imagen {image} y abrir el shell del host.",
-    "kubernetes.nodeShell.cleanup": "El Pod auxiliar se elimina al terminar el shell, perder la conexión, cerrar la pestaña o salir normalmente de Ocular. Sesión máxima: 1 hora. Tras un fallo de la aplicación o de eliminación, el Pod puede permanecer; su plazo lo detiene, pero no lo elimina.",
+    "kubernetes.nodeShell.cleanup": "El Pod auxiliar se elimina al terminar la shell, perder la conexión, cerrar la pestaña o salir normalmente de Ocular. Duración máxima: 1 hora. La limpieza pendiente se guarda localmente y se reintenta en silencio en clústeres conectados, incluso tras reiniciar, con intervalos exponenciales de hasta 24 horas. El plazo detiene el Pod, pero no lo elimina.",
     "kubernetes.nodeShell.privileged": "Esto concede acceso root al sistema de archivos, procesos y red del host. Los comandos pueden modificar o dañar el nodo y sus cargas.",
     "kubernetes.nodeShell.requirements": "Requiere create/get/watch/delete de Pods y acceso a pods/exec. La admisión del namespace debe permitir espacios de nombres privilegiados del host. La imagen necesita sleep y nsenter; el host, /bin/sh.",
     "kubernetes.nodeShell.policy": "El namespace {namespace} aplica Pod Security baseline/restricted. La admisión puede rechazar este Pod auxiliar salvo que la solicitud esté exenta.",
@@ -1500,7 +1506,9 @@
     "kubernetes.nodeShell.startFailed": "No se pudo iniciar el Pod auxiliar de Node Shell: {reason}",
     "kubernetes.nodeShell.changed": "Cambió la identidad del Pod auxiliar de Node Shell; no se abrió ningún shell.",
     "kubernetes.nodeShell.createUnknown": "Se desconoce el resultado de crear el Pod {namespace}/{name}. Se intenta limpiarlo; revise ese Pod antes de otra sesión.",
-    "kubernetes.nodeShell.cleanupFailed": "No se pudo confirmar la limpieza del Pod {namespace}/{name}: {detail}. Revíselo y elimínelo manualmente si permanece.",
-    "kubernetes.nodeShell.agentDenied": "Los Pods auxiliares del shell del nodo son exclusivos de la interfaz; los permisos exec de contenedores no autorizan comandos en ellos."
+    "kubernetes.nodeShell.cleanupFailed": "No se confirmó la limpieza del Pod {namespace}/{name}: {detail}. Se reintentará en silencio cuando este clúster esté conectado.",
+    "kubernetes.nodeShell.agentDenied": "Los Pods auxiliares del shell del nodo son exclusivos de la interfaz; los permisos exec de contenedores no autorizan comandos en ellos.",
+    "kubernetes.nodeFiles.effect": "Crear un Pod temporal en {namespace} en el nodo {name}, con la imagen {image}, para explorar, descargar y editar el sistema de archivos del host.",
+    "kubernetes.nodeFiles.cleanup": "El Pod auxiliar se elimina al cerrar el explorador de archivos o salir normalmente de Ocular. Duración máxima: 1 hora. La limpieza pendiente se guarda localmente y se reintenta en silencio en clústeres conectados, incluso tras reiniciar, con intervalos exponenciales de hasta 24 horas. El plazo detiene el Pod, pero no lo elimina."
   }
 }

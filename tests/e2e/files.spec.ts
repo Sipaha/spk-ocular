@@ -562,3 +562,56 @@ test('revision Compare defaults to the nearest lower retained number independent
   await dialog.getByRole('button',{name:'Close',exact:true}).click()
  }
 })
+
+test('Files creates a versioned empty file, opens it for editing, refuses duplicates and protects a draft',async({page})=>{
+ const files=new Map<string,string>(),calls:Record<string,unknown>[]=[]
+ await page.route('**/api/Files',async route=>{
+  const req=route.request().postDataJSON();calls.push(req)
+  if(req.command==='list')return route.fulfill({json:{path:req.path,configRev:'fixture',text:'',entries:req.path==='/'?[{name:'etc',directory:true,symlink:false}]:[...files.keys()].map(path=>({name:path.slice(5),directory:false,symlink:false}))}})
+  if(req.command==='create'){
+   expect(req.configRev).toBe('fixture')
+   if(files.has(req.path))return route.fulfill({status:409,json:{code:'conflict',detail:'File already exists; nothing overwritten'}})
+   files.set(req.path,'');return route.fulfill({json:{path:req.path,configRev:'fixture',text:'',version:'empty-version'}})
+  }
+  if(req.command==='write'){expect(req.expect).toBe('empty-version');files.set(req.path,req.text);return route.fulfill({json:{path:req.path,configRev:'fixture',text:req.text,version:'saved-version'}})}
+  return route.fulfill({json:{path:req.path,configRev:'fixture',text:files.get(req.path),version:'saved-version'}})
+ })
+ await selectObject(page,'api');await page.getByRole('button',{name:'Files',exact:true}).click()
+ const browser=page.getByRole('dialog',{name:'Files',exact:true});await browser.getByRole('button',{name:'Expand /etc',exact:true}).click();await expect(browser.getByRole('treeitem',{name:'No elements',exact:true})).toBeVisible()
+ await browser.getByRole('button',{name:'New empty file',exact:true}).click();const dialog=page.getByRole('dialog',{name:'New empty file',exact:true}),name=dialog.getByRole('textbox',{name:'File name',exact:true})
+ await expect(name).toBeFocused();await name.fill('../bad');await expect(dialog.getByRole('button',{name:'New empty file',exact:true})).toBeDisabled()
+ await name.fill('empty file.yaml');await page.screenshot({path:join(scratchRoot,'container-new-empty-file.png')});await dialog.getByRole('button',{name:'New empty file',exact:true}).click();await expect(dialog).toHaveCount(0)
+ await expect(browser.getByRole('treeitem',{name:'empty file.yaml',exact:true})).toBeVisible();await expect(browser.locator('[data-file-document-header]')).toContainText('/etc/empty file.yaml');expect(files.get('/etc/empty file.yaml')).toBe('')
+ const editor=browser.locator('.cm-content');await editor.click();await page.keyboard.type('enabled: true');await browser.getByRole('button',{name:'Save',exact:true}).click();await expect.poll(()=>files.get('/etc/empty file.yaml')).toBe('enabled: true')
+ await browser.getByRole('button',{name:'New empty file',exact:true}).click();await name.fill('empty file.yaml');await dialog.getByRole('button',{name:'New empty file',exact:true}).click();await expect(dialog.getByRole('alert')).toContainText('already exists');expect(files.get('/etc/empty file.yaml')).toBe('enabled: true')
+ await page.keyboard.press('Escape');await expect(dialog).toHaveCount(0);await expect(browser).toBeVisible()
+ await editor.click();await page.keyboard.press('Control+End');await page.keyboard.type('\ndraft');await browser.getByRole('button',{name:'New empty file',exact:true}).click();const discard=page.getByRole('alertdialog');await expect(discard).toBeVisible();await discard.getByRole('button',{name:/keep editing/i}).click();await expect(dialog).toHaveCount(0);await expect(editor).toContainText('draft')
+ expect(calls.filter(c=>c.command==='create')).toHaveLength(2)
+})
+
+test('Files renames a cached directory, updates its open document path and keeps drafts behind the discard guard',async({page})=>{
+ let directory='/etc',content='original text';const calls:Record<string,unknown>[]=[]
+ await page.route('**/api/Files',async route=>{
+  const req=route.request().postDataJSON();calls.push(req)
+  if(req.command==='list')return route.fulfill({json:{path:req.path,configRev:'fixture',text:'',entries:req.path==='/'?[{name:directory.slice(1),directory:true,symlink:false},...(directory==='/etc'?[{name:'settings',directory:true,symlink:false}]:[])]:[{name:req.path==='/settings'&&directory==='/etc'?'stale.txt':'config.txt',directory:false,symlink:false}]}})
+  if(req.command==='rename-info')return route.fulfill({json:{path:req.path,configRev:'fixture',text:'',version:'source-identity'}})
+  if(req.command==='rename'){
+   expect(req.expect).toBe('source-identity');expect(req.configRev).toBe('fixture')
+   if(req.newName==='exists')return route.fulfill({status:409,json:{code:'conflict',detail:'Destination already exists; nothing overwritten'}})
+   directory='/'+req.newName;return route.fulfill({json:{path:directory,configRev:'fixture',text:''}})
+  }
+  if(req.command==='write'){expect(req.path).toBe('/settings/config.txt');expect(req.expect).toBe('file-content-version');content=req.text}
+  return route.fulfill({json:{path:req.path,configRev:'fixture',text:content,version:'file-content-version'}})
+ })
+ await selectObject(page,'api');await page.getByRole('button',{name:'Files',exact:true}).click();const browser=page.getByRole('dialog',{name:'Files',exact:true})
+ await browser.getByRole('button',{name:'Expand /settings',exact:true}).click();await expect(browser.getByRole('treeitem',{name:'stale.txt',exact:true})).toBeVisible();await browser.getByRole('button',{name:'Collapse /settings',exact:true}).click()
+ await browser.getByRole('button',{name:'Expand /etc',exact:true}).click();await browser.getByRole('treeitem',{name:'config.txt',exact:true}).dblclick();await expect(browser.locator('.cm-content')).toContainText('original text')
+ await browser.getByRole('treeitem',{name:'etc',exact:true}).click({button:'right'});await page.getByRole('menuitem',{name:'Rename',exact:true}).click()
+ const rename=page.getByRole('dialog',{name:'Rename',exact:true}),name=rename.getByRole('textbox',{name:'File name',exact:true});await expect(name).toHaveValue('etc');await name.fill('exists');await rename.getByRole('button',{name:'Rename',exact:true}).click();await expect(rename.getByRole('alert')).toContainText('already exists');await expect(name).toBeFocused()
+ await name.fill('settings');await page.screenshot({path:join(scratchRoot,'files-rename-directory.png')});await rename.getByRole('button',{name:'Rename',exact:true}).click();await expect(rename).toHaveCount(0)
+ await expect(browser.getByRole('treeitem',{name:'settings',exact:true})).toHaveCount(1);await expect(browser.getByRole('treeitem',{name:'stale.txt',exact:true})).toHaveCount(0)
+ await expect(browser.getByRole('treeitem',{name:'settings',exact:true})).toHaveAttribute('aria-expanded','true');await expect(browser.getByRole('treeitem',{name:'config.txt',exact:true})).toBeVisible();await expect(browser.locator('[data-file-document-header]')).toContainText('/settings/config.txt')
+ const editor=browser.locator('.cm-content');await editor.click();await page.keyboard.press('Control+End');await page.keyboard.type(' updated');await browser.getByRole('button',{name:'Save',exact:true}).click();await expect.poll(()=>content).toBe('original text updated')
+ await editor.click();await page.keyboard.type(' draft');await browser.getByRole('treeitem',{name:'config.txt',exact:true}).click();await page.keyboard.press('F2');const discard=page.getByRole('alertdialog');await expect(discard).toBeVisible();await discard.getByRole('button',{name:/keep editing/i}).click();await expect(rename).toHaveCount(0);await expect(editor).toContainText('draft')
+ expect(calls.filter(c=>c.command==='rename')).toHaveLength(2);expect(calls.filter(c=>c.command==='rename-info')).toHaveLength(1)
+})

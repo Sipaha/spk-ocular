@@ -1162,7 +1162,13 @@
     "class.scope_limit": "Namespaces auswählen",
     "compare.noBaseline": "Keine Vergleichsbasis ausgewählt. Öffnen Sie die Eigenschaften einer Ressource und klicken Sie auf „{pin}“. Öffnen Sie dann eine andere Ressource und klicken Sie auf „{compare}“, um deren YAML zu vergleichen.",
     "act.node-shell": "Knoten-Shell",
-    "term.reviewNodeShell": "Für eine weitere Host-Shell den Knoten wählen und Knoten-Shell erneut bestätigen."
+    "term.reviewNodeShell": "Für eine weitere Host-Shell den Knoten wählen und Knoten-Shell erneut bestätigen.",
+    "act.node-files": "Dateien",
+    "files.create": "Neue leere Datei",
+    "files.name": "Dateiname",
+    "files.nameInvalid": "Dateiname mit höchstens 255 Bytes ohne /; . und .. sind nicht zulässig.",
+    "files.savedHost": "Auf dem Host gespeichert",
+    "files.rename": "Umbenennen"
   },
   "provider": {
     "kubernetes.rbac.source": "RBAC-Quelle konnte nicht gelesen werden ({class})",
@@ -1491,7 +1497,7 @@
     "kubernetes.nodeShell.invalid": "Wählen Sie einen gültigen Namespace und ein Image ohne Leerzeichen.",
     "kubernetes.nodeShell.namespaceError": "Namespace {namespace} ist nicht verfügbar, nicht lesbar oder wurde geändert; erneut prüfen.",
     "kubernetes.nodeShell.effect": "Einen temporären Pod in {namespace} auf Knoten {name} mit Image {image} erstellen und die Host-Shell öffnen.",
-    "kubernetes.nodeShell.cleanup": "Der Hilfs-Pod wird beim Ende der Shell, Verbindungsverlust, Schließen des Tabs oder normalen Beenden von Ocular gelöscht. Höchstdauer: 1 Stunde. Nach einem Absturz oder Löschfehler kann der Pod bleiben; seine Frist stoppt ihn, löscht ihn aber nicht.",
+    "kubernetes.nodeShell.cleanup": "Der Hilfs-Pod wird beim Ende der Shell, Verbindungsverlust, Schließen des Tabs oder normalen Beenden von Ocular gelöscht. Höchstdauer: 1 Stunde. Unvollständige Bereinigung wird lokal gespeichert und in verbundenen Clustern auch nach einem Neustart still mit exponentiellen Abständen bis zu 24 Stunden wiederholt. Die Frist stoppt den Pod, löscht ihn aber nicht.",
     "kubernetes.nodeShell.privileged": "Dies gewährt Root-Zugriff auf Dateisystem, Prozesse und Netzwerk des Hosts. Befehle können den Knoten und seine Workloads verändern oder beschädigen.",
     "kubernetes.nodeShell.requirements": "Erfordert create/get/watch/delete für Pods und Zugriff auf pods/exec. Die Namespace-Zulassung muss privilegierte Host-Namespaces erlauben. Das Image benötigt sleep und nsenter, der Host /bin/sh.",
     "kubernetes.nodeShell.policy": "Namespace {namespace} erzwingt Pod Security baseline/restricted. Die Zulassung kann diesen Hilfs-Pod ablehnen, sofern keine Ausnahme gilt.",
@@ -1500,7 +1506,9 @@
     "kubernetes.nodeShell.startFailed": "Der Node-Shell-Hilfs-Pod konnte nicht starten: {reason}",
     "kubernetes.nodeShell.changed": "Die Identität des Node-Shell-Hilfs-Pods hat sich geändert; keine Shell geöffnet.",
     "kubernetes.nodeShell.createUnknown": "Das Ergebnis der Erstellung von Pod {namespace}/{name} ist unbekannt. Die Bereinigung wird versucht; diesen Pod vor einer neuen Sitzung prüfen.",
-    "kubernetes.nodeShell.cleanupFailed": "Bereinigung von Pod {namespace}/{name} konnte nicht bestätigt werden: {detail}. Prüfen und bei Bedarf manuell löschen.",
-    "kubernetes.nodeShell.agentDenied": "Hilfs-Pods der Knoten-Shell sind nur über die Oberfläche zugänglich; Container-Exec-Rechte erlauben darin keine Befehle."
+    "kubernetes.nodeShell.cleanupFailed": "Bereinigung von Pod {namespace}/{name} nicht bestätigt: {detail}. Sie wird still wiederholt, wenn dieser Cluster verbunden ist.",
+    "kubernetes.nodeShell.agentDenied": "Hilfs-Pods der Knoten-Shell sind nur über die Oberfläche zugänglich; Container-Exec-Rechte erlauben darin keine Befehle.",
+    "kubernetes.nodeFiles.effect": "Einen temporären Pod in {namespace} auf Knoten {name} mit Image {image} erstellen, um das Host-Dateisystem zu durchsuchen, herunterzuladen und zu bearbeiten.",
+    "kubernetes.nodeFiles.cleanup": "Der Hilfs-Pod wird beim Schließen des Dateibrowsers oder normalen Beenden von Ocular gelöscht. Höchstdauer: 1 Stunde. Unvollständige Bereinigung wird lokal gespeichert und in verbundenen Clustern auch nach einem Neustart still mit exponentiellen Abständen bis zu 24 Stunden wiederholt. Die Frist stoppt den Pod, löscht ihn aber nicht."
   }
 }

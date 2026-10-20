@@ -94,6 +94,27 @@ func (s *Service) RunAction(ctx context.Context, req ActionRunRequest) (core.Act
 	if err := d.CheckParams(req.Params, true); err != nil {
 		return core.ActionResult{}, coded(CodeBadRequest, err)
 	}
+	if d.Files {
+		if !fromUI(ctx) || !d.NoAgents || !d.Single || d.Terminal {
+			return core.ActionResult{}, coded("forbidden", errors.New("file actions require the user interface"))
+		}
+		files, ok := sess.(provider.FilesActioner)
+		if !ok {
+			return core.ActionResult{}, coded(CodeUnsupported, errors.New("file actions are unavailable"))
+		}
+		h, err := files.PrepareFilesAction(ctx, provider.ActionRun{Ref: req.Ref, Action: req.Action, Params: req.Params, Expect: req.Expect})
+		if err != nil {
+			return core.ActionResult{}, fromProvider(err)
+		}
+		if tracked, ok := h.(provider.HelperTracked); ok {
+			tracked.SetHelperJournal(s.helperJournal)
+		}
+		id := s.fileSessions.add(req.Ref, h)
+		if id == "" {
+			return core.ActionResult{}, coded(CodeGone, errors.New("file session limit reached or the app is closing"))
+		}
+		return core.ActionResult{Outcome: core.OutcomeDone, Message: core.Message{Text: d.Title}, Files: &core.FilesOpen{Ref: req.Ref, PreparedID: id}}, nil
+	}
 	if d.Terminal {
 		if !fromUI(ctx) || !d.NoAgents || !d.Single {
 			return core.ActionResult{}, coded("forbidden", errors.New("terminal actions require the user interface"))
@@ -105,6 +126,9 @@ func (s *Service) RunAction(ctx context.Context, req ActionRunRequest) (core.Act
 		h, err := terminal.PrepareTerminalAction(ctx, provider.ActionRun{Ref: req.Ref, Action: req.Action, Params: req.Params, Expect: req.Expect})
 		if err != nil {
 			return core.ActionResult{}, fromProvider(err)
+		}
+		if tracked, ok := h.(provider.HelperTracked); ok {
+			tracked.SetHelperJournal(s.helperJournal)
 		}
 		id := s.terms.add(h)
 		if id == "" {

@@ -255,6 +255,7 @@ export interface ActionDescriptor {
   /** only one object at a time (a node's drain): never in a bulk action */
   single?: boolean
   terminal?: boolean
+  files?: boolean
 }
 
 export interface ActionText {
@@ -501,7 +502,10 @@ export interface ActionResult {
   parts?: ActionPart[]
   /** open a terminal there once done (a debug container's) */
   terminal?: TerminalOpen
+  files?: FilesOpen
 }
+
+export interface FilesOpen { ref: Ref; preparedId: string }
 
 export interface TerminalOpen {
 	/** Reviewed app-owned terminal; starts once, without implicit recreation. */
@@ -913,7 +917,7 @@ export interface AgentAuditEntry {
   count: number
 }
 
-export interface FilesRequest { configRev?: string; ref: Ref; instance: string; channel: string; command: 'list' | 'read' | 'write' | 'resolve'; path: string; text?: string; expect?: string }
+export interface FilesRequest { preparedId?: string; newName?: string; configRev?: string; ref: Ref; instance: string; channel: string; command: 'list' | 'read' | 'write' | 'resolve' | 'close' | 'create' | 'rename-info' | 'rename'; path: string; text?: string; expect?: string }
 export interface FilesResponse { configRev: string; path: string; entries?: { name: string; directory: boolean; symlink: boolean; target?: string }[]; text: string; version?: string }
 
 

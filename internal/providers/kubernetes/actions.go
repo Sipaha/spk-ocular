@@ -57,7 +57,7 @@ var kindActions = map[*kindDef][]core.ActionDescriptor{
 	ingressesKind:    {actDelete},
 	configMapsKind:   {actDelete},
 	secretsKind:      {actDelete},
-	nodesKind:        {actNodeShell, actCordon, actUncordon, actDrain},
+	nodesKind:        {actNodeShell, actNodeFiles, actCordon, actUncordon, actDrain},
 }
 
 func (d *kindDef) action(id string) (core.ActionDescriptor, bool) {
@@ -459,7 +459,7 @@ func (s *session) PrepareAction(ctx context.Context, ref core.Ref, action string
 		Unavailable: actionUnavailable(def, action, u),
 		Expect:      actionExpect(def, action, p, u),
 	}
-	if action == actNodeShell.ID {
+	if action == actNodeShell.ID || action == actNodeFiles.ID {
 		return s.prepareNodeShell(ctx, plan, u), nil
 	}
 	if action == actDrain.ID {

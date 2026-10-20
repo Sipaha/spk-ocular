@@ -1,3 +1,6 @@
+import {FileNameDialog} from './FileNameDialog'
+import {ActionIconButton} from '../components/ActionIconButton'
+import {ActionIcon} from '../components/icons'
 import { RefreshButton } from '../components/RefreshButton'
 import { lazy, Suspense, useEffect, useRef, useState, useCallback } from 'react'
 import { createPortal } from 'react-dom'
@@ -21,11 +24,11 @@ const button = 'h-[26px] rounded border border-line px-2 text-[13px] hover:bg-ho
 interface Container { instance: string; channel: string; title: string }
 const errorText = (error: unknown) => error instanceof Error ? error.message : String(error)
 
-export default function FileBrowser({ client, subject, selectedInstance, onClose }: { client: Client; subject: Ref; selectedInstance?: ExecInstance; onClose: () => void }) {
+export default function FileBrowser({ client, subject, selectedInstance, preparedId, onClose }: { client: Client; subject: Ref; selectedInstance?: ExecInstance; preparedId?: string; onClose: () => void }) {
   // The inspector belongs to the object/container it opened on, not a later
   // background selection. Reopening Files resolves a fresh provider default.
   const [source] = useState(subject)
-  const [container, setContainer] = useState<Container | null>(null)
+  const [container, setContainer] = useState<Container | null>(()=>preparedId?{instance:'',channel:'',title:source.title||source.name}:null)
   const [treeWidth, setTreeWidth] = useState(306)
   const [directories, setDirectories] = useState<Directories>({})
   const directoryCache = useRef<Directories>({})
@@ -44,6 +47,8 @@ export default function FileBrowser({ client, subject, selectedInstance, onClose
   const [writing, setWriting] = useState(false)
   const [downloading, setDownloading] = useState(false)
   const [downloaded, setDownloaded] = useState('')
+  const [renameSource,setRenameSource]=useState<{path:string;version:string}|null>(null)
+  const [createDirectory,setCreateDirectory]=useState<string|null>(null)
   const [saved, setSaved] = useState(false)
   const [language, setLanguage] = useState('')
   const [languages, setLanguages] = useState<LanguageDescription[]>([])
@@ -56,6 +61,11 @@ export default function FileBrowser({ client, subject, selectedInstance, onClose
   const alive = useRef(true)
   const sequence = useRef(0)
   useEffect(() => { alive.current = true; return () => { alive.current = false } }, [])
+  useEffect(() => {
+    if(!preparedId)return
+    // StrictMode's discarded mount must not revoke the real mount's session.
+    return () => {setTimeout(()=>{if(!alive.current)void client.files({ref:source,preparedId,instance:'',channel:'',command:'close',path:'/'}).catch(()=>{})},0)}
+  },[client,preparedId,source])
   useEffect(() => holdEdits({
     dirty: () => state.current.writing || (!!state.current.doc && state.current.text !== state.current.doc.text),
     discard: () => { setDoc(null); setText('') },
@@ -65,6 +75,7 @@ export default function FileBrowser({ client, subject, selectedInstance, onClose
   useEffect(() => {
     let live = true
     void import('@codemirror/language-data').then(module => { if (live) setLanguages(module.languages) })
+    if(preparedId)return()=>{live=false}
     const infoRequest = selectedInstance ? Promise.resolve({instances:[selectedInstance],defaultInstance:selectedInstance.id}) : client.execInfo(source)
     infoRequest.then(info => {
       if (!live) return
@@ -76,7 +87,7 @@ export default function FileBrowser({ client, subject, selectedInstance, onClose
       setContainer({ instance: instance.id, channel: channel?.id ?? '', title })
     }, failure => { if (live) { setError(errorText(failure)); setInitializing(false) } })
     return () => { live = false }
-  }, [client, source, selectedInstance])
+  }, [client, source, selectedInstance, preparedId])
 
   const updateDirectory = useCallback((path: string, update: Directories[string]) => {
     directoryCache.current = { ...directoryCache.current, [path]: update }
@@ -92,7 +103,7 @@ export default function FileBrowser({ client, subject, selectedInstance, onClose
     const cached = directoryCache.current[path]
     if (!refresh && cached?.entries) return Promise.resolve({ path, entries: cached.entries, text: '', configRev: revision.current })
     updateDirectory(path, { ...cached, loading: true, refreshing:refresh, error: undefined })
-    const request = client.files({ ref: source, instance: container.instance, channel: container.channel, command: 'list', path, configRev: revision.current })
+    const request = client.files({ ref: source, preparedId, instance: container.instance, channel: container.channel, command: 'list', path, configRev: revision.current })
       .then(result => {
         if (alive.current) {
           revision.current = result.configRev
@@ -109,7 +120,7 @@ export default function FileBrowser({ client, subject, selectedInstance, onClose
       }).finally(() => { inFlight.current.delete(path) })
     inFlight.current.set(path, request)
     return request
-  }, [client, container, source, updateDirectory])
+  }, [client, container, source, preparedId, updateDirectory])
 
   useEffect(() => {
     if (!container) return
@@ -157,7 +168,7 @@ export default function FileBrowser({ client, subject, selectedInstance, onClose
     const current = ++sequence.current
     setBusy(true); setReadingPath(command === 'read' ? path : ''); setWriting(command === 'write'); setError(''); setSaved(false)
     try {
-      const result = await client.files({ ref: source, instance: container.instance, channel: container.channel, command, path, configRev: revision.current,
+      const result = await client.files({ ref: source, preparedId, instance: container.instance, channel: container.channel, command, path, configRev: revision.current,
         ...(command === 'write' ? { text: state.current.text, expect: state.current.doc?.version } : {}) })
       if (!alive.current || current !== sequence.current) return
       revision.current = result.configRev
@@ -173,7 +184,7 @@ export default function FileBrowser({ client, subject, selectedInstance, onClose
       setResolvingLink(true); setError('')
       if (!folder) setReadingPath(path)
       try {
-        const result = await client.files({ ref: source, instance: container.instance, channel: container.channel, command:'resolve', path, configRev:revision.current })
+        const result = await client.files({ ref: source, preparedId, instance: container.instance, channel: container.channel, command:'resolve', path, configRev:revision.current })
         if (!alive.current) return
         const parent = folder ? result.path : result.path.slice(0, result.path.lastIndexOf('/')) || '/'
         for (const ancestor of ancestorsOf(parent)) {
@@ -193,10 +204,57 @@ export default function FileBrowser({ client, subject, selectedInstance, onClose
     if (!container || downloading) return
     setDownloading(true); setDownloaded(''); setError('')
     try {
-      const destination = await downloadContainerFiles({ ref: source, instance: container.instance, channel: container.channel, path, configRev: revision.current, command: 'read' })
+      const destination = await downloadContainerFiles({ ref: source, preparedId, instance: container.instance, channel: container.channel, path, configRev: revision.current, command: 'read' })
       if (alive.current && destination) setDownloaded(destination)
     } catch (failure) { if (alive.current) setError(errorText(failure)) }
     finally { if (alive.current) setDownloading(false) }
+  }
+  const createFile=async(name:string)=>{
+    if(!container||busy)throw new Error(t('app.loading'))
+    const parent=createDirectory??directory,path=(parent==='/'?'':parent)+'/'+name
+    setBusy(true);setWriting(true);setError('')
+    try{
+      const result=await client.files({ref:source,preparedId,instance:container.instance,channel:container.channel,command:'create',path,configRev:revision.current})
+      if(!alive.current)return
+      revision.current=result.configRev
+      const cached=directoryCache.current[parent]
+      updateDirectory(parent,{...cached,entries:[...(cached?.entries??[]).filter(item=>item.name!==name),{name,directory:false,symlink:false,target:''}]})
+      setExpanded(previous=>new Set([...previous,parent]));setDirectory(parent);setAddress(parent);setSelected(path)
+      setDoc(result);setText('');setLanguage('');setSaved(false);setCreateDirectory(null)
+    }finally{if(alive.current){setBusy(false);setWriting(false)}}
+  }
+  const prepareRename=(path:string)=>{
+    if(!container||busy||Object.values(directoryCache.current).some(item=>item.loading))return
+    mayLeave(()=>{void(async()=>{
+      setBusy(true);setError('')
+      try{
+        const info=await client.files({ref:source,preparedId,instance:container.instance,channel:container.channel,command:'rename-info',path,configRev:revision.current})
+        if(alive.current&&info.version)setRenameSource({path,version:info.version})
+      }catch(e){if(alive.current)setError(errorText(e))}finally{if(alive.current)setBusy(false)}
+    })()})
+  }
+  const renameFile=async(name:string)=>{
+    if(!container||busy||!renameSource)throw new Error(t('app.loading'))
+    const sourcePath=renameSource.path,parent=sourcePath.slice(0,sourcePath.lastIndexOf('/'))||'/',oldName=sourcePath.slice(sourcePath.lastIndexOf('/')+1)
+    setBusy(true);setWriting(true);setError('')
+    try{
+      const result=await client.files({ref:source,preparedId,instance:container.instance,channel:container.channel,command:'rename',path:sourcePath,newName:name,expect:renameSource.version,configRev:revision.current})
+      if(!alive.current)return
+      const remap=(path:string)=>path===sourcePath||path.startsWith(sourcePath+'/')?result.path+path.slice(sourcePath.length):path
+      const next:Directories={}
+      const staleDestination=(path:string)=>path===result.path||path.startsWith(result.path+'/')
+      for(const [path,entry]of Object.entries(directoryCache.current)){
+        if(staleDestination(path))continue
+        next[remap(path)]=path===parent?{...entry,entries:entry.entries?.filter(item=>item.name!==name).map(item=>item.name===oldName?{...item,name}:item)}:entry
+      }
+      directoryCache.current=next;setDirectories(next)
+      setExpanded(previous=>new Set([...previous].filter(path=>!staleDestination(path)).map(remap)));setDirectory(remap);setAddress(remap);setSelected(result.path)
+      if(state.current.doc){
+        if(staleDestination(state.current.doc.path)){setDoc(null);setText('')}
+        else setDoc({...state.current.doc,path:remap(state.current.doc.path)})
+      }
+      revision.current=result.configRev;setRenameSource(null);setSaved(false)
+    }finally{if(alive.current){setBusy(false);setWriting(false)}}
   }
   const openFile = (path: string) => { if (!busy) mayLeave(() => void requestFile('read', path)) }
   const close = () => { if (!writing) mayLeave(onClose) }
@@ -204,8 +262,9 @@ export default function FileBrowser({ client, subject, selectedInstance, onClose
   const directoryLoading = Object.values(directories).some(item => item.loading)
 
   return createPortal(
+    <>
     <div data-file-overlay className="fixed inset-0 z-30 flex items-center justify-center bg-black/50 p-[12px]" onMouseDown={event => { if (event.target === event.currentTarget) close() }}>
-      <section ref={box} tabIndex={-1} role="dialog" aria-modal="true" aria-label={t('files.title')}
+      <section ref={box} inert={createDirectory!==null||renameSource!==null} tabIndex={-1} role="dialog" aria-modal="true" aria-label={t('files.title')}
         className="relative flex h-[calc(100dvh-24px)] w-[min(1800px,calc(100vw-24px))] flex-col border border-line bg-panel"
         onKeyDown={event => {
           if (event.key === 'Tab') {
@@ -229,6 +288,7 @@ export default function FileBrowser({ client, subject, selectedInstance, onClose
               value={address} onChange={event => setAddress(event.target.value)} />
             <button className={button} disabled={initializing || writing}>{t('files.go')}</button>
           </form>
+          <ActionIconButton className="h-[26px] w-[26px]" label={t('files.create')} description={t('files.create')} disabled={initializing||busy||writing||directoryLoading} onClick={()=>mayLeave(()=>setCreateDirectory(directory))}><ActionIcon name="newFile"/></ActionIconButton>
           <RefreshButton className="h-[26px] w-[26px]" busy={!!directories[directory]?.refreshing} disabled={initializing || writing || !!directories[directory]?.loading} onClick={() => refreshDirectory(directory)} />
         </div>
         {error && <div role="alert" data-file-error className="absolute right-3 bottom-[39px] z-30 flex max-w-[min(600px,calc(100%-24px))] items-start gap-3 border border-danger/50 bg-panel px-3 py-2 text-sm text-danger shadow-lg">
@@ -239,7 +299,7 @@ export default function FileBrowser({ client, subject, selectedInstance, onClose
         <div className="flex min-h-0 flex-1">
           <div className="relative min-h-0 shrink-0" style={{width:treeWidth,maxWidth:'65%'}} data-file-tree-panel>
           <FileTree directories={directories} expanded={expanded} selected={selected} disabled={writing || initializing || downloading || resolvingLink} onSelect={(path, folder) => { setSelected(path); const parent = folder ? path : path.slice(0, path.lastIndexOf('/')) || '/'; setDirectory(parent); setAddress(parent) }}
-            onToggle={toggleDirectory} onOpen={openFile} onRefresh={refreshDirectory} onDownload={path => void download(path)} onFollowLink={followLink} />
+            canRename={!busy&&!directoryLoading} onRename={prepareRename} onToggle={toggleDirectory} onOpen={openFile} onRefresh={refreshDirectory} onDownload={path => void download(path)} onFollowLink={followLink} />
           <PanelResize label={t('files.resizeTree')} outside value={treeWidth} min={140} max={() => (box.current?.clientWidth ?? 1200)*0.65} onDone={setTreeWidth} />
           </div>
           <div className="relative flex min-w-0 flex-1 flex-col" data-file-editor-panel aria-busy={!!readingPath || undefined}>
@@ -256,13 +316,16 @@ export default function FileBrowser({ client, subject, selectedInstance, onClose
           </div>
         </div>
         <footer className="flex h-[27px] shrink-0 items-center gap-3 border-t border-line px-3 py-[2px] text-[12px] leading-[18px] text-fg-muted" data-file-footer>
-          <span className="min-w-0 flex-1 truncate" aria-live="polite">{busy || initializing || directoryLoading || downloading || resolvingLink ? t('app.loading') : downloaded ? t('files.downloaded', { path: downloaded }) : saved ? t('files.saved') : t('files.limit')}</span>
+          <span className="min-w-0 flex-1 truncate" aria-live="polite">{busy || initializing || directoryLoading || downloading || resolvingLink ? t('app.loading') : downloaded ? t('files.downloaded', { path: downloaded }) : saved ? t(preparedId?'files.savedHost':'files.saved') : t('files.limit')}</span>
           {doc && <Select label={t('files.language')} className="file-footer-select text-[12px]" value={language} options={[
             { value: '', label: `${autoLanguage ?? t('files.plain')} · ${t('files.auto')}` },
             { value: 'plain', label: t('files.plain') }, ...languages.map(item => ({ value: item.name, label: item.name })),
           ]} onChange={setLanguage} />}
         </footer>
       </section>
-    </div>, document.body,
+    </div>
+    {createDirectory!==null&&<FileNameDialog directory={createDirectory} onSubmit={createFile} onClose={()=>setCreateDirectory(null)}/>}
+    {renameSource&&<FileNameDialog mode="rename" directory={renameSource.path.slice(0,renameSource.path.lastIndexOf('/'))||'/'} initialName={renameSource.path.slice(renameSource.path.lastIndexOf('/')+1)} onSubmit={renameFile} onClose={()=>setRenameSource(null)}/>}
+    </>, document.body,
   )
 }

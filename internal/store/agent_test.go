@@ -244,7 +244,7 @@ func TestAgentMigrationOnAnOlderDatabase(t *testing.T) {
 	s := open(t, path)
 	require.NoError(t, s.TouchRecent(ctx, rec("a", "web", "1", 1), 50, 500))
 	require.NoError(t, s.WithTx(ctx, func(tx *sql.Tx) error {
-		for _, q := range []string{`DROP TABLE agent_grants`, `DROP TABLE agent_targets`, `DROP TABLE agent_audit`, `DELETE FROM schema_migrations WHERE version >= 3`} {
+		for _, q := range []string{`DROP TABLE owned_helpers`, `DROP TABLE agent_grants`, `DROP TABLE agent_targets`, `DROP TABLE agent_audit`, `DELETE FROM schema_migrations WHERE version >= 3`} {
 			if _, err := tx.ExecContext(ctx, q); err != nil {
 				return err
 			}
@@ -307,7 +307,7 @@ func TestGroupMigrationPreservesLegacyGrants(t *testing.T) {
 	original := agentgrant.Target{Provider: "k", Target: "t", Identity: "i", Grants: []agentgrant.Grant{grantOne("a", "read"), grantOne("a", "read", "pods")}}
 	require.NoError(t, s.ReplaceAgentGrants(ctx, original))
 	require.NoError(t, s.WithTx(ctx, func(tx *sql.Tx) error {
-		for _, q := range []string{"ALTER TABLE agent_targets DROP COLUMN groups_json", "ALTER TABLE agent_targets DROP COLUMN disabled_scopes_json", "DELETE FROM schema_migrations WHERE version=4"} {
+		for _, q := range []string{"ALTER TABLE agent_targets DROP COLUMN groups_json", "ALTER TABLE agent_targets DROP COLUMN disabled_scopes_json", "DROP TABLE owned_helpers", "DELETE FROM schema_migrations WHERE version>=4"} {
 			if _, err := tx.ExecContext(ctx, q); err != nil {
 				return err
 			}

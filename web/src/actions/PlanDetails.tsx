@@ -21,7 +21,7 @@ export function PlanDetails({ plan }: { plan: ActionPlan }) {
           {t('action.unavailable', { reason: messageText(plan.unavailable) })}
         </p>
       )}
-      {plan.action.terminal && warnings}
+      {(plan.action.terminal || plan.action.files) && warnings}
       {!!plan.effects?.length && (
         <section aria-label={t('action.effects')}>
           <h3 className="mb-1 text-[12px] font-semibold uppercase tracking-wider text-fg-subtle">{t('action.effects')}</h3>
@@ -32,7 +32,7 @@ export function PlanDetails({ plan }: { plan: ActionPlan }) {
           </ul>
         </section>
       )}
-      {!plan.action.terminal && warnings}
+      {!(plan.action.terminal || plan.action.files) && warnings}
       {!!plan.changes?.length && (
         <section aria-label={t('action.changes')}>
           <h3 className="mb-1 text-[12px] font-semibold uppercase tracking-wider text-fg-subtle">{t('action.changes')}</h3>

@@ -28,6 +28,8 @@ type ActionDescriptor struct {
 	// Terminal actions prepare an app-owned, reviewed terminal handle. They
 	// never write through RunAction and must be UI-only and single-object.
 	Terminal bool `json:"terminal,omitempty"`
+	// Files actions admit a UI-only file session without remote writes.
+	Files bool `json:"files,omitempty"`
 }
 
 // ActionText describes an action's text value.
@@ -236,6 +238,7 @@ type ActionResult struct {
 	Parts   []ActionPart  `json:"parts,omitempty"`
 	// Terminal: open a terminal there once done (a debug container's).
 	Terminal *TerminalOpen `json:"terminal,omitempty"`
+	Files    *FilesOpen    `json:"files,omitempty"`
 }
 
 // ActionPart is one write of a run: its object (ID: the full id, Title:
@@ -290,4 +293,10 @@ type TerminalOpen struct {
 	Channel    string `json:"channel,omitempty"`
 	// Attach: to the container's own process (its stdin), not a new one.
 	Attach bool `json:"attach,omitempty"`
+}
+
+// FilesOpen identifies a reviewed, memory-only file session.
+type FilesOpen struct {
+	Ref        Ref    `json:"ref"`
+	PreparedID string `json:"preparedId"`
 }

@@ -32,3 +32,15 @@ type ActionRun struct {
 type TerminalActioner interface {
 	PrepareTerminalAction(context.Context, ActionRun) (ExecHandle, error)
 }
+
+// FilesActioner admits a reviewed, UI-only file session without remote writes.
+type FilesActioner interface {
+	PrepareFilesAction(context.Context, ActionRun) (FilesHandle, error)
+}
+
+// FilesHandle owns helper startup and cleanup across individual file commands.
+type FilesHandle interface {
+	Describe() core.LiveTarget
+	PrepareCommand(context.Context, []string) (ExecHandle, error)
+	Close() error
+}

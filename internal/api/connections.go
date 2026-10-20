@@ -38,6 +38,19 @@ type connectionAttempt struct {
 	cancel                        context.CancelFunc
 	provisional                   *connectingSession
 	createdOwner                  bool
+	liveCtx                       context.Context
+	liveCancel                    context.CancelFunc
+}
+
+// The opening attempt's context ends at readiness. Recovery needs a separate
+// explicit-connection lifetime, including while agent calls retain a session.
+func (a *connectionAttempt) startLive() {
+	a.liveCtx, a.liveCancel = context.WithCancel(context.Background())
+}
+func (a *connectionAttempt) stopLive() {
+	if a.liveCancel != nil {
+		a.liveCancel()
+	}
 }
 
 func (s *Service) ConnectTarget(ctx context.Context, providerID, id string) (core.ConnectionStatus, error) {
@@ -69,6 +82,9 @@ func (s *Service) ConnectTarget(ctx context.Context, providerID, id string) (cor
 // configuration changed. Callers hold sessMu and have validated the target.
 func (s *Service) startConnectionLocked(providerID, id, hash string, opener provider.Opener) core.ConnectionStatus {
 	key := ownerKey(providerID, id)
+	if old := s.connections[key]; old != nil {
+		old.stopLive()
+	}
 	s.connectionSeq++
 	a := &connectionAttempt{provider: providerID, target: id, hash: hash,
 		status: core.ConnectionStatus{ID: s.connectionSeq, State: "connecting", Phase: "opening", MaxAttempts: connectionAttempts, StartedAt: s.now().UnixMilli()}}
@@ -77,7 +93,9 @@ func (s *Service) startConnectionLocked(providerID, id, hash string, opener prov
 	if e := s.sessions[key]; e != nil && e.hash == hash {
 		e.closing = false
 		a.owner = e.owner
+		a.startLive()
 		a.status.State, a.status.Phase, a.status.FinishedAt = "connected", "ready", s.now().UnixMilli()
+		s.wakeHelperCleanup()
 		s.emitTargetsChanged(providerID)
 		return a.status
 	}
@@ -188,7 +206,9 @@ func (s *Service) connect(a *connectionAttempt, opener provider.Opener) {
 			}
 			a.owner, a.provisional = e.owner, nil
 			a.createdOwner = !reused
+			a.startLive()
 			a.status.State, a.status.Phase, a.status.FinishedAt = "connected", "ready", s.now().UnixMilli()
+			s.wakeHelperCleanup()
 			a.status.Error, a.status.ErrorClass = "", ""
 			s.emitTargetsChanged(a.provider)
 			s.sessMu.Unlock()
@@ -258,6 +278,7 @@ func (s *Service) CancelConnectTarget(_ context.Context, providerID, id string, 
 		return nil
 	}
 	a.cancel()
+	a.stopLive()
 	a.status.State, a.status.Phase, a.status.RetryAt = "cancelled", "cancelled", 0
 	a.status.FinishedAt = s.now().UnixMilli()
 	provisional := a.provisional
@@ -285,6 +306,7 @@ func (s *Service) stopConnections() {
 	var provisional []*connectingSession
 	for _, a := range s.connections {
 		a.cancel()
+		a.stopLive()
 		if a.provisional != nil {
 			provisional = append(provisional, a.provisional)
 		}

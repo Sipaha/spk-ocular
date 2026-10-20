@@ -4,6 +4,7 @@ import { LocationStatus } from './LocationStatus'
 import { RefreshButton } from './RefreshButton'
 import { ResourceGroupIcon } from './ResourceGroupIcon'
 import { lazy, Suspense } from 'react'
+const FileBrowser = lazy(() => import('../files/FileBrowser'))
 const RbacWorkspace = lazy(() => import('../rbac/RbacWorkspace'))
 const SecurityWorkspace = lazy(() => import('../security/SecurityWorkspace'))
 const TimelineWorkspace = lazy(() => import('../timeline/TimelineWorkspace'))
@@ -15,7 +16,7 @@ import { useInstancePicker, runningChannel } from './useInstancePicker'
 import { PanelResize, usePanelWidths } from './PanelResize'
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import type { Client } from '../api/client'
-import type { ActionDescriptor, KindDescriptor, KindsView, MetricsView, Ref, Row, ScopeSel, ScopesView, SourceCoverage, Target } from '../api/types'
+import type { ActionDescriptor, KindDescriptor, KindsView, MetricsView, Ref, Row, FilesOpen, ScopeSel, ScopesView, SourceCoverage, Target } from '../api/types'
 import { ApiError } from '../api/client'
 import { actionLabel, classLabel, getLanguage, t } from '../i18n'
 import { showNotice, targetKey, useStore } from '../store'
@@ -210,6 +211,7 @@ export function Workspace({ client, hub, target, onFavorite, onMoveFavorite, onN
   const editableOf = useCallback((kindId: string) => !!kinds?.find((k) => k.id === kindId)?.editable, [kinds])
   const valuesOf = useCallback((kindId: string) => !!kinds?.find((k) => k.id === kindId)?.values, [kinds])
   const kindTitleOf = useCallback((kindId: string) => ((k) => k?.singular ?? k?.title ?? kindId)(kinds?.find((k) => k.id === kindId)), [kinds])
+  const [nodeFiles, setNodeFiles] = useState<FilesOpen | null>(null)
   const [actionReq, setActionReq] = useState<(ActionRequest & { seq: number }) | null>(null)
   const actionSeq = useRef(0)
   const openAction = useCallback(
@@ -501,6 +503,7 @@ export function Workspace({ client, hub, target, onFavorite, onMoveFavorite, onN
             onDone={bulkReq.onDone}
           />
         )}
+        {nodeFiles && <Suspense fallback={null}><FileBrowser key={nodeFiles.preparedId} client={client} subject={nodeFiles.ref} preparedId={nodeFiles.preparedId} onClose={()=>setNodeFiles(null)} /></Suspense>}
         {actionReq && (
           <ActionDialog
             // A new request is a new dialog: nothing of the last one carries over.
@@ -508,6 +511,7 @@ export function Workspace({ client, hub, target, onFavorite, onMoveFavorite, onN
             client={client}
             req={actionReq}
             onClose={() => setActionReq(null)}
+            onFiles={setNodeFiles}
             onTerminal={(open) =>
               dock.openTerminal(targetRef, target.title, { ref: open.ref, instance: open.instance, channel: open.channel, attach: open.attach, preparedId: open.preparedId }, open.channel ? `${open.channel} · ${refTitle(open.ref)}` : undefined)
             }
