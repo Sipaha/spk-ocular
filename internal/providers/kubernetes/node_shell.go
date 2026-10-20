@@ -34,7 +34,7 @@ func nodeShellHelper(p *unstructured.Unstructured) bool {
 }
 
 var actNodeShell = core.ActionDescriptor{
-	ID: "node-shell", Title: "Node Shell", Destructive: true, NoAgents: true, Single: true, Terminal: true,
+	ID: "node-shell", Title: "Node Shell", NoAgents: true, Single: true, Terminal: true,
 	Param: &core.ActionParam{Kind: core.ParamChoice, Title: msgp("nodeShell.namespace"), Custom: true},
 	Text:  &core.ActionText{Title: msg("debug.image"), Default: nodeShellImage, Max: maxDebugImage},
 }

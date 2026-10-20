@@ -26,15 +26,19 @@ async function launch(page:import('@playwright/test').Page){
 }
 async function openReview(page:import('@playwright/test').Page,language='en'){
   await page.getByRole('gridcell',{name:'worker-01',exact:true}).click()
-  const drawer=page.locator('[data-area=details]');await drawer.getByRole('button',{name:language==='ru'?'Действия':'Actions',exact:true}).click()
-  await page.getByRole('menuitem',{name:language==='ru'?'Терминал ноды…':'Node Shell…',exact:true}).click()
+  const drawer=page.locator('[data-area=details]'),shell=drawer.getByRole('button',{name:language==='ru'?'Терминал ноды':'Node Shell',exact:true})
+  await expect(drawer.locator('.drawer-tools button').first()).toHaveAccessibleName(language==='ru'?'Терминал ноды':'Node Shell')
+  await expect(shell.locator('svg')).toBeVisible()
+  await shell.click()
   const dialog=page.getByRole('dialog',{name:language==='ru'?'Терминал ноды worker-01':'Node Shell worker-01',exact:true});await expect(dialog.getByRole('button',{name:language==='ru'?'Отмена':'Cancel',exact:true})).toBeFocused();return dialog
 }
 
 test('Node Shell reviews privileged access, streams through Kubernetes and deletes its helper on exit and tab close',async({page})=>{
   const run=await launch(page),errors:string[]=[];page.on('pageerror',e=>errors.push(e.message))
   try{
-    const d=await openReview(page);await expect(d).toContainText('root access');await expect(d).toContainText('1 hour');expect(run.fixture.pods.size).toBe(0)
+    await page.getByRole('gridcell',{name:'worker-01',exact:true}).click()
+    await page.screenshot({path:join(run.root,'toolbar-en.png')})
+    const d=await openReview(page);await expect(d.locator('.bg-danger, .text-danger')).toHaveCount(0);await expect(d).toContainText('root access');await expect(d).toContainText('1 hour');expect(run.fixture.pods.size).toBe(0)
     await page.screenshot({path:join(run.root,'review-en.png')})
     const ns=d.getByRole('textbox',{name:'Helper namespace'});await ns.fill('tools');await expect(d.getByRole('button',{name:'Node Shell',exact:true})).toBeDisabled();await d.getByRole('button',{name:'Review',exact:true}).click();await expect(d).toContainText('Create a temporary Pod in tools')
     await d.getByRole('button',{name:'Node Shell',exact:true}).click();await expectScreen(page,'fixture node worker-01 (root)')
@@ -83,8 +87,10 @@ test('Node Shell review uses all eight local catalogues and keeps root access ab
       await run.rpc('SetLanguage',{language});await page.reload()
       const local=language==='en'?{ui:{'act.node-shell':'Node Shell','action.menu':'Actions','action.cancel':'Cancel'}}:language==='ru'?{ui:{'act.node-shell':'Терминал ноды','action.menu':'Действия','action.cancel':'Отмена'}}:JSON.parse(readFileSync(resolve(import.meta.dirname,`../../web/src/locales/${language}.json`),'utf8'))
       await page.getByRole('gridcell',{name:'worker-01',exact:true}).click()
-      await page.locator('[data-area=details]').getByRole('button',{name:local.ui['action.menu'],exact:true}).click()
-      const label=local.ui['act.node-shell'];await page.getByRole('menuitem',{name:label+'…',exact:true}).click()
+      const label=local.ui['act.node-shell'],toolbar=page.locator('[data-area=details] .drawer-tools')
+      await expect(toolbar.getByRole('button').first()).toHaveAccessibleName(label)
+      await page.screenshot({path:join(run.root,`toolbar-${language}.png`)})
+      await toolbar.getByRole('button',{name:label,exact:true}).click()
       const d=page.getByRole('dialog',{name:label+' worker-01',exact:true})
       await expect(d.getByRole('button',{name:local.ui['action.cancel'],exact:true})).toBeFocused()
       const warning=d.locator('section').first();await expect(warning).toHaveClass(/text-warning/)

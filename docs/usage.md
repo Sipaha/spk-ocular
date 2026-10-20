@@ -1137,10 +1137,13 @@ Deployment/ReplicaSet/Pod lesson. Its actions change only local lesson state.
 
 ## Node Shell
 
-Select a Linux node in **Nodes**, open its **Actions → Node Shell…**, and review
+Select a Linux node in **Nodes**, click the **Node Shell** terminal icon at the left of its
+action toolbar, and review
 its connection, node, helper namespace and image. The namespace is a typed field;
 listing every namespace is not required. Changing namespace or image requires a
-new **Review** before confirmation. Cancel receives initial focus.
+new **Review** before confirmation. The action uses neutral styling; root-access
+warnings remain in the review, and Cancel receives initial focus. Node Shell is
+also available from the node row’s context menu.
 
 Node Shell uses the Kubernetes API, not SSH. A temporary privileged Pod runs on
 the selected node with host PID, IPC and network namespaces. `nsenter` enters

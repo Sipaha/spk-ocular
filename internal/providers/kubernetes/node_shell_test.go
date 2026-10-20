@@ -77,7 +77,7 @@ func countShellWrites(c *dynamicfake.FakeDynamicClient, verb string) int {
 func TestNodeShellReviewAndAdmissionNeverWrite(t *testing.T) {
 	s, c := nodeShellSession(t)
 	p := nodeShellPlan(t, s)
-	assert.True(t, p.Destructive)
+	assert.False(t, p.Destructive)
 	assert.True(t, p.Action.NoAgents)
 	assert.True(t, p.Action.Single)
 	assert.True(t, p.Action.Terminal)

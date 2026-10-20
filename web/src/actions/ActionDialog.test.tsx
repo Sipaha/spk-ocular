@@ -863,11 +863,13 @@ describe('ActionDialog', () => {
 })
 
 it('requires a fresh review after typing a namespace for a privileged terminal action', async () => {
-  const nodeShell:ActionDescriptor={id:'node-shell',title:'Node Shell',destructive:true,noAgents:true,single:true,terminal:true,param:{kind:'choice',min:0,max:0,custom:true,title:{text:'Helper namespace'}},text:{title:{text:'Image'},default:'alpine:3.24.2',max:512}}
+  const nodeShell:ActionDescriptor={id:'node-shell',title:'Node Shell',noAgents:true,single:true,terminal:true,param:{kind:'choice',min:0,max:0,custom:true,title:{text:'Helper namespace'}},text:{title:{text:'Image'},default:'alpine:3.24.2',max:512}}
   const {f,dialog}=setup(nodeShell,p=>planOf(nodeShell,{text:p.text??'alpine:3.24.2',choice:p.choice??'kube-system'}))
   const open=within(dialog).getByRole('button',{name:'Node Shell'})
   await waitFor(()=>expect(open).toBeEnabled())
   expect(within(dialog).getByRole('button',{name:'Cancel'})).toHaveFocus()
+  expect(open).not.toHaveClass('bg-danger')
+  expect(dialog.querySelector('.text-danger')).toBeNull()
   const ns=within(dialog).getByRole('textbox',{name:'Helper namespace'})
   await userEvent.clear(ns);await userEvent.type(ns,'private-tools')
   expect(open).toBeDisabled()

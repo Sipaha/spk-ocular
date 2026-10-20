@@ -238,7 +238,8 @@ export function ResourceDrawer({ hidden = false, embedded = false, client, hub, 
   const presentation = loading ? res : shown
   const actions = actionsOf?.(displayKind) ?? []
   const scaleAction = target.provider === 'kubernetes' && displayKind === 'apps/deployments' ? actions.find(action => action.id === 'scale') : undefined
-  const menuActions = actions.filter(action => action !== scaleAction)
+  const nodeShellAction = target.provider === 'kubernetes' && displayKind === 'nodes' ? actions.find(action => action.id === 'node-shell') : undefined
+  const menuActions = actions.filter(action => action !== scaleAction && action !== nodeShellAction)
   // The object shown now (after relation navigation: that one), with the UID read.
   // A deleted object has nothing to open or act on.
   const hasTools = !presentation?.gone && (!!r?.ref.uid || !!r?.rbacSubject || (!!onLogs && !!hasLogs?.(displayKind)) || (!!onTerminal && !!hasExec?.(displayKind)) || (!!onAction && actions.length > 0) || !!editableOf?.(displayKind))
@@ -301,6 +302,7 @@ export function ResourceDrawer({ hidden = false, embedded = false, client, hub, 
         </div>
         {hasTools && (
           <div className="drawer-tools" inert={loading}>
+            {onAction && nodeShellAction && <ActionIconButton label={actionLabel(nodeShellAction)} description={actionLabel(nodeShellAction)} onClick={()=>onAction(shownRef(),nodeShellAction)}><ActionIcon name="terminal"/></ActionIconButton>}
             {!embedded&&r?.ref.uid&&!presentation?.error&&<ActionIconButton label={t('workspace.pinProperties')} description={t('workspace.pinPropertiesHint')} disabled={!workspaceReady} onClick={()=>{const targetInfo=useStore.getState().view?.groups.flatMap(g=>g.targets).find(item=>item.provider===target.provider&&item.id===target.id);if(!dock.openProperties(target,targetInfo?.title??target.id,shownRef(),tab))showNotice(t('workspace.limit'))}}><ActionIcon name="pin"/></ActionIconButton>}
             {r?.ref.uid&&!presentation?.error&&<ComparisonTools subject={shownRef()}/>}
             {r?.rbacSubject && <ActionIconButton label={t('rbac.permissions')} description={t('rbac.permissionsHint')} onClick={()=>setAccess({subject:r.rbacSubject})}><ActionIcon name="permissions"/></ActionIconButton>}

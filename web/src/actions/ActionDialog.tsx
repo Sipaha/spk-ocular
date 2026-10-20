@@ -162,9 +162,10 @@ export function ActionDialog({ client, req, onClose, onTerminal, runTimeoutMs = 
     textReviewed && (!param || (choosing ? chosen !== null && plan?.params.choice === chosen : planned !== undefined && count.trim() === String(planned)))
   const canRun = !!plan && reviewed && !busy && !sent && !plan.unavailable && plan.rights.state !== 'denied'
   const destructive = !!plan?.destructive
+  const cancelInitially = destructive || !!plan?.action.terminal
 
   // Focus: the count while choosing it; on a reviewed plan the confirmation,
-  // or Cancel when it is destructive.
+  // or Cancel for destructive plans and privileged terminal admission.
   useLayoutEffect(() => {
     if (busy) {
       // A pending initial review already owns keyboard input. Keep Escape
@@ -188,8 +189,8 @@ export function ActionDialog({ client, req, onClose, onTerminal, runTimeoutMs = 
         countRef.current?.focus()
         countRef.current?.select()
       }
-    } else if (plan && canRun && !destructive) confirmRef.current?.focus()
-    else if (plan && destructive) cancelRef.current?.focus() // also from the count: a destructive plan starts at Cancel
+    } else if (plan && canRun && !cancelInitially) confirmRef.current?.focus()
+    else if (plan && cancelInitially) cancelRef.current?.focus()
     else if (!box.current?.contains(document.activeElement) || document.activeElement === box.current) cancelRef.current?.focus()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [plan, busy])
