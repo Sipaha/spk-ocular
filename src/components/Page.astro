@@ -73,7 +73,7 @@ const fill = (text: string, values: Record<string,string>) => text.replace(/\{(\
       <details class="measurement-conditions"><summary>{d.measurementConditions}</summary><div>
         <p>{d.measurementBudget}</p><p>{fill(d.measurementSetup,{version:m.version})}</p><p>{fill(d.measurementBoundary,{runs:fmt(m.validCurrentSessions,0)})}</p>
         <p>{fill(d.measurementMethod,{peakInterval:fmt(m.peakSamplingSeconds,1)})}</p>
-        <p><time datetime={m.dateISO}>{m.dateDisplay}</time> · <a href={REPO+'/blob/master/docs/performance.md'} {...external}>{d.measurementSummary} ↗</a> · <a href={REPO+'/blob/master/docs/performance-data/2026-10-16-memory.csv'} {...external}>{d.measurementRaw} ↗</a></p>
+        <p><time datetime={m.dateISO}>{m.dateDisplay}</time></p>
       </div></details>
     </section>
     <section id="features" class="container section">

@@ -14,6 +14,8 @@ const browser=await chromium.launch();
 async function externalLinks(page) {
  const invalid=await page.locator('a[href^="https://"],a[href^="http://"]').evaluateAll(links=>links.filter(a=>a.target!=='_blank'||!a.relList.contains('noopener')||!a.relList.contains('noreferrer')).map(a=>a.href));
  expect(invalid).toEqual([]);
+ const privateDocs=await page.locator('a[href]').evaluateAll(links=>links.filter(a=>/github\.com\/Sipaha\/(?:internal-docs|spk-ocular\/(?:blob|raw)\/[^/]+\/docs\/)/i.test(a.href)).map(a=>a.href));
+ expect(privateDocs).toEqual([]);
 }
 try {
  for(const {code} of languages)for(const theme of ['light','dark'])for(const width of [375,1440]) {
@@ -34,10 +36,10 @@ try {
   await section.screenshot({path:path.join(out,`memory-${code}-${theme}-${width}.png`)});
   if(code==='ru'&&theme==='light'&&width===1440) {
    await section.locator('summary').click();
-   const report=section.locator('a').first(),before=page.url();
-   await context.route(REPO+'/blob/master/docs/performance.md',route=>route.fulfill({body:'report fixture'}));
-   const popupPromise=page.waitForEvent('popup');await report.click();const popup=await popupPromise;
-   await expect(popup).toHaveURL(REPO+'/blob/master/docs/performance.md');expect(page.url()).toBe(before);await popup.close();
+   await expect(section.locator('.measurement-conditions')).toHaveAttribute('open','');
+   await expect(section.locator('time')).toHaveAttribute('datetime',measurement.dateISO);
+   await expect(section.locator('time')).toBeVisible();
+   await expect(section.locator('a')).toHaveCount(0);
    await section.screenshot({path:path.join(out,'memory-ru-expanded.png')});
   }
   await context.close();console.log(`PASS memory ${code} ${theme} ${width}`);
@@ -57,5 +59,5 @@ try {
  await expect(page.locator('.package a').last()).toHaveAttribute('href',url+'.sha256');
  await externalLinks(page);await context.close();
  console.log('PASS generated package, checksum and primary-download new-tab contracts');
- console.log('PASS 32 measurement layouts, 8 no-JS outbound contracts and actual report popup');
+ console.log('PASS 32 measurement layouts, 8 no-JS outbound contracts and no internal documentation links');
 } finally {await browser.close();await new Promise(resolve=>server.close(resolve));}

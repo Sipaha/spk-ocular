@@ -16,9 +16,9 @@ export const en = {
   measurementLoad: "Connect → complete resource list",
   measurementSeconds: "s",
   measurementMiB: "MiB",
-  measurementConditions: "Conditions and raw measurements",
+  measurementConditions: "Measurement conditions",
   measurementBoundary: "Linux browser mode with a dedicated headless Chromium. PSS includes the app and Chromium process trees; the HTTP fixture and measurement tool are excluded. The sampled peak across {runs} valid sessions was 558 MiB.",
-  measurementMethod: "Memory was sampled approximately every {peakInterval} seconds. The full report describes the workload and assessment criteria.",
+  measurementMethod: "Memory was sampled approximately every {peakInterval} seconds.",
   measurementRaw: "Raw memory samples",
   measurementSummary: "Measurement summary",
 
@@ -102,9 +102,9 @@ export const ru: Copy = {
   measurementLoad: "Подключение → полный список ресурсов",
   measurementSeconds: "с",
   measurementMiB: "МиБ",
-  measurementConditions: "Условия и исходные замеры",
+  measurementConditions: "Условия измерения",
   measurementBoundary: "Браузерный режим на Linux с отдельным headless Chromium. PSS включает процессы приложения и Chromium; тестовый HTTP API и инструмент замера исключены. Наблюдаемый пик по {runs} валидным сессиям: 558 МиБ.",
-  measurementMethod: "Память снималась примерно каждые {peakInterval} секунды. Нагрузка и критерии оценки описаны в полном отчёте.",
+  measurementMethod: "Память снималась примерно каждые {peakInterval} секунды.",
   measurementRaw: "Исходные отсчёты памяти",
   measurementSummary: "Сводка замера",
 

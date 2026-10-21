@@ -1,19 +1,15 @@
-# SPK Ocular website
+# Website contributor entry point
 
-This orphan `pages` branch contains the static product website, independently of
-the application on `master`. Keep both worktrees intact. The website uses Astro,
-plain TypeScript and CSS, eight website locales, and light/dark themes. Read docs/localization.md for
-translation quality, real screenshot language and routing constraints.
+Read `../../internal-docs/spk-ocular/site/AGENTS.md` in the shared solution
+and its linked private guides.
+Report unavailable private documentation before substantive work.
 
-Run `make check` before committing: pure logic tests, Astro checks/build, and real
-browser verification. Inspect desktop/mobile screenshots in both themes. Put all
-test output, browser profiles, logs and temporary downloads in the solution's
-`.agents/tmp/site`; set `OCULAR_SITE_SCRATCH` in another workspace. No `/tmp`.
+Keep both application and website worktrees intact. Documentation and comments
+are English; product copy covers all eight locales. Use verified release facts
+and real product captures. Do not put private guides in source or build payloads.
 
-Use actual product screenshots and verified product facts. Do not invent release
-assets, downloads, statistics, testimonials or platform support. Download links
-must survive missing releases, API failure and JavaScript being disabled.
-
-Documentation and code comments are English; product copy is localized.
-New author and committer: Pavel Simonov <sipahabk@gmail.com>. No global Git changes,
-subagents, app restarts, infrastructure mutations, release tags or history rewrites.
+Run `make check` here before committing and inspect real desktop/mobile captures
+in both themes. All logs, profiles and TMPDIR belong in solution `.tmp/`;
+set OCULAR_SITE_SCRATCH. Never disturb the user's app, configuration or displays.
+Both commit identities must be Pavel Simonov <sipahabk@gmail.com>, per command.
+No history rewrite, release or website publication without explicit owner scope.
