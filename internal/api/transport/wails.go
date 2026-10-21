@@ -259,3 +259,7 @@ func (w *API) ResourceNetworkPath(ctx context.Context, ref core.Ref) (core.Netwo
 func (w *API) ViewPresets(req api.ViewPresetsRequest) (api.ViewPresetRegistry, error) {
 	return w.a.ViewPresets(api.UIContext(context.Background()), req)
 }
+
+func (w *API) CertificateStatus(ctx context.Context, ref core.Ref) (core.CertificateStatus, error) {
+	return w.a.CertificateStatus(api.UIContext(ctx), ref)
+}

@@ -1,4 +1,5 @@
 import type { ViewPresetsRequest, ViewPresetRegistry } from './types'
+import type {CertificateStatus} from '../certificates/types'
 import type {NetworkPath} from '../network/types'
 import type {Diagnosis} from '../diagnosis/types'
 import type {FluxRequest,FluxSnapshot} from '../fluxcd/types'
@@ -29,6 +30,7 @@ export class ApiError extends Error {
 }
 
 export interface Client {
+ certificateStatus(ref:Ref,signal?:AbortSignal):Promise<CertificateStatus>
  resourceNetworkPath(ref:Ref,signal?:AbortSignal):Promise<NetworkPath>
  diagnoseResource(ref:Ref,signal?:AbortSignal):Promise<Diagnosis>
  fluxCD(req:FluxRequest,signal?:AbortSignal):Promise<FluxSnapshot>
@@ -186,6 +188,7 @@ const done = async (p: Promise<unknown>) => {
 
 export const httpClient: Client = {
   argoCD: (req,signal) => post('ArgoCD',req,signal),
+ certificateStatus:(ref,signal)=>post('CertificateStatus',ref,signal),
  resourceNetworkPath:(ref,signal)=>post('ResourceNetworkPath',ref,signal),
  diagnoseResource:(ref,signal)=>post('DiagnoseResource',ref,signal),
  fluxCD:(req,signal)=>post('FluxCD',req,signal),
@@ -331,6 +334,7 @@ const EVENT_TYPES: EventType[] = ['targets_changed', 'resync', 'view_changed', '
 
 export const wailsClient: Client = {
   argoCD: (req,signal) => wcallAbortable(signal,'ArgoCD',req),
+ certificateStatus:(ref,signal)=>wcallAbortable(signal,'CertificateStatus',ref),
  resourceNetworkPath:(ref,signal)=>wcallAbortable(signal,'ResourceNetworkPath',ref),
  diagnoseResource:(ref,signal)=>wcallAbortable(signal,'DiagnoseResource',ref),
  fluxCD:(req,signal)=>wcallAbortable(signal,'FluxCD',req),

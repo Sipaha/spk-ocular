@@ -47,6 +47,7 @@ export function fakeClient(targets: Target[], connected = false) {
     audit: [] as AgentAuditEntry[],
   }
   const client: Client = {
+ certificateStatus:vi.fn(async(ref)=>({ref,capturedAt:0,notBefore:{state:'missing'},notAfter:{state:'missing'},renewal:{state:'missing'},validity:'unknown',secretName:'',conditions:[],requestedNames:[],issuerState:'unknown',consumers:[],consumerState:'unknown',truncated:false})),
  resourceNetworkPath:vi.fn(async(ref)=>({ref,routes:[],coverage:[],capturedAt:Date.now(),discovery:'ready',truncated:false})),
  diagnoseResource:vi.fn(async(ref)=>({ref,evidence:[],coverage:[],capturedAt:Date.now(),truncated:false})),
  fluxCD:vi.fn(async()=>({objects:[],events:[],coverage:[],discovery:"ready",truncated:false,capturedAt:0})),

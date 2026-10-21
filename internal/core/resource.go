@@ -142,15 +142,16 @@ type ResourceRevision struct {
 }
 
 type Resource struct {
-	NetworkPathAvailable bool               `json:"networkPathAvailable,omitempty"`
-	DiagnosisAvailable   bool               `json:"diagnosisAvailable,omitempty"`
-	FluxTracking         *FluxTracking      `json:"fluxTracking,omitempty"`
-	ArgoTracking         *ArgoTracking      `json:"argoTracking,omitempty"`
-	RBACSubject          *Ref               `json:"rbacSubject,omitempty"`
-	Revisions            []ResourceRevision `json:"revisions,omitempty"`
-	RevisionsAvailable   bool               `json:"revisionsAvailable,omitempty"`
-	RevisionsError       string             `json:"revisionsError,omitempty"`
-	RevisionsTruncated   bool               `json:"revisionsTruncated,omitempty"`
+	CertificateStatusAvailable bool               `json:"certificateStatusAvailable,omitempty"`
+	NetworkPathAvailable       bool               `json:"networkPathAvailable,omitempty"`
+	DiagnosisAvailable         bool               `json:"diagnosisAvailable,omitempty"`
+	FluxTracking               *FluxTracking      `json:"fluxTracking,omitempty"`
+	ArgoTracking               *ArgoTracking      `json:"argoTracking,omitempty"`
+	RBACSubject                *Ref               `json:"rbacSubject,omitempty"`
+	Revisions                  []ResourceRevision `json:"revisions,omitempty"`
+	RevisionsAvailable         bool               `json:"revisionsAvailable,omitempty"`
+	RevisionsError             string             `json:"revisionsError,omitempty"`
+	RevisionsTruncated         bool               `json:"revisionsTruncated,omitempty"`
 	// TemplateYAML is the normalized Pod template for read-only revision comparison.
 	TemplateYAML string     `json:"templateYAML,omitempty"`
 	Ref          Ref        `json:"ref"`

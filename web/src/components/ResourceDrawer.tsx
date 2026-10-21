@@ -1,3 +1,4 @@
+import {ResourceCertificate} from '../certificates/ResourceCertificate'
 import {ResourceNetworkPath} from '../network/ResourceNetworkPath'
 import {ResourceDiagnosis} from '../diagnosis/ResourceDiagnosis'
 import {FluxManagedBy} from '../fluxcd/FluxManagedBy'
@@ -521,6 +522,7 @@ function Details(props: { onDiagnosisLogs:(ref:Ref,channel:string,previous:boole
           </div>
         ))}
       </dl>
+      {r.certificateStatusAvailable&&<RetainedSection pending={pending}><ResourceCertificate client={client} subject={r.ref} onGo={onGo}/></RetainedSection>}
       {r.networkPathAvailable&&<RetainedSection pending={pending}><ResourceNetworkPath client={client} subject={r.ref} onGo={onGo}/></RetainedSection>}
       {r.diagnosisAvailable&&<RetainedSection pending={pending}><ResourceDiagnosis client={client} subject={r.ref} onGo={onGo} onLogs={props.onDiagnosisLogs}/></RetainedSection>}
       {r.fluxTracking&&<RetainedSection pending={pending}><FluxManagedBy client={client} resource={r} scope={argoScope} onGo={onFluxResource??onGo}/></RetainedSection>}

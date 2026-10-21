@@ -623,7 +623,7 @@ export interface ResourceRevision {
 }
 
 export interface Resource {
- networkPathAvailable?:boolean
+ certificateStatusAvailable?:boolean;networkPathAvailable?:boolean
  diagnosisAvailable?:boolean
  fluxTracking?:import("../fluxcd/types").FluxTracking
  argoTracking?: import("../argocd/types").ArgoTracking
