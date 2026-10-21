@@ -4,10 +4,62 @@ This is the remaining product backlog, not authorization to start a task.
 Implementation begins only when requested. Current behavior is documented in
 [usage](usage.md) and [architecture](architecture.md).
 
+The [Radar comparison](radar-comparison.md) explains the proposed next feature
+sequence. Detailed acceptance criteria and live task status are maintained in
+the work task service under `spk-ocular-radar-analysis` and its linked cards;
+do not use this document as a duplicate operational task registry.
+
+[Cluster assessment research](cluster-assessment.md) extends this direction to
+configuration quality, reliability and measured resource efficiency, including
+VPA/KRR, existing audit reports and optional cost evidence. Current proposals
+and priorities live under `spk-ocular-cluster-assessment-research` in the task service.
+
 [Product and website direction](product-plan.md) compares competitors, paid
 capabilities and proposed validation priorities. It does not authorize additional
 implementation or publication. [Website direction](site-plan.md) tracks remaining
 site and download-journey work separately from application features.
+
+The [deep competitive comparison](comparison.md) identifies daily-workflow gaps
+separately from advanced assessment: generic resource creation, multi-cluster
+inspection and multi-resource log composition. Detailed proposals and comparative
+validation remain in the task service under `spk-ocular-competitive-review`.
+
+## Comparative priorities
+
+The [Sextant assessment](sextant-comparison.md) and
+[four-product comparison](competitor-landscape.md) inform the following proposed
+order. This is a planning update, not a selection to implement every competitor
+feature. Detailed acceptance and live execution status belong to the work task
+service; the existing backlog below remains grouped by product area.
+
+1. **Operational trust and onboarding:** validate corporate proxies, OIDC/exec
+   login and expiry, recovery after disconnect, exact target/namespace identity,
+   native keyboard/menu geometry and sustained logs/terminal sessions. Complete
+   comparable memory plateau/control evidence before claiming stability. Evaluate
+   installation, signing and update friction alongside feature work.
+2. **Connected diagnosis and controller context:** explain the
+   Service/Ingress/Gateway-to-endpoints path using existing Events, logs, RBAC
+   and policy evidence; distinguish failed, unreadable and unmodelled steps.
+   Extend ordinary edit/scale review with verified HPA/GitOps ownership and
+   possible reconciliation effects, without guessing ownership or future timing.
+3. **Reliability and historical observability:** evaluate opt-in practice checks
+   and Prometheus/VictoriaMetrics history before resource-sizing recommendations;
+   disclose sample coverage and workload identity. Existing cost/scanner/VPA
+   evidence adapters need separate scope; current usage is not capacity or cost.
+4. **Investigation handoff and agent interoperability:** evaluate reviewed local
+   evidence exports, preserved investigation context and broader comparisons;
+   assess a standard MCP adapter over existing scoped readers and prepared plans,
+   preserving grants, confirmation, identity and cancellation boundaries.
+5. **Scenario-selected ecosystem adapters:** keep Velero as the explicit roadmap
+   item below, and choose further operators from real user workflows. Generic
+   Custom Resources remain alongside specialized pages. Broader Docker/Compose
+   workflows and offline learning remain product distinctions to validate, not
+   reasons to build an unrelated password manager, database IDE or SSH suite.
+
+These priorities do not mark planned work as implemented or extend agent rights.
+Argo CD and Flux are present in current source; availability in downloaded builds
+continues to follow release notes. Independent beginner/native-speaker validation
+remains separate from delivery of the learning modules.
 
 ## Learning and resource help
 
@@ -22,6 +74,16 @@ Current behavior is documented in [learning](learning.md).
   cluster, with reset, owner navigation and a bounded comprehension check.
 - Implemented: five additional local modules with guided practice and independent
   checks for Service routing, probes, startup failures, configuration and resources.
+- Planned redesign: **educational connections** with prepared local learning
+  scenarios operated through the normal Ocular workspace, resource tables,
+  Properties, YAML, Events and Logs. Guidance, goals, hints and progress appear
+  as overlays or a learning panel instead of a separate lesson interface.
+  A floating lower-right button/ball is a proposed panel launcher; its final
+  shape, placement and interaction remain a design decision. Learning targets
+  must be unmistakably labeled and isolated from real infrastructure. Reuse and
+  adapt the existing lessons/reference content; progress, reset and interaction
+  boundaries need acceptance criteria before implementation. Planning task:
+  `spk-ocular-learning-connections`. Recording this direction does not start work.
 - Remaining validation: independent beginner studies and native-speaker review;
   local task completion does not establish real-world competence.
 - P2: a bounded form-based resource builder and manifest export; create/apply is

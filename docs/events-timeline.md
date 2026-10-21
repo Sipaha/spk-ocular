@@ -64,5 +64,5 @@ serialized gate. Disconnect, cancellation and unmount stop in-flight work; late
 responses cannot update a replacement page.
 
 The frontend virtualizes event rows and bounds ownership traversal, including
-cycles. All eight UI languages use local catalogs. This development feature has
-not been included in the published v1.1.2 release.
+cycles. All eight UI languages use local catalogs. The Events API snapshot
+timeline is available from 1.2.0; persistent observed history remains separate.

@@ -1,6 +1,6 @@
 # Product and website direction
 
-Competitor evidence reviewed: 2026-10-05. Priorities below are recommendations for validation and sequencing, not authorization to implement or publish them. Public official pages, documentation and repositories support competitor facts; advertised performance and customer outcomes were not independently benchmarked. Prices can change and vary by billing period, currency and region.
+Landscape evidence originally reviewed 2026-10-05; Aptakube offer rechecked 2026-10-15. The [deep comparison](comparison.md) supersedes the original positioning; the [four-product assessment](competitor-landscape.md) adds the October 21 Sextant/Rubick/OpsDeck evidence. The [roadmap](backlog.md#comparative-priorities) consolidates the proposed order. Priorities below are recommendations for validation and sequencing, not authorization to implement or publish them. Public official pages, documentation and repositories support competitor facts; advertised performance and customer outcomes were not independently benchmarked. Prices can change and vary by billing period, currency and region.
 
 ## Direction
 
@@ -78,7 +78,7 @@ K8Studio and Radar are particularly relevant additional comparisons: local opera
 | Product | Public offer observed | What to learn |
 | --- | --- | --- |
 | Lens | Helm is in eligible free Personal. Plus/Pro: $25/user/month annual equivalent ($300/year), $30 monthly; Enterprise $50 annual equivalent, $60 monthly. Paid capabilities include AI/MCP, GitOps, cloud integrations and security; organization tiers add collaboration/administration, with offline activation and identity/provisioning in Enterprise. Personal eligibility has an organizational revenue/funding threshold. [Plans](https://lenshq.io/pricing/) | Complete Helm is baseline. Paid value combines daily productivity with organizational adoption requirements. |
-| Aptakube | 15-day trial; personal 79/year and team 59/seat/year in observed localized currency. Independent page fetches showed USD and EUR; use a specific locale/currency when publishing. Both include all app features; team terms add licensing/support/SSO. [Pricing](https://aptakube.com/pricing) | A cohesive daily tool can be sold without gating every advanced workflow. |
+| Aptakube | Rechecked 2026-10-15: all features free indefinitely for clusters up to 5 nodes, no license key. Larger clusters: Personal $79/year or Team $59/seat/year on the observed USD page; 15-day large-cluster trial. Team adds license management/SSO and support. [Pricing](https://aptakube.com/pricing) | Free small-cluster use removes a simple Ocular price advantage; compete on concrete workflows and unrestricted scale. |
 | K8Studio | Basic $9/month, Professional $17/month in the observed monthly view; Airtight $187/year; 15-day trial. Advanced visual investigation, AI, security/RBAC and Helm support its higher tier. [Pricing](https://k8studio.io/pricing/), [AI workflow](https://k8studio.io/ai-assistant/) | Reviewed AI operations and local models already exist in direct competitors. Compare scope, revocation and stale-plan behavior instead of claiming uniqueness. |
 | Kubernetic | Desktop €60/year; on-prem team app €8/user/month. Team includes organizational/integration features. Its pricing/docs differ on Tekton availability; do not claim confirmed parity there. [Pricing](https://www.kubernetic.com/pricing), [docs](https://docs.kubernetic.com/) | Private chart repositories and a clear path from personal tool to team workflow matter. |
 | Docker / OrbStack | Docker annual equivalents: Pro $9, Team $15, Business $24/user/month; runtime/service bundles make direct GUI price comparisons misleading. OrbStack Pro $8/user/month billed annually, with commercial use and support/debugging value. [Docker](https://www.docker.com/pricing/), [OrbStack](https://orbstack.dev/pricing) | Installation, runtime compatibility and daily convenience deserve investment. Do not infer an unverified paid boundary for Docker Debug. |
@@ -99,16 +99,16 @@ P0 means a baseline or adoption prerequisite. P1/P2 are proposed validation orde
 | **P0 — First successful connection** | Clear requirements, reliable packages, existing context discovery and actionable credential-helper/RBAC errors. | Fresh isolated OS profiles; measure installation failures and time to first useful inspection. Signing/notarization/updater changes need their own release scope. |
 | **P1 — Explain workload failure** | A focused trail from rollout to pod condition, events, previous exit and relevant bounded logs. | Seed image-pull, probe, OOM and scheduling failures; measure correct diagnosis and false confidence. Show missing evidence; extend existing views instead of adding a generic Overview. |
 | **P1 — Incident evidence bundle** | Preview and locally export selected status/events/manifests/log excerpts with timestamps and coverage for handoff. | Recipient diagnoses a fixture with fewer follow-up requests. Test secret fixtures; excluding Secret objects alone cannot sanitize logs/config. |
-| **P1 — Compare environments** | Explicitly pair staging/production resources; compare images, probes, limits and normalized YAML with unmistakable target identity. | Find planted differences faster than context switching. Distinguish absent from forbidden/unavailable; no automatic cross-target writes. |
+| **Implemented baseline — Compare environments** | Explicitly pair staging/production resources; compare images, probes, limits and normalized YAML with unmistakable target identity. | Find planted differences faster than context switching. Distinguish absent from forbidden/unavailable; no automatic cross-target writes. |
 | **P1 — Custom columns and view presets** | Preview bounded JSONPath-derived fields and save common investigation layouts, especially for CRDs. | Observe reuse in a second session; measure detail-panel openings avoided. Cap expression cost and preserve masking. |
 | **P1 — GitOps ownership awareness** | Show controller/source/revision clues before an edit that may be reconciled away; link to the durable source when known. | Users choose appropriate edit paths for managed/unmanaged fixtures. Inference is labeled; start with inspection rather than automatic Git actions. |
 | **P1 — Change receipt** | Record the requested action, exact target/version, known result and subsequent observed health for the operator. | Reconstruct an earlier failed operation and decide whether retry is safe. Exclude secrets; rollback is operation-specific, not universal Undo. |
 | **P1 — Expiring task access** | Grant a bounded investigation scope for a visible duration; pause/revoke from one place and inspect pending changes. | Measure overgranting and users' ability to explain remaining access. Expiry can extend current grants; authenticated per-agent credentials require a separate design. |
-| **P2 — Preserve investigation context** | Pinned details, log filters and restorable layouts reduce navigation repetition. | Three-workload task-switch exercise. Restore disconnected; do not replay terminal commands or silently persist sensitive drafts. |
-| **P2 — Explain reachability** | Trace Ingress/Gateway → Service → EndpointSlice → ready Pods and show broken selectors/ports. | Seed selector, port and readiness faults. API relationships do not prove packet delivery or every network-policy effect. |
+| **Implemented baseline — Preserve investigation context** | Pinned details, log filters and restorable layouts reduce navigation repetition. | Three-workload task-switch exercise. Restore disconnected; do not replay terminal commands or silently persist sensitive drafts. |
+| **P1 — Explain reachability** | Trace Ingress/Gateway → Service → EndpointSlice → ready Pods and show broken selectors/ports. | Seed selector, port and readiness faults. API relationships do not prove packet delivery or every network-policy effect. |
 | **P2 — Compose-to-cluster comparison** | Explicitly pair a local service and deployed workload; compare image, environment names, mounts, ports and checks. | Interview engineers using both, then test a narrow prototype. Avoid exposing environment values or promising automatic equivalent conversion. |
 | **P2 — Observed change timeline** | Bounded local history explains a transient failure after it disappears. | Reproduce short-lived changes and reconstruct only recorded evidence. Mark observation gaps, UID replacement and retention limits; no retrospective audit claim. |
-| **P2 — Evidence-based resource tuning** | Show requests/limits against measured usage with source and sample duration. | Test whether users know when evidence is insufficient to change limits. Instant samples cannot justify long-term rightsizing or dollar savings. |
+| **P1 after historical metrics — Evidence-based resource tuning** | Show requests/limits against measured usage with source and sample duration. | Test whether users know when evidence is insufficient to change limits. Instant samples cannot justify long-term rightsizing or dollar savings. |
 | **P2 — Safe shared runbooks** | Declarative view/filter/action templates transfer a team's troubleshooting knowledge. | A newcomer solves a fixture with less help. Imports never grant rights or execute commands; defer arbitrary plugin/shell execution. |
 
 Narrow public demand signals support testing manifest review, configurable columns and workload logs, but do not establish market-wide demand or today's unfixed state: [Freelens manifest-review request](https://github.com/freelensapp/freelens-ai-extension/issues/87), [custom columns](https://github.com/freelensapp/freelens/issues/2244), [aggregated logs](https://github.com/freelensapp/freelens/issues/687). Ocular already has relevant logs/review primitives; demonstrate and improve them before adding another generic chat interface.
@@ -121,19 +121,28 @@ learning path are implemented; current behavior is documented in
 learner studies and native-speaker review have not been performed; implemented
 checks do not establish production competence or validated educational outcomes.
 
-The recommended sequence is diagnosis and configuration/reliability checks, then
-localized resource help, then one introductory interactive lesson. Help precedes
-lessons so both reuse the same explanations. GitOps context, network diagnosis,
-custom views and multi-target/log workflows remain important daily-work priorities.
-A beginner-acquisition focus can move the first lesson earlier; demand is not yet
-validated. Generic create/apply is a capability gap, not evidence that it should
-lead the roadmap. No market-wide frequency of manual creation has been measured.
+The next learning direction is to move practice into **educational connections**:
+prepared local scenarios use the ordinary Ocular workspace, while instructions,
+current goals, hints and progress appear in overlays or a learning panel. A
+floating button/ball in the lower-right corner is a proposed launcher, not a
+finished interaction design. Existing lesson and reference content should be
+adapted to this flow rather than presenting a separate practice interface.
+The target must be clearly educational and isolated from real infrastructure;
+creation, reset, progression and unsaved-work behavior need explicit acceptance
+criteria before implementation. This is the owner's recorded redesign direction,
+not an implementation started by updating the roadmap.
+
+GitOps context, network diagnosis, custom views and multi-target/log workflows
+remain daily-work priorities. Independent learner validation is still needed.
+Generic create/apply is a capability gap, not evidence that it should lead the
+roadmap; no market-wide frequency of manual creation has been measured.
 
 | Priority | Planned outcome | Boundary and validation |
 | --- | --- | --- |
 | Implemented | Offline contextual help for built-in Kubernetes resource types, in all eight application languages | A “What is this?” entry beside the kind explains purpose, relationships, common misconceptions and key fields, with links to related concepts and official documentation. Preserve technical identifiers. Validate understanding and locale completeness. |
 | Implemented | One interactive introduction: Deployment, ReplicaSet, Pod and reconciliation | Start without kubeconfig, Docker, cloud accounts or a real cluster. Use clearly labeled synthetic data through familiar Ocular views. Delete a simulated Pod, observe replacement and find its controller. Success means independently explaining and navigating the relationship, not merely clicking through. |
 | Implemented | Bounded task-based learning path | Five modules cover selectors/ports, readiness/startup, image pull/CrashLoop, ConfigMap/Secret references and requests/limits/scheduling. Each has two guided tasks and two new checks requiring evidence, diagnosis, repair and observed result. Authored snapshots are not a general Kubernetes simulator; independent learning outcomes remain unverified. |
+| Planned redesign | Educational connections in the normal workspace with overlay guidance and a learning panel | Prepared local scenarios; unmistakable training identity; reuse existing explanations/lessons. Evaluate a lower-right floating launcher, keyboard access, reset and progression without affecting real targets. |
 | P2 | Small resource builder and manifest preparation | Optional Deployment plus Service form, YAML preview and export for a project; reviewed cluster application is separate. Do not prioritize a large visual editor without demonstrated demand. |
 
 Help content ships locally without mandatory AI or runtime translation. Built-in
@@ -161,7 +170,8 @@ forms, other kinds and reverse form conversion are later scope, not part of the
 first proposal. Existing Secret and Prepare/Run boundaries remain mandatory.
 
 Operational proposals: `spk-ocular-learning-resource-help`,
-`spk-ocular-learning-first-lesson`, `spk-ocular-learning-path`, and the existing
+`spk-ocular-learning-first-lesson`, `spk-ocular-learning-path`,
+`spk-ocular-learning-connections`, and the existing
 `spk-ocular-competitive-resource-create`. Task cards hold acceptance and status;
 this document records product direction only.
 
