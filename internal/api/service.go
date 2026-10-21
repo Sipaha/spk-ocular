@@ -43,6 +43,7 @@ type Service struct {
 	store         *store.Store
 	em            *events.Emitter
 	opts          Options
+	viewPresetsMu sync.Mutex
 	favoritesMu   sync.Mutex
 	navSectionsMu sync.Mutex
 

@@ -1,3 +1,8 @@
+import {usePresets} from '../presets/usePresets'
+import {PresetDialog} from '../presets/PresetDialog'
+import {columnsFor,rowsFor,labelState,labelID} from '../presets/model'
+import {Select} from './Select'
+import type {ViewPreset,SortSpec} from '../api/types'
 import {reuseNodeTool} from '../actions/reuseNodeTool'
 import {ResourceHelpButton} from '../learning/ResourceHelp'
 import { WorkspaceToolbar } from './WorkspaceToolbar'
@@ -787,7 +792,14 @@ function ResourcePage(props: {
 }) {
   const { pageKey, onHalted, client, hub, target, kind, scope, scopes, scopeMenu, onScope, hasLogs, onLogs, hasExec, onTerminal, hasForward, actionsOf, onAction, onArgoApplication, onFluxResource, hasFlux, onBulk, eventsKindOf, editableOf, valuesOf, kindTitleOf, filterReq, openReq, memoKey: tkey } = props
   const scopeKey = JSON.stringify(scope)
-  const query = useMemo(() => ({ kind: kind.id, scope: JSON.parse(scopeKey) as ScopeSel }), [kind.id, scopeKey])
+  const presets=usePresets(client,target.provider,kind.id,!!kind.labelColumns&&target.provider==='kubernetes')
+  const activePreset=presets.registry.presets.find(p=>p.name===presets.registry.active)
+  const keysKey=JSON.stringify(activePreset?.labels ?? [])
+  const query = useMemo(() => {const labelKeys=JSON.parse(keysKey) as string[];return {kind:kind.id,scope:JSON.parse(scopeKey) as ScopeSel,...(labelKeys.length?{labelKeys}:{})}},[kind.id,scopeKey,keysKey])
+  const [presetDialog,setPresetDialog]=useState(false)
+  const [presetSort,setPresetSort]=useState<{col:string;desc:boolean;seq:number}>()
+  const [userSort,setUserSort]=useState<SortSpec>()
+  const [appliedPreset,setAppliedPreset]=useState<string|null>(null)
   const view = useView(hub, target.provider, target.id, query)
   const [contentShown, setContentShown] = useState(false)
   const initialLoading = !contentShown && view.status.state === 'loading' && view.rows.length === 0
@@ -843,7 +855,16 @@ function ResourcePage(props: {
   useEffect(() => lend('rows', view.rows), [view.rows])
   const baseColumns=view.kind?.columns??kind.columns
  const fluxColumn=hasFlux&&['apps/deployments','apps/statefulsets','apps/daemonsets'].includes(kind.id)
- const columns=fluxColumn?[...baseColumns,{id:'flux',title:'Flux',type:'text' as const,width:180}]:baseColumns
+ const originalColumns=useMemo(()=>fluxColumn?[...baseColumns,{id:'flux',title:'Flux',type:'text' as const,width:180}]:baseColumns,[baseColumns,fluxColumn])
+ const columns=useMemo(()=>columnsFor(originalColumns,activePreset),[originalColumns,activePreset])
+ const tableRows=useMemo(()=>rowsFor(view.rows,originalColumns,columns,activePreset),[view.rows,originalColumns,columns,activePreset])
+ const activeKey=JSON.stringify([presets.registry.revision,presets.registry.active])
+ if(presets.ready&&appliedPreset!==activeKey){
+   setAppliedPreset(activeKey)
+   setUserSort(activePreset?.sort)
+   if(activePreset){setFilter(activePreset.filter);setPresetSort({col:activePreset.sort?.column??'name',desc:!!activePreset.sort?.desc,seq:presets.registry.revision+1})}
+ }
+ const savePreset=async(p:ViewPreset)=>{const list=presets.registry.presets.filter(x=>x.name!==p.name);return presets.save({...presets.registry,active:p.name,presets:[...list,p]})}
   const [visibleRows, setVisibleRows] = useState<string[]>([])
   // A sample of a row since changed (a service's last replica stopped) is
   // not shown as current.
@@ -859,8 +880,8 @@ function ResourcePage(props: {
   const [markedAll, setMarked] = useState<ReadonlySet<string>>(() => new Set())
   const shownRows = useMemo(() => {
     const f = filter.trim()
-    return f ? view.rows.filter((r) => matchesRow(r, f)) : view.rows
-  }, [view.rows, filter])
+    return f ? tableRows.filter((r) => matchesRow(r, f)) : tableRows
+  }, [tableRows, filter])
   const marked = useMemo(() => {
     const shown = new Set(shownRows.map((r) => r.id))
     const kept = [...markedAll].filter((id) => shown.has(id))
@@ -937,6 +958,11 @@ function ResourcePage(props: {
             {t('agents.scopeAccess')}
           </button>
         )}
+        {kind.labelColumns&&target.provider==='kubernetes'&&<div className="flex min-w-0 items-center gap-1">
+          <Select label={t('presets.select')} value={presets.registry.active} disabled={!presets.ready||presets.busy} options={[{value:'',label:t('presets.default')},...presets.registry.presets.map(p=>({value:p.name,label:p.name}))]} onChange={active=>{void presets.save({...presets.registry,active})}} className="max-w-40 text-xs"/>
+          <button type="button" data-view-presets disabled={!presets.ready||presets.busy} onClick={()=>setPresetDialog(true)} className="shrink-0 rounded border border-line px-2 py-1 text-xs hover:bg-hover disabled:opacity-50">{t('presets.title')}</button>
+          {presets.registry.active&&<button type="button" disabled={presets.busy} aria-label={t('presets.remove')} title={t('presets.remove')} onClick={()=>{void presets.save({...presets.registry,active:'',presets:presets.registry.presets.filter(p=>p.name!==presets.registry.active)})}} className="rounded px-2 py-1 text-xs hover:bg-hover">×</button>}
+        </div>}
         <ListRefreshProgress view={view} initial={initialLoading}/>
         {view.resync && !view.cancelled && <ResyncButton client={client} viewId={view.viewId} loading={view.status.state === 'loading'} />}
         <label className="resource-filter field-shell">
@@ -962,6 +988,8 @@ function ResourcePage(props: {
           />
         </label>
       </WorkspaceToolbar>
+      {presets.error&&<div role="alert" className="flex flex-wrap items-center gap-2 px-3 py-1 text-xs text-danger">{t(presets.error==='load'?'presets.loadError':'presets.saveError')}<button type="button" onClick={presets.reload} className="underline">{t('presets.reload')}</button></div>}
+      {presetDialog&&<PresetDialog target={target} hub={hub} query={query} base={originalColumns} registry={presets.registry} filter={filter} sort={userSort??activePreset?.sort??(leftSort?{column:leftSort.col,desc:leftSort.desc}:view.kind?.sort??kind.sort)} busy={presets.busy} onSave={savePreset} onClose={()=>setPresetDialog(false)}/>}
       {!view.cancelled && !initialLoading && view.status.state !== 'ready' && <StatusBanner state={view.status.state} cls={view.status.class} message={view.status.message} />}
       {!view.cancelled && !initialLoading && view.status.coverage && <CoverageNote coverage={view.status.coverage} notCovered={view.kind?.notCovered ?? kind.notCovered} compact={scope.mode === 'some'} loading={view.status.state === 'loading'} />}
       {!view.cancelled && !initialLoading && metrics && <MetricsNote metrics={metrics} />}
@@ -972,8 +1000,13 @@ function ResourcePage(props: {
           areaFocus
           emptyMessage={initialLoading ? <ListLoading view={view} label={t('table.loading', {kind: kindLabel(target.provider, kind)})} /> : view.status.state === 'ready' ? view.rows.length === 0 ? emptyTableText(view.status.coverage) : t('nav.noMatches') : null}
           columns={columns}
-          renderCell={(row,column)=>column.id==='flux'?<FluxWorkloadStatus client={client} resource={row} scope={scope} onGo={onFluxResource}/>:undefined}
-          rows={view.rows}
+          renderCell={(row,column)=>{
+            if(column.id==='flux')return <FluxWorkloadStatus client={client} resource={row} scope={scope} onGo={onFluxResource}/>
+            const key=activePreset?.labels.find(k=>labelID(k)===column.id)
+            if(key!==undefined){const state=labelState(row,key);if(state!=='value')return <span className="text-fg-subtle" title={t(`presets.${state}`)}>{t(`presets.${state}`)}</span>;if(row.labels?.[key]?.value==='')return <span className="text-fg-subtle">{t('presets.empty')}</span>}
+            return undefined
+          }}
+          rows={tableRows}
           hideScope={scope.mode === 'one'}
           filter={filter}
           selected={selected}
@@ -1000,7 +1033,8 @@ function ResourcePage(props: {
           onMarked={setMarked}
           defaultSort={view.kind?.sort ?? kind.sort}
           initialSort={leftSort}
-          onSort={(s) => rememberSort(tkey, kind.id, s)}
+          requestedSort={presetSort}
+          onSort={(s) => {setUserSort({column:s.col,desc:s.desc});rememberSort(tkey, kind.id, s)}}
           initialWidths={leftWidths}
           onWidths={(widths) => {
             rememberPage(tkey, { columnWidths: { ...memoOf(tkey).columnWidths, [kind.id]: widths } })

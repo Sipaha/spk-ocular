@@ -155,6 +155,7 @@ export interface Cell {
 }
 
 export interface Row {
+  labels?: Record<string, {state: 'value' | 'missing' | 'unavailable' | 'limit'; value?: string}>
  fluxTracking?:import("../fluxcd/types").FluxTracking
   id: string
   /** Provider revision: changes with any change of the object. */
@@ -167,6 +168,7 @@ export interface Row {
 export type ColumnType = 'text' | 'number' | 'age' | 'status' | 'ratio' | 'cpu' | 'bytes'
 
 export interface Column {
+  hidden?: boolean
   id: string
   title: string
   type: ColumnType
@@ -176,6 +178,7 @@ export interface Column {
 }
 
 export interface KindDescriptor {
+  labelColumns?: boolean
   workspace?: string
   id: string
   title: string
@@ -540,6 +543,7 @@ export interface ScopeSel {
 }
 
 export interface Query {
+  labelKeys?: string[]
   kind: string
   scope: ScopeSel
   subject?: Ref
@@ -989,3 +993,7 @@ export interface SecurityFinding {
  id: string; ref: Ref; kindTitle: string; category: 'configuration' | 'network' | 'rbac' | 'cve'; severity: 'critical' | 'high' | 'medium' | 'low' | 'unknown'
  rule: string; container?: string; evidence: string; title?: string; image?: string; package?: string; installed?: string; fixed?: string; scanner?: string; scannedAt?: number; workload?: string
 }
+
+export interface ViewPreset { name: string; labels: string[]; hidden: string[]; order: string[]; filter: string; sort?: SortSpec }
+export interface ViewPresetRegistry { version: number; revision: number; active: string; presets: ViewPreset[] }
+export interface ViewPresetsRequest { provider: string; kind: string; registry?: ViewPresetRegistry }

@@ -26,6 +26,7 @@ type viewWatch struct {
 	c            *informerCache
 	def          *kindDef
 	sink         provider.Sink
+	labelKeys    []string
 	target       string
 	now          func() time.Time
 	progressBase int64
@@ -64,6 +65,7 @@ func (w *viewWatch) row(u *unstructured.Unstructured) (core.Row, time.Time) {
 	}
 	return core.Row{
 		FluxTracking: fluxTracking(u),
+		Labels:       projectLabels(u, w.labelKeys),
 		ID:           id,
 		Rev:          u.GetResourceVersion(),
 		Ref: core.Ref{

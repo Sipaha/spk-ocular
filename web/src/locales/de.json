@@ -2,6 +2,31 @@
 
 
   "ui": {
+    "presets.title": "Label-Spalten",
+    "presets.select": "Gespeicherte Ansicht",
+    "presets.default": "Standardansicht",
+    "presets.remove": "Gespeicherte Ansicht löschen",
+    "presets.help": "Nur exakte metadata.labels-Schlüssel. Bis zu 8 Schlüssel mit je 253 Byte; 256 Byte pro Wert. Bis zu 4 Ansichten pro provider/kind. Keine annotations oder JSONPath.",
+    "presets.name": "Ansichtsname",
+    "presets.keys": "Label-Schlüssel · einer pro Zeile",
+    "presets.invalid": "Bis zu 8 eindeutige exakte Schlüssel mit je 1–253 Byte ohne Leerraum.",
+    "presets.full": "Vier Ansichten gespeichert. Vorhandenen Namen aktualisieren oder eine Ansicht löschen.",
+    "presets.columns": "Sichtbare Spalten und Reihenfolge",
+    "presets.up": "{name} nach oben",
+    "presets.down": "{name} nach unten",
+    "presets.preview": "Vorschau · bis zu 3 geladene Zeilen",
+    "presets.capture": "Speichert aktuellen Filter und Sortierung. Namespace-Auswahl und Editorentwürfe bleiben erhalten.",
+    "presets.noRows": "Keine geladenen Zeilen",
+    "presets.save": "Speichern und anwenden",
+    "presets.loadError": "Ansichten konnten nicht gelesen werden. Vorhandene Daten bleiben erhalten.",
+    "presets.saveError": "Ansicht nicht gespeichert. Für neuere Änderungen neu laden und erneut versuchen.",
+    "presets.reload": "Ansichten neu laden",
+    "presets.missing": "Fehlt",
+    "presets.unavailable": "Nicht verfügbar",
+    "presets.limit": "Wertlimit",
+    "presets.empty": "Leerer Wert",
+    "presets.nameError": "Verwenden Sie einen nicht leeren Namen mit bis zu 64 UTF-8-Byte ohne Steuerzeichen.",
+
  "network.selector_mismatch": "Der Endpoint-Pod entspricht nicht dem Service-Selektor.",
 
  "network.title": "Deklarierter Netzwerkpfad",

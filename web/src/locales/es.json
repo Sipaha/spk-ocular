@@ -2,6 +2,31 @@
 
 
   "ui": {
+    "presets.title": "Columnas de labels",
+    "presets.select": "Vista guardada",
+    "presets.default": "Vista predeterminada",
+    "presets.remove": "Eliminar vista guardada",
+    "presets.help": "Solo claves exactas de metadata.labels. Hasta 8 claves de 253 bytes; 256 bytes por valor. Hasta 4 vistas por provider/kind. Sin annotations ni JSONPath.",
+    "presets.name": "Nombre de la vista",
+    "presets.keys": "Claves de labels · una por línea",
+    "presets.invalid": "Use hasta 8 claves exactas únicas de 1–253 bytes, sin espacios.",
+    "presets.full": "Ya hay cuatro vistas. Actualice un nombre existente o elimine una vista.",
+    "presets.columns": "Columnas visibles y orden",
+    "presets.up": "Subir {name}",
+    "presets.down": "Bajar {name}",
+    "presets.preview": "Vista previa · hasta 3 filas cargadas",
+    "presets.capture": "Guarda el filtro y orden actuales. Conserva namespaces y borradores del editor.",
+    "presets.noRows": "No hay filas cargadas",
+    "presets.save": "Guardar y aplicar",
+    "presets.loadError": "No se pudieron leer las vistas. Se conservan los datos existentes.",
+    "presets.saveError": "No se guardó la vista. Recargue para comprobar cambios recientes y reintente.",
+    "presets.reload": "Recargar vistas",
+    "presets.missing": "Ausente",
+    "presets.unavailable": "No disponible",
+    "presets.limit": "Límite del valor",
+    "presets.empty": "Valor vacío",
+    "presets.nameError": "Use un nombre no vacío de hasta 64 bytes UTF-8, sin caracteres de control.",
+
  "network.selector_mismatch": "El Pod del endpoint no coincide con el selector del Service.",
 
  "network.title": "Ruta de red declarada",

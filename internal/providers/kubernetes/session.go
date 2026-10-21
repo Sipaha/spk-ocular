@@ -394,6 +394,12 @@ func (s *session) CheckConnection(ctx context.Context) error {
 }
 
 func (s *session) Watch(q provider.Query, sink provider.Sink) (func(), error) {
+	if err := core.ValidLabelKeys(q.LabelKeys); err != nil {
+		return nil, &provider.Error{Class: provider.ClassInvalid, Message: err.Error()}
+	}
+	if len(q.LabelKeys) > 0 && (s.kind(q.Kind) == nil || s.kind(q.Kind).virtual) {
+		return nil, &provider.Error{Class: provider.ClassUnsupported, Message: "label projection requires a direct resource kind"}
+	}
 	def := s.kind(q.Kind)
 	switch {
 	case def == nil && s.KindRemoved(q.Kind):
@@ -453,7 +459,7 @@ func (s *session) watchDef(def *kindDef, q provider.Query, selector string, sink
 	if !ok {
 		return nil, &provider.Error{Class: provider.ClassGone, Message: "session closed"}
 	}
-	w := &viewWatch{c: c, def: def, sink: sink, target: s.target, now: s.now, done: make(chan struct{}), deadlines: map[string]deadline{}}
+	w := &viewWatch{labelKeys: append([]string(nil), q.LabelKeys...), c: c, def: def, sink: sink, target: s.target, now: s.now, done: make(chan struct{}), deadlines: map[string]deadline{}}
 	c.mu.Lock()
 	if c.observed && c.inf.HasSynced() {
 		if n := c.progress.snapshot(); n != nil {

@@ -2,6 +2,31 @@
 
 
   "ui": {
+    "presets.title": "Colonnes de labels",
+    "presets.select": "Vue enregistrée",
+    "presets.default": "Vue par défaut",
+    "presets.remove": "Supprimer la vue enregistrée",
+    "presets.help": "Clés exactes de metadata.labels uniquement. Jusqu’à 8 clés de 253 octets ; 256 octets par valeur. Jusqu’à 4 vues par provider/kind. Sans annotations ni JSONPath.",
+    "presets.name": "Nom de la vue",
+    "presets.keys": "Clés de labels · une par ligne",
+    "presets.invalid": "Jusqu’à 8 clés exactes uniques de 1–253 octets, sans espaces.",
+    "presets.full": "Quatre vues sont enregistrées. Modifiez un nom existant ou supprimez une vue.",
+    "presets.columns": "Colonnes visibles et ordre",
+    "presets.up": "Monter {name}",
+    "presets.down": "Descendre {name}",
+    "presets.preview": "Aperçu · jusqu’à 3 lignes chargées",
+    "presets.capture": "Enregistre le filtre et le tri actuels. Conserve les namespaces et les brouillons de l’éditeur.",
+    "presets.noRows": "Aucune ligne chargée",
+    "presets.save": "Enregistrer et appliquer",
+    "presets.loadError": "Lecture des vues impossible. Les données existantes sont conservées.",
+    "presets.saveError": "Vue non enregistrée. Rechargez pour vérifier les modifications récentes, puis réessayez.",
+    "presets.reload": "Recharger les vues",
+    "presets.missing": "Absent",
+    "presets.unavailable": "Indisponible",
+    "presets.limit": "Limite de valeur",
+    "presets.empty": "Valeur vide",
+    "presets.nameError": "Utilisez un nom non vide de 64 octets UTF-8 au maximum, sans caractères de contrôle.",
+
  "network.selector_mismatch": "Le Pod de l’endpoint ne correspond pas au sélecteur du Service.",
 
  "network.title": "Chemin réseau déclaré",

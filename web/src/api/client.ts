@@ -1,3 +1,4 @@
+import type { ViewPresetsRequest, ViewPresetRegistry } from './types'
 import type {NetworkPath} from '../network/types'
 import type {Diagnosis} from '../diagnosis/types'
 import type {FluxRequest,FluxSnapshot} from '../fluxcd/types'
@@ -69,6 +70,7 @@ export interface Client {
   /** Usage for an open view's rows; a missing metrics API is a status, not a rejection. */
   /** Usage of the rows the page shows; signal abandons the request (the server stops waiting too). */
   getMetrics(viewId: string, rowIds: string[], signal?: AbortSignal): Promise<MetricsView>
+  viewPresets(req: ViewPresetsRequest): Promise<ViewPresetRegistry>
   getTargetState(provider: string, target: string): Promise<Record<string, string>>
   setTargetState(provider: string, target: string, key: string, value: string): Promise<void>
   getNavSections(): Promise<Record<string, boolean>>
@@ -213,6 +215,7 @@ export const httpClient: Client = {
   compareResources: (req,signal) => post('CompareResources',req,signal),
   getResource: (ref) => post('GetResource', ref),
   getMetrics: (viewId, rowIds, signal) => post('GetMetrics', { viewId, rowIds, seq: nextMetricsSeq() }, signal),
+  viewPresets: req => post('ViewPresets',req),
   getTargetState: (provider, target) => post('GetTargetState', { provider, target }),
   setTargetState: (provider, target, key, value) => done(post('SetTargetState', { provider, target, key, value })),
   getNavSections: () => post('GetNavSections', {}),
@@ -368,6 +371,7 @@ export const wailsClient: Client = {
     signal?.addEventListener('abort', onAbort, { once: true })
     return wcallAbortable<MetricsView>(signal, 'GetMetrics', { viewId, rowIds, seq }).finally(() => signal?.removeEventListener('abort', onAbort))
   },
+  viewPresets: req => wcall('ViewPresets',req),
   getTargetState: (provider, target) => wcall('GetTargetState', provider, target),
   setTargetState: (provider, target, key, value) => wcall('SetTargetState', provider, target, key, value),
   getNavSections: () => wcall('GetNavSections'),

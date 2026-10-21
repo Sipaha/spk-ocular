@@ -54,6 +54,7 @@ interface Props {
   /** The kind's first sort (else by the first column). */
   defaultSort?: SortSpec
   /** The sort the table was left with (a column id), before defaultSort; onSort hears each chosen. */
+  requestedSort?: {col: string; desc: boolean; seq: number}
   initialSort?: { col: string; desc: boolean }
   onSort?: (s: { col: string; desc: boolean }) => void
   initialWidths?: Record<string, number>
@@ -135,7 +136,7 @@ export function matchesRow(r: Row, f: string): boolean {
   return r.cells.some((c) => (c.text ?? '').toLowerCase().includes(needle)) || (r.health.reason ?? '').toLowerCase().includes(needle)
 }
 
-export function ResourceTable({ appearance, renderCell, ariaLabel = t('table.resources'), emptyMessage, columns, rows, hideScope, filter, selected, reveal, onSelect, onOpen, onLogs, onTerminal, metrics, onVisibleRows, rowMenu, onDelete, defaultSort, initialSort, onSort, initialWidths, onWidths, areaFocus, marked, onMarked }: Props) {
+export function ResourceTable({ appearance, renderCell, ariaLabel = t('table.resources'), emptyMessage, columns, rows, hideScope, filter, selected, reveal, onSelect, onOpen, onLogs, onTerminal, metrics, onVisibleRows, rowMenu, onDelete, defaultSort, requestedSort, initialSort, onSort, initialWidths, onWidths, areaFocus, marked, onMarked }: Props) {
   "use no memo"; // TanStack Virtual exposes mutable state; keep its reads outside automatic memoization.
   const now = useNow(10_000)
   const [widths, setWidths] = useState<Record<string, number>>(initialWidths ?? {})
@@ -168,6 +169,12 @@ export function ResourceTable({ appearance, renderCell, ariaLabel = t('table.res
     setColumnIDs(columns.map(c => c.id))
     setSort({...sort, col: next >= 0 ? next : Math.max(0, fallback), desc: !columnIDs.length && !sort.clicks ? initialSort?.desc ?? !!defaultSort?.desc : next >= 0 ? sort.desc : !!defaultSort?.desc})
   }
+  const [appliedSort,setAppliedSort] = useState(0)
+  if(requestedSort && requestedSort.seq !== appliedSort){
+    const i=columns.findIndex(c=>c.id===requestedSort.col)
+    setAppliedSort(requestedSort.seq)
+    setSort({col:Math.max(0,i),desc:requestedSort.desc,clicks:0})
+  }
   const sortCol = columns[sort.col]?.id
   useEffect(() => {
     if (sort.clicks && sortCol) onSort?.({ col: sortCol, desc: sort.desc })
@@ -177,7 +184,7 @@ export function ResourceTable({ appearance, renderCell, ariaLabel = t('table.res
   const thenCol = defaultSort?.then ? columns.findIndex((c) => c.id === defaultSort.then) : -1
   const hasStatus = columns.some((c) => c.type === 'status')
   const visibleCols = useMemo(
-    () => columns.map((c, i) => ({ c, i })).filter(({ c }) => !(hideScope && c.scopeColumn)),
+    () => columns.map((c, i) => ({ c, i })).filter(({ c }) => !c.hidden && !(hideScope && c.scopeColumn)),
     [columns, hideScope],
   )
   // Metric columns take their values from the metrics poll, not the row.
@@ -372,10 +379,10 @@ export function ResourceTable({ appearance, renderCell, ariaLabel = t('table.res
               onClick={() => setSort((s) => ({ col: i, desc: s.col === i ? !s.desc : false, clicks: s.clicks + 1 }))}
               className={['h-full w-full truncate py-1.5 text-left hover:text-fg', appearance === 'detail' ? 'px-2' : 'px-3', isNumeric(c) ? 'text-right' : ''].join(' ')}
             >
-              {columnLabel(c.title)}
+              {(c.id.startsWith('metadata.labels:') ? c.title : columnLabel(c.title))}
               {sort.col === i && <span className="ml-1">{sort.desc ? '↓' : '↑'}</span>}
             </button>
-            <ColumnResize column={columnLabel(c.title)} variable={`--column-${i}`} value={widths[c.id] ?? least(c)} onDone={(width) => resizeColumn(c.id, width)} />
+            <ColumnResize column={(c.id.startsWith('metadata.labels:') ? c.title : columnLabel(c.title))} variable={`--column-${i}`} value={widths[c.id] ?? least(c)} onDone={(width) => resizeColumn(c.id, width)} />
             </div>
           ))}
         </div>

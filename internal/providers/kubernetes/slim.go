@@ -2,6 +2,7 @@ package kubernetes
 
 import (
 	"encoding/json"
+	"errors"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -33,13 +34,17 @@ func (o *slimObject) DeepCopyObject() runtime.Object {
 
 // slim converts a trimmed unstructured object.
 func slim(u *unstructured.Unstructured) (*slimObject, error) {
+	labels, _, labelErr := unstructured.NestedStringMap(u.Object, "metadata", "labels")
+	if labelErr != nil {
+		return nil, errors.New("invalid metadata.labels")
+	}
 	o := &slimObject{
 		TypeMeta: metav1.TypeMeta{APIVersion: u.GetAPIVersion(), Kind: u.GetKind()},
 		ObjectMeta: metav1.ObjectMeta{
 			Name: u.GetName(), Namespace: u.GetNamespace(), UID: u.GetUID(),
 			ResourceVersion: u.GetResourceVersion(), Generation: u.GetGeneration(),
 			CreationTimestamp: u.GetCreationTimestamp(), DeletionTimestamp: u.GetDeletionTimestamp(),
-			Labels: u.GetLabels(), OwnerReferences: u.GetOwnerReferences(),
+			Labels: labels, OwnerReferences: u.GetOwnerReferences(),
 		},
 	}
 	body := make(map[string]any, len(u.Object))

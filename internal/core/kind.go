@@ -46,6 +46,7 @@ func NumCell(n float64, text string) Cell { return Cell{Text: text, Num: &n} }
 func TimeCell(unixMs int64) Cell { return Cell{Time: unixMs} }
 
 type KindDescriptor struct {
+	LabelColumns bool `json:"labelColumns,omitempty"`
 	// Workspace selects a UI-only specialized workspace; empty means resources.
 	Workspace string `json:"workspace,omitempty"`
 	ID        string `json:"id"`

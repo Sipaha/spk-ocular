@@ -255,3 +255,7 @@ func (w *API) DiagnoseResource(ctx context.Context, ref core.Ref) (core.Diagnosi
 func (w *API) ResourceNetworkPath(ctx context.Context, ref core.Ref) (core.NetworkPath, error) {
 	return w.a.ResourceNetworkPath(api.UIContext(ctx), ref)
 }
+
+func (w *API) ViewPresets(req api.ViewPresetsRequest) (api.ViewPresetRegistry, error) {
+	return w.a.ViewPresets(api.UIContext(context.Background()), req)
+}

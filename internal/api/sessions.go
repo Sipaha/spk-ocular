@@ -448,6 +448,12 @@ func (s *Service) ListScopes(ctx context.Context, providerID, target string) (Sc
 }
 
 func (s *Service) OpenView(ctx context.Context, req OpenViewRequest) (ViewInfo, error) {
+	if err := core.ValidLabelKeys(req.Query.LabelKeys); err != nil {
+		return ViewInfo{}, coded(CodeBadRequest, err)
+	}
+	if len(req.Query.LabelKeys) > 0 && !fromUI(ctx) {
+		return ViewInfo{}, coded("forbidden", errors.New("label projection is available only to the application UI"))
+	}
 	if !req.Query.Scope.Valid() {
 		return ViewInfo{}, coded(CodeBadRequest, errors.New("invalid scope selector"))
 	}
@@ -473,6 +479,9 @@ func (s *Service) OpenView(ctx context.Context, req OpenViewRequest) (ViewInfo, 
 			return ViewInfo{}, coded(CodeRemoved, fmt.Errorf("%s is no longer served", req.Query.Kind))
 		}
 		return ViewInfo{}, coded(CodeUnsupported, fmt.Errorf("unknown kind %q", req.Query.Kind))
+	}
+	if len(req.Query.LabelKeys) > 0 && !kind.LabelColumns {
+		return ViewInfo{}, coded(CodeUnsupported, errors.New("kind does not support label projection"))
 	}
 	q := req.Query
 	q.Schema = 0 // only the session binds a view to columns

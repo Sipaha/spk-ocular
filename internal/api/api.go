@@ -74,6 +74,7 @@ type API interface {
 	GetResource(ctx context.Context, ref core.Ref) (*core.Resource, error)
 	// GetTargetState / SetTargetState keep small per-target UI state (last
 	// kind and scope) as opaque JSON strings by key.
+	ViewPresets(ctx context.Context, req ViewPresetsRequest) (ViewPresetRegistry, error)
 	GetTargetState(ctx context.Context, provider, target string) (map[string]string, error)
 	SetTargetState(ctx context.Context, provider, target, key, value string) error
 	// Favorite kinds are global UI preferences, independent of any target.

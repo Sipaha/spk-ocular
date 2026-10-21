@@ -8,6 +8,31 @@ const loaders = {
 }
 
 const en = {
+ "presets.nameError": "Use a non-empty view name of up to 64 UTF-8 bytes, without control characters.",
+ "presets.title": "Label columns",
+ "presets.select": "Saved view",
+ "presets.default": "Default view",
+ "presets.remove": "Delete saved view",
+ "presets.help": "Exact metadata.labels keys only. Up to 8 keys, 253 bytes each; 256 bytes per value. Up to 4 named views per provider/kind. No annotations or JSONPath.",
+ "presets.name": "View name",
+ "presets.keys": "Label keys · one per line",
+ "presets.invalid": "Use up to 8 unique literal keys, 1–253 bytes each, without whitespace.",
+ "presets.full": "Four views are already saved. Update an existing name or delete a view.",
+ "presets.columns": "Visible columns and order",
+ "presets.up": "Move {name} up",
+ "presets.down": "Move {name} down",
+ "presets.preview": "Preview · up to 3 loaded rows",
+ "presets.capture": "Saves current filter and sort. Namespace selection and editor drafts stay in place.",
+ "presets.noRows": "No loaded rows",
+ "presets.save": "Save and apply",
+ "presets.loadError": "Saved views could not be read. Existing data is preserved.",
+ "presets.saveError": "View was not saved. Reload to check newer changes, then retry.",
+ "presets.reload": "Reload saved views",
+ "presets.missing": "Missing",
+ "presets.unavailable": "Unavailable",
+ "presets.limit": "Value limit",
+ "presets.empty": "Empty value",
+
  "network.selector_mismatch": "The endpoint Pod does not match the Service selector.",
 
  "network.title": "Declared network path",
@@ -1367,6 +1392,31 @@ const en = {
 export type MessageKey = keyof typeof en
 
 const ru: Record<MessageKey, string> = {
+ "presets.nameError": "Укажите непустое имя вида до 64 байт UTF-8 без управляющих символов.",
+ "presets.title": "Колонки меток",
+ "presets.select": "Сохранённый вид",
+ "presets.default": "Исходный вид",
+ "presets.remove": "Удалить сохранённый вид",
+ "presets.help": "Только точные ключи metadata.labels. До 8 ключей по 253 байта; значение до 256 байт. До 4 видов на provider/kind. Без annotations и JSONPath.",
+ "presets.name": "Имя вида",
+ "presets.keys": "Ключи labels · по одному на строку",
+ "presets.invalid": "Укажите до 8 уникальных точных ключей по 1–253 байта без пробелов.",
+ "presets.full": "Уже сохранено четыре вида. Обновите существующее имя или удалите вид.",
+ "presets.columns": "Видимые колонки и порядок",
+ "presets.up": "Переместить {name} выше",
+ "presets.down": "Переместить {name} ниже",
+ "presets.preview": "Предпросмотр · до 3 загруженных строк",
+ "presets.capture": "Сохраняет текущие фильтр и сортировку. Выбор namespace и черновики редактора сохраняются.",
+ "presets.noRows": "Нет загруженных строк",
+ "presets.save": "Сохранить и применить",
+ "presets.loadError": "Не удалось прочитать виды. Существующие данные сохранены.",
+ "presets.saveError": "Вид не сохранён. Перезагрузите виды для проверки новых изменений и повторите.",
+ "presets.reload": "Перезагрузить виды",
+ "presets.missing": "Отсутствует",
+ "presets.unavailable": "Недоступно",
+ "presets.limit": "Лимит значения",
+ "presets.empty": "Пустое значение",
+
  "network.selector_mismatch": "Pod endpoint не соответствует селектору Service.",
 
  "network.title": "Объявленный сетевой путь",

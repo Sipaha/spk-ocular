@@ -143,6 +143,7 @@ func (r *kindRegistry) descriptors() []core.KindDescriptor {
 	out := make([]core.KindDescriptor, 0, len(r.list))
 	for _, d := range r.list {
 		desc := d.desc
+		desc.LabelColumns = !d.virtual
 		if !d.discovered {
 			desc.Actions = kindActions[d]
 			desc.Aliases = kindAliases[d]

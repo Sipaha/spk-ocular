@@ -2,6 +2,31 @@
 
 
   "ui": {
+    "presets.title": "标签列",
+    "presets.select": "已保存视图",
+    "presets.default": "默认视图",
+    "presets.remove": "删除已保存视图",
+    "presets.help": "仅使用 metadata.labels 的精确键。最多 8 个键，每个 253 字节；每个值最多 256 字节。每个 provider/kind 最多 4 个视图。不支持 annotations 或 JSONPath。",
+    "presets.name": "视图名称",
+    "presets.keys": "标签键 · 每行一个",
+    "presets.invalid": "最多输入 8 个不重复的精确键，每个 1–253 字节，不含空白字符。",
+    "presets.full": "已保存四个视图。请更新现有名称或删除一个视图。",
+    "presets.columns": "可见列与顺序",
+    "presets.up": "上移 {name}",
+    "presets.down": "下移 {name}",
+    "presets.preview": "预览 · 最多 3 个已加载行",
+    "presets.capture": "保存当前筛选和排序。保留 namespace 选择和编辑器草稿。",
+    "presets.noRows": "没有已加载行",
+    "presets.save": "保存并应用",
+    "presets.loadError": "无法读取已保存视图。现有数据已保留。",
+    "presets.saveError": "视图未保存。请重新加载以检查最新更改，然后重试。",
+    "presets.reload": "重新加载视图",
+    "presets.missing": "不存在",
+    "presets.unavailable": "不可用",
+    "presets.limit": "超出值限制",
+    "presets.empty": "空值",
+    "presets.nameError": "视图名称不能为空，最多 64 个 UTF-8 字节，不能包含控制字符。",
+
  "network.selector_mismatch": "端点 Pod 与 Service 选择器不匹配。",
 
  "network.title": "声明的网络路径",

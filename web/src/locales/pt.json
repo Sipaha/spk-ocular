@@ -2,6 +2,31 @@
 
 
   "ui": {
+    "presets.title": "Colunas de labels",
+    "presets.select": "Visualização salva",
+    "presets.default": "Visualização padrão",
+    "presets.remove": "Excluir visualização salva",
+    "presets.help": "Apenas chaves exatas de metadata.labels. Até 8 chaves de 253 bytes; 256 bytes por valor. Até 4 visualizações por provider/kind. Sem annotations ou JSONPath.",
+    "presets.name": "Nome da visualização",
+    "presets.keys": "Chaves de labels · uma por linha",
+    "presets.invalid": "Use até 8 chaves exatas únicas de 1–253 bytes, sem espaços.",
+    "presets.full": "Quatro visualizações salvas. Atualize um nome existente ou exclua uma visualização.",
+    "presets.columns": "Colunas visíveis e ordem",
+    "presets.up": "Mover {name} para cima",
+    "presets.down": "Mover {name} para baixo",
+    "presets.preview": "Prévia · até 3 linhas carregadas",
+    "presets.capture": "Salva o filtro e a ordenação atuais. Mantém namespaces e rascunhos do editor.",
+    "presets.noRows": "Nenhuma linha carregada",
+    "presets.save": "Salvar e aplicar",
+    "presets.loadError": "Não foi possível ler as visualizações. Os dados existentes foram preservados.",
+    "presets.saveError": "Visualização não salva. Recarregue para verificar mudanças recentes e tente novamente.",
+    "presets.reload": "Recarregar visualizações",
+    "presets.missing": "Ausente",
+    "presets.unavailable": "Indisponível",
+    "presets.limit": "Limite do valor",
+    "presets.empty": "Valor vazio",
+    "presets.nameError": "Use um nome não vazio de até 64 bytes UTF-8, sem caracteres de controle.",
+
  "network.selector_mismatch": "O Pod do endpoint não corresponde ao seletor do Service.",
 
  "network.title": "Caminho de rede declarado",

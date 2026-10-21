@@ -121,6 +121,7 @@ export function fakeClient(targets: Target[], connected = false) {
     setTargetState: vi.fn(async () => {}),
     getNavSections: vi.fn(async () => ({})),
     setNavSection: vi.fn(async () => {}),
+    viewPresets: vi.fn(async () => ({version:1,revision:0,active:'',presets:[]})),
     getFavoriteKinds: vi.fn(async () => []),
     setKindFavorite: vi.fn(async () => {}),
     moveFavoriteKind: vi.fn(async () => {}),

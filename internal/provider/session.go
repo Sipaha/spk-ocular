@@ -114,8 +114,9 @@ type Identifier interface {
 
 // Query is what a view shows. It is immutable for the view's lifetime.
 type Query struct {
-	Kind  string        `json:"kind"`
-	Scope core.ScopeSel `json:"scope"`
+	LabelKeys []string      `json:"labelKeys,omitempty"`
+	Kind      string        `json:"kind"`
+	Scope     core.ScopeSel `json:"scope"`
 	// Subject narrows the kind to objects about one object (events of a pod).
 	// Providers translate it (k8s: involvedObject.uid); nil = no narrowing.
 	Subject *core.Ref `json:"subject,omitempty"`

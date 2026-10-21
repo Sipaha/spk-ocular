@@ -2,6 +2,31 @@
 
 
   "ui": {
+    "presets.title": "ラベル列",
+    "presets.select": "保存済みビュー",
+    "presets.default": "既定のビュー",
+    "presets.remove": "保存済みビューを削除",
+    "presets.help": "metadata.labels の正確なキーのみ。最大 8 キー、各 253 バイト、値は各 256 バイト。provider/kind ごとに最大 4 ビュー。annotations と JSONPath は対象外です。",
+    "presets.name": "ビュー名",
+    "presets.keys": "ラベルキー · 一行に一つ",
+    "presets.invalid": "空白を含まない一意の正確なキーを最大 8 個、各 1–253 バイトで指定してください。",
+    "presets.full": "四つのビュー保存済みです。既存の名前を更新するか、ビューを削除してください。",
+    "presets.columns": "表示列と順序",
+    "presets.up": "{name} を上へ",
+    "presets.down": "{name} を下へ",
+    "presets.preview": "プレビュー · 読み込み済みの最大 3 行",
+    "presets.capture": "現在のフィルターと並べ替えを保存します。namespace の選択と編集下書きは保持されます。",
+    "presets.noRows": "読み込み済みの行がありません",
+    "presets.save": "保存して適用",
+    "presets.loadError": "保存済みビューを読み取れませんでした。既存データは保持されています。",
+    "presets.saveError": "ビューは保存されませんでした。再読み込みで新しい変更を確認し、再試行してください。",
+    "presets.reload": "ビューを再読み込み",
+    "presets.missing": "存在しません",
+    "presets.unavailable": "利用不可",
+    "presets.limit": "値の上限",
+    "presets.empty": "空の値",
+    "presets.nameError": "空でないビュー名を UTF-8 で最大 64 バイト、制御文字なしで指定してください。",
+
  "network.selector_mismatch": "エンドポイントの Pod は Service セレクターと一致しません。",
 
  "network.title": "宣言されたネットワーク経路",
