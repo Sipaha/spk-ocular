@@ -142,6 +142,7 @@ type ResourceRevision struct {
 }
 
 type Resource struct {
+	MetricsHistoryAvailable    bool               `json:"metricsHistoryAvailable,omitempty"`
 	ReliabilityAvailable       bool               `json:"reliabilityAvailable,omitempty"`
 	CertificateStatusAvailable bool               `json:"certificateStatusAvailable,omitempty"`
 	NetworkPathAvailable       bool               `json:"networkPathAvailable,omitempty"`

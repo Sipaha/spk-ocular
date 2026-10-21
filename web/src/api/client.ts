@@ -1,3 +1,4 @@
+import type {HistoryRequest,MetricsHistory} from '../metricsHistory/types'
 import type {Reliability} from '../reliability/types'
 import type { ViewPresetsRequest, ViewPresetRegistry } from './types'
 import type {CertificateStatus} from '../certificates/types'
@@ -31,6 +32,7 @@ export class ApiError extends Error {
 }
 
 export interface Client {
+ resourceMetricsHistory(req:HistoryRequest,signal?:AbortSignal):Promise<MetricsHistory>
  resourceReliability(ref:Ref,signal?:AbortSignal):Promise<Reliability>
  certificateStatus(ref:Ref,signal?:AbortSignal):Promise<CertificateStatus>
  resourceNetworkPath(ref:Ref,signal?:AbortSignal):Promise<NetworkPath>
@@ -190,6 +192,7 @@ const done = async (p: Promise<unknown>) => {
 
 export const httpClient: Client = {
   argoCD: (req,signal) => post('ArgoCD',req,signal),
+ resourceMetricsHistory:(req,signal)=>post('ResourceMetricsHistory',req,signal),
  resourceReliability:(ref,signal)=>post('ResourceReliability',ref,signal),
  certificateStatus:(ref,signal)=>post('CertificateStatus',ref,signal),
  resourceNetworkPath:(ref,signal)=>post('ResourceNetworkPath',ref,signal),
@@ -337,6 +340,7 @@ const EVENT_TYPES: EventType[] = ['targets_changed', 'resync', 'view_changed', '
 
 export const wailsClient: Client = {
   argoCD: (req,signal) => wcallAbortable(signal,'ArgoCD',req),
+ resourceMetricsHistory:(req,signal)=>wcallAbortable(signal,'ResourceMetricsHistory',req),
  resourceReliability:(ref,signal)=>wcallAbortable(signal,'ResourceReliability',ref),
  certificateStatus:(ref,signal)=>wcallAbortable(signal,'CertificateStatus',ref),
  resourceNetworkPath:(ref,signal)=>wcallAbortable(signal,'ResourceNetworkPath',ref),

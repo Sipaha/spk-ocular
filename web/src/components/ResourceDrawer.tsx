@@ -1,3 +1,4 @@
+import {ResourceMetricsHistory} from '../metricsHistory/ResourceMetricsHistory'
 import {ResourceReliability} from '../reliability/ResourceReliability'
 import {ResourceCertificate} from '../certificates/ResourceCertificate'
 import {ResourceNetworkPath} from '../network/ResourceNetworkPath'
@@ -523,6 +524,7 @@ function Details(props: { snapshotKey:unknown;revision?:string; onDiagnosisLogs:
           </div>
         ))}
       </dl>
+      {r.metricsHistoryAvailable&&<RetainedSection pending={pending}><ResourceMetricsHistory client={client} subject={r.ref} snapshotKey={props.snapshotKey} revision={props.revision}/></RetainedSection>}
       {r.reliabilityAvailable&&<RetainedSection pending={pending}><ResourceReliability client={client} subject={r.ref} snapshotKey={props.snapshotKey} revision={props.revision} onGo={onGo}/></RetainedSection>}
       {r.certificateStatusAvailable&&<RetainedSection pending={pending}><ResourceCertificate client={client} subject={r.ref} onGo={onGo}/></RetainedSection>}
       {r.networkPathAvailable&&<RetainedSection pending={pending}><ResourceNetworkPath client={client} subject={r.ref} onGo={onGo}/></RetainedSection>}

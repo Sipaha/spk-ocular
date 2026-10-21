@@ -47,6 +47,7 @@ export function fakeClient(targets: Target[], connected = false) {
     audit: [] as AgentAuditEntry[],
   }
   const client: Client = {
+ resourceMetricsHistory:vi.fn(async(req)=>({ref:req.ref,resourceVersion:"1",source:"https://fixture.invalid",scope:"dedicated-asserted",capturedAt:0,requestedStart:0,start:0,end:0,step:60,metrics:[],declarations:[]})),
  resourceReliability:vi.fn(async(ref)=>({ref,resourceVersion:"1",capturedAt:0,observations:[],pdbState:"unknown",hpaState:"unknown",partial:false})),
  certificateStatus:vi.fn(async(ref)=>({ref,capturedAt:0,notBefore:{state:'missing'},notAfter:{state:'missing'},renewal:{state:'missing'},validity:'unknown',secretName:'',conditions:[],requestedNames:[],issuerState:'unknown',consumers:[],consumerState:'unknown',truncated:false})),
  resourceNetworkPath:vi.fn(async(ref)=>({ref,routes:[],coverage:[],capturedAt:Date.now(),discovery:'ready',truncated:false})),

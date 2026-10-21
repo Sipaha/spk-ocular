@@ -267,3 +267,7 @@ func (w *API) CertificateStatus(ctx context.Context, ref core.Ref) (core.Certifi
 func (w *API) ResourceReliability(ctx context.Context, ref core.Ref) (core.Reliability, error) {
 	return w.a.ResourceReliability(api.UIContext(ctx), ref)
 }
+
+func (w *API) ResourceMetricsHistory(ctx context.Context, req core.HistoryRequest) (core.MetricsHistory, error) {
+	return w.a.ResourceMetricsHistory(api.UIContext(ctx), req)
+}
