@@ -271,3 +271,7 @@ func (w *API) ResourceReliability(ctx context.Context, ref core.Ref) (core.Relia
 func (w *API) ResourceMetricsHistory(ctx context.Context, req core.HistoryRequest) (core.MetricsHistory, error) {
 	return w.a.ResourceMetricsHistory(api.UIContext(ctx), req)
 }
+
+func (w *API) ResourceVPA(ctx context.Context, ref core.Ref) (core.VPAInspection, error) {
+	return w.a.ResourceVPA(api.UIContext(ctx), ref)
+}

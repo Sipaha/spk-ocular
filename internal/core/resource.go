@@ -142,6 +142,7 @@ type ResourceRevision struct {
 }
 
 type Resource struct {
+	VPAAvailable               bool               `json:"vpaAvailable,omitempty"`
 	MetricsHistoryAvailable    bool               `json:"metricsHistoryAvailable,omitempty"`
 	ReliabilityAvailable       bool               `json:"reliabilityAvailable,omitempty"`
 	CertificateStatusAvailable bool               `json:"certificateStatusAvailable,omitempty"`

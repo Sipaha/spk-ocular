@@ -23,6 +23,7 @@ type API interface {
 	ResourceNetworkPath(context.Context, core.Ref) (core.NetworkPath, error)
 	CertificateStatus(context.Context, core.Ref) (core.CertificateStatus, error)
 	ResourceMetricsHistory(context.Context, core.HistoryRequest) (core.MetricsHistory, error)
+	ResourceVPA(context.Context, core.Ref) (core.VPAInspection, error)
 	ResourceReliability(context.Context, core.Ref) (core.Reliability, error)
 	ArgoCD(context.Context, ArgoRequest) (core.ArgoSnapshot, error)
 	FluxCD(context.Context, FluxRequest) (core.FluxSnapshot, error)
