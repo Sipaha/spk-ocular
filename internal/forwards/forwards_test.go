@@ -146,13 +146,45 @@ func TestAutoPortTakesTheRemoteOneOrAnyFree(t *testing.T) {
 }
 
 func TestIPv6TakenByAnotherProgramIsAStatus(t *testing.T) {
-	foreign, err := net.Listen("tcp6", "[::1]:0")
-	if err != nil {
-		t.Skip("no IPv6 loopback:", err)
+	// Reserve both address families before giving listeners to the manager.
+	// A free IPv6 port is not necessarily free on IPv4; closing a probe would
+	// leave another allocation race. All assertions still use real sockets.
+	reservePair := func() (net.Listener, net.Listener) {
+		for range 32 {
+			ipv4, err := net.Listen("tcp4", "127.0.0.1:0")
+			require.NoError(t, err)
+			ipv6, err := net.Listen("tcp6", addr6(ipv4.Addr().(*net.TCPAddr).Port))
+			if err == nil {
+				return ipv4, ipv6
+			}
+			require.NoError(t, ipv4.Close())
+			if inUse(err) {
+				continue
+			}
+			t.Skip("no IPv6 loopback:", err)
+		}
+		t.Fatal("could not reserve a port on both loopback families")
+		return nil, nil
 	}
+	own4, foreign := reservePair()
+	defer own4.Close()
 	defer foreign.Close()
+	next4, next6 := reservePair()
+	defer next4.Close()
+	defer next6.Close()
 	port := foreign.Addr().(*net.TCPAddr).Port
-	m := newManager(t, Options{})
+	reserved := map[string]net.Listener{"tcp4|" + addr4(port): own4, "tcp4|" + addr4(0): next4, "tcp6|" + addr6(next6.Addr().(*net.TCPAddr).Port): next6}
+	var listenersMu sync.Mutex
+	m := newManager(t, Options{Listen: func(network, addr string) (net.Listener, error) {
+		listenersMu.Lock()
+		ln := reserved[network+"|"+addr]
+		delete(reserved, network+"|"+addr)
+		listenersMu.Unlock()
+		if ln != nil {
+			return ln, nil
+		}
+		return net.Listen(network, addr)
+	}})
 	in := start(t, m, &fakeHandle{be: newBackend(t, false), remote: 80}, port)
 	assert.Equal(t, IPv6Busy, in.IPv6)
 	assert.Contains(t, in.IPv6Detail, "another program")
@@ -632,4 +664,41 @@ func TestFailureCountAndErrorArePublishedTogether(t *testing.T) {
 	require.EqualValues(t, 1, snapshot.Failed)
 	require.NotNil(t, snapshot.LastError)
 	require.Equal(t, "connection refused on port", snapshot.LastError.Message)
+}
+
+func TestRetiringOldUpstreamPreservesPendingReconnectState(t *testing.T) {
+	m := newManager(t, Options{})
+	h := &fakeHandle{remote: 80}
+	upstream, err := h.Connect(t.Context())
+	require.NoError(t, err)
+	tn := newTunnel(m, "pending-reconnect", h, h.Describe(), bound{}, "")
+	t.Cleanup(tn.cancel)
+	old := &generation{u: upstream, gen: 1}
+	pending := &connectCall{gen: 2, done: make(chan struct{})}
+	// The old watcher can run after acquire has started generation 2, while
+	// the previous generation is still recorded in up. Reproduce that order.
+	tn.up, tn.call, tn.gen, tn.state = old, pending, 2, StateConnecting
+	tn.retire(old)
+	assert.Equal(t, StateConnecting, tn.info().State)
+	assert.Same(t, pending, tn.call)
+	assert.Nil(t, tn.up)
+	assert.Equal(t, 1, h.upstream(0).closeCount())
+}
+
+func TestRetiringOldUpstreamPreservesFailedReconnectState(t *testing.T) {
+	m := newManager(t, Options{})
+	h := &fakeHandle{remote: 80}
+	upstream, err := h.Connect(t.Context())
+	require.NoError(t, err)
+	h.upstream(0).kill(errors.New("old upstream failed"))
+	tn := newTunnel(m, "failed-reconnect", h, h.Describe(), bound{}, "")
+	t.Cleanup(tn.cancel)
+	old := &generation{u: upstream, gen: 1}
+	tn.up, tn.gen, tn.state = old, 2, StateError
+	tn.lastErr = m.problem(errors.New("replacement connect failed"))
+	tn.retire(old)
+	assert.Equal(t, StateError, tn.info().State)
+	require.NotNil(t, tn.info().LastError)
+	assert.Contains(t, tn.info().LastError.Message, "replacement connect failed")
+	assert.Nil(t, tn.up)
 }

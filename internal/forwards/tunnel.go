@@ -254,9 +254,15 @@ func (t *tunnel) retire(g *generation) {
 	current := t.up == g
 	if current {
 		t.up = nil
-		t.state = StateIdle
-		if err := g.u.Err(); err != nil {
-			t.lastErr = t.m.problem(err)
+		// An old watcher can finish after a replacement Connect has started
+		// or failed. State and errors from the newer generation take priority.
+		if t.gen == g.gen {
+			t.state = StateIdle
+		}
+		if t.gen == g.gen || t.call != nil {
+			if err := g.u.Err(); err != nil {
+				t.lastErr = t.m.problem(err)
+			}
 		}
 	}
 	t.mu.Unlock()
