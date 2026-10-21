@@ -54,6 +54,9 @@ func (s *Service) PrepareAction(ctx context.Context, req ActionRequest) (core.Ac
 	if err != nil {
 		return core.ActionPlan{}, fromProvider(err)
 	}
+	if !fromUI(ctx) || req.Action != "scale" {
+		plan.Management = nil
+	}
 	plan.Action = d
 	plan.Where.Provider, plan.Where.Target = req.Ref.Provider, req.Ref.Target
 	plan.Where.ConfigHash = e.hash // the revision of the session the plan was read in

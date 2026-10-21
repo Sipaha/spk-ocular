@@ -1,9 +1,11 @@
+import type { Client } from '../api/client'
+import { ManagementReview } from '../management/ManagementReview'
 import type { ActionPlan } from '../api/types'
 import { messageText, t } from '../i18n'
 import { ActionLists, Portions } from './ActionLists'
 
 /** What a plan says: why it cannot run, what happens, warnings, changes, the objects concerned and the permission check. */
-export function PlanDetails({ plan }: { plan: ActionPlan }) {
+export function PlanDetails({ plan, client }: { plan: ActionPlan; client: Client }) {
   const warnings = !!plan.warnings?.length && (
     <section aria-label={t('action.warnings')} className="text-warning">
       <h3 className="mb-1 text-[12px] font-semibold uppercase tracking-wider">{t('action.warnings')}</h3>
@@ -33,6 +35,7 @@ export function PlanDetails({ plan }: { plan: ActionPlan }) {
         </section>
       )}
       {!(plan.action.terminal || plan.action.files) && warnings}
+      {plan.action.id === 'scale' && plan.management && <ManagementReview client={client} where={plan.where} context={plan.management} />}
       {!!plan.changes?.length && (
         <section aria-label={t('action.changes')}>
           <h3 className="mb-1 text-[12px] font-semibold uppercase tracking-wider text-fg-subtle">{t('action.changes')}</h3>

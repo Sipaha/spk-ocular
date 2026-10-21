@@ -2,6 +2,15 @@
 
 
   "ui": {
+    "management.title": "GitOps 审查上下文",
+    "management.notice": "跟踪元数据仅为线索，并非已验证的所有权。请显式加载一个命名空间内的控制器观测。Argo 比较的目标修订不代表已部署修订。不读取 Git，也不预测未来的协调。",
+    "management.namespace": "控制器命名空间",
+    "management.load": "加载控制器上下文",
+    "management.stale": "审查连接或对象身份已不匹配。请重新准备审查以加载上下文。",
+    "management.pin": "固定属性",
+    "management.pinNotice": "属性将固定在底部面板中；审查和草稿保持打开。",
+    "management.pinFailed": "无法固定属性。请检查底部面板数量限制。",
+
  "diagnosis.title": "诊断",
  "diagnosis.notice": "有界快照，包含观测状态、对象引用和相关 Events。事件可能描述过去的故障；不检查对象中的键。",
  "diagnosis.run": "收集证据",

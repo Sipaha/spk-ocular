@@ -8,6 +8,15 @@ const loaders = {
 }
 
 const en = {
+ "management.title": "GitOps review context",
+ "management.notice": "Tracking metadata is a hint, not verified ownership. Load controller observations explicitly in one namespace. Argo compared target revisions are not deployed revisions. No Git is read; observations do not predict future reconciliation.",
+ "management.namespace": "Controller namespace",
+ "management.load": "Load controller context",
+ "management.stale": "The review connection or object identity no longer matches. Prepare a new review to load context.",
+ "management.pin": "Pin properties",
+ "management.pinNotice": "Properties are pinned in the dock; this review and its draft stay open.",
+ "management.pinFailed": "The properties panel could not be pinned. Check the dock panel limit.",
+
  "diagnosis.title": "Diagnosis",
  "diagnosis.notice": "A bounded snapshot of observed state, object references and related Events. Events may describe earlier failures; object keys are not checked.",
  "diagnosis.run": "Collect evidence",
@@ -1328,6 +1337,15 @@ const en = {
 export type MessageKey = keyof typeof en
 
 const ru: Record<MessageKey, string> = {
+ "management.title": "GitOps-контекст правки",
+ "management.notice": "Tracking-метаданные — подсказка, а не подтверждённое владение. Наблюдения контроллеров загружаются явно в одном namespace. Сравниваемая целевая ревизия Argo не означает развёрнутую ревизию. Git не читается; будущая reconciliation не прогнозируется.",
+ "management.namespace": "Namespace контроллера",
+ "management.load": "Загрузить контекст контроллеров",
+ "management.stale": "Подключение или идентичность объекта уже не совпадают с review. Подготовьте новое review для загрузки контекста.",
+ "management.pin": "Закрепить свойства",
+ "management.pinNotice": "Свойства закрепляются в нижней панели; review и черновик остаются открытыми.",
+ "management.pinFailed": "Не удалось закрепить свойства. Проверьте лимит нижней панели.",
+
  "diagnosis.title": "Диагностика",
  "diagnosis.notice": "Ограниченный снимок состояния, ссылок на объекты и связанных Events. События могут описывать прошлые сбои; ключи объектов не проверяются.",
  "diagnosis.run": "Собрать доказательства",

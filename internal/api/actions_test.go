@@ -36,7 +36,7 @@ func (a *actionSession) PrepareAction(_ context.Context, ref core.Ref, _ string,
 	}
 	ref.UID = "uid-web"
 	return core.ActionPlan{Where: core.LiveTarget{Provider: "k", Target: a.target, TargetTitle: a.target, Endpoint: "server", ConfigHash: a.hash, Ref: ref},
-		Params: p, Rights: core.Rights{State: core.RightsAllowed}, Expect: "e1"}, nil
+		Management: a.o.management, Params: p, Rights: core.Rights{State: core.RightsAllowed}, Expect: "e1"}, nil
 }
 
 func (a *actionSession) RunAction(_ context.Context, run provider.ActionRun) (core.ActionResult, error) {
@@ -63,6 +63,7 @@ type actionOpenable struct {
 	mu            sync.Mutex
 	runs          []ranAction
 	duringPrepare func()
+	management    *core.ManagementContext
 	duringRun     func()
 	// result: what runs return (nil: done, \"<action> requested\")
 	result *core.ActionResult

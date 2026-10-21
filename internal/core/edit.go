@@ -17,7 +17,8 @@ type EditDoc struct {
 
 // EditPlan is what an edit would do, read without changing anything.
 type EditPlan struct {
-	Where LiveTarget `json:"where"`
+	Management *ManagementContext `json:"management,omitempty"`
+	Where      LiveTarget         `json:"where"`
 	// Before is the object now and After the expected result, as the
 	// editor shows objects.
 	Before string `json:"before"`

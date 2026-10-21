@@ -295,7 +295,18 @@ export interface Message {
 }
 
 /** What an action would do, read without changing anything. */
+/** UI-only self-tracking hints from the exact prepared object, not ownership. */
+export interface ManagementContext {
+  ref: Ref
+  version: string
+  capturedAt: number
+  argoTracking?: import('../argocd/types').ArgoTracking
+  fluxTracking?: import('../fluxcd/types').FluxTracking
+  truncated: boolean
+}
+
 export interface ActionPlan {
+  management?: ManagementContext
   reuse?: boolean
   /** the target (title, endpoint, configRev) and the object with its UID as read now */
   where: LiveTarget
@@ -332,6 +343,7 @@ export interface EditDoc {
 
 /** What an edit would do, read without changing anything. */
 export interface EditPlan {
+  management?: ManagementContext
   where: LiveTarget
   /** the object now and the expected result, as the editor shows objects */
   before: string

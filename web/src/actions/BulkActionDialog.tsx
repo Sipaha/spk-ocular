@@ -1,3 +1,4 @@
+import { createPortal } from 'react-dom'
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type { Client } from '../api/client'
 import type { ActionDescriptor, ActionParams, ActionPlan, ActionResult, Message, Ref } from '../api/types'
@@ -315,8 +316,8 @@ export function BulkActionDialog({ client, req, onClose, onDone, runTimeoutMs = 
     return { text: (w ? t('bulk.state.warned', { n: w }) : t('bulk.state.ready')) + now, cls: w ? 'text-warning' : 'text-success' }
   }
 
-  return (
-    <div className="absolute inset-0 z-20 flex items-start justify-center bg-black/40 pt-16" onMouseDown={(e) => e.target === e.currentTarget && close()}>
+  return createPortal(
+    <div className="fixed inset-0 z-30 flex items-start justify-center bg-black/40 pt-16" onMouseDown={(e) => e.target === e.currentTarget && close()}>
       <form
         ref={box}
         role="dialog"
@@ -419,7 +420,7 @@ export function BulkActionDialog({ client, req, onClose, onDone, runTimeoutMs = 
                         </div>
                         {expanded && plan && (
                           <div className="flex flex-col gap-2 py-2 pl-4 text-xs">
-                            <PlanDetails plan={plan} />
+                            <PlanDetails plan={plan} client={client} />
                           </div>
                         )}
                       </li>
@@ -457,6 +458,6 @@ export function BulkActionDialog({ client, req, onClose, onDone, runTimeoutMs = 
           )}
         </div>
       </form>
-    </div>
+    </div>, document.body,
   )
 }

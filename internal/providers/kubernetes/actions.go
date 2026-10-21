@@ -475,6 +475,7 @@ func (s *session) PrepareAction(ctx context.Context, ref core.Ref, action string
 		return s.prepareDrain(ctx, def, plan, u), nil
 	}
 	if action == actScale.ID {
+		plan.Management = s.reviewManagement(def, u)
 		n := replicas(u.Object)
 		plan.Current = &n
 	}

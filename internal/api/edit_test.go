@@ -34,8 +34,9 @@ func (e *editSession) PrepareEdit(_ context.Context, req provider.EditRequest) (
 	e.o.mu.Lock()
 	e.o.prepared = append(e.o.prepared, req)
 	noGrant := e.o.noGrant
+	management := e.o.management
 	e.o.mu.Unlock()
-	plan := core.EditPlan{Where: core.LiveTarget{Provider: "k", Target: e.target, ConfigHash: e.hash, Ref: req.Ref}, Changed: true}
+	plan := core.EditPlan{Where: core.LiveTarget{Provider: "k", Target: e.target, ConfigHash: e.hash, Ref: req.Ref}, Changed: true, Management: management}
 	if noGrant {
 		return plan, nil, nil
 	}
@@ -51,10 +52,11 @@ func (e *editSession) RunEdit(_ context.Context, run provider.EditRun) (core.Edi
 
 type editOpenable struct {
 	*openable
-	mu       sync.Mutex
-	prepared []provider.EditRequest
-	runs     []provider.EditRun
-	noGrant  bool
+	mu         sync.Mutex
+	prepared   []provider.EditRequest
+	runs       []provider.EditRun
+	noGrant    bool
+	management *core.ManagementContext
 }
 
 func (o *editOpenable) Open(ctx context.Context, target string) (provider.Session, error) {

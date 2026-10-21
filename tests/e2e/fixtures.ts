@@ -25,6 +25,10 @@ export const test = base.extend<{ cleanPageMemo: void }>({
       // These suites exercise already imported connections. Onboarding has a
       // separate fresh-profile browser suite and is never bypassed in production.
       const configHeaders = { Authorization: `Bearer ${token}`, Origin: new URL(root.url()).origin }
+      // A locale case may fail before restoring its manual choice. Start each
+      // case with automatic browser detection; persistence within a case remains.
+      const language = await page.request.post('/api/SetLanguage', { headers: configHeaders, data: { language: '' } })
+      expect(language.ok()).toBeTruthy()
       const status = await page.request.post('/api/Configurations', { headers: configHeaders, data: { command: 'status' } })
       expect(status.ok()).toBeTruthy()
       const configState = await status.json()

@@ -2,6 +2,15 @@
 
 
   "ui": {
+    "management.title": "Contexte GitOps de la vérification",
+    "management.notice": "Les métadonnées de suivi sont des indices, pas une propriété vérifiée. Chargez explicitement les observations des contrôleurs dans un seul espace de noms. La révision cible comparée par Argo ne désigne pas la révision déployée. Git n’est pas lu et les réconciliations futures ne sont pas prédites.",
+    "management.namespace": "Espace de noms du contrôleur",
+    "management.load": "Charger le contexte des contrôleurs",
+    "management.stale": "La connexion ou l’identité de l’objet ne correspond plus à la vérification. Préparez une nouvelle vérification pour charger le contexte.",
+    "management.pin": "Épingler les propriétés",
+    "management.pinNotice": "Les propriétés sont épinglées dans le panneau inférieur ; la vérification et le brouillon restent ouverts.",
+    "management.pinFailed": "Impossible d’épingler les propriétés. Vérifiez la limite de panneaux.",
+
  "diagnosis.title": "Diagnostic",
  "diagnosis.notice": "Instantané limité de l’état observé, des références aux objets et des Events associés. Les événements peuvent décrire des pannes antérieures ; les clés des objets ne sont pas vérifiées.",
  "diagnosis.run": "Recueillir les preuves",

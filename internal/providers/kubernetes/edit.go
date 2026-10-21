@@ -231,6 +231,7 @@ func (s *session) prepareEdit(ctx context.Context, c *editCheck, req provider.Ed
 		return core.EditPlan{}, nil, &provider.Error{Class: provider.ClassInternal, Message: err.Error()}
 	}
 	plan := core.EditPlan{
+		Management: s.reviewManagement(def, cur),
 		Where: core.LiveTarget{Provider: ProviderID, Target: s.conn.target, TargetTitle: s.conn.targetTitle, Endpoint: s.conn.endpoint,
 			ConfigHash: s.hash, Ref: c.ref},
 		Before: before, After: before,

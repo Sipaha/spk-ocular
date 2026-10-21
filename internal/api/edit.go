@@ -159,6 +159,9 @@ func (s *Service) PrepareEdit(ctx context.Context, req EditPrepareRequest) (core
 	if err != nil {
 		return core.EditPlan{}, fromProvider(err)
 	}
+	if !fromUI(ctx) {
+		plan.Management = nil
+	}
 	plan.Where.Provider, plan.Where.Target = req.Ref.Provider, req.Ref.Target
 	plan.Where = s.live(plan.Where)
 	plan.Token = ""

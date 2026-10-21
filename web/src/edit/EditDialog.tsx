@@ -1,3 +1,4 @@
+import { createPortal } from 'react-dom'
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { ApiError, type Client } from '../api/client'
 import type { EditPlan, EditPrepareRequest, EditResult } from '../api/types'
@@ -7,6 +8,7 @@ import { useScopeWords } from '../scopeNames'
 import { EditDiff } from './EditDiff'
 import { withoutVersion } from './text'
 import { errorDetail } from '../errors'
+import { ManagementReview } from '../management/ManagementReview'
 
 /** An edit to review: the object, its signed base, the text as given and as edited. */
 export interface EditReview extends EditPrepareRequest {
@@ -150,7 +152,7 @@ export function EditDialog({ client, req, onBack, onDone }: Props) {
       e.preventDefault()
       e.stopPropagation()
     } else if (e.key === 'Tab') {
-      const list = [...(box.current?.querySelectorAll<HTMLElement>('button:not(:disabled)') ?? [])]
+      const list = [...(box.current?.querySelectorAll<HTMLElement>('button:not(:disabled), input:not(:disabled), a[href], summary') ?? [])]
       if (!list.length) return
       const i = list.indexOf(document.activeElement as HTMLElement)
       const next = e.shiftKey ? (i <= 0 ? list.length - 1 : i - 1) : i < 0 || i === list.length - 1 ? 0 : i + 1
@@ -163,7 +165,7 @@ export function EditDialog({ client, req, onBack, onDone }: Props) {
   const name = refTitle(where?.ref ?? req.ref)
   const scope = where?.ref.scope ?? req.ref.scope
 
-  return (
+  return createPortal(
     <div className="fixed inset-0 z-30 flex items-start justify-center bg-black/40 pt-10" onMouseDown={(e) => e.target === e.currentTarget && back()}>
       <div
         ref={box}
@@ -228,6 +230,7 @@ export function EditDialog({ client, req, onBack, onDone }: Props) {
                 </ul>
               </section>
             )}
+            {plan.management && <ManagementReview client={client} where={plan.where} context={plan.management} />}
             {plan.changed && (
               <p aria-label={t('action.rights')} className={plan.rights.state === 'denied' ? 'text-danger' : plan.rights.state === 'unknown' ? 'text-warning' : 'text-fg-muted'}>
                 {t('action.rights')}:{' '}
@@ -274,6 +277,6 @@ export function EditDialog({ client, req, onBack, onDone }: Props) {
           )}
         </div>
       </div>
-    </div>
+    </div>, document.body,
   )
 }

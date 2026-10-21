@@ -2,6 +2,15 @@
 
 
   "ui": {
+    "management.title": "Contexto GitOps de la revisión",
+    "management.notice": "Los metadatos de seguimiento son indicios, no propiedad verificada. Cargue explícitamente observaciones de controladores en un espacio de nombres. La revisión objetivo comparada de Argo no es la revisión desplegada. No se lee Git ni se predicen reconciliaciones futuras.",
+    "management.namespace": "Espacio de nombres del controlador",
+    "management.load": "Cargar contexto de controladores",
+    "management.stale": "La conexión o identidad del objeto ya no coincide con la revisión. Prepare otra revisión para cargar el contexto.",
+    "management.pin": "Fijar propiedades",
+    "management.pinNotice": "Las propiedades se fijan en el panel inferior; la revisión y su borrador siguen abiertos.",
+    "management.pinFailed": "No se pudieron fijar las propiedades. Compruebe el límite de paneles.",
+
  "diagnosis.title": "Diagnóstico",
  "diagnosis.notice": "Instantánea limitada del estado observado, las referencias a objetos y los Events relacionados. Los eventos pueden describir fallos anteriores; no se comprueban las claves de los objetos.",
  "diagnosis.run": "Recopilar pruebas",

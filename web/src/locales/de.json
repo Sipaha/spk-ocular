@@ -2,6 +2,15 @@
 
 
   "ui": {
+    "management.title": "GitOps-Kontext der Prüfung",
+    "management.notice": "Tracking-Metadaten sind Hinweise, kein verifizierter Eigentumsnachweis. Laden Sie Controller-Beobachtungen ausdrücklich in einem Namespace. Die verglichene Argo-Zielrevision ist nicht die bereitgestellte Revision. Git wird nicht gelesen; zukünftige Abgleiche werden nicht vorhergesagt.",
+    "management.namespace": "Controller-Namespace",
+    "management.load": "Controller-Kontext laden",
+    "management.stale": "Verbindung oder Objektidentität stimmen nicht mehr mit der Prüfung überein. Bereiten Sie eine neue Prüfung vor, um Kontext zu laden.",
+    "management.pin": "Eigenschaften anheften",
+    "management.pinNotice": "Die Eigenschaften werden im unteren Bereich angeheftet; Prüfung und Entwurf bleiben geöffnet.",
+    "management.pinFailed": "Eigenschaften konnten nicht angeheftet werden. Prüfen Sie das Panel-Limit.",
+
  "diagnosis.title": "Diagnose",
  "diagnosis.notice": "Begrenzte Momentaufnahme des beobachteten Zustands, der Objektreferenzen und zugehöriger Events. Ereignisse können frühere Fehler beschreiben; Objektschlüssel werden nicht geprüft.",
  "diagnosis.run": "Nachweise sammeln",

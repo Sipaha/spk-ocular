@@ -2,6 +2,15 @@
 
 
   "ui": {
+    "management.title": "Contexto GitOps da revisão",
+    "management.notice": "Os metadados de rastreamento são indícios, não propriedade verificada. Carregue explicitamente observações dos controladores em um namespace. A revisão de destino comparada pelo Argo não é a revisão implantada. O Git não é lido e reconciliações futuras não são previstas.",
+    "management.namespace": "Namespace do controlador",
+    "management.load": "Carregar contexto dos controladores",
+    "management.stale": "A conexão ou a identidade do objeto não corresponde mais à revisão. Prepare uma nova revisão para carregar o contexto.",
+    "management.pin": "Fixar propriedades",
+    "management.pinNotice": "As propriedades são fixadas no painel inferior; a revisão e o rascunho permanecem abertos.",
+    "management.pinFailed": "Não foi possível fixar as propriedades. Verifique o limite de painéis.",
+
  "diagnosis.title": "Diagnóstico",
  "diagnosis.notice": "Retrato limitado do estado observado, das referências a objetos e dos Events relacionados. Os eventos podem descrever falhas anteriores; as chaves dos objetos não são verificadas.",
  "diagnosis.run": "Coletar evidências",

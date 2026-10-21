@@ -1,3 +1,4 @@
+import { createPortal } from 'react-dom'
 import { isoDateTime } from '../dates'
 import { useEffect, useLayoutEffect, useId, useRef, useState } from 'react'
 import type { Client } from '../api/client'
@@ -341,7 +342,7 @@ export function ActionDialog({ client, req, onClose, onTerminal, onFiles, runTim
       // A group of choices is one stop (its checked one, else its first): arrows move within it.
       const radios = [...(box.current?.querySelectorAll<HTMLInputElement>('input[type=radio]:not(:disabled)') ?? [])]
       const stop = radios.find((r) => r.checked) ?? radios[0]
-      const list = [...(box.current?.querySelectorAll<HTMLElement>('button:not(:disabled), input:not(:disabled)') ?? [])].filter(
+      const list = [...(box.current?.querySelectorAll<HTMLElement>('button:not(:disabled), input:not(:disabled), a[href], summary') ?? [])].filter(
         (el) => !(el instanceof HTMLInputElement && el.type === 'radio') || el === stop,
       )
       if (!list.length) return
@@ -358,8 +359,8 @@ export function ActionDialog({ client, req, onClose, onTerminal, onFiles, runTim
   const label = actionLabel(action)
   const unknownOrDone = outcome?.type === 'unknown' || outcome?.type === 'lateDone' || outcome?.type === 'partial'
 
-  return (
-    <div className="absolute inset-0 z-20 flex items-start justify-center bg-black/40 pt-20" onMouseDown={(e) => e.target === e.currentTarget && close()}>
+  return createPortal(
+    <div className="fixed inset-0 z-30 flex items-start justify-center bg-black/40 pt-20" onMouseDown={(e) => e.target === e.currentTarget && close()}>
       <form
         ref={box}
         role="dialog"
@@ -463,7 +464,7 @@ export function ActionDialog({ client, req, onClose, onTerminal, onFiles, runTim
 
           {plan && busy !== 'prepare' && (reviewed || (choosing && chosen === null)) && (
             <>
-              <PlanDetails plan={plan} />
+              <PlanDetails plan={plan} client={client} />
             </>
           )}
 
@@ -530,7 +531,7 @@ export function ActionDialog({ client, req, onClose, onTerminal, onFiles, runTim
           )}
         </div>
       </form>
-    </div>
+    </div>, document.body,
   )
 }
 
