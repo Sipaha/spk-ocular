@@ -76,8 +76,11 @@ Implementation scope for each subsequent feature is selected separately.
   Sync/Prune and Refresh/Hard refresh with revision/identity guards. Explicit
   local-resource resolution and Argo UI Service forwarding; no real-controller
   reconciliation claim. Current source; release inclusion follows release notes.
+- [x] **[Native Flux CD views](fluxcd.md):** detected per-kind controller pages,
+  generation-aware status, dashboard/Events and scoped source/inventory/manager
+  links. No AI, credential reads or new Flux controller mutation.
 - [ ] **Broader GitOps ownership awareness:** explain known controller/source
-  context before ordinary edits; Flux and further adapters remain separate.
+  context before ordinary edits; further controller adapters remain separate.
 - [ ] **Historical metrics:** connect to an existing Prometheus and link existing
   Grafana dashboards; no implicit collector installation.
 - [x] **[Investigation workspace continuity](workspace-continuity.md):** pinned

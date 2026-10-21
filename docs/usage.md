@@ -1318,3 +1318,17 @@ Sync and health stay independent; coverage and asynchronous outcomes remain
 visible. Open Argo CD UI reuses an exact current Service forward or starts one
 explicitly on a free loopback port; multiple Services require a choice. Ask AI is
 not part of this feature.
+
+## Flux CD and Custom Resources
+
+The free [Flux section](fluxcd.md) appears only after supported controller APIs
+are discovered. It offers Dashboard and per-kind Sources, Workloads, Image
+automation and Notifications pages, condition/generation-aware reconciliation
+state, related Events and guarded source/inventory/manager navigation. Workload
+Flux columns use loaded evidence without background inventory reads. No AI,
+controller installation or credential inspection is added.
+
+The former API groups navigator heading is now **Custom Resources**. Present
+Argo/Flux pages complement the generic views: their CRDs and other third-party
+resources remain in Custom Resources. Stored section and favorite identifiers
+and all ordinary object access are preserved.

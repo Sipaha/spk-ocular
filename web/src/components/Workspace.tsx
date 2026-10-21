@@ -6,10 +6,12 @@ import { RefreshButton } from './RefreshButton'
 import { ResourceGroupIcon } from './ResourceGroupIcon'
 import { lazy, Suspense } from 'react'
 const RbacWorkspace = lazy(() => import('../rbac/RbacWorkspace'))
+const FluxWorkspace=lazy(()=>import('../fluxcd/FluxWorkspace'))
 const ArgoWorkspace = lazy(() => import('../argocd/ArgoWorkspace'))
 const SecurityWorkspace = lazy(() => import('../security/SecurityWorkspace'))
 const TimelineWorkspace = lazy(() => import('../timeline/TimelineWorkspace'))
 const GraphWorkspace = lazy(() => import('../graph/GraphWorkspace'))
+import {FluxWorkloadStatus} from '../fluxcd/FluxWorkloadStatus'
 import { groupLabel, kindLabel } from '../presentation'
 import { HelmWorkspace } from '../helm/HelmWorkspace'
 import { agents } from '../agents/store'
@@ -193,6 +195,7 @@ export function Workspace({ client, hub, target, onFavorite, onMoveFavorite, onN
   const [filterReq, setFilterReq] = useState<PageReq<string> | null>(null)
   const [openReq, setOpenReq] = useState<PageReq<Ref> | null>(null)
   const reqSeq = useRef(0)
+  const openFluxResource=(ref:Ref)=>mayLeave(()=>{const next='ocular.fluxcd.'+ref.kind.split('/')[1];again(next);remember({kind:next,scope});setOpenReq({value:ref,seq:++reqSeq.current})})
   const openArgoApplication=(ref:Ref)=>mayLeave(()=>{const next='ocular.argocd.applications';again(next);remember({kind:next,scope});setOpenReq({value:ref,seq:++reqSeq.current})})
 
   // Tabs live in the dock above this keyed Workspace and survive target switches.
@@ -397,7 +400,7 @@ export function Workspace({ client, hub, target, onFavorite, onMoveFavorite, onN
                   ) : (
                     <NavSubgroup provider={target.provider}
                       key={it.sub}
-                      label={g.group==='Argo CD'&&it.sub==='Settings'?t('argo.settings'):it.sub}
+                      label={g.group==='Argo CD'&&it.sub==='Settings'?t('argo.settings'):g.group==='Flux'?groupLabel('kubernetes',it.sub,language):it.sub}
                       kinds={it.kinds}
                       open={sectionOpen(subKey(g.group, it.sub), false)}
                       disabled={!navSectionsReady || searching}
@@ -435,30 +438,32 @@ export function Workspace({ client, hub, target, onFavorite, onMoveFavorite, onN
           <div role={kindsError ? 'alert' : 'status'} className="p-4 text-fg-muted">
             {kindsError || t('nav.noKinds')}
           </div>
+        ) : (page.kind.workspace==='fluxcd'||page.kind.workspace?.startsWith('fluxcd-')) ? (
+          <Suspense fallback={<LoadingState/>}><FluxWorkspace key={page.key} client={client} target={target} scope={scope} kinds={kinds??[]} workspace={page.kind.workspace} scopePicker={<WorkspaceScopePicker client={client} hub={hub} target={target} scope={scope} scopes={scopes} scopeMenu={scopeMenu} onScope={setScope} />} openRequest={openReq} onNavigate={(id,ref)=>leaveFor(id,()=>{again(id);remember({kind:id,scope});if(ref)setOpenReq({value:ref,seq:++reqSeq.current})})} drawer={{client,hub,target,argoScope:scope,onArgoApplication:openArgoApplication,onFluxResource:openFluxResource,hasLogs,onLogs:openLogs,hasExec,onTerminal:openTerminal,hasForward,actionsOf,onAction:openAction,eventsKindOf,editableOf,valuesOf,kindTitleOf}}/></Suspense>
         ) : (page.kind.workspace === 'argocd'||page.kind.workspace?.startsWith('argocd-')) ? (
           <Suspense fallback={<LoadingState />}><ArgoWorkspace key={page.key} client={client} target={target} scope={scope} kinds={kinds ?? []} workspace={page.kind.workspace} openRequest={openReq} onNavigate={(id,ref)=>leaveFor(id,()=>{again(id);remember({kind:id,scope});if(ref)setOpenReq({value:ref,seq:++reqSeq.current})})}
             scopePicker={<WorkspaceScopePicker client={client} hub={hub} target={target} scope={scope} scopes={scopes} scopeMenu={scopeMenu} onScope={setScope} />}
-            drawer={{client,hub,target,argoScope:scope,onArgoApplication:openArgoApplication,hasLogs,onLogs:openLogs,hasExec,onTerminal:openTerminal,hasForward,actionsOf,onAction:openAction,eventsKindOf,editableOf,valuesOf,kindTitleOf}}
+            drawer={{client,hub,target,argoScope:scope,onArgoApplication:openArgoApplication,onFluxResource:openFluxResource,hasLogs,onLogs:openLogs,hasExec,onTerminal:openTerminal,hasForward,actionsOf,onAction:openAction,eventsKindOf,editableOf,valuesOf,kindTitleOf}}
           /></Suspense>
         ) : page.kind.workspace === 'rbac' ? (
           <Suspense fallback={<LoadingState />}><RbacWorkspace key={page.key} client={client} target={target} scope={scope}
             scopePicker={<WorkspaceScopePicker client={client} hub={hub} target={target} scope={scope} scopes={scopes} scopeMenu={scopeMenu} onScope={setScope} />}
-            drawer={{client,hub,target,argoScope:scope,onArgoApplication:openArgoApplication,hasLogs,onLogs:openLogs,hasExec,onTerminal:openTerminal,hasForward,actionsOf,onAction:openAction,eventsKindOf,editableOf,valuesOf,kindTitleOf}}
+            drawer={{client,hub,target,argoScope:scope,onArgoApplication:openArgoApplication,onFluxResource:openFluxResource,hasLogs,onLogs:openLogs,hasExec,onTerminal:openTerminal,hasForward,actionsOf,onAction:openAction,eventsKindOf,editableOf,valuesOf,kindTitleOf}}
           /></Suspense>
         ) : page.kind.workspace === 'security' ? (
           <Suspense fallback={<LoadingState />}><SecurityWorkspace key={page.key} client={client} target={target} scope={scope}
             scopePicker={<WorkspaceScopePicker client={client} hub={hub} target={target} scope={scope} scopes={scopes} scopeMenu={scopeMenu} onScope={setScope} />}
-            drawer={{client,hub,target,argoScope:scope,onArgoApplication:openArgoApplication,hasLogs,onLogs:openLogs,hasExec,onTerminal:openTerminal,hasForward,actionsOf,onAction:openAction,eventsKindOf,editableOf,valuesOf,kindTitleOf}}
+            drawer={{client,hub,target,argoScope:scope,onArgoApplication:openArgoApplication,onFluxResource:openFluxResource,hasLogs,onLogs:openLogs,hasExec,onTerminal:openTerminal,hasForward,actionsOf,onAction:openAction,eventsKindOf,editableOf,valuesOf,kindTitleOf}}
           /></Suspense>
         ) : page.kind.workspace === 'timeline' ? (
           <Suspense fallback={<LoadingState />}><TimelineWorkspace key={page.key} client={client} target={target} scope={scope}
             scopePicker={<WorkspaceScopePicker client={client} hub={hub} target={target} scope={scope} scopes={scopes} scopeMenu={scopeMenu} onScope={setScope} />}
-            drawer={{client,hub,target,argoScope:scope,onArgoApplication:openArgoApplication,hasLogs,onLogs:openLogs,hasExec,onTerminal:openTerminal,hasForward,actionsOf,onAction:openAction,eventsKindOf,editableOf,valuesOf,kindTitleOf}}
+            drawer={{client,hub,target,argoScope:scope,onArgoApplication:openArgoApplication,onFluxResource:openFluxResource,hasLogs,onLogs:openLogs,hasExec,onTerminal:openTerminal,hasForward,actionsOf,onAction:openAction,eventsKindOf,editableOf,valuesOf,kindTitleOf}}
           /></Suspense>
         ) : page.kind.workspace === 'graph' ? (
           <Suspense fallback={<LoadingState />}><GraphWorkspace key={page.key} client={client} target={target} session={catalog.view?.session ?? 0} connection={target.connection?.id ?? 0} scope={scope}
             scopePicker={<WorkspaceScopePicker client={client} hub={hub} target={target} scope={scope} scopes={scopes} scopeMenu={scopeMenu} onScope={setScope} />}
-            drawer={{client,hub,target,argoScope:scope,onArgoApplication:openArgoApplication,hasLogs,onLogs:openLogs,hasExec,onTerminal:openTerminal,hasForward,actionsOf,onAction:openAction,eventsKindOf,editableOf,valuesOf,kindTitleOf}}
+            drawer={{client,hub,target,argoScope:scope,onArgoApplication:openArgoApplication,onFluxResource:openFluxResource,hasLogs,onLogs:openLogs,hasExec,onTerminal:openTerminal,hasForward,actionsOf,onAction:openAction,eventsKindOf,editableOf,valuesOf,kindTitleOf}}
           /></Suspense>
         ) : page.kind.workspace?.startsWith('helm-') ? (
           <HelmWorkspace key={page.key} client={client} target={target} scope={scope} onResource={ref => paletteActs.current?.openObject(ref)} initialTab={page.kind.workspace === 'helm-settings' ? 'settings' : page.kind.workspace === 'helm-charts' ? 'charts' : 'releases'} scopePicker={<WorkspaceScopePicker client={client} hub={hub} target={target} scope={scope} scopes={scopes} scopeMenu={scopeMenu} onScope={setScope} />} />
@@ -483,6 +488,8 @@ export function Workspace({ client, hub, target, onFavorite, onMoveFavorite, onN
             actionsOf={actionsOf}
             onAction={openAction}
             onArgoApplication={openArgoApplication}
+            onFluxResource={openFluxResource}
+            hasFlux={!!kinds?.some(k=>k.workspace==='fluxcd')}
             onBulk={openBulk}
             eventsKindOf={eventsKindOf}
             editableOf={editableOf}
@@ -595,7 +602,9 @@ export function navGroups(kinds: KindDescriptor[], provider?: string): NavGroup[
   }
   const argoGroup=out.find(g=>g.group==='Argo CD'),helmGroup=out.find(g=>g.group==='Helm')
   if(argoGroup&&helmGroup){out.splice(out.indexOf(argoGroup),1);out.splice(out.indexOf(helmGroup)+1,0,argoGroup)}
-  for (const g of out) g.items = g.items.map((it) => ('sub' in it && it.kinds.length === 1 ? { kind: it.kinds[0] } : it))
+  const fluxGroup=out.find(g=>g.group==='Flux'),anchor=argoGroup??helmGroup
+ if(fluxGroup&&anchor){out.splice(out.indexOf(fluxGroup),1);out.splice(out.indexOf(anchor)+1,0,fluxGroup)}
+ for (const g of out) g.items = g.items.map((it) => ('sub' in it && it.kinds.length === 1 ? { kind: it.kinds[0] } : it))
   return out
 }
 
@@ -764,6 +773,8 @@ function ResourcePage(props: {
   actionsOf: (kindId: string) => ActionDescriptor[]
   onAction: (ref: Ref, action: ActionDescriptor) => void
   onArgoApplication: (ref:Ref)=>void
+  onFluxResource:(ref:Ref)=>void
+  hasFlux:boolean
   onBulk: (items: BulkItem[], action: ActionDescriptor, onDone: (ids: string[]) => void) => void
   eventsKindOf: (kindId: string) => string | undefined
   editableOf: (kindId: string) => boolean
@@ -774,7 +785,7 @@ function ResourcePage(props: {
   /** The target's key in pageMemo (P18): this page's part is restored once. */
   memoKey: string
 }) {
-  const { pageKey, onHalted, client, hub, target, kind, scope, scopes, scopeMenu, onScope, hasLogs, onLogs, hasExec, onTerminal, hasForward, actionsOf, onAction, onArgoApplication, onBulk, eventsKindOf, editableOf, valuesOf, kindTitleOf, filterReq, openReq, memoKey: tkey } = props
+  const { pageKey, onHalted, client, hub, target, kind, scope, scopes, scopeMenu, onScope, hasLogs, onLogs, hasExec, onTerminal, hasForward, actionsOf, onAction, onArgoApplication, onFluxResource, hasFlux, onBulk, eventsKindOf, editableOf, valuesOf, kindTitleOf, filterReq, openReq, memoKey: tkey } = props
   const scopeKey = JSON.stringify(scope)
   const query = useMemo(() => ({ kind: kind.id, scope: JSON.parse(scopeKey) as ScopeSel }), [kind.id, scopeKey])
   const view = useView(hub, target.provider, target.id, query)
@@ -830,7 +841,9 @@ function ResourcePage(props: {
   }
   // The palette offers this table's rows.
   useEffect(() => lend('rows', view.rows), [view.rows])
-  const columns = view.kind?.columns ?? kind.columns
+  const baseColumns=view.kind?.columns??kind.columns
+ const fluxColumn=hasFlux&&['apps/deployments','apps/statefulsets','apps/daemonsets'].includes(kind.id)
+ const columns=fluxColumn?[...baseColumns,{id:'flux',title:'Flux',type:'text' as const,width:180}]:baseColumns
   const [visibleRows, setVisibleRows] = useState<string[]>([])
   // A sample of a row since changed (a service's last replica stopped) is
   // not shown as current.
@@ -959,6 +972,7 @@ function ResourcePage(props: {
           areaFocus
           emptyMessage={initialLoading ? <ListLoading view={view} label={t('table.loading', {kind: kindLabel(target.provider, kind)})} /> : view.status.state === 'ready' ? view.rows.length === 0 ? emptyTableText(view.status.coverage) : t('nav.noMatches') : null}
           columns={columns}
+          renderCell={(row,column)=>column.id==='flux'?<FluxWorkloadStatus client={client} resource={row} scope={scope} onGo={onFluxResource}/>:undefined}
           rows={view.rows}
           hideScope={scope.mode === 'one'}
           filter={filter}
@@ -999,6 +1013,7 @@ function ResourcePage(props: {
             hidden={view.cancelled}
             argoScope={scope}
             onArgoApplication={onArgoApplication}
+            onFluxResource={onFluxResource}
             client={client}
             hub={hub}
             target={{ provider: target.provider, id: target.id }}

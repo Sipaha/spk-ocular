@@ -1,3 +1,4 @@
+import {groupLabel} from '../presentation'
 // What the palette offers for an input: fuzzy over the current target's
 // views, all targets, scopes and eligible live rows. History ranks matching rows,
 // or a command (":po", ":deploy web", ":ns demo", ":ns *", ":ctx prod").
@@ -69,7 +70,7 @@ const kindItem = (k: KindDescriptor, filter?: string,scope?:ScopeSel): PaletteIt
   key: `kind:${k.id}${filter ? `:${filter}` : ''}${scope ? `:scope:${JSON.stringify(scope)}` : ''}`,
   section: 'kind',
   label: k.title,
-  hint: `${scope?.mode === 'one' ? `${scope.name} · ` : ''}${filter ? t('palette.filtered', { text: filter }) : k.subgroup ? `${k.group} · ${k.subgroup}` : k.group}`,
+  hint: `${scope?.mode === 'one' ? `${scope.name} · ` : ''}${filter ? t('palette.filtered', { text: filter }) : k.subgroup ? `${groupLabel('',k.group)} · ${k.subgroup}` : groupLabel('',k.group)}`,
   action: { type:'kind',kind:k.id,...(filter?{filter}:{}),...(scope?{scope}:{}) },
 })
 

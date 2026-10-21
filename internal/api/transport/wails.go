@@ -243,3 +243,7 @@ func (w *API) ClusterSecurity(ctx context.Context, req api.SecurityRequest) (cor
 func (w *API) ArgoCD(ctx context.Context, req api.ArgoRequest) (core.ArgoSnapshot, error) {
 	return w.a.ArgoCD(api.UIContext(ctx), req)
 }
+
+func (w *API) FluxCD(ctx context.Context, req api.FluxRequest) (core.FluxSnapshot, error) {
+	return w.a.FluxCD(api.UIContext(ctx), req)
+}

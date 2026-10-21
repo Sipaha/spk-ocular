@@ -155,6 +155,7 @@ export interface Cell {
 }
 
 export interface Row {
+ fluxTracking?:import("../fluxcd/types").FluxTracking
   id: string
   /** Provider revision: changes with any change of the object. */
   rev?: string
@@ -606,6 +607,7 @@ export interface ResourceRevision {
 }
 
 export interface Resource {
+ fluxTracking?:import("../fluxcd/types").FluxTracking
  argoTracking?: import("../argocd/types").ArgoTracking
  rbacSubject?: Ref
   revisions?: ResourceRevision[]

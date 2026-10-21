@@ -149,6 +149,11 @@ checks the real agent socket without expanding existing project grants. The
 browser DIND suite also exercises standalone rows and scope transitions. These
 tests use the same verified `ocular-dind` endpoint and clean up their own IDs.
 
+Socket fixtures that need a specific local port reserve real IPv4 and IPv6
+listeners together and transfer ownership through the injected listener hook.
+A free port on one address family does not establish availability on the other;
+closing a probe before the test binds it introduces a separate allocation race.
+
 ## Actual desktop verification
 
 Use a dedicated X display and an isolated profile. Preserve displays/processes
@@ -452,3 +457,11 @@ Argo CD tests use Kubernetes fake clients and owned HTTP/synthetic fixtures.
 `make check` gate includes it. Browser operation responses use the HTTP fixture
 seam; provider tests verify the actual guarded patch bodies. Neither fixture
 runs an Argo controller or proves real-cluster reconciliation.
+
+Flux projection and navigation tests use Kubernetes fake clients, authenticated
+HTTP tests and synthetic browser fixtures. The normal synthetic Playwright
+configuration includes `fluxcd.spec.ts`: detection, retained generic CRD access, all
+supported typed pages, source/inventory/manager references, errors/cancellation
+and eight locales at wide/narrow widths. These fixtures do not execute a real
+Flux reconciliation or use a user's cluster. See [Flux](fluxcd.md) for semantic
+and coverage limits.

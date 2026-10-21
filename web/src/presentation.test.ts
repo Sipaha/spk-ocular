@@ -20,6 +20,8 @@ describe('localized presentation and stable identity', () => {
     expect(columnLabel('vendor.example/Custom')).toBe('vendor.example/Custom')
     expect(groupLabel('kubernetes', 'Workloads')).toBe('Рабочие нагрузки')
     expect(groupLabel('synthetic', 'Workloads')).toBe('Workloads')
+    expect(groupLabel('kubernetes','API groups','en')).toBe('Custom Resources')
+    expect(groupLabel('kubernetes','API groups','ru')).toBe('Пользовательские ресурсы')
     const kind = { id: 'projects', title: 'Projects', group: 'Compose', columns: [], scoped: false }
     expect(kindLabel('compose', kind)).toBe('Проекты')
     expect(kindLabel('synthetic', kind)).toBe('Projects')

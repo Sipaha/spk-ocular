@@ -139,6 +139,7 @@ func (h *HTTP) routes() {
 	h.mux.Handle("POST /api/Configurations", noStore(handle(func(ctx context.Context, r *configuration.ConfigRequest) (any, error) {
 		return h.api.Configurations(ctx, *r)
 	})))
+	h.mux.Handle("POST /api/FluxCD", noStore(handle(func(ctx context.Context, req *api.FluxRequest) (any, error) { return h.api.FluxCD(ctx, *req) })))
 	h.mux.Handle("POST /api/ArgoCD", noStore(handle(func(ctx context.Context, req *api.ArgoRequest) (any, error) { return h.api.ArgoCD(ctx, *req) })))
 	h.mux.HandleFunc("POST /api/ClusterSecurity", handle(func(ctx context.Context, req *api.SecurityRequest) (any, error) {
 		return h.api.ClusterSecurity(ctx, *req)

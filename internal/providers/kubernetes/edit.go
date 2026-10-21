@@ -543,6 +543,9 @@ func managedBy(u *unstructured.Unstructured) string {
 	if ann["argocd.argoproj.io/tracking-id"] != "" {
 		return "Argo CD"
 	}
+	if fluxTracking(u) != nil {
+		return "Flux tracking metadata"
+	}
 	return ""
 }
 

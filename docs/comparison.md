@@ -110,6 +110,7 @@ Refresh/Hard refresh, verified bidirectional local-resource investigation and an
 explicit Argo UI action with exact-current tunnel reuse. Settings loads are
 explicit, namespace/kind-scoped Secret projections that do not export credentials.
 Unknown/partial controller or ownership evidence stays visible. Ask AI is explicitly
-excluded; Flux, credential editing and Git writeback remain separate. These
+excluded. [Flux](fluxcd.md) has its own detected section; credential editing
+and Git writeback remain separate. These
 workflows use Kubernetes API rights and do not establish complete Lens parity,
 market uniqueness or measured user value.

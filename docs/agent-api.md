@@ -379,3 +379,10 @@ workspace kinds are application-UI-only. Argo Sync, Sync with prune,
 Refresh and Hard refresh are `NoAgents` operations: generic object grants cannot
 authorize controller reconciliation. Use the [native UI workspace](argocd.md) for
 explicit reviewed operations.
+
+### Flux CD boundary
+
+`FluxCD` and virtual `ocular.fluxcd*` navigator kinds are application-UI-only.
+No Flux mutation or additional agent grant is introduced. Ordinary discovered
+resource grants remain independent; removal of navigation duplicates does not
+remove their descriptors or broaden access. See [Flux](fluxcd.md).

@@ -446,7 +446,7 @@ test('a user without the right sees it in the review', async ({ page }) => {
 /** The navigation's discovered kind (API groups and its subgroup expanded). */
 async function apiKind(page: Page, sub: string, kind: string, ns?: string) {
   const nav = page.getByRole('navigation', { name: 'resources' })
-  const fold = nav.getByRole('region', { name: 'API groups' }).getByRole('button', { name: /^API groups/ })
+  const fold = nav.getByRole('region', { name: 'Custom Resources' }).getByRole('button', { name: /^Custom Resources/ })
   if ((await fold.getAttribute('aria-expanded')) === 'false') await fold.click()
   const group = nav.getByRole('group', { name: sub })
   const head = group.getByRole('button', { name: new RegExp(`^${sub.replace(/\./g, '\\.')}`) })
@@ -459,9 +459,9 @@ async function apiKind(page: Page, sub: string, kind: string, ns?: string) {
 
 test('custom resources: API groups in the navigation, the CRD columns, live changes', async ({ page }) => {
   await openTarget(page, 'kind-ocular-dev')
-  const section = page.getByRole('navigation', { name: 'resources' }).getByRole('region', { name: 'API groups' })
+  const section = page.getByRole('navigation', { name: 'resources' }).getByRole('region', { name: 'Custom Resources' })
   // The rare and the custom: folded by default.
-  await expect(section.getByRole('button', { name: /^API groups/ })).toHaveAttribute('aria-expanded', 'false')
+  await expect(section.getByRole('button', { name: /^Custom Resources/ })).toHaveAttribute('aria-expanded', 'false')
   await expect(section.getByRole('button', { name: /^ocular\.dev/ })).toBeHidden()
   const grid = await apiKind(page, 'ocular.dev', 'Widgets', 'ocular-crd')
   // kubectl get's columns (Detail is wide: a fact of the details)

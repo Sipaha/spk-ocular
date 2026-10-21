@@ -158,7 +158,7 @@ describe('buildItems — commands', () => {
     const pods = buildItems(':pods', src)
     expect(cursorItem(pods)?.action).toEqual({ type: 'kind', kind: 'pods' })
     expect(labels(pods)).toEqual(['kind:Pods', 'kind:Pods']) // the other one is still offered
-    expect(pods.items[1]).toMatchObject({ hint: 'API groups · other.example' })
+    expect(pods.items[1]).toMatchObject({ hint: 'Custom Resources · other.example' })
     expect(cursorItem(buildItems(':po', src))?.action).toEqual({ type: 'kind', kind: 'pods' })
     expect(cursorItem(buildItems(':things', src))?.action).toEqual({ type: 'kind', kind: 'a.example/things' })
     expect(cursorItem(buildItems(':other.example/pods', src))?.action).toEqual({ type: 'kind', kind: 'other.example/pods' })

@@ -100,6 +100,7 @@ func (s *session) Get(ctx context.Context, ref core.Ref) (*core.Resource, error)
 
 	out := &core.Resource{
 		ArgoTracking: argoTracking(u),
+		FluxTracking: fluxTracking(u),
 		Ref:          core.Ref{Provider: ProviderID, Target: s.target, Scope: u.GetNamespace(), Kind: def.desc.ID, Name: u.GetName(), UID: string(u.GetUID())},
 		Health:       health,
 		Facts:        fs,

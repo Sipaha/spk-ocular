@@ -163,5 +163,6 @@ scope, coverage, pagination, tracking identity, revision pinning and single-writ
 conflicts/failures. Headless browser fixtures cover actual independent navigation,
 registered descriptors, operations, bulk selection, forward reuse, edit guards,
 late answers and eight locales. These checks do not run a real Argo controller or
-prove reconciliation in a user cluster. Flux, Ask AI, credential editing, Git
-writeback and controller installation remain outside this task.
+prove reconciliation in a user cluster. [Flux](fluxcd.md) has a separate detected
+section. Ask AI, credential editing, Git writeback and controller installation
+remain outside this feature.

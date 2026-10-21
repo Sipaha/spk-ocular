@@ -216,7 +216,7 @@ var kind = core.KindDescriptor{
 
 func (s *session) ConfigHash() string { return s.hash }
 func (s *session) Kinds() []core.KindDescriptor {
-	return []core.KindDescriptor{kind, workloadKind, problemsKind, crateKind, parcelKind, argoApplicationKind}
+	return append([]core.KindDescriptor{kind, workloadKind, problemsKind, crateKind, parcelKind, argoApplicationKind}, fluxKinds()...)
 }
 
 // Scopes cannot be listed: the UI takes a typed one.
@@ -226,6 +226,11 @@ func (s *session) Scopes(context.Context) ([]core.Scope, error) {
 func (s *session) ScopeKind() string { return "" }
 func (s *session) Close()            {}
 func (s *session) Get(_ context.Context, ref core.Ref) (*core.Resource, error) {
+	for _, k := range fluxKinds() {
+		if ref.Kind == k.ID {
+			return s.getFlux(ref)
+		}
+	}
 	switch ref.Kind {
 	case WorkloadKind:
 		return s.getWorkload(ref.Name)

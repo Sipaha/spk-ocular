@@ -1133,3 +1133,23 @@ unknown installation identity and ambiguous matches do not authorize a link.
 An eight-entry per-Client memory cache shares only ordinary controller projections
 for an exact connection incarnation and namespace selection. Held editors cannot
 relabel retained evidence as belonging to a replacement connection.
+
+## Native Flux controller views
+
+`provider.FluxSource` supplies a bounded, UI-only projection of discovered Flux
+controller kinds and related Events through authenticated no-store `FluxCD` HTTP
+and Wails routes. `core.FluxResourceKinds` is the exact supported API inventory;
+served versions come from discovery. Virtual `ocular.fluxcd*` descriptors are
+added only to the UI catalog when supported APIs are present.
+
+The frontend shares at most eight finite snapshots per client in memory for exact
+target/scope/connection identity. Manager links require current UID and controller
+inventory or an exact owner UID; Helm labels alone remain unresolved. Source and
+local inventory links retain namespace and edit/late-response guards. The
+[Flux contract](fluxcd.md) describes bounds, partial coverage and privacy.
+
+Generic navigation is labelled Custom Resources while its internal API groups
+identity remains stable. Argo/Flux CRDs and other third-party API resources remain
+in generic navigation alongside specialized pages, with independent favorites
+and selections. Their descriptors remain available to resources, schemas,
+relations and agent permissions.

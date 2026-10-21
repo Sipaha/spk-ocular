@@ -1,3 +1,4 @@
+import type {FluxRequest,FluxSnapshot} from '../fluxcd/types'
 import type { ArgoRequest, ArgoSnapshot } from '../argocd/types'
 import type {SecurityRequest,SecuritySnapshot} from './types'
 import type {CompareRequest,ResourceComparison} from './types'
@@ -25,6 +26,7 @@ export class ApiError extends Error {
 }
 
 export interface Client {
+ fluxCD(req:FluxRequest,signal?:AbortSignal):Promise<FluxSnapshot>
  argoCD(req:ArgoRequest,signal?:AbortSignal):Promise<ArgoSnapshot>
  compareResources(req:CompareRequest,signal?:AbortSignal):Promise<ResourceComparison>
  rbacSnapshot(req: RBACRequest, signal?: AbortSignal): Promise<RBACSnapshot>
@@ -178,6 +180,7 @@ const done = async (p: Promise<unknown>) => {
 
 export const httpClient: Client = {
   argoCD: (req,signal) => post('ArgoCD',req,signal),
+ fluxCD:(req,signal)=>post('FluxCD',req,signal),
   configurations: (req) => post('Configurations', req),
   appInfo: () => post('AppInfo', {}),
   setLanguage: (language) => post('SetLanguage', { language }),
@@ -319,6 +322,7 @@ const EVENT_TYPES: EventType[] = ['targets_changed', 'resync', 'view_changed', '
 
 export const wailsClient: Client = {
   argoCD: (req,signal) => wcallAbortable(signal,'ArgoCD',req),
+ fluxCD:(req,signal)=>wcallAbortable(signal,'FluxCD',req),
   configurations: (req) => wcall('Configurations', req),
   appInfo: () => wcall('AppInfo'),
   setLanguage: (language) => wcall('SetLanguage', language),

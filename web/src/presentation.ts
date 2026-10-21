@@ -56,7 +56,10 @@ const rows = [
 'Cluster|Кластер|集群|Clúster|Cluster|Cluster|Cluster|クラスタ',
 'Storage|Хранилища|存储|Almacenamiento|Speicher|Stockage|Armazenamento|ストレージ',
 'Access Control|Управление доступом|访问控制|Control de acceso|Zugriffssteuerung|Contrôle d’accès|Controle de acesso|アクセス制御',
-'API groups|API-группы|API 组|Grupos de API|API-Gruppen|Groupes d’API|Grupos de API|API グループ',
+'Custom Resources|Пользовательские ресурсы|自定义资源|Recursos personalizados|Benutzerdefinierte Ressourcen|Ressources personnalisées|Recursos personalizados|カスタムリソース',
+'Sources|Источники|源|Fuentes|Quellen|Sources|Fontes|ソース',
+'Image automation|Автоматизация образов|镜像自动化|Automatización de imágenes|Image-Automatisierung|Automatisation des images|Automação de imagens|イメージ自動化',
+'Notifications|Уведомления|通知|Notificaciones|Benachrichtigungen|Notifications|Notificações|通知',
 'Engine|Движок Docker|Docker 引擎|Motor de Docker|Docker Engine|Moteur Docker|Docker Engine|Docker エンジン',
 'Projects|Проекты|项目|Proyectos|Projekte|Projets|Projetos|プロジェクト',
 'Networks|Сети|网络|Redes|Netzwerke|Réseaux|Redes|ネットワーク',
@@ -75,9 +78,12 @@ export function columnLabel(title: string, language: Language = getLanguage()): 
   return Object.hasOwn(labels, title) ? labels[title] : title
 }
 export function groupLabel(provider: string, title: string, language: Language = getLanguage()): string {
+  if(title==='API groups') return columnLabel('Custom Resources',language)
   return provider === 'kubernetes' || provider === 'compose' ? columnLabel(title, language) : title
 }
 export function kindLabel(provider: string, kind: KindDescriptor): string {
+ if(kind.workspace === 'fluxcd') return t('argo.dashboard')
+ if(kind.workspace?.startsWith('fluxcd-')) return kind.title
  if(kind.workspace === 'argocd') return t('argo.dashboard')
  if(kind.workspace === 'argocd-applications') return t('argo.applications')
  if(kind.workspace === 'argocd-applicationsets') return t('argo.sets')

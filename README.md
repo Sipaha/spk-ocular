@@ -27,6 +27,7 @@ not collect telemetry. Helm is embedded; a separate Helm CLI is not required.
 
 - Live resource tables, discovery of Kubernetes API resources, details, and metrics.
 - Multiple namespaces, global favorites, resource search, and saved table layouts.
+- [Flux CD](docs/fluxcd.md) for detected controller dashboards, typed resources and scoped source/manager navigation.
 - [Argo CD](docs/argocd.md) for a standalone dashboard and typed resource/settings pages,
   reviewed Sync/Prune and Refresh, bidirectional resource investigation and UI tunnels.
 - [Security](docs/security.md) for read-only configuration risks, NetworkPolicy

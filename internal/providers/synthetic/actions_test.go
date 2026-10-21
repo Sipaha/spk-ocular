@@ -81,7 +81,7 @@ func class(t *testing.T, err error) provider.ErrorClass {
 func TestWorkloadsOfferActionsAndServicesDoNot(t *testing.T) {
 	_, s := open(t)
 	kinds := s.Kinds()
-	require.Len(t, kinds, 6)
+	require.Len(t, kinds, 20)
 	assert.Equal(t, "argoproj.io/applications", kinds[5].ID)
 	assert.True(t, kinds[5].Hidden)
 	require.Len(t, kinds[5].Actions, 4)
