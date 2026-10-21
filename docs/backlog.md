@@ -33,6 +33,17 @@ Detailed scope and acceptance live in `spk-ocular-learning-resource-help`,
 implemented. Independent learner validation remains separate from software
 delivery; do not treat a completed local check as a learner study.
 
+## Backup and recovery integrations
+
+- [ ] **Native Velero support:** add a dedicated section when Velero APIs are
+  discovered in the connected cluster, following the Argo CD/Flux navigation
+  model. Plan backup/restore and schedule inspection, controller status, related
+  events and guarded resource navigation. Detailed supported kinds, operations
+  and acceptance criteria must be selected and verified before implementation.
+  This is a roadmap item only; installation, backup/restore execution, credential
+  access and changes to real clusters are not authorized by its inclusion.
+  Planning task: `spk-ocular-velero` in the work task service.
+
 ## Investigation workbench
 
 Events Timeline, RBAC explanation, resource comparison and workspace continuity
