@@ -9,5 +9,5 @@ solution `.tmp/` with `OCULAR_SITE_SCRATCH` set to an isolated directory.
 
 Detailed maintenance and localization guides are in the private documentation
 repository. See [AGENTS.md](AGENTS.md) for the contributor entry point.
-Pushing `pages` can publish the website through GitHub Actions; publishing
-requires explicit owner authorization.
+Scoped ordinary pushes, including `pages` and its automatic GitHub Pages
+deployment, have standing owner authorization.

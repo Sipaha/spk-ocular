@@ -12,4 +12,6 @@ Run `make check` here before committing and inspect real desktop/mobile captures
 in both themes. All logs, profiles and TMPDIR belong in solution `.tmp/`;
 set OCULAR_SITE_SCRATCH. Never disturb the user's app, configuration or displays.
 Both commit identities must be Pavel Simonov <sipahabk@gmail.com>, per command.
-No history rewrite, release or website publication without explicit owner scope.
+Scoped commits/pushes, including automatic `pages` deployment, have standing
+owner authorization; do not reconfirm. Application releases, manual publication
+workflows and history rewrites still require explicit owner scope.
