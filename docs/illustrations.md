@@ -2,10 +2,13 @@
 
 ## Disconnected workspace
 
-Two bundled illustrations decorate unopened or closed connections:
+Two illustrations decorate unopened or closed connections; the asset inventory
+also retains the lighthouse reference variant:
 
 - `web/src/assets/disconnected-lighthouse-drawn.webp`: drawn lighthouse for the
   navigation panel.
+- `web/src/assets/disconnected-lighthouse.webp`: retained lighthouse reference
+  variant; it is not used by the current workspace CSS.
 - `web/src/assets/disconnected-mountains.webp`: schematic mountains and lake for
   the main connection-status panel, also used before selecting a connection.
 
