@@ -1,3 +1,4 @@
+import {ResourceReliability} from '../reliability/ResourceReliability'
 import {ResourceCertificate} from '../certificates/ResourceCertificate'
 import {ResourceNetworkPath} from '../network/ResourceNetworkPath'
 import {ResourceDiagnosis} from '../diagnosis/ResourceDiagnosis'
@@ -435,7 +436,7 @@ export function ResourceDrawer({ hidden = false, embedded = false, client, hub, 
           </div>
         )}
         {r && tab === 'details' && (
-          <Details argoScope={argoScope} onArgoApplication={onArgoApplication} onFluxResource={onFluxResource}
+          <Details snapshotKey={presentation} revision={revision} argoScope={argoScope} onArgoApplication={onArgoApplication} onFluxResource={onFluxResource}
             onDiagnosisLogs={(ref,channel,previous)=>leave(()=>dock.openLogs({provider:ref.provider,id:ref.target},filesTargetTitle,ref,channel,previous))}
             client={client}
             hub={hub}
@@ -493,7 +494,7 @@ function RetainedSection({pending,children}:{pending:boolean;children:ReactNode}
  return <div ref={box} data-retained-section style={pending?{height}:undefined}>{pending?null:children}</div>
 }
 
-function Details(props: { onDiagnosisLogs:(ref:Ref,channel:string,previous:boolean)=>void; argoScope?:ScopeSel;onArgoApplication?:(ref:Ref)=>void;onFluxResource?:(ref:Ref)=>void; client: Client; hub: ViewHub; target: { provider: string; id: string }; r: Resource; onGo: (ref: Ref) => void; kindTitleOf?: (kind: string) => string; eventsKind?: string; ports?: ReactNode; values?: ReactNode; pending?:boolean }) {
+function Details(props: { snapshotKey:unknown;revision?:string; onDiagnosisLogs:(ref:Ref,channel:string,previous:boolean)=>void; argoScope?:ScopeSel;onArgoApplication?:(ref:Ref)=>void;onFluxResource?:(ref:Ref)=>void; client: Client; hub: ViewHub; target: { provider: string; id: string }; r: Resource; onGo: (ref: Ref) => void; kindTitleOf?: (kind: string) => string; eventsKind?: string; ports?: ReactNode; values?: ReactNode; pending?:boolean }) {
   const { client, hub, target, r, onGo, kindTitleOf, eventsKind, ports, values, pending=false, argoScope, onArgoApplication, onFluxResource } = props
   const containerFacts = useMemo(() => podContainerFacts(r), [r])
   const groups = useMemo(() => {
@@ -522,6 +523,7 @@ function Details(props: { onDiagnosisLogs:(ref:Ref,channel:string,previous:boole
           </div>
         ))}
       </dl>
+      {r.reliabilityAvailable&&<RetainedSection pending={pending}><ResourceReliability client={client} subject={r.ref} snapshotKey={props.snapshotKey} revision={props.revision} onGo={onGo}/></RetainedSection>}
       {r.certificateStatusAvailable&&<RetainedSection pending={pending}><ResourceCertificate client={client} subject={r.ref} onGo={onGo}/></RetainedSection>}
       {r.networkPathAvailable&&<RetainedSection pending={pending}><ResourceNetworkPath client={client} subject={r.ref} onGo={onGo}/></RetainedSection>}
       {r.diagnosisAvailable&&<RetainedSection pending={pending}><ResourceDiagnosis client={client} subject={r.ref} onGo={onGo} onLogs={props.onDiagnosisLogs}/></RetainedSection>}

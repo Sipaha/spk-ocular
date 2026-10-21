@@ -263,3 +263,7 @@ func (w *API) ViewPresets(req api.ViewPresetsRequest) (api.ViewPresetRegistry, e
 func (w *API) CertificateStatus(ctx context.Context, ref core.Ref) (core.CertificateStatus, error) {
 	return w.a.CertificateStatus(api.UIContext(ctx), ref)
 }
+
+func (w *API) ResourceReliability(ctx context.Context, ref core.Ref) (core.Reliability, error) {
+	return w.a.ResourceReliability(api.UIContext(ctx), ref)
+}

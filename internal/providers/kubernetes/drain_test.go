@@ -69,8 +69,8 @@ func pdb(ns, name string, match map[string]any, allowed int64) *unstructured.Uns
 	}
 	return &unstructured.Unstructured{Object: map[string]any{
 		"apiVersion": "policy/v1", "kind": "PodDisruptionBudget",
-		"metadata": map[string]any{"name": name, "namespace": ns, "uid": "uid-" + name},
-		"spec":     spec, "status": map[string]any{"disruptionsAllowed": allowed},
+		"metadata": map[string]any{"name": name, "namespace": ns, "uid": "uid-" + name, "generation": int64(1)},
+		"spec":     spec, "status": map[string]any{"disruptionsAllowed": allowed, "observedGeneration": int64(1)},
 	}}
 }
 

@@ -28,6 +28,10 @@ func TestInventoryCursorRejectsRepeatedContinuation(t *testing.T) {
 
 func TestSnapshotCancellationWhileWaitingForInventoryGate(t *testing.T) {
 	calls := map[string]func(*session, context.Context) error{
+		"reliability": func(s *session, c context.Context) error {
+			_, e := s.ResourceReliability(c, reliabilityRef())
+			return e
+		},
 		"graph": func(s *session, c context.Context) error {
 			_, e := s.Graph(c, core.ScopeSel{Mode: core.ScopeAll})
 			return e
@@ -50,6 +54,11 @@ func TestSnapshotCancellationWhileWaitingForInventoryGate(t *testing.T) {
 			sessionCtx, cancel := context.WithCancel(t.Context())
 			defer cancel()
 			s := &session{ctx: sessionCtx, graphGate: make(chan struct{}, 1)}
+			if name == "reliability" {
+				s = newSession("t", "h", reliabilityFake(), false)
+				s.ctx = sessionCtx
+				defer s.Close()
+			}
 			s.graphGate <- struct{}{}
 			result := make(chan error, 1)
 			go func() { result <- call(s, t.Context()) }()

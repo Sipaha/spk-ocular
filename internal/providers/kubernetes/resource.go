@@ -100,6 +100,7 @@ func (s *session) Get(ctx context.Context, ref core.Ref) (*core.Resource, error)
 
 	out := &core.Resource{
 		CertificateStatusAvailable: certificateSupported(def),
+		ReliabilityAvailable:       reliabilitySupported(def),
 		NetworkPathAvailable:       def == servicesKind || def == ingressesKind,
 		DiagnosisAvailable:         def.namespaced && diagnosisSupported(def.gvr.GroupResource()),
 		ArgoTracking:               argoTracking(u),

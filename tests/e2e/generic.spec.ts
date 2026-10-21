@@ -639,7 +639,9 @@ test('refresh details wait two seconds and never move toolbar controls', async (
   const filter = toolbar.locator('[data-primary-filter]')
   const before = await refresh.boundingBox()
   const filterBefore = await filter.boundingBox()
-  loading = true
+  // Arm the artificial loading phase only for the explicit refresh. Initial
+  // GetRows replies may still be in flight after the first rows are visible.
+  await page.route('**/api/ResyncView', route => { loading = true; return route.continue() })
   await refresh.click()
   await expect(refresh).toHaveAttribute('aria-busy','true')
   await expect(toolbar.locator('[data-list-loading]')).toHaveCount(0)

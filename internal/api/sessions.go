@@ -568,10 +568,11 @@ func (s *Service) GetResource(ctx context.Context, ref core.Ref) (*core.Resource
 	if err != nil {
 		return nil, fromProvider(err)
 	}
-	if !fromUI(ctx) && (r.NetworkPathAvailable || r.CertificateStatusAvailable) {
+	if !fromUI(ctx) && (r.NetworkPathAvailable || r.CertificateStatusAvailable || r.ReliabilityAvailable) {
 		uiCopy := *r
 		uiCopy.NetworkPathAvailable = false
 		uiCopy.CertificateStatusAvailable = false
+		uiCopy.ReliabilityAvailable = false
 		r = &uiCopy
 	}
 	return r, nil

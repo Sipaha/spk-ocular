@@ -22,6 +22,7 @@ type API interface {
 	DiagnoseResource(context.Context, core.Ref) (core.Diagnosis, error)
 	ResourceNetworkPath(context.Context, core.Ref) (core.NetworkPath, error)
 	CertificateStatus(context.Context, core.Ref) (core.CertificateStatus, error)
+	ResourceReliability(context.Context, core.Ref) (core.Reliability, error)
 	ArgoCD(context.Context, ArgoRequest) (core.ArgoSnapshot, error)
 	FluxCD(context.Context, FluxRequest) (core.FluxSnapshot, error)
 	RBACSnapshot(context.Context, RBACRequest) (core.RBACSnapshot, error)

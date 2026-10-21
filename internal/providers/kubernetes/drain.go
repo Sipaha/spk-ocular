@@ -450,9 +450,10 @@ func (s *session) drainPDBs(ctx context.Context, evict []drainPod) []core.Messag
 		namespaces = namespaces[:maxPDBNamespaces]
 	}
 	type found struct {
-		blocking map[string][]string // PDB → pods
-		many     []string
-		ok       bool
+		blocking  map[string][]string // PDB → pods
+		many      []string
+		ok        bool
+		unchecked bool
 	}
 	results := make([]found, len(namespaces))
 	sem := make(chan struct{}, drainParallel)
@@ -494,7 +495,12 @@ func (s *session) drainPDBs(ctx context.Context, evict []drainPod) []core.Messag
 					f.many = append(f.many, p.name())
 				}
 				for _, b := range matched {
-					if i64(b.Object, "status", "disruptionsAllowed") == 0 {
+					allowed, current := currentPDBDisruptions(b)
+					if !current {
+						f.unchecked = true
+						continue
+					}
+					if allowed == 0 {
 						f.blocking[b.GetName()] = append(f.blocking[b.GetName()], p.name())
 					}
 				}
@@ -505,6 +511,9 @@ func (s *session) drainPDBs(ctx context.Context, evict []drainPod) []core.Messag
 	wg.Wait()
 	var out []core.Message
 	for i, f := range results {
+		if f.unchecked {
+			unchecked = true
+		}
 		if !f.ok {
 			unchecked = true
 			continue
