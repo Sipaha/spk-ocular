@@ -56,6 +56,8 @@ var securitySources = []securitySource{
 	{schema.GroupVersionResource{Group: "rbac.authorization.k8s.io", Version: "v1", Resource: "roles"}, "Role", false},
 	{schema.GroupVersionResource{Group: "rbac.authorization.k8s.io", Version: "v1", Resource: "clusterroles"}, "ClusterRole", true},
 	{vulnerabilityReportGVR, "VulnerabilityReport", false},
+	{schema.GroupVersionResource{Group: "aquasecurity.github.io", Version: "v1alpha1", Resource: "configauditreports"}, "ConfigAuditReport", false},
+	{schema.GroupVersionResource{Group: "aquasecurity.github.io", Version: "v1alpha1", Resource: "rbacassessmentreports"}, "RbacAssessmentReport", false},
 }
 
 // Security projects only declared risk fields. No Secret/ConfigMap resources,
@@ -66,7 +68,12 @@ func (s *session) Security(parent context.Context, scope core.ScopeSel) (core.Se
 		return core.SecuritySnapshot{}, err
 	}
 	defer release()
-	out := core.SecuritySnapshot{Findings: []core.SecurityFinding{}, Problems: []core.GraphProblem{}, Discovery: s.cat.snap().state, CVEState: "empty"}
+	out := core.SecuritySnapshot{Findings: []core.SecurityFinding{}, Problems: []core.GraphProblem{}, Discovery: s.cat.snap().state, CVEState: "empty", AuditSources: []core.SecurityAuditSource{}}
+	for _, source := range securitySources {
+		if source.audit() {
+			out.AuditSources = append(out.AuditSources, core.SecurityAuditSource{Kind: source.kind, APIVersion: source.gvr.GroupVersion().String(), State: "not-requested"})
+		}
+	}
 	namespaces := []string{""}
 	if scope.Mode != core.ScopeAll {
 		namespaces = scope.SelectedNames()
@@ -76,6 +83,7 @@ func (s *session) Security(parent context.Context, scope core.ScopeSel) (core.Se
 		out.CapturedAt = s.now().UnixMilli()
 		return out, nil
 	}
+	scopeTruncated := len(namespaces) > 128
 	if len(namespaces) > 128 {
 		namespaces = namespaces[:128]
 		out.Truncated = true
@@ -87,6 +95,7 @@ func (s *session) Security(parent context.Context, scope core.ScopeSel) (core.Se
 	accountComplete := map[string]bool{}
 	cveErrors := map[string]bool{}
 	cveOK := false
+	cveTruncated := false
 	usedBytes := 0
 	pages := 0
 	seenObjects := map[string]bool{}
@@ -99,6 +108,8 @@ func (s *session) Security(parent context.Context, scope core.ScopeSel) (core.Se
 		out.Findings = append(out.Findings, f)
 	}
 	for _, source := range securitySources {
+		audit := newSecurityAuditCoverage()
+		audit.incomplete = scopeTruncated
 		sourceNamespaces := namespaces
 		if source.global {
 			sourceNamespaces = []string{""}
@@ -109,6 +120,10 @@ func (s *session) Security(parent context.Context, scope core.ScopeSel) (core.Se
 			}
 			if out.Resources >= securityResourceLimit || usedBytes >= securityByteLimit || pages >= 4096 {
 				out.Truncated = true
+				audit.incomplete = true
+				if source.gvr == vulnerabilityReportGVR {
+					cveTruncated = true
+				}
 				break
 			}
 			jobCtx, done := context.WithTimeout(ctx, 20*time.Second)
@@ -126,7 +141,7 @@ func (s *session) Security(parent context.Context, scope core.ScopeSel) (core.Se
 					class, _ := classify(err)
 					// An optional report API that is not installed is setup state,
 					// not failed coverage. A missing namespace is still a read error.
-					missingReportAPI := source.gvr == vulnerabilityReportGVR && apierrors.IsNotFound(err)
+					missingReportAPI := (source.gvr == vulnerabilityReportGVR || source.audit()) && apierrors.IsNotFound(err)
 					if status, ok := err.(apierrors.APIStatus); ok && status.Status().Details != nil && status.Status().Details.Kind == "namespaces" {
 						missingReportAPI = false
 					}
@@ -134,6 +149,7 @@ func (s *session) Security(parent context.Context, scope core.ScopeSel) (core.Se
 						out.Problems = append(out.Problems, core.GraphProblem{Kind: source.gvr.String(), Scope: ns, Class: string(class)})
 					}
 					complete = false
+					audit.readError(err, missingReportAPI)
 					if source.gvr == vulnerabilityReportGVR {
 						state := "error"
 						if missingReportAPI {
@@ -146,12 +162,16 @@ func (s *session) Security(parent context.Context, scope core.ScopeSel) (core.Se
 					}
 					break
 				}
+				audit.ok = true
 				if source.gvr == vulnerabilityReportGVR {
 					cveOK = true
 				}
 				for i := range list.Items {
 					u := &list.Items[i]
-					if u.GetUID() == "" || (!source.global && !scope.Contains(u.GetNamespace())) {
+					if u.GetUID() == "" || (!source.global && (!scope.Contains(u.GetNamespace()) || (ns != "" && u.GetNamespace() != ns))) {
+						if source.audit() {
+							complete = false
+						}
 						continue
 					}
 					raw, err := json.Marshal(u.Object)
@@ -209,6 +229,11 @@ func (s *session) Security(parent context.Context, scope core.ScopeSel) (core.Se
 						policies = append(policies, securityPolicy{u.GetNamespace(), sel, ingress, egress})
 					case "Role", "ClusterRole":
 						s.securityRole(ref, source.kind, u, emit, &out.Truncated)
+					case "ConfigAuditReport", "RbacAssessmentReport":
+						audit.reports++
+						if !s.securityAuditReport(ref, source, u, emit, &out.Truncated) || len(out.Findings) >= securityFindingLimit {
+							complete = false
+						}
 					case "VulnerabilityReport":
 						out.Reports++
 						s.securityReport(ref, u, emit, &out.Truncated)
@@ -243,6 +268,12 @@ func (s *session) Security(parent context.Context, scope core.ScopeSel) (core.Se
 				}
 			}
 			done()
+			if !complete {
+				audit.incomplete = true
+			}
+			if source.gvr == vulnerabilityReportGVR && (!complete || out.Truncated) {
+				cveTruncated = true
+			}
 			if source.kind == "NetworkPolicy" {
 				policyComplete[ns] = complete
 			}
@@ -250,6 +281,7 @@ func (s *session) Security(parent context.Context, scope core.ScopeSel) (core.Se
 				accountComplete[ns] = complete
 			}
 		}
+		audit.finish(source, &out)
 	}
 	for _, w := range workloads {
 		if err := ctx.Err(); err != nil {
@@ -284,7 +316,7 @@ func (s *session) Security(parent context.Context, scope core.ScopeSel) (core.Se
 				out.CVEState = "missing"
 			}
 		}
-	} else if out.Truncated {
+	} else if cveTruncated {
 		out.CVEState = "partial"
 	} else if out.Reports > 0 {
 		out.CVEState = "available"

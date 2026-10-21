@@ -25,6 +25,8 @@ func (s *Service) ClusterSecurity(ctx context.Context, req SecurityRequest) (cor
 	if !req.Scope.Valid() || req.Scope.Mode == core.ScopeNone {
 		return core.SecuritySnapshot{}, coded(CodeBadRequest, errors.New("invalid namespace selection"))
 	}
+	ctx, cancel := context.WithTimeout(ctx, 75*time.Second)
+	defer cancel()
 	e, err := s.sessionFor(ctx, req.Provider, req.Target)
 	if err != nil {
 		return core.SecuritySnapshot{}, err
@@ -33,7 +35,19 @@ func (s *Service) ClusterSecurity(ctx context.Context, req SecurityRequest) (cor
 	if !ok {
 		return core.SecuritySnapshot{}, coded(CodeUnsupported, errors.New("connection does not support security inspection"))
 	}
-	ctx, cancel := context.WithTimeout(ctx, 75*time.Second)
-	defer cancel()
-	return source.Security(ctx, req.Scope)
+	out, err := source.Security(ctx, req.Scope)
+	if err != nil {
+		return core.SecuritySnapshot{}, fromProvider(err)
+	}
+	current, err := s.sessionFor(ctx, req.Provider, req.Target)
+	if err != nil {
+		return core.SecuritySnapshot{}, err
+	}
+	if current != e {
+		return core.SecuritySnapshot{}, coded(CodeGone, errors.New("connection changed"))
+	}
+	if ctx.Err() != nil {
+		return core.SecuritySnapshot{}, ctx.Err()
+	}
+	return out, nil
 }

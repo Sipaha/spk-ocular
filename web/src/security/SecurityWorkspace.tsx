@@ -35,6 +35,7 @@ export default function SecurityWorkspace({client,target,scope,scopePicker,drawe
  const [query,setQuery]=useState('')
  const [category,setCategory]=useState('')
  const [severity,setSeverity]=useState('')
+ const [result,setResult]=useState('')
  const [selectedID,setSelectedID]=useState('')
  const [subject,setSubject]=useState<Ref|null>(null)
  const [mode,setMode]=useState<'desktop'|'browser'>('browser')
@@ -45,7 +46,7 @@ export default function SecurityWorkspace({client,target,scope,scopePicker,drawe
  const load=useCallback((signal:AbortSignal)=>client.clusterSecurity({provider:target.provider,target:target.id,scope:JSON.parse(scopeKey)},signal),[client,target.provider,target.id,scopeKey])
  const request=useSnapshotRequest(load,key)
  const snapshot=request.value,busy=request.busy,error=request.error?errorDetail(request.error):''
- const rows=filterFindings(snapshot?.findings??[],query,category,severity)
+ const rows=filterFindings(snapshot?.findings??[],query,category,severity,result)
  const tkey=targetKey(target)
  const findings=new Map(rows.map(f=>[f.id,f]))
  const columns:Column[]=[
@@ -65,7 +66,7 @@ export default function SecurityWorkspace({client,target,scope,scopePicker,drawe
   {text:f.scanner||t(`security.${f.category}`)}, {text:''},
  ]}))
  const selected=rows.find(f=>f.id===selectedID)
- const counts=Object.fromEntries(severities.map(level=>[level,(snapshot?.findings??[]).filter(f=>f.severity===level).length]))
+ const counts=Object.fromEntries(severities.map(level=>[level,(snapshot?.findings??[]).filter(f=>f.severity===level&&(!f.audit||f.audit.result==='fail')).length]))
  const open=(ref:Ref)=>mayLeave(()=>setSubject(ref))
  const changeFilter=(act:()=>void)=>act()
  const external=(event:MouseEvent<HTMLAnchorElement>)=>{
@@ -73,10 +74,21 @@ export default function SecurityWorkspace({client,target,scope,scopePicker,drawe
   event.preventDefault();setLinkError('')
   void openURL(event.currentTarget.href,mode).catch(e=>setLinkError(t('about.linkFailed',{error:e instanceof Error?e.message:String(e)})))
  }
- const explanation=(f:SecurityFinding)=><div className="max-h-52 overflow-auto border-t border-line bg-panel px-3 py-2 text-xs" aria-label={t('security.explain')}>
+ const explanation=(f:SecurityFinding)=><div data-security-explanation className="max-h-52 overflow-auto border-t border-line bg-panel px-3 py-2 text-xs" aria-label={t('security.explain')}>
   <div className="flex items-center gap-3"><strong>{findingTitle(f)}</strong><button className={'ml-auto '+button} onClick={()=>setSelectedID('')}>{t('drawer.close')}</button></div>
   <p className="mt-2 break-words"><span className="text-fg-muted">{t('security.evidence')}: </span>{f.evidence}</p>
-  {f.category==='cve'?<>
+  {f.audit?<>
+   <p className="mt-2">{t('security.auditResult')}: {t(`security.result.${f.audit.result}`)} · {t('security.severity')}: {f.audit.nativeSeverity||t('security.unknown')}</p>
+   <p className="mt-1 break-words">{t('security.source')}: {f.audit.scannerName||t('security.unknown')} · {f.audit.scannerVersion||t('security.unknown')} · {f.audit.scannerVendor||t('security.unknown')}</p>
+   <p className="mt-1 break-words">{f.audit.category} · {f.audit.scopeType} {f.audit.scopeValue}</p>
+   {f.audit.description&&<p className="mt-1 whitespace-pre-wrap break-words">{f.audit.description}</p>}
+   {f.audit.messages.map((message,i)=><p key={i} className="mt-1 whitespace-pre-wrap break-words">{message}</p>)}
+   <p className="mt-1 whitespace-pre-wrap break-words">{t('security.recommendation')}: {f.audit.remediation||t('security.unknown')}</p>
+   <p className="mt-1 break-words">{t('security.auditIdentity')}: {f.audit.apiVersion} · UID {f.ref.uid} · RV {f.audit.resourceVersion}</p>
+   {f.workload&&<p className="mt-1 break-words">{t('security.auditOwner')}: {f.workload} · UID {f.audit.ownerUid||t('security.unknown')}</p>}
+   <p className="mt-1" title={isoDateTime(f.scannedAt??0)}>{t('security.reportAge',{time:date(f.scannedAt??0)})}</p>
+   <p className="mt-1 text-fg-muted">{t('security.auditFreshness')}</p>
+  </>:f.category==='cve'?<>
    {f.workload&&<p className="mt-1 text-fg-muted">{t('security.workload')}: {f.workload}</p>}
    <p className="mt-1 break-words">{f.image} · {f.package}</p>
    <p className="mt-1">{t('security.installed')}: {f.installed||'—'} · {t('security.fixed')}: {f.fixed||t('security.noFix')}</p>
@@ -97,12 +109,17 @@ export default function SecurityWorkspace({client,target,scope,scopePicker,drawe
    <div className="flex min-w-0 flex-1 flex-col">
     <div className="grid shrink-0 grid-cols-2 gap-2 border-b border-line p-3 lg:grid-cols-4" aria-label={t('security.severity')}>
      <div className="rounded border border-line bg-panel px-3 py-2"><p className="text-xs text-fg-muted">{t('security.resources')}</p><strong className="text-xl tabular-nums">{snapshot?snapshot.resources:'—'}</strong></div>
-     <div className="rounded border border-line bg-panel px-3 py-2"><p className="text-xs text-fg-muted">{t('security.reports')}</p><strong className="text-xl tabular-nums">{snapshot?snapshot.reports:'—'}</strong></div>
+     <div className="rounded border border-line bg-panel px-3 py-2"><p className="text-xs text-fg-muted">{t('security.reports')}</p><strong className="text-xl tabular-nums">{snapshot?snapshot.reports+(snapshot.auditSources??[]).reduce((sum,source)=>sum+source.reports,0):'—'}</strong></div>
      {(['critical','high'] as const).map(level=><button key={level} className={'rounded border border-line bg-panel px-3 py-2 text-left hover:bg-hover focus-visible:outline-2 focus-visible:outline-accent '+severityColors[level]} onClick={()=>changeFilter(()=>setSeverity(level))}><p className="text-xs">{t(`security.${level}`)}</p><strong className="text-xl tabular-nums">{snapshot?counts[level]:'—'}</strong></button>)}
     </div>
     <p className="shrink-0 px-3 py-2 text-xs text-fg-muted">{t('security.notice')}</p>
+    {!!snapshot?.auditSources?.length&&<details data-security-audit-status className="shrink-0 border-y border-line bg-panel px-3 py-2 text-xs">
+     <summary>{t('security.auditCoverage')}</summary>
+     <p className="mt-1 text-fg-muted">{t('security.auditFreshness')}</p>
+     {snapshot.auditSources.map(source=><p key={source.kind} className="mt-1 break-words">{source.kind} · {source.apiVersion} · {t(`security.auditState.${source.state}`)} · {source.reports}</p>)}
+    </details>}
     {snapshot&&snapshot.cveState!=='available'&&<div role="status" data-security-cve-status className="shrink-0 border-y border-line bg-panel px-3 py-2 text-xs">
-     <p>{t(`security.cve.${snapshot.cveState}`)}</p>
+     <p>{t('security.cve')}: {t(`security.cve.${snapshot.cveState}`)}</p>
      {(snapshot.cveState==='missing'||snapshot.cveState==='empty'||snapshot.cveState==='denied')&&<div className="mt-1 flex flex-wrap gap-x-4 gap-y-1">
       {snapshot.cveState!=='denied'&&<a href={installURL} target="_blank" rel="noopener noreferrer" onClick={external} className="text-accent hover:underline">{t('security.install')}</a>}
       <a href={accessURL} target="_blank" rel="noopener noreferrer" onClick={external} className="text-accent hover:underline">{t('security.access')}</a>
@@ -111,8 +128,9 @@ export default function SecurityWorkspace({client,target,scope,scopePicker,drawe
     {linkError&&<p role="alert" className="px-3 py-1 text-xs text-danger">{linkError}</p>}
     <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-line px-3 py-2 text-xs">
      <input className="min-w-40 flex-1 rounded border border-line bg-panel px-2 py-1 outline-none focus:border-accent" aria-label={t('security.search')} placeholder={t('security.search')} value={query} onChange={e=>changeFilter(()=>setQuery(e.target.value))} onKeyDown={e=>{if(e.key==='Escape'){e.stopPropagation();changeFilter(()=>setQuery(''))}}}/>
-     <Select label={t('security.source')} value={category} options={[{value:'',label:t('security.all')},...(['configuration','rbac','network','cve'] as const).map(value=>({value,label:t(`security.${value}`)}))]} onChange={value=>changeFilter(()=>setCategory(value))}/>
+     <Select label={t('security.source')} value={category} options={[{value:'',label:t('security.all')},...(['configuration','rbac','network','cve','audit'] as const).map(value=>({value,label:t(`security.${value}`)}))]} onChange={value=>changeFilter(()=>setCategory(value))}/>
      <Select label={t('security.severity')} value={severity} options={[{value:'',label:t('security.allSeverities')},...severities.map(value=>({value,label:t(`security.${value}`)}))]} onChange={value=>changeFilter(()=>setSeverity(value))}/>
+     <Select label={t('security.auditResult')} value={result} options={[{value:'',label:t('security.allResults')},...(['pass','fail','unknown'] as const).map(value=>({value,label:t(`security.result.${value}`)}))]} onChange={setResult}/>
     </div>
     {error&&<p role="alert" className="shrink-0 border-b border-line px-3 py-2 text-xs text-danger">{error}{snapshot?' · '+t('security.stale'):''}</p>}
     <div data-area="table" className="flex min-h-0 min-w-0 flex-1">
@@ -131,7 +149,7 @@ export default function SecurityWorkspace({client,target,scope,scopePicker,drawe
        const openLabel=t('security.open')+' · '+f.kindTitle+'/'+(f.ref.title??f.ref.name)
        if(column.id==='severity')return <span className={severityColors[f.severity]}>{t(`security.${f.severity}`)}</span>
        if(column.id==='name')return <button disabled={!f.ref.kind||!f.ref.uid} className="block w-full truncate text-left outline-none hover:text-accent focus-visible:text-accent disabled:opacity-40" aria-label={openLabel} onClick={e=>{e.stopPropagation();open(f.ref)}}>{f.kindTitle+'/'+(f.ref.title??f.ref.name)}</button>
-       if(column.id==='finding')return <button className="block w-full truncate text-left outline-none hover:text-accent focus-visible:text-accent" aria-label={t('security.explain')+' · '+f.rule+' · '+f.ref.name} onClick={e=>{e.stopPropagation();setSelectedID(f.id)}}>{findingTitle(f)}</button>
+       if(column.id==='finding')return <button className="block w-full truncate text-left outline-none hover:text-accent focus-visible:text-accent" aria-label={t('security.explain')+' · '+f.rule+' · '+f.ref.name} onClick={e=>{e.stopPropagation();setSelectedID(f.id)}}>{f.audit?t(`security.result.${f.audit.result}`)+' · ':''}{findingTitle(f)}</button>
        if(column.id==='rule')return <span className="font-mono text-[13px]">{f.rule}</span>
        if(column.id==='open')return <button disabled={!f.ref.kind||!f.ref.uid} aria-label={openLabel} title={openLabel} className="flex h-6 w-6 items-center justify-center rounded text-fg-muted hover:bg-hover hover:text-accent focus-visible:outline-2 focus-visible:outline-accent disabled:opacity-40" onClick={e=>{e.stopPropagation();open(f.ref)}}><LinkArrowIcon className="h-[14px] w-[14px]"/></button>
        return undefined

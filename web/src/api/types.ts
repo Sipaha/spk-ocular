@@ -987,10 +987,15 @@ export interface CompareRequest { left: CompareSelection; right: CompareSelectio
 export interface SecurityRequest {provider: string; target: string; scope: ScopeSel}
 export interface SecuritySnapshot {
  findings: SecurityFinding[]; problems: ClusterGraph['problems']; discovery: string; truncated: boolean; capturedAt: number; resources: number; reports: number
+ auditSources?: {kind: string; apiVersion: string; state: 'available'|'empty'|'missing'|'denied'|'error'|'partial'|'not-requested'; reports: number}[]
  cveState: 'available' | 'empty' | 'missing' | 'denied' | 'error' | 'partial' | 'not-requested'
 }
+export interface SecurityAuditCheck {
+ result: 'pass'|'fail'|'unknown'; nativeSeverity: string; category: string; description: string; messages: string[]; remediation: string; scopeType: string; scopeValue: string; scannerName: string; scannerVersion: string; scannerVendor: string; apiVersion: string; resourceVersion: string; ownerUid: string
+}
 export interface SecurityFinding {
- id: string; ref: Ref; kindTitle: string; category: 'configuration' | 'network' | 'rbac' | 'cve'; severity: 'critical' | 'high' | 'medium' | 'low' | 'unknown'
+ audit?: SecurityAuditCheck
+ id: string; ref: Ref; kindTitle: string; category: 'configuration' | 'network' | 'rbac' | 'cve' | 'audit'; severity: 'critical' | 'high' | 'medium' | 'low' | 'unknown'
  rule: string; container?: string; evidence: string; title?: string; image?: string; package?: string; installed?: string; fixed?: string; scanner?: string; scannedAt?: number; workload?: string
 }
 

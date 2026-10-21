@@ -18,3 +18,12 @@ describe('security filters and evidence presentation',()=>{
   expect(recommendation(finding)).toContain('runAsNonRoot: true')
  })
 })
+
+it('preserves external audit rule semantics and filters results without promoting unknown to pass',()=>{
+ const audit:SecurityFinding={...finding,category:'audit',title:'Producer title',audit:{result:'unknown',nativeSeverity:'OTHER',category:'Reliability',description:'External explanation',messages:['plain <script> text'],remediation:'Review policy',scopeType:'JSONPath',scopeValue:'.spec.field',scannerName:'Scanner',scannerVersion:'',scannerVendor:'',apiVersion:'aquasecurity.github.io/v1alpha1',resourceVersion:'9',ownerUid:'old'}}
+ expect(findingTitle(audit)).toBe('Producer title');expect(recommendation(audit)).toBe('')
+ expect(filterFindings([audit,finding],'Reliability .spec.field policy','audit','','unknown')).toEqual([audit])
+ expect(filterFindings([audit],'','','','pass')).toEqual([])
+ expect(filterFindings([finding],'','','','unknown')).toEqual([])
+ expect(filterFindings([audit],'plain <script>','','')).toEqual([audit])
+})
