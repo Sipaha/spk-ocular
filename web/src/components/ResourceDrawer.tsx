@@ -1,3 +1,4 @@
+import {ResourceNetworkPath} from '../network/ResourceNetworkPath'
 import {ResourceDiagnosis} from '../diagnosis/ResourceDiagnosis'
 import {FluxManagedBy} from '../fluxcd/FluxManagedBy'
 import { ArgoManagedBy } from '../argocd/ArgoManagedBy'
@@ -361,7 +362,7 @@ export function ResourceDrawer({ hidden = false, embedded = false, client, hub, 
           </div>
         )}
       </header>
-      <nav className="drawer-tabs flex gap-1 border-b border-line px-3" role="tablist">
+      <nav className="drawer-tabs flex flex-wrap gap-1 border-b border-line px-3" role="tablist">
         {(['details', 'yaml'] as Tab[]).map((tb) => (
           <button
             key={tb}
@@ -520,6 +521,7 @@ function Details(props: { onDiagnosisLogs:(ref:Ref,channel:string,previous:boole
           </div>
         ))}
       </dl>
+      {r.networkPathAvailable&&<RetainedSection pending={pending}><ResourceNetworkPath client={client} subject={r.ref} onGo={onGo}/></RetainedSection>}
       {r.diagnosisAvailable&&<RetainedSection pending={pending}><ResourceDiagnosis client={client} subject={r.ref} onGo={onGo} onLogs={props.onDiagnosisLogs}/></RetainedSection>}
       {r.fluxTracking&&<RetainedSection pending={pending}><FluxManagedBy client={client} resource={r} scope={argoScope} onGo={onFluxResource??onGo}/></RetainedSection>}
       {r.argoTracking&&<RetainedSection pending={pending}><ArgoManagedBy client={client} resource={r} scope={argoScope} onGo={onArgoApplication??onGo}/></RetainedSection>}

@@ -251,3 +251,7 @@ func (w *API) FluxCD(ctx context.Context, req api.FluxRequest) (core.FluxSnapsho
 func (w *API) DiagnoseResource(ctx context.Context, ref core.Ref) (core.Diagnosis, error) {
 	return w.a.DiagnoseResource(api.UIContext(ctx), ref)
 }
+
+func (w *API) ResourceNetworkPath(ctx context.Context, ref core.Ref) (core.NetworkPath, error) {
+	return w.a.ResourceNetworkPath(api.UIContext(ctx), ref)
+}

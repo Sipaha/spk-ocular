@@ -47,6 +47,7 @@ export function fakeClient(targets: Target[], connected = false) {
     audit: [] as AgentAuditEntry[],
   }
   const client: Client = {
+ resourceNetworkPath:vi.fn(async(ref)=>({ref,routes:[],coverage:[],capturedAt:Date.now(),discovery:'ready',truncated:false})),
  diagnoseResource:vi.fn(async(ref)=>({ref,evidence:[],coverage:[],capturedAt:Date.now(),truncated:false})),
  fluxCD:vi.fn(async()=>({objects:[],events:[],coverage:[],discovery:"ready",truncated:false,capturedAt:0})),
  argoCD: vi.fn(async()=>({objects:[],servers:[],events:[],coverage:[],discovery:"ready",truncated:false,capturedAt:0})),

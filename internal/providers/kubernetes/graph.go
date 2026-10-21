@@ -318,11 +318,8 @@ func (s *session) graphLinks(def *kindDef, u *unstructured.Unstructured) []core.
 		}
 	}
 	if def == ingressesKind {
-		add("services", ns, str(spec, "defaultBackend", "service", "name"), "routes-to")
-		for _, r := range slice(spec, "rules") {
-			for _, p := range slice(r, "http", "paths") {
-				add("services", ns, str(p, "backend", "service", "name"), "routes-to")
-			}
+		for _, b := range ingressBackends(u) {
+			add("services", ns, str(b.backend, "service", "name"), "routes-to")
 		}
 		for _, tls := range slice(spec, "tls") {
 			add("secrets", ns, str(tls, "secretName"), "uses")

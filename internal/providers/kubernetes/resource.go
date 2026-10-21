@@ -99,13 +99,14 @@ func (s *session) Get(ctx context.Context, ref core.Ref) (*core.Resource, error)
 	}
 
 	out := &core.Resource{
-		DiagnosisAvailable: def.namespaced && diagnosisSupported(def.gvr.GroupResource()),
-		ArgoTracking:       argoTracking(u),
-		FluxTracking:       fluxTracking(u),
-		Ref:                core.Ref{Provider: ProviderID, Target: s.target, Scope: u.GetNamespace(), Kind: def.desc.ID, Name: u.GetName(), UID: string(u.GetUID())},
-		Health:             health,
-		Facts:              fs,
-		YAML:               string(y),
+		NetworkPathAvailable: def == servicesKind || def == ingressesKind,
+		DiagnosisAvailable:   def.namespaced && diagnosisSupported(def.gvr.GroupResource()),
+		ArgoTracking:         argoTracking(u),
+		FluxTracking:         fluxTracking(u),
+		Ref:                  core.Ref{Provider: ProviderID, Target: s.target, Scope: u.GetNamespace(), Kind: def.desc.ID, Name: u.GetName(), UID: string(u.GetUID())},
+		Health:               health,
+		Facts:                fs,
+		YAML:                 string(y),
 	}
 	if def.gvr.Group == "" && def.gvr.Resource == "serviceaccounts" {
 		ref := out.Ref
@@ -381,11 +382,8 @@ func (s *session) relations(ctx context.Context, def *kindDef, u *unstructured.U
 				out = append(out, core.Relation{Type: "routes-to", Ref: s.ref(servicesKind, ns, name, ""), Route: &route})
 			}
 		}
-		add(str(u.Object, "spec", "defaultBackend", "service", "name"), core.IngressRoute{DefaultBackend: true})
-		for _, rule := range slice(u.Object, "spec", "rules") {
-			for _, path := range slice(rule, "http", "paths") {
-				add(str(path, "backend", "service", "name"), core.IngressRoute{Host: str(rule, "host"), Path: str(path, "path"), PathType: str(path, "pathType")})
-			}
+		for _, b := range ingressBackends(u) {
+			add(str(b.backend, "service", "name"), b.route)
 		}
 	case eventsKind:
 		out = append(out, eventSubject(s, u))

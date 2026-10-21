@@ -36,15 +36,15 @@ export function PortsSection({ client, subject, revision }: { client: Client; su
       {info && !info.unsupported && (
         <ul className="flex flex-col gap-1">
           {info.ports.map((p) => (
-            <li key={`${p.protocol}/${p.port}`} className="flex items-center gap-2 text-xs">
+            <li key={`${p.protocol}/${p.port}`} className="flex min-w-0 flex-wrap items-center gap-2 text-xs">
               <code className="w-14 font-mono text-fg">{p.port}</code>
-              <span className="text-fg-muted">{[p.name, p.protocol !== 'TCP' ? p.protocol : '', p.note].filter(Boolean).join(' · ')}</span>
+              <span className="min-w-0 wrap-anywhere text-fg-muted">{[p.name, p.protocol !== 'TCP' ? p.protocol : '', p.note].filter(Boolean).join(' · ')}</span>
               {p.supported ? (
-                <button className="ml-auto rounded-md border border-line px-2 py-0.5 text-fg-muted hover:bg-hover hover:text-fg" onClick={() => setDialog({ port: p })}>
+                <button className="ml-auto max-w-full wrap-anywhere rounded-md border border-line px-2 py-0.5 text-fg-muted hover:bg-hover hover:text-fg" onClick={() => setDialog({ port: p })}>
                   {t('fwd.forward')}
                 </button>
               ) : (
-                <span className="ml-auto text-fg-subtle" title={p.reason}>
+                <span className="ml-auto max-w-full wrap-anywhere text-fg-subtle" title={p.reason}>
                   {t('fwd.unsupported')}
                 </span>
               )}
