@@ -1,5 +1,20 @@
 {
+
+
   "ui": {
+ "diagnosis.title": "Diagnostic",
+ "diagnosis.notice": "Instantané limité de l’état observé, des références aux objets et des Events associés. Les événements peuvent décrire des pannes antérieures ; les clés des objets ne sont pas vérifiées.",
+ "diagnosis.run": "Recueillir les preuves",
+ "diagnosis.partial": "Les preuves sont incomplètes ou limitées.",
+ "diagnosis.observations": "État observé et références",
+ "diagnosis.events": "Events associés · observations historiques",
+ "diagnosis.coverage": "Couverture de lecture",
+ "diagnosis.ready": "Lecture terminée",
+ "diagnosis.keysUnchecked": "Les clés de l’objet n’ont pas été vérifiées",
+ "diagnosis.notCovered": "Non couvert",
+ "diagnosis.currentLogs": "Logs actuels",
+ "diagnosis.previousLogs": "Logs précédents",
+ "diagnosis.logsUnavailable": "Les logs demandés du conteneur sont indisponibles.",
     "flux.ready": "Prêt",
     "flux.reconciling": "Réconciliation",
     "flux.suspended": "Suspendu",

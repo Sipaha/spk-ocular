@@ -29,6 +29,11 @@ func fullFake(objs ...runtime.Object) *dynamicfake.FakeDynamicClient {
 	}
 	lists[podMetricsGVR] = "PodMetricsList"
 	lists[nodeMetricsGVR] = "NodeMetricsList"
+	for _, src := range problemSources {
+		if _, registered := lists[src.def.gvr]; !registered {
+			lists[src.def.gvr] = kindOf(src.def) + "List"
+		}
+	}
 	return dynamicfake.NewSimpleDynamicClientWithCustomListKinds(runtime.NewScheme(), lists, objs...)
 }
 

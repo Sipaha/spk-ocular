@@ -141,6 +141,7 @@ type ResourceRevision struct {
 }
 
 type Resource struct {
+	DiagnosisAvailable bool               `json:"diagnosisAvailable,omitempty"`
 	FluxTracking       *FluxTracking      `json:"fluxTracking,omitempty"`
 	ArgoTracking       *ArgoTracking      `json:"argoTracking,omitempty"`
 	RBACSubject        *Ref               `json:"rbacSubject,omitempty"`

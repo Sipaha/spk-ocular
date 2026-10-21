@@ -27,7 +27,7 @@ var problemsKind = &kindDef{
 		// The worst first; among equals the most recent first.
 		Sort: &core.SortSpec{Column: "severity", Desc: true, Then: "since"},
 		// Not observed (the sources are problemSources).
-		NotCovered: []string{"Jobs", "CronJobs", "PersistentVolumeClaims", "custom resources"},
+		NotCovered: []string{"CronJobs", "custom resources"},
 		Columns: []core.Column{
 			{ID: "severity", Title: "Severity", Type: core.ColStatus, Width: 90},
 			{ID: "kind", Title: "Kind", Type: core.ColText, Width: 110},
@@ -50,13 +50,16 @@ type problemSource struct {
 	selector string
 }
 
-// problemSources, in coverage order. Jobs, CronJobs, PVCs and custom
-// resources are not observed (problemsKind.NotCovered says so).
+// problemSources, in coverage order. CronJob schedule assessment and custom
+// resource semantics are not observed (problemsKind.NotCovered says so).
 var problemSources = []problemSource{
 	{def: problemDef(podsKind, false), title: "Pods"},
 	{def: problemDef(deploymentsKind, false), title: "Deployments"},
 	{def: problemDef(statefulSetsKind, false), title: "StatefulSets"},
 	{def: problemDef(daemonSetsKind, false), title: "DaemonSets"},
+	diagnosisSource("batch/jobs", "Jobs", "Job", "batch", "v1", "jobs"),
+	diagnosisSource("persistentvolumeclaims", "PersistentVolumeClaims", "PersistentVolumeClaim", "", "v1", "persistentvolumeclaims"),
+	diagnosisSource("autoscaling/horizontalpodautoscalers", "HorizontalPodAutoscalers", "HorizontalPodAutoscaler", "autoscaling", "v2", "horizontalpodautoscalers"),
 	{def: problemDef(servicesKind, false), title: "Services"},
 	{def: problemDef(ingressesKind, false), title: "Ingresses"},
 	{def: problemDef(nodesKind, false), title: "Nodes"},
@@ -263,7 +266,7 @@ func (s *session) watchProblems(q provider.Query, sink provider.Sink) (func(), e
 	if q.Name != "" || q.Subject != nil {
 		return nil, &provider.Error{Class: provider.ClassUnsupported, Message: "problems cannot be narrowed to one object"}
 	}
-	srcs := s.problemSources
+	srcs := s.resolvedProblemSources()
 	if q.Scope.Mode == core.ScopeNone {
 		// Objects outside namespaces only (an agent granted the cluster
 		// alone): no namespaced source is opened, so none is listed.
@@ -301,4 +304,24 @@ func (s *session) watchProblems(q provider.Query, sink provider.Sink) (func(), e
 		stops = append(stops, stop)
 	}
 	return stopAll, nil
+}
+
+// Follow the served version when discovery knows it (notably autoscaling/v1
+// versus v2). Before discovery settles, stable built-in routes still report
+// their own loading/denied/unsupported coverage rather than disappearing.
+func (s *session) resolvedProblemSources() []problemSource {
+	out := slices.Clone(s.problemSources)
+	for i, src := range out {
+		if src.def.kind == "" {
+			continue
+		}
+		served := s.kind(src.def.desc.ID)
+		if served == nil || served.kind != src.def.kind || served.gvr.GroupResource() != src.def.gvr.GroupResource() {
+			continue
+		}
+		def := *src.def
+		def.gvr = served.gvr
+		out[i].def = &def
+	}
+	return out
 }

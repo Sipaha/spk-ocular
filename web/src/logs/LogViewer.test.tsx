@@ -1,4 +1,4 @@
-import { act, render, screen, waitFor, within } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { Ref } from '../api/types'
@@ -281,4 +281,17 @@ describe('LogViewer', () => {
     await waitFor(() => expect(screen.getByRole('button', { name: 'Source' })).toHaveAttribute('aria-pressed', 'false'), { timeout: 5000 })
     expect(screen.queryByText(/the pod was deleted/)).not.toBeInTheDocument()
   })
+})
+
+
+it('reopening an explicit diagnosis link restores its current/previous selection after a toolbar toggle',async()=>{
+ const {client}=fakeClient([k8s('dev')])
+ client.logInfo=vi.fn(async()=>({channels:[{id:'app',title:'app'}],defaultChannel:'app',aggregate:false,previous:true}))
+ vi.stubGlobal('fetch',vi.fn(async()=>stream().response))
+ const view=render(<LogViewer client={client} subject={pod} active initialChannel="app" initialPrevious focusEpoch={1}/>)
+ await waitFor(()=>expect(client.openLogStream).toHaveBeenCalledWith(pod,expect.objectContaining({channel:'app',previous:true})))
+ fireEvent.click(screen.getByRole('button',{name:'Previous'}))
+ await waitFor(()=>expect(client.openLogStream).toHaveBeenLastCalledWith(pod,expect.objectContaining({previous:false})))
+ view.rerender(<LogViewer client={client} subject={pod} active initialChannel="app" initialPrevious focusEpoch={2}/>)
+ await waitFor(()=>expect(client.openLogStream).toHaveBeenLastCalledWith(pod,expect.objectContaining({channel:'app',previous:true})))
 })

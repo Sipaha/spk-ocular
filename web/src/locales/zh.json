@@ -1,5 +1,20 @@
 {
+
+
   "ui": {
+ "diagnosis.title": "诊断",
+ "diagnosis.notice": "有界快照，包含观测状态、对象引用和相关 Events。事件可能描述过去的故障；不检查对象中的键。",
+ "diagnosis.run": "收集证据",
+ "diagnosis.partial": "证据不完整或受到限制。",
+ "diagnosis.observations": "观测状态和对象引用",
+ "diagnosis.events": "相关 Events · 历史观测",
+ "diagnosis.coverage": "读取覆盖范围",
+ "diagnosis.ready": "读取完成",
+ "diagnosis.keysUnchecked": "未检查对象中的键",
+ "diagnosis.notCovered": "不在覆盖范围内",
+ "diagnosis.currentLogs": "当前日志",
+ "diagnosis.previousLogs": "上一次日志",
+ "diagnosis.logsUnavailable": "所请求的容器日志不可用。",
     "flux.ready": "就绪",
     "flux.reconciling": "协调中",
     "flux.suspended": "已暂停",

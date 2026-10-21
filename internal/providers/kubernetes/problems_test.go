@@ -295,7 +295,7 @@ func TestProblemsCannotBeNarrowed(t *testing.T) {
 }
 
 func TestProblemsNameWhatTheyNeverLookAt(t *testing.T) {
-	assert.Equal(t, []string{"Jobs", "CronJobs", "PersistentVolumeClaims", "custom resources"}, problemsKind.desc.NotCovered)
+	assert.Equal(t, []string{"CronJobs", "custom resources"}, problemsKind.desc.NotCovered)
 	for _, src := range problemSources {
 		assert.NotContains(t, problemsKind.desc.NotCovered, src.title, "a source is covered")
 	}

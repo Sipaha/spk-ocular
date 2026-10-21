@@ -62,3 +62,13 @@ it('chooses the nearest surviving tab when group closing removes the active tab'
  dock.activate(ids[0]);dock.closeGroup(ids[1],'left')
  expect(useDock.getState().active).toBe(ids[1])
 })
+
+it('keeps previous-instance diagnosis logs distinct from current logs',()=>{
+ dock.openLogs(prod,'prod',pod('a'),'app',false)
+ dock.openLogs(prod,'prod',pod('a'),'app',true)
+ const tabs=useDock.getState().tabs
+ expect(tabs).toHaveLength(2)
+ expect(tabs[0]).toMatchObject({previous:false,channel:'app'})
+ expect(tabs[1]).toMatchObject({previous:true,channel:'app'})
+ expect(tabs[1].id).not.toBe(tabs[0].id)
+})

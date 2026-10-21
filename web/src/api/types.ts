@@ -607,6 +607,7 @@ export interface ResourceRevision {
 }
 
 export interface Resource {
+ diagnosisAvailable?:boolean
  fluxTracking?:import("../fluxcd/types").FluxTracking
  argoTracking?: import("../argocd/types").ArgoTracking
  rbacSubject?: Ref

@@ -1,5 +1,20 @@
 {
+
+
   "ui": {
+ "diagnosis.title": "Diagnose",
+ "diagnosis.notice": "Begrenzte Momentaufnahme des beobachteten Zustands, der Objektreferenzen und zugehöriger Events. Ereignisse können frühere Fehler beschreiben; Objektschlüssel werden nicht geprüft.",
+ "diagnosis.run": "Nachweise sammeln",
+ "diagnosis.partial": "Die Nachweise sind unvollständig oder begrenzt.",
+ "diagnosis.observations": "Beobachteter Zustand und Referenzen",
+ "diagnosis.events": "Zugehörige Events · frühere Beobachtungen",
+ "diagnosis.coverage": "Leseabdeckung",
+ "diagnosis.ready": "Lesen abgeschlossen",
+ "diagnosis.keysUnchecked": "Objektschlüssel wurden nicht geprüft",
+ "diagnosis.notCovered": "Nicht abgedeckt",
+ "diagnosis.currentLogs": "Aktuelle Logs",
+ "diagnosis.previousLogs": "Vorherige Logs",
+ "diagnosis.logsUnavailable": "Die angeforderten Container-Logs sind nicht verfügbar.",
     "flux.ready": "Bereit",
     "flux.reconciling": "Abgleich läuft",
     "flux.suspended": "Angehalten",

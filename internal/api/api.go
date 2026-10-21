@@ -19,6 +19,7 @@ import (
 )
 
 type API interface {
+	DiagnoseResource(context.Context, core.Ref) (core.Diagnosis, error)
 	ArgoCD(context.Context, ArgoRequest) (core.ArgoSnapshot, error)
 	FluxCD(context.Context, FluxRequest) (core.FluxSnapshot, error)
 	RBACSnapshot(context.Context, RBACRequest) (core.RBACSnapshot, error)

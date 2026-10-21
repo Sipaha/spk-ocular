@@ -32,6 +32,7 @@ interface TabBase {
 }
 
 export interface LogsTab extends TabBase {
+ previous?:boolean
   kind: 'logs'
   ref: Ref
   channel?: string
@@ -110,10 +111,10 @@ export const dock = {
     const tabs=[...state.tabs.map(t=>restored.some(r=>r.id===t.id)?{...t,pinned:true}:t),...restored.filter(t=>!state.tabs.some(old=>old.id===t.id))];useDock.setState({tabs,active:state.active??restored[snapshot.active]?.id??null})
   },
   /** One log tab per object, target and explicit channel; reopening activates it. */
-  openLogs(target: TargetRef, targetTitle: string, ref: Ref, channel?: string) {
-    const id = `logs:${targetKey(target)}:${refKey(ref)}${channel ? `:${channel}` : ''}`
+  openLogs(target: TargetRef, targetTitle: string, ref: Ref, channel?: string, previousInstance?:boolean) {
+    const id = `logs:${targetKey(target)}:${refKey(ref)}${channel ? `:${channel}` : ''}${previousInstance ? ':previous' : ''}`
     const previous = useDock.getState().tabs.find(tab => tab.id === id)
-    activate({ kind: 'logs', id, focusEpoch: (previous?.kind === 'logs' ? previous.focusEpoch ?? 0 : 0) + 1, target, targetTitle, ref:{...ref,provider:target.provider,target:target.id}, channel, title: `${ref.kind.split('/').pop()}/${refTitle(ref)}` })
+    activate({ kind: 'logs', id, previous:previousInstance, focusEpoch: (previous?.kind === 'logs' ? previous.focusEpoch ?? 0 : 0) + 1, target, targetTitle, ref:{...ref,provider:target.provider,target:target.id}, channel, title: `${ref.kind.split('/').pop()}/${refTitle(ref)}` })
   },
   /** Files capabilities and editor contents remain memory-only. */
   openFiles(target:TargetRef,targetTitle:string,ref:Ref,selectedInstance?:ExecInstance,preparedId?:string) {

@@ -23,7 +23,7 @@ func (s *session) PrepareRefresh(ctx context.Context, q provider.Query) error {
 	}
 	sources := []problemSource{{def: def}}
 	if def == problemsKind {
-		sources = s.problemSources
+		sources = s.resolvedProblemSources()
 	}
 	return s.caches.invalidate(func(key cacheKey) bool {
 		for _, src := range sources {

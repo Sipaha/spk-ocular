@@ -1,3 +1,4 @@
+import {ResourceDiagnosis} from '../diagnosis/ResourceDiagnosis'
 import {FluxManagedBy} from '../fluxcd/FluxManagedBy'
 import { ArgoManagedBy } from '../argocd/ArgoManagedBy'
 import {ResourceHelpButton} from '../learning/ResourceHelp'
@@ -433,6 +434,7 @@ export function ResourceDrawer({ hidden = false, embedded = false, client, hub, 
         )}
         {r && tab === 'details' && (
           <Details argoScope={argoScope} onArgoApplication={onArgoApplication} onFluxResource={onFluxResource}
+            onDiagnosisLogs={(ref,channel,previous)=>leave(()=>dock.openLogs({provider:ref.provider,id:ref.target},filesTargetTitle,ref,channel,previous))}
             client={client}
             hub={hub}
             target={target}
@@ -489,7 +491,7 @@ function RetainedSection({pending,children}:{pending:boolean;children:ReactNode}
  return <div ref={box} data-retained-section style={pending?{height}:undefined}>{pending?null:children}</div>
 }
 
-function Details(props: { argoScope?:ScopeSel;onArgoApplication?:(ref:Ref)=>void;onFluxResource?:(ref:Ref)=>void; client: Client; hub: ViewHub; target: { provider: string; id: string }; r: Resource; onGo: (ref: Ref) => void; kindTitleOf?: (kind: string) => string; eventsKind?: string; ports?: ReactNode; values?: ReactNode; pending?:boolean }) {
+function Details(props: { onDiagnosisLogs:(ref:Ref,channel:string,previous:boolean)=>void; argoScope?:ScopeSel;onArgoApplication?:(ref:Ref)=>void;onFluxResource?:(ref:Ref)=>void; client: Client; hub: ViewHub; target: { provider: string; id: string }; r: Resource; onGo: (ref: Ref) => void; kindTitleOf?: (kind: string) => string; eventsKind?: string; ports?: ReactNode; values?: ReactNode; pending?:boolean }) {
   const { client, hub, target, r, onGo, kindTitleOf, eventsKind, ports, values, pending=false, argoScope, onArgoApplication, onFluxResource } = props
   const containerFacts = useMemo(() => podContainerFacts(r), [r])
   const groups = useMemo(() => {
@@ -518,6 +520,7 @@ function Details(props: { argoScope?:ScopeSel;onArgoApplication?:(ref:Ref)=>void
           </div>
         ))}
       </dl>
+      {r.diagnosisAvailable&&<RetainedSection pending={pending}><ResourceDiagnosis client={client} subject={r.ref} onGo={onGo} onLogs={props.onDiagnosisLogs}/></RetainedSection>}
       {r.fluxTracking&&<RetainedSection pending={pending}><FluxManagedBy client={client} resource={r} scope={argoScope} onGo={onFluxResource??onGo}/></RetainedSection>}
       {r.argoTracking&&<RetainedSection pending={pending}><ArgoManagedBy client={client} resource={r} scope={argoScope} onGo={onArgoApplication??onGo}/></RetainedSection>}
       <PodContainers groups={containerFacts.groups} />

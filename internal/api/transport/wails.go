@@ -247,3 +247,7 @@ func (w *API) ArgoCD(ctx context.Context, req api.ArgoRequest) (core.ArgoSnapsho
 func (w *API) FluxCD(ctx context.Context, req api.FluxRequest) (core.FluxSnapshot, error) {
 	return w.a.FluxCD(api.UIContext(ctx), req)
 }
+
+func (w *API) DiagnoseResource(ctx context.Context, ref core.Ref) (core.Diagnosis, error) {
+	return w.a.DiagnoseResource(api.UIContext(ctx), ref)
+}

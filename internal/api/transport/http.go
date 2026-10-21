@@ -136,6 +136,7 @@ func writeErr(w http.ResponseWriter, err error) {
 }
 
 func (h *HTTP) routes() {
+	h.mux.Handle("POST /api/DiagnoseResource", noStore(handle(func(ctx context.Context, ref *core.Ref) (any, error) { return h.api.DiagnoseResource(ctx, *ref) })))
 	h.mux.Handle("POST /api/Configurations", noStore(handle(func(ctx context.Context, r *configuration.ConfigRequest) (any, error) {
 		return h.api.Configurations(ctx, *r)
 	})))

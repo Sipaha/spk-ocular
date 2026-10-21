@@ -99,12 +99,13 @@ func (s *session) Get(ctx context.Context, ref core.Ref) (*core.Resource, error)
 	}
 
 	out := &core.Resource{
-		ArgoTracking: argoTracking(u),
-		FluxTracking: fluxTracking(u),
-		Ref:          core.Ref{Provider: ProviderID, Target: s.target, Scope: u.GetNamespace(), Kind: def.desc.ID, Name: u.GetName(), UID: string(u.GetUID())},
-		Health:       health,
-		Facts:        fs,
-		YAML:         string(y),
+		DiagnosisAvailable: def.namespaced && diagnosisSupported(def.gvr.GroupResource()),
+		ArgoTracking:       argoTracking(u),
+		FluxTracking:       fluxTracking(u),
+		Ref:                core.Ref{Provider: ProviderID, Target: s.target, Scope: u.GetNamespace(), Kind: def.desc.ID, Name: u.GetName(), UID: string(u.GetUID())},
+		Health:             health,
+		Facts:              fs,
+		YAML:               string(y),
 	}
 	if def.gvr.Group == "" && def.gvr.Resource == "serviceaccounts" {
 		ref := out.Ref
@@ -325,7 +326,7 @@ func kindOf(d *kindDef) string {
 	case eventsKind:
 		return "Event"
 	}
-	return ""
+	return d.kind
 }
 
 func (s *session) ref(kind *kindDef, ns, name, uid string) core.Ref {

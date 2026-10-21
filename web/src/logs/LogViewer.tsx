@@ -37,6 +37,7 @@ interface Props {
   bridge?: LogWindowBridge
   initial?: LogViewState
   initialChannel?: string
+  initialPrevious?:boolean
   focusEpoch?: number
   onWindowAction?: () => void
 }
@@ -46,7 +47,7 @@ interface Props {
  * buffer), useLogFilter (filter, search) and LogViewport (the
  * virtual list).
  */
-export default function LogViewer({ client, connectionName: initialConnectionName, subject, active, bridge, initial, initialChannel, focusEpoch, onWindowAction }: Props) {
+export default function LogViewer({ client, connectionName: initialConnectionName, subject, active, bridge, initial, initialChannel, initialPrevious, focusEpoch, onWindowAction }: Props) {
   const connectionName = useStore(state => state.view?.groups.flatMap(group => group.targets).find(target => target.provider === subject.provider && target.id === subject.target)?.title) || initialConnectionName
   const [info, setInfo] = useState<LogInfo | null>(null)
   const [infoError, setInfoError] = useState<string | null>(null)
@@ -54,7 +55,12 @@ export default function LogViewer({ client, connectionName: initialConnectionNam
   const [tail, setTail] = useState(initial?.tail ?? 500)
   const [since, setSince] = useState<{ key: string; at: string } | null>(initial?.since ?? null)
   const [serverFilter, setServerFilter] = useState(initial?.filterText ?? '')
-  const [previous, setPrevious] = useState(initial?.previous ?? false)
+  const [previous, setPrevious] = useState(initial?.previous ?? initialPrevious ?? false)
+  const [selectionRequest,setSelectionRequest]=useState({focusEpoch,initialChannel,initialPrevious})
+  if(selectionRequest.focusEpoch!==focusEpoch||selectionRequest.initialChannel!==initialChannel||selectionRequest.initialPrevious!==initialPrevious){
+    setSelectionRequest({focusEpoch,initialChannel,initialPrevious})
+    if(initialPrevious!==undefined){setPrevious(initialPrevious);if(initialChannel!==undefined)setChannel(initialChannel)}
+  }
   const [showTime, setShowTime] = useState(initial?.showTime ?? false)
   const [showSource, setShowSource] = useState<boolean | null>(initial?.showSource ?? null) // null: automatic
   const [wrap, setWrap] = useState(initial?.wrap ?? false)

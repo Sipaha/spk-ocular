@@ -8,6 +8,20 @@ const loaders = {
 }
 
 const en = {
+ "diagnosis.title": "Diagnosis",
+ "diagnosis.notice": "A bounded snapshot of observed state, object references and related Events. Events may describe earlier failures; object keys are not checked.",
+ "diagnosis.run": "Collect evidence",
+ "diagnosis.partial": "Evidence is incomplete or limited.",
+ "diagnosis.observations": "Observed state and references",
+ "diagnosis.events": "Related Events · historical observations",
+ "diagnosis.coverage": "Read coverage",
+ "diagnosis.ready": "Read complete",
+ "diagnosis.keysUnchecked": "Object keys were not checked",
+ "diagnosis.notCovered": "Not covered",
+ "diagnosis.currentLogs": "Current logs",
+ "diagnosis.previousLogs": "Previous logs",
+ "diagnosis.logsUnavailable": "The requested container logs are unavailable.",
+
  "flux.ready": "Ready",
  "flux.reconciling": "Reconciling",
  "flux.suspended": "Suspended",
@@ -1314,6 +1328,20 @@ const en = {
 export type MessageKey = keyof typeof en
 
 const ru: Record<MessageKey, string> = {
+ "diagnosis.title": "Диагностика",
+ "diagnosis.notice": "Ограниченный снимок состояния, ссылок на объекты и связанных Events. События могут описывать прошлые сбои; ключи объектов не проверяются.",
+ "diagnosis.run": "Собрать доказательства",
+ "diagnosis.partial": "Доказательства неполны или ограничены.",
+ "diagnosis.observations": "Состояние и ссылки на объекты",
+ "diagnosis.events": "Связанные Events · прошлые наблюдения",
+ "diagnosis.coverage": "Покрытие чтения",
+ "diagnosis.ready": "Чтение завершено",
+ "diagnosis.keysUnchecked": "Ключи объекта не проверены",
+ "diagnosis.notCovered": "Вне покрытия",
+ "diagnosis.currentLogs": "Текущие логи",
+ "diagnosis.previousLogs": "Предыдущие логи",
+ "diagnosis.logsUnavailable": "Запрошенные логи контейнера недоступны.",
+
  "flux.ready": "Готово",
  "flux.reconciling": "Сверка состояния",
  "flux.suspended": "Приостановлено",

@@ -1,5 +1,20 @@
 {
+
+
   "ui": {
+ "diagnosis.title": "診断",
+ "diagnosis.notice": "観測された状態、オブジェクト参照、関連 Events の制限付きスナップショットです。イベントは過去の障害を示す場合があり、オブジェクト内のキーは検査されません。",
+ "diagnosis.run": "証拠を収集",
+ "diagnosis.partial": "証拠は不完全、または制限されています。",
+ "diagnosis.observations": "観測された状態と参照",
+ "diagnosis.events": "関連 Events · 過去の観測",
+ "diagnosis.coverage": "読み取り範囲",
+ "diagnosis.ready": "読み取り完了",
+ "diagnosis.keysUnchecked": "オブジェクト内のキーは未検査",
+ "diagnosis.notCovered": "対象外",
+ "diagnosis.currentLogs": "現在のログ",
+ "diagnosis.previousLogs": "前回のログ",
+ "diagnosis.logsUnavailable": "要求されたコンテナログは利用できません。",
     "flux.ready": "準備完了",
     "flux.reconciling": "調整中",
     "flux.suspended": "中断中",

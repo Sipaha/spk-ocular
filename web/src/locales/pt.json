@@ -1,5 +1,20 @@
 {
+
+
   "ui": {
+ "diagnosis.title": "Diagnóstico",
+ "diagnosis.notice": "Retrato limitado do estado observado, das referências a objetos e dos Events relacionados. Os eventos podem descrever falhas anteriores; as chaves dos objetos não são verificadas.",
+ "diagnosis.run": "Coletar evidências",
+ "diagnosis.partial": "As evidências estão incompletas ou limitadas.",
+ "diagnosis.observations": "Estado observado e referências",
+ "diagnosis.events": "Events relacionados · observações históricas",
+ "diagnosis.coverage": "Cobertura de leitura",
+ "diagnosis.ready": "Leitura concluída",
+ "diagnosis.keysUnchecked": "As chaves do objeto não foram verificadas",
+ "diagnosis.notCovered": "Fora da cobertura",
+ "diagnosis.currentLogs": "Logs atuais",
+ "diagnosis.previousLogs": "Logs anteriores",
+ "diagnosis.logsUnavailable": "Os logs solicitados do contêiner estão indisponíveis.",
     "flux.ready": "Pronto",
     "flux.reconciling": "Reconciliando",
     "flux.suspended": "Suspenso",

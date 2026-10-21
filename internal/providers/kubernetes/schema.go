@@ -106,7 +106,7 @@ func newTableSchema(base *kindDef, epoch uint64, table bool, cols []metav1.Table
 	}
 	d := *base
 	d.desc.Columns = s.cols
-	d.keep = genericKeep
+	d.keep = diagnosisKeep(base.gvr.GroupResource())
 	d.project = s.project
 	d.schema = s
 	s.def = &d
@@ -139,7 +139,7 @@ func columnID(name string, taken map[string]bool) string {
 // the row's cells and what health reads.
 var genericKeep = fields{
 	cellsField: true,
-	"status":   fields{"conditions": fields{"type": true, "status": true, "reason": true, "message": true, "observedGeneration": true}},
+	"status":   fields{"conditions": fields{"type": true, "status": true, "reason": true, "message": true, "observedGeneration": true, "lastTransitionTime": true}},
 }
 
 func (s *tableSchema) project(u *unstructured.Unstructured, _ time.Time) ([]core.Cell, core.Health, time.Time) {
@@ -201,6 +201,9 @@ func tableCell(typ string, v any) core.Cell {
 // → warning over ok; nothing known → neutral (unknown). The order of the
 // conditions does not matter.
 func genericHealth(u *unstructured.Unstructured) core.Health {
+	if h, supported := diagnosisHealth(u); supported {
+		return h
+	}
 	if u.GetDeletionTimestamp() != nil {
 		return core.HealthFrom([]core.Issue{{State: core.HealthTerminating, Reason: "Terminating"}})
 	}
