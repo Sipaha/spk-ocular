@@ -367,3 +367,11 @@ it('uses section icons for known canonical groups and a neutral icon for unknown
  await userEvent.click(within(nav).getByRole('button',{name:/API groups/}))
  expect(within(nav).getByRole('group',{name:'ocular.dev'}).querySelector('[data-resource-group-icon]')).toHaveAttribute('data-resource-group-icon','default')
 })
+
+it('Argo CD is a peer navigation group beside Helm with its own nested Settings',()=>{
+ const pages=['Dashboard','Applications','Application Sets','Projects','Repositories','Clusters'].map((title,i)=>({id:'argo-'+i,title,group:'Argo CD',workspace:i?'argocd-page':'argocd',scoped:true,columns:[],subgroup:i>3?'Settings':undefined}))
+ const groups=navGroups([{id:'nodes',title:'Nodes',group:'Cluster',scoped:false,columns:[]},...pages,{id:'helm',title:'Releases',group:'Helm',scoped:true,columns:[]}],'kubernetes')
+ expect(groups.map(g=>g.group)).toEqual(['Cluster','Helm','Argo CD'])
+ const argo=groups[2];expect(argo.count).toBe(6);expect(argo.items).toHaveLength(5)
+ const settings=argo.items[4];expect('sub' in settings&&settings.sub).toBe('Settings');expect('kinds' in settings&&settings.kinds.map(k=>k.title)).toEqual(['Repositories','Clusters'])
+})

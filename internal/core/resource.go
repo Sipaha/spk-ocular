@@ -140,6 +140,7 @@ type ResourceRevision struct {
 }
 
 type Resource struct {
+	ArgoTracking       *ArgoTracking      `json:"argoTracking,omitempty"`
 	RBACSubject        *Ref               `json:"rbacSubject,omitempty"`
 	Revisions          []ResourceRevision `json:"revisions,omitempty"`
 	RevisionsAvailable bool               `json:"revisionsAvailable,omitempty"`
@@ -157,4 +158,13 @@ type Resource struct {
 	RelationsError string `json:"relationsError,omitempty"`
 	// RelationsTruncated: a relation list hit its cap (200); more exist.
 	RelationsTruncated bool `json:"relationsTruncated,omitempty"`
+}
+
+// ArgoTracking is a current object's tracking hint, not verified ownership.
+type ArgoTracking struct {
+	Application  string `json:"application"`
+	Method       string `json:"method"`
+	Group        string `json:"group"`
+	Kind         string `json:"kind"`
+	Installation string `json:"installation"`
 }

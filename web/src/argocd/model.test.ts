@@ -1,5 +1,5 @@
 import { describe,it,expect } from 'vitest'
-import { attention,resourceRef } from './model'
+import { attention,resourceRef,managerMatches,repositoryLink,revisionLink,eventCategory } from './model'
 import type { ArgoObject,ArgoResource } from './types'
 import type { KindDescriptor,ScopeSel } from '../api/types'
 const app={ref:{provider:'kubernetes',target:'demo',kind:'argoproj.io/applications',name:'api',scope:'argo',uid:'app-uid'},kind:'Application',localDestination:true,sync:'Synced',health:'Healthy',operation:'Unknown',conditions:[],project:'',operationMessage:'',destination:'https://kubernetes.default.svc',destinationNamespace:'blue',sources:[],resources:[],generators:[],description:'',reconciledAt:0,createdAt:0,truncated:false} satisfies ArgoObject
@@ -29,4 +29,33 @@ it('keeps sync and health independent; absent operation alone is not a failure',
  expect(attention({...app,sync:'OutOfSync'})).toBe(true)
  expect(attention({...app,operation:'Running'})).toBe(true)
  expect(attention({...app,kind:'AppProject'})).toBe(false)
+})
+
+it('requires current identity, local controller membership and tracking metadata for reverse links',()=>{
+ const resource={ref:{...app.ref,kind:'apps/deployments',name:'api',uid:'current-api',scope:'blue'},argoTracking:{application:'api',method:'annotation' as const,group:'apps',kind:'Deployment',installation:''},health:{state:'ok' as const},facts:[],yaml:'',relations:null}
+ const managed={...app,resources:[{group:'apps',version:'v1',kind:'Deployment',name:'api',namespace:'blue',sync:'Synced',health:'Healthy',message:''}]}
+ expect(managerMatches(resource,[managed])).toEqual([managed])
+ expect(managerMatches({...resource,argoTracking:{...resource.argoTracking,method:'label'}},[{...managed,resources:[]}])).toEqual([])
+ expect(managerMatches({...resource,argoTracking:{...resource.argoTracking,installation:'other-instance'}},[managed])).toEqual([])
+ expect(managerMatches(resource,[{...managed,localDestination:false}])).toEqual([])
+ expect(managerMatches({...resource,ref:{...resource.ref,uid:undefined}},[managed])).toEqual([])
+ expect(managerMatches({...resource,argoTracking:{...resource.argoTracking,application:'argo_api'}},[{...managed,ref:{...managed.ref,scope:'argo'}}])).toHaveLength(1)
+ expect(managerMatches(resource,[managed,{...managed,ref:{...managed.ref,scope:'other'}}])).toHaveLength(2)
+})
+it('opens only explicit safe repository URLs and known GitHub commit paths',()=>{
+ expect(repositoryLink('javascript:alert(1)')).toBeNull()
+ expect(repositoryLink('https://user:password@github.com/org/repo')).toBeNull()
+ expect(repositoryLink('https://github.com/org/repo?token=hidden')).toBeNull()
+ expect(repositoryLink('https://github.com/org/repo…')).toBeNull()
+ const source={repository:'https://github.com/org/repo.git',observedRevision:'a'.repeat(40),path:'',chart:'',targetRevision:'main'}
+ expect(revisionLink(source)).toBe('https://github.com/org/repo/tree/'+'a'.repeat(40))
+ expect(revisionLink({...source,observedRevision:'main'})).toBeNull()
+ expect(revisionLink({...source,repository:'https://other.example/org/repo'})).toBeNull()
+ expect(revisionLink({...source,repository:'https://github.com/org/..'})).toBeNull()
+})
+it('activity categories preserve warning precedence and leave unknown reasons informational',()=>{
+ expect(eventCategory({type:'Warning',reason:'OperationCompleted'})).toBe('failure')
+ expect(eventCategory({type:'Normal',reason:'OperationStarted'})).toBe('progress')
+ expect(eventCategory({type:'Normal',reason:'OperationCompleted'})).toBe('success')
+ expect(eventCategory({type:'Normal',reason:'ApplicationUpdated'})).toBe('information')
 })

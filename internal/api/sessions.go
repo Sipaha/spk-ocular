@@ -381,7 +381,7 @@ func (s *Service) ListKinds(ctx context.Context, providerID, target string) (Kin
 		if _, ok := e.sess.(provider.ArgoSource); ok {
 			for _, kind := range catalog.Kinds {
 				if kind.ID == "argoproj.io/applications" {
-					catalog.Kinds = append(append([]core.KindDescriptor(nil), catalog.Kinds...), argoKind())
+					catalog.Kinds = append(append([]core.KindDescriptor(nil), catalog.Kinds...), argoKinds()...)
 					break
 				}
 			}

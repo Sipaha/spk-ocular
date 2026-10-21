@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"strings"
 	"sync/atomic"
 	"testing"
 
@@ -12,8 +13,9 @@ import (
 
 type argoTestProvider struct {
 	*openable
-	offered atomic.Bool
-	calls   atomic.Int64
+	offered       atomic.Bool
+	calls         atomic.Int64
+	settingsCalls atomic.Int64
 }
 type argoTestSession struct {
 	provider.Session
@@ -74,21 +76,53 @@ func TestArgoNavigationRequiresServedApplicationAndNeverAppearsForAgent(t *testi
 	kinds, err := s.ListKinds(ctx, "k", "a")
 	require.NoError(t, err)
 	found := false
+	count := 0
 	for _, k := range kinds.Kinds {
+		if strings.HasPrefix(k.Workspace, "argocd") {
+			count++
+			require.Equal(t, "Argo CD", k.Group)
+		}
 		if k.Workspace == "argocd" {
 			found = true
 		}
 	}
 	require.True(t, found)
+	require.Equal(t, 6, count)
 	agent, err := s.ListKinds(t.Context(), "k", "a")
 	require.NoError(t, err)
 	for _, k := range agent.Kinds {
-		require.NotEqual(t, "argocd", k.Workspace)
+		require.False(t, strings.HasPrefix(k.Workspace, "argocd"))
 	}
 	p.offered.Store(false)
 	kinds, err = s.ListKinds(ctx, "k", "a")
 	require.NoError(t, err)
 	for _, k := range kinds.Kinds {
-		require.NotEqual(t, "argocd", k.Workspace)
+		require.False(t, strings.HasPrefix(k.Workspace, "argocd"))
 	}
+}
+
+func (s *argoTestSession) ArgoSettings(ctx context.Context, _ core.ScopeSel, _ string) (core.ArgoSnapshot, error) {
+	s.owner.settingsCalls.Add(1)
+	return core.ArgoSnapshot{Settings: []core.ArgoSetting{}, Discovery: "ready"}, ctx.Err()
+}
+func TestArgoSettingsUseSameUIBoundaryAndExplicitRequest(t *testing.T) {
+	p := &argoTestProvider{openable: newOpenable("a")}
+	p.offered.Store(true)
+	s, _ := newService(t, p)
+	req := ArgoRequest{Provider: "k", Target: "a", Scope: core.ScopeSel{Mode: core.ScopeOne, Name: "argo"}, Settings: "repository"}
+	_, err := s.ArgoCD(t.Context(), req)
+	require.Error(t, err)
+	require.Zero(t, p.settingsCalls.Load())
+	_, err = s.ConnectTarget(UIContext(t.Context()), "k", "a")
+	require.NoError(t, err)
+	awaitConnection(t, s, "connected")
+	_, err = s.ArgoCD(UIContext(t.Context()), req)
+	require.NoError(t, err)
+	require.EqualValues(t, 1, p.settingsCalls.Load())
+	require.Zero(t, p.calls.Load())
+	req.Settings = ""
+	_, err = s.ArgoCD(UIContext(t.Context()), req)
+	require.NoError(t, err)
+	require.EqualValues(t, 1, p.settingsCalls.Load())
+	require.EqualValues(t, 1, p.calls.Load())
 }

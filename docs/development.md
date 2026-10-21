@@ -447,7 +447,8 @@ the program before executing its open descriptor; a noexec temporary directory,
 missing `/proc` or unsupported kernel fails without a rename fallback.
 
 Argo CD tests use Kubernetes fake clients and owned HTTP/synthetic fixtures.
-`tests/e2e/argocd.spec.ts` belongs to `playwright.synth.config.ts`, so the ordinary
+`tests/e2e/argocd.spec.ts` and `argocd-parity.spec.ts` belong to
+`playwright.synth.config.ts`, so the ordinary
 `make check` gate includes it. Browser operation responses use the HTTP fixture
 seam; provider tests verify the actual guarded patch bodies. Neither fixture
 runs an Argo controller or proves real-cluster reconciliation.

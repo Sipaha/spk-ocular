@@ -27,8 +27,8 @@ not collect telemetry. Helm is embedded; a separate Helm CLI is not required.
 
 - Live resource tables, discovery of Kubernetes API resources, details, and metrics.
 - Multiple namespaces, global favorites, resource search, and saved table layouts.
-- [Argo CD](docs/argocd.md) for scoped controller observations, reviewed Sync/Prune
-  and Refresh operations, related-resource inspection and an explicit UI tunnel.
+- [Argo CD](docs/argocd.md) for a standalone dashboard and typed resource/settings pages,
+  reviewed Sync/Prune and Refresh, bidirectional resource investigation and UI tunnels.
 - [Security](docs/security.md) for read-only configuration risks, NetworkPolicy
   selection and existing Trivy Operator vulnerability reports (from 1.3.0).
 - [RBAC explanation](docs/rbac-explanation.md) with binding/role provenance and

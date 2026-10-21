@@ -2,6 +2,7 @@ package kubernetes
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"net/url"
 	"regexp"
@@ -11,6 +12,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/spk/spk-ocular/internal/core"
+	"github.com/spk/spk-ocular/internal/provider"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -27,6 +29,15 @@ var argoURLs = regexp.MustCompile(`https?://[^\s<>"']+`)
 // ArgoCD reads controller observations, never Git, repo/cluster Secrets, Helm
 // values, generator credentials or remote destination clusters.
 func (s *session) ArgoCD(parent context.Context, scope core.ScopeSel) (core.ArgoSnapshot, error) {
+	return s.argoSnapshot(parent, scope, "")
+}
+func (s *session) ArgoSettings(parent context.Context, scope core.ScopeSel, kind string) (core.ArgoSnapshot, error) {
+	if kind != "repository" && kind != "cluster" {
+		return core.ArgoSnapshot{}, &provider.Error{Class: provider.ClassInvalid, Message: "invalid Argo CD settings kind"}
+	}
+	return s.argoSnapshot(parent, scope, kind)
+}
+func (s *session) argoSnapshot(parent context.Context, scope core.ScopeSel, settings string) (core.ArgoSnapshot, error) {
 	ctx, release, err := s.inventoryContext(parent)
 	if err != nil {
 		return core.ArgoSnapshot{}, err
@@ -43,13 +54,18 @@ func (s *session) ArgoCD(parent context.Context, scope core.ScopeSel) (core.Argo
 	}
 	count, bytes, pages := 0, 0, 0
 	seen := map[string]bool{}
-	for _, source := range argoResources {
+	sources := argoResources
+	if settings != "" {
+		sources = []struct{ resource, kind string }{{"secrets", map[string]string{"repository": "Repository", "cluster": "Cluster"}[settings]}}
+		out.Settings = []core.ArgoSetting{}
+	}
+	for _, source := range sources {
 		for _, ns := range spaces {
 			if err := ctx.Err(); err != nil {
 				return out, err
 			}
 			gvr := schema.GroupVersionResource{Group: argoGroup, Version: "v1alpha1", Resource: source.resource}
-			if source.kind == "Event" || source.kind == "Service" {
+			if source.kind == "Event" || source.kind == "Service" || settings != "" {
 				gvr = schema.GroupVersionResource{Version: "v1", Resource: source.resource}
 			} else if d := s.kind(argoGroup + "/" + source.resource); d != nil {
 				gvr = d.gvr
@@ -65,6 +81,9 @@ func (s *session) ArgoCD(parent context.Context, scope core.ScopeSel) (core.Argo
 				}
 				pages++
 				options := metav1.ListOptions{Limit: 50, Continue: cursor.token}
+				if settings != "" {
+					options.LabelSelector = "argocd.argoproj.io/secret-type=" + strings.ToLower(source.kind)
+				}
 				if source.kind == "Service" {
 					options.LabelSelector = "app.kubernetes.io/name=argocd-server"
 				}
@@ -97,7 +116,7 @@ func (s *session) ArgoCD(parent context.Context, scope core.ScopeSel) (core.Argo
 						state = "partial"
 						break
 					}
-					key := gvr.String() + "/" + string(u.GetUID())
+					key := source.kind + "/" + gvr.String() + "/" + string(u.GetUID())
 					if seen[key] {
 						out.Truncated = true
 						state = "partial"
@@ -105,6 +124,14 @@ func (s *session) ArgoCD(parent context.Context, scope core.ScopeSel) (core.Argo
 					}
 					seen[key] = true
 					count++
+					if settings != "" {
+						if u.GetLabels()["argocd.argoproj.io/secret-type"] == strings.ToLower(source.kind) {
+							setting := s.argoSetting(u, source.kind)
+							out.Settings = append(out.Settings, setting)
+							out.Truncated = out.Truncated || setting.Truncated
+						}
+						continue
+					}
 					switch source.kind {
 					case "Service":
 						if u.GetLabels()["app.kubernetes.io/name"] == "argocd-server" {
@@ -299,4 +326,47 @@ func (s *session) argoEvent(u *unstructured.Unstructured) (core.ArgoEvent, bool)
 		atMillis = at.UnixMilli()
 	}
 	return core.ArgoEvent{ID: string(u.GetUID()), Ref: core.Ref{Provider: ProviderID, Target: s.target, Kind: argoGroup + "/" + map[string]string{"Application": "applications", "ApplicationSet": "applicationsets", "AppProject": "appprojects"}[kind], Scope: str(o, "involvedObject", "namespace"), Name: str(o, "involvedObject", "name"), UID: str(o, "involvedObject", "uid")}, Type: argoString(o, "type"), Reason: argoString(o, "reason"), Message: argoString(o, "message"), At: atMillis, Count: i64(o, "count")}, true
+}
+
+func (s *session) argoSetting(u *unstructured.Unstructured, kind string) core.ArgoSetting {
+	out := core.ArgoSetting{Ref: core.Ref{Provider: ProviderID, Target: s.target, Kind: "secrets", Scope: u.GetNamespace(), Name: u.GetName(), UID: string(u.GetUID())}, Kind: kind}
+	// Never decode config, authentication fields, certificates or arbitrary keys.
+	field := func(key string, urlValue bool) string {
+		encoded := str(u.Object, "data", key)
+		if len(encoded) > 8192 {
+			out.Truncated = true
+			return ""
+		}
+		value, err := base64.StdEncoding.DecodeString(encoded)
+		if err != nil {
+			out.Truncated = true
+			return ""
+		}
+		if !utf8.Valid(value) {
+			out.Truncated = true
+			return ""
+		}
+		if len(value) > 512 {
+			out.Truncated = true
+		}
+		if urlValue {
+			return argoURL(string(value))
+		}
+		return argoText(string(value))
+	}
+	out.Name = field("name", false)
+	if out.Name == "" {
+		out.Name = argoBound(u.GetName())
+	}
+	if kind == "Repository" {
+		out.Type = field("type", false)
+		out.URL = field("url", true)
+		out.Project = field("project", false)
+	} else {
+		out.URL = field("server", true)
+	}
+	if !u.GetCreationTimestamp().Time.IsZero() {
+		out.CreatedAt = u.GetCreationTimestamp().UnixMilli()
+	}
+	return out
 }

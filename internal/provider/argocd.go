@@ -9,3 +9,9 @@ import (
 type ArgoSource interface {
 	ArgoCD(context.Context, core.ScopeSel) (core.ArgoSnapshot, error)
 }
+
+// ArgoSettingsSource is an explicitly requested whitelist projection from
+// label-selected settings Secrets. It never returns Secret payloads.
+type ArgoSettingsSource interface {
+	ArgoSettings(context.Context, core.ScopeSel, string) (core.ArgoSnapshot, error)
+}

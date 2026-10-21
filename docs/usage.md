@@ -1305,10 +1305,16 @@ terminal tab ends its command. Separate windows close when their main owner exit
 
 ## Argo CD
 
-The free [Argo CD workspace](argocd.md) appears under Cluster when the Application
-API is discovered. Inspect scoped Applications, ApplicationSets, Projects, source
-revisions, conditions and events; review Sync/Prune or Refresh/Hard refresh through
-the standard guarded dialogs. Sync and health remain independent, incomplete
-coverage is visible, and accepted requests are not controller success. Related
-resources require verified local identity; the Argo UI uses explicit Service
-selection and the existing loopback tunnel controls.
+The free [Argo CD section](argocd.md) appears beside Helm when the Application
+API is discovered. Dashboard, Applications, Application Sets and Projects are
+independent pages; Settings contains Repositories and Clusters. These registered
+connection descriptors are explicitly loaded from per-kind label-selected Secrets
+without returning credentials or cluster config. Namespace selection stays scoped.
+
+Inspect controller observations and source revisions, investigate reported local
+resources, and follow verified Managed by links back to typed Applications.
+Dashboard bulk selection precedes shared Sync/Prune or Refresh/Hard refresh reviews.
+Sync and health stay independent; coverage and asynchronous outcomes remain
+visible. Open Argo CD UI reuses an exact current Service forward or starts one
+explicitly on a free loopback port; multiple Services require a choice. Ask AI is
+not part of this feature.

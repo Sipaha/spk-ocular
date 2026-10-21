@@ -1105,8 +1105,8 @@ Wails events and browser BroadcastChannel carry memory-only data; owner page exi
 ## Native Argo CD workspace
 
 `provider.ArgoSource` provides the UI-only `ArgoCD` API snapshot over the current
-explicit session. The virtual `ocular.argocd` kind is conditional on discovered
-Applications. See [Argo CD](argocd.md) for projection/read bounds and semantics.
+explicit session. Six virtual Argo kinds are conditional on discovered Applications;
+`ocular.argocd` retains its stable ID as Dashboard in the standalone Argo CD group. See [Argo CD](argocd.md) for projection/read bounds and semantics.
 The projection excludes inline values and credential objects; no Git or remote
 cluster connection is made. Argo status resource refs are resolved explicitly
 against the catalog and selected namespace, then pinned to a fresh UID.
@@ -1118,3 +1118,18 @@ Canonical comparison permits only known omitted typed defaults; opaque values
 and unknown fields remain significant. Server acceptance is asynchronous. The
 frontend reuses shared snapshot/loading, grids, operation reviews, edit guards
 and forwarding; snapshots are not persisted or silently widened.
+
+`ArgoRequest.settings` is empty for ordinary controller observations, or explicitly
+`repository`/`cluster` for one settings page. `ArgoSettingsSource` performs a
+bounded, per-namespace, per-kind label-selected Secret list and decodes only the
+connection descriptor whitelist. Secret payloads/config never cross this API or
+enter persistence/controller evidence. Invalid kinds are refused before opening
+or reading a session. The original controller snapshot still makes no Secret read.
+
+Current resource DTOs can expose parsed self-tracking metadata without another
+inventory request. Reverse manager links require current resource UID, local
+Application destination and exact reported membership. Generic labels alone,
+unknown installation identity and ambiguous matches do not authorize a link.
+An eight-entry per-Client memory cache shares only ordinary controller projections
+for an exact connection incarnation and namespace selection. Held editors cannot
+relabel retained evidence as belonging to a replacement connection.

@@ -606,6 +606,7 @@ export interface ResourceRevision {
 }
 
 export interface Resource {
+ argoTracking?: import("../argocd/types").ArgoTracking
  rbacSubject?: Ref
   revisions?: ResourceRevision[]
   revisionsAvailable?: boolean

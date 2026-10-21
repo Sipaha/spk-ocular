@@ -54,3 +54,25 @@ func (s *session) ArgoCD(ctx context.Context, scope core.ScopeSel) (core.ArgoSna
 	}
 	return out, nil
 }
+
+func (s *session) ArgoSettings(ctx context.Context, scope core.ScopeSel, selected string) (core.ArgoSnapshot, error) {
+	out := core.ArgoSnapshot{Objects: []core.ArgoObject{}, Servers: []core.Ref{}, Events: []core.ArgoEvent{}, Coverage: []core.ArgoCoverage{}, Settings: []core.ArgoSetting{}, Discovery: "ready", CapturedAt: time.Now().UnixMilli()}
+	if err := ctx.Err(); err != nil {
+		return out, err
+	}
+	if !scope.Contains("blue") {
+		return out, nil
+	}
+	for _, kind := range []string{"Repository", "Cluster"} {
+		if (selected == "repository" && kind != "Repository") || (selected == "cluster" && kind != "Cluster") {
+			continue
+		}
+		name, url, typ, project := "production", "https://production.example.test", "", ""
+		if kind == "Repository" {
+			name, url, typ, project = "commerce", "https://git.example.test/commerce.git", "git", "commerce"
+		}
+		out.Settings = append(out.Settings, core.ArgoSetting{Ref: core.Ref{Provider: ID, Target: s.target, Kind: "secrets", Scope: "blue", Name: name, UID: "setting-" + name}, Kind: kind, Name: name, URL: url, Type: typ, Project: project, CreatedAt: out.CapturedAt - 86400000})
+		out.Coverage = append(out.Coverage, core.ArgoCoverage{Kind: kind, Scope: "blue", State: "ready"})
+	}
+	return out, nil
+}

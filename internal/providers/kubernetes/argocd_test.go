@@ -34,7 +34,7 @@ func argoFixture(ns, name string) *unstructured.Unstructured {
 	return mk("argoproj.io/v1alpha1", "Application", ns, name, "argo-"+name, map[string]any{"metadata": map[string]any{"resourceVersion": "7"}, "spec": map[string]any{"source": source, "destination": dest, "project": "default", "syncPolicy": map[string]any{"syncOptions": []any{"ServerSideApply=true"}}}, "status": map[string]any{"sync": map[string]any{"status": "OutOfSync", "revision": strings.Repeat("a", 40), "comparedTo": map[string]any{"source": runtime.DeepCopyJSONValue(source), "destination": runtime.DeepCopyJSONValue(dest)}}, "health": map[string]any{"status": "Degraded"}, "reconciledAt": "2026-10-20T12:00:00Z", "conditions": []any{map[string]any{"type": "ComparisonError", "message": "Failed https://USER:PRIVATE-PASSWORD@git.invalid/repo?token=PRIVATE-TOKEN"}}, "resources": []any{map[string]any{"group": "apps", "version": "v1", "kind": "Deployment", "name": "api", "namespace": "ns", "status": "OutOfSync", "health": map[string]any{"status": "Degraded", "message": "ProgressDeadlineExceeded"}}}}})
 }
 func argoFake(objects ...runtime.Object) *dynamicfake.FakeDynamicClient {
-	lists := map[schema.GroupVersionResource]string{{Version: "v1", Resource: "events"}: "EventList", {Version: "v1", Resource: "services"}: "ServiceList"}
+	lists := map[schema.GroupVersionResource]string{{Version: "v1", Resource: "secrets"}: "SecretList", {Version: "v1", Resource: "events"}: "EventList", {Version: "v1", Resource: "services"}: "ServiceList"}
 	for _, source := range argoResources {
 		if source.kind != "Event" && source.kind != "Service" {
 			lists[schema.GroupVersionResource{Group: argoGroup, Version: "v1alpha1", Resource: source.resource}] = source.kind + "List"

@@ -193,6 +193,7 @@ export function Workspace({ client, hub, target, onFavorite, onMoveFavorite, onN
   const [filterReq, setFilterReq] = useState<PageReq<string> | null>(null)
   const [openReq, setOpenReq] = useState<PageReq<Ref> | null>(null)
   const reqSeq = useRef(0)
+  const openArgoApplication=(ref:Ref)=>mayLeave(()=>{const next='ocular.argocd.applications';again(next);remember({kind:next,scope});setOpenReq({value:ref,seq:++reqSeq.current})})
 
   // Tabs live in the dock above this keyed Workspace and survive target switches.
   const targetRef = useMemo(() => ({ provider: target.provider, id: target.id }), [target.provider, target.id])
@@ -394,9 +395,9 @@ export function Workspace({ client, hub, target, onFavorite, onMoveFavorite, onN
                     <NavItem key={it.kind.id} active={kind === it.kind.id && !favorites.has(it.kind.id)} onClick={() => setKind(it.kind.id)} label={kindLabel(target.provider, it.kind)} hint={it.kind.subgroup}
                       favorite={favorites.has(it.kind.id)} onFavorite={() => toggleFavorite(it.kind.id)} favoriteDisabled={!favoritesReady} />
                   ) : (
-                    <NavSubgroup
+                    <NavSubgroup provider={target.provider}
                       key={it.sub}
-                      label={it.sub}
+                      label={g.group==='Argo CD'&&it.sub==='Settings'?t('argo.settings'):it.sub}
                       kinds={it.kinds}
                       open={sectionOpen(subKey(g.group, it.sub), false)}
                       disabled={!navSectionsReady || searching}
@@ -434,30 +435,30 @@ export function Workspace({ client, hub, target, onFavorite, onMoveFavorite, onN
           <div role={kindsError ? 'alert' : 'status'} className="p-4 text-fg-muted">
             {kindsError || t('nav.noKinds')}
           </div>
-        ) : page.kind.workspace === 'argocd' ? (
-          <Suspense fallback={<LoadingState />}><ArgoWorkspace key={page.key} client={client} target={target} scope={scope} kinds={kinds ?? []}
+        ) : (page.kind.workspace === 'argocd'||page.kind.workspace?.startsWith('argocd-')) ? (
+          <Suspense fallback={<LoadingState />}><ArgoWorkspace key={page.key} client={client} target={target} scope={scope} kinds={kinds ?? []} workspace={page.kind.workspace} openRequest={openReq} onNavigate={(id,ref)=>leaveFor(id,()=>{again(id);remember({kind:id,scope});if(ref)setOpenReq({value:ref,seq:++reqSeq.current})})}
             scopePicker={<WorkspaceScopePicker client={client} hub={hub} target={target} scope={scope} scopes={scopes} scopeMenu={scopeMenu} onScope={setScope} />}
-            drawer={{client,hub,target,hasLogs,onLogs:openLogs,hasExec,onTerminal:openTerminal,hasForward,actionsOf,onAction:openAction,eventsKindOf,editableOf,valuesOf,kindTitleOf}}
+            drawer={{client,hub,target,argoScope:scope,onArgoApplication:openArgoApplication,hasLogs,onLogs:openLogs,hasExec,onTerminal:openTerminal,hasForward,actionsOf,onAction:openAction,eventsKindOf,editableOf,valuesOf,kindTitleOf}}
           /></Suspense>
         ) : page.kind.workspace === 'rbac' ? (
           <Suspense fallback={<LoadingState />}><RbacWorkspace key={page.key} client={client} target={target} scope={scope}
             scopePicker={<WorkspaceScopePicker client={client} hub={hub} target={target} scope={scope} scopes={scopes} scopeMenu={scopeMenu} onScope={setScope} />}
-            drawer={{client,hub,target,hasLogs,onLogs:openLogs,hasExec,onTerminal:openTerminal,hasForward,actionsOf,onAction:openAction,eventsKindOf,editableOf,valuesOf,kindTitleOf}}
+            drawer={{client,hub,target,argoScope:scope,onArgoApplication:openArgoApplication,hasLogs,onLogs:openLogs,hasExec,onTerminal:openTerminal,hasForward,actionsOf,onAction:openAction,eventsKindOf,editableOf,valuesOf,kindTitleOf}}
           /></Suspense>
         ) : page.kind.workspace === 'security' ? (
           <Suspense fallback={<LoadingState />}><SecurityWorkspace key={page.key} client={client} target={target} scope={scope}
             scopePicker={<WorkspaceScopePicker client={client} hub={hub} target={target} scope={scope} scopes={scopes} scopeMenu={scopeMenu} onScope={setScope} />}
-            drawer={{client,hub,target,hasLogs,onLogs:openLogs,hasExec,onTerminal:openTerminal,hasForward,actionsOf,onAction:openAction,eventsKindOf,editableOf,valuesOf,kindTitleOf}}
+            drawer={{client,hub,target,argoScope:scope,onArgoApplication:openArgoApplication,hasLogs,onLogs:openLogs,hasExec,onTerminal:openTerminal,hasForward,actionsOf,onAction:openAction,eventsKindOf,editableOf,valuesOf,kindTitleOf}}
           /></Suspense>
         ) : page.kind.workspace === 'timeline' ? (
           <Suspense fallback={<LoadingState />}><TimelineWorkspace key={page.key} client={client} target={target} scope={scope}
             scopePicker={<WorkspaceScopePicker client={client} hub={hub} target={target} scope={scope} scopes={scopes} scopeMenu={scopeMenu} onScope={setScope} />}
-            drawer={{client,hub,target,hasLogs,onLogs:openLogs,hasExec,onTerminal:openTerminal,hasForward,actionsOf,onAction:openAction,eventsKindOf,editableOf,valuesOf,kindTitleOf}}
+            drawer={{client,hub,target,argoScope:scope,onArgoApplication:openArgoApplication,hasLogs,onLogs:openLogs,hasExec,onTerminal:openTerminal,hasForward,actionsOf,onAction:openAction,eventsKindOf,editableOf,valuesOf,kindTitleOf}}
           /></Suspense>
         ) : page.kind.workspace === 'graph' ? (
           <Suspense fallback={<LoadingState />}><GraphWorkspace key={page.key} client={client} target={target} session={catalog.view?.session ?? 0} connection={target.connection?.id ?? 0} scope={scope}
             scopePicker={<WorkspaceScopePicker client={client} hub={hub} target={target} scope={scope} scopes={scopes} scopeMenu={scopeMenu} onScope={setScope} />}
-            drawer={{client,hub,target,hasLogs,onLogs:openLogs,hasExec,onTerminal:openTerminal,hasForward,actionsOf,onAction:openAction,eventsKindOf,editableOf,valuesOf,kindTitleOf}}
+            drawer={{client,hub,target,argoScope:scope,onArgoApplication:openArgoApplication,hasLogs,onLogs:openLogs,hasExec,onTerminal:openTerminal,hasForward,actionsOf,onAction:openAction,eventsKindOf,editableOf,valuesOf,kindTitleOf}}
           /></Suspense>
         ) : page.kind.workspace?.startsWith('helm-') ? (
           <HelmWorkspace key={page.key} client={client} target={target} scope={scope} onResource={ref => paletteActs.current?.openObject(ref)} initialTab={page.kind.workspace === 'helm-settings' ? 'settings' : page.kind.workspace === 'helm-charts' ? 'charts' : 'releases'} scopePicker={<WorkspaceScopePicker client={client} hub={hub} target={target} scope={scope} scopes={scopes} scopeMenu={scopeMenu} onScope={setScope} />} />
@@ -481,6 +482,7 @@ export function Workspace({ client, hub, target, onFavorite, onMoveFavorite, onN
             hasForward={hasForward}
             actionsOf={actionsOf}
             onAction={openAction}
+            onArgoApplication={openArgoApplication}
             onBulk={openBulk}
             eventsKindOf={eventsKindOf}
             editableOf={editableOf}
@@ -554,7 +556,7 @@ interface NavGroup {
   count: number
 }
 
-/** Provider order, with Kubernetes Helm after Storage. Inside each group its
+/** Provider order, with Helm after Kubernetes Storage and Argo CD beside Helm. Inside each group its
  * subgroups (a subgroup of one kind is that kind, without a level). */
 export function navGroups(kinds: KindDescriptor[], provider?: string): NavGroup[] {
   const out: NavGroup[] = []
@@ -591,6 +593,8 @@ export function navGroups(kinds: KindDescriptor[], provider?: string): NavGroup[
       out.splice(out.indexOf(storage) + 1, 0, helm)
     }
   }
+  const argoGroup=out.find(g=>g.group==='Argo CD'),helmGroup=out.find(g=>g.group==='Helm')
+  if(argoGroup&&helmGroup){out.splice(out.indexOf(argoGroup),1);out.splice(out.indexOf(helmGroup)+1,0,argoGroup)}
   for (const g of out) g.items = g.items.map((it) => ('sub' in it && it.kinds.length === 1 ? { kind: it.kinds[0] } : it))
   return out
 }
@@ -679,6 +683,7 @@ function NavItem({ active, onClick, label, hint, nested, favorite, onFavorite, f
 
 /** A collapsed navigation level hides all its children. → opens, ← closes. */
 function NavSubgroup(props: {
+  provider:string
   label: string
   kinds: KindDescriptor[]
   open: boolean
@@ -690,7 +695,7 @@ function NavSubgroup(props: {
   onFavorite: (kind: string) => void
   favoritesReady: boolean
 }) {
-  const { label, kinds, open, disabled, onToggle, active, onPick, favorites, onFavorite, favoritesReady } = props
+  const { provider,label, kinds, open, disabled, onToggle, active, onPick, favorites, onFavorite, favoritesReady } = props
   const shown = open ? kinds : []
   return (
     <div role="group" aria-label={label}>
@@ -715,7 +720,7 @@ function NavSubgroup(props: {
         <span className="shrink-0 text-[12px] text-fg-subtle">{kinds.length}</span>
       </button>
       {shown.map((k) => (
-        <NavItem key={k.id} nested active={active === k.id && !favorites.has(k.id)} onClick={() => onPick(k.id)} label={k.title} hint={label}
+        <NavItem key={k.id} nested active={active === k.id && !favorites.has(k.id)} onClick={() => onPick(k.id)} label={kindLabel(provider,k)} hint={label}
           favorite={favorites.has(k.id)} onFavorite={() => onFavorite(k.id)} favoriteDisabled={!favoritesReady} />
       ))}
     </div>
@@ -758,6 +763,7 @@ function ResourcePage(props: {
   hasForward: (kindId: string) => boolean
   actionsOf: (kindId: string) => ActionDescriptor[]
   onAction: (ref: Ref, action: ActionDescriptor) => void
+  onArgoApplication: (ref:Ref)=>void
   onBulk: (items: BulkItem[], action: ActionDescriptor, onDone: (ids: string[]) => void) => void
   eventsKindOf: (kindId: string) => string | undefined
   editableOf: (kindId: string) => boolean
@@ -768,7 +774,7 @@ function ResourcePage(props: {
   /** The target's key in pageMemo (P18): this page's part is restored once. */
   memoKey: string
 }) {
-  const { pageKey, onHalted, client, hub, target, kind, scope, scopes, scopeMenu, onScope, hasLogs, onLogs, hasExec, onTerminal, hasForward, actionsOf, onAction, onBulk, eventsKindOf, editableOf, valuesOf, kindTitleOf, filterReq, openReq, memoKey: tkey } = props
+  const { pageKey, onHalted, client, hub, target, kind, scope, scopes, scopeMenu, onScope, hasLogs, onLogs, hasExec, onTerminal, hasForward, actionsOf, onAction, onArgoApplication, onBulk, eventsKindOf, editableOf, valuesOf, kindTitleOf, filterReq, openReq, memoKey: tkey } = props
   const scopeKey = JSON.stringify(scope)
   const query = useMemo(() => ({ kind: kind.id, scope: JSON.parse(scopeKey) as ScopeSel }), [kind.id, scopeKey])
   const view = useView(hub, target.provider, target.id, query)
@@ -991,6 +997,8 @@ function ResourcePage(props: {
         {open && (
           <ResourceDrawer
             hidden={view.cancelled}
+            argoScope={scope}
+            onArgoApplication={onArgoApplication}
             client={client}
             hub={hub}
             target={{ provider: target.provider, id: target.id }}

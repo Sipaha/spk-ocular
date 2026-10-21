@@ -374,7 +374,8 @@ by target and reported agent name in the UI.
 
 ### Argo CD boundary
 
-`ArgoCD` and `ocular.argocd` are application-UI-only. Argo Sync, Sync with prune,
+`ArgoCD` (including explicit settings projections) and all six virtual Argo
+workspace kinds are application-UI-only. Argo Sync, Sync with prune,
 Refresh and Hard refresh are `NoAgents` operations: generic object grants cannot
 authorize controller reconciliation. Use the [native UI workspace](argocd.md) for
 explicit reviewed operations.

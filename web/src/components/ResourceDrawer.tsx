@@ -1,3 +1,4 @@
+import { ArgoManagedBy } from '../argocd/ArgoManagedBy'
 import {ResourceHelpButton} from '../learning/ResourceHelp'
 import { RefreshButton } from './RefreshButton'
 import { CancelledList, ListLoading } from './ListLoading'
@@ -17,7 +18,7 @@ import { DetailsPanel } from './DetailsPanel'
 import { PodContainers, podContainerFacts } from './PodContainers'
 import { lazy, Suspense, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { ApiError, type Client } from '../api/client'
-import type { ActionDescriptor, EditDoc, Relation, Ref, Resource } from '../api/types'
+import type { ActionDescriptor, EditDoc, Relation, Ref, Resource, ScopeSel } from '../api/types'
 import { Menu } from '../actions/Menu'
 import { EditDialog, type EditReview } from '../edit/EditDialog'
 import { holdEdits, mayLeave } from '../edit/guard'
@@ -39,6 +40,8 @@ const YamlView = lazy(loadYamlView)
 const preloadYamlView = () => { void loadYamlView().catch(() => {}) }
 
 interface Props {
+ onArgoApplication?:(ref:Ref)=>void
+ argoScope?:ScopeSel
   /** Retain guarded edits while a cancelled list displays its placeholder. */
   hidden?: boolean
   embedded?: boolean
@@ -81,7 +84,7 @@ const toolBtn = 'rounded-md border border-line px-2 py-0.5 text-xs text-fg-muted
 
 type Tab = 'details' | 'yaml'
 
-export function ResourceDrawer({ hidden = false, embedded = false, client, hub, target, subject, initialTab, onTab, onClose, hasLogs, onLogs, hasExec, onTerminal, hasForward, actionsOf, onAction, eventsKindOf, editableOf, valuesOf, kindTitleOf }: Props) {
+export function ResourceDrawer({ hidden = false, embedded = false, client, hub, target, subject, argoScope, onArgoApplication, initialTab, onTab, onClose, hasLogs, onLogs, hasExec, onTerminal, hasForward, actionsOf, onAction, eventsKindOf, editableOf, valuesOf, kindTitleOf }: Props) {
   const leave=(run:()=>void)=>embedded?run():mayLeave(run)
   const filesTargetTitle=useStore(s=>s.view?.groups.flatMap(g=>g.targets).find(t=>t.provider===target.provider&&t.id===target.id)?.title??target.id)
   const workspaceReady=useWorkspaceStatus(s=>s.ready)
@@ -428,7 +431,7 @@ export function ResourceDrawer({ hidden = false, embedded = false, client, hub, 
           </div>
         )}
         {r && tab === 'details' && (
-          <Details
+          <Details argoScope={argoScope} onArgoApplication={onArgoApplication}
             client={client}
             hub={hub}
             target={target}
@@ -485,8 +488,8 @@ function RetainedSection({pending,children}:{pending:boolean;children:ReactNode}
  return <div ref={box} data-retained-section style={pending?{height}:undefined}>{pending?null:children}</div>
 }
 
-function Details(props: { client: Client; hub: ViewHub; target: { provider: string; id: string }; r: Resource; onGo: (ref: Ref) => void; kindTitleOf?: (kind: string) => string; eventsKind?: string; ports?: ReactNode; values?: ReactNode; pending?:boolean }) {
-  const { client, hub, target, r, onGo, kindTitleOf, eventsKind, ports, values, pending=false } = props
+function Details(props: { argoScope?:ScopeSel;onArgoApplication?:(ref:Ref)=>void; client: Client; hub: ViewHub; target: { provider: string; id: string }; r: Resource; onGo: (ref: Ref) => void; kindTitleOf?: (kind: string) => string; eventsKind?: string; ports?: ReactNode; values?: ReactNode; pending?:boolean }) {
+  const { client, hub, target, r, onGo, kindTitleOf, eventsKind, ports, values, pending=false, argoScope, onArgoApplication } = props
   const containerFacts = useMemo(() => podContainerFacts(r), [r])
   const groups = useMemo(() => {
     const m = new Map<string, Relation[]>()
@@ -514,6 +517,7 @@ function Details(props: { client: Client; hub: ViewHub; target: { provider: stri
           </div>
         ))}
       </dl>
+      {r.argoTracking&&<RetainedSection pending={pending}><ArgoManagedBy client={client} resource={r} scope={argoScope} onGo={onArgoApplication??onGo}/></RetainedSection>}
       <PodContainers groups={containerFacts.groups} />
       <RetainedSection pending={pending}>{values}</RetainedSection>
       <RetainedSection pending={pending}>{ports}</RetainedSection>

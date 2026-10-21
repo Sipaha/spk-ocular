@@ -3,6 +3,7 @@ package core
 // ArgoSnapshot is bounded controller evidence, not a comparison made by Ocular
 // against Git or a guarantee that remote destination resources are reachable.
 type ArgoSnapshot struct {
+	Settings   []ArgoSetting  `json:"settings,omitempty"`
 	Servers    []Ref          `json:"servers"`
 	Objects    []ArgoObject   `json:"objects"`
 	Events     []ArgoEvent    `json:"events"`
@@ -69,4 +70,16 @@ type ArgoEvent struct {
 	Message  string `json:"message"`
 	At       int64  `json:"at"`
 	Count    int64  `json:"count"`
+}
+
+// ArgoSetting contains only the public connection descriptor, never credentials.
+type ArgoSetting struct {
+	Ref       Ref    `json:"ref"`
+	Kind      string `json:"kind"`
+	Name      string `json:"name"`
+	Type      string `json:"type"`
+	URL       string `json:"url"`
+	Project   string `json:"project"`
+	CreatedAt int64  `json:"createdAt"`
+	Truncated bool   `json:"truncated"`
 }

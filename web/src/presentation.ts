@@ -5,6 +5,7 @@ import type { Language } from './languages'
 // Only known UI labels are localized; provider IDs, API kinds, custom groups,
 // resource names and persistence keys retain the provider's original values.
 const rows = [
+'Settings|Настройки|设置|Configuración|Einstellungen|Paramètres|Configurações|設定',
 'Address|Адрес|地址|Dirección|Adresse|Adresse|Endereço|アドレス',
 'Age|Возраст|存在时间|Antigüedad|Alter|Âge|Idade|経過時間',
 'Available|Доступно|可用|Disponibles|Verfügbar|Disponibles|Disponíveis|利用可能',
@@ -77,7 +78,12 @@ export function groupLabel(provider: string, title: string, language: Language =
   return provider === 'kubernetes' || provider === 'compose' ? columnLabel(title, language) : title
 }
 export function kindLabel(provider: string, kind: KindDescriptor): string {
- if(kind.workspace === 'argocd') return 'Argo CD'
+ if(kind.workspace === 'argocd') return t('argo.dashboard')
+ if(kind.workspace === 'argocd-applications') return t('argo.applications')
+ if(kind.workspace === 'argocd-applicationsets') return t('argo.sets')
+ if(kind.workspace === 'argocd-projects') return t('argo.projects')
+ if(kind.workspace === 'argocd-repositories') return t('argo.repositories')
+ if(kind.workspace === 'argocd-clusters') return t('argo.clusters')
  if(kind.workspace === 'rbac') return t('rbac.title')
  if(kind.workspace === 'security') return t('security.title')
  if(kind.workspace === 'timeline') return t('timeline.title')

@@ -102,9 +102,14 @@ published `pages` website and its remaining improvements.
 
 ## Native Argo CD in the current source
 
-Ocular includes a free [Argo CD workspace](argocd.md): scoped Applications,
-ApplicationSets and Projects, controller sync/health, source/revision/condition
-evidence, Events, reviewed Sync/Prune and Refresh/Hard refresh, explicit local
-resource inspection and UI Service forwarding. Flux and credential-backed Argo
-settings remain outside this feature. These workflows use Kubernetes API rights
-and do not establish Lens parity, market uniqueness or measured user value.
+Ocular includes a free standalone [Argo CD section](argocd.md) beside Helm, with
+Dashboard, typed Application/ApplicationSet/Project pages and registered repository
+and cluster descriptor pages under Settings. It provides independent sync/health,
+source/revision/condition evidence, filtered Events, reviewed Sync/Prune and
+Refresh/Hard refresh, verified bidirectional local-resource investigation and an
+explicit Argo UI action with exact-current tunnel reuse. Settings loads are
+explicit, namespace/kind-scoped Secret projections that do not export credentials.
+Unknown/partial controller or ownership evidence stays visible. Ask AI is explicitly
+excluded; Flux, credential editing and Git writeback remain separate. These
+workflows use Kubernetes API rights and do not establish complete Lens parity,
+market uniqueness or measured user value.

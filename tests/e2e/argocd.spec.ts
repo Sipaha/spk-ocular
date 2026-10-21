@@ -1,32 +1,17 @@
 import {expect,type Page} from '@playwright/test'
-import {test,selectConnection,connectSelected,openAppMenu,scratchRoot} from './fixtures'
+import {test,openAppMenu,scratchRoot} from './fixtures'
+import {english,argoPage,openArgo} from './argocd-fixtures'
 import {join} from 'node:path'
 import {languages,languageNames} from '../../web/src/languages'
 import type {ArgoSnapshot} from '../../web/src/argocd/types'
-async function english(page:Page){
- const response=await page.request.get('/'),html=await response.text(),token=html.match(/spk-ocular-api-token" content="([^"]+)"/)?.[1]
- const saved=await page.request.post('/api/SetLanguage',{headers:{Authorization:'Bearer '+token,Origin:new URL(response.url()).origin},data:{language:'en'}})
- expect(saved.ok()).toBeTruthy()
-}
 test.beforeEach(async({page})=>english(page))
 test.afterEach(async({page})=>english(page))
-async function openArgo(page:Page){
- await page.goto('/');await selectConnection(page,/^demo\b/);await connectSelected(page)
- const nav=page.getByRole('navigation',{name:'resources'})
- await nav.getByRole('textbox',{name:'Filter resources'}).fill('Argo CD')
- await nav.getByRole('button',{name:'Argo CD',exact:true}).click()
- await nav.getByRole('textbox',{name:'Filter resources'}).fill('')
- const workspace=page.locator('.argo-workspace')
- const zone=workspace.getByRole('textbox',{name:'Zone',exact:true});await zone.fill('blue');await zone.press('Enter')
- await expect(workspace.locator('[data-resync]')).toBeEnabled()
- return workspace
-}
 async function selectApp(page:Page,name='storefront'){
  const ws=page.locator('.argo-workspace');const grid=ws.getByRole('grid',{name:'Applications',exact:true})
  await grid.locator('[data-row-id]').filter({hasText:name}).click()
  return ws.getByLabel('Argo CD details',{exact:true})
 }
-test('native snapshot shows independent axes, sources, conditions, typed tabs and attention',async({page})=>{
+test('native snapshot shows independent axes, sources, conditions, typed pages and attention',async({page})=>{
  const ws=await openArgo(page)
  await expect(ws.getByRole('grid')).toHaveAttribute('aria-rowcount','2')
  const details=await selectApp(page)
@@ -35,10 +20,10 @@ test('native snapshot shows independent axes, sources, conditions, typed tabs an
  await expect(details).toContainText('Requested revision: main')
  await expect(ws.getByRole('grid')).toContainText('Unknown')
  await page.screenshot({path:join(scratchRoot,'argo-applications-en.png')})
- await ws.getByRole('button',{name:'ApplicationSets',exact:true}).click();await expect(ws.getByRole('grid')).toHaveAttribute('aria-rowcount','1')
- await ws.getByRole('button',{name:'Projects',exact:true}).click();await expect(ws.getByRole('grid')).toContainText('commerce')
- await ws.getByRole('button',{name:'Activity',exact:true}).click();await expect(ws.getByLabel('Activity',{exact:true})).toContainText('Sync operation failed')
- await ws.getByRole('button',{name:'Applications',exact:true}).click()
+ await argoPage(page,'Application Sets');await expect(ws.getByRole('grid')).toHaveAttribute('aria-rowcount','1')
+ await argoPage(page,'Projects');await expect(ws.getByRole('grid')).toContainText('commerce')
+ await argoPage(page,'Dashboard');await expect(ws.getByLabel('Activity',{exact:true})).toContainText('Sync operation failed')
+ await argoPage(page,'Applications')
  await ws.getByRole('textbox',{name:'Search applications, projects and sources…'}).fill('catalog')
  await expect(ws.getByRole('grid')).toHaveAttribute('aria-rowcount','1')
  await selectApp(page,'catalog');await expect(ws.getByLabel('Argo CD details',{exact:true})).toContainText('Local destination not verified')
@@ -98,7 +83,7 @@ test('eight locales and narrow layouts retain a bounded grid and projection deta
    await page.setViewportSize({width,height:900})
    expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBeTruthy()
    expect(await ws.evaluate(el=>el.scrollWidth<=el.clientWidth)).toBeTruthy()
-   await expect(ws.getByRole('columnheader')).toHaveCount(8)
+   await expect(ws.getByRole('columnheader')).toHaveCount(9)
    await expect(ws.getByRole('grid')).toHaveAttribute('aria-rowcount','2')
    if(language==='en'||language==='ru')await page.screenshot({path:join(scratchRoot,`argo-${language}-${width}.png`)})
   }
@@ -119,8 +104,7 @@ test('reported local resources resolve a fresh UID and refresh/navigation preser
  await drawer.locator('.cm-content').click();await page.keyboard.press('Control+End');await page.keyboard.type('\n# retained Argo draft')
  await ws.locator('[data-resync]').click();await expect(ws.locator('[data-resync]')).toBeEnabled()
  await expect(drawer.locator('.cm-content')).toContainText('retained Argo draft')
- await ws.getByRole('button',{name:'Activity',exact:true}).click()
- await ws.getByLabel('Activity',{exact:true}).getByRole('button',{name:'blue/storefront',exact:true}).click()
+ await argoPage(page,'Dashboard')
  const confirm=page.getByRole('alertdialog',{name:'Discard edits?',exact:true});await expect(confirm).toBeVisible();await confirm.getByRole('button',{name:'Keep editing',exact:true}).click()
  await expect(drawer.locator('.cm-content')).toContainText('retained Argo draft')
  await page.screenshot({path:join(scratchRoot,'argo-held-draft.png')})
@@ -171,29 +155,5 @@ test('large projections virtualize rows and cancelled reads cannot replace the c
  delayed=false;release()
  await ws.getByRole('button',{name:'Retry',exact:true}).click()
  await expect(grid).toHaveAttribute('aria-rowcount','12000')
- await page.unrouteAll({behavior:'wait'})
-})
-
-test('a resource answer arriving after a new edit asks again before replacing the drawer',async({page})=>{
- let release=()=>{},started=false
- const gate=new Promise<void>(resolve=>{release=resolve})
- await page.route('**/api/ListKinds',async route=>{const response=await route.fetch(),value=await response.json();for(const k of value.kinds)if(k.id==='argoproj.io/applications')k.editable=true;await route.fulfill({response,json:value})})
- await page.route('**/api/GetResource',async route=>{
-  const ref=route.request().postDataJSON()
-  if(ref.kind==='argoproj.io/applications'){await route.fulfill({json:{ref,health:{state:'unknown'},facts:[],yaml:'kind: Application\nmetadata:\n  name: storefront\n',relations:[]}});return}
-  const response=await route.fetch()
-  if(ref.kind==='crates'&&!ref.uid){started=true;await gate}
-  await route.fulfill({response})
- })
- await page.route('**/api/GetEditSource',route=>route.fulfill({json:{ref:route.request().postDataJSON(),text:'kind: Application\nmetadata:\n  name: storefront\n',base:'argo-edit-race'}}))
- const ws=await openArgo(page),details=await selectApp(page)
- await details.getByRole('button',{name:'Crate / blue/crate-7f3a',exact:true}).click();await expect.poll(()=>started).toBe(true)
- await ws.getByRole('button',{name:'Activity',exact:true}).click();await ws.getByLabel('Activity',{exact:true}).getByRole('button',{name:'blue/storefront',exact:true}).click()
- const drawer=ws.locator('[data-resource-drawer]');await expect(drawer.getByRole('heading',{name:'storefront',exact:true})).toBeVisible()
- await drawer.getByRole('tab',{name:'YAML',exact:true}).click();await drawer.getByRole('button',{name:'Edit',exact:true}).click()
- await drawer.locator('.cm-content').click();await page.keyboard.press('Control+End');await page.keyboard.type('\n# acquired while lookup pending')
- release()
- const prompt=page.getByRole('alertdialog',{name:'Discard edits?',exact:true});await expect(prompt).toBeVisible();await prompt.getByRole('button',{name:'Keep editing',exact:true}).click()
- await expect(drawer.getByRole('heading',{name:'storefront',exact:true})).toBeVisible();await expect(drawer.locator('.cm-content')).toContainText('acquired while lookup pending')
  await page.unrouteAll({behavior:'wait'})
 })

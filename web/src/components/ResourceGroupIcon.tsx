@@ -9,6 +9,7 @@ const paths: Record<string, string> = {
   'Access Control': 'm12 3 8 3v6c0 5-8 9-8 9s-8-4-8-9V6ZM9 12l2 2 4-4',
   'API groups': 'M3 3h7v7H3ZM14 3h7v7h-7ZM3 14h7v7H3ZM14 14h7v7h-7Z',
   Health: 'M3 12h4l3-8 4 16 3-8h4',
+  'Argo CD': 'M6 3v12a4 4 0 0 0 4 4h3M6 7h8a4 4 0 0 0 4-4M3 3a3 3 0 1 0 6 0 3 3 0 1 0-6 0ZM14 19a3 3 0 1 0 6 0 3 3 0 1 0-6 0Z',
   Helm: 'M12 3v5m0 8v5M3 12h5m8 0h5M5.6 5.6l3.5 3.5m5.8 5.8 3.5 3.5M5.6 18.4l3.5-3.5m5.8-5.8 3.5-3.5M5 12a7 7 0 1 0 14 0 7 7 0 1 0-14 0ZM9 12a3 3 0 1 0 6 0 3 3 0 1 0-6 0Z',
   Compose: 'm12 3 9 5-9 5-9-5ZM3 12l9 5 9-5M3 16l9 5 9-5',
   Engine: 'M6 6h12v12H6ZM9 9h6v6H9ZM9 2v4m6-4v4M9 18v4m6-4v4M2 9h4m-4 6h4m12-6h4m-4 6h4',
