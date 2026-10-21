@@ -1,195 +1,52 @@
-<p align="center">
-  <img src="internal/appfiles/icons/icon.png" alt="SPK Ocular" width="72" height="72" />
-</p>
+# SPK Ocular
 
-<h1 align="center">SPK Ocular</h1>
+A local desktop workspace for Kubernetes and Docker, with a native system
+webview and an optional loopback browser interface. No Ocular account is
+required. All features are free for individuals and companies.
 
-<p align="center">Kubernetes and Docker in one local workspace.</p>
+[Website](https://sipaha.github.io/spk-ocular/) ·
+[Downloads and release notes](https://github.com/Sipaha/spk-ocular/releases/latest)
 
-<p align="center">
-  <a href="https://github.com/Sipaha/spk-ocular/releases/latest"><img src="https://img.shields.io/github/v/release/Sipaha/spk-ocular?sort=semver&amp;style=flat-square" alt="Latest release" /></a>
-  <a href="https://github.com/Sipaha/spk-ocular/releases"><img src="https://img.shields.io/github/downloads/Sipaha/spk-ocular/total?style=flat-square" alt="Total release asset downloads" /></a>
-  <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache--2.0-blue?style=flat-square" alt="Apache 2.0 license" /></a>
-  <img src="https://img.shields.io/badge/platform-Linux%20%7C%20Windows%20%7C%20macOS-grey?style=flat-square" alt="Linux, Windows and macOS" />
-</p>
+## Install and run
 
-<p align="center">
-  <a href="https://sipaha.github.io/spk-ocular/">Website</a> ·
-  <a href="docs/usage.md">Documentation</a> ·
-  <a href="https://sipaha.github.io/about/">About the author</a>
-</p>
+Download a package for your operating system and architecture. Linux, Windows
+and macOS packages are available for amd64 and arm64. Consult the selected
+release's notes for its included features.
 
+- Linux: glibc 2.35+, GTK 3 and WebKit2GTK 4.1. Install the DEB/RPM package with
+  your distribution's package manager, or use the archive with those libraries.
+- Windows: Windows 10/11 with Microsoft Edge WebView2 Runtime. Install the MSI
+  or extract the ZIP. Installers are unsigned.
+- macOS: macOS 12+. Open the DMG and move SPK Ocular.app to Applications.
+  Bundles are ad-hoc signed, without Developer ID signing or notarization.
 
-SPK Ocular is a local desktop application for Kubernetes and Docker.
-It uses a native system webview and your existing connection configuration.
-No Ocular account or hosted management service is required. The application does
-not collect telemetry. Helm is embedded; a separate Helm CLI is not required.
-
-- Live resource tables, discovery of Kubernetes API resources, details, and metrics.
-- Multiple namespaces, global favorites, resource search, and saved table layouts.
-- [Flux CD](docs/fluxcd.md) for detected controller dashboards, typed resources and scoped source/manager navigation.
-- [Argo CD](docs/argocd.md) for a standalone dashboard and typed resource/settings pages,
-  reviewed Sync/Prune and Refresh, bidirectional resource investigation and UI tunnels.
-- [Security](docs/security.md) for read-only configuration risks, NetworkPolicy
-  selection and existing Trivy Operator vulnerability reports (from 1.3.0).
-- [RBAC explanation](docs/rbac-explanation.md) with binding/role provenance and
-  self-only server access checks (from 1.2.0).
-- [Events timeline](docs/events-timeline.md) for bounded, time-based workload
-  investigation with ownership groups and standard resource tools (from 1.2.0).
-- [Cluster graph](docs/cluster-graph.md) with namespace regions, fast canvas navigation,
-  resource details and an optional declared-route layer.
-- Standalone Docker containers and Compose project/service grouping.
-- Logs in the bottom panel or a separate OS window, interactive terminals, and local Kubernetes port forwarding.
-- Reviewed [node Files](docs/usage.md#node-files) for host browsing, download and text editing.
-- Reviewed [Linux Node Shell](docs/usage.md#node-shell) through the Kubernetes API,
-  with shared temporary privileged helpers and durable cleanup recovery.
-- Container folders and UTF-8 file editing with syntax highlighting (up to 2 MiB).
-- Shared Downloads history for UI file/folder copies and log exports; desktop
-  entries can open the saved item, show its folder or copy its path, dismiss
-  metadata, and confirm permanent deletion of downloaded files or folders.
-- Reviewed Kubernetes changes, Secret value editing, and bulk actions.
-- Helm chart browsing, repositories, release history, install, upgrade, rollback
-  and uninstall with review before execution.
-- Explicit local agent access with named permission groups and scope/group switches,
-  including separately granted, reviewed and bounded container commands.
-
-All features are free for individuals and companies of any size, revenue or
-funding. Development is supported only through voluntary cryptocurrency donations;
-donations do not unlock features.
-
-[Product website](https://sipaha.github.io/spk-ocular/).
-This README describes the current source; consult release notes for the features
-included in a downloaded version.
-
-## Languages
-
-The application offers Russian, English, Simplified Chinese, Spanish, German,
-French, Brazilian Portuguese and Japanese. The application menu in the header shows the current native
-language name. Before a manual choice, the app detects the system/browser language.
-A manual choice is saved in the local profile and
-survives restarts. See [localization](docs/localization.md) for coverage and fallback rules.
-
-## Install
-
-Download a package matching your architecture from
-[GitHub Releases](https://github.com/Sipaha/spk-ocular/releases/latest).
-Desktop packages cover **Linux, Windows and macOS**, each for `amd64` (x86-64)
-and `arm64` (AArch64 / Apple Silicon). Windows requires Windows 10/11 and
-Microsoft Edge WebView2 Runtime; macOS requires 12 or newer.
-Linux desktop packages require **glibc 2.35 or newer**, GTK 3 and WebKit2GTK 4.1.
-From 1.6.1, both Linux architectures are checked natively for normal DEB
-installation and browser/GTK startup in Ubuntu 22.04 userspace before publication.
-The build runners remain Ubuntu 24.04. See [Linux compatibility](docs/linux-compatibility.md)
-for the package baseline, distribution checks and their limits.
-
-```sh
-# Debian / Ubuntu; replace VERSION and ARCH with the downloaded filename.
-sudo apt install ./spk-ocular_VERSION_linux_ARCH.deb
-
-# Fedora and compatible RPM systems.
-sudo dnf install ./spk-ocular_VERSION_linux_ARCH.rpm
-```
-
-Launch **SPK Ocular** from the application menu or run `spk-ocular`.
-Upgrades use the same package name. Removing the package keeps your local data.
-The archive contains an executable `spk-ocular`; its desktop runtime libraries
-must already be installed. Verify a downloaded file with its `.sha256` sidecar:
-
-```sh
-sha256sum -c spk-ocular_VERSION_linux_ARCH.deb.sha256
-```
-
-On Windows, install `spk-ocular_VERSION_windows_ARCH.msi` for the current user,
-or extract the desktop ZIP and open `spk-ocular.exe`. The MSI adds a Start menu
-shortcut and keeps application data on removal. Windows installers are unsigned;
-Windows may ask you to confirm the publisher before running them.
-
-On macOS, open `spk-ocular_VERSION_darwin_ARCH.dmg` and drag **SPK Ocular.app**
-to Applications. Bundles have an ad-hoc signature but are not Developer ID signed
-or notarized. For a trusted download, macOS may require approval in
-System Settings → Privacy & Security → Open Anyway.
-
-The same desktop executable can serve the interface in your browser:
+Start SPK Ocular from the application menu. For browser mode, run:
 
 ```sh
 spk-ocular --browser --port 5190
-# Open http://127.0.0.1:5190 in a local browser.
 ```
 
-From the executable’s directory on Windows, use
-`.\spk-ocular.exe --browser --port 5190` in PowerShell. For a macOS app bundle,
-run `/Applications/SPK\ Ocular.app/Contents/MacOS/spk-ocular --browser --port 5190`.
-Without `--browser`, the executable opens its native desktop window. The same
-native runtime libraries are required in either mode; Linux still needs the
-GTK/WebKit libraries listed above, but browser mode does not need a display.
-Packages from 1.3.0 use this single executable; earlier published browser-only
-archives remain available as immutable release assets.
-
-The browser endpoint is local only. In-app automatic updates are not implemented.
-
-## Connections and data
-
-On first use, Ocular offers kubeconfig files from `KUBECONFIG` and `~/.kube`
-for explicit selection. Only selected files become connections. **Add kubeconfig**
-lets you select more files or paste a custom kubeconfig. Selected external files
-remain linked and their updates are observed; Ocular never edits them. Custom
-configurations are encrypted using a master password and unlock for the current
-app process only. The password is not stored or recoverable; see
-[configuration storage](docs/usage.md#kubernetes-configurations).
-Docker connections come from
-Docker contexts and the Docker environment variables. Select a target and press
-**Connect** in the main connection-status area; selecting or restoring a target does not
-connect. Connection progress includes errors and at most three total automatic
-attempts, with **Cancel** available during attempts and retry waits. Connecting
-may execute credential helpers configured in kubeconfig.
-
-The application stores preferences, recent objects, and agent grants in
-`~/.spk/ocular/ocular.db` (`%USERPROFILE%\.spk\ocular\ocular.db` on Windows). Set `SPK_OCULAR_HOME` to use another data directory.
-Connection credentials remain in their source configuration. Helm repository
-credentials and SQL connection settings are stored in a private application-owned
-`helm/settings.json` under the data directory. Secret values and Helm credentials
-are not stored in the application database; see [Helm](docs/usage.md#helm).
-
-## Documentation
-
-- [Using the application](docs/usage.md)
-- [Architecture and behavior contracts](docs/architecture.md)
-- [Local agent API](docs/agent-api.md)
-- [Development and verification](docs/development.md)
-- [Builds and releases](docs/releases.md)
-- [Planned work](docs/backlog.md)
-- [Contributor and coding-agent rules](AGENTS.md)
+Open `http://127.0.0.1:5190`. Select a connection and press **Connect**.
+Connecting can execute credential helpers from your kubeconfig. Choose only
+configuration and targets you trust. In-app updates are not implemented.
 
 ## Build from source
 
-Requirements: the Go version in `go.mod`, Node.js 22, pnpm 10, a C toolchain,
-`pkg-config`, GTK 3 and WebKit2GTK 4.1 development libraries.
+Use the Go version declared in `go.mod`, Node.js 22 and pnpm 10. Linux desktop
+builds also need a C compiler, pkg-config, GTK 3 and WebKit2GTK 4.1 development
+libraries. With the required toolchain installed:
 
 ```sh
-sudo apt install build-essential pkg-config libgtk-3-dev libwebkit2gtk-4.1-dev
 make build-desktop
-./build/bin/spk-ocular-desktop
+make check
 ```
 
-`make build` builds the browser-mode executable. `make check` runs the full
-verification gate; see [development](docs/development.md) for its extra tools
-and isolated scratch configuration. For native Windows/macOS packages, run
-`python packaging/portable.py --version 1.0.0 --os windows --arch amd64` (use
-`darwin` for macOS) on a matching native host. Windows needs WiX 5.0.2; macOS
-needs Xcode Command Line Tools. CI runs on pull requests to `master`, pushes to
-`release/**` and manual runs; tagged versions use the same tests before packaging
-and publication.
+Contributor instructions are in [AGENTS.md](AGENTS.md). Detailed project
+documentation, research and planning are maintained separately in a private
+repository. Public builds and checks do not require that checkout.
 
 ## License
 
 [Apache License 2.0](LICENSE). Dependencies retain their own licenses; see
-[third-party notices](THIRD-PARTY-NOTICES.txt). Run `spk-ocular licenses` to read
-the notices embedded in a downloaded build.
-
-Resource comparison from 1.2.0 supports explicitly paired resources
-across connected targets, normalized saved YAML and optional service fields.
-See [resource comparison](docs/resource-comparison.md); it is included from 1.2.0.
-
-[Workspace continuity](docs/workspace-continuity.md) from 1.2.0 retains
-pinned properties/log references, ended terminal slots and panel sizes across
-restarts, with explicit connection/resume and no saved contents or command replay.
+[third-party notices](THIRD-PARTY-NOTICES.txt), also available with
+`spk-ocular licenses`.

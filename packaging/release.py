@@ -49,8 +49,10 @@ def archive(path, entries, epoch):
 
 
 def document_paths(root=ROOT):
+    # Only public distribution metadata belongs in archives. Never recurse into
+    # an internal docs tree, even if one is present in a developer checkout.
     paths = [root / name for name in ('LICENSE', 'THIRD-PARTY-NOTICES.txt', 'README.md', 'AGENTS.md')]
-    paths += sorted(path for directory in ('docs', 'changelog') for path in (root / directory).rglob('*') if path.is_file())
+    paths += sorted(path for path in (root / 'changelog').rglob('*') if path.is_file())
     return paths
 
 

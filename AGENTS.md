@@ -1,288 +1,34 @@
-# SPK Ocular: contributor and agent guide
+# Contributor and agent entry point
 
-SPK Ocular is a local infrastructure viewer for Kubernetes and Docker.
-The shared Go API serves a Wails desktop window or a loopback browser UI.
-Release platforms are Linux, Windows and macOS, each on amd64 and arm64.
-Linux uses GTK 3/WebKit2GTK 4.1; Windows uses WebView2; macOS uses WKWebView.
+Detailed project documentation and contributor rules live in the private
+`internal-docs` repository, under `spk-ocular/`. In this solution, read
+`../internal-docs/spk-ocular/AGENTS.md` and the applicable guides before
+substantive work. Source comments referring to `docs/...` mean that private
+project documentation tree. If it is unavailable, report that limitation.
 
-## Read first
+- Work within the owner's selected scope. Backlog text does not authorize
+  implementation. Do not delegate to subagents without explicit authorization.
+- Preserve unrelated work. Never restart or kill the user's application or
+  disturb shared displays, configuration, infrastructure or processes.
+- Run source/build/test/git commands from this member repository. Put all
+  scratch files, logs, profiles and TMPDIR under the solution's `.tmp/`.
+- Test only owned isolated profiles and fixtures. No real infrastructure
+  mutations without explicit scope and verified target identity.
+- Both commit author and committer must be Pavel Simonov
+  <sipahabk@gmail.com>, set per command; never change global Git configuration.
+- Scoped commits and ordinary pushes have standing owner authorization.
+  Releases, tags, publication and published-history rewrites require explicit
+  owner instructions.
+- `make check` is required before committing: lint, tests, documentation and
+  both builds. Use `VITEST_MAX_WORKERS=2` here. Do not relax assertions, budgets
+  or timeouts. Inspect actual screenshots for user-visible interface changes.
+- Keep code/comments and documentation English and all eight UI locales
+  complete. Keep the private documentation current when behavior changes.
+- Keep internal guides, plans, research and evidence out of the public source
+  tree and distribution payloads. Public metadata is limited to this entry
+  point, README, changelog, licenses and third-party notices. Preserve required
+  third-party documentation with vendored code.
 
-- [README](README.md): installation, commands, supported platforms.
-- [Usage](docs/usage.md): current user-visible behavior.
-- [Architecture](docs/architecture.md): module boundaries and invariants.
-- [Agent API](docs/agent-api.md): local automation permissions and transport.
-- [Development](docs/development.md): toolchain, checks and isolated fixtures.
-- [Releases](docs/releases.md): packages, workflows, versioning and publication.
-- [Backlog](docs/backlog.md): future work; it is not permission to start a task.
-
-## Documentation policy
-
-Documentation describes **what exists now or explicitly planned work**. Do not
-turn it into a historical archive. Update the authoritative section when behavior
-changes; delete obsolete claims, completed implementation plans, old review
-reports, superseded alternatives, session transcripts and dated test summaries.
-Retain a decision's current constraint and rationale, not the story of how it
-was reached. Put transient logs, screenshots, benchmarks and handoff notes in
-scratch, outside product documentation. Git and GitHub Releases retain history.
-
-All documentation and code comments are English. UI translations belong in
-localization data (`web/src/i18n.ts`, `web/src/locales`, `web/src/presentation.ts`,
-and native notification data in `internal/desktop/pending.go`); release descriptions may be bilingual.
-Release notes live in `changelog/<version>/<locale>.md`, as in the launcher;
-GitHub uses `en.md`. Keep published version notes as release metadata. Verify documentation
-against source, commands and tests; do not claim a platform or workflow has run when it
-has only been configured. Keep local links valid (`scripts/check-docs.py`).
-
-## Work safely
-
-- Preserve existing work and stay within the user's agreed task. Do not start
-  backlog items or delegate to subagents without explicit authorization.
-- Work inside the current solution. Build/test/git commands run from a member
-  repository. Other clones and user/system configuration are read-only unless
-  the user authorizes the exact path and change.
-- Scratch files, logs, profiles, screenshots and test tool installations belong
-  in the solution's `.agents/tmp`. Set a canonical TMPDIR there. No `/tmp` scratch.
-- Never restart or kill the user's application. Test launches isolate HOME,
-  DOCKER_CONFIG, SPK_OCULAR_HOME and KUBECONFIG. Discover current PID/window
-  ownership; stale helper files are not evidence. Leave shared X displays running.
-- Only disposable kind-ocular-dev and ocular-dind are infrastructure mutation
-  destinations. Verify the fixture's identity; never use the user's containers
-  or real clusters. `scripts/dind-verify.sh` is mandatory before DIND mutations.
-- Every new commit's author **and** committer must be
-  `Pavel Simonov <sipahabk@gmail.com>`. Do not change global Git identity.
-- The owner grants standing authorization to commit and push in this repository
-  without additional approval. Keep commits scoped to the current task and
-  preserve unrelated work.
-- Create or publish a release only on the owner's explicit command. Standing
-  commit/push authorization does not authorize release tags, release workflows
-  or release publication.
-- Published history is rewritten only on an explicit request. Before rewriting,
-  save a bundle and preserve the working tree inside solution scratch; compare
-  tree contents afterward. A requested remote replacement uses an exact
-  force-with-lease expectation, never an unconditional force push.
-- Within an authorized release, a failed build or workflow before publication
-  does not require a new version or tag name. Keep that release version and all
-  eight complete changelogs relative to the previous published release; include
-  the fixes rather than replacing the notes with only the latest CI repair.
-  Verify that the release is still unpublished before updating its existing tag
-  to the corrected, fully verified commit. Preserve the failed tag identity and
-  evidence, and use an exact remote tag force-with-lease expectation. Published
-  releases, their tags and their assets remain immutable; corrections after
-  publication require a new version. Never mix draft assets from different source
-  commits or treat a failed CI attempt as a published release.
-- Quality is more important than speed. Run real checks, inspect actual UI
-  screenshots for visible changes, and report concrete evidence and limits.
-  Do not relax assertions, budgets or timeouts to make a check pass.
-
-## Build and verify
-
-`make build` builds web + browser binary; `make build-desktop` builds the native
-window; `make release` adds production mode. The desktop development executable
-is replaced atomically. A web/browser build does not update an already running
-native process or its embedded assets.
-
-`make check` is required before a commit/release: Go vet and golangci with/without
-`wails gtk3`, ESLint/TypeScript, actionlint, Go race, Vitest, Playwright, packaging
-contract checks, documentation validation, and both builds. Use
-VITEST_MAX_WORKERS=2 on this workspace. The existing TanStack React Compiler
-warning is not a failed build.
-
-`make package-linux RELEASE_VERSION=1.0.0 ARCH=amd64` produces native packages
-and archives. `packaging/verify.py` validates their real contents. Packaging
-requires a native host of the requested architecture; never relabel a binary.
-Windows/macOS use `packaging/portable.py` on native hosts and
-`packaging/verify-portable.py`; Windows adds real MSI install/remove checks.
-Published assets must include all six OS/architecture pairs and every checksum. Release
-metadata, package identity and artifact names use SPK Ocular exclusively.
-
-Tests use the synthetic provider and fake servers unless an explicit kind/DIND
-integration target is requested. Fixture ports must be free; choose another port
-instead of killing another task's process. `OCULAR_SCRATCH_DIR` selects e2e output.
-Tests importing `fixtures.ts` reset the persisted page snapshot between specs.
-Lifecycle tests own their app's shutdown and wait for it to exit.
-
-For GTK screenshots use a dedicated/shared test display without disturbing its
-owner, `xwininfo` to find the actual window, `scripts/xinput.py` for input and
-`import` for captures. Inspect the image. Use LANGUAGE=ru to check localization;
-LANG alone can be overridden. A window can take time to appear on a private
-D-Bus without portals; don't assume a timeout means the application is broken.
-
-## Implementation map
-
-- API: `internal/api/api.go`, service files, `transport/http.go`,
-  `transport/wails.go`, `web/src/api/client.ts`. New methods need all layers.
-- Core/provider types: `internal/core`, `internal/provider`; keep generic UI
-  independent of Kubernetes pod/namespace/container assumptions.
-- Live data: `internal/events`, `internal/views`, Kubernetes cache/discovery/schema,
-  Docker/Compose feeds, `web/src/views/viewSync.ts` and hooks.
-- Workspace/navigation: `web/src/components/Workspace.tsx`, `web/src/connections`,
-  `ResourceDrawer.tsx`, `ResourceTable.tsx`, `ScopeSelect.tsx`, `Select.tsx`.
-- Persistence: SQLite `internal/store`; `pageMemo*`, `navigationPersist.ts`,
-  `columnWidths.ts`, global preferences in `web/src/store.ts`.
-- Mutations: `internal/api` and provider action/edit/value modules;
-  frontend `actions`, `edit`, `values` and `mayLeave` guards.
-- Logs/terminal/tunnels: `internal/streams`, `internal/forwards`;
-  frontend `logs`, `term`, `tunnels` and `dock`.
-- Agent access: `internal/agentgrant`, `internal/agentapi`, `web/src/agents`.
-- Helm: `internal/helm`, provider configuration adapters, `internal/api/helm.go`,
-  `web/src/helm`. UI-only workspaces never become agent-grant resource kinds.
-  SQL storage adapts Helm's schema/codec with cancellable queries and pool cleanup.
-- Packaging: `packaging/`, `.github/workflows/`, `VERSION` (development base), `changelog/<version>/<locale>.md`.
-
-## Behavior invariants
-
-### Data, ownership and permissions
-
-Target identity is stable across unrelated configuration changes. Credentials
-stay out of target DTOs/logs/events/SQLite. Explicit UI-only kubeconfig inspection
-may return bounded YAML with no-store headers; never retain it in metadata or preferences. Kubernetes sources are explicitly
-imported links or master-password-encrypted custom configurations; candidate
-scanning must not create targets. Decrypt custom YAML only in memory. Configuration revisions are HMACs. Views
-belong to one session incarnation; responses, timers and late deliveries cannot
-mutate a replacement. UID distinguishes same-name resource replacements.
-
-Initial readiness follows delivered data, not merely an established watch.
-Permission failures and partial coverage are visible, never empty success.
-Discovered kinds disappear only after a successful catalog response proves it;
-unconfirmed sources retain their last known kinds. No network I/O in provider
-Open/Kinds; discovery is asynchronous and single-flight.
-
-Explicit namespace sets use per-namespace reads/watches/schema probes/metrics.
-Empty sets remain empty; All is explicit. Source Reset is local to that source,
-and shared rows remain while any owner has them. Unscoped reads run once.
-Agent grants remain independent and are checked again at the moment of writing.
-Named access groups are additive; preserve kind/no-confirm boundaries between
-overlapping grants. Namespace master switches override inherited All grants;
-disabled groups and scopes retain their configuration in SQLite. Standalone
-Docker containers have no project scope: existing all-project or cluster grants
-must not acquire access to them. Retain the stable `compose` provider ID so saved
-connections, selections and permissions are not renamed implicitly.
-
-One agent `logs` grant covers history, time ranges, grep, bounded live reads and
-file export within its scope. Time ranges require an explicit matching-line
-limit; streams always require one. Bound complete encoded API output and stream
-duration, not just text lengths. Apply filters before output limits and report
-every truncation. Large analysis belongs in a private Downloads export whose API
-response contains metadata only. Revocation stops active reads and removes an
-unreturned partial export. Do not use the UI's tail/merge limits for archive reads.
-
-### Workspace and interaction
-
-Selecting or restoring an unopened target never connects it. Connect belongs in
-the main connection-status area; ordinary UI reads cannot create sessions. Once explicitly
-connected, a target stays connected while idle, minimized or unselected until
-Disconnect/application exit; idle cleanup applies only to implicit sessions.
-Configuration changes automatically check a replacement incarnation for the same
-target, retaining the workspace during recovery. This does not authorize stale
-reviewed writes or retry mutations. Failed recovery requires a new Connect. Cancel is attempt-scoped
-and stops checks, backoff and credential helpers. Report real phase/error/time
-and at most three total automatic attempts. Granted agent sessions remain
-independent. Preserve held edits when a connection becomes unavailable.
-
-Connection switching lives in the header picker; opening/searching it never connects.
-Appearance uses 32 stable SVG IDs and 16 curated pairs in per-target UI state; no arbitrary colours.
-The app logo/name is absent from the workspace header. Native window chrome remains unchanged.
-
-Only Workloads defaults to expanded; saved global section choices take priority.
-
-Namespace row/text/Enter selects exactly one and closes. Checkbox and Space in
-the list toggle a set without closing; Space in search types normally. Picker
-query/cursor/scroll/focus survive keyed page remounts. Close popups before a
-mayLeave question. Selection is per target; Favorites and section expansion are
-global. Neither unavailable catalog entries nor target switches erase them.
-
-A favorite exists in only one navigation section, including search. Removing it
-returns the original position. D&D changes order without navigation and has a
-keyboard equivalent. Empty original sections disappear and counts reflect their
-remaining kinds. Keep one active nav row and F6 entry point.
-
-Collapsed groups hide every child, including the current kind, while retaining
-the selected page. Search expands matches temporarily
-without persisting that expansion. Ordinary palette object results use the selected
-scope even on unscoped tables; explicit scope/type/name queries read only that
-scope and commit it atomically with the chosen result behind mayLeave; opening a result changes the kind and reveals the
-exact Ref+UID row once. Scope selection and unsaved-editor protection survive it.
-
-Target writes share a serialized queue across remounts and await failures as well
-as successes. Global optimistic changes replay pending operations after a failed
-write. Persistence errors are visible. Respect the 4096-byte target-state limit.
-Column widths are keyed by ID, outside the page snapshot's size budget.
-
-Resize pointer capture/cancel/lost-capture must be cleaned up; Escape restores the
-old size. Use CSS variables and one DOM write per animation frame; commit React
-state on release. Resize cannot sort or select a row. Virtualizer keys are stable.
-
-Text and resource-page titles are 14 px (titles semibold), root rem 17 px,
-rows 32 px, app/resource headers 40 px, radii 2/4 px.
-Keep the embedded PNG at 256 px and verify `_NET_WM_ICON` on GTK. Keep the 24 px
-resource-list right inset: invisible GTK overlay scrollbar hit regions cover star
-buttons without it. `@theme static` retains runtime ANSI/xterm colors. Modal
-connection information preserves the table/editor, traps focus and restores it
-on close, Escape and backdrop. No Overview page.
-
-Graph inventory loading requires an explicit Load graph click once per backend
-connection session. Opening the graph before that click creates neither an inventory
-request nor a layout worker. Navigation and warm target switching retain this choice;
-Disconnect/Connect, a replacement session and application restart require a fresh click.
-The choice is memory-only, never a saved target preference. Automatic replacement retains
-a guarded unsaved editor until its edits are released, then requests fresh graph admission.
-
-### Mutations and secrets
-
-Use Prepare/Run with exact UID, configuration revision, route and version/Expect.
-Disable HTTP mutation retries; an ambiguous result is unknown. Retry a failed
-precondition only after proving no write occurred. A new preview is not implicit
-permission to write. Destructive dialogs display the actual object and start on
-Cancel. Bulk writes preserve independent outcomes and support stopping new work.
-
-Secret YAML changes only metadata. Never write masked values or expose Secret
-server-error details. Actual value reads/writes use the dedicated per-key path
-and version guards. Values stay out of caches, history, grants and journals.
-Late reveal/copy responses cannot display data after target/object/version changes.
-Clipboard writes are serialized and reported successful only after completion.
-
-Every navigation that discards edits uses mayLeave; automatic page replacement
-waits for held edits. A cancelled transition preserves the prior kind, scope,
-selection and editor. YAML and Secret value editors can hold guards simultaneously.
-
-### Streams and processes
-
-Stream IDs are one-shot and session-owned. Transport guards run before consuming
-IDs. Logs are bounded by lines/bytes/frame size and explicitly report gaps.
-Terminal input/output use credits; interrupt preempts queued input. Closing tabs
-hangs up the in-container command before disconnecting. Protocol errors are fatal.
-
-Never send streamed data through wails asset URLs. Keep quiet-stream nudges for
-WebKitGTK. Tunnels bind loopback, recheck failed Service backends and have bounded
-handshakes. Existing terminal/tunnel connections keep their original configuration.
-Regex search remains in a time-limited Worker. Untrusted terminal output cannot
-write the clipboard or open links.
-
-## Test pitfalls
-
-- kubeconfig is YAML 1.1: quote names such as `yes`, `on`, `n` in fixtures.
-- Fake dynamic clients do not reproduce all field selectors, PodMetrics, server
-  status bodies or watch-list behavior; use kind when those properties matter.
-- Client-go WatchList readiness requires all initial deliveries, not a List call.
-- Fake client reactors run under its lock: mutate the tracker, not the client.
-- CodeMirror renders visible lines only. E2E must scroll before checking distant
-  text. jsdom needs layout/scroll stubs and cannot establish GTK hit-test correctness.
-- Native select menus are avoided. Custom popups must be focusable while positioning;
-  use opacity rather than visibility:hidden. Only relevant ancestor scroll closes them.
-- Option descendants' title/aria-label can alter accessible names; put tooltips on
-  the row rather than decorative children. Focus and pointer menu highlight agree.
-- Resource detail events are another resource grid; target the primary grid explicitly.
-- CPU/RAM metrics require the cached object's current UID and sample incarnation.
-- Docker log timestamps are not a total order; preserve anchor-based replay logic.
-- `t.Context()` is already cancelled in cleanup. Use a fresh bounded context where needed.
-- Long TMPDIR paths can exceed Unix socket limits; use the existing short-socket helpers.
-- Xvfb keyboard layout resets when its last client exits; configure it with a live window.
-
-## Localization invariants
-
-Application languages and fallback rules are documented in
-[Localization](docs/localization.md). Keep every UI/provider catalogue complete
-with exact placeholders and full warning semantics. Never translate resource
-identifiers, persistence keys, object names, raw logs or manifests. Language
-switching must preserve open editors and live connections. Additional languages
-load from static local catalogues; do not add runtime translation services.
+Public CI and packaging must work without private repository access. Run
+`python3 scripts/check-docs.py` in `internal-docs` separately when its documents
+change. Do not upload private documentation to the work knowledge service.

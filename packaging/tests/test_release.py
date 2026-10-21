@@ -9,6 +9,25 @@ spec.loader.exec_module(release)
 
 
 class ReleaseInputs(unittest.TestCase):
+    def test_archives_include_public_metadata_but_exclude_internal_documents(self):
+        import tarfile
+        with tempfile.TemporaryDirectory() as scratch:
+            root = Path(scratch)
+            public = ['LICENSE', 'THIRD-PARTY-NOTICES.txt', 'README.md',
+                      'AGENTS.md', 'changelog/1.9.0/en.md']
+            for name in [*public, 'docs/backlog.md',
+                         'docs/images/internal.png', 'internal-docs/strategy.md']:
+                path = root / name
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text(name)
+            paths = release.document_paths(root)
+            self.assertEqual({p.relative_to(root).as_posix() for p in paths}, set(public))
+            output = root / 'distribution.tar.gz'
+            release.archive(output, [(p.relative_to(root).as_posix(), p, 0o644)
+                                     for p in paths], 1234)
+            with tarfile.open(output) as archive:
+                self.assertEqual(set(archive.getnames()), set(public))
+
     def test_versions_are_safe_filenames_and_valid_semver(self):
         for value in ['0.1.0', 'v1.2.3', '1.2.3-rc.1', '0.1.0-dev.42']:
             self.assertEqual(release.version(value), value.removeprefix('v'))
