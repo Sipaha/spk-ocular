@@ -16,9 +16,10 @@ project documentation tree. If it is unavailable, report that limitation.
   mutations without explicit scope and verified target identity.
 - Both commit author and committer must be Pavel Simonov
   <sipahabk@gmail.com>, set per command; never change global Git configuration.
-- Scoped commits and ordinary pushes have standing owner authorization.
-  Releases, tags, publication and published-history rewrites require explicit
-  owner instructions.
+- Scoped commits and ordinary pushes have standing owner authorization,
+  including automatic website deployment from `pages`; do not reconfirm them.
+  Application releases/tags, manual publication workflows and published-history
+  rewrites require explicit owner instructions.
 - `make check` is required before committing: lint, tests, documentation and
   both builds. Use `VITEST_MAX_WORKERS=2` here. Do not relax assertions, budgets
   or timeouts. Inspect actual screenshots for user-visible interface changes.
