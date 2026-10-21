@@ -211,7 +211,7 @@ func (s *Server) prepareAction(ctx context.Context, c caller, req *PrepareAction
 		return nil, badRequest("%v", err)
 	}
 	if d.NoAgents {
-		err := forbidden("%s is not for agents: it gives access like a terminal", d.ID)
+		err := forbidden("%s is not for agents: this action is available only in the application UI", d.ID)
 		s.refused(c, "PrepareAction", ref.Provider, ref.Target, ref.Scope, objectOf(ref), err)
 		return nil, err
 	}

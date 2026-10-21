@@ -239,3 +239,7 @@ func (w *API) CheckAccess(ctx context.Context, req api.AccessRequest) (core.Acce
 func (w *API) ClusterSecurity(ctx context.Context, req api.SecurityRequest) (core.SecuritySnapshot, error) {
 	return w.a.ClusterSecurity(api.UIContext(ctx), req)
 }
+
+func (w *API) ArgoCD(ctx context.Context, req api.ArgoRequest) (core.ArgoSnapshot, error) {
+	return w.a.ArgoCD(api.UIContext(ctx), req)
+}

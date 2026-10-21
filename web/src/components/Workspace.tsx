@@ -6,6 +6,7 @@ import { RefreshButton } from './RefreshButton'
 import { ResourceGroupIcon } from './ResourceGroupIcon'
 import { lazy, Suspense } from 'react'
 const RbacWorkspace = lazy(() => import('../rbac/RbacWorkspace'))
+const ArgoWorkspace = lazy(() => import('../argocd/ArgoWorkspace'))
 const SecurityWorkspace = lazy(() => import('../security/SecurityWorkspace'))
 const TimelineWorkspace = lazy(() => import('../timeline/TimelineWorkspace'))
 const GraphWorkspace = lazy(() => import('../graph/GraphWorkspace'))
@@ -433,6 +434,11 @@ export function Workspace({ client, hub, target, onFavorite, onMoveFavorite, onN
           <div role={kindsError ? 'alert' : 'status'} className="p-4 text-fg-muted">
             {kindsError || t('nav.noKinds')}
           </div>
+        ) : page.kind.workspace === 'argocd' ? (
+          <Suspense fallback={<LoadingState />}><ArgoWorkspace key={page.key} client={client} target={target} scope={scope} kinds={kinds ?? []}
+            scopePicker={<WorkspaceScopePicker client={client} hub={hub} target={target} scope={scope} scopes={scopes} scopeMenu={scopeMenu} onScope={setScope} />}
+            drawer={{client,hub,target,hasLogs,onLogs:openLogs,hasExec,onTerminal:openTerminal,hasForward,actionsOf,onAction:openAction,eventsKindOf,editableOf,valuesOf,kindTitleOf}}
+          /></Suspense>
         ) : page.kind.workspace === 'rbac' ? (
           <Suspense fallback={<LoadingState />}><RbacWorkspace key={page.key} client={client} target={target} scope={scope}
             scopePicker={<WorkspaceScopePicker client={client} hub={hub} target={target} scope={scope} scopes={scopes} scopeMenu={scopeMenu} onScope={setScope} />}

@@ -99,3 +99,12 @@ extend that baseline.
 These are proposed improvements, not authorization to implement them. They remain
 free under the confirmed Ocular model. The [site plan](site-plan.md) describes the
 published `pages` website and its remaining improvements.
+
+## Native Argo CD in the current source
+
+Ocular includes a free [Argo CD workspace](argocd.md): scoped Applications,
+ApplicationSets and Projects, controller sync/health, source/revision/condition
+evidence, Events, reviewed Sync/Prune and Refresh/Hard refresh, explicit local
+resource inspection and UI Service forwarding. Flux and credential-backed Argo
+settings remain outside this feature. These workflows use Kubernetes API rights
+and do not establish Lens parity, market uniqueness or measured user value.

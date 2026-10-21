@@ -81,7 +81,13 @@ func class(t *testing.T, err error) provider.ErrorClass {
 func TestWorkloadsOfferActionsAndServicesDoNot(t *testing.T) {
 	_, s := open(t)
 	kinds := s.Kinds()
-	require.Len(t, kinds, 5)
+	require.Len(t, kinds, 6)
+	assert.Equal(t, "argoproj.io/applications", kinds[5].ID)
+	assert.True(t, kinds[5].Hidden)
+	require.Len(t, kinds[5].Actions, 4)
+	for _, action := range kinds[5].Actions {
+		assert.True(t, action.NoAgents)
+	}
 	assert.Empty(t, kinds[0].Actions, "services are for logs, terminals and tunnels")
 	assert.Empty(t, kinds[2].Actions, "problems: a row offers its object's kind's")
 	assert.Empty(t, kinds[3].Actions, "crates: a regression of the generic UI, no actions")

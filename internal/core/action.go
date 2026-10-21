@@ -19,8 +19,8 @@ type ActionDescriptor struct {
 	// Text: a text value the action takes next to its Param (a debug
 	// container's image).
 	Text *ActionText `json:"text,omitempty"`
-	// NoAgents: exec-level access (a debug container) — never granted to
-	// agents, whatever their grants say.
+	// NoAgents: UI-only effects beyond an object grant (exec/host access or
+	// controller reconciliation). Never granted to agents, whatever grants say.
 	NoAgents bool `json:"noAgents,omitempty"`
 	// Single: only one object at a time (a node's drain: several at once
 	// evict everything together) — never in a bulk action.

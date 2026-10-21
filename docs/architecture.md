@@ -1101,3 +1101,20 @@ by logical work area; no maximize/fullscreen operation exists. A synchronous Wai
 WindowClosing hook waits for guest state/input flush before approved closure.
 Per-opening epochs reject messages and close requests from an older window.
 Wails events and browser BroadcastChannel carry memory-only data; owner page exit and the browser opener lifetime end orphan guests. No tool window is exposed through agent grants.
+
+## Native Argo CD workspace
+
+`provider.ArgoSource` provides the UI-only `ArgoCD` API snapshot over the current
+explicit session. The virtual `ocular.argocd` kind is conditional on discovered
+Applications. See [Argo CD](argocd.md) for projection/read bounds and semantics.
+The projection excludes inline values and credential objects; no Git or remote
+cluster connection is made. Argo status resource refs are resolved explicitly
+against the catalog and selected namespace, then pinned to a fresh UID.
+
+The four exact v1alpha1 Application actions reuse Prepare/Run, are NoAgents,
+and send one resource-version-guarded write. Sync pins comparison revisions and
+binds original spec/operation state along with UID, route and configuration.
+Canonical comparison permits only known omitted typed defaults; opaque values
+and unknown fields remain significant. Server acceptance is asynchronous. The
+frontend reuses shared snapshot/loading, grids, operation reviews, edit guards
+and forwarding; snapshots are not persisted or silently widened.

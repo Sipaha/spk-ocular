@@ -1302,3 +1302,13 @@ working directory, screen/history, colors, cursor and alternate buffer continue;
 no new shell or helper is created. Input, paste, interrupt and resize go to the
 original stream, and output keeps its processing credits. Closing the actual
 terminal tab ends its command. Separate windows close when their main owner exits.
+
+## Argo CD
+
+The free [Argo CD workspace](argocd.md) appears under Cluster when the Application
+API is discovered. Inspect scoped Applications, ApplicationSets, Projects, source
+revisions, conditions and events; review Sync/Prune or Refresh/Hard refresh through
+the standard guarded dialogs. Sync and health remain independent, incomplete
+coverage is visible, and accepted requests are not controller success. Related
+resources require verified local identity; the Argo UI uses explicit Service
+selection and the existing loopback tunnel controls.

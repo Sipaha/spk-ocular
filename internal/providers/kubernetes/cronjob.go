@@ -22,6 +22,9 @@ var cronJobsV1GVR = schema.GroupVersionResource{Group: "batch", Version: "v1", R
 func discoveredActions(r apiResource) []core.ActionDescriptor {
 	var out []core.ActionDescriptor
 	gvr := schema.GroupVersionResource{Group: r.Group, Version: r.Version, Resource: r.Resource}
+	if gvr == argoApplicationGVR && r.Kind == "Application" && r.Namespaced && r.has("get") && r.has("patch") {
+		out = append(out, argoActions...)
+	}
 	if gvr == cronJobsV1GVR && r.has("get") && r.has("patch") {
 		out = append(out, actSuspend, actResume)
 	}

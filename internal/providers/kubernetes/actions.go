@@ -117,6 +117,9 @@ func sameRoute(def *kindDef, expect string) bool {
 func effectState(def *kindDef, action string, u *unstructured.Unstructured) map[string]any {
 	o := u.Object
 	st := map[string]any{"uid": string(u.GetUID()), "deleting": u.GetDeletionTimestamp() != nil}
+	if isArgoAction(action) {
+		argoEffectState(o, st)
+	}
 	sts := def == statefulSetsKind
 	switch action {
 	case actRestart.ID:
@@ -204,6 +207,9 @@ func actionUnavailable(def *kindDef, action string, u *unstructured.Unstructured
 		m := msg("unavailable.deleting", "kind", singular(def), "name", u.GetName())
 		return &m
 	}
+	if isArgoAction(action) {
+		return argoUnavailable(action, u)
+	}
 	if action == actRestart.ID && def == deploymentsKind && boolAt(u.Object, "spec", "paused") {
 		m := msg("unavailable.paused", "name", u.GetName())
 		return &m
@@ -255,6 +261,9 @@ func (s *session) RunAction(ctx context.Context, run provider.ActionRun) (core.A
 	def, _, err := s.actionTarget(run.Ref, run.Action, run.Params, true)
 	if err != nil {
 		return core.ActionResult{}, err
+	}
+	if isArgoAction(run.Action) {
+		return s.runArgo(ctx, def, run)
 	}
 	switch run.Action {
 	case actDrain.ID:

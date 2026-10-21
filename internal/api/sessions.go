@@ -378,6 +378,14 @@ func (s *Service) ListKinds(ctx context.Context, providerID, target string) (Kin
 		if _, ok := e.sess.(provider.GraphSource); ok {
 			catalog.Kinds = append(append([]core.KindDescriptor(nil), catalog.Kinds...), graphKind())
 		}
+		if _, ok := e.sess.(provider.ArgoSource); ok {
+			for _, kind := range catalog.Kinds {
+				if kind.ID == "argoproj.io/applications" {
+					catalog.Kinds = append(append([]core.KindDescriptor(nil), catalog.Kinds...), argoKind())
+					break
+				}
+			}
+		}
 		if _, ok := e.sess.(provider.SecuritySource); ok {
 			catalog.Kinds = append(append([]core.KindDescriptor(nil), catalog.Kinds...), securityKind())
 		}

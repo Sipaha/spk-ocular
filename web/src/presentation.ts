@@ -77,6 +77,7 @@ export function groupLabel(provider: string, title: string, language: Language =
   return provider === 'kubernetes' || provider === 'compose' ? columnLabel(title, language) : title
 }
 export function kindLabel(provider: string, kind: KindDescriptor): string {
+ if(kind.workspace === 'argocd') return 'Argo CD'
  if(kind.workspace === 'rbac') return t('rbac.title')
  if(kind.workspace === 'security') return t('security.title')
  if(kind.workspace === 'timeline') return t('timeline.title')

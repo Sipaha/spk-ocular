@@ -19,6 +19,7 @@ import (
 )
 
 type API interface {
+	ArgoCD(context.Context, ArgoRequest) (core.ArgoSnapshot, error)
 	RBACSnapshot(context.Context, RBACRequest) (core.RBACSnapshot, error)
 	CheckAccess(context.Context, AccessRequest) (core.AccessReview, error)
 	ClusterGraph(context.Context, GraphRequest) (core.Graph, error)

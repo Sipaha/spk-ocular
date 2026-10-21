@@ -23,6 +23,9 @@ type actionEffects struct {
 }
 
 func effects(def *kindDef, action string, p core.ActionParams, u *unstructured.Unstructured) actionEffects {
+	if isArgoAction(action) {
+		return argoEffects(action, u)
+	}
 	var fx actionEffects
 	o := u.Object
 	switch action {

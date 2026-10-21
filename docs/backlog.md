@@ -60,8 +60,13 @@ Implementation scope for each subsequent feature is selected separately.
   selected UID-pinned resources across connected targets, normalized saved YAML
   diff and optional service fields/status. Read-only, with Secret payloads
   excluded. Included from 1.2.0.
-- [ ] **GitOps awareness:** show known Argo CD ownership/source/revision/sync
-  context and explain reconciliation before edits.
+- [x] **[Native Argo CD workspace](argocd.md):** scoped Applications, ApplicationSets,
+  Projects, source/revision/conditions/resources and Events; reviewed UI-only
+  Sync/Prune and Refresh/Hard refresh with revision/identity guards. Explicit
+  local-resource resolution and Argo UI Service forwarding; no real-controller
+  reconciliation claim. Current source; release inclusion follows release notes.
+- [ ] **Broader GitOps ownership awareness:** explain known controller/source
+  context before ordinary edits; Flux and further adapters remain separate.
 - [ ] **Historical metrics:** connect to an existing Prometheus and link existing
   Grafana dashboards; no implicit collector installation.
 - [x] **[Investigation workspace continuity](workspace-continuity.md):** pinned

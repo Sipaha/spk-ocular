@@ -11,10 +11,24 @@ import (
 // (web/src/i18n.ts, providerTexts) with the same parameters, the rest in
 // this English.
 var messageTexts = map[string]string{
-	"nodeShell.reuse":        "Reuse running helper Pod {namespace}/{name}; no new Pod is created.",
-	"nodeShell.sharedConfig": "The shared helper already uses namespace {namespace} and image {image}. Close its consumers and wait for cleanup before choosing another configuration.",
-	"nodeShell.closing":      "Helper Pod {namespace}/{name} is closing or awaiting cleanup. Retry after its cleanup is confirmed.",
-	"nodeShell.helperLimit":  "At most 128 node helpers may be retained by one connection.",
+	"argo.hardRefresh":        "Hard refresh invalidates Argo CD manifest and target-state caches before comparison.",
+	"argo.authorization":      "Uses Kubernetes patch permission on this Application. Argo CD server user roles and API authorization are not evaluated by Ocular.",
+	"argo.requestOnly":        "This requests work from the Argo CD controller; acceptance is not successful reconciliation. Inspect its resulting status.",
+	"argo.skipped":            "Argo CD reconciliation is skipped for this Application.",
+	"argo.busy":               "An operation is requested or running. Wait for it to finish before starting another request.",
+	"argo.refreshPending":     "A refresh annotation is already present. Inspect its value and wait for it to be cleared before another request.",
+	"argo.comparisonRequired": "Refresh first: a resolved revision and comparison matching the current sources and destination are required.",
+	"argo.optionsLimit":       "There are too many sync options to review this request.",
+	"argo.refreshEffect":      "Set the refresh annotation to {mode}; the controller compares state again and removes the annotation.",
+	"argo.syncEffect":         "Request synchronization to observed revision(s) {revisions} at destination {destination}, namespace {namespace}.",
+	"argo.prune":              "Prune resources no longer in the source: {enabled}.",
+	"argo.controllerWrites":   "The controller may change resources in other namespaces or clusters. Pruning deletes resources; hooks and application sync options may also replace or delete resources even without pruning.",
+	"argo.syncOption":         "Application sync option: {option}",
+	"argo.requested":          "Requested Argo CD work for {name}; inspect the controller status for the outcome.",
+	"nodeShell.reuse":         "Reuse running helper Pod {namespace}/{name}; no new Pod is created.",
+	"nodeShell.sharedConfig":  "The shared helper already uses namespace {namespace} and image {image}. Close its consumers and wait for cleanup before choosing another configuration.",
+	"nodeShell.closing":       "Helper Pod {namespace}/{name} is closing or awaiting cleanup. Retry after its cleanup is confirmed.",
+	"nodeShell.helperLimit":   "At most 128 node helpers may be retained by one connection.",
 
 	"nodeShell.agentDenied":    "Node Shell helpers are UI-only; container exec grants do not authorize commands in them.",
 	"nodeShell.namespace":      "Helper namespace",

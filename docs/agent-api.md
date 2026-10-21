@@ -371,3 +371,10 @@ include intent before writes and the resulting status afterward. Reads are
 coalesced by method and target within a minute. Request bodies and Secret values
 are not journaled. The journal is bounded to 20,000 records and can be filtered
 by target and reported agent name in the UI.
+
+### Argo CD boundary
+
+`ArgoCD` and `ocular.argocd` are application-UI-only. Argo Sync, Sync with prune,
+Refresh and Hard refresh are `NoAgents` operations: generic object grants cannot
+authorize controller reconciliation. Use the [native UI workspace](argocd.md) for
+explicit reviewed operations.

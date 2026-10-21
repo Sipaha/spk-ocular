@@ -216,7 +216,7 @@ var kind = core.KindDescriptor{
 
 func (s *session) ConfigHash() string { return s.hash }
 func (s *session) Kinds() []core.KindDescriptor {
-	return []core.KindDescriptor{kind, workloadKind, problemsKind, crateKind, parcelKind}
+	return []core.KindDescriptor{kind, workloadKind, problemsKind, crateKind, parcelKind, argoApplicationKind}
 }
 
 // Scopes cannot be listed: the UI takes a typed one.

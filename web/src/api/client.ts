@@ -1,3 +1,4 @@
+import type { ArgoRequest, ArgoSnapshot } from '../argocd/types'
 import type {SecurityRequest,SecuritySnapshot} from './types'
 import type {CompareRequest,ResourceComparison} from './types'
 import type { RBACRequest, RBACSnapshot, AccessRequest, AccessReview } from './types'
@@ -24,6 +25,7 @@ export class ApiError extends Error {
 }
 
 export interface Client {
+ argoCD(req:ArgoRequest,signal?:AbortSignal):Promise<ArgoSnapshot>
  compareResources(req:CompareRequest,signal?:AbortSignal):Promise<ResourceComparison>
  rbacSnapshot(req: RBACRequest, signal?: AbortSignal): Promise<RBACSnapshot>
  checkAccess(req: AccessRequest, signal?: AbortSignal): Promise<AccessReview>
@@ -175,6 +177,7 @@ const done = async (p: Promise<unknown>) => {
 }
 
 export const httpClient: Client = {
+  argoCD: (req,signal) => post('ArgoCD',req,signal),
   configurations: (req) => post('Configurations', req),
   appInfo: () => post('AppInfo', {}),
   setLanguage: (language) => post('SetLanguage', { language }),
@@ -315,6 +318,7 @@ async function awaitWailsCall<T>(signal: AbortSignal | undefined, p: ReturnType<
 const EVENT_TYPES: EventType[] = ['targets_changed', 'resync', 'view_changed', 'forwards_changed', 'kinds_changed', 'agent_grants_changed', 'agent_pending_changed', 'agent_audit_changed']
 
 export const wailsClient: Client = {
+  argoCD: (req,signal) => wcallAbortable(signal,'ArgoCD',req),
   configurations: (req) => wcall('Configurations', req),
   appInfo: () => wcall('AppInfo'),
   setLanguage: (language) => wcall('SetLanguage', language),
