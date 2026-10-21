@@ -18,30 +18,39 @@ type helmSession interface {
 	HelmConfiguration(context.Context, string, helm.Storage) (*action.Configuration, error)
 }
 type HelmRequest struct {
-	Command    string         `json:"command"`
-	Provider   string         `json:"provider"`
-	Target     string         `json:"target"`
-	ConfigRev  string         `json:"configRev"`
-	Scope      core.ScopeSel  `json:"scope"`
-	Namespace  string         `json:"namespace"`
-	Name       string         `json:"name"`
-	Revision   int            `json:"revision"`
-	Repository string         `json:"repository"`
-	Chart      helm.ChartRef  `json:"chart"`
-	Settings   *helm.Settings `json:"settings,omitempty"`
-	Operation  helm.Operation `json:"operation"`
-	PlanID     string         `json:"planId"`
+	ReadOwner           string         `json:"readOwner"`
+	OtherRevision       int            `json:"otherRevision"`
+	HookIndex           int            `json:"hookIndex"`
+	ControllerNamespace string         `json:"controllerNamespace"`
+	Command             string         `json:"command"`
+	Provider            string         `json:"provider"`
+	Target              string         `json:"target"`
+	ConfigRev           string         `json:"configRev"`
+	Scope               core.ScopeSel  `json:"scope"`
+	Namespace           string         `json:"namespace"`
+	Name                string         `json:"name"`
+	Revision            int            `json:"revision"`
+	Repository          string         `json:"repository"`
+	Chart               helm.ChartRef  `json:"chart"`
+	Settings            *helm.Settings `json:"settings,omitempty"`
+	Operation           helm.Operation `json:"operation"`
+	PlanID              string         `json:"planId"`
 }
 type HelmResponse struct {
-	Problems  []string       `json:"problems,omitempty"`
-	ConfigRev string         `json:"configRev,omitempty"`
-	Settings  *helm.Settings `json:"settings,omitempty"`
-	Charts    []helm.Chart   `json:"charts,omitempty"`
-	Chart     *helm.Chart    `json:"chart,omitempty"`
-	Releases  []helm.Release `json:"releases,omitempty"`
-	Detail    *helm.Detail   `json:"detail,omitempty"`
-	Plan      *helm.Plan     `json:"plan,omitempty"`
-	Result    *helm.Result   `json:"result,omitempty"`
+	ReadOwner   string                   `json:"readOwner,omitempty"`
+	Diagnosis   *helm.Diagnosis          `json:"diagnosis,omitempty"`
+	Comparison  *helm.RevisionComparison `json:"comparison,omitempty"`
+	CurrentHook *core.Diagnosis          `json:"currentHook,omitempty"`
+	Flux        *helm.FluxContext        `json:"flux,omitempty"`
+	Problems    []string                 `json:"problems,omitempty"`
+	ConfigRev   string                   `json:"configRev,omitempty"`
+	Settings    *helm.Settings           `json:"settings,omitempty"`
+	Charts      []helm.Chart             `json:"charts,omitempty"`
+	Chart       *helm.Chart              `json:"chart,omitempty"`
+	Releases    []helm.Release           `json:"releases,omitempty"`
+	Detail      *helm.Detail             `json:"detail,omitempty"`
+	Plan        *helm.Plan               `json:"plan,omitempty"`
+	Result      *helm.Result             `json:"result,omitempty"`
 }
 
 func helmKinds() []core.KindDescriptor {
@@ -60,6 +69,9 @@ func (s *Service) Helm(ctx context.Context, req HelmRequest) (HelmResponse, erro
 		return out, coded("forbidden", errors.New("Helm is available only to the application UI"))
 	}
 	limit := 90 * time.Second
+	if helmDiagnosisCommand(req.Command) {
+		limit = 20 * time.Second
+	}
 	if req.Command == "run" {
 		limit = 30 * time.Minute
 	}
@@ -124,6 +136,10 @@ func (s *Service) Helm(ctx context.Context, req HelmRequest) (HelmResponse, erro
 	}
 	hash := sha256.Sum256(b)
 	owner := e.owner + hex.EncodeToString(hash[:])
+	out.ReadOwner = s.configRev(owner)
+	if helmDiagnosisCommand(req.Command) {
+		return s.helmDiagnosis(ctx, req, out, e, sess, storage, owner)
+	}
 	factory := func(ctx context.Context, ns string) (*action.Configuration, error) {
 		return sess.HelmConfiguration(ctx, ns, storage)
 	}
@@ -152,6 +168,9 @@ func (s *Service) Helm(ctx context.Context, req HelmRequest) (HelmResponse, erro
 				out.Problems = append(out.Problems, label+": "+err.Error())
 				continue
 			}
+			for i := range releases {
+				releases[i].StorageNamespace = ns
+			}
 			out.Releases = append(out.Releases, releases...)
 		}
 
@@ -164,6 +183,10 @@ func (s *Service) Helm(ctx context.Context, req HelmRequest) (HelmResponse, erro
 			return out, err
 		}
 		v, err := helm.Get(a, req.Name, req.Revision)
+		v.StorageNamespace = req.Namespace
+		for i := range v.History {
+			v.History[i].StorageNamespace = req.Namespace
+		}
 		if err == nil {
 			if resolver, ok := e.sess.(interface {
 				HelmResourceRef(helm.Resource, string) *core.Ref

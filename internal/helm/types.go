@@ -39,14 +39,16 @@ type Chart struct {
 }
 
 type Release struct {
-	Name         string    `json:"name"`
-	Namespace    string    `json:"namespace"`
-	Revision     int       `json:"revision"`
-	Chart        string    `json:"chart"`
-	ChartVersion string    `json:"chartVersion"`
-	AppVersion   string    `json:"appVersion"`
-	Status       string    `json:"status"`
-	Updated      time.Time `json:"updated"`
+	StorageNamespace string    `json:"storageNamespace,omitempty"`
+	RollbackRevision int       `json:"rollbackRevision,omitempty"`
+	Name             string    `json:"name"`
+	Namespace        string    `json:"namespace"`
+	Revision         int       `json:"revision"`
+	Chart            string    `json:"chart"`
+	ChartVersion     string    `json:"chartVersion"`
+	AppVersion       string    `json:"appVersion"`
+	Status           string    `json:"status"`
+	Updated          time.Time `json:"updated"`
 }
 
 type Resource struct {

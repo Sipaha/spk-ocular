@@ -360,6 +360,13 @@ html[data-tab-focus] .helm-input:focus { border-color: var(--color-accent); }
 .helm-code { overflow: auto; white-space: pre; padding: 12px; background: var(--color-app); border: 1px solid var(--color-line); font: 12px/1.6 var(--font-mono); tab-size: 2; }
 .helm-form-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; }
 
+/* Keep Helm detail content readable when the workspace is narrower than its desktop split. */
+@media (max-width: 640px) {
+  .helm-workspace .resource-drawer { width: 100% !important; max-width: 100% !important; }
+  .helm-workspace .drawer-tabs { flex-wrap: nowrap; overflow-x: auto; }
+  .helm-workspace .drawer-tabs > button { flex-shrink: 0; white-space: nowrap; }
+}
+
 /* Configuration dialogs share one action row; narrow windows use a deliberate stack. */
 @media (max-width: 640px) {
   .config-dialog-footer { flex-direction: column-reverse; align-items: stretch; }

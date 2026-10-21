@@ -35,6 +35,7 @@ func asRelease(raw releaseapi.Releaser) (*release.Release, error) {
 func summary(r *release.Release) Release {
 	out := Release{Name: r.Name, Namespace: r.Namespace, Revision: r.Version}
 	if r.Info != nil {
+		out.RollbackRevision = r.Info.RollbackRevision
 		out.Status = string(r.Info.Status)
 		out.Updated = r.Info.LastDeployed
 	}

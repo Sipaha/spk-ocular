@@ -91,6 +91,7 @@ type diagnosisReader struct {
 	ctx                            context.Context
 	out                            *core.Diagnosis
 	bytes, objects, referencesRead int
+	currentOnly                    bool
 }
 
 func (d *diagnosisReader) cover(source, state string) {
@@ -180,6 +181,7 @@ func (d *diagnosisReader) object(u *unstructured.Unstructured, ref core.Ref) {
 // progress. Every consumer must independently check identity and ownership.
 func (d *diagnosisReader) list(gvr schema.GroupVersionResource, ns, selector, labels string, accept func(*unstructured.Unstructured)) string {
 	cursor := inventoryCursor{}
+	count := 0
 	for page := 0; page < 4; page++ {
 		if d.ctx.Err() != nil {
 			return "unavailable"
@@ -190,6 +192,10 @@ func (d *diagnosisReader) list(gvr schema.GroupVersionResource, ns, selector, la
 			return string(class)
 		}
 		for i := range items.Items {
+			if d.currentOnly && count >= 128 {
+				return "partial"
+			}
+			count++
 			if !d.admit(&items.Items[i]) {
 				return "partial"
 			}
@@ -246,10 +252,29 @@ func (d *diagnosisReader) jobPods(_ *unstructured.Unstructured, ref core.Ref) {
 		}
 		count++
 		podRef := core.Ref{Provider: ProviderID, Target: d.s.target, Scope: ref.Scope, Kind: "pods", Name: u.GetName(), UID: string(u.GetUID())}
+		start := len(d.out.Evidence)
+		coverageStart := len(d.out.Coverage)
 		d.evidence(core.DiagnosisEvidence{Ref: ref, Source: ref, Rule: "owned_pod", Field: "metadata.ownerReferences", State: core.HealthUnknown, Reason: "OwnedPod", Related: &podRef})
+		if d.currentOnly && u.GetResourceVersion() == "" {
+			d.out.Evidence = d.out.Evidence[:start]
+			d.out.Truncated = true
+			d.cover(podRef.String(), "unknown")
+			return
+		}
 		d.object(u, podRef)
-		d.references(u.Object, podRef, "spec")
+		if !d.currentOnly {
+			d.references(u.Object, podRef, "spec")
+		}
 		d.events(podRef)
+		if d.currentOnly {
+			after, e := d.s.dyn.Resource(podsKind.gvr).Namespace(ref.Scope).Get(d.ctx, u.GetName(), metav1.GetOptions{})
+			if e != nil || after.GetUID() != u.GetUID() || after.GetResourceVersion() != u.GetResourceVersion() || after.GetName() != u.GetName() || after.GetNamespace() != u.GetNamespace() || after.GetKind() != u.GetKind() || after.GetAPIVersion() != u.GetAPIVersion() {
+				d.out.Evidence = d.out.Evidence[:start]
+				d.out.Coverage = d.out.Coverage[:coverageStart]
+				d.cover(podRef.String(), "changed")
+				d.out.Truncated = true
+			}
+		}
 	})
 	if count >= 16 && d.out.Truncated {
 		state = "partial"

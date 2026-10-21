@@ -112,3 +112,49 @@ func TestHelmKeepsSuccessfulNamespacesAndReportsDeniedCoverage(t *testing.T) {
 func (s *partialHelmSession) CheckConnection(ctx context.Context) error {
 	return s.Session.(provider.ConnectionChecker).CheckConnection(ctx)
 }
+
+func TestHelmDiagnosisExplicitStorageAndOwnerFences(t *testing.T) {
+	s, _ := newService(t, synthetic.New())
+	s.helmRepos = helm.NewRepositories(t.TempDir())
+	ctx := UIContext(t.Context())
+	_, err := s.ConnectTarget(ctx, synthetic.ID, synthetic.Target)
+	require.NoError(t, err)
+	req := HelmRequest{Command: "list", Provider: synthetic.ID, Target: synthetic.Target, Scope: core.ScopeSel{Mode: core.ScopeOne, Name: "blue"}}
+	require.Eventually(t, func() bool { _, e := s.Helm(ctx, req); return e == nil }, time.Second, 5*time.Millisecond)
+	rows, err := s.Helm(ctx, req)
+	require.NoError(t, err)
+	require.Equal(t, "blue", rows.Releases[0].StorageNamespace)
+	req.Scope = core.ScopeSel{Mode: core.ScopeAll}
+	all, err := s.Helm(ctx, req)
+	require.NoError(t, err)
+	require.Empty(t, all.Releases[0].StorageNamespace)
+	req.Command = "diagnose"
+	req.Namespace = "blue"
+	req.Name = "demo-web"
+	req.Revision = 1
+	req.ConfigRev = rows.ConfigRev
+	req.ReadOwner = rows.ReadOwner
+	d, err := s.Helm(ctx, req)
+	require.NoError(t, err)
+	require.Equal(t, "blue", d.Diagnosis.Selected.StorageNamespace)
+	require.Zero(t, d.Diagnosis.CompareFrom)
+	for _, command := range []string{"diagnose", "observe-hook", "compare", "flux-context"} {
+		bad := req
+		bad.Command = command
+		bad.ReadOwner = "stale"
+		_, err = s.Helm(ctx, bad)
+		require.ErrorContains(t, err, "changed")
+		_, err = s.Helm(t.Context(), bad)
+		require.ErrorContains(t, err, "only to the application UI")
+	}
+	req.Namespace = ""
+	_, err = s.Helm(ctx, req)
+	require.ErrorContains(t, err, "explicit storage")
+	req.Namespace = "blue"
+	settings, err := s.helmRepos.Settings()
+	require.NoError(t, err)
+	settings.Storage.Driver = "configmap"
+	require.NoError(t, s.helmRepos.Save(settings))
+	_, err = s.Helm(ctx, req)
+	require.ErrorContains(t, err, "changed")
+}
