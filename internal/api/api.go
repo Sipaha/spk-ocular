@@ -166,13 +166,14 @@ type API interface {
 	// token; browser: a path on this server).
 	StreamBase(ctx context.Context) (string, error)
 
-	// Agent access (P14, agentaccess.go): the socket's state and the line
+	// Agent access (P14, agentaccess.go): MCP setup and the instructions
 	// for an agent's instructions; the grants per target (saved whole;
 	// Reconfirm grants them for the identity the user was shown, if the
 	// target still has it — else conflict); the
 	// agents' destructive plans waiting for the user and the decision; the
 	// journal, newest first. EventAgent*Changed say when to reload.
 	AgentAccessStatus(ctx context.Context) (AgentAccessStatus, error)
+	AgentClientSetup(ctx context.Context, req AgentClientSetupRequest) (AgentClientSetupView, error)
 	ListAgentGrants(ctx context.Context) ([]agentgrant.Target, error)
 	SaveAgentGrants(ctx context.Context, req SaveAgentGrantsRequest) error
 	RevokeAllAgentGrants(ctx context.Context) error

@@ -857,3 +857,54 @@ func TestRegisteringLeavesClosingToRelease(t *testing.T) {
 	release()
 	assert.EqualValues(t, 1, refused.closed.Load())
 }
+
+// A zero-byte pipe read witnesses a pending write without consuming its ^C.
+// A repeat arriving during that write must coalesce, just as a queued repeat.
+func TestTermInterruptCoalescesWhilePipeWriteIsPending(t *testing.T) {
+	b := newTermBridge(nil, fastTimings, nil, provider.TermSize{})
+	ctx, cancel := context.WithCancelCause(t.Context())
+	defer cancel(nil)
+	b.ctx, b.cancel = ctx, cancel
+	reader, writer := io.Pipe()
+	defer reader.Close()
+	defer writer.Close()
+	done := make(chan struct{})
+	go func() { defer close(done); b.stdinLoop(ctx, writer) }()
+	b.interrupt()
+	pending := make(chan error, 1)
+	go func() { _, err := reader.Read(nil); pending <- err }()
+	select {
+	case err := <-pending:
+		require.NoError(t, err)
+	case <-time.After(5 * time.Second):
+		t.Fatal("interrupt never reached the pipe")
+	}
+	b.interrupt()
+	require.True(t, b.pushInput([]byte("four\r")))
+	received := make(chan []byte, 1)
+	go func() {
+		var all []byte
+		buf := make([]byte, 16)
+		for {
+			n, err := reader.Read(buf)
+			all = append(all, buf[:n]...)
+			if err != nil || bytes.HasSuffix(all, []byte("four\r")) {
+				received <- all
+				return
+			}
+		}
+	}()
+	select {
+	case got := <-received:
+		assert.Equal(t, "\x03four\r", string(got))
+	case <-time.After(5 * time.Second):
+		t.Fatal("input after interrupt did not arrive")
+	}
+	cancel(errPageGone)
+	_ = writer.Close()
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("stdin loop did not stop")
+	}
+}

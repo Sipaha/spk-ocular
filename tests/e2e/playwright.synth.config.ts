@@ -28,6 +28,8 @@ export default defineConfig({
     env: {
       SPK_OCULAR_HOME: e.dataDir,
       HOME: e.home,
+      CODEX_HOME: join(e.home, '.codex'),
+      CLAUDE_CONFIG_DIR: join(e.home, '.claude'),
       ...noDockerEnv,
       SPK_OCULAR_TEST_SYNTH_SECOND: '1',
       KUBECONFIG: e.one,

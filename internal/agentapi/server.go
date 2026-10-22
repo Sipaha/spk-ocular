@@ -206,12 +206,15 @@ func (s *Server) Handler() http.Handler { return s.handler }
 func (s *Server) Status(context.Context) (api.AgentAccessStatus, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	config := ""
+	codex, claude := "", ""
 	if s.state == api.AgentServing {
-		data, _ := json.Marshal(map[string]any{"mcpServers": map[string]any{"ocular": map[string]any{"url": s.endpoint, "headers": map[string]string{"Authorization": "Bearer " + s.token}}}})
-		config = string(data)
+		// The endpoint and token contain only validated ASCII URL/hex characters,
+		// so Go's quoted strings are also TOML basic strings.
+		codex = fmt.Sprintf("[mcp_servers.ocular]\nurl = %q\nhttp_headers = { Authorization = %q }\n", s.endpoint, "Bearer "+s.token)
+		data, _ := json.MarshalIndent(map[string]any{"mcpServers": map[string]any{"ocular": map[string]any{"type": "http", "url": s.endpoint, "headers": map[string]string{"Authorization": "Bearer " + s.token}}}}, "", "  ")
+		claude = string(data)
 	}
-	return api.AgentAccessStatus{State: s.state, Endpoint: s.endpoint, ClientConfig: config, Instruction: "Connect to SPK Ocular using MCP Streamable HTTP. Copy the client configuration from Ocular; access remains limited by its grants and confirmations.", Error: s.errMsg, Pending: s.pend.awaiting()}, nil
+	return api.AgentAccessStatus{State: s.state, Endpoint: s.endpoint, CodexConfig: codex, ClaudeConfig: claude, Instruction: "Connect to SPK Ocular using MCP Streamable HTTP. Copy the matching Codex or Claude Code configuration from Ocular; access remains limited by its grants and confirmations.", Error: s.errMsg, Pending: s.pend.awaiting()}, nil
 }
 
 // Agent names are reported client metadata, not authenticated identities.

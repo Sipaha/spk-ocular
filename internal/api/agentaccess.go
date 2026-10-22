@@ -8,6 +8,7 @@ import (
 	"github.com/spk/spk-ocular/internal/agentgrant"
 	"github.com/spk/spk-ocular/internal/core"
 	"github.com/spk/spk-ocular/internal/events"
+	"github.com/spk/spk-ocular/internal/mcpclientconfig"
 	"github.com/spk/spk-ocular/internal/store"
 )
 
@@ -37,8 +38,9 @@ type AgentAccessStatus struct {
 	State string `json:"state"`
 	// Endpoint is the MCP URL; Instruction describes agent connection setup.
 	Endpoint string `json:"endpoint"`
-	// ClientConfig contains a bearer credential: copy explicitly; never log or render it.
-	ClientConfig string `json:"clientConfig,omitempty"`
+	// Client configurations contain a bearer credential: show only in the trusted manual setup UI; never log them.
+	CodexConfig  string `json:"codexConfig,omitempty"`
+	ClaudeConfig string `json:"claudeConfig,omitempty"`
 	Instruction  string `json:"instruction"`
 	Error        string `json:"error,omitempty"`
 	// Pending: plans waiting for the user's confirmation.
@@ -186,4 +188,49 @@ func (s *Service) ListAgentAudit(ctx context.Context, f store.AuditFilter) ([]st
 		out = []store.AuditEntry{}
 	}
 	return out, err
+}
+
+// AgentClientSetup is UI-only; it never runs a client or grants agent access.
+type AgentClientSetupRequest struct {
+	Client   string `json:"client,omitempty"`
+	Install  bool   `json:"install,omitempty"`
+	Revision string `json:"revision,omitempty"`
+}
+type AgentClientSetupView struct {
+	Clients []mcpclientconfig.Status `json:"clients"`
+}
+
+func (s *Service) AgentClientSetup(ctx context.Context, req AgentClientSetupRequest) (AgentClientSetupView, error) {
+	if !fromUI(ctx) {
+		return AgentClientSetupView{}, coded("forbidden", errors.New("client setup is available only to the application UI"))
+	}
+	if (req.Client != "" && req.Client != "codex" && req.Client != "claude") || len(req.Revision) > 64 || (req.Install && req.Client == "") {
+		return AgentClientSetupView{}, coded(CodeBadRequest, errors.New("invalid client setup request"))
+	}
+	control, err := s.agentControl()
+	if err != nil {
+		return AgentClientSetupView{}, err
+	}
+	status, err := control.Status(ctx)
+	if err != nil {
+		return AgentClientSetupView{}, err
+	}
+	if status.State != AgentServing {
+		return AgentClientSetupView{}, coded(CodeUnsupported, errors.New("MCP access is not available"))
+	}
+	wanted := map[string]string{"codex": status.CodexConfig, "claude": status.ClaudeConfig}
+	if req.Install {
+		_, err = s.agentClientConfigs.Install(ctx, req.Client, wanted[req.Client], req.Revision)
+		if errors.Is(err, mcpclientconfig.ErrChanged) {
+			return AgentClientSetupView{}, coded(CodeConflict, err)
+		}
+		if err != nil {
+			return AgentClientSetupView{}, coded(CodeBadRequest, mcpclientconfig.ErrUnavailable)
+		}
+	}
+	result := AgentClientSetupView{Clients: make([]mcpclientconfig.Status, 0, 2)}
+	for _, client := range []string{"codex", "claude"} {
+		result.Clients = append(result.Clients, s.agentClientConfigs.Inspect(client, wanted[client]))
+	}
+	return result, nil
 }

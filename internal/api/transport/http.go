@@ -30,6 +30,8 @@ const (
 // budgets. Auth and Origin checks precede this limit; Wails keeps service limits.
 func requestBodyLimit(path string) int64 {
 	switch path {
+	case "/api/AgentClientSetup":
+		return 4 << 10
 	case "/api/PrepareEdit", "/api/RunEdit":
 		return 40 << 20 // two 3 MiB strings can each use six-byte escapes
 	case "/api/PrepareValueEdit", "/api/RunValueEdit":
@@ -75,6 +77,14 @@ func (h *HTTP) authorized(r *http.Request) bool {
 }
 
 func handle[Req any](fn func(ctx context.Context, req *Req) (any, error)) http.HandlerFunc {
+	return handleJSON(fn, false)
+}
+
+func handleStrict[Req any](fn func(ctx context.Context, req *Req) (any, error)) http.HandlerFunc {
+	return handleJSON(fn, true)
+}
+
+func handleJSON[Req any](fn func(ctx context.Context, req *Req) (any, error), strict bool) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var req Req
 		if r.ContentLength != 0 {
@@ -87,6 +97,9 @@ func handle[Req any](fn func(ctx context.Context, req *Req) (any, error)) http.H
 			rc := http.NewResponseController(w)
 			_ = rc.SetReadDeadline(time.Now().Add(requestBodyTimeout))
 			decoder := json.NewDecoder(r.Body)
+			if strict {
+				decoder.DisallowUnknownFields()
+			}
 			err := decoder.Decode(&req)
 			if err == nil {
 				var trailing any
@@ -353,9 +366,12 @@ func (h *HTTP) routes() {
 	h.mux.HandleFunc("POST /api/StreamBase", handle(func(ctx context.Context, _ *struct{}) (any, error) {
 		return h.api.StreamBase(ctx)
 	}))
-	h.mux.HandleFunc("POST /api/AgentAccessStatus", handle(func(ctx context.Context, _ *struct{}) (any, error) {
+	h.mux.Handle("POST /api/AgentAccessStatus", noStore(handle(func(ctx context.Context, _ *struct{}) (any, error) {
 		return h.api.AgentAccessStatus(ctx)
-	}))
+	})))
+	h.mux.Handle("POST /api/AgentClientSetup", noStore(handleStrict(func(ctx context.Context, r *api.AgentClientSetupRequest) (any, error) {
+		return h.api.AgentClientSetup(ctx, *r)
+	})))
 	h.mux.HandleFunc("POST /api/ListAgentGrants", handle(func(ctx context.Context, _ *struct{}) (any, error) {
 		return h.api.ListAgentGrants(ctx)
 	}))

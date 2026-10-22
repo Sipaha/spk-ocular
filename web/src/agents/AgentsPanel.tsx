@@ -4,12 +4,12 @@ import type { Client } from '../api/client'
 import type { AgentAuditEntry, AgentTarget, Target } from '../api/types'
 import { classLabel, isMessageKey, t, type MessageKey } from '../i18n'
 import { showNotice, useStore } from '../store'
-import { copyText } from '../term/clipboard'
 import { errorDetail } from '../errors'
 import { focusMark, restoreFocus } from '../shortcuts'
 import { PanelResize, usePanelWidths } from '../components/PanelResize'
 import { Select } from '../components/Select'
 import { ProviderIcon } from '../components/icons'
+import { ClientSetup } from './ClientSetup'
 import { GrantEditor } from './GrantEditor'
 import { useAuditJournal } from './useAuditJournal'
 import { agents, agentTargetKey, pendingOf, shownPending, useAgents, type AgentsTab } from './store'
@@ -133,22 +133,20 @@ function Panel({ client, tab }: { client: Client; tab: AgentsTab }) {
             ×
           </button>
         </header>
-        <EndpointStatus />
+        <EndpointStatus client={client} />
         {tab === 'grants' ? <GrantsTab client={client} /> : <JournalTab client={client} />}
       </section>
     </div>
   )
 }
 
-function EndpointStatus() {
+function EndpointStatus({ client }: { client: Client }) {
   const status = useAgents((s) => s.status)
   const error = useAgents((s) => s.error)
-  const mode = useStore((s) => (s.info?.mode === 'desktop' ? 'desktop' : 'browser'))
-  const [copied, setCopied] = useState(false)
-  const [copyFailed, setCopyFailed] = useState(false)
+  const [expanded, setExpanded] = useState(false)
   const dot = status?.state === 'serving' ? 'bg-success' : status?.state === 'other_instance' ? 'bg-warning' : 'bg-danger'
   return (
-    <details className="agents-connection" open={!!error || status?.state === 'failed'}>
+    <details className="agents-connection" open={expanded || !!error || status?.state === 'failed'} onToggle={e => setExpanded(e.currentTarget.open)}>
       <summary>
         <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${status ? dot : 'bg-fg-subtle'}`} />
         <span className="min-w-0 flex-1" role="status">
@@ -160,28 +158,8 @@ function EndpointStatus() {
       <div className="agents-connection-body">
         <p className="text-fg-muted">{t('agents.about')}</p>
         {status?.state === 'serving' && <p className="break-all text-fg-subtle">{t('agents.state.serving', { endpoint: status.endpoint })}</p>}
-        {status?.state === 'serving' && (
-          <div className="space-y-2">
-            <p className="text-fg-muted" data-instruction>{t('agents.instruction')}</p>
-            <button
-              type="button"
-              className="agents-button"
-              disabled={!status.clientConfig}
-              onClick={() => {
-                if (!status.clientConfig) return
-                setCopyFailed(false)
-                void copyText(status.clientConfig, mode, true).then(() => {
-                  setCopied(true)
-                  setTimeout(() => setCopied(false), 1500)
-                }).catch(() => { setCopied(false); setCopyFailed(true) })
-              }}
-            >
-              {copied ? t('agents.copied') : t('agents.copy')}
-            </button>
-          </div>
-        )}
+        {expanded && status?.state === 'serving' && <ClientSetup key={`${status.codexConfig ?? ''}:${status.claudeConfig ?? ''}`} client={client} status={status} />}
       </div>
-      {copyFailed && <p role="alert" className="px-4 pb-2 text-danger">{t('agents.copyFailed')}</p>}
       {error && <p role="alert" className="px-4 pb-2 text-danger">{error}</p>}
     </details>
   )

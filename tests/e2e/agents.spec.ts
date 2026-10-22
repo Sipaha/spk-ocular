@@ -5,8 +5,9 @@ import { test } from './fixtures'
 import { join } from 'node:path'
 import { env, scratchRoot } from './fixtures'
 import { token } from './synth'
-import { mkdirSync, readFileSync } from 'node:fs'
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { languages } from '../../web/src/languages'
+import { execFileSync } from 'node:child_process'
 
 test('journal filter owns pending pages and ignores an older pagination failure', async ({ page }) => {
   const entry = (id: number, agent: string) => ({ id, agent, at: '2026-10-12T12:34:56Z', method: 'ListObjects', phase: 'read', count: 1 })
@@ -84,6 +85,9 @@ async function agent(method: string, args: unknown): Promise<Answer> {
   try {
     const initialized = await call({ jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: '2025-11-25', capabilities: {}, clientInfo: { name: 'e2e-agent', version: '1' } } })
     expect(initialized.protocolVersion).toBe('2025-11-25')
+    expect(initialized.instructions).toContain('Kubernetes')
+    expect(initialized.instructions).toContain('Docker')
+    expect(initialized.instructions).toContain('Access')
     headers['MCP-Protocol-Version'] = initialized.protocolVersion
     await call({ jsonrpc: '2.0', method: 'notifications/initialized' })
     const result = await call({ jsonrpc: '2.0', id: 2, method: 'tools/call', params: { name: method, arguments: args } })
@@ -113,6 +117,52 @@ test.afterEach(async ({ page }) => {
   await post(page, '/api/_test/synthetic/reset')
 })
 
+test('explicit client setup preserves settings, rejects stale revisions and foreign entries', async ({ page }) => {
+  const home = env(process.env.E2E_SYNTH_ROOT!).home
+  const codexPath = join(home, '.codex/config.toml')
+  const claudePath = join(home, '.claude/.claude.json')
+  mkdirSync(join(home, '.codex'), { recursive: true })
+  mkdirSync(join(home, '.claude'), { recursive: true })
+  const codexOriginal = '# Keep this comment\n[mcp_servers.other]\nurl = "http://127.0.0.1:1/mcp"\n'
+  const claudeOriginal = '{ "unrelated": 9007199254740993, "mcpServers": { "other": { "type": "http", "url": "http://127.0.0.1:1/mcp" } } }'
+  writeFileSync(codexPath, codexOriginal, { mode: 0o600 })
+  writeFileSync(claudePath, claudeOriginal, { mode: 0o600 })
+  await page.goto('/')
+  await page.getByRole('button', { name: 'Agents', exact: true }).click()
+  const panel = page.getByRole('dialog', { name: 'Agent access' })
+  await panel.locator('.agents-connection > summary').click()
+  await expect(panel.getByRole('button', { name: 'Set up Codex', exact: true })).toBeEnabled()
+  expect(readFileSync(codexPath, 'utf8')).toBe(codexOriginal)
+  expect(readFileSync(claudePath, 'utf8')).toBe(claudeOriginal)
+  // An external editor changes settings after discovery. The explicit write must fail.
+  const changed = codexOriginal + '# Changed after inspection\n'
+  writeFileSync(codexPath, changed)
+  await panel.getByRole('button', { name: 'Set up Codex', exact: true }).click()
+  await expect(panel.locator('.agents-connection').getByRole('alert')).toContainText('Check clients again before retrying')
+  expect(readFileSync(codexPath, 'utf8')).toBe(changed)
+  await panel.getByRole('button', { name: 'Check clients again' }).click()
+  await panel.getByRole('button', { name: 'Set up Codex', exact: true }).click()
+  await expect(panel.getByRole('group', { name: 'Codex', exact: true })).toContainText('Ocular settings match')
+  expect(readFileSync(codexPath, 'utf8').startsWith(changed)).toBe(true)
+  await panel.getByRole('button', { name: 'Set up Claude Code', exact: true }).click()
+  await expect(panel.getByRole('group', { name: 'Claude Code', exact: true })).toContainText('Ocular settings match')
+  const claude = readFileSync(claudePath, 'utf8')
+  expect(claude).toContain('9007199254740993')
+  expect(JSON.parse(claude).mcpServers.other.url).toBe('http://127.0.0.1:1/mcp')
+  const installed = readFileSync(codexPath, 'utf8')
+  await panel.getByRole('button', { name: 'Check clients again' }).click()
+  await expect(panel.getByRole('button', { name: /^Set up / })).toHaveCount(0)
+  expect(readFileSync(codexPath, 'utf8')).toBe(installed)
+  expect(readFileSync(claudePath, 'utf8')).toBe(claude)
+  const foreign = '[mcp_servers.ocular]\nurl = "http://127.0.0.1:2/mcp"\n'
+  writeFileSync(codexPath, foreign)
+  await panel.getByRole('button', { name: 'Check clients again' }).click()
+  await expect(panel.getByRole('group', { name: 'Codex', exact: true })).toContainText('An existing ocular entry differs')
+  expect(readFileSync(codexPath, 'utf8')).toBe(foreign)
+  await panel.locator('.agents-connection-body details > summary').click()
+  await expect(panel.getByRole('button', { name: 'Copy for Codex' })).toBeEnabled()
+})
+
 test('MCP setup copies private configuration explicitly and fits all eight locales', async ({ page }) => {
   await page.goto('/')
   const config = JSON.parse(readFileSync(join(env(process.env.E2E_SYNTH_ROOT!).dataDir, 'mcp.json'), 'utf8')) as { url: string; token: string }
@@ -129,20 +179,48 @@ test('MCP setup copies private configuration explicitly and fits all eight local
     await panel.locator('.agents-connection > summary').click()
     await expect(panel).toContainText(config.url)
     expect((await panel.evaluate(el => el.outerHTML)).includes(config.token)).toBe(false)
-    const copy = panel.locator('.agents-connection button')
+    await expect(panel.locator('[aria-busy]')).toHaveAttribute('aria-busy', 'false')
+    await panel.locator('.agents-connection-body details > summary').click()
+    const copies = panel.locator('.agents-connection-body details button')
+    await expect(copies).toHaveCount(2)
+    expect((await panel.locator('[data-client-config=codex]').textContent())?.includes(config.token)).toBe(true)
+    expect((await panel.locator('[data-client-config=claude]').textContent())?.includes(config.token)).toBe(true)
     if (language === 'en') {
-      await copy.click()
-      const copied = await page.evaluate(() => navigator.clipboard.readText())
-      const setup = JSON.parse(copied).mcpServers.ocular
-      expect(setup.url === config.url && setup.headers.Authorization === `Bearer ${config.token}`).toBe(true)
+      const codex = panel.getByRole('button', { name: 'Copy for Codex', exact: true })
+      const claude = panel.getByRole('button', { name: 'Copy for Claude Code', exact: true })
+      await codex.click()
+      const toml = await page.evaluate(() => navigator.clipboard.readText())
+      const parsed = JSON.parse(execFileSync('python3', ['-c', 'import json,sys,tomllib; print(json.dumps(tomllib.loads(sys.stdin.read())))'], { input: toml, encoding: 'utf8' }))
+      const setup = parsed.mcp_servers.ocular
+      expect(setup.url === config.url && setup.http_headers.Authorization === `Bearer ${config.token}`).toBe(true)
+      await expect(codex).toHaveText('Copied')
+      await expect(claude).toHaveText('Copy for Claude Code')
+      await claude.click()
+      const json = await page.evaluate(() => navigator.clipboard.readText())
+      const other = JSON.parse(json).mcpServers.ocular
+      expect(other.type === 'http' && other.url === config.url && other.headers.Authorization === `Bearer ${config.token}`).toBe(true)
+      await expect(claude).toHaveText('Copied')
+      await expect(codex).toHaveText('Copy for Codex')
       await page.evaluate(() => navigator.clipboard.writeText(''))
+      // Capture the original labels rather than the transient success text.
+      await expect(claude).toHaveText('Copy for Claude Code')
     }
     for (const width of [1280, 800]) {
       await page.setViewportSize({ width, height: 820 })
       expect(await panel.evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true)
-      await expect(copy).toBeInViewport({ ratio: 1 })
-      expect((await panel.evaluate(el => el.outerHTML)).includes(config.token)).toBe(false)
-      await page.screenshot({ path: join(captures, `mcp-setup-${language}-${width}.png`) })
+      await panel.locator('.agents-connection-body details > summary').click()
+      await expect(copies).toHaveCount(0)
+      await panel.locator('.agents-connection').evaluate(el => { el.scrollTop = 0 })
+      await page.screenshot({ path: join(captures, `mcp-auto-${language}-${width}.png`) })
+      await panel.locator('.agents-connection-body details > summary').click()
+      await expect(copies).toHaveCount(2)
+      for (const copy of await copies.all()) {
+        await copy.evaluate(el => el.scrollIntoView({ block: 'center', inline: 'nearest' }))
+        await expect(copy).toBeInViewport({ ratio: 1 })
+      }
+      // The full credential is deliberately visible in the trusted UI. Mask both
+      // raw blocks only for shareable screenshots; assertions above use real text.
+      await page.screenshot({ path: join(captures, `mcp-setup-${language}-${width}.png`), mask: [panel.locator('[data-client-config]')] })
     }
     await page.keyboard.press('Escape')
   }
@@ -310,7 +388,7 @@ test('permissions layout keeps actions visible, traps focus and fits Russian tex
   expect(await panel.evaluate((el) => el.scrollWidth <= el.clientWidth)).toBe(true)
   await page.screenshot({ path: join(scratchRoot, 'agent-permissions-compact.png') })
   await panel.getByText('Подключение агента', { exact: true }).click()
-  await expect(panel.locator('[data-instruction]')).toBeVisible()
+  await expect(panel.getByRole('button', { name: 'Проверить клиентов снова' })).toBeVisible()
   await expect(save).toBeInViewport()
   await page.keyboard.press('Escape')
   await expect(panel).toBeHidden()

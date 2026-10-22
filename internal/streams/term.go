@@ -116,7 +116,7 @@ type termBridge struct {
 	inBytes  int   // received, not yet written to stdin
 	inDone   int64 // written to stdin
 	inSig    chan struct{}
-	intr     bool // ^C is due before any queued input
+	intr     bool // ^C is pending or being written, before any queued input
 	running  sync.Once
 	attached atomic.Bool // the command side started reading input or writing output
 
@@ -489,7 +489,6 @@ func (b *termBridge) stdinLoop(runCtx context.Context, w *io.PipeWriter) {
 		intr := b.intr
 		switch {
 		case intr:
-			b.intr = false
 			chunk = hangupKeys[0]
 		case len(b.inQ) > 0:
 			chunk = b.inQ[0]
@@ -508,7 +507,9 @@ func (b *termBridge) stdinLoop(runCtx context.Context, w *io.PipeWriter) {
 			return
 		}
 		b.mu.Lock()
-		if !intr {
+		if intr {
+			b.intr = false
+		} else {
 			b.inBytes -= len(chunk)
 			b.inDone += int64(len(chunk))
 		}

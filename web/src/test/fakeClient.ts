@@ -1,6 +1,6 @@
 import { vi } from 'vitest'
 import { ApiError, type Client } from '../api/client'
-import type { AgentAccessStatus, AgentAuditEntry, AgentPending, AgentTarget, ApiEvent, ConnectionStatus, KindDescriptor, KindsView, Query, RecentObject, Ref, Row, Target, TargetsView, TerminalRequest, ViewStatus } from '../api/types'
+import type { AgentAccessStatus, AgentClientSetup, AgentAuditEntry, AgentPending, AgentTarget, ApiEvent, ConnectionStatus, KindDescriptor, KindsView, Query, RecentObject, Ref, Row, Target, TargetsView, TerminalRequest, ViewStatus } from '../api/types'
 
 export const k8s = (id: string, extra: Partial<Target> = {}): Target => ({
   provider: 'kubernetes',
@@ -41,7 +41,11 @@ export function fakeClient(targets: Target[], connected = false) {
     version: 0,
     recents: [] as RecentObject[],
     view: { groups: [{ provider: 'kubernetes', title: 'Kubernetes', targets, problems: [], scopeNames: k8sScopeNames }], selected: null } as TargetsView,
-    agentStatus: { state: 'serving', endpoint: 'http://127.0.0.1:43123/mcp', clientConfig: JSON.stringify({ mcpServers: { ocular: { url: 'http://127.0.0.1:43123/mcp', headers: { Authorization: 'Bearer fixture-private-mcp-token' } } } }), instruction: 'Connect to SPK Ocular using MCP Streamable HTTP.', pending: 0 } as AgentAccessStatus,
+    agentStatus: { state: 'serving', endpoint: 'http://127.0.0.1:43123/mcp', codexConfig: '[mcp_servers.ocular]\nurl = "http://127.0.0.1:43123/mcp"\nhttp_headers = { Authorization = "Bearer fixture-private-mcp-token" }\n', claudeConfig: JSON.stringify({ mcpServers: { ocular: { type: 'http', url: 'http://127.0.0.1:43123/mcp', headers: { Authorization: 'Bearer fixture-private-mcp-token' } } } }), instruction: 'Connect to SPK Ocular using MCP Streamable HTTP.', pending: 0 } as AgentAccessStatus,
+    agentClients: [
+      { client: 'codex', path: '/home/u/.codex/config.toml', state: 'ready', revision: 'codex-revision' },
+      { client: 'claude', path: '/home/u/.claude.json', state: 'ready', revision: 'claude-revision' },
+    ] as AgentClientSetup[],
     agentTargets: [] as AgentTarget[],
     agentPending: [] as AgentPending[],
     audit: [] as AgentAuditEntry[],
@@ -180,6 +184,14 @@ export function fakeClient(targets: Target[], connected = false) {
       target: { provider: req.ref.provider, target: req.ref.target, targetTitle: req.ref.target, ref: req.ref, instance: req.ref.name, channel: 'app' },
     })),
     streamBase: vi.fn(async () => '/streams/tok'),
+    agentClientSetup: vi.fn(async req => {
+      if (req.install) {
+        const row = state.agentClients.find(row => row.client === req.client)
+        if (!row || row.revision !== req.revision || row.state !== 'ready') throw new Error('changed')
+        row.state = 'configured'
+      }
+      return { clients: structuredClone(state.agentClients) }
+    }),
     agentAccessStatus: vi.fn(async () => structuredClone(state.agentStatus)),
     listAgentGrants: vi.fn(async () => structuredClone(state.agentTargets)),
     saveAgentGrants: vi.fn(async (provider: string, target: string, grants: AgentTarget['grants'], settings: Pick<AgentTarget, 'groups' | 'disabledScopes'> = {}) => {

@@ -19,6 +19,7 @@ import (
 	"github.com/spk/spk-ocular/internal/forwards"
 	"github.com/spk/spk-ocular/internal/helm"
 	"github.com/spk/spk-ocular/internal/krr"
+	"github.com/spk/spk-ocular/internal/mcpclientconfig"
 	"github.com/spk/spk-ocular/internal/offlineaudit"
 	"github.com/spk/spk-ocular/internal/provider"
 	"github.com/spk/spk-ocular/internal/store"
@@ -92,7 +93,8 @@ type Service struct {
 	afterSessionResolved func()
 
 	// agent is the agent MCP server's side the UI manages (nil: not served).
-	agent AgentControl
+	agent              AgentControl
+	agentClientConfigs *mcpclientconfig.Manager
 	// agentWatches: the slots of agents' snapshot watches (AgentCall).
 	agentWatches chan struct{}
 
@@ -109,6 +111,7 @@ func NewService(reg *provider.Registry, st *store.Store, em *events.Emitter, o O
 		panic(err) // crypto/rand does not fail on supported platforms
 	}
 	s := &Service{helmRepos: helm.NewRepositories(helm.SettingsDirectory(o.DataDir)), helmPlans: helm.NewPlans(), reg: reg, store: st, em: em, opts: o, views: views.NewManager(em), streams: streams.NewRegistry(), fwd: newForwards(em), sessions: map[string]*sessionEntry{}, connections: map[string]*connectionAttempt{}, left: map[string]time.Time{}, now: time.Now, revKey: key, agentWatches: make(chan struct{}, maxAgentWatches)}
+	s.agentClientConfigs = mcpclientconfig.New(o.Getenv)
 	s.offlineAudits = offlineaudit.NewRegistry(func() time.Time { return s.now() })
 	s.krrReports = krr.NewRegistry(func() time.Time { return s.now() })
 	s.krrRuns = krr.NewManager(s.krrReports, func() time.Time { return s.now() })

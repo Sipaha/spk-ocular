@@ -9,6 +9,7 @@ import (
 	"runtime"
 	"testing"
 
+	"github.com/pelletier/go-toml/v2"
 	"github.com/spk/spk-ocular/internal/api"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -73,12 +74,25 @@ func TestMCPServerCloseReleasesPortAndProfileOwnership(t *testing.T) {
 	require.Len(t, out.Tools, 19)
 	var copied struct {
 		Servers map[string]struct {
+			Type    string            `json:"type"`
 			URL     string            `json:"url"`
 			Headers map[string]string `json:"headers"`
 		} `json:"mcpServers"`
 	}
-	require.NoError(t, json.Unmarshal([]byte(status.ClientConfig), &copied))
+	require.NoError(t, json.Unmarshal([]byte(status.ClaudeConfig), &copied))
 	assert.Equal(t, status.Endpoint, copied.Servers["ocular"].URL)
+	assert.Equal(t, "http", copied.Servers["ocular"].Type)
+	assert.True(t, copied.Servers["ocular"].Headers["Authorization"] == "Bearer "+e.srv.token)
+	var codex struct {
+		Servers map[string]struct {
+			URL     string            `toml:"url"`
+			Headers map[string]string `toml:"http_headers"`
+		} `toml:"mcp_servers"`
+	}
+	err = toml.Unmarshal([]byte(status.CodexConfig), &codex)
+	require.NoError(t, err)
+	assert.Equal(t, status.Endpoint, codex.Servers["ocular"].URL)
+	assert.True(t, codex.Servers["ocular"].Headers["Authorization"] == "Bearer "+e.srv.token)
 	assert.NotContains(t, status.Instruction, e.srv.token)
 	e.srv.Close()
 	_, err = client.ListTools(t.Context(), nil)
@@ -89,5 +103,19 @@ func TestMCPServerCloseReleasesPortAndProfileOwnership(t *testing.T) {
 	same, err := next.Status(t.Context())
 	require.NoError(t, err)
 	assert.Equal(t, status.Endpoint, same.Endpoint)
-	assert.Equal(t, status.ClientConfig, same.ClientConfig)
+	assert.True(t, status.ClaudeConfig == same.ClaudeConfig)
+	assert.True(t, status.CodexConfig == same.CodexConfig)
+}
+
+func TestMCPClientConfigurationsRequireServingState(t *testing.T) {
+	e := newEnv(t)
+	for _, state := range []string{api.AgentFailed, api.AgentOtherInstance} {
+		e.srv.mu.Lock()
+		e.srv.state = state
+		e.srv.mu.Unlock()
+		status, err := e.srv.Status(t.Context())
+		require.NoError(t, err)
+		assert.Empty(t, status.CodexConfig)
+		assert.Empty(t, status.ClaudeConfig)
+	}
 }

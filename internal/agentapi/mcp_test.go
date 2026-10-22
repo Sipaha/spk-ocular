@@ -51,6 +51,15 @@ func connectMCP(t *testing.T, s *Server, name string, opts *mcp.ClientOptions) *
 func TestMCPToolsAndGrantBoundary(t *testing.T) {
 	e := newEnv(t)
 	client := connectMCP(t, e.srv, "MCP fixture", nil)
+	instructions := client.InitializeResult().Instructions
+	assert.Contains(t, instructions, "Kubernetes")
+	assert.Contains(t, instructions, "Docker/Compose")
+	assert.Contains(t, instructions, "bounded logs and metrics")
+	assert.Contains(t, instructions, "Use Access first")
+	assert.Contains(t, instructions, "Never retry an uncertain write")
+	assert.NotContains(t, instructions, e.srv.token)
+	_, setupErr := client.CallTool(t.Context(), &mcp.CallToolParams{Name: "AgentClientSetup", Arguments: map[string]any{"client": "codex", "install": true}})
+	require.Error(t, setupErr, "client configuration is a trusted UI operation, never an MCP tool")
 	listed, err := client.ListTools(t.Context(), nil)
 	require.NoError(t, err)
 	names := []string{}

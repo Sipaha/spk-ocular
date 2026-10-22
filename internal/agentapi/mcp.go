@@ -25,7 +25,7 @@ const maxMCPSessions = 32
 // application-UI methods sit behind this transport.
 func (s *Server) setupMCP() error {
 	s.mcp = mcp.NewServer(&mcp.Implementation{Name: "SPK Ocular", Version: s.o.Version}, &mcp.ServerOptions{
-		Instructions:              "Use Access first. Nothing is granted by default. Prepare changes with PrepareAction/PrepareEdit/PrepareExec, then RunAction/RunEdit/RunExec. If awaiting_confirmation, ask the person to confirm in Ocular and poll GetRun. Never retry an uncertain write or command automatically. Client names are unverified attribution, not authorization.",
+		Instructions:              "SPK Ocular provides local, permission-controlled access to Kubernetes clusters and Docker/Compose environments while Ocular is running. Use these tools to inspect resources, investigate problems, read bounded logs and metrics, and prepare permitted resource changes or finite container commands. Only granted targets, namespaces/projects, kinds and operations are available. UI-only features are not exposed.\n\nUse Access first. Nothing is granted by default. Prepare changes with PrepareAction/PrepareEdit/PrepareExec, then RunAction/RunEdit/RunExec. If awaiting_confirmation, ask the person to confirm in Ocular and poll GetRun. Never retry an uncertain write or command automatically. Client names are unverified attribution, not authorization.",
 		Capabilities:              &mcp.ServerCapabilities{},
 		SupportedProtocolVersions: []string{"2025-11-25", "2025-06-18"},
 	})

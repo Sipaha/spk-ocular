@@ -21,7 +21,7 @@ import type { ConfigRequest, ConfigState } from '../configurations/types'
 import type { HelmRequest, HelmResponse } from '../helm/types'
 import { Call, Events } from '@wailsio/runtime'
 import type { ConnectionStatus, FavoriteKind } from './types'
-import type { ActionParams, ActionPlan, AgentAccessStatus, AgentAuditEntry, AgentAuditFilter, AgentGrant, AgentGrantSettings, AgentPending, AgentTarget, ActionResult, ApiEvent, AppInfo, EditDoc, EditPlan, EditPrepareRequest, EditResult, EditRunRequest, EventType, ExecInfo,
+import type { AgentClientSetupView, AgentClientSetupRequest, ActionParams, ActionPlan, AgentAccessStatus, AgentAuditEntry, AgentAuditFilter, AgentGrant, AgentGrantSettings, AgentPending, AgentTarget, ActionResult, ApiEvent, AppInfo, EditDoc, EditPlan, EditPrepareRequest, EditResult, EditRunRequest, EventType, ExecInfo,
   KindsView, LogInfo, Message, LogQuery, LogStreamInfo, MetricsView, Page, Query, RecentObject, Ref, Resource, ScopesView, TargetsView, TerminalInfo, TerminalRequest, ViewInfo, ForwardInfo, StartForwardRequest, Tunnel, Value, ValueEditRequest, ValueList, ValuePlan, ValueResult, ValueRunRequest } from './types'
 
 export class ApiError extends Error {
@@ -141,6 +141,7 @@ export interface Client {
   streamBase(): Promise<string>
   /** The MCP endpoint status and credential-bearing configuration for explicit copy. */
   agentAccessStatus(): Promise<AgentAccessStatus>
+  agentClientSetup(req: AgentClientSetupRequest): Promise<AgentClientSetupView>
   /** Every target with grants; reload on 'agent_grants_changed'. */
   listAgentGrants(): Promise<AgentTarget[]>
   /** Sets a target's grants whole (none: revoked); a target granted anew is bound to what it points at now. */
@@ -277,6 +278,7 @@ export const httpClient: Client = {
   listForwards: () => post('ListForwards', {}),
   streamBase: () => post('StreamBase', {}),
   agentAccessStatus: () => post('AgentAccessStatus', {}),
+  agentClientSetup: req => post('AgentClientSetup', req),
   listAgentGrants: () => post('ListAgentGrants', {}),
   saveAgentGrants: (provider, target, grants, settings) => done(post('SaveAgentGrants', { provider, target, grants, ...settings })),
   revokeAllAgentGrants: () => done(post('RevokeAllAgentGrants', {})),
@@ -443,6 +445,7 @@ export const wailsClient: Client = {
   listForwards: () => wcall('ListForwards'),
   streamBase: () => wcall('StreamBase'),
   agentAccessStatus: () => wcall('AgentAccessStatus'),
+  agentClientSetup: req => wcall('AgentClientSetup', req),
   listAgentGrants: () => wcall('ListAgentGrants'),
   saveAgentGrants: (provider, target, grants, settings) => wcall('SaveAgentGrants', { provider, target, grants, ...settings }),
   revokeAllAgentGrants: () => wcall('RevokeAllAgentGrants'),

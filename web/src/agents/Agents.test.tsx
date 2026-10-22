@@ -84,6 +84,54 @@ const pending = (id: string, extra: Partial<AgentPending> = {}): AgentPending =>
 }
 
 describe('agent access: grants', () => {
+  it('discovers without writing; explicitly installs each reviewed revision and retains the other client', async () => {
+    const { f, user } = await setup()
+    const panel = await openPanel(user)
+    expect(f.client.agentClientSetup).not.toHaveBeenCalled()
+    await user.click(within(panel).getByText('Connect an agent', { exact: true }))
+    const codex = await within(panel).findByRole('button', { name: 'Set up Codex' })
+    expect(f.client.agentClientSetup).toHaveBeenCalledExactlyOnceWith({})
+    expect(panel.outerHTML).not.toContain('fixture-private-mcp-token')
+    await user.click(codex)
+    await waitFor(() => expect(f.client.agentClientSetup).toHaveBeenLastCalledWith({ client: 'codex', install: true, revision: 'codex-revision' }))
+    expect(await within(within(panel).getByRole('group', { name: /^Codex$/ })).findByText(/Ocular settings match/)).toBeInTheDocument()
+    await user.click(within(panel).getByRole('button', { name: 'Set up Claude Code' }))
+    await waitFor(() => expect(within(panel).queryByRole('button', { name: /^Set up/ })).not.toBeInTheDocument())
+    await user.click(within(panel).getByRole('button', { name: 'Check clients again' }))
+    await waitFor(() => expect(within(panel).getAllByText(/Ocular settings match/)).toHaveLength(2))
+    expect(f.client.saveAgentGrants).not.toHaveBeenCalled()
+  })
+
+  it('requires fresh inspection after an ambiguous write failure and keeps manual setup available', async () => {
+    const { f, user } = await setup()
+    const panel = await openPanel(user)
+    await user.click(within(panel).getByText('Connect an agent', { exact: true }))
+    await within(panel).findByRole('button', { name: 'Set up Codex' })
+    vi.mocked(f.client.agentClientSetup).mockRejectedValueOnce(new Error('private config content'))
+    await user.click(within(panel).getByRole('button', { name: 'Set up Codex' }))
+    expect(await within(panel).findByRole('alert')).toHaveTextContent('Check clients again before retrying')
+    expect(within(panel).queryByRole('button', { name: /^Set up/ })).not.toBeInTheDocument()
+    expect(panel.outerHTML).not.toContain('private config content')
+    expect(f.client.agentClientSetup).toHaveBeenCalledTimes(2)
+    await user.click(within(panel).getByText('Manual configuration / other clients'))
+    expect(panel.querySelector('[data-client-config=claude]')?.textContent).toBe(f.state.agentStatus.claudeConfig)
+    await user.click(within(panel).getByRole('button', { name: 'Check clients again' }))
+    expect(await within(panel).findByRole('button', { name: 'Set up Codex' })).toBeEnabled()
+    expect(f.client.agentClientSetup).toHaveBeenLastCalledWith({})
+  })
+
+  it('offers manual fallback for unsupported settings and never offers to overwrite a conflict', async () => {
+    const { f, user } = await setup()
+    f.state.agentClients[0].state = 'conflict'
+    f.state.agentClients[1].state = 'invalid'
+    const panel = await openPanel(user)
+    await user.click(within(panel).getByText('Connect an agent', { exact: true }))
+    expect(await within(panel).findByText('An existing ocular entry differs. Review it manually.')).toBeInTheDocument()
+    expect(within(panel).getByText('These settings cannot be edited safely. Use manual configuration.')).toBeInTheDocument()
+    expect(within(panel).queryByRole('button', { name: /^Set up/ })).not.toBeInTheDocument()
+    expect(f.client.agentClientSetup).toHaveBeenCalledExactlyOnceWith({})
+  })
+
   it.each([
     [{ mode: 'one', name: 'web' } as ScopeSel, ['Namespace web']],
     [{ mode: 'some', names: ['web', 'default'] } as ScopeSel, ['Namespace web', 'Namespace default']],
@@ -116,16 +164,17 @@ describe('agent access: grants', () => {
     expect(f.client.saveAgentGrants).not.toHaveBeenCalled()
   })
 
-  it('reports clipboard refusal without exposing configuration or claiming success', async () => {
+  it('reports clipboard refusal without echoing failure details or claiming success', async () => {
     const { user } = await setup()
     const panel = await openPanel(user)
     await user.click(within(panel).getByText('Connect an agent', { exact: true }))
+    await user.click(within(panel).getByText('Manual configuration / other clients', { exact: true }))
     const copy = vi.spyOn(navigator.clipboard, 'writeText').mockRejectedValueOnce(new Error('private clipboard detail'))
     try {
-      await user.click(within(panel).getByRole('button', { name: 'Copy MCP configuration' }))
+      await user.click(within(panel).getByRole('button', { name: 'Copy for Codex' }))
       expect(await within(panel).findByRole('alert')).toHaveTextContent('Configuration was not copied.')
       expect(within(panel).queryByText('Copied')).not.toBeInTheDocument()
-      expect(panel.outerHTML).not.toContain('fixture-private-mcp-token')
+      expect(panel.outerHTML).toContain('fixture-private-mcp-token')
       expect(panel.outerHTML).not.toContain('private clipboard detail')
     } finally { copy.mockRestore() }
   })
@@ -136,9 +185,17 @@ describe('agent access: grants', () => {
     expect(await within(panel).findByText(/MCP endpoint: http:\/\/127.0.0.1:43123\/mcp/)).toBeInTheDocument()
     expect(panel.outerHTML).not.toContain('fixture-private-mcp-token')
     await user.click(within(panel).getByText('Connect an agent', { exact: true }))
-    await user.click(within(panel).getByRole('button', { name: 'Copy MCP configuration' }))
-    expect(await navigator.clipboard.readText()).toBe(f.state.agentStatus.clientConfig)
-    expect(panel.outerHTML).not.toContain('fixture-private-mcp-token')
+    await user.click(within(panel).getByText('Manual configuration / other clients', { exact: true }))
+    expect(panel.querySelector('[data-client-config=codex]')).toHaveTextContent('fixture-private-mcp-token')
+    await user.click(within(panel).getByRole('button', { name: 'Copy for Codex' }))
+    expect(await navigator.clipboard.readText()).toBe(f.state.agentStatus.codexConfig)
+    expect(within(panel).getByRole('button', { name: 'Copy for Codex' })).toHaveTextContent('Copied')
+    expect(within(panel).getByRole('button', { name: 'Copy for Claude Code' })).toHaveTextContent('Copy for Claude Code')
+    await user.click(within(panel).getByRole('button', { name: 'Copy for Claude Code' }))
+    expect(await navigator.clipboard.readText()).toBe(f.state.agentStatus.claudeConfig)
+    expect(within(panel).getByRole('button', { name: 'Copy for Claude Code' })).toHaveTextContent('Copied')
+    expect(within(panel).getByRole('button', { name: 'Copy for Codex' })).toHaveTextContent('Copy for Codex')
+    expect(panel.outerHTML).toContain('fixture-private-mcp-token')
 
     // The selected target is edited first.
     const editor = editorOf(panel, 'prod')

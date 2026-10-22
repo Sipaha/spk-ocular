@@ -881,13 +881,23 @@ export type AgentEndpointState = 'serving' | 'other_instance' | 'failed'
 export interface AgentAccessStatus {
   state: AgentEndpointState
   endpoint: string
-  /** Credential-bearing MCP setup: explicit clipboard copy only; never render. */
-  clientConfig?: string
+  /** Credential-bearing MCP setup: shown in the trusted manual setup UI only. */
+  codexConfig?: string
+  claudeConfig?: string
   /** Credential-free connection instructions. */
   instruction: string
   error?: string
   pending: number
 }
+
+export interface AgentClientSetup {
+  client: 'codex' | 'claude'
+  path: string
+  state: 'ready' | 'configured' | 'not_detected' | 'invalid' | 'conflict' | 'unavailable'
+  revision: string
+}
+export interface AgentClientSetupView { clients: AgentClientSetup[] }
+export interface AgentClientSetupRequest { client?: 'codex' | 'claude'; install?: boolean; revision?: string }
 
 /** An agent's destructive plan waiting for the user. */
 export interface AgentPending {

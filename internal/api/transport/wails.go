@@ -187,6 +187,9 @@ func (w *API) StreamBase() (string, error) {
 func (w *API) AgentAccessStatus() (api.AgentAccessStatus, error) {
 	return w.a.AgentAccessStatus(api.UIContext(context.Background()))
 }
+func (w *API) AgentClientSetup(req api.AgentClientSetupRequest) (api.AgentClientSetupView, error) {
+	return w.a.AgentClientSetup(api.UIContext(context.Background()), req)
+}
 func (w *API) ListAgentGrants() ([]agentgrant.Target, error) {
 	return w.a.ListAgentGrants(api.UIContext(context.Background()))
 }
