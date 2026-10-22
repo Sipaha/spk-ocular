@@ -15,10 +15,6 @@ type Paths struct {
 	DataDir string
 	DBFile  string
 	TmpDir  string
-	// AgentSocket serves agent access (P14); AgentLock is held by the
-	// instance serving it.
-	AgentSocket string
-	AgentLock   string
 }
 
 // Resolve returns ~/.spk/ocular (house convention shared with the other spk-*
@@ -36,9 +32,6 @@ func Resolve() (Paths, error) {
 		DataDir: dir,
 		DBFile:  filepath.Join(dir, "ocular.db"),
 		TmpDir:  filepath.Join(dir, "tmp"),
-
-		AgentSocket: AgentEndpoint(dir),
-		AgentLock:   filepath.Join(dir, "agent.sock.lock"),
 	}, nil
 }
 

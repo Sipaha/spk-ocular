@@ -24,7 +24,7 @@ import (
 )
 
 // Production Kubernetes discovery/dynamic client/exec WebSocket behind the
-// real agent socket. Only this test's loopback fake API receives requests.
+// real agent MCP endpoint. Only this test's loopback fake API receives requests.
 func TestAgentExecKubernetesOverSocket(t *testing.T) {
 	var replaced atomic.Bool
 	var starts atomic.Int32

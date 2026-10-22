@@ -28,7 +28,7 @@ type appCore struct {
 	Store     *store.Store
 	Emitter   *events.Emitter
 	Service   *api.Service
-	// Agent serves agent access over a unix socket (P14).
+	// Agent serves MCP access on its profile-owned loopback port.
 	Agent *agentapi.Server
 }
 
@@ -73,14 +73,13 @@ func newCore(ctx context.Context, mode string, withSynthetic bool) (*appCore, er
 	}
 	em := events.NewEmitter()
 	svc := api.NewService(reg, st, em, api.Options{DataDir: p.DataDir, Version: version, Mode: mode, Getenv: os.Getenv})
-	home, _ := os.UserHomeDir()
-	agent := agentapi.New(agentapi.Options{Service: svc, Store: st, Socket: p.AgentSocket, Lock: p.AgentLock, Version: version, Home: home, Downloads: func() (string, error) { return paths.Downloads(os.Getenv) }})
+	agent := agentapi.New(agentapi.Options{Service: svc, Store: st, Profile: p.DataDir, Version: version, Downloads: func() (string, error) { return paths.Downloads(os.Getenv) }})
 	svc.SetAgentControl(agent)
 	svc.Start(ctx)
-	// A socket that cannot be served is not fatal: the UI shows why
+	// An MCP endpoint that cannot be served is not fatal: the UI shows why
 	// (AgentAccessStatus), the app works without agent access.
 	if err := agent.Start(); err != nil {
-		slog.Warn("agent access unavailable", "socket", p.AgentSocket, "err", err)
+		slog.Warn("agent MCP access unavailable", "err", err)
 	}
 	return &appCore{Synthetic: syn, Paths: p, Store: st, Emitter: em, Service: svc, Agent: agent}, nil
 }

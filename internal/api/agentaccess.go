@@ -12,9 +12,9 @@ import (
 )
 
 // Agent access as the UI manages it (P14): the grants, the plans waiting
-// for the user's confirmation, the journal, the socket's state. The agent
-// socket (internal/agentapi) implements AgentControl; without one (tests,
-// a process that does not serve the socket) these methods say unsupported.
+// for the user's confirmation, the journal, the MCP endpoint's state. The agent MCP server
+// (internal/agentapi) implements AgentControl; without one (tests,
+// a process that does not serve MCP) these methods say unsupported.
 type AgentControl interface {
 	Status(ctx context.Context) (AgentAccessStatus, error)
 	Grants(ctx context.Context) ([]agentgrant.Target, error)
@@ -26,7 +26,7 @@ type AgentControl interface {
 	Audit(ctx context.Context, f store.AuditFilter) ([]store.AuditEntry, error)
 }
 
-// Agent socket states (AgentAccessStatus.State).
+// Agent MCP server states (AgentAccessStatus.State).
 const (
 	AgentServing       = "serving"
 	AgentOtherInstance = "other_instance"
@@ -35,11 +35,12 @@ const (
 
 type AgentAccessStatus struct {
 	State string `json:"state"`
-	// Socket is the socket's path; Instruction the line for an agent's
-	// instructions.
-	Socket      string `json:"socket"`
-	Instruction string `json:"instruction"`
-	Error       string `json:"error,omitempty"`
+	// Endpoint is the MCP URL; Instruction describes agent connection setup.
+	Endpoint string `json:"endpoint"`
+	// ClientConfig contains a bearer credential: copy explicitly; never log or render it.
+	ClientConfig string `json:"clientConfig,omitempty"`
+	Instruction  string `json:"instruction"`
+	Error        string `json:"error,omitempty"`
 	// Pending: plans waiting for the user's confirmation.
 	Pending int `json:"pending"`
 }
@@ -93,10 +94,10 @@ const (
 // MaxAuditPage bounds one ListAgentAudit page.
 const MaxAuditPage = 500
 
-// SetAgentControl connects the agent socket (before the UI starts).
+// SetAgentControl connects the agent MCP server (before the UI starts).
 func (s *Service) SetAgentControl(c AgentControl) { s.agent = c }
 
-// Emit sends an event to the UI (the agent socket's changes).
+// Emit sends an event to the UI (the agent MCP server's changes).
 func (s *Service) Emit(typ, key string, payload map[string]any) {
 	s.em.Emit(events.Event{Type: typ, Key: key, Payload: payload})
 }

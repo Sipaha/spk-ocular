@@ -2,11 +2,10 @@ import { selectConnection } from './fixtures'
 import { connectSelected } from './fixtures'
 import { expect, type Page } from '@playwright/test'
 import { test } from './fixtures'
-import { request } from 'node:http'
 import { join } from 'node:path'
 import { env, scratchRoot } from './fixtures'
 import { token } from './synth'
-import { mkdirSync } from 'node:fs'
+import { mkdirSync, readFileSync } from 'node:fs'
 import { languages } from '../../web/src/languages'
 
 test('journal filter owns pending pages and ignores an older pagination failure', async ({ page }) => {
@@ -55,30 +54,48 @@ test('journal filter owns pending pages and ignores an older pagination failure'
   } finally { releaseOld?.(); releaseNew?.() }
 })
 
-// Agent access end to end (P14): the user grants in the UI, an agent
-// talks to the real unix socket (Node http with socketPath), a destructive
-// plan waits for the user's "Yes" in the page, the journal shows it all.
-// Parcels are the synthetic scoped kind with actions (zones blue, green).
-
-const socketPath = () => join(env(process.env.E2E_SYNTH_ROOT!).dataDir, 'agent.sock')
-
+// Real MCP Streamable HTTP lifecycle against the in-process Ocular listener.
+// Each call closes its session; assertions inspect tool errors, not HTTP codes.
 interface Answer {
-  status: number
+  isError: boolean
   body: Record<string, unknown>
 }
 
-/** One call of the agent socket as an agent would make it. */
-function agent(method: string, body: unknown): Promise<Answer> {
-  return new Promise((resolve, reject) => {
-    const req = request({ socketPath: socketPath(), path: `/v1/${method}`, method: 'POST', headers: { 'content-type': 'application/json', 'X-Agent-Name': 'e2e-agent' } }, (res) => {
-      let data = ''
-      res.setEncoding('utf8')
-      res.on('data', (c: string) => (data += c))
-      res.on('end', () => resolve({ status: res.statusCode ?? 0, body: JSON.parse(data) as Record<string, unknown> }))
-    })
-    req.on('error', reject)
-    req.end(JSON.stringify(body))
-  })
+async function agent(method: string, args: unknown): Promise<Answer> {
+  const config = JSON.parse(readFileSync(join(env(process.env.E2E_SYNTH_ROOT!).dataDir, 'mcp.json'), 'utf8')) as { url: string; token: string }
+  const headers: Record<string, string> = { Authorization: `Bearer ${config.token}`, 'Content-Type': 'application/json', Accept: 'application/json, text/event-stream' }
+  let session = ''
+  const call = async (message: unknown) => {
+    const res = await fetch(config.url, { method: 'POST', headers, body: JSON.stringify(message), signal: AbortSignal.timeout(60_000) })
+    expect(res.ok, `MCP HTTP ${res.status}`).toBeTruthy()
+    const id = res.headers.get('mcp-session-id')
+    if (id) { session = id; headers['Mcp-Session-Id'] = id }
+    const text = await res.text()
+    if (!text) return null
+    const messages = res.headers.get('content-type')?.includes('text/event-stream')
+      ? text.split(/\r?\n\r?\n/).flatMap(event => {
+        const data = event.split(/\r?\n/).filter(line => line.startsWith('data:')).map(line => line.slice(5).trimStart()).join('\n')
+        return data ? [JSON.parse(data)] : []
+      }) : [JSON.parse(text)]
+    const response = messages.find(item => item.id === (message as { id?: number }).id)
+    expect(response?.error).toBeUndefined()
+    return response?.result
+  }
+  try {
+    const initialized = await call({ jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: '2025-11-25', capabilities: {}, clientInfo: { name: 'e2e-agent', version: '1' } } })
+    expect(initialized.protocolVersion).toBe('2025-11-25')
+    headers['MCP-Protocol-Version'] = initialized.protocolVersion
+    await call({ jsonrpc: '2.0', method: 'notifications/initialized' })
+    const result = await call({ jsonrpc: '2.0', id: 2, method: 'tools/call', params: { name: method, arguments: args } })
+    const body = result.structuredContent ?? JSON.parse(result.content.find((item: { type: string }) => item.type === 'text').text)
+    return { isError: result.isError === true, body }
+  } finally {
+    if (session) {
+      const closed = await fetch(config.url, { method: 'DELETE', headers, signal: AbortSignal.timeout(5_000) })
+      expect(closed.ok).toBeTruthy()
+      await closed.body?.cancel()
+    }
+  }
 }
 
 /** A call of the page's own API (a write carries the page's Origin, as the page does). */
@@ -96,6 +113,41 @@ test.afterEach(async ({ page }) => {
   await post(page, '/api/_test/synthetic/reset')
 })
 
+test('MCP setup copies private configuration explicitly and fits all eight locales', async ({ page }) => {
+  await page.goto('/')
+  const config = JSON.parse(readFileSync(join(env(process.env.E2E_SYNTH_ROOT!).dataDir, 'mcp.json'), 'utf8')) as { url: string; token: string }
+  const captures = join(scratchRoot, 'mcp-setup-screenshots')
+  mkdirSync(captures, { recursive: true })
+  for (const language of languages) {
+    await post(page, '/api/SetLanguage', { language })
+    await page.reload()
+    await expect(page.locator('html')).toHaveAttribute('lang', language)
+    // Open through the actual toolbar; the fixture owns its clipboard.
+    const names: Record<string, string> = { en: 'Agents', ru: 'Агенты', zh: "代理", es: "Agentes", de: "Agenten", fr: "Agents", pt: "Agentes", ja: "エージェント" }
+    await page.getByRole('button', { name: names[language], exact: true }).click()
+    const panel = page.getByRole('dialog')
+    await panel.locator('.agents-connection > summary').click()
+    await expect(panel).toContainText(config.url)
+    expect((await panel.evaluate(el => el.outerHTML)).includes(config.token)).toBe(false)
+    const copy = panel.locator('.agents-connection button')
+    if (language === 'en') {
+      await copy.click()
+      const copied = await page.evaluate(() => navigator.clipboard.readText())
+      const setup = JSON.parse(copied).mcpServers.ocular
+      expect(setup.url === config.url && setup.headers.Authorization === `Bearer ${config.token}`).toBe(true)
+      await page.evaluate(() => navigator.clipboard.writeText(''))
+    }
+    for (const width of [1280, 800]) {
+      await page.setViewportSize({ width, height: 820 })
+      expect(await panel.evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true)
+      await expect(copy).toBeInViewport({ ratio: 1 })
+      expect((await panel.evaluate(el => el.outerHTML)).includes(config.token)).toBe(false)
+      await page.screenshot({ path: join(captures, `mcp-setup-${language}-${width}.png`) })
+    }
+    await page.keyboard.press('Escape')
+  }
+})
+
 test('granted in the UI, an agent reads its zone only; its delete waits for Yes; the journal shows it', async ({ page }) => {
   await page.goto('/')
   await post(page, '/api/_test/synthetic/reset')
@@ -107,7 +159,7 @@ test('granted in the UI, an agent reads its zone only; its delete waits for Yes;
 
   await page.getByRole('button', { name: 'Agents', exact: true }).click()
   const panel = page.getByRole('dialog', { name: 'Agent access' })
-  await expect(panel).toContainText('Agents connect over')
+  await expect(panel).toContainText('MCP endpoint:')
   const editor = panel.getByRole('region', { name: 'demo' })
   // Zones cannot be listed: typed.
   await editor.getByRole('textbox', { name: / name$/ }).fill('blue')
@@ -128,16 +180,16 @@ test('granted in the UI, an agent reads its zone only; its delete waits for Yes;
   const access = await agent('Access', {})
   expect(JSON.stringify(access.body)).toContain('"verb":"action:delete"')
   const list = await agent('ListObjects', { ...target, kind: 'parcels' })
-  expect(list.status).toBe(200)
+  expect(list.isError).toBe(false)
   const names = (list.body.rows as { ref: { name: string } }[]).map((r) => r.ref.name).sort()
   expect(names).toEqual(['parcel-1', 'parcel-2'])
-  expect((await agent('GetObject', { ref: parcel('parcel-3', 'green') })).status).toBe(403)
+  expect((await agent('GetObject', { ref: parcel('parcel-3', 'green') })).body.code).toBe('forbidden')
   // No grant of stamp: refused before the provider is asked.
-  expect((await agent('PrepareAction', { ref: parcel('parcel-1', 'blue'), action: 'stamp' })).status).toBe(403)
+  expect((await agent('PrepareAction', { ref: parcel('parcel-1', 'blue'), action: 'stamp' })).body.code).toBe('forbidden')
 
   // Delete: prepared, run, waits for the user.
   const prep = await agent('PrepareAction', { ref: parcel('parcel-1', 'blue'), action: 'delete' })
-  expect(prep.status).toBe(200)
+  expect(prep.isError).toBe(false)
   const run = await agent('RunAction', { planId: prep.body.planId })
   expect(run.body.state).toBe('awaiting_confirmation')
 
@@ -176,7 +228,7 @@ test('revoked grants take effect at once', async ({ page }) => {
   await panel.getByRole('button', { name: /^demo(?!2)/ }).click()
   await panel.getByRole('region', { name: 'demo' }).getByRole('button', { name: 'Revoke all of this target' }).click()
   await expect(panel.getByText('granted: 1')).toBeHidden()
-  expect((await agent('ListObjects', { ...target, kind: 'parcels' })).status).toBe(403)
+  expect((await agent('ListObjects', { ...target, kind: 'parcels' })).body.code).toBe('forbidden')
 })
 
 
@@ -209,7 +261,7 @@ test('contextual permissions preserve other scopes and require explicit grants',
   await expect(blue.getByRole('checkbox', { name: 'Read', exact: true })).not.toBeChecked()
   await expect(green.getByRole('checkbox', { name: 'Read', exact: true })).toBeChecked()
   await expect(editor.getByRole('button', { name: 'Save', exact: true })).toBeDisabled()
-  expect((await agent('GetObject', { ref: parcel('parcel-1', 'blue') })).status).toBe(403)
+  expect((await agent('GetObject', { ref: parcel('parcel-1', 'blue') })).body.code).toBe('forbidden')
   await blue.getByRole('checkbox', { name: 'Read', exact: true }).check()
   await blue.getByText('Execution', { exact: true }).click()
   await page.screenshot({ path: join(scratchRoot, 'agent-permissions.png') })
@@ -217,7 +269,7 @@ test('contextual permissions preserve other scopes and require explicit grants',
   await expect(editor.getByRole('button', { name: 'Save', exact: true })).toBeDisabled()
   const access = JSON.stringify((await agent('Access', {})).body)
   expect(access).toContain('"kinds":["parcels"]')
-  expect((await agent('GetObject', { ref: parcel('parcel-1', 'blue') })).status).toBe(200)
+  expect((await agent('GetObject', { ref: parcel('parcel-1', 'blue') })).isError).toBe(false)
   await panel.getByRole('button', { name: 'Close', exact: true }).click()
   await zone.fill('')
   await zone.press('Enter')
@@ -306,21 +358,21 @@ test('named groups union their access and both switches persist without deleting
   }
   const read = (kind: string) => agent('ListObjects', { ...target, scope: 'blue', kind })
   await persist()
-  expect((await read('crates')).status).toBe(200)
-  expect((await read('parcels')).status).toBe(200)
+  expect((await read('crates')).isError).toBe(false)
+  expect((await read('parcels')).isError).toBe(false)
   await page.mouse.move(0, 0)
   await page.screenshot({ path: join(scratchRoot, 'agent-named-groups.png') })
   await limited.getByRole('switch', { name: 'Enable group Parcels only' }).click()
   await persist()
-  expect((await read('crates')).status).toBe(200)
+  expect((await read('crates')).isError).toBe(false)
   await limited.getByRole('switch', { name: 'Enable group Parcels only' }).click()
   await broad.getByRole('switch', { name: 'Enable group Observation' }).click()
   await persist()
-  expect((await read('crates')).status).toBe(403)
-  expect((await read('parcels')).status).toBe(200)
+  expect((await read('crates')).body.code).toBe('forbidden')
+  expect((await read('parcels')).isError).toBe(false)
   await blue.getByRole('switch', { name: 'Access to Zone blue' }).click()
   await persist()
-  expect((await read('parcels')).status).toBe(403)
+  expect((await read('parcels')).body.code).toBe('forbidden')
   await page.reload()
   await page.getByRole('button', { name: 'Agents', exact: true }).click()
   await expect(blue.getByRole('switch', { name: 'Access to Zone blue' })).not.toBeChecked()
@@ -329,8 +381,8 @@ test('named groups union their access and both switches persist without deleting
   await expect(limited.getByRole('checkbox', { name: 'Read', exact: true })).toBeChecked()
   await blue.getByRole('switch', { name: 'Access to Zone blue' }).click()
   await persist()
-  expect((await read('parcels')).status).toBe(200)
-  expect((await read('crates')).status).toBe(403)
+  expect((await read('parcels')).isError).toBe(false)
+  expect((await read('crates')).body.code).toBe('forbidden')
 })
 
 test('exec is explicitly granted, reviews exact input, runs once and retains its scope', async ({ page }) => {
@@ -339,7 +391,7 @@ test('exec is explicitly granted, reviews exact input, runs once and retains its
   await selectConnection(page,/^demo\b/)
   await connectSelected(page)
   const ref = { ...parcel('parcel-1', 'blue'), uid: 'uid-parcel-1' }
-  expect((await agent('GetExecInfo', { ref })).status).toBe(403)
+  expect((await agent('GetExecInfo', { ref })).body.code).toBe('forbidden')
   await page.getByRole('button', { name: 'Agents', exact: true }).click()
   const panel = page.getByRole('dialog', { name: 'Agent access' })
   const editor = panel.getByRole('region', { name: 'demo' })
@@ -360,11 +412,11 @@ test('exec is explicitly granted, reviews exact input, runs once and retains its
   await expect(panel.getByText('granted: 1', { exact: true })).toBeVisible()
   await panel.getByRole('button', { name: 'Close', exact: true }).click()
   const info = await agent('GetExecInfo', { ref })
-  expect(info.status).toBe(200)
+  expect(info.isError).toBe(false)
   const instances = info.body.instances as { id: string }[]
   expect(instances).toHaveLength(1)
   const prep = await agent('PrepareExec', { ref, instance: instances[0].id, channel: 'main', command: ['stdin'], stdin: 'finite input: привет\n', maxBytes: 4096 })
-  expect(prep.status).toBe(200)
+  expect(prep.isError).toBe(false)
   expect(prep.body.confirmation).toBe('user')
   const run = await agent('RunExec', { planId: prep.body.planId })
   expect(run.body.state).toBe('awaiting_confirmation')
@@ -401,12 +453,12 @@ test('exec is explicitly granted, reviews exact input, runs once and retains its
   expect(output.complete).toBe(true)
   expect(output.exitCode).toBe(0)
   const maxPrep=await agent('PrepareExec',{ref,instance:instances[0].id,channel:'main',command:['stdin'],maxSeconds:1800})
-  expect(maxPrep.status).toBe(200)
+  expect(maxPrep.isError).toBe(false)
   const maxRun=await agent('RunExec',{planId:maxPrep.body.planId});expect(maxRun.body.state).toBe('awaiting_confirmation')
   await expect(dialog).toContainText('duration: 1800 seconds.');await expect(dialog.getByRole('button',{name:'No',exact:true})).toBeFocused();await page.screenshot({path:join(captures,'exec-confirmation-maximum.png')});await dialog.getByRole('button',{name:'No',exact:true}).click();expect((await agent('GetRun',{runId:maxRun.body.runId})).body.state).toBe('rejected')
-  expect((await agent('RunExec', { planId: prep.body.planId })).status).toBe(404)
-  expect((await agent('GetObject', { ref })).status).toBe(403)
-  expect((await agent('GetExecInfo', { ref: { ...parcel('parcel-3', 'green'), uid: 'uid-parcel-3' } })).status).toBe(403)
+  expect((await agent('RunExec', { planId: prep.body.planId })).body.code).toBe('not_found')
+  expect((await agent('GetObject', { ref })).body.code).toBe('forbidden')
+  expect((await agent('GetExecInfo', { ref: { ...parcel('parcel-3', 'green'), uid: 'uid-parcel-3' } })).body.code).toBe('forbidden')
   await post(page, '/api/RevokeAllAgentGrants')
-  expect((await agent('GetRun', { runId: run.body.runId })).status).toBe(403)
+  expect((await agent('GetRun', { runId: run.body.runId })).body.code).toBe('forbidden')
 })

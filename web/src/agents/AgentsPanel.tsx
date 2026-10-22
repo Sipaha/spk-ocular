@@ -133,44 +133,47 @@ function Panel({ client, tab }: { client: Client; tab: AgentsTab }) {
             ×
           </button>
         </header>
-        <SocketStatus />
+        <EndpointStatus />
         {tab === 'grants' ? <GrantsTab client={client} /> : <JournalTab client={client} />}
       </section>
     </div>
   )
 }
 
-function SocketStatus() {
+function EndpointStatus() {
   const status = useAgents((s) => s.status)
   const error = useAgents((s) => s.error)
   const mode = useStore((s) => (s.info?.mode === 'desktop' ? 'desktop' : 'browser'))
   const [copied, setCopied] = useState(false)
+  const [copyFailed, setCopyFailed] = useState(false)
   const dot = status?.state === 'serving' ? 'bg-success' : status?.state === 'other_instance' ? 'bg-warning' : 'bg-danger'
   return (
     <details className="agents-connection" open={!!error || status?.state === 'failed'}>
       <summary>
         <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${status ? dot : 'bg-fg-subtle'}`} />
         <span className="min-w-0 flex-1" role="status">
-          {status?.state === 'serving' ? t('agents.connected') : !status ? t('agents.state.loading') : t(`agents.state.${status.state}` as MessageKey, { socket: status.socket, error: status.error ?? '' })}
+          {status?.state === 'serving' ? t('agents.connected') : !status ? t('agents.state.loading') : t(`agents.state.${status.state}` as MessageKey, { endpoint: status.endpoint, error: status.error ?? '' })}
         </span>
         <span className="agents-connection-label">{t('agents.connectionHelp')}</span>
         <span aria-hidden className="agents-chevron">›</span>
       </summary>
       <div className="agents-connection-body">
         <p className="text-fg-muted">{t('agents.about')}</p>
-        {status?.state === 'serving' && <p className="break-all text-fg-subtle">{t('agents.state.serving', { socket: status.socket })}</p>}
-        {status && (
-          <div className="flex min-w-0 items-center gap-2">
-            <code className="min-w-0 flex-1 select-all overflow-x-auto whitespace-nowrap rounded-md border border-line bg-app px-2 py-1.5 font-mono text-xs" title={status.instruction} data-instruction>
-              {status.instruction}
-            </code>
+        {status?.state === 'serving' && <p className="break-all text-fg-subtle">{t('agents.state.serving', { endpoint: status.endpoint })}</p>}
+        {status?.state === 'serving' && (
+          <div className="space-y-2">
+            <p className="text-fg-muted" data-instruction>{t('agents.instruction')}</p>
             <button
               type="button"
               className="agents-button"
+              disabled={!status.clientConfig}
               onClick={() => {
-                void copyText(status.instruction, mode)
-                setCopied(true)
-                setTimeout(() => setCopied(false), 1500)
+                if (!status.clientConfig) return
+                setCopyFailed(false)
+                void copyText(status.clientConfig, mode, true).then(() => {
+                  setCopied(true)
+                  setTimeout(() => setCopied(false), 1500)
+                }).catch(() => { setCopied(false); setCopyFailed(true) })
               }}
             >
               {copied ? t('agents.copied') : t('agents.copy')}
@@ -178,6 +181,7 @@ function SocketStatus() {
           </div>
         )}
       </div>
+      {copyFailed && <p role="alert" className="px-4 pb-2 text-danger">{t('agents.copyFailed')}</p>}
       {error && <p role="alert" className="px-4 pb-2 text-danger">{error}</p>}
     </details>
   )

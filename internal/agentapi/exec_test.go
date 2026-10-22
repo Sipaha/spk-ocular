@@ -177,7 +177,7 @@ func TestAgentExecBudgetsAndCancellation(t *testing.T) {
 			request := httptest.NewRequest("POST", "/v1/RunExec", strings.NewReader(string(b))).WithContext(ctx)
 			response := httptest.NewRecorder()
 			done := make(chan struct{})
-			go func() { e.srv.Handler().ServeHTTP(response, request); close(done) }()
+			go func() { testOperationHandler(e.srv, "RunExec").ServeHTTP(response, request); close(done) }()
 			<-started
 			switch test {
 			case "revoke":

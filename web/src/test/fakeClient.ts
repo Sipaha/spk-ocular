@@ -41,7 +41,7 @@ export function fakeClient(targets: Target[], connected = false) {
     version: 0,
     recents: [] as RecentObject[],
     view: { groups: [{ provider: 'kubernetes', title: 'Kubernetes', targets, problems: [], scopeNames: k8sScopeNames }], selected: null } as TargetsView,
-    agentStatus: { state: 'serving', socket: '/home/u/.spk/ocular/agent.sock', instruction: 'SPK Ocular (Kubernetes/Docker): `curl -s --unix-socket ~/.spk/ocular/agent.sock http://ocular/v1`', pending: 0 } as AgentAccessStatus,
+    agentStatus: { state: 'serving', endpoint: 'http://127.0.0.1:43123/mcp', clientConfig: JSON.stringify({ mcpServers: { ocular: { url: 'http://127.0.0.1:43123/mcp', headers: { Authorization: 'Bearer fixture-private-mcp-token' } } } }), instruction: 'Connect to SPK Ocular using MCP Streamable HTTP.', pending: 0 } as AgentAccessStatus,
     agentTargets: [] as AgentTarget[],
     agentPending: [] as AgentPending[],
     audit: [] as AgentAuditEntry[],

@@ -1,13 +1,12 @@
 package agentapi
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"net/http"
-	"net/http/httptest"
 	"path/filepath"
-	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -23,12 +22,14 @@ import (
 )
 
 type env struct {
-	t   *testing.T
-	f   *fakeProv
-	svc *api.Service
-	st  *store.Store
-	srv *Server
-	em  *events.Emitter
+	t          *testing.T
+	f          *fakeProv
+	svc        *api.Service
+	st         *store.Store
+	srv        *Server
+	em         *events.Emitter
+	clientOnce sync.Once
+	client     *mcp.ClientSession
 }
 
 func newEnv(t *testing.T) *env {
@@ -43,7 +44,7 @@ func newEnv(t *testing.T) *env {
 	svc := api.NewService(reg, st, em, api.Options{Version: "test", Mode: "browser", Getenv: func(string) string { return "" }})
 	t.Cleanup(svc.Close)
 	downloads := filepath.Join(t.TempDir(), "Downloads")
-	srv := New(Options{Downloads: func() (string, error) { return downloads, nil }, Service: svc, Store: st, Socket: "/nowhere/agent.sock", Lock: "/nowhere/agent.sock.lock", Version: "test"})
+	srv := New(Options{Downloads: func() (string, error) { return downloads, nil }, Service: svc, Store: st, Profile: t.TempDir(), Version: "test"})
 	t.Cleanup(srv.Close)
 	svc.SetAgentControl(srv)
 	return &env{t: t, f: f, svc: svc, st: st, srv: srv, em: em}
@@ -66,14 +67,21 @@ func (e *env) grant(gs ...agentgrant.Grant) {
 // decoded body.
 func (e *env) call(method string, body any) (int, map[string]any) {
 	e.t.Helper()
-	b, _ := json.Marshal(body)
-	r := httptest.NewRequest("POST", "/v1/"+method, bytes.NewReader(b))
-	r.Header.Set(agentHeader, "claude")
-	w := httptest.NewRecorder()
-	e.srv.Handler().ServeHTTP(w, r)
-	var out map[string]any
-	require.NoError(e.t, json.Unmarshal(w.Body.Bytes(), &out), w.Body.String())
-	return w.Code, out
+	e.clientOnce.Do(func() { e.client = connectMCP(e.t, e.srv, "claude", nil) })
+	if body == nil {
+		body = struct{}{}
+	}
+	result, err := e.client.CallTool(e.t.Context(), &mcp.CallToolParams{Name: method, Arguments: body})
+	require.NoError(e.t, err)
+	data, err := json.Marshal(result.StructuredContent)
+	require.NoError(e.t, err)
+	var decoded map[string]any
+	require.NoError(e.t, json.Unmarshal(data, &decoded))
+	code := http.StatusOK
+	if result.IsError {
+		code = errorStatus(decoded["code"].(string))
+	}
+	return code, decoded
 }
 
 func (e *env) ok(method string, body any) map[string]any {
@@ -579,7 +587,7 @@ func TestClosingDuringAWriteLeavesATrace(t *testing.T) {
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		_, _ = e.call("RunAction", map[string]any{"planId": p["planId"]})
+		_, _ = e.srv.runAction(e.t.Context(), caller{agent: "claude"}, &RunRequest{PlanID: p["planId"].(string)})
 	}()
 	require.Eventually(t, func() bool {
 		j, _ := e.st.ListAudit(context.Background(), store.AuditFilter{Limit: 10})
@@ -601,8 +609,13 @@ func TestClosingEndsTheWaitingPlans(t *testing.T) {
 	id := e.ok("RunAction", map[string]any{"planId": p["planId"]})["runId"].(string)
 	got := make(chan map[string]any, 1)
 	go func() {
-		_, out := e.call("GetRun", map[string]any{"runId": id})
-		got <- out
+		out, err := e.srv.invokeForTest(e.t.Context(), "GetRun", []byte(`{"runId":"`+id+`"}`))
+		require.NoError(e.t, err)
+		encoded, err := json.Marshal(out)
+		require.NoError(e.t, err)
+		var result map[string]any
+		require.NoError(e.t, json.Unmarshal(encoded, &result))
+		got <- result
 	}()
 	time.Sleep(50 * time.Millisecond) // GetRun waits
 	start := time.Now()
@@ -656,9 +669,8 @@ func TestPendingPlansExpireAndAreBounded(t *testing.T) {
 // schemas.
 func TestTheCatalogIsTheMethods(t *testing.T) {
 	e := newEnv(t)
-	w := httptest.NewRecorder()
-	e.srv.Handler().ServeHTTP(w, httptest.NewRequest("GET", "/v1/methods", nil))
-	require.Equal(t, http.StatusOK, w.Code)
+	encoded, err := json.Marshal(e.srv.catalog())
+	require.NoError(t, err)
 	var cat struct {
 		Methods []struct {
 			Name, Path, Description, Verb string
@@ -666,7 +678,7 @@ func TestTheCatalogIsTheMethods(t *testing.T) {
 			Response                      map[string]any
 		}
 	}
-	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &cat))
+	require.NoError(t, json.Unmarshal(encoded, &cat))
 	var listed []string
 	for _, m := range cat.Methods {
 		if m.Name == "PrepareExec" {
@@ -679,9 +691,7 @@ func TestTheCatalogIsTheMethods(t *testing.T) {
 		assert.NotEmpty(t, m.Verb, m.Name)
 		assert.Equal(t, "object", m.Request["type"], m.Name)
 		assert.Equal(t, "object", m.Response["type"], m.Name)
-		// Served: a POST reaches the method, not the fallback.
-		_, pattern := e.srv.mux.Handler(httptest.NewRequest("POST", m.Path, nil))
-		assert.Equal(t, "POST "+m.Path, pattern)
+
 	}
 	assert.ElementsMatch(t, []string{"Access", "ListKinds", "ListObjects", "GetObject", "Problems", "GetMetrics", "GetLogInfo", "GetLogs", "StreamLogs", "ExportLogs",
 		"PrepareAction", "RunAction", "GetEditSource", "PrepareEdit", "RunEdit", "GetRun", "GetExecInfo", "PrepareExec", "RunExec"}, listed)
@@ -689,13 +699,6 @@ func TestTheCatalogIsTheMethods(t *testing.T) {
 	assert.Equal(t, "ListObjects", lo.Name)
 	assert.Contains(t, lo.Request["required"], "kind")
 
-	w = httptest.NewRecorder()
-	e.srv.Handler().ServeHTTP(w, httptest.NewRequest("GET", "/v1", nil))
-	assert.Contains(t, w.Body.String(), "/v1/methods")
-	assert.Contains(t, w.Body.String(), "confirmation")
-	w = httptest.NewRecorder()
-	e.srv.Handler().ServeHTTP(w, httptest.NewRequest("POST", "/v1/Exec", strings.NewReader("{}")))
-	assert.Equal(t, http.StatusNotFound, w.Code)
 }
 
 // A choice reaches agents: prepared without one, the plan offers the

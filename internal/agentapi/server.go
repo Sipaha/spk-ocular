@@ -1,4 +1,4 @@
-// Package agentapi serves agent access over a local Unix socket or Windows pipe.
+// Package agentapi serves agent access through an in-process loopback MCP server.
 // See docs/agent-api.md: local agents (Claude,
 // Codex) learn what the user granted them and, within it, read targets'
 // objects, logs and metrics, and prepare and run actions and edits. The
@@ -15,11 +15,12 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
-	"path/filepath"
-	"runtime"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/gofrs/flock"
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/spk/spk-ocular/internal/api"
 	"github.com/spk/spk-ocular/internal/store"
@@ -28,28 +29,38 @@ import (
 type Options struct {
 	Service *api.Service
 	Store   *store.Store
-	// Socket is a Unix socket path or Windows named pipe. Lock is Unix-only.
-	Socket, Lock string
-	Version      string
-	// Home shortens the socket's path in the instruction line ("~").
-	Home string
+	// Profile owns the stable endpoint, credential and exclusive instance lock.
+	Profile string
+	Version string
 	// Downloads resolves the application's local export destination.
 	Downloads func() (string, error)
 }
 
-// Server is the agent socket and what the UI manages of it
+// Server is the in-process agent MCP endpoint and what the UI manages of it
 // (api.AgentControl).
 type Server struct {
-	o       Options
-	mux     *http.ServeMux
-	methods []*method
-	now     func() time.Time
+	o            Options
+	mcp          *mcp.Server
+	handler      http.Handler
+	initErr      error
+	token        string
+	endpoint     string
+	lock         *flock.Flock
+	requests     chan struct{}
+	bodies       chan struct{}
+	controls     chan struct{}
+	listens      chan struct{}
+	initMu       sync.Mutex
+	httpMu       sync.Mutex
+	httpContexts map[string]context.Context
+	methods      []*method
+	now          func() time.Time
 
-	mu     sync.Mutex
-	sock   *socket
-	srv    *http.Server
-	state  string
-	errMsg string
+	mu       sync.Mutex
+	listener net.Listener
+	srv      *http.Server
+	state    string
+	errMsg   string
 
 	plans   *registry[*plan]
 	sources *registry[*editSource]
@@ -78,75 +89,102 @@ var _ api.AgentControl = (*Server)(nil)
 
 // New builds the server (Start serves it).
 func New(o Options) *Server {
-	s := &Server{o: o, mux: http.NewServeMux(), now: time.Now, state: api.AgentFailed, errMsg: "not started", logReads: map[*activeLogRead]struct{}{}, execs: map[*activeExec]struct{}{}}
+	s := &Server{o: o, token: newToken(), requests: make(chan struct{}, 16), bodies: make(chan struct{}, 24), controls: make(chan struct{}, 8), listens: make(chan struct{}, 32), httpContexts: map[string]context.Context{}, now: time.Now, state: api.AgentFailed, errMsg: "not started", logReads: map[*activeLogRead]struct{}{}, execs: map[*activeExec]struct{}{}}
 	s.runCtx, s.runCancel = context.WithCancel(context.Background())
 	s.reqCtx, s.reqCancel = context.WithCancel(context.Background())
 	s.plans = newRegistry[*plan](planTTL, maxPlans)
 	s.sources = newRegistry[*editSource](planTTL, maxPlans)
 	s.pend = newPendingSet(s)
-	s.routes()
+	s.registerMethods()
+	s.initErr = s.setupMCP()
 	return s
 }
 
-// Start serves the socket. Another instance owning it is not an error: the
-// UI says so (AgentAccessStatus).
+// Start acquires the profile lock and serves only the profile's loopback endpoint.
 func (s *Server) Start() error {
-	sock, err := listen(s.o.Socket, s.o.Lock)
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	switch {
-	case errors.Is(err, ErrOtherInstance):
+	if s.initErr != nil {
+		s.errMsg = s.initErr.Error()
+		return s.initErr
+	}
+	if s.reqCtx.Err() != nil {
+		return errors.New("MCP server is closed")
+	}
+	if s.srv != nil {
+		return errors.New("MCP server already started")
+	}
+	ln, lock, config, err := openEndpoint(s.o.Profile)
+	if errors.Is(err, ErrOtherInstance) {
 		s.state, s.errMsg = api.AgentOtherInstance, ""
-		slog.Info("agent access is served by another instance", "socket", s.o.Socket)
 		return nil
-	case err != nil:
+	}
+	if err != nil {
 		s.state, s.errMsg = api.AgentFailed, err.Error()
 		return err
 	}
-	srv := &http.Server{
-		Handler:           s.mux,
-		ReadHeaderTimeout: 5 * time.Second,
-		IdleTimeout:       120 * time.Second,
-		BaseContext:       func(net.Listener) context.Context { return s.reqCtx },
-	}
-	s.sock, s.srv = sock, srv
+	s.token, s.endpoint = config.Token, config.URL
+	srv := &http.Server{Handler: s.handler, ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 10 * time.Second, IdleTimeout: 120 * time.Second, MaxHeaderBytes: 32 << 10, BaseContext: func(net.Listener) context.Context { return s.reqCtx }}
+	s.listener, s.lock, s.srv = ln, lock, srv
 	s.state, s.errMsg = api.AgentServing, ""
-	// The goroutine keeps its own srv: Close clears the fields.
 	go func() {
-		if err := srv.Serve(sock.ln); err != nil && !errors.Is(err, http.ErrServerClosed) && !errors.Is(err, net.ErrClosed) {
-			slog.Warn("agent socket stopped", "err", err)
+		if err := srv.Serve(ln); err != nil && !errors.Is(err, http.ErrServerClosed) && !errors.Is(err, net.ErrClosed) {
+			slog.Warn("agent MCP server stopped")
 		}
 	}()
-	slog.Info("agent access", "socket", s.o.Socket)
+	slog.Info("agent MCP access", "endpoint", s.endpoint)
 	return nil
 }
 
 // Close stops serving, ends the writes in progress (bounded) and
-// releases the socket.
+// releases the port and profile lock.
 func (s *Server) Close() {
 	s.mu.Lock()
-	srv, sock := s.srv, s.sock
-	s.srv, s.sock = nil, nil
+	srv, ln, lock := s.srv, s.listener, s.lock
+	s.srv, s.listener, s.lock = nil, nil, nil
 	s.mu.Unlock()
 	s.pend.close() // the undecided are gone: their waiters are answered
 	s.reqCancel()
-	if srv != nil {
-		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-		_ = srv.Shutdown(ctx)
-		cancel()
-	}
 	s.runCancel()
 	s.runMu.Lock()
 	s.closing = true
 	s.runMu.Unlock()
+	s.initMu.Lock()
+	sessions := []*mcp.ServerSession{}
+	if s.mcp != nil {
+		for session := range s.mcp.Sessions() {
+			sessions = append(sessions, session)
+		}
+	}
+	s.initMu.Unlock()
 	done := make(chan struct{})
-	go func() { s.runs.Wait(); close(done) }()
+	go func() {
+		var joined sync.WaitGroup
+		for _, session := range sessions {
+			joined.Add(1)
+			go func() { defer joined.Done(); _ = session.Close() }()
+		}
+		joined.Wait()
+		s.runs.Wait()
+		close(done)
+	}()
 	select {
 	case <-done:
 	case <-time.After(3 * time.Second):
 	}
-	if sock != nil {
-		sock.close()
+
+	if srv != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		if err := srv.Shutdown(ctx); err != nil {
+			_ = srv.Close()
+		}
+		cancel()
+	}
+	if ln != nil {
+		_ = ln.Close()
+	}
+	if lock != nil {
+		_ = lock.Unlock()
 	}
 }
 
@@ -162,38 +200,28 @@ func (s *Server) track() bool {
 	return true
 }
 
-// Handler serves the methods (tests: without a socket).
-func (s *Server) Handler() http.Handler { return s.mux }
-
-// instruction is the line for an agent's instructions.
-func (s *Server) instruction() string {
-	p := s.o.Socket
-	if runtime.GOOS == "windows" {
-		return fmt.Sprintf("SPK Ocular (Kubernetes/Docker): HTTP/1.1 over the current user's named pipe %s; GET /v1 describes the methods. The user grants access to namespaces in Ocular.", p)
-	}
-	if s.o.Home != "" && strings.HasPrefix(p, s.o.Home+string(filepath.Separator)) {
-		p = "~" + strings.TrimPrefix(p, s.o.Home)
-	}
-	return fmt.Sprintf("SPK Ocular (Kubernetes/Docker): `curl -s --unix-socket %s http://ocular/v1` — how to use it and its methods; the user grants access to namespaces in Ocular.", p)
-}
+// Handler serves MCP only; no proprietary routes are retained.
+func (s *Server) Handler() http.Handler { return s.handler }
 
 func (s *Server) Status(context.Context) (api.AgentAccessStatus, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return api.AgentAccessStatus{State: s.state, Socket: s.o.Socket, Instruction: s.instruction(), Error: s.errMsg, Pending: s.pend.awaiting()}, nil
+	config := ""
+	if s.state == api.AgentServing {
+		data, _ := json.Marshal(map[string]any{"mcpServers": map[string]any{"ocular": map[string]any{"url": s.endpoint, "headers": map[string]string{"Authorization": "Bearer " + s.token}}}})
+		config = string(data)
+	}
+	return api.AgentAccessStatus{State: s.state, Endpoint: s.endpoint, ClientConfig: config, Instruction: "Connect to SPK Ocular using MCP Streamable HTTP. Copy the client configuration from Ocular; access remains limited by its grants and confirmations.", Error: s.errMsg, Pending: s.pend.awaiting()}, nil
 }
 
-// agentHeader carries the agent's name (not verified).
-const agentHeader = "X-Agent-Name"
-
-// agentName is the name the agent gave, printable and bounded.
-func agentName(r *http.Request) string {
+// Agent names are reported client metadata, not authenticated identities.
+func boundedAgentName(name string) string {
 	n := strings.Map(func(r rune) rune {
 		if r < 0x20 || r == 0x7f {
 			return -1
 		}
 		return r
-	}, strings.TrimSpace(r.Header.Get(agentHeader)))
+	}, strings.TrimSpace(name))
 	if n == "" {
 		return "unknown"
 	}
@@ -210,48 +238,6 @@ type caller struct {
 
 // maxBody bounds a request (an edit's text is at most 3 MiB).
 const maxBody = 4 << 20
-
-// errorStatus: the HTTP status of an error code.
-func errorStatus(code string) int {
-	switch code {
-	case api.CodeBadRequest:
-		return http.StatusBadRequest
-	case "forbidden":
-		return http.StatusForbidden
-	case "unauthorized":
-		return http.StatusUnauthorized
-	case api.CodeNotFound:
-		return http.StatusNotFound
-	case api.CodeGone, api.CodeRemoved:
-		return http.StatusGone
-	case api.CodeConflict:
-		return http.StatusConflict
-	case api.CodeLimit:
-		return http.StatusTooManyRequests
-	case api.CodeUnsupported:
-		return http.StatusNotImplemented
-	case api.CodeInternal:
-		return http.StatusInternalServerError
-	}
-	return http.StatusBadGateway // the target's own failure (unavailable, ...)
-}
-
-func writeJSON(w http.ResponseWriter, status int, v any) {
-	w.Header().Set("Content-Type", "application/json")
-	w.Header().Set("Cache-Control", "no-store")
-	w.WriteHeader(status)
-	enc := json.NewEncoder(w)
-	enc.SetIndent("", "  ")
-	_ = enc.Encode(v)
-}
-
-func writeError(w http.ResponseWriter, err error) {
-	var ce *api.CodedError
-	if !errors.As(err, &ce) {
-		ce = &api.CodedError{Code: api.CodeInternal, Detail: err.Error()}
-	}
-	writeJSON(w, errorStatus(ce.Code), ce)
-}
 
 // forbidden is a refusal of the grants (English, for the agent).
 func forbidden(format string, a ...any) *api.CodedError {

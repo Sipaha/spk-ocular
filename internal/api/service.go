@@ -91,7 +91,7 @@ type Service struct {
 	// production. It runs before validating that the captured entry is still live.
 	afterSessionResolved func()
 
-	// agent is the agent socket's side the UI manages (nil: not served).
+	// agent is the agent MCP server's side the UI manages (nil: not served).
 	agent AgentControl
 	// agentWatches: the slots of agents' snapshot watches (AgentCall).
 	agentWatches chan struct{}

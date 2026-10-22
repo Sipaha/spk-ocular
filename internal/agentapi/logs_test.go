@@ -101,7 +101,7 @@ func TestLogInfoNeedsOnlyLogsAndHonorsNamespaceAndKind(t *testing.T) {
 
 func streamRequest(t *testing.T, e *env, request StreamLogsRequest) *http.Response {
 	t.Helper()
-	server := httptest.NewServer(e.srv.Handler())
+	server := httptest.NewServer(testStreamHandler(e.srv))
 	t.Cleanup(server.Close)
 	body, err := json.Marshal(request)
 	require.NoError(t, err)
@@ -282,7 +282,7 @@ func TestRevocationDiscardsAnInFlightSnapshot(t *testing.T) {
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		e.srv.Handler().ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/v1/GetLogs", bytes.NewReader(body)))
+		testOperationHandler(e.srv, "GetLogs").ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/operation", bytes.NewReader(body)))
 	}()
 	select {
 	case <-started:
@@ -348,7 +348,7 @@ func TestLogResponsesHaveAnEncodedByteBudget(t *testing.T) {
 	data, err := json.Marshal(query)
 	require.NoError(t, err)
 	w := httptest.NewRecorder()
-	e.srv.Handler().ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/v1/GetLogs", bytes.NewReader(data)))
+	testOperationHandler(e.srv, "GetLogs").ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/operation", bytes.NewReader(data)))
 	require.Equal(t, http.StatusOK, w.Code)
 	assert.LessOrEqual(t, w.Body.Len(), 4096, "JSON escaping and metadata also count")
 	assert.Contains(t, w.Body.String(), `"byte_limit"`)

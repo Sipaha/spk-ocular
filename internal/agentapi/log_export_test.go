@@ -116,7 +116,7 @@ func TestRevocationRemovesAnIncompleteExport(t *testing.T) {
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		e.srv.Handler().ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/v1/ExportLogs", bytes.NewReader(body)))
+		testOperationHandler(e.srv, "ExportLogs").ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/operation", bytes.NewReader(body)))
 	}()
 	select {
 	case <-started:

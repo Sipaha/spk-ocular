@@ -6,8 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"net/http"
-	"reflect"
 	"sync"
 	"time"
 
@@ -137,7 +135,7 @@ type StreamLogsRequest struct {
 	MaxSeconds int  `json:"maxSeconds,omitempty" jsonschema_description:"Maximum read duration: 1..60 seconds, default 20, including follow mode."`
 }
 
-// LogFrame is one NDJSON object, not an array accumulated in server memory.
+// LogFrame preserves the bounded source and completion semantics across MCP framing.
 type LogFrame struct {
 	Type       string             `json:"type" jsonschema_description:"start, source, lines, state, ready, ping, error, end. A response without an end frame is incomplete."`
 	Source     int                `json:"source,omitempty"`
@@ -152,40 +150,79 @@ type LogFrame struct {
 	StopReason string             `json:"stopReason,omitempty" jsonschema_description:"End only: end, line_limit, byte_limit, time_limit, or error. A reached budget means more matching data may exist."`
 }
 
-func (s *Server) registerLogStream() {
-	s.methods = append(s.methods, &method{Name: "StreamLogs", Verb: agentgrant.VerbLogs, Streaming: true,
-		Doc: "POST JSON, receive application/x-ndjson LogFrames. Same logs grant and time/channel options as GetLogs. Default follow=false. limit is always required (1..5000); maxBytes defaults to 65536 (maximum 1048576); maxSeconds defaults to 20 (maximum 60), including follow. Grep filters before counting matching lines. End states report the stopping budget. Provider retention and source limits still apply. With an upper bound and positive tailLines, a completed historical tail uses GetLogs snapshot limits. Inspect state/gap/truncated and the final end frame. Closing the connection cancels the read; permissions are not expanded by streaming.",
-		req: reflect.TypeFor[StreamLogsRequest](), resp: reflect.TypeFor[LogFrame]()})
-	s.mux.HandleFunc("POST /v1/StreamLogs", s.streamLogs)
+// LogStreamResult is one finite capture. Progress messages are optional;
+// these bounded frames, including the final end state, are authoritative.
+type LogStreamResult struct {
+	Frames []LogFrame `json:"frames"`
 }
 
-func (s *Server) streamLogs(w http.ResponseWriter, r *http.Request) {
-	body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, maxBody))
-	if err != nil {
-		writeError(w, badRequest("the request is over %d MiB", maxBody>>20))
-		return
+func (s *Server) registerLogStream() {
+	register(s, "StreamLogs", agentgrant.VerbLogs, false,
+		"Capture finite log frames with the same logs grant as GetLogs. limit is required (1..5000); maxBytes defaults to 65536 (maximum 1048576); maxSeconds defaults to 20 (maximum 60), including follow. With a progress token, progress messages carry JSON frames during capture; the final structured frames are authoritative. Inspect source states and the final end frame. Cancellation ends the read. This never follows indefinitely.", s.collectLogs)
+	s.methods[len(s.methods)-1].Streaming = true
+}
+
+// logOutput keeps the capture independent of HTTP or MCP framing.
+type logOutput interface {
+	io.Writer
+	Flush() error
+	SetWriteDeadline(time.Time) error
+	Start()
+}
+
+type collectedLogs struct {
+	frames []LogFrame
+	emit   func(LogFrame) error
+}
+
+func (c *collectedLogs) Start()                           {}
+func (c *collectedLogs) Flush() error                     { return nil }
+func (c *collectedLogs) SetWriteDeadline(time.Time) error { return nil }
+func (c *collectedLogs) Write(data []byte) (int, error) {
+	var frame LogFrame
+	if err := json.Unmarshal(data, &frame); err != nil {
+		return 0, err
 	}
-	var req StreamLogsRequest
-	if err := json.Unmarshal(body, &req); err != nil {
-		writeError(w, badRequest("bad request body: %v", err))
-		return
+	if c.emit != nil {
+		if err := c.emit(frame); err != nil {
+			return 0, err
+		}
 	}
+	c.frames = append(c.frames, frame)
+	return len(data), nil
+}
+
+type logProgressKey struct{}
+
+func (s *Server) collectLogs(ctx context.Context, c caller, req *StreamLogsRequest) (*LogStreamResult, error) {
+	output := &collectedLogs{frames: []LogFrame{}}
+	output.emit, _ = ctx.Value(logProgressKey{}).(func(LogFrame) error)
+	if err := s.streamLogs(ctx, c, req, output); err != nil {
+		return nil, err
+	}
+	// A finite MCP result must not release newly buffered payload after access
+	// was revoked. Earlier progress cannot be retracted, as with a live stream.
+	for _, frame := range output.frames {
+		if frame.Error != nil && (frame.Error.Code == "forbidden" || frame.Error.Code == "gone" || frame.Error.Code == "unauthorized") {
+			return nil, frame.Error
+		}
+	}
+	return &LogStreamResult{Frames: output.frames}, nil
+}
+
+func (s *Server) streamLogs(ctx context.Context, c caller, req *StreamLogsRequest, output logOutput) error {
 	query := req.query()
 	if err := api.ValidateAgentLogs(query); err != nil {
-		writeError(w, err)
-		return
+		return err
 	}
 	if req.Previous && req.Follow || req.Limit < 1 || req.MaxSeconds < 0 || req.MaxSeconds > 60 {
-		writeError(w, badRequest("StreamLogs requires limit (1..5000); maxSeconds is 1..60 (default 20); previous logs cannot be followed"))
-		return
+		return badRequest("StreamLogs requires limit (1..5000); maxSeconds is 1..60 (default 20); previous logs cannot be followed")
 	}
-	ctx, done, err := s.beginLogRead(r.Context(), req.Ref)
+	ctx, done, err := s.beginLogRead(ctx, req.Ref)
 	if err != nil {
-		writeError(w, err)
-		return
+		return err
 	}
 	defer done()
-	c := caller{agent: agentName(r)}
 	seconds := req.MaxSeconds
 	if seconds == 0 {
 		seconds = 20
@@ -194,21 +231,16 @@ func (s *Server) streamLogs(w http.ResponseWriter, r *http.Request) {
 	defer cancel()
 	x, err := s.openLogs(streamCtx, c, "StreamLogs", req.Ref)
 	if err != nil {
-		writeError(w, err)
-		return
+		return err
 	}
 	defer x.done()
 	if ctx.Err() != nil {
-		writeError(w, context.Cause(ctx))
-		return
+		return context.Cause(ctx)
 	}
 	s.read(c, "StreamLogs", req.Ref.Provider, req.Ref.Target, req.Ref.Scope, objectOf(req.Ref))
-	w.Header().Set("Content-Type", "application/x-ndjson")
-	w.Header().Set("Cache-Control", "no-store")
-	w.Header().Set("X-Content-Type-Options", "nosniff")
-	w.WriteHeader(http.StatusOK)
+	output.Start()
 	limit, bytes := api.AgentLogLimits(query)
-	sink := &agentLogWriter{ctx: x.call.Context(), cancel: cancel, writer: w, control: http.NewResponseController(w), limit: limit, maxBytes: bytes}
+	sink := &agentLogWriter{ctx: x.call.Context(), cancel: cancel, writer: output, control: output, limit: limit, maxBytes: bytes}
 	defer func() { _ = sink.control.SetWriteDeadline(time.Time{}) }()
 	deadlineDone := make(chan struct{})
 	stopDeadline := context.AfterFunc(x.call.Context(), func() {
@@ -225,7 +257,7 @@ func (s *Server) streamLogs(w http.ResponseWriter, r *http.Request) {
 	}
 	defer stopAndWaitDeadline()
 	if err := sink.frame(LogFrame{Type: "start"}); err != nil {
-		return
+		return err
 	}
 	heartbeatDone := make(chan struct{})
 	go func() {
@@ -260,13 +292,14 @@ func (s *Server) streamLogs(w http.ResponseWriter, r *http.Request) {
 		err = context.Cause(ctx)
 	}
 	sink.finish(err)
+	return nil
 }
 
 type agentLogWriter struct {
 	ctx             context.Context
 	cancel          context.CancelFunc
-	writer          http.ResponseWriter
-	control         *http.ResponseController
+	writer          io.Writer
+	control         logOutput
 	mu              sync.Mutex
 	failed          bool
 	truncated       bool

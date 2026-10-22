@@ -3,17 +3,13 @@ package agentapi
 import (
 	"context"
 	"encoding/json"
-	"io"
-	"net/http"
 	"reflect"
 
 	"github.com/invopop/jsonschema"
-
-	"github.com/spk/spk-ocular/internal/api"
 )
 
 // method is one entry of the catalog: the same structures serve the call
-// and describe it (/v1/methods).
+// and describe it (MCP tools/list).
 type method struct {
 	Name string
 	Doc  string
@@ -27,7 +23,7 @@ type method struct {
 	handle    func(ctx context.Context, c caller, body []byte) (any, error)
 }
 
-// register adds a POST /v1/<name> method.
+// register adds an agent operation to the MCP tool catalogue.
 func register[Req, Resp any](s *Server, name, verb string, writes bool, doc string, fn func(ctx context.Context, c caller, req *Req) (*Resp, error)) {
 	m := &method{
 		Name: name, Doc: doc, Verb: verb, Writes: writes,
@@ -43,69 +39,17 @@ func register[Req, Resp any](s *Server, name, verb string, writes bool, doc stri
 		},
 	}
 	s.methods = append(s.methods, m)
-	s.mux.HandleFunc("POST /v1/"+name, func(w http.ResponseWriter, r *http.Request) {
-		body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, maxBody))
-		if err != nil {
-			writeError(w, badRequest("the request is over %d MiB", maxBody>>20))
-			return
-		}
-		out, err := m.handle(r.Context(), caller{agent: agentName(r)}, body)
-		if err != nil {
-			writeError(w, err)
-			return
-		}
-		writeJSON(w, http.StatusOK, out)
-	})
 }
 
-func (s *Server) routes() {
-	s.mux.HandleFunc("GET /v1", func(w http.ResponseWriter, _ *http.Request) { writeJSON(w, http.StatusOK, s.intro()) })
-	s.mux.HandleFunc("GET /v1/{$}", func(w http.ResponseWriter, _ *http.Request) { writeJSON(w, http.StatusOK, s.intro()) })
-	s.mux.HandleFunc("GET /v1/methods", func(w http.ResponseWriter, _ *http.Request) { writeJSON(w, http.StatusOK, s.catalog()) })
-	s.mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		writeError(w, &api.CodedError{Code: api.CodeNotFound, Detail: r.Method + " " + r.URL.Path + " is not a method: GET /v1/methods lists them"})
-	})
+func (s *Server) registerMethods() {
 	s.readMethods()
 	s.writeMethods()
 	s.execMethods()
 }
 
-// Intro is GET /v1.
-type Intro struct {
-	Name    string   `json:"name"`
-	Version string   `json:"version"`
-	About   string   `json:"about"`
-	Usage   []string `json:"usage"`
-	Methods string   `json:"methods"`
-}
-
-func (s *Server) intro() Intro {
-	return Intro{
-		Name:    "SPK Ocular agent access",
-		Version: s.o.Version,
-		About: "Read and change Kubernetes and Docker Compose targets within what the user granted in SPK Ocular. " +
-			"Nothing is granted by default; agents cannot grant themselves anything.",
-		Usage: []string{
-			"POST /v1/<Method> with a JSON body; GET /v1/methods lists the methods with their JSON schemas.",
-			"Start with Access: the targets, namespaces, verbs and kinds granted to agents.",
-			"Send your name in the " + agentHeader + " header: the user sees it (it is not verified).",
-			"Cluster changes are two steps: Prepare* returns the plan and a planId, Run* runs that plan.",
-			"A destructive plan or exec command waits for the user's confirmation in the SPK Ocular window unless its grant says otherwise: " +
-				"Run* then answers state awaiting_confirmation with a runId; ask GetRun (it waits up to 25 s) and tell your user to confirm in Ocular.",
-			"Container commands use the separate scope-wide exec grant: GetExecInfo, PrepareExec, RunExec. Explicit instance and argv are required; confirmation is the default, output and duration are bounded, and no command is automatically retried.",
-			"Errors are {code, detail}: forbidden says what is not granted.",
-			"GetLogInfo and log reads use the same logs grant. GetLogInfo lists channels; GetLogs returns a bounded snapshot; StreamLogs returns bounded NDJSON frames, including a final end frame. ExportLogs writes retained logs to a private file in Downloads and returns only metadata. Time intervals and streams require an explicit limit. The catalog marks streaming methods and describes each frame's schema.",
-			"A call that needs a cluster login answers unauthorized (a login is done by a person: the user selects the target in Ocular); " +
-				"tell your user and retry after they select it.",
-		},
-		Methods: "/v1/methods",
-	}
-}
-
-// MethodDoc is one method of GET /v1/methods.
+// MethodDoc is one method of MCP tools/list.
 type MethodDoc struct {
 	Name      string             `json:"name"`
-	Path      string             `json:"path"`
 	Doc       string             `json:"description"`
 	Verb      string             `json:"verb"`
 	Writes    bool               `json:"writes"`
@@ -130,7 +74,7 @@ func (s *Server) catalog() Catalog {
 			request.Required = append(request.Required, "limit")
 		}
 		out.Methods = append(out.Methods, MethodDoc{
-			Name: m.Name, Path: "/v1/" + m.Name, Doc: m.Doc, Verb: m.Verb, Writes: m.Writes, Streaming: m.Streaming,
+			Name: m.Name, Doc: m.Doc, Verb: m.Verb, Writes: m.Writes, Streaming: m.Streaming,
 			Request: request, Response: r.ReflectFromType(m.resp),
 		})
 	}

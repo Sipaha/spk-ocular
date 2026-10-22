@@ -61,7 +61,7 @@ func helmKinds() []core.KindDescriptor {
 	}
 }
 
-// Helm is deliberately absent from the agent socket's method registry. The UI
+// Helm is deliberately absent from the agent MCP tool registry. The UI
 // marker is checked as defense in depth: wildcard resource grants never apply.
 func (s *Service) Helm(ctx context.Context, req HelmRequest) (HelmResponse, error) {
 	var out HelmResponse

@@ -3,7 +3,7 @@ import { selectedScopes } from '../scopes'
 import type { Client } from '../api/client'
 import type { AgentAccessStatus, AgentPending, AgentTarget, AgentScope, ScopeSel } from '../api/types'
 
-// Agent access as the UI keeps it: the socket's state, the targets'
+// Agent access as the UI keeps it: the MCP endpoint's state, the targets'
 // grants, the plans waiting for the user. Reloaded on the agent_* events
 // (and on resync); the journal is read by its tab on its own.
 

@@ -6,14 +6,14 @@ import (
 	"testing"
 	"time"
 
+	"crypto/rand"
 	"github.com/Microsoft/go-winio"
-	"github.com/spk/spk-ocular/internal/paths"
 	"github.com/spk/spk-ocular/internal/privatefs"
 	"github.com/stretchr/testify/require"
 )
 
 func TestWindowsNamedPipeTransport(t *testing.T) {
-	path := paths.AgentEndpoint(t.TempDir())
+	path := `\\.\pipe\ocular-engine-test-` + rand.Text()
 	sddl, err := privatefs.OwnerDescriptor(false)
 	require.NoError(t, err)
 	ln, err := winio.ListenPipe(path, &winio.PipeConfig{SecurityDescriptor: sddl})

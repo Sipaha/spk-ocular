@@ -80,11 +80,11 @@ func (a *dindAgent) docker(args ...string) string {
 	return strings.TrimSpace(string(out))
 }
 
-// TestDindAgentAccessOverTheSocket: an agent on the real socket reads the
+// TestDindAgentAccessOverMCP: an agent on the real MCP endpoint reads the
 // project granted and not another (the seed's ocular-other), a container's
 // logs, restarts a container by its grant and is refused a stop that is not
 // granted; the target's identity names the daemon.
-func TestDindAgentAccessOverTheSocket(t *testing.T) {
+func TestDindAgentAccessOverMCP(t *testing.T) {
 	a := newDindAgent(t)
 	name := fmt.Sprintf("ocular-agent-%d", time.Now().UnixNano()%1_000_000)
 	file := filepath.Join(t.TempDir(), "compose.yaml")

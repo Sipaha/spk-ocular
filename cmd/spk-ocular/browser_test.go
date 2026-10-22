@@ -3,7 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
-	"errors"
+	"encoding/json"
 	"fmt"
 	"io"
 	"log/slog"
@@ -13,6 +13,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"strings"
 	"sync"
 	"testing"
@@ -87,8 +88,7 @@ func TestTestAPIOnlyWithFlagAndToken(t *testing.T) {
 	assert.True(t, strings.Contains(string(body), c.Paths.DataDir))
 }
 
-// shortHome is a data dir short enough for the agent socket (unix socket
-// paths are limited to ~108 bytes; t.TempDir under a long TMPDIR is not).
+// shortHome creates an isolated application profile under the configured scratch root.
 func shortHome(t *testing.T) string {
 	t.Helper()
 	d, err := os.MkdirTemp(os.Getenv("TMPDIR"), "oc")
@@ -123,10 +123,8 @@ func (s *syncBuffer) String() string {
 	return s.b.String()
 }
 
-// The browser mode serves the agent socket for its lifetime: it appears,
-// answers GET /v1, is gone after the context ends; the startup log names
-// the socket but never the page's API token.
-func TestBrowserModeServesAgentSocket(t *testing.T) {
+// Browser mode owns its in-process MCP port and never logs either credential.
+func TestBrowserModeServesMCP(t *testing.T) {
 	home := shortHome(t)
 	t.Setenv(paths.EnvHome, home)
 	t.Setenv("HOME", t.TempDir())
@@ -158,20 +156,27 @@ func TestBrowserModeServesAgentSocket(t *testing.T) {
 	require.Len(t, m, 2, "the page carries the token")
 	token := m[1]
 
-	sock := filepath.Join(home, "agent.sock")
-	agent := &http.Client{Transport: &http.Transport{DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
-		var d net.Dialer
-		return d.DialContext(ctx, "unix", sock)
-	}}}
-	resp, err := agent.Get("http://ocular/v1")
+	configBytes, err := os.ReadFile(filepath.Join(home, "mcp.json"))
+	require.NoError(t, err)
+	var config struct{ URL, Token string }
+	require.NoError(t, json.Unmarshal(configBytes, &config))
+	require.True(t, strings.HasPrefix(config.URL, "http://127.0.0.1:"))
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, config.URL, strings.NewReader(`{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-11-25","capabilities":{},"clientInfo":{"name":"browser-test","version":"1"}}}`))
+	require.NoError(t, err)
+	req.Header.Set("Authorization", "Bearer "+config.Token)
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Accept", "application/json, text/event-stream")
+	resp, err := http.DefaultClient.Do(req)
 	require.NoError(t, err)
 	body, _ := io.ReadAll(resp.Body)
 	_ = resp.Body.Close()
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
-	assert.Contains(t, string(body), "SPK Ocular agent access")
-	st, err := os.Stat(sock)
+	assert.Contains(t, string(body), "SPK Ocular")
+	st, err := os.Stat(filepath.Join(home, "mcp.json"))
 	require.NoError(t, err)
-	assert.Equal(t, os.FileMode(0o600), st.Mode().Perm())
+	if runtime.GOOS != "windows" {
+		assert.Equal(t, os.FileMode(0o600), st.Mode().Perm())
+	}
 
 	cancel()
 	select {
@@ -180,8 +185,9 @@ func TestBrowserModeServesAgentSocket(t *testing.T) {
 	case <-time.After(10 * time.Second):
 		t.Fatal("browser mode did not stop")
 	}
-	_, err = os.Stat(sock)
-	assert.True(t, errors.Is(err, os.ErrNotExist), "the socket is removed on exit: %v", err)
-	assert.Contains(t, logs.String(), sock, "the startup log names the socket")
-	assert.NotContains(t, logs.String(), token, "the page's token never reaches the log")
+	_, err = http.Post(config.URL, "application/json", strings.NewReader(`{}`))
+	assert.Error(t, err, "MCP port closes on application exit")
+	assert.Contains(t, logs.String(), config.URL)
+	assert.NotContains(t, logs.String(), token, "the page token never reaches the log")
+	assert.NotContains(t, logs.String(), config.Token, "the MCP credential never reaches the log")
 }

@@ -600,7 +600,7 @@ func TestAgentCallIdentity(t *testing.T) {
 	assert.True(t, IsCoded(err, string(provider.ClassUnavailable)))
 }
 
-// Without the agent socket the UI's agent methods say so.
+// Without the agent MCP server the UI's agent methods say so.
 func TestAgentAccessWithoutTheSocket(t *testing.T) {
 	ctx := context.Background()
 	s, _ := newService(t, newAgentProvider("a"))

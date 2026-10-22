@@ -139,7 +139,7 @@ export interface Client {
   listForwards(): Promise<Tunnel[]>
   /** Desktop: a loopback URL with a token; browser: a path on this server. */
   streamBase(): Promise<string>
-  /** The agent socket's state and the line for agents' instructions. */
+  /** The MCP endpoint status and credential-bearing configuration for explicit copy. */
   agentAccessStatus(): Promise<AgentAccessStatus>
   /** Every target with grants; reload on 'agent_grants_changed'. */
   listAgentGrants(): Promise<AgentTarget[]>

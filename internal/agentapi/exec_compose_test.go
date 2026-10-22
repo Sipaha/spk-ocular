@@ -18,7 +18,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// Real agent socket, grant/store/session stack and production Docker adapter,
+// Real agent MCP endpoint, grant/store/session stack and production Docker adapter,
 // with a private fake Engine on loopback. No user daemon or DIND is touched.
 func TestAgentExecDockerOverSocket(t *testing.T) {
 	fe := enginefake.New(t, enginefake.WithTCP(nil))

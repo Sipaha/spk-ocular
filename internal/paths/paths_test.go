@@ -18,8 +18,6 @@ func TestResolveHonorsEnvOverride(t *testing.T) {
 	assert.Equal(t, dir, p.DataDir)
 	assert.Equal(t, filepath.Join(dir, "ocular.db"), p.DBFile)
 	assert.Equal(t, filepath.Join(dir, "tmp"), p.TmpDir)
-	assert.Equal(t, AgentEndpoint(dir), p.AgentSocket)
-	assert.Equal(t, filepath.Join(dir, "agent.sock.lock"), p.AgentLock)
 }
 
 func TestResolveDefaultsToSpkOcular(t *testing.T) {

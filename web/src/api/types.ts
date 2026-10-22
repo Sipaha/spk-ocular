@@ -876,12 +876,14 @@ export interface AgentTarget extends AgentGrantSettings {
   grants: AgentGrant[]
 }
 
-export type AgentSocketState = 'serving' | 'other_instance' | 'failed'
+export type AgentEndpointState = 'serving' | 'other_instance' | 'failed'
 
 export interface AgentAccessStatus {
-  state: AgentSocketState
-  socket: string
-  /** the line for an agent's instructions */
+  state: AgentEndpointState
+  endpoint: string
+  /** Credential-bearing MCP setup: explicit clipboard copy only; never render. */
+  clientConfig?: string
+  /** Credential-free connection instructions. */
   instruction: string
   error?: string
   pending: number

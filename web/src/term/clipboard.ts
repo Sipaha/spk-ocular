@@ -4,7 +4,7 @@ import { Clipboard } from '@wailsio/runtime'
 // reliably permitted for the app's origin); browser: the Clipboard API
 // (127.0.0.1 is a secure context).
 
-export async function copyText(text: string, mode: 'desktop' | 'browser'): Promise<void> {
+export async function copyText(text: string, mode: 'desktop' | 'browser', requireSuccess = false): Promise<void> {
   if (mode === 'desktop') {
     try {
       await Clipboard.SetText(text)
@@ -13,7 +13,12 @@ export async function copyText(text: string, mode: 'desktop' | 'browser'): Promi
       // fall through
     }
   }
-  await navigator.clipboard?.writeText(text).catch(() => {})
+  try {
+    if (!navigator.clipboard) throw new Error('Clipboard unavailable')
+    await navigator.clipboard.writeText(text)
+  } catch (error) {
+    if (requireSuccess) throw error
+  }
 }
 
 export async function readText(mode: 'desktop' | 'browser'): Promise<string> {

@@ -116,11 +116,29 @@ describe('agent access: grants', () => {
     expect(f.client.saveAgentGrants).not.toHaveBeenCalled()
   })
 
-  it('shows the socket and the instruction line; a target\'s grants are saved whole', async () => {
+  it('reports clipboard refusal without exposing configuration or claiming success', async () => {
+    const { user } = await setup()
+    const panel = await openPanel(user)
+    await user.click(within(panel).getByText('Connect an agent', { exact: true }))
+    const copy = vi.spyOn(navigator.clipboard, 'writeText').mockRejectedValueOnce(new Error('private clipboard detail'))
+    try {
+      await user.click(within(panel).getByRole('button', { name: 'Copy MCP configuration' }))
+      expect(await within(panel).findByRole('alert')).toHaveTextContent('Configuration was not copied.')
+      expect(within(panel).queryByText('Copied')).not.toBeInTheDocument()
+      expect(panel.outerHTML).not.toContain('fixture-private-mcp-token')
+      expect(panel.outerHTML).not.toContain('private clipboard detail')
+    } finally { copy.mockRestore() }
+  })
+
+  it('shows the MCP endpoint without credentials; a target\'s grants are saved whole', async () => {
     const { f, user } = await setup()
     const panel = await openPanel(user)
-    expect(await within(panel).findByText(/Agents connect over \/home\/u\/.spk\/ocular\/agent.sock/)).toBeInTheDocument()
-    expect(within(panel).getByText(/curl -s --unix-socket ~\/.spk\/ocular\/agent.sock/)).toBeInTheDocument()
+    expect(await within(panel).findByText(/MCP endpoint: http:\/\/127.0.0.1:43123\/mcp/)).toBeInTheDocument()
+    expect(panel.outerHTML).not.toContain('fixture-private-mcp-token')
+    await user.click(within(panel).getByText('Connect an agent', { exact: true }))
+    await user.click(within(panel).getByRole('button', { name: 'Copy MCP configuration' }))
+    expect(await navigator.clipboard.readText()).toBe(f.state.agentStatus.clientConfig)
+    expect(panel.outerHTML).not.toContain('fixture-private-mcp-token')
 
     // The selected target is edited first.
     const editor = editorOf(panel, 'prod')

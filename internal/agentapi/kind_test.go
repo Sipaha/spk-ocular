@@ -3,12 +3,9 @@
 package agentapi
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
-	"net"
 	"net/http"
 	"net/url"
 	"os"
@@ -18,6 +15,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -33,13 +31,12 @@ import (
 const kindTarget = "kubeconfig:kind-ocular-dev"
 
 // liveAgent is the whole stack on a real target: the service over one
-// provider, the agent socket served for real, and an agent's HTTP client
-// on that socket.
+// provider, the in-process MCP endpoint served for real, and an SDK client.
 type liveAgent struct {
 	t      *testing.T
 	svc    *api.Service
 	st     *store.Store
-	client *http.Client
+	client *mcp.ClientSession
 }
 
 func serveAgent(t *testing.T, p provider.Provider) *liveAgent {
@@ -53,16 +50,14 @@ func serveAgent(t *testing.T, p provider.Provider) *liveAgent {
 	ctx, cancel := context.WithCancel(context.Background())
 	svc.Start(ctx)
 	t.Cleanup(func() { cancel(); svc.Close() })
-	d := sockDir(t)
+	d := t.TempDir()
 	downloads := filepath.Join(t.TempDir(), "Downloads")
-	srv := New(Options{Service: svc, Store: st, Socket: filepath.Join(d, "agent.sock"), Lock: filepath.Join(d, "agent.sock.lock"), Version: "test", Downloads: func() (string, error) { return downloads, nil }})
+	srv := New(Options{Service: svc, Store: st, Profile: d, Version: "test", Downloads: func() (string, error) { return downloads, nil }})
 	require.NoError(t, srv.Start())
 	t.Cleanup(srv.Close)
 	svc.SetAgentControl(srv)
-	return &liveAgent{t: t, svc: svc, st: st, client: &http.Client{Timeout: 60 * time.Second, Transport: &http.Transport{DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
-		var dl net.Dialer
-		return dl.DialContext(ctx, "unix", filepath.Join(d, "agent.sock"))
-	}}}}
+	client := connectMCP(t, srv, "kind-test", nil)
+	return &liveAgent{t: t, svc: svc, st: st, client: client}
 }
 
 // kindAgent is a liveAgent on the kind test cluster, its Kubernetes
@@ -114,21 +109,22 @@ func (a *kindAgent) namespace(prefix string) string {
 // call is one request of the agent: the HTTP status and the JSON answer.
 func (a *liveAgent) call(method string, body any, out any) int {
 	a.t.Helper()
-	b, err := json.Marshal(body)
-	require.NoError(a.t, err)
-	req, err := http.NewRequest(http.MethodPost, "http://ocular/v1/"+method, bytes.NewReader(b))
-	require.NoError(a.t, err)
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set(agentHeader, "kind-test")
-	resp, err := a.client.Do(req)
-	require.NoError(a.t, err)
-	defer func() { _ = resp.Body.Close() }()
-	data, err := io.ReadAll(resp.Body)
-	require.NoError(a.t, err)
-	if out != nil && resp.StatusCode == http.StatusOK {
-		require.NoError(a.t, json.Unmarshal(data, out), string(data))
+	if body == nil {
+		body = struct{}{}
 	}
-	return resp.StatusCode
+	result, err := a.client.CallTool(a.t.Context(), &mcp.CallToolParams{Name: method, Arguments: body})
+	require.NoError(a.t, err)
+	data, err := json.Marshal(result.StructuredContent)
+	require.NoError(a.t, err)
+	if result.IsError {
+		var ce api.CodedError
+		require.NoError(a.t, json.Unmarshal(data, &ce))
+		return errorStatus(ce.Code)
+	}
+	if out != nil {
+		require.NoError(a.t, json.Unmarshal(data, out))
+	}
+	return http.StatusOK
 }
 
 func (a *liveAgent) objects(req ListObjectsRequest) (ObjectsView, int) {
@@ -144,12 +140,12 @@ func rowNames(v ObjectsView) []string {
 	return out
 }
 
-// TestKindAgentAccessOverTheSocket: an agent on the real socket reads the
+// TestKindAgentAccessOverMCP: an agent on the real MCP endpoint reads the
 // namespace granted and not another, a discovered custom resource with its
 // server's columns, a pod's logs and metrics; restarts a Deployment by its
 // grant and is refused what is not granted; its delete waits for the
 // user's decision (No, then Yes).
-func TestKindAgentAccessOverTheSocket(t *testing.T) {
+func TestKindAgentAccessOverMCP(t *testing.T) {
 	a := newKindAgent(t)
 	ns := a.namespace("ocular-agent")
 	other := a.namespace("ocular-agent-other")
@@ -316,23 +312,10 @@ func (a *liveAgent) checkLogInterval(ref core.Ref, tail api.Tail) {
 		found = found || line.TS == last.TS && line.Text == last.Text
 	}
 	assert.True(t, found, "the requested historical line survives the interval filter")
-	body, err := json.Marshal(StreamLogsRequest{GetLogsRequest: query})
-	require.NoError(t, err)
-	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, "http://ocular/v1/StreamLogs", bytes.NewReader(body))
-	require.NoError(t, err)
-	response, err := a.client.Do(req)
-	require.NoError(t, err)
-	defer func() { _ = response.Body.Close() }()
-	require.Equal(t, http.StatusOK, response.StatusCode)
-	decoder := json.NewDecoder(response.Body)
+	var capture LogStreamResult
+	require.Equal(t, http.StatusOK, a.call("StreamLogs", StreamLogsRequest{GetLogsRequest: query}, &capture))
 	count, ended := 0, false
-	for {
-		var frame LogFrame
-		err := decoder.Decode(&frame)
-		if err == io.EOF {
-			break
-		}
-		require.NoError(t, err)
+	for _, frame := range capture.Frames {
 		require.Nil(t, frame.Error)
 		for _, line := range frame.Lines {
 			ts, err := time.Parse(time.RFC3339Nano, line.TS)
