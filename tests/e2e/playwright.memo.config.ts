@@ -8,7 +8,7 @@ import { scratchRoot } from './fixtures'
 export default defineConfig({
   testDir: '.',
   outputDir: join(scratchRoot, 'playwright-memo'),
-  testMatch: ['krr-run.spec.ts','krr.spec.ts','gatekeeper.spec.ts','security-cluster-policy.spec.ts','security-policy.spec.ts','security-audit.spec.ts','security-cluster-audit.spec.ts','vpa.spec.ts','metrics-history.spec.ts','reliability.spec.ts','helm-diagnosis.spec.ts', 'certificate.spec.ts', 'view-presets.spec.ts', 'workspace-restart.spec.ts', 'memo.spec.ts', 'configurations.spec.ts'],
+  testMatch: ['capacity.spec.ts','krr-run.spec.ts','krr.spec.ts','gatekeeper.spec.ts','security-cluster-policy.spec.ts','security-policy.spec.ts','security-audit.spec.ts','security-cluster-audit.spec.ts','vpa.spec.ts','metrics-history.spec.ts','reliability.spec.ts','helm-diagnosis.spec.ts', 'certificate.spec.ts', 'view-presets.spec.ts', 'workspace-restart.spec.ts', 'memo.spec.ts', 'configurations.spec.ts'],
   workers: 1,
   timeout: 90_000,
   use: { locale: 'en-US', screenshot: 'only-on-failure' },

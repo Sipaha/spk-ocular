@@ -103,6 +103,7 @@ func (s *session) Get(ctx context.Context, ref core.Ref) (*core.Resource, error)
 		CertificateStatusAvailable: certificateSupported(def),
 		VPAAvailable:               vpaSupported(def),
 		MetricsHistoryAvailable:    def.gvr == podsKind.gvr && kindOf(def) == "Pod",
+		NodeCapacityAvailable:      def == nodesKind,
 		ReliabilityAvailable:       reliabilitySupported(def),
 		NetworkPathAvailable:       def == servicesKind || def == ingressesKind,
 		DiagnosisAvailable:         def.namespaced && diagnosisSupported(def.gvr.GroupResource()),

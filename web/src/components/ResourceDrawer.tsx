@@ -1,3 +1,4 @@
+import {ResourceCapacity} from '../capacity/ResourceCapacity'
 import {ResourceGatekeeper} from '../gatekeeper/ResourceGatekeeper'
 import {ResourceVPA} from '../vpa/ResourceVPA'
 import {ResourceMetricsHistory} from '../metricsHistory/ResourceMetricsHistory'
@@ -529,6 +530,7 @@ function Details(props: { snapshotKey:unknown;revision?:string; onDiagnosisLogs:
       {r.metricsHistoryAvailable&&<RetainedSection pending={pending}><ResourceMetricsHistory client={client} subject={r.ref} snapshotKey={props.snapshotKey} revision={props.revision}/></RetainedSection>}
       {r.gatekeeperAuditAvailable&&<RetainedSection pending={pending}><ResourceGatekeeper client={client} subject={r.ref} snapshotKey={props.snapshotKey} revision={props.revision}/></RetainedSection>}
       {r.vpaAvailable&&<RetainedSection pending={pending}><ResourceVPA client={client} subject={r.ref} snapshotKey={props.snapshotKey} revision={props.revision} onGo={onGo}/></RetainedSection>}
+      {r.nodeCapacityAvailable&&<RetainedSection pending={pending}><ResourceCapacity client={client} subject={r.ref} snapshotKey={props.snapshotKey} revision={props.revision} onGo={onGo}/></RetainedSection>}
       {r.reliabilityAvailable&&<RetainedSection pending={pending}><ResourceReliability client={client} subject={r.ref} snapshotKey={props.snapshotKey} revision={props.revision} onGo={onGo}/></RetainedSection>}
       {r.certificateStatusAvailable&&<RetainedSection pending={pending}><ResourceCertificate client={client} subject={r.ref} onGo={onGo}/></RetainedSection>}
       {r.networkPathAvailable&&<RetainedSection pending={pending}><ResourceNetworkPath client={client} subject={r.ref} onGo={onGo}/></RetainedSection>}

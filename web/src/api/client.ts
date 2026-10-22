@@ -1,3 +1,4 @@
+import type {NodeCapacity,NodeCapacityRequest} from '../capacity/types'
 import type {KrrRequest,KrrResponse} from '../krr/model'
 import type {VPAInspection} from '../vpa/types'
 import type {HistoryRequest,MetricsHistory} from '../metricsHistory/types'
@@ -37,6 +38,7 @@ export class ApiError extends Error {
 export interface Client {
  resourceMetricsHistory(req:HistoryRequest,signal?:AbortSignal):Promise<MetricsHistory>
  resourceVPA(ref:Ref,signal?:AbortSignal):Promise<VPAInspection>
+ nodeCapacity(req:NodeCapacityRequest,signal?:AbortSignal):Promise<NodeCapacity>
  resourceReliability(ref:Ref,signal?:AbortSignal):Promise<Reliability>
  krr(req:KrrRequest,signal?:AbortSignal):Promise<KrrResponse>
  gatekeeperAudit(ref:Ref,signal?:AbortSignal):Promise<GatekeeperAudit>
@@ -200,6 +202,7 @@ export const httpClient: Client = {
   argoCD: (req,signal) => post('ArgoCD',req,signal),
  resourceMetricsHistory:(req,signal)=>post('ResourceMetricsHistory',req,signal),
  resourceVPA:(ref,signal)=>post('ResourceVPA',ref,signal),
+ nodeCapacity:(req,signal)=>post('NodeCapacity',req,signal),
  resourceReliability:(ref,signal)=>post('ResourceReliability',ref,signal),
  krr:(req,signal)=>post('KRR',req,signal),
  gatekeeperAudit:(ref,signal)=>post('GatekeeperAudit',ref,signal),
@@ -351,6 +354,7 @@ export const wailsClient: Client = {
   argoCD: (req,signal) => wcallAbortable(signal,'ArgoCD',req),
  resourceMetricsHistory:(req,signal)=>wcallAbortable(signal,'ResourceMetricsHistory',req),
  resourceVPA:(ref,signal)=>wcallAbortable(signal,'ResourceVPA',ref),
+ nodeCapacity:(req,signal)=>wcallAbortable(signal,'NodeCapacity',req),
  resourceReliability:(ref,signal)=>wcallAbortable(signal,'ResourceReliability',ref),
  krr:(req,signal)=>wcallAbortable(signal,'KRR',req),
  gatekeeperAudit:(ref,signal)=>wcallAbortable(signal,'GatekeeperAudit',ref),

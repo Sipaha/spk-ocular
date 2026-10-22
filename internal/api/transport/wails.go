@@ -283,3 +283,7 @@ func (w *API) GatekeeperAudit(ctx context.Context, ref core.Ref) (core.Gatekeepe
 func (w *API) KRR(ctx context.Context, req api.KRRRequest) (api.KRRResponse, error) {
 	return w.a.KRR(api.UIContext(ctx), req)
 }
+
+func (w *API) NodeCapacity(ctx context.Context, req core.NodeCapacityRequest) (core.NodeCapacity, error) {
+	return w.a.NodeCapacity(api.UIContext(ctx), req)
+}
