@@ -51,6 +51,7 @@ export function fakeClient(targets: Target[], connected = false) {
  resourceVPA:vi.fn(async(ref)=>({ref,resourceVersion:"1",capturedAt:0,state:"not-discovered",hpaState:"not-checked",sources:[],declarations:[],hpaMetrics:[]})),
  nodeCapacity:vi.fn(async(req)=>({ref:req.ref,namespace:req.namespace,resourceVersion:"1",capturedAt:0,allocatable:{cpu:{state:"unknown"},memory:{state:"unknown"}},requests:{cpu:{state:"unknown"},memory:{state:"unknown"}},pods:[],coverage:"unknown",excludedTerminal:0,unverified:0})),
  resourceReliability:vi.fn(async(ref)=>({ref,resourceVersion:"1",capturedAt:0,observations:[],pdbState:"unknown",hpaState:"unknown",partial:false})),
+ offlineAudit: async()=>({reports:[]}),
  krr: async()=>({reports:[]}),
  gatekeeperAudit:vi.fn(async(ref)=>({ref,apiVersion:"constraints.gatekeeper.sh/v1beta1",resourceVersion:"1",capturedAt:0,auditTimeState:"missing",returnedViolations:0,coverage:"unknown",partial:true,violations:[]})),
  certificateStatus:vi.fn(async(ref)=>({ref,capturedAt:0,notBefore:{state:'missing'},notAfter:{state:'missing'},renewal:{state:'missing'},validity:'unknown',secretName:'',conditions:[],requestedNames:[],issuerState:'unknown',consumers:[],consumerState:'unknown',truncated:false})),

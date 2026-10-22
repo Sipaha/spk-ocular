@@ -287,3 +287,7 @@ func (w *API) KRR(ctx context.Context, req api.KRRRequest) (api.KRRResponse, err
 func (w *API) NodeCapacity(ctx context.Context, req core.NodeCapacityRequest) (core.NodeCapacity, error) {
 	return w.a.NodeCapacity(api.UIContext(ctx), req)
 }
+
+func (w *API) OfflineAudit(ctx context.Context, req api.OfflineAuditRequest) (api.OfflineAuditResponse, error) {
+	return w.a.OfflineAudit(api.UIContext(ctx), req)
+}

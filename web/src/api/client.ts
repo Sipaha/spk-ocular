@@ -1,3 +1,4 @@
+import type {AuditRequest,AuditResponse} from '../offlineAudit/types'
 import type {NodeCapacity,NodeCapacityRequest} from '../capacity/types'
 import type {KrrRequest,KrrResponse} from '../krr/model'
 import type {VPAInspection} from '../vpa/types'
@@ -40,6 +41,7 @@ export interface Client {
  resourceVPA(ref:Ref,signal?:AbortSignal):Promise<VPAInspection>
  nodeCapacity(req:NodeCapacityRequest,signal?:AbortSignal):Promise<NodeCapacity>
  resourceReliability(ref:Ref,signal?:AbortSignal):Promise<Reliability>
+ offlineAudit(req:AuditRequest,signal?:AbortSignal):Promise<AuditResponse>
  krr(req:KrrRequest,signal?:AbortSignal):Promise<KrrResponse>
  gatekeeperAudit(ref:Ref,signal?:AbortSignal):Promise<GatekeeperAudit>
  certificateStatus(ref:Ref,signal?:AbortSignal):Promise<CertificateStatus>
@@ -204,6 +206,7 @@ export const httpClient: Client = {
  resourceVPA:(ref,signal)=>post('ResourceVPA',ref,signal),
  nodeCapacity:(req,signal)=>post('NodeCapacity',req,signal),
  resourceReliability:(ref,signal)=>post('ResourceReliability',ref,signal),
+ offlineAudit:(req,signal)=>post('OfflineAudit',req,signal),
  krr:(req,signal)=>post('KRR',req,signal),
  gatekeeperAudit:(ref,signal)=>post('GatekeeperAudit',ref,signal),
  certificateStatus:(ref,signal)=>post('CertificateStatus',ref,signal),
@@ -356,6 +359,7 @@ export const wailsClient: Client = {
  resourceVPA:(ref,signal)=>wcallAbortable(signal,'ResourceVPA',ref),
  nodeCapacity:(req,signal)=>wcallAbortable(signal,'NodeCapacity',req),
  resourceReliability:(ref,signal)=>wcallAbortable(signal,'ResourceReliability',ref),
+ offlineAudit:(req,signal)=>wcallAbortable(signal,'OfflineAudit',req),
  krr:(req,signal)=>wcallAbortable(signal,'KRR',req),
  gatekeeperAudit:(ref,signal)=>wcallAbortable(signal,'GatekeeperAudit',ref),
  certificateStatus:(ref,signal)=>wcallAbortable(signal,'CertificateStatus',ref),

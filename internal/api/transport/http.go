@@ -136,6 +136,9 @@ func writeErr(w http.ResponseWriter, err error) {
 }
 
 func (h *HTTP) routes() {
+	h.mux.Handle("POST /api/OfflineAudit", noStore(handle(func(ctx context.Context, req *api.OfflineAuditRequest) (any, error) {
+		return h.api.OfflineAudit(ctx, *req)
+	})))
 	h.mux.Handle("POST /api/KRR", noStore(handle(func(ctx context.Context, req *api.KRRRequest) (any, error) { return h.api.KRR(ctx, *req) })))
 	h.mux.Handle("POST /api/ViewPresets", noStore(handle(func(ctx context.Context, r *api.ViewPresetsRequest) (any, error) { return h.api.ViewPresets(ctx, *r) })))
 	h.mux.Handle("POST /api/ResourceMetricsHistory", noStore(handle(func(ctx context.Context, req *core.HistoryRequest) (any, error) {

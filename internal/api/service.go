@@ -19,6 +19,7 @@ import (
 	"github.com/spk/spk-ocular/internal/forwards"
 	"github.com/spk/spk-ocular/internal/helm"
 	"github.com/spk/spk-ocular/internal/krr"
+	"github.com/spk/spk-ocular/internal/offlineaudit"
 	"github.com/spk/spk-ocular/internal/provider"
 	"github.com/spk/spk-ocular/internal/store"
 	"github.com/spk/spk-ocular/internal/streams"
@@ -36,6 +37,7 @@ type Options struct {
 
 // Service implements API.
 type Service struct {
+	offlineAudits   *offlineaudit.Registry
 	krrReports      *krr.Registry
 	krrRuns         *krr.Manager
 	krrAdmissionMu  sync.Mutex
@@ -107,6 +109,7 @@ func NewService(reg *provider.Registry, st *store.Store, em *events.Emitter, o O
 		panic(err) // crypto/rand does not fail on supported platforms
 	}
 	s := &Service{helmRepos: helm.NewRepositories(helm.SettingsDirectory(o.DataDir)), helmPlans: helm.NewPlans(), reg: reg, store: st, em: em, opts: o, views: views.NewManager(em), streams: streams.NewRegistry(), fwd: newForwards(em), sessions: map[string]*sessionEntry{}, connections: map[string]*connectionAttempt{}, left: map[string]time.Time{}, now: time.Now, revKey: key, agentWatches: make(chan struct{}, maxAgentWatches)}
+	s.offlineAudits = offlineaudit.NewRegistry(func() time.Time { return s.now() })
 	s.krrReports = krr.NewRegistry(func() time.Time { return s.now() })
 	s.krrRuns = krr.NewManager(s.krrReports, func() time.Time { return s.now() })
 	s.helperWake = make(chan struct{}, 1)
@@ -167,6 +170,7 @@ func (s *Service) Close() {
 	s.krrRuns.Close(krrClose)
 	krrCancel()
 	s.krrReports.Close()
+	s.offlineAudits.Close()
 	s.helmPlans.Close()
 	s.stopConnections()
 	if s.cancel != nil {

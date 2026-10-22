@@ -19,6 +19,7 @@ import (
 )
 
 type API interface {
+	OfflineAudit(context.Context, OfflineAuditRequest) (OfflineAuditResponse, error)
 	KRR(context.Context, KRRRequest) (KRRResponse, error)
 	DiagnoseResource(context.Context, core.Ref) (core.Diagnosis, error)
 	ResourceNetworkPath(context.Context, core.Ref) (core.NetworkPath, error)
