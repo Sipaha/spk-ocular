@@ -1,5 +1,13 @@
 {
   "ui": {
+    "gatekeeper.title": "Gatekeeper-Constraint-Audit",
+    "gatekeeper.load": "Constraint-Audit laden",
+    "gatekeeper.notice": "Nur diese ausgewählte clusterweite Constraint ausdrücklich lesen. Gespeicherter Erzeugerstatus, kein neues Audit. Aktualität und aktuelle Ressourcenkonfiguration sind ungeprüft; null gemeldete Verstöße belegen keinen Erfolg.",
+    "gatekeeper.identityNotice": "Betroffene Ressourcen sind beschreibend, ohne geprüfte UID und werden nie aufgelöst. Actions sind Erzeugertext, kein Schweregrad oder Nachweis der Durchsetzung. Nachrichten können sensible Daten enthalten; vor Weitergabe prüfen.",
+    "gatekeeper.counts": "Gemeldete Gesamtzahl: {total} · Zurückgegeben: {returned} · Angezeigt: {shown}",
+    "gatekeeper.capped": "Der Erzeuger meldet mehr Verstöße als die zurückgegebene Liste enthält.",
+    "gatekeeper.inconsistent": "Gemeldete Gesamtzahl und zurückgegebene Liste sind widersprüchlich.",
+    "gatekeeper.reported": "Zahlen stimmen mit der Liste überein; Vollständigkeit des Audits bleibt ungeprüft.",
   "security.policy": "Richtlinienberichte",
   "security.policyAPI": "API für Richtlinienberichte",
   "security.includeClusterPolicyReports": "Clusterweite Richtlinienberichte einschließen",

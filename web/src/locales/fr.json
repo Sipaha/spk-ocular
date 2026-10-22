@@ -1,5 +1,13 @@
 {
   "ui": {
+    "gatekeeper.title": "Audit de constraint Gatekeeper",
+    "gatekeeper.load": "Charger l’audit de constraint",
+    "gatekeeper.notice": "Lire explicitement cette seule constraint sélectionnée à l’échelle du cluster. État enregistré du producteur, pas un nouvel audit. La fraîcheur et la configuration actuelle ne sont pas vérifiées ; zéro violation signalée ne prouve pas la réussite.",
+    "gatekeeper.identityNotice": "Les ressources concernées sont descriptives, sans UID vérifié et ne sont jamais résolues. Actions est du texte du producteur, pas une gravité ni une preuve d’application. Les messages peuvent contenir des données sensibles ; vérifier avant partage.",
+    "gatekeeper.counts": "Total signalé : {total} · Renvoyées : {returned} · Affichées : {shown}",
+    "gatekeeper.capped": "Le producteur signale plus de violations que la liste renvoyée n’en contient.",
+    "gatekeeper.inconsistent": "Le total signalé et la liste renvoyée sont incohérents.",
+    "gatekeeper.reported": "Les nombres concordent avec la liste ; l’exhaustivité de l’audit reste non vérifiée.",
   "security.policy": "Rapports de politiques",
   "security.policyAPI": "API des rapports de politiques",
   "security.includeClusterPolicyReports": "Inclure les rapports de politiques du cluster entier",

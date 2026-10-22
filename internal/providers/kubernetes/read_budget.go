@@ -4,6 +4,9 @@ import (
 	"io"
 	"net/http"
 	"sync"
+	"sync/atomic"
+
+	"github.com/spk/spk-ocular/internal/provider"
 
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/util/flowcontrol"
@@ -23,6 +26,10 @@ type readBudget struct {
 	rate  flowcontrol.RateLimiter
 	slots chan struct{}
 }
+
+// An opt-in observation budget charges actual HTTP attempts, including client-go
+// retries. Logical Get calls alone do not bound retry traffic.
+type finiteRequestLimitKey struct{}
 
 // budgetConfig copies, rather than mutates, the admitted caller configuration.
 // The shared transport budget also covers raw HTTP clients. Existing stricter
@@ -44,6 +51,9 @@ func budgetConfig(original *rest.Config) *rest.Config {
 func (b *readBudget) RoundTrip(req *http.Request) (*http.Response, error) {
 	if req.Method != http.MethodGet && req.Method != http.MethodHead {
 		return b.next.RoundTrip(req)
+	}
+	if remaining, ok := req.Context().Value(finiteRequestLimitKey{}).(*atomic.Int32); ok && remaining.Add(-1) < 0 {
+		return nil, &provider.Error{Class: provider.ClassScopeLimit, Message: "finite observation request budget exhausted"}
 	}
 	if p, ok := req.Context().Value(loadTransferKey{}).(*loadTransfer); ok {
 		p.known.Store(true)

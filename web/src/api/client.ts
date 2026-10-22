@@ -3,6 +3,7 @@ import type {HistoryRequest,MetricsHistory} from '../metricsHistory/types'
 import type {Reliability} from '../reliability/types'
 import type { ViewPresetsRequest, ViewPresetRegistry } from './types'
 import type {CertificateStatus} from '../certificates/types'
+import type {GatekeeperAudit} from '../gatekeeper/types'
 import type {NetworkPath} from '../network/types'
 import type {Diagnosis} from '../diagnosis/types'
 import type {FluxRequest,FluxSnapshot} from '../fluxcd/types'
@@ -36,6 +37,7 @@ export interface Client {
  resourceMetricsHistory(req:HistoryRequest,signal?:AbortSignal):Promise<MetricsHistory>
  resourceVPA(ref:Ref,signal?:AbortSignal):Promise<VPAInspection>
  resourceReliability(ref:Ref,signal?:AbortSignal):Promise<Reliability>
+ gatekeeperAudit(ref:Ref,signal?:AbortSignal):Promise<GatekeeperAudit>
  certificateStatus(ref:Ref,signal?:AbortSignal):Promise<CertificateStatus>
  resourceNetworkPath(ref:Ref,signal?:AbortSignal):Promise<NetworkPath>
  diagnoseResource(ref:Ref,signal?:AbortSignal):Promise<Diagnosis>
@@ -197,6 +199,7 @@ export const httpClient: Client = {
  resourceMetricsHistory:(req,signal)=>post('ResourceMetricsHistory',req,signal),
  resourceVPA:(ref,signal)=>post('ResourceVPA',ref,signal),
  resourceReliability:(ref,signal)=>post('ResourceReliability',ref,signal),
+ gatekeeperAudit:(ref,signal)=>post('GatekeeperAudit',ref,signal),
  certificateStatus:(ref,signal)=>post('CertificateStatus',ref,signal),
  resourceNetworkPath:(ref,signal)=>post('ResourceNetworkPath',ref,signal),
  diagnoseResource:(ref,signal)=>post('DiagnoseResource',ref,signal),
@@ -346,6 +349,7 @@ export const wailsClient: Client = {
  resourceMetricsHistory:(req,signal)=>wcallAbortable(signal,'ResourceMetricsHistory',req),
  resourceVPA:(ref,signal)=>wcallAbortable(signal,'ResourceVPA',ref),
  resourceReliability:(ref,signal)=>wcallAbortable(signal,'ResourceReliability',ref),
+ gatekeeperAudit:(ref,signal)=>wcallAbortable(signal,'GatekeeperAudit',ref),
  certificateStatus:(ref,signal)=>wcallAbortable(signal,'CertificateStatus',ref),
  resourceNetworkPath:(ref,signal)=>wcallAbortable(signal,'ResourceNetworkPath',ref),
  diagnoseResource:(ref,signal)=>wcallAbortable(signal,'DiagnoseResource',ref),

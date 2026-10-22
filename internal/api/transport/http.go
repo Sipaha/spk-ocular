@@ -142,6 +142,7 @@ func (h *HTTP) routes() {
 	})))
 	h.mux.Handle("POST /api/ResourceVPA", noStore(handle(func(ctx context.Context, ref *core.Ref) (any, error) { return h.api.ResourceVPA(ctx, *ref) })))
 	h.mux.Handle("POST /api/ResourceReliability", noStore(handle(func(ctx context.Context, ref *core.Ref) (any, error) { return h.api.ResourceReliability(ctx, *ref) })))
+	h.mux.Handle("POST /api/GatekeeperAudit", noStore(handle(func(ctx context.Context, ref *core.Ref) (any, error) { return h.api.GatekeeperAudit(ctx, *ref) })))
 	h.mux.Handle("POST /api/CertificateStatus", noStore(handle(func(ctx context.Context, ref *core.Ref) (any, error) { return h.api.CertificateStatus(ctx, *ref) })))
 	h.mux.Handle("POST /api/ResourceNetworkPath", noStore(handle(func(ctx context.Context, ref *core.Ref) (any, error) { return h.api.ResourceNetworkPath(ctx, *ref) })))
 	h.mux.Handle("POST /api/DiagnoseResource", noStore(handle(func(ctx context.Context, ref *core.Ref) (any, error) { return h.api.DiagnoseResource(ctx, *ref) })))

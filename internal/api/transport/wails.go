@@ -275,3 +275,7 @@ func (w *API) ResourceMetricsHistory(ctx context.Context, req core.HistoryReques
 func (w *API) ResourceVPA(ctx context.Context, ref core.Ref) (core.VPAInspection, error) {
 	return w.a.ResourceVPA(api.UIContext(ctx), ref)
 }
+
+func (w *API) GatekeeperAudit(ctx context.Context, ref core.Ref) (core.GatekeeperAudit, error) {
+	return w.a.GatekeeperAudit(api.UIContext(ctx), ref)
+}

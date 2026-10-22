@@ -99,6 +99,7 @@ func (s *session) Get(ctx context.Context, ref core.Ref) (*core.Resource, error)
 	}
 
 	out := &core.Resource{
+		GatekeeperAuditAvailable:   s.gatekeeperAvailable(def),
 		CertificateStatusAvailable: certificateSupported(def),
 		VPAAvailable:               vpaSupported(def),
 		MetricsHistoryAvailable:    def.gvr == podsKind.gvr && kindOf(def) == "Pod",

@@ -1,5 +1,13 @@
 {
   "ui": {
+    "gatekeeper.title": "Gatekeeper constraint 監査",
+    "gatekeeper.load": "constraint 監査を読み込む",
+    "gatekeeper.notice": "選択した一件のクラスター全体の constraint のみ明示的に読み取ります。保存された生成元の状態であり、新しい監査ではありません。鮮度と現在のリソース設定は未検証で、報告された違反がゼロでも成功の証明にはなりません。",
+    "gatekeeper.identityNotice": "違反対象は説明情報で、検証済み UID がなく、解決されません。Actions は生成元のテキストで、重大度や適用の証明ではありません。メッセージには機密情報が含まれる場合があります。共有前に確認してください。",
+    "gatekeeper.counts": "報告総数: {total} · 返却: {returned} · 表示: {shown}",
+    "gatekeeper.capped": "生成元の違反総数は返却されたリストより多くなっています。",
+    "gatekeeper.inconsistent": "報告総数と返却されたリストが一致しません。",
+    "gatekeeper.reported": "件数はリストと一致していますが、監査の完全性は未検証です。",
   "security.policy": "ポリシーレポート",
   "security.policyAPI": "ポリシーレポート API",
   "security.includeClusterPolicyReports": "クラスタ全体のポリシーレポートを含める",

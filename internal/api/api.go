@@ -21,6 +21,7 @@ import (
 type API interface {
 	DiagnoseResource(context.Context, core.Ref) (core.Diagnosis, error)
 	ResourceNetworkPath(context.Context, core.Ref) (core.NetworkPath, error)
+	GatekeeperAudit(context.Context, core.Ref) (core.GatekeeperAudit, error)
 	CertificateStatus(context.Context, core.Ref) (core.CertificateStatus, error)
 	ResourceMetricsHistory(context.Context, core.HistoryRequest) (core.MetricsHistory, error)
 	ResourceVPA(context.Context, core.Ref) (core.VPAInspection, error)

@@ -1,5 +1,13 @@
 {
   "ui": {
+    "gatekeeper.title": "Gatekeeper constraint 审计",
+    "gatekeeper.load": "加载 constraint 审计",
+    "gatekeeper.notice": "仅明确读取所选的单个集群级 constraint。这是生产者保存的状态，不是新审计。数据时效性和资源当前配置未经验证；报告零违规不代表检查通过。",
+    "gatekeeper.identityNotice": "违规资源仅为描述信息，没有已验证的 UID，也不会解析。Actions 是生产者文本，不是严重性或执行证明。消息可能含敏感数据，分享前请检查。",
+    "gatekeeper.counts": "报告总数：{total} · 返回：{returned} · 显示：{shown}",
+    "gatekeeper.capped": "生产者报告的违规总数大于返回列表。",
+    "gatekeeper.inconsistent": "报告总数与返回列表不一致。",
+    "gatekeeper.reported": "计数与列表一致；审计完整性仍未经验证。",
   "security.policy": "策略报告",
   "security.policyAPI": "策略报告 API",
   "security.includeClusterPolicyReports": "包含整个集群的策略报告",

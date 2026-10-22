@@ -568,8 +568,9 @@ func (s *Service) GetResource(ctx context.Context, ref core.Ref) (*core.Resource
 	if err != nil {
 		return nil, fromProvider(err)
 	}
-	if !fromUI(ctx) && (r.VPAAvailable || r.NetworkPathAvailable || r.CertificateStatusAvailable || r.ReliabilityAvailable || r.MetricsHistoryAvailable) {
+	if !fromUI(ctx) && (r.GatekeeperAuditAvailable || r.VPAAvailable || r.NetworkPathAvailable || r.CertificateStatusAvailable || r.ReliabilityAvailable || r.MetricsHistoryAvailable) {
 		uiCopy := *r
+		uiCopy.GatekeeperAuditAvailable = false
 		uiCopy.NetworkPathAvailable = false
 		uiCopy.CertificateStatusAvailable = false
 		uiCopy.ReliabilityAvailable = false
