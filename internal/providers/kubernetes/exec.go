@@ -420,6 +420,9 @@ func (s *session) PrepareExec(ctx context.Context, ref core.Ref, req provider.Ex
 			return nil, err
 		}
 	}
+	if req.Agent && (p.GetLabels()[krrJobLabel] != "" || strings.HasPrefix(p.GetName(), "ocular-krr-")) {
+		return nil, &provider.Error{Class: provider.ClassForbidden, Message: "application-owned KRR helpers are unavailable to agents"}
+	}
 	if req.Agent && nodeShellHelper(p) {
 		return nil, provider.Said(provider.ClassForbidden, msg("nodeShell.agentDenied"))
 	}

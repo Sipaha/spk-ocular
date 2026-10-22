@@ -11,7 +11,10 @@ import (
 )
 
 func (s *session) CleanupOwnedHelper(ctx context.Context, r core.OwnedHelper, pin func(string) error) (bool, error) {
-	if r.Provider != ProviderID || r.Target != s.conn.target || r.ID == "" || r.NamespaceUID == "" || r.NodeUID == "" {
+	if r.Kind == "krr-job" {
+		return s.cleanupKRRJob(ctx, r, pin)
+	}
+	if r.Kind != "" || r.Provider != ProviderID || r.Target != s.conn.target || r.ID == "" || r.NamespaceUID == "" || r.NodeUID == "" {
 		return false, errors.New("helper recovery identity is incomplete")
 	}
 	ctx, cancel := context.WithCancel(ctx)

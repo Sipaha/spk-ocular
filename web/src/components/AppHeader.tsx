@@ -1,3 +1,4 @@
+import {lazy, Suspense} from 'react'
 import {useLearning} from '../learning/store'
 import {learn} from '../learning/content'
 import { BaselineControl } from '../compare/BaselineControl'
@@ -14,9 +15,12 @@ import { SearchIcon } from './icons'
 import { DownloadsButton } from '../downloads/DownloadsButton'
 import { ConnectionSwitcher } from '../connections/ConnectionSwitcher'
 
+const KrrDialog = lazy(() => import('../krr/KrrDialog'))
+
 /** Connection identity leads the workspace; app utilities stay in a quiet menu. */
 export function AppHeader({target,onHelp,onAbout,client,act,configRef}:{target:Target|null;onHelp:()=>void;onAbout:()=>void;client:Client;act:Actions;configRef:RefObject<ConfigurationActions|null>}){
  const [open,setOpen]=useState(false),button=useRef<HTMLButtonElement>(null),menu=useRef<HTMLElement>(null)
+ const [krrOpen,setKrrOpen]=useState(false)
  const close=()=>{setOpen(false);button.current?.focus()}
  useEffect(()=>{if(open)menu.current?.querySelector<HTMLElement>('button')?.focus()},[open])
  return <header className="app-header">
@@ -36,8 +40,10 @@ export function AppHeader({target,onHelp,onAbout,client,act,configRef}:{target:T
   }}>
    <LanguageMenu client={client} onChanged={close}/>
    <button type="button" className="app-utility-action" onClick={()=>{close();useLearning.getState().open()}}>{learn('library')}</button>
+   <button type="button" className="app-utility-action" onClick={()=>{close();setKrrOpen(true)}}>{t('krr.title')}</button>
    <button type="button" className="app-utility-action about-trigger" aria-label={t('about.title')} onClick={()=>{close();onAbout()}}>{t('about.open')}</button>
    <button type="button" className="app-utility-action" onClick={()=>{close();onHelp()}}>{t('keys.title')}<kbd>?</kbd></button>
   </section></div>,document.body)}
+  {krrOpen&&createPortal(<Suspense fallback={null}><KrrDialog client={client} target={target} onClose={()=>{setKrrOpen(false);button.current?.focus()}}/></Suspense>,document.body)}
  </header>
 }

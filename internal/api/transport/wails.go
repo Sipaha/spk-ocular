@@ -279,3 +279,7 @@ func (w *API) ResourceVPA(ctx context.Context, ref core.Ref) (core.VPAInspection
 func (w *API) GatekeeperAudit(ctx context.Context, ref core.Ref) (core.GatekeeperAudit, error) {
 	return w.a.GatekeeperAudit(api.UIContext(ctx), ref)
 }
+
+func (w *API) KRR(ctx context.Context, req api.KRRRequest) (api.KRRResponse, error) {
+	return w.a.KRR(api.UIContext(ctx), req)
+}

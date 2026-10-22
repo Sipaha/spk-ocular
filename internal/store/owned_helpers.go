@@ -81,3 +81,27 @@ func (s *Store) FinishHelper(ctx context.Context, id, owner string, clean bool, 
 	_, err := s.db.ExecContext(ctx, `UPDATE owned_helpers SET next_try=?+delay_ms, delay_ms=MIN(delay_ms*2,86400000),owner='',lease_until=0 WHERE id=? AND owner=?`, now, id, owner)
 	return err
 }
+
+// HelperIntents exposes bounded non-secret identities for visible recovery status.
+// It includes active leases: callers distinguish them from active in-memory runs.
+func (s *Store) HelperIntents(ctx context.Context) ([]core.OwnedHelper, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT identity_json,uid FROM owned_helpers ORDER BY id LIMIT 256`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []core.OwnedHelper{}
+	for rows.Next() {
+		var data, uid string
+		if err = rows.Scan(&data, &uid); err != nil {
+			return nil, err
+		}
+		var h core.OwnedHelper
+		if err = json.Unmarshal([]byte(data), &h); err != nil {
+			return nil, err
+		}
+		h.UID = uid
+		out = append(out, h)
+	}
+	return out, rows.Err()
+}

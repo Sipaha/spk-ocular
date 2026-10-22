@@ -19,6 +19,7 @@ import (
 )
 
 type API interface {
+	KRR(context.Context, KRRRequest) (KRRResponse, error)
 	DiagnoseResource(context.Context, core.Ref) (core.Diagnosis, error)
 	ResourceNetworkPath(context.Context, core.Ref) (core.NetworkPath, error)
 	GatekeeperAudit(context.Context, core.Ref) (core.GatekeeperAudit, error)

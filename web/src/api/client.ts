@@ -1,3 +1,4 @@
+import type {KrrRequest,KrrResponse} from '../krr/model'
 import type {VPAInspection} from '../vpa/types'
 import type {HistoryRequest,MetricsHistory} from '../metricsHistory/types'
 import type {Reliability} from '../reliability/types'
@@ -37,6 +38,7 @@ export interface Client {
  resourceMetricsHistory(req:HistoryRequest,signal?:AbortSignal):Promise<MetricsHistory>
  resourceVPA(ref:Ref,signal?:AbortSignal):Promise<VPAInspection>
  resourceReliability(ref:Ref,signal?:AbortSignal):Promise<Reliability>
+ krr(req:KrrRequest,signal?:AbortSignal):Promise<KrrResponse>
  gatekeeperAudit(ref:Ref,signal?:AbortSignal):Promise<GatekeeperAudit>
  certificateStatus(ref:Ref,signal?:AbortSignal):Promise<CertificateStatus>
  resourceNetworkPath(ref:Ref,signal?:AbortSignal):Promise<NetworkPath>
@@ -199,6 +201,7 @@ export const httpClient: Client = {
  resourceMetricsHistory:(req,signal)=>post('ResourceMetricsHistory',req,signal),
  resourceVPA:(ref,signal)=>post('ResourceVPA',ref,signal),
  resourceReliability:(ref,signal)=>post('ResourceReliability',ref,signal),
+ krr:(req,signal)=>post('KRR',req,signal),
  gatekeeperAudit:(ref,signal)=>post('GatekeeperAudit',ref,signal),
  certificateStatus:(ref,signal)=>post('CertificateStatus',ref,signal),
  resourceNetworkPath:(ref,signal)=>post('ResourceNetworkPath',ref,signal),
@@ -349,6 +352,7 @@ export const wailsClient: Client = {
  resourceMetricsHistory:(req,signal)=>wcallAbortable(signal,'ResourceMetricsHistory',req),
  resourceVPA:(ref,signal)=>wcallAbortable(signal,'ResourceVPA',ref),
  resourceReliability:(ref,signal)=>wcallAbortable(signal,'ResourceReliability',ref),
+ krr:(req,signal)=>wcallAbortable(signal,'KRR',req),
  gatekeeperAudit:(ref,signal)=>wcallAbortable(signal,'GatekeeperAudit',ref),
  certificateStatus:(ref,signal)=>wcallAbortable(signal,'CertificateStatus',ref),
  resourceNetworkPath:(ref,signal)=>wcallAbortable(signal,'ResourceNetworkPath',ref),
