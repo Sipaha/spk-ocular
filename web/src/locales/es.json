@@ -1,9 +1,11 @@
 {
   "ui": {
   "security.policy": "Informes de políticas",
-  "security.policyAPI": "Informes de políticas con namespace",
+  "security.policyAPI": "API de informes de políticas",
+  "security.includeClusterPolicyReports": "Incluir informes de políticas de todo el clúster",
+  "security.clusterPolicyReportsNotice": "Lee ClusterPolicyReport o ClusterReport de la API elegida en todo el clúster, independientemente de los namespaces seleccionados. Desactivado por defecto; cambiar la API restablece esta opción.",
   "security.policyOff": "Desactivado",
-  "security.policyNotice": "Una API con namespace por captura. Sin alternativa automática, combinación ni lectura de políticas de todo el clúster.",
+  "security.policyNotice": "Una API para los namespaces seleccionados. Sin alternativas ni fusiones; la lectura de políticas de todo el clúster se activa por separado.",
   "security.policyProducer": "Productor declarado (versión desconocida)",
   "security.policyRule": "Política / regla",
   "security.policyScored": "Indicador scored declarado",

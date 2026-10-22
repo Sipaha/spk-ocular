@@ -1,9 +1,11 @@
 {
   "ui": {
   "security.policy": "策略报告",
-  "security.policyAPI": "命名空间策略报告",
+  "security.policyAPI": "策略报告 API",
+  "security.includeClusterPolicyReports": "包含整个集群的策略报告",
+  "security.clusterPolicyReportsNotice": "读取所选 API 的 ClusterPolicyReport 或 ClusterReport，范围为整个集群，不受所选 namespace 限制。默认关闭；更改 API 会清除此选项。",
   "security.policyOff": "关闭",
-  "security.policyNotice": "每次快照仅使用一个命名空间 API。不自动回退、合并或读取集群级策略报告。",
+  "security.policyNotice": "为选定的 namespace 使用一个 API。不回退、不合并；集群级策略读取需单独启用。",
   "security.policyProducer": "报告的生成方（版本未知）",
   "security.policyRule": "策略 / 规则",
   "security.policyScored": "报告的 scored 标志",

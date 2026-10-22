@@ -6,7 +6,7 @@ import {start,stop,freePort} from './restartApp'
 import {auditServer} from './security-audit-fixture'
 import {languages,languageNames} from '../../web/src/languages'
 const policyPath=(path:string)=>/\/(wgpolicyk8s.io|openreports.io)\/.+\/(policyreports|reports)(?:\/|$)/.test(path)
-const chooseAPI=async(page:Page,label:string)=>{await page.getByRole('button',{name:'Namespaced policy reports',exact:true}).click();await page.getByRole('option',{name:label,exact:true}).click()}
+const chooseAPI=async(page:Page,label:string)=>{await page.getByRole('button',{name:'Policy report API',exact:true}).click();await page.getByRole('option',{name:label,exact:true}).click()}
 async function launch(browser:Browser){
  mkdirSync(scratchRoot,{recursive:true});const root=mkdtempSync(join(scratchRoot,'policy-audit-')),e=env(root),fixture=await auditServer(false,true)
  writeAtomic(e.one,kubeconfig('policy-audit','policy-audit').replace(/https:\/\/[^"\s]+/g,`http://127.0.0.1:${fixture.port}`).replace(/ns-policy-audit/g,'blue'))
@@ -24,7 +24,7 @@ test('policy reports use one explicit discovered API, preserve verdicts and guar
  const f=await launch(browser),{page,workspace,fixture}=f
  try{
  expect(fixture.requests.filter(r=>policyPath(r.path))).toHaveLength(0)
- await expect(page.getByRole('button',{name:'Namespaced policy reports',exact:true})).toContainText('Off')
+ await expect(page.getByRole('button',{name:'Policy report API',exact:true})).toContainText('Off')
  await chooseAPI(page,'wgpolicyk8s.io · PolicyReport');await expect(workspace.locator('[data-row-id]')).toHaveCount(12)
  const first=fixture.requests.filter(r=>policyPath(r.path));expect(first).toHaveLength(1);expect(first[0].path).toBe('/apis/wgpolicyk8s.io/v1beta1/namespaces/blue/policyreports');expect(first[0].query).toEqual({limit:'50'})
  await workspace.getByRole('button',{name:'Source',exact:true}).click();await page.getByRole('option',{name:'Policy reports',exact:true}).click();await expect(workspace.locator('[data-row-id]')).toHaveCount(6)
@@ -45,7 +45,7 @@ test('policy reports use one explicit discovered API, preserve verdicts and guar
  fixture.setMode('policy-hold');const before=fixture.requests.length;await workspace.getByRole('button',{name:'Refresh',exact:true}).click();await expect.poll(()=>fixture.requests.slice(before).some(r=>r.path.endsWith('/reports')&&r.query.limit==='50')).toBe(true);await workspace.getByRole('button',{name:'Cancel',exact:true}).click();await expect.poll(()=>fixture.policyCancellationDurations.length).toBe(1);expect(fixture.policyCancellationDurations[0]).toBeLessThan(20000)
  fixture.setMode('normal');await chooseAPI(page,'Off');await expect(workspace.getByRole('button',{name:'Refresh',exact:true})).toBeEnabled();const off=fixture.requests.length;await workspace.getByRole('button',{name:'Refresh',exact:true}).focus();await page.keyboard.press('Enter');await expect(workspace.getByRole('button',{name:'Refresh',exact:true})).toBeEnabled();expect(fixture.requests.slice(off).filter(r=>policyPath(r.path)&&r.query.limit==='50')).toHaveLength(0)
  await chooseAPI(page,'openreports.io · Report');await expect(workspace.getByRole('button',{name:'Open resource · Report/policy-open',exact:true}).first()).toBeVisible();const reconnect=fixture.requests.filter(r=>policyPath(r.path)&&r.query.limit==='50').length
- await (await connectionChoice(page,/^policy-audit\b/)).click({button:'right'});await page.getByRole('menuitem',{name:'Disconnect',exact:true}).click();await page.getByRole('button',{name:'Connect',exact:true}).click();await expect(page.getByRole('button',{name:'Namespaced policy reports',exact:true})).toContainText('Off');await expect(workspace.getByRole('button',{name:'Refresh',exact:true})).toBeEnabled();expect(fixture.requests.filter(r=>policyPath(r.path)&&r.query.limit==='50')).toHaveLength(reconnect)
+ await (await connectionChoice(page,/^policy-audit\b/)).click({button:'right'});await page.getByRole('menuitem',{name:'Disconnect',exact:true}).click();await page.getByRole('button',{name:'Connect',exact:true}).click();await expect(page.getByRole('button',{name:'Policy report API',exact:true})).toContainText('Off');await expect(workspace.getByRole('button',{name:'Refresh',exact:true})).toBeEnabled();expect(fixture.requests.filter(r=>policyPath(r.path)&&r.query.limit==='50')).toHaveLength(reconnect)
  expect(fixture.requests.every(r=>r.method==='GET')).toBe(true);expect(fixture.requests.filter(r=>/\/(secrets|configmaps|nodes|clusterpolicyreports|clusterreports|clusterconfigauditreports|clusterrbacassessmentreports)(?:\/|$)/.test(r.path))).toHaveLength(0)
  }finally{writeFileSync(test.info().outputPath('policy-wire.json'),JSON.stringify({requests:fixture.requests,cancelMilliseconds:fixture.policyCancellationDurations},null,2));await f.close()}
 })

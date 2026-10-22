@@ -3,12 +3,13 @@ package core
 // SecurityOptions controls explicit additional report acquisition. Namespace
 // selection alone never opts into cluster-scoped audit reports.
 type SecurityOptions struct {
-	IncludeClusterReports bool
-	PolicyReportAPI       string
+	IncludeClusterReports       bool
+	IncludeClusterPolicyReports bool
+	PolicyReportAPI             string
 }
 
 func (o SecurityOptions) Valid() bool {
-	return o.PolicyReportAPI == "" || o.PolicyReportAPI == "wgpolicy" || o.PolicyReportAPI == "openreports"
+	return (o.PolicyReportAPI == "" || o.PolicyReportAPI == "wgpolicy" || o.PolicyReportAPI == "openreports") && (!o.IncludeClusterPolicyReports || o.PolicyReportAPI != "")
 }
 
 // SecuritySnapshot contains declarations and scanner reports, not exploitability

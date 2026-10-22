@@ -1,9 +1,11 @@
 {
   "ui": {
   "security.policy": "Richtlinienberichte",
-  "security.policyAPI": "Namespaced-Richtlinienberichte",
+  "security.policyAPI": "API für Richtlinienberichte",
+  "security.includeClusterPolicyReports": "Clusterweite Richtlinienberichte einschließen",
+  "security.clusterPolicyReportsNotice": "Liest ClusterPolicyReport oder ClusterReport der gewählten API im gesamten Cluster, unabhängig von den ausgewählten Namespaces. Standardmäßig aus; ein API-Wechsel setzt diese Auswahl zurück.",
   "security.policyOff": "Aus",
-  "security.policyNotice": "Eine Namespace-API pro Momentaufnahme. Kein Fallback, Zusammenführen oder clusterweites Lesen von Richtlinien.",
+  "security.policyNotice": "Eine API für ausgewählte Namespaces. Kein Fallback oder Zusammenführen; clusterweite Richtlinienberichte werden separat aktiviert.",
   "security.policyProducer": "Gemeldeter Erzeuger (Version unbekannt)",
   "security.policyRule": "Richtlinie / Regel",
   "security.policyScored": "Gemeldetes scored-Flag",

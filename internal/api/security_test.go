@@ -137,3 +137,24 @@ func TestSecurityPolicySelectionValidatedBeforeSessionAndDeliveredOnlyToUI(t *te
 	}
 	require.Equal(t, []core.SecurityOptions{{PolicyReportAPI: "wgpolicy"}, {PolicyReportAPI: "openreports"}}, seen)
 }
+
+func TestSecurityGlobalPolicyOptionRequiresAPIAndUIBeforeSession(t *testing.T) {
+	seen := []core.SecurityOptions{}
+	p := &securityFenceProvider{argoTestProvider: &argoTestProvider{openable: newOpenable("a")}, onRead: func(_ context.Context, o core.SecurityOptions) { seen = append(seen, o) }}
+	s, _ := newService(t, p)
+	req := SecurityRequest{Provider: "kubernetes", Target: "a", Scope: core.ScopeSel{Mode: core.ScopeOne, Name: "blue"}, IncludeClusterPolicyReports: true}
+	_, err := s.ClusterSecurity(UIContext(t.Context()), req)
+	require.True(t, IsCoded(err, CodeBadRequest))
+	require.Empty(t, seen)
+	_, err = s.ConnectTarget(UIContext(t.Context()), "kubernetes", "a")
+	require.NoError(t, err)
+	awaitConnection(t, s, "connected")
+	for _, api := range []string{"wgpolicy", "openreports"} {
+		req.PolicyReportAPI = api
+		_, err = s.ClusterSecurity(t.Context(), req)
+		require.Error(t, err)
+		_, err = s.ClusterSecurity(UIContext(t.Context()), req)
+		require.NoError(t, err)
+	}
+	require.Equal(t, []core.SecurityOptions{{PolicyReportAPI: "wgpolicy", IncludeClusterPolicyReports: true}, {PolicyReportAPI: "openreports", IncludeClusterPolicyReports: true}}, seen)
+}

@@ -53,7 +53,7 @@ func TestSecurityClusterAuditRequiresExplicitOptInAndIsNotNamespaceEvidence(t *t
 	counts := map[string]int{}
 	for _, a := range client.Actions() {
 		require.Equal(t, "list", a.GetVerb())
-		require.NotContains(t, []string{"secrets", "configmaps", "nodes", "policyreports"}, a.GetResource().Resource)
+		require.NotContains(t, []string{"secrets", "configmaps", "nodes", "policyreports", "reports", "clusterpolicyreports", "clusterreports"}, a.GetResource().Resource)
 		if strings.HasPrefix(a.GetResource().Resource, "cluster") && a.GetResource().Resource != "clusterroles" {
 			require.Empty(t, a.GetNamespace())
 			counts[a.GetResource().Resource]++
@@ -68,11 +68,16 @@ func TestSecurityClusterAuditRequiresExplicitOptInAndIsNotNamespaceEvidence(t *t
 		require.Zero(t, f.ScannedAt)
 	}
 	for _, source := range out.AuditSources {
-		if strings.HasPrefix(source.Kind, "Cluster") {
+		switch source.Kind {
+		case "ClusterConfigAuditReport", "ClusterRbacAssessmentReport":
 			require.True(t, source.ClusterScoped)
 			require.Equal(t, "available", source.State)
 			require.Equal(t, 1, source.Reports)
-		} else {
+		case "ClusterPolicyReport", "ClusterReport":
+			require.True(t, source.ClusterScoped)
+			require.Equal(t, "not-requested", source.State)
+			require.Zero(t, source.Reports)
+		default:
 			require.False(t, source.ClusterScoped)
 		}
 	}

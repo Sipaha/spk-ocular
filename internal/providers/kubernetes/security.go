@@ -61,6 +61,8 @@ var securitySources = []securitySource{
 	{schema.GroupVersionResource{Group: "aquasecurity.github.io", Version: "v1alpha1", Resource: "clusterrbacassessmentreports"}, "ClusterRbacAssessmentReport", true},
 	{schema.GroupVersionResource{Group: "wgpolicyk8s.io", Version: "v1alpha2", Resource: "policyreports"}, "PolicyReport", false},
 	{schema.GroupVersionResource{Group: "openreports.io", Version: "v1alpha1", Resource: "reports"}, "Report", false},
+	{schema.GroupVersionResource{Group: "wgpolicyk8s.io", Version: "v1alpha2", Resource: "clusterpolicyreports"}, "ClusterPolicyReport", true},
+	{schema.GroupVersionResource{Group: "openreports.io", Version: "v1alpha1", Resource: "clusterreports"}, "ClusterReport", true},
 	{schema.GroupVersionResource{Group: "aquasecurity.github.io", Version: "v1alpha1", Resource: "configauditreports"}, "ConfigAuditReport", false},
 	{schema.GroupVersionResource{Group: "aquasecurity.github.io", Version: "v1alpha1", Resource: "rbacassessmentreports"}, "RbacAssessmentReport", false},
 }
@@ -121,7 +123,7 @@ func (s *session) Security(parent context.Context, scope core.ScopeSel, options 
 			if source.gvr.Group == "openreports.io" {
 				selection = "openreports"
 			}
-			if options.PolicyReportAPI != selection {
+			if options.PolicyReportAPI != selection || (source.global && !options.IncludeClusterPolicyReports) {
 				continue
 			}
 			var state string
@@ -265,7 +267,7 @@ func (s *session) Security(parent context.Context, scope core.ScopeSel, options 
 						if !s.securityAuditReport(ref, source, u, emit, &out.Truncated) || len(out.Findings) >= securityFindingLimit {
 							complete = false
 						}
-					case "PolicyReport", "Report":
+					case "PolicyReport", "Report", "ClusterPolicyReport", "ClusterReport":
 						audit.reports++
 						if !s.securityPolicyReport(ref, source, u, emit, &out.Truncated) || len(out.Findings) >= securityFindingLimit {
 							complete = false

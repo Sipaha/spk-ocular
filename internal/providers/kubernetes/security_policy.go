@@ -17,7 +17,7 @@ var securityPolicyResults = []string{"pass", "fail", "warn", "error", "skip"}
 // lose their source value at that boundary and must stay unknown/incomplete.
 const securityPolicyMaxCount = 1<<53 - 1
 
-// Only a discovered, supported namespaced route is admitted. Choosing one API
+// Only a discovered route with the exact supported scope is admitted. Choosing one API
 // never probes the other group or guesses equivalence between report objects.
 func (s *session) securityPolicySource(source securitySource) (securitySource, string) {
 	snap := s.cat.snap()
@@ -30,7 +30,7 @@ func (s *session) securityPolicySource(source securitySource) (securitySource, s
 		}
 		source.gvr = d.gvr
 		supported := d.gvr.Group == "wgpolicyk8s.io" && (d.gvr.Version == "v1alpha2" || d.gvr.Version == "v1beta1") || d.gvr.Group == "openreports.io" && d.gvr.Version == "v1alpha1"
-		if !supported || !d.namespaced || d.kind != source.kind || !slices.Contains(d.verbs, "list") {
+		if !supported || d.namespaced == source.global || d.kind != source.kind || !slices.Contains(d.verbs, "list") {
 			return source, "unsupported"
 		}
 		return source, ""
@@ -39,7 +39,7 @@ func (s *session) securityPolicySource(source securitySource) (securitySource, s
 }
 
 func (s *session) securityPolicyReport(ref core.Ref, source securitySource, u *unstructured.Unstructured, emit func(core.SecurityFinding), truncated *bool) bool {
-	if u.GetAPIVersion() != source.gvr.GroupVersion().String() || u.GetKind() != source.kind || u.GetNamespace() == "" || len(u.GetNamespace()) > 253 || u.GetName() == "" || len(u.GetName()) > 253 || u.GetUID() == "" || len(u.GetUID()) > 256 || u.GetResourceVersion() == "" || len(u.GetResourceVersion()) > 256 {
+	if u.GetAPIVersion() != source.gvr.GroupVersion().String() || u.GetKind() != source.kind || (!source.global && (u.GetNamespace() == "" || len(u.GetNamespace()) > 253)) || (source.global && u.GetNamespace() != "") || u.GetName() == "" || len(u.GetName()) > 253 || u.GetUID() == "" || len(u.GetUID()) > 256 || u.GetResourceVersion() == "" || len(u.GetResourceVersion()) > 256 {
 		return false
 	}
 	complete := true

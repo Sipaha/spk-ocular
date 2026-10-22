@@ -9,11 +9,12 @@ import (
 )
 
 type SecurityRequest struct {
-	IncludeClusterReports bool          `json:"includeClusterReports"`
-	PolicyReportAPI       string        `json:"policyReportAPI"`
-	Provider              string        `json:"provider"`
-	Target                string        `json:"target"`
-	Scope                 core.ScopeSel `json:"scope"`
+	IncludeClusterReports       bool          `json:"includeClusterReports"`
+	IncludeClusterPolicyReports bool          `json:"includeClusterPolicyReports"`
+	PolicyReportAPI             string        `json:"policyReportAPI"`
+	Provider                    string        `json:"provider"`
+	Target                      string        `json:"target"`
+	Scope                       core.ScopeSel `json:"scope"`
 }
 
 func securityKind() core.KindDescriptor {
@@ -27,7 +28,7 @@ func (s *Service) ClusterSecurity(ctx context.Context, req SecurityRequest) (cor
 	if !req.Scope.Valid() || req.Scope.Mode == core.ScopeNone {
 		return core.SecuritySnapshot{}, coded(CodeBadRequest, errors.New("invalid namespace selection"))
 	}
-	options := core.SecurityOptions{IncludeClusterReports: req.IncludeClusterReports, PolicyReportAPI: req.PolicyReportAPI}
+	options := core.SecurityOptions{IncludeClusterReports: req.IncludeClusterReports, PolicyReportAPI: req.PolicyReportAPI, IncludeClusterPolicyReports: req.IncludeClusterPolicyReports}
 	if !options.Valid() {
 		return core.SecuritySnapshot{}, coded(CodeBadRequest, errors.New("unsupported policy report API selection"))
 	}

@@ -47,15 +47,16 @@ export default function SecurityWorkspace({client,target,scope,scopePicker,drawe
  const sameAdmission=clusterSelection.client===client&&clusterSelection.key===admissionKey
  if(!sameAdmission)setClusterSelection({client,key:admissionKey,enabled:false})
  const includeClusterReports=sameAdmission&&clusterSelection.enabled
- const [policySelection,setPolicySelection]=useState({client,key:admissionKey,api:''})
+ const [policySelection,setPolicySelection]=useState({client,key:admissionKey,api:'',includeCluster:false})
  const samePolicyAdmission=policySelection.client===client&&policySelection.key===admissionKey
- if(!samePolicyAdmission)setPolicySelection({client,key:admissionKey,api:''})
+ if(!samePolicyAdmission)setPolicySelection({client,key:admissionKey,api:'',includeCluster:false})
  const policyReportAPI=samePolicyAdmission?policySelection.api:''
+ const includeClusterPolicyReports=samePolicyAdmission&&policySelection.includeCluster
  const scopeKey=JSON.stringify(scope)
- const key=target.provider+'/'+target.id+'/'+scopeKey+'/'+includeClusterReports+'/'+policyReportAPI
+ const key=target.provider+'/'+target.id+'/'+scopeKey+'/'+includeClusterReports+'/'+policyReportAPI+'/'+includeClusterPolicyReports
  const date=(at:number)=>at>0?localDateTime(at):t('security.unknown')
  useEffect(()=>{let live=true;client.appInfo().then(info=>{if(live)setMode(info.mode)},()=>{});return()=>{live=false}},[client])
- const load=useCallback((signal:AbortSignal)=>client.clusterSecurity({provider:target.provider,target:target.id,scope:JSON.parse(scopeKey),includeClusterReports,policyReportAPI},signal),[client,target.provider,target.id,scopeKey,includeClusterReports,policyReportAPI])
+ const load=useCallback((signal:AbortSignal)=>client.clusterSecurity({provider:target.provider,target:target.id,scope:JSON.parse(scopeKey),includeClusterReports,includeClusterPolicyReports,policyReportAPI},signal),[client,target.provider,target.id,scopeKey,includeClusterReports,includeClusterPolicyReports,policyReportAPI])
  const request=useSnapshotRequest(load,key)
  const snapshot=request.value,busy=request.busy,error=request.error?errorDetail(request.error):''
  const rows=filterFindings(snapshot?.findings??[],query,category,severity,result)
@@ -119,8 +120,10 @@ export default function SecurityWorkspace({client,target,scope,scopePicker,drawe
   {target.provider==='kubernetes'&&<div className="shrink-0 border-b border-line px-3 py-2 text-xs">
    <label className="flex items-center gap-2"><input type="checkbox" checked={includeClusterReports} onChange={event=>{const enabled=event.currentTarget.checked;mayLeave(()=>{setSubject(null);setSelectedID('');setClusterSelection({client,key:admissionKey,enabled})})}}/>{t('security.includeClusterReports')}</label>
    <p className="mt-1 text-fg-muted">{t('security.clusterReportsNotice')}</p>
-   <div className="mt-2 flex items-center gap-2"><span>{t('security.policyAPI')}</span><Select label={t('security.policyAPI')} value={policyReportAPI} options={[{value:'',label:t('security.policyOff')},{value:'wgpolicy',label:'wgpolicyk8s.io · PolicyReport'},{value:'openreports',label:'openreports.io · Report'}]} onChange={api=>mayLeave(()=>{setSubject(null);setSelectedID('');setPolicySelection({client,key:admissionKey,api})})}/></div>
+   <div className="mt-2 flex items-center gap-2"><span>{t('security.policyAPI')}</span><Select label={t('security.policyAPI')} value={policyReportAPI} options={[{value:'',label:t('security.policyOff')},{value:'wgpolicy',label:'wgpolicyk8s.io · PolicyReport'},{value:'openreports',label:'openreports.io · Report'}]} onChange={api=>mayLeave(()=>{setSubject(null);setSelectedID('');setPolicySelection({client,key:admissionKey,api,includeCluster:false})})}/></div>
    <p className="mt-1 text-fg-muted">{t('security.policyNotice')}</p>
+   <label className="mt-2 flex items-center gap-2"><input type="checkbox" disabled={!policyReportAPI} checked={includeClusterPolicyReports} onChange={event=>{const enabled=event.currentTarget.checked;mayLeave(()=>{setSubject(null);setSelectedID('');setPolicySelection({client,key:admissionKey,api:policyReportAPI,includeCluster:enabled})})}}/>{t('security.includeClusterPolicyReports')}</label>
+   <p className="mt-1 text-fg-muted">{t('security.clusterPolicyReportsNotice')}</p>
   </div>}
   <SnapshotBoundary request={request}>
   <div className="relative flex min-h-0 min-w-0 flex-1">

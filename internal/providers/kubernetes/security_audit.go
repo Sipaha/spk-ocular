@@ -13,7 +13,9 @@ func (s securitySource) audit() bool {
 	return s.kind == "ConfigAuditReport" || s.kind == "RbacAssessmentReport" || s.kind == "ClusterConfigAuditReport" || s.kind == "ClusterRbacAssessmentReport"
 }
 
-func (s securitySource) policy() bool   { return s.kind == "PolicyReport" || s.kind == "Report" }
+func (s securitySource) policy() bool {
+	return s.kind == "PolicyReport" || s.kind == "Report" || s.kind == "ClusterPolicyReport" || s.kind == "ClusterReport"
+}
 func (s securitySource) external() bool { return s.audit() || s.policy() }
 
 type securityAuditCoverage struct {

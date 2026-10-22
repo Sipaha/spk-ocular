@@ -1,9 +1,11 @@
 {
   "ui": {
   "security.policy": "ポリシーレポート",
-  "security.policyAPI": "Namespace 内のポリシーレポート",
+  "security.policyAPI": "ポリシーレポート API",
+  "security.includeClusterPolicyReports": "クラスタ全体のポリシーレポートを含める",
+  "security.clusterPolicyReportsNotice": "選択した API の ClusterPolicyReport または ClusterReport を、選択した namespace に関係なくクラスタ全体から読み取ります。既定では無効です。API を変更するとこの選択は解除されます。",
   "security.policyOff": "無効",
-  "security.policyNotice": "スナップショットごとに単一の Namespace API を使用。自動切替、統合、クラスター全体のポリシー読み取りは行いません。",
+  "security.policyNotice": "選択した namespace に一つの API を使用します。フォールバックや統合は行いません。クラスタ全体のポリシー読み取りは別途有効にします。",
   "security.policyProducer": "報告された生成元（バージョン不明）",
   "security.policyRule": "ポリシー / ルール",
   "security.policyScored": "報告された scored フラグ",
