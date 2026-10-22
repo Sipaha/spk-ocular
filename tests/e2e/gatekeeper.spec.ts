@@ -15,10 +15,16 @@ async function launch(browser:Browser){
   const response=await page.request.post(url+'/api/Configurations',{headers:{Authorization:`Bearer ${token}`,Origin:url},data:{command:'import',paths:[e.one]}});expect(response.ok()).toBe(true)
   await page.reload();await selectConnection(page,/^gatekeeper\b/);await connectSelected(page)
   const nav=page.getByRole('navigation',{name:'resources'});await nav.getByRole('textbox',{name:'Filter resources'}).fill('K8sRequiredLabels');await nav.getByRole('button',{name:'K8sRequiredLabels',exact:true}).click()
-  let detailReads=0;page.on('response',response=>{if(response.url().endsWith('/api/GetResource')&&response.request().postDataJSON()?.name==='required-labels')detailReads++})
+  const detailReads=new Map<string,number>()
+  page.on('response',response=>{
+   if(!response.url().endsWith('/api/GetResource')||!response.ok())return
+   const name=response.request().postDataJSON()?.name as string
+   void response.finished().then(error=>{if(!error)detailReads.set(name,(detailReads.get(name)??0)+1)}).catch(()=>{})
+  })
+  const detailsReady=async(name:string)=>{await expect.poll(()=>detailReads.get(name)??0).toBeGreaterThanOrEqual(2)}
   await page.getByRole('grid',{name:'resources'}).getByRole('gridcell',{name:'required-labels',exact:true}).click()
-  const drawer=page.locator('[data-resource-drawer]'),panel=drawer.locator('[data-gatekeeper-audit]');await expect(panel).toBeVisible();await expect.poll(()=>detailReads).toBeGreaterThanOrEqual(2)
-  return {page,fixture,drawer,panel,calls,close:async()=>{await page.close();await stop(app);await fixture.close()}}
+  const drawer=page.locator('[data-resource-drawer]'),panel=drawer.locator('[data-gatekeeper-audit]');await expect(panel).toBeVisible();await detailsReady('required-labels')
+  return {page,fixture,drawer,panel,calls,detailsReady,close:async()=>{await page.close();await stop(app);await fixture.close()}}
  }catch(error){await page.close();await stop(app);await fixture.close();throw error}
 }
 test('selected constraint audit is explicit, exact-source, capped, read-only and cancellable',async({browser})=>{
@@ -38,10 +44,10 @@ test('selected constraint audit is explicit, exact-source, capped, read-only and
  }finally{writeFileSync(test.info().outputPath('gatekeeper-wire.json'),JSON.stringify({requests:fixture.requests,cancellations:fixture.cancellations,calls},null,2));await f.close()}
 })
 test('selected constraint audit keeps zero, missing, inconsistent and bounded evidence distinct and resets object consent',async({browser})=>{
- const f=await launch(browser),{page,panel,drawer,calls}=f
+ const f=await launch(browser),{page,panel,drawer,calls,detailsReady}=f
  try{
   for(const [name,text] of [['reported-zero','Reported total: 0 · Returned: 0 · Displayed: 0'],['missing-audit','Reported total: Unknown'],['inconsistent','Reported total and returned list are inconsistent'],['large-projection','Returned: 140 · Displayed: 128']]){
-   const before=calls.length;await drawer.getByRole('button',{name:'Close',exact:true}).click();await page.getByRole('grid',{name:'resources'}).getByRole('gridcell',{name,exact:true}).click();await expect(drawer.getByRole('heading',{name,exact:true})).toBeVisible();await expect(panel.getByRole('button',{name:'Load constraint audit'})).toBeVisible();expect(calls).toHaveLength(before);await expect(panel).not.toContainText('Reported total:');await panel.getByRole('button',{name:'Load constraint audit'}).click();await expect(panel).toContainText(text);await expect(panel).toContainText('zero reported violations does not prove a pass')
+   const before=calls.length;await drawer.getByRole('button',{name:'Close',exact:true}).click();await page.getByRole('grid',{name:'resources'}).getByRole('gridcell',{name,exact:true}).click();await expect(drawer.getByRole('heading',{name,exact:true})).toBeVisible();await detailsReady(name);await expect(panel.getByRole('button',{name:'Load constraint audit'})).toBeVisible();expect(calls).toHaveLength(before);await expect(panel).not.toContainText('Reported total:');await panel.getByRole('button',{name:'Load constraint audit'}).click();await expect(panel).toContainText(text);await expect(panel).toContainText('zero reported violations does not prove a pass')
   }
  }finally{await f.close()}
 })

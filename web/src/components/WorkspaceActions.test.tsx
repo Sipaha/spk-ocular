@@ -15,8 +15,8 @@ const scale: ActionDescriptor = { id: 'scale', title: 'Scale', param: { kind: 'c
 const pods: KindDescriptor = { ...podsKind, logs: true, actions: [del] }
 const nodes: KindDescriptor = { id: 'nodes', title: 'Nodes', group: 'Cluster', scoped: false, columns: [{ id: 'name', title: 'Name', type: 'text' }], actions: [restart, scale] }
 
-async function openProd() {
-  const f = fakeClient([k8s('prod')])
+async function openProd(configRev?:string) {
+  const f = fakeClient([k8s('prod',configRev?{configRev}:{})])
   f.state.view.selected = { provider: 'kubernetes', id: 'prod' }
   f.state.rows = [{ ...podRow('api-1', 'web'), rev: '1' }, { ...podRow('api-2', 'web'), rev: '1' }]
   f.client.listKinds = vi.fn(async () => kindsView([pods, nodes]))
@@ -69,7 +69,7 @@ describe('actions in the workspace', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Close' }))
     fireEvent.contextMenu(within(grid).getByText('api-2'))
     const menu = screen.getByRole('menu', { name: 'Row actions' })
-    expect(within(menu).getAllByRole('menuitem').map((m) => m.textContent)).toEqual(['Details', 'Logs', 'Delete'])
+    expect(within(menu).getAllByRole('menuitem').map((m) => m.textContent)).toEqual(['Details', 'Logs', 'Add to composed logs', 'Delete'])
     expect(within(menu).getByRole('menuitem', { name: 'Delete' })).toHaveClass('text-danger')
     await userEvent.click(within(menu).getByRole('menuitem', { name: 'Delete' }))
     expect(f.client.prepareAction).toHaveBeenCalledWith(expect.objectContaining({ name: 'api-2', uid: 'uid-web-api-2' }), 'delete', {})
@@ -104,6 +104,8 @@ describe('actions in the workspace', () => {
     const menu = screen.getByRole('menu', { name: 'Row actions' })
     expect(within(menu).getByRole('menuitem', { name: 'Details' })).toHaveFocus()
     await userEvent.keyboard('{ArrowDown}{ArrowDown}')
+    expect(within(menu).getByRole('menuitem', { name: 'Add to composed logs' })).toHaveFocus()
+    await userEvent.keyboard('{ArrowDown}')
     expect(within(menu).getByRole('menuitem', { name: 'Delete' })).toHaveFocus()
     // Enter held: the first press chooses, the repeats reach the dialog.
     await userEvent.keyboard('{Enter}')
@@ -202,15 +204,22 @@ describe('actions on marked rows', () => {
   }
 
   it('marked rows get a bar: how many, their common actions, unmark', async () => {
-    const { f, grid } = await openProd()
+    const { f, grid } = await openProd('composed-fixture-rev')
     expect(screen.queryByRole('toolbar', { name: 'Marked' })).toBeNull()
     await mark(grid, 'api-1')
     await mark(grid, 'api-2')
     expect(bar()).toHaveTextContent('Marked: 2 of 2')
     await userEvent.click(within(bar()).getByRole('button', { name: 'Actions' }))
     const menu = screen.getByRole('menu', { name: 'Actions on the marked' })
-    expect(within(menu).getAllByRole('menuitem').map((m) => m.textContent)).toEqual(['Delete', 'Unmark'])
-    await userEvent.click(within(menu).getByRole('menuitem', { name: 'Delete' }))
+    expect(within(menu).getAllByRole('menuitem').map((m) => m.textContent)).toEqual(['Delete', 'Add to composed logs', 'Unmark'])
+    await userEvent.click(within(menu).getByRole('menuitem', { name: 'Add to composed logs' }))
+    expect(screen.getByRole('region', { name: 'Composed logs' })).toHaveTextContent('Sources: 2/8')
+    expect(f.client.openLogStream).not.toHaveBeenCalled()
+    expect(f.client.openComposedLogStream).not.toHaveBeenCalled()
+    expect(f.client.logInfo).not.toHaveBeenCalled()
+    await userEvent.click(within(bar()).getByRole('button', { name: 'Actions' }))
+    const deleteMenu = screen.getByRole('menu', { name: 'Actions on the marked' })
+    await userEvent.click(within(deleteMenu).getByRole('menuitem', { name: 'Delete' }))
     const dialog = await screen.findByRole('dialog', { name: 'Delete 2 objects' })
     await within(dialog).findByRole('button', { name: 'Delete 2' })
     expect(f.client.prepareAction).toHaveBeenCalledWith(expect.objectContaining({ name: 'api-1' }), 'delete', {})

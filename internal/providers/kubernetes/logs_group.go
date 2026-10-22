@@ -61,22 +61,29 @@ func (l *lockedSink) Ready() error {
 	return l.sink.Ready()
 }
 
+type logMembership interface {
+	snapshot() ([]memberPod, bool, string, <-chan struct{})
+}
+
 // logGroup streams several container streams as one: a workload's pods,
 // or all containers of a pod.
 type logGroup struct {
-	s       *session
-	ns      string
-	q       provider.LogQuery
-	sink    *lockedSink
-	tr      *groupTracker
-	channel func(m memberPod) []string
-	onePod  bool // all containers of one pod (not a workload)
+	s           *session
+	fetchMember func(memberPod) logFetcher
+	ns          string
+	q           provider.LogQuery
+	sink        *lockedSink
+	tr          logMembership
+	channel     func(m memberPod) []string
+	onePod      bool // all containers of one pod (not a workload)
 
 	nextID   int
 	active   map[string]*groupSrc
 	finished map[string]bool
 	limited  string // the last "showing N of K" message
 	preview  *provider.LogPreview
+	composed bool
+	coverage []provider.LogState
 	done     chan string
 }
 
@@ -227,14 +234,25 @@ func (g *logGroup) admit(late bool) ([]*groupSrc, <-chan struct{}, error) {
 		limit = 1000
 	}
 	members, _, blind, changed := g.tr.snapshot()
+	if tr, ok := g.tr.(interface{ coverage() []provider.LogState }); ok {
+		states := tr.coverage()
+		for i, state := range states {
+			if state.State != "" && (i >= len(g.coverage) || g.coverage[i] != state) {
+				if err := g.sink.State(i+1, state); err != nil {
+					return nil, nil, err
+				}
+			}
+		}
+		g.coverage = states
+	}
 	// A finished source stays finished only while its pod does: the key of
 	// a pod that left the inventory is forgotten (no growth over rollouts).
 	present := map[string]bool{}
 	for _, m := range members {
-		present[m.uid] = true
+		present[g.memberKey(m)] = true
 	}
 	for key := range g.finished {
-		if uid, _, _ := strings.Cut(key, "/"); !present[uid] {
+		if at := strings.LastIndex(key, "/"); at >= 0 && !present[key[:at]] {
 			delete(g.finished, key)
 		}
 	}
@@ -242,7 +260,7 @@ func (g *logGroup) admit(late bool) ([]*groupSrc, <-chan struct{}, error) {
 	total := 0
 	for _, m := range members {
 		for _, ctr := range g.channel(m) {
-			key := m.uid + "/" + ctr
+			key := g.memberKey(m) + "/" + ctr
 			if g.finished[key] {
 				continue
 			}
@@ -252,9 +270,16 @@ func (g *logGroup) admit(late bool) ([]*groupSrc, <-chan struct{}, error) {
 			}
 			g.nextID++
 			x := &groupSrc{key: key, pod: m, ctr: ctr}
-			x.src = newPodSource(g.nextID, g.ns, m.name, m.uid, ctr, g.s.logs, m.box, g.sink, g.q)
+			x.src = newPodSource(g.nextID, g.memberNamespace(m), m.name, m.uid, ctr, g.s.logs, m.box, g.sink, g.q)
+			if g.fetchMember != nil {
+				x.src.fetch = g.fetchMember(m)
+			}
 			x.src.slots, x.src.late = g.s.slots, late
-			if err := g.sink.Source(x.src.id, key, m.name+"/"+ctr, ctr); err != nil {
+			label := m.name + "/" + ctr
+			if g.composed {
+				label = g.memberNamespace(m) + "/" + label
+			}
+			if err := g.sink.Source(x.src.id, key, label, ctr); err != nil {
 				return nil, nil, err
 			}
 			g.active[key] = x
@@ -453,7 +478,7 @@ func (g *logGroup) readBacklogWindow(ctx context.Context, x *groupSrc, per int64
 		return nil, false, errMemberGone
 	}
 	rc, err := x.src.open(ctx, podLogRequest{
-		Namespace: g.ns, Pod: x.pod.name, Container: x.ctr, Previous: g.q.Previous,
+		Namespace: g.memberNamespace(x.pod), Pod: x.pod.name, Container: x.ctr, Previous: g.q.Previous,
 		TailLines: tail, SinceTime: g.q.SinceTime, LimitBytes: per,
 	})
 	if err != nil {
@@ -585,4 +610,19 @@ func (l *lockedSink) Preview(lines []provider.LogPreviewLine, final bool) error 
 		return p.Preview(lines, final)
 	}
 	return nil
+}
+
+// Ordinary groups retain their public source keys. Compositions include the
+// namespace so neither attribution nor membership relies on a group-wide scope.
+func (g *logGroup) memberNamespace(m memberPod) string {
+	if m.namespace != "" {
+		return m.namespace
+	}
+	return g.ns
+}
+func (g *logGroup) memberKey(m memberPod) string {
+	if g.composed {
+		return g.memberNamespace(m) + "/" + m.uid
+	}
+	return m.uid
 }

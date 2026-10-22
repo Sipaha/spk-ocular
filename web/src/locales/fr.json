@@ -1,5 +1,16 @@
 {
   "ui": {
+    "logs.composition.observed": "Pods observés",
+    "logs.composition.title": "Logs composés",
+    "logs.composition.add": "Ajouter aux logs composés",
+    "logs.composition.count": "Sources : {count}/8",
+    "logs.composition.review": "Vérifier les sources",
+    "logs.composition.clear": "Vider les sources",
+    "logs.composition.remove": "Retirer",
+    "logs.composition.open": "Ouvrir les logs composés",
+    "logs.composition.hint": "Sélectionnez 2 à 8 Pods ou charges uniques sur une même cible connectée. Tous les conteneurs sont lus ; les sources communes ne sont lues qu’une fois.",
+    "logs.composition.memory": "Les compositions restent en mémoire et ne peuvent être épinglées ni restaurées.",
+    "logs.composition.rejected": "Sélectionnez jusqu’à 8 sources UID prises en charge sur la connexion actuelle. Effacez d’abord les sources périmées ou d’une autre cible.",
     "audit.title": "Rapport d’audit Polaris",
     "audit.notice": "Importez un rapport local existant. Ocular ne lance pas Polaris, ne connecte aucun cluster et ne réalise pas de nouvel audit.",
     "audit.identity": "La cible choisie est uniquement le contexte que vous déclarez. Les noms du rapport n’ont ni UID vérifié ni lien actif ; aucune ressource n’est ouverte ou modifiée.",

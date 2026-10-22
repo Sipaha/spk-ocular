@@ -291,3 +291,10 @@ func (w *API) NodeCapacity(ctx context.Context, req core.NodeCapacityRequest) (c
 func (w *API) OfflineAudit(ctx context.Context, req api.OfflineAuditRequest) (api.OfflineAuditResponse, error) {
 	return w.a.OfflineAudit(api.UIContext(ctx), req)
 }
+
+func (w *API) OpenComposedLogStream(req api.ComposedLogStreamRequest) (api.LogStreamInfo, error) {
+	return w.a.OpenComposedLogStream(api.UIContext(context.Background()), req)
+}
+func (w *API) OpenComposedLogHistory(req api.LogComposition) (api.LogStreamInfo, error) {
+	return w.a.OpenComposedLogHistory(api.UIContext(context.Background()), req)
+}

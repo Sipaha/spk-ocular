@@ -1,5 +1,16 @@
 {
   "ui": {
+    "logs.composition.observed": "Pod を確認済み",
+    "logs.composition.title": "複合ログ",
+    "logs.composition.add": "複合ログに追加",
+    "logs.composition.count": "ソース：{count}/8",
+    "logs.composition.review": "ソースを確認",
+    "logs.composition.clear": "ソースをクリア",
+    "logs.composition.remove": "削除",
+    "logs.composition.open": "複合ログを開く",
+    "logs.composition.hint": "接続済みの同一ターゲットから、一意の Pod またはワークロードを 2～8 個選択します。全コンテナを読み取り、重複するソースは一度だけ読み取ります。",
+    "logs.composition.memory": "構成はメモリ内のみに保持され、固定や復元はできません。",
+    "logs.composition.rejected": "現在の同一接続から、対応する UID ソースを最大 8 個選択してください。古いソースや別ターゲットのソースは先にクリアしてください。",
     "audit.title": "Polaris 監査レポート",
     "audit.notice": "既存のローカルレポートを読み込みます。Ocular は Polaris の実行、クラスタへの接続、新しい監査を行いません。",
     "audit.identity": "選択した対象は利用者が宣言するコンテキストのみです。レポート名には検証済み UID やライブの紐付けがなく、リソースの表示や変更は行いません。",

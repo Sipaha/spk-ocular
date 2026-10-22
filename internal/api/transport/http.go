@@ -285,6 +285,12 @@ func (h *HTTP) routes() {
 	h.mux.HandleFunc("POST /api/OpenLogStream", handle(func(ctx context.Context, r *api.LogStreamRequest) (any, error) {
 		return h.api.OpenLogStream(ctx, *r)
 	}))
+	h.mux.Handle("POST /api/OpenComposedLogStream", noStore(handle(func(ctx context.Context, r *api.ComposedLogStreamRequest) (any, error) {
+		return h.api.OpenComposedLogStream(ctx, *r)
+	})))
+	h.mux.Handle("POST /api/OpenComposedLogHistory", noStore(handle(func(ctx context.Context, r *api.LogComposition) (any, error) {
+		return h.api.OpenComposedLogHistory(ctx, *r)
+	})))
 	h.mux.HandleFunc("POST /api/OpenLogHistory", handle(func(ctx context.Context, r *api.LogHistoryRequest) (any, error) { return h.api.OpenLogHistory(ctx, *r) }))
 
 	h.mux.Handle("POST /api/Files", noStore(handle(func(ctx context.Context, r *api.FilesRequest) (any, error) { return h.api.Files(ctx, *r) })))

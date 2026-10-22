@@ -17,6 +17,14 @@ type LogSource interface {
 	StreamLogs(ctx context.Context, ref core.Ref, q LogQuery, sink LogSink) error
 }
 
+// ComposedLogSource is a UI-only optional capability. Implementations must use
+// one membership union and one set of stream/backlog budgets for all roots.
+// Callers admit and bind the explicit root set before invoking this capability.
+type ComposedLogSource interface {
+	CheckComposedLogRoots(ctx context.Context, refs []core.Ref) error
+	StreamComposedLogs(ctx context.Context, refs []core.Ref, q LogQuery, sink LogSink) error
+}
+
 // ChannelAll selects every channel (all containers).
 const ChannelAll = "*"
 

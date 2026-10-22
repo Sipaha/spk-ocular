@@ -1,3 +1,4 @@
+import type {LogComposition} from './types'
 import type {AuditRequest,AuditResponse} from '../offlineAudit/types'
 import type {NodeCapacity,NodeCapacityRequest} from '../capacity/types'
 import type {KrrRequest,KrrResponse} from '../krr/model'
@@ -100,6 +101,8 @@ export interface Client {
   touchRecent(ref: Ref, title: string): Promise<void>
   logInfo(ref: Ref): Promise<LogInfo>
   /** Registers a log stream; read it from streamBase() + '/logs/' + streamId. */
+  openComposedLogStream(composition:LogComposition,query:LogQuery):Promise<LogStreamInfo>
+  openComposedLogHistory(composition:LogComposition,signal?:AbortSignal):Promise<LogStreamInfo>
   openLogStream(ref: Ref, query: LogQuery): Promise<LogStreamInfo>
   openLogHistory(ref:Ref,channel:string,previous:boolean,signal?:AbortSignal):Promise<LogStreamInfo>
   files(req: FilesRequest): Promise<FilesResponse>
@@ -250,6 +253,8 @@ export const httpClient: Client = {
   recentObjects: (provider, target) => post('RecentObjects', { provider, target }),
   touchRecent: (ref, title) => done(post('TouchRecent', { ref, title })),
   logInfo: (ref) => post('LogInfo', ref),
+  openComposedLogStream:(composition,query)=>post('OpenComposedLogStream',{composition,query}),
+  openComposedLogHistory:(composition,signal)=>post('OpenComposedLogHistory',composition,signal),
   openLogStream: (ref, query) => post('OpenLogStream', { ref, query }),
   openLogHistory: (ref,channel,previous,signal) => post('OpenLogHistory',{ref,channel,previous},signal),
   files: (req) => post('Files', req, undefined, req.command==='close'),
@@ -414,6 +419,8 @@ export const wailsClient: Client = {
   recentObjects: (provider, target) => wcall('RecentObjects', provider, target),
   touchRecent: (ref, title) => wcall('TouchRecent', { ref, title }),
   logInfo: (ref) => wcall('LogInfo', ref),
+  openComposedLogStream:(composition,query)=>wcall('OpenComposedLogStream',{composition,query}),
+  openComposedLogHistory:(composition,signal)=>wcallAbortable(signal,'OpenComposedLogHistory',composition),
   openLogStream: (ref, query) => wcall('OpenLogStream', { ref, query }),
   openLogHistory: (ref,channel,previous,signal) => wcallAbortable(signal,'OpenLogHistory',{ref,channel,previous}),
   files: (req) => wcall('Files', req),

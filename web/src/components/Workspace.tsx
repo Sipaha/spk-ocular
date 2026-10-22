@@ -1,3 +1,4 @@
+import {addLogRoots,compositionRoot} from '../logs/composition'
 import {usePresets} from '../presets/usePresets'
 import {PresetDialog} from '../presets/PresetDialog'
 import {columnsFor,rowsFor,labelState,labelID} from '../presets/model'
@@ -900,6 +901,7 @@ function ResourcePage(props: {
     const acts = bulkActions(rows.map((r) => actionsOf(r.ref.kind)))
     const items: MenuItem[] = acts.map((a) => ({ id: `bulk-${a.id}`, label: actionLabel(a) + (a.param ? '…' : ''), danger: a.destructive, onSelect: () => actOnMarked(rows, a) }))
     if (!items.length) items.push({ id: 'bulk-none', label: t('bulk.noCommon'), disabled: true, onSelect: () => {} })
+    if(rows.length&&rows.every(r=>compositionRoot({...r.ref,provider:target.provider})))items.push({id:'compose-logs',label:t('logs.composition.add'),onSelect:()=>{if(!addLogRoots(rows.map(r=>r.ref),target))showNotice(t('logs.composition.rejected'))}})
     items.push({ id: 'unmark', label: t('bulk.unmark'), separator: true, onSelect: () => setMarked(new Set()) })
     return items
   }
@@ -910,6 +912,7 @@ function ResourcePage(props: {
     if (marked.size >= 2 && marked.has(r.id)) return { label: t('bulk.menu'), items: markedMenu() }
     const items: MenuItem[] = [{ id: 'details', label: t('row.details'), onSelect: () => setOpen(r.ref) }]
     if (hasLogs(r.ref.kind)) items.push({ id: 'logs', label: t('row.logs'), hint: 'L', onSelect: () => onLogs(r.ref) })
+    if(compositionRoot({...r.ref,provider:target.provider}))items.push({id:'compose-logs',label:t('logs.composition.add'),onSelect:()=>{if(!addLogRoots([r.ref],target))showNotice(t('logs.composition.rejected'))}})
     if (hasExec(r.ref.kind)) items.push({ id: 'terminal', label: t('row.terminal'), hint: 'S', onSelect: () => onTerminal(r.ref, false) })
     actionsOf(r.ref.kind).forEach((a, i) =>
       items.push({ id: `action-${a.id}`, label: actionLabel(a) + (a.param ? '…' : ''), danger: a.destructive, separator: i === 0, hint: a.id === 'delete' ? 'Delete' : undefined, onSelect: () => onAction(r.ref, a) }),

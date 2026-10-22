@@ -136,6 +136,8 @@ export function fakeClient(targets: Target[], connected = false) {
     recentObjects: vi.fn(async (provider: string, target: string) => state.recents.filter((r) => r.ref.provider === provider && r.ref.target === target)),
     touchRecent: vi.fn(async () => {}),
     logInfo: vi.fn(async () => ({ channels: [{ id: 'app', title: 'app' }], defaultChannel: 'app', aggregate: false, previous: true })),
+    openComposedLogStream: vi.fn(async()=>({streamId:'composed-stream'})),
+    openComposedLogHistory: vi.fn(async()=>({streamId:'composed-history'})),
     openLogStream: vi.fn(async () => ({ streamId: 's1' })),
     openLogHistory: vi.fn(async () => ({ streamId: 'h1' })),
     execInfo: vi.fn(async (ref: Ref) => ({

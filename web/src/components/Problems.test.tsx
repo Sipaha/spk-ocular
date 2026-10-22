@@ -133,7 +133,7 @@ describe('Problems', () => {
     const { grid } = await openProblems([problem('pods#crash', 'pods', 'crash', 'error', 4, 5), problem('events#e1', 'events', 'pod/a', 'recent', 1, 1)])
     fireEvent.contextMenu(await within(grid).findByText('crash'))
     let menu = screen.getByRole('menu', { name: 'Row actions' })
-    expect(within(menu).getAllByRole('menuitem').map((m) => m.textContent)).toEqual(['Details', 'Logs', 'Delete'])
+    expect(within(menu).getAllByRole('menuitem').map((m) => m.textContent)).toEqual(['Details', 'Logs', 'Add to composed logs', 'Delete'])
     fireEvent.keyDown(menu, { key: 'Escape' })
     fireEvent.contextMenu(within(grid).getByText('pod/a'))
     menu = screen.getByRole('menu', { name: 'Row actions' })

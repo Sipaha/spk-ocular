@@ -1,5 +1,16 @@
 {
   "ui": {
+    "logs.composition.observed": "Pods observados",
+    "logs.composition.title": "Logs compostos",
+    "logs.composition.add": "Adicionar aos logs compostos",
+    "logs.composition.count": "Fontes: {count}/8",
+    "logs.composition.review": "Revisar fontes",
+    "logs.composition.clear": "Limpar fontes",
+    "logs.composition.remove": "Remover",
+    "logs.composition.open": "Abrir logs compostos",
+    "logs.composition.hint": "Selecione de 2 a 8 Pods ou cargas únicos no mesmo destino conectado. Todos os contêineres são lidos; fontes sobrepostas são lidas uma só vez.",
+    "logs.composition.memory": "As composições ficam apenas na memória e não podem ser fixadas ou restauradas.",
+    "logs.composition.rejected": "Selecione até 8 fontes UID compatíveis na mesma conexão atual. Primeiro limpe fontes antigas ou de outro destino.",
     "audit.title": "Relatório de auditoria Polaris",
     "audit.notice": "Importe um relatório local existente. Ocular não executa Polaris, não conecta um cluster nem realiza nova auditoria.",
     "audit.identity": "O destino selecionado é apenas o contexto declarado por você. Os nomes do relatório não têm UID verificado nem vínculo ativo; nenhum recurso é aberto ou alterado.",

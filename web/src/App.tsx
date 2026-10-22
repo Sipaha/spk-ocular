@@ -1,3 +1,5 @@
+import {CompositionTray} from './logs/CompositionTray'
+import {clearLogComposition} from './logs/composition'
 import {LearningDialog} from './learning/ResourceHelp'
 import {LanguageMenu} from './components/LanguageMenu'
 import {useWorkspacePersistence,useWorkspaceStatus} from './workspace/persistence'
@@ -32,7 +34,7 @@ import { AgentConfirm } from './agents/ConfirmDialog'
 import { agentLoaders, agents, useAgents } from './agents/store'
 
 export function App({ client }: { client: Client }) {
-  useEffect(()=>clearComparison,[client])
+  useEffect(()=>()=>{clearComparison();clearLogComposition()},[client])
   useWorkspacePersistence(client)
   const workspaceStatus=useWorkspaceStatus()
   const dockOpen = useDock(s => s.tabs.length > 0)
@@ -173,6 +175,7 @@ export function App({ client }: { client: Client }) {
             </main>
           )}
           </LocationStatusScope>
+          <CompositionTray/>
           <Dock
             client={client}
             hub={hub}

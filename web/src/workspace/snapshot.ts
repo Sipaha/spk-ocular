@@ -14,13 +14,13 @@ const hasControl=(s:string)=>[...s].some(ch=>ch.codePointAt(0)!<32||ch.codePoint
 const bytes=(text:string)=>new TextEncoder().encode(text).length
 const cleanRef=(r:Ref):Ref=>({provider:r.provider,target:r.target,kind:r.kind,name:r.name,uid:r.uid,...(r.scope?{scope:r.scope}:{})})
 export function savedPanels(tabs:DockTab[]):SavedPanel[]{
- return tabs.filter(t=>t.pinned&&t.kind!=='files').map(t=>t.kind==='properties'?{kind:'properties',ref:cleanRef(t.ref),tab:t.detailsTab??'details'}:t.kind==='logs'?{kind:'logs',ref:cleanRef(t.ref),...(t.channel?{channel:t.channel}:{})}:{kind:'terminal',ref:cleanRef(t.kind==='term'?t.open.ref:t.ref)})
+ return tabs.filter(t=>t.pinned&&t.kind!=='files'&&!(t.kind==='logs'&&t.composition)).map(t=>t.kind==='properties'?{kind:'properties',ref:cleanRef(t.ref),tab:t.detailsTab??'details'}:t.kind==='logs'?{kind:'logs',ref:cleanRef(t.ref),...(t.channel?{channel:t.channel}:{})}:{kind:'terminal',ref:cleanRef(t.kind==='term'?t.open.ref:t.ref)})
 }
 export function fitsPins(tabs:DockTab[]){const pins=savedPanels(tabs);return pins.every(p=>validRef(p.ref)&&(!p.channel||p.channel.length<=256))&&pins.length<=MAX_PINS&&bytes(JSON.stringify(pins))<=MAX_WORKSPACE_BYTES-512}
 const clamp=(value:number,min:number,max:number)=>Math.min(max,Math.max(min,Number.isFinite(value)?Math.round(value):min))
 export function cleanWidths(w:Widths):Widths{return {targets:clamp(w.targets,160,420),navigation:clamp(w.navigation,140,360),details:w.details===null?null:clamp(w.details,280,1400),helmDetails:w.helmDetails===null?null:clamp(w.helmDetails,280,1400),agentsTargets:clamp(w.agentsTargets,160,420)}}
 export function serializeWorkspace(dock:DockState,widths:Widths):string|null{
- const pinned=dock.tabs.filter(t=>t.pinned&&t.kind!=='files')
+ const pinned=dock.tabs.filter(t=>t.pinned&&t.kind!=='files'&&!(t.kind==='logs'&&t.composition))
  if(!fitsPins(dock.tabs))return null
  const snapshot:WorkspaceSnapshot={v:1,panels:savedPanels(dock.tabs),active:Math.max(0,pinned.findIndex(t=>t.id===dock.active)),height:clamp(dock.height,140,1200),widths:cleanWidths(widths)}
  const text=JSON.stringify(snapshot)

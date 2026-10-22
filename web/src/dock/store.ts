@@ -1,3 +1,5 @@
+import {compositionKey,copyComposition} from '../logs/composition'
+import type {LogComposition} from '../api/types'
 import {mayLeaveMatching} from '../edit/guard'
 import {fitsPins, type WorkspaceSnapshot} from '../workspace/snapshot'
 import { create } from 'zustand'
@@ -33,6 +35,7 @@ interface TabBase {
 
 export interface LogsTab extends TabBase {
  previous?:boolean
+  composition?: LogComposition
   kind: 'logs'
   ref: Ref
   channel?: string
@@ -98,7 +101,7 @@ function removeTabs(ids:ReadonlySet<string>) {
 
 export const dock = {
   pin(id:string):boolean {
-    const state=useDock.getState();if(state.tabs.find(t=>t.id===id)?.kind==='files')return false;const tabs=state.tabs.map(t=>t.id===id?{...t,pinned:!t.pinned}:t);if(!fitsPins(tabs))return false;useDock.setState({tabs});return true
+    const state=useDock.getState();const tab=state.tabs.find(t=>t.id===id);if(tab?.kind==='files'||tab?.kind==='logs'&&tab.composition)return false;const tabs=state.tabs.map(t=>t.id===id?{...t,pinned:!t.pinned}:t);if(!fitsPins(tabs))return false;useDock.setState({tabs});return true
   },
   openProperties(target:TargetRef,targetTitle:string,ref:Ref,detailsTab:'details'|'yaml'='details'):boolean {
     const tab:PropertiesTab={kind:'properties',id:`properties:${targetKey(target)}:${refKey(ref)}`,target,targetTitle,ref:{...ref,provider:target.provider,target:target.id},title:`${ref.kind.split('/').pop()}/${refTitle(ref)}`,detailsTab,pinned:true};
@@ -115,6 +118,13 @@ export const dock = {
     const id = `logs:${targetKey(target)}:${refKey(ref)}${channel ? `:${channel}` : ''}${previousInstance ? ':previous' : ''}`
     const previous = useDock.getState().tabs.find(tab => tab.id === id)
     activate({ kind: 'logs', id, previous:previousInstance, focusEpoch: (previous?.kind === 'logs' ? previous.focusEpoch ?? 0 : 0) + 1, target, targetTitle, ref:{...ref,provider:target.provider,target:target.id}, channel, title: `${ref.kind.split('/').pop()}/${refTitle(ref)}` })
+  },
+  openComposedLogs(targetTitle:string,composition:LogComposition) {
+    const c=copyComposition(composition),ref=c.refs[0]
+    if(c.refs.length<2||c.refs.length>8||!ref)return
+    const id=`composed-logs:${compositionKey(c)}`
+    const previous=useDock.getState().tabs.find(tab=>tab.id===id)
+    activate({kind:'logs',id,composition:c,focusEpoch:(previous?.kind==='logs'?previous.focusEpoch??0:0)+1,target:{provider:ref.provider,id:ref.target},targetTitle,ref,channel:'*',title:`${c.refs.length} · ${c.refs.map(r=>r.name).join(', ')}`})
   },
   /** Files capabilities and editor contents remain memory-only. */
   openFiles(target:TargetRef,targetTitle:string,ref:Ref,selectedInstance?:ExecInstance,preparedId?:string) {

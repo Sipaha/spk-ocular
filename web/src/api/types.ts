@@ -691,7 +691,11 @@ export interface LogInfo {
   allChannelsLabel?: Message
 }
 
+export interface LogComposition { refs: Ref[]; configRev: string; connectionId: number }
+
 export interface LogQuery {
+  /** Renderer/window identity only, stripped before provider transport. */
+  compositionKey?: string
   /** Case-insensitive wildcard text filter, applied by backend before history limits. */
   filter?: string
   /** "" = default, "*" = all */

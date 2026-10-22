@@ -116,6 +116,8 @@ type API interface {
 	// the page reads it from StreamBase (NDJSON, web/src/logs/ndjson.ts).
 	OpenLogStream(ctx context.Context, req LogStreamRequest) (LogStreamInfo, error)
 	OpenLogHistory(ctx context.Context, req LogHistoryRequest) (LogStreamInfo, error)
+	OpenComposedLogStream(ctx context.Context, req ComposedLogStreamRequest) (LogStreamInfo, error)
+	OpenComposedLogHistory(ctx context.Context, composition LogComposition) (LogStreamInfo, error)
 	// ExecInfo: where a command can run for an object (instances = pods,
 	// channels = containers).
 	Files(ctx context.Context, req FilesRequest) (FilesResponse, error)

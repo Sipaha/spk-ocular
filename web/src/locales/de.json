@@ -1,5 +1,16 @@
 {
   "ui": {
+    "logs.composition.observed": "Pods beobachtet",
+    "logs.composition.title": "Zusammengesetzte Logs",
+    "logs.composition.add": "Zu zusammengesetzten Logs hinzufügen",
+    "logs.composition.count": "Quellen: {count}/8",
+    "logs.composition.review": "Quellen prüfen",
+    "logs.composition.clear": "Quellen leeren",
+    "logs.composition.remove": "Entfernen",
+    "logs.composition.open": "Zusammengesetzte Logs öffnen",
+    "logs.composition.hint": "Wähle 2–8 eindeutige Pods oder Workloads eines verbundenen Ziels. Alle Container werden gelesen; überlappende Quellen nur einmal.",
+    "logs.composition.memory": "Zusammenstellungen bleiben nur im Speicher und können nicht angeheftet oder wiederhergestellt werden.",
+    "logs.composition.rejected": "Wähle bis zu 8 unterstützte UID-Quellen derselben aktuellen Verbindung. Entferne zuerst veraltete Quellen oder Quellen anderer Ziele.",
     "audit.title": "Polaris-Auditbericht",
     "audit.notice": "Vorhandenen lokalen Bericht importieren. Ocular startet Polaris nicht, verbindet keinen Cluster und führt kein neues Audit aus.",
     "audit.identity": "Das gewählte Ziel ist nur Ihr angegebener Kontext. Berichtsnamen haben keine geprüfte UID oder Live-Zuordnung; Ressourcen werden weder geöffnet noch geändert.",

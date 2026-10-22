@@ -8,6 +8,17 @@ const loaders = {
 }
 
 const en = {
+ "logs.composition.observed": "Pods observed",
+ "logs.composition.title": "Composed logs",
+ "logs.composition.add": "Add to composed logs",
+ "logs.composition.count": "Sources: {count}/8",
+ "logs.composition.review": "Review sources",
+ "logs.composition.clear": "Clear sources",
+ "logs.composition.remove": "Remove",
+ "logs.composition.open": "Open composed logs",
+ "logs.composition.hint": "Select 2–8 unique Pods or workloads on one connected target. Open reads all containers; overlapping sources are read once.",
+ "logs.composition.memory": "Compositions are memory-only and cannot be pinned or restored.",
+ "logs.composition.rejected": "Select up to 8 supported UID sources on the same current connection. Clear stale or other-target sources first.",
  "audit.title": "Polaris audit report",
  "audit.notice": "Import an existing local report. Ocular does not run Polaris, connect to a cluster or perform a new audit.",
  "audit.identity": "The selected target is your declared context only. Report names have no verified UID or live binding; no resource is opened or changed.",
@@ -1690,6 +1701,17 @@ const en = {
 export type MessageKey = keyof typeof en
 
 const ru: Record<MessageKey, string> = {
+ "logs.composition.observed": "Pod наблюдаются",
+ "logs.composition.title": "Составные логи",
+ "logs.composition.add": "Добавить в составные логи",
+ "logs.composition.count": "Источники: {count}/8",
+ "logs.composition.review": "Проверить источники",
+ "logs.composition.clear": "Очистить источники",
+ "logs.composition.remove": "Убрать",
+ "logs.composition.open": "Открыть составные логи",
+ "logs.composition.hint": "Выберите 2–8 уникальных Pod или workloads одного подключённого target. Читаются все контейнеры; пересечения не дублируются.",
+ "logs.composition.memory": "Композиции хранятся только в памяти: их нельзя закрепить или восстановить.",
+ "logs.composition.rejected": "Выберите до 8 поддерживаемых UID-источников текущего подключения. Сначала очистите устаревшие источники или источники другого target.",
  "audit.title": "Отчёт аудита Polaris",
  "audit.notice": "Импорт существующего локального отчёта. Ocular не запускает Polaris, не подключается к кластеру и не выполняет новый аудит.",
  "audit.identity": "Выбранное подключение — только указанный вами контекст. У имён из отчёта нет проверенного UID или привязки к действующим ресурсам; ресурсы не открываются и не изменяются.",

@@ -1,5 +1,16 @@
 {
   "ui": {
+    "logs.composition.observed": "已观察到 Pod",
+    "logs.composition.title": "组合日志",
+    "logs.composition.add": "添加到组合日志",
+    "logs.composition.count": "来源：{count}/8",
+    "logs.composition.review": "检查来源",
+    "logs.composition.clear": "清空来源",
+    "logs.composition.remove": "移除",
+    "logs.composition.open": "打开组合日志",
+    "logs.composition.hint": "在同一已连接目标中选择 2–8 个唯一的 Pod 或工作负载。打开后读取所有容器；重叠来源只读取一次。",
+    "logs.composition.memory": "组合仅保存在内存中，无法固定或恢复。",
+    "logs.composition.rejected": "请在同一当前连接中选择最多 8 个受支持的 UID 来源。请先清除过期来源或其他目标的来源。",
     "audit.title": "Polaris 审计报告",
     "audit.notice": "导入已有本地报告。Ocular 不运行 Polaris、不连接集群，也不执行新的审计。",
     "audit.identity": "所选目标仅是您声明的上下文。报告名称没有已验证的 UID 或实时绑定；不会打开或修改任何资源。",

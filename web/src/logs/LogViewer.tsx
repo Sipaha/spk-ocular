@@ -1,3 +1,5 @@
+import {composedLogClient,compositionKey} from './composition'
+import type {LogComposition} from '../api/types'
 import { useStore } from '../store'
 import { LogContext } from './LogContext'
 import { LocationStatus } from '../components/LocationStatus'
@@ -30,6 +32,7 @@ const SINCE: [string, number][] = [
 
 interface Props {
   client: Client
+  composition?: LogComposition
   connectionName?: string
   subject: Ref
   /** The visible tab: keyboard shortcuts are live only there. */
@@ -47,7 +50,9 @@ interface Props {
  * buffer), useLogFilter (filter, search) and LogViewport (the
  * virtual list).
  */
-export default function LogViewer({ client, connectionName: initialConnectionName, subject, active, bridge, initial, initialChannel, initialPrevious, focusEpoch, onWindowAction }: Props) {
+export default function LogViewer({ client: baseClient, composition, connectionName: initialConnectionName, subject, active, bridge, initial, initialChannel, initialPrevious, focusEpoch, onWindowAction }: Props) {
+  const client=useMemo(()=>composition?composedLogClient(baseClient,composition):baseClient,[baseClient,composition])
+  const identity=composition?compositionKey(composition):undefined
   const connectionName = useStore(state => state.view?.groups.flatMap(group => group.targets).find(target => target.provider === subject.provider && target.id === subject.target)?.title) || initialConnectionName
   const [info, setInfo] = useState<LogInfo | null>(null)
   const [infoError, setInfoError] = useState<string | null>(null)
@@ -96,13 +101,13 @@ export default function LogViewer({ client, connectionName: initialConnectionNam
       setServerFilter(q.filter ?? '')
       const current = bridge.captureView?.()
       if (current) bridge.applyFilter?.({ ...current, filterText: q.filter ?? '' })
-    }, connectionName)
+    }, connectionName, composition)
     if (bridge.role === 'guest') void bridge.post('view', bridge.captureView?.())
-  }, [bridge, subject, channel, tail, since, previous, showTime, showSource, wrap, follow, connectionName])
+  }, [bridge, subject, channel, tail, since, previous, showTime, showSource, wrap, follow, connectionName, composition])
 
   const query = useMemo<LogQuery | null>(
-    () => (channel === null ? null : { channel, previous, follow: !previous, tailLines: tail, sinceTime: since?.at, filter: serverLogFilter(serverFilter) }),
-    [channel, previous, tail, since, serverFilter],
+    () => (channel === null ? null : { channel, previous, compositionKey:identity, follow: !previous, tailLines: tail, sinceTime: since?.at, filter: serverLogFilter(serverFilter) }),
+    [channel, previous, tail, since, serverFilter, identity],
   )
 
   return infoError ? (
@@ -114,6 +119,7 @@ export default function LogViewer({ client, connectionName: initialConnectionNam
   ) : (
     <Stream
       client={client}
+      composition={composition}
       subject={subject}
       connectionName={connectionName}
       active={active}
@@ -176,26 +182,26 @@ interface ViewState {
   setNote: (v: string | null) => void
 }
 
-function Stream({ client, connectionName, subject, active, focusEpoch, query, onServerFilter, toolbar, view, bridge, initial, windowButton, onWindowAction }: { client: Client; connectionName?: string; subject: Ref; active: boolean; focusEpoch?: number; query: LogQuery; onServerFilter: (filter: string) => void; toolbar: ReactNode; view: ViewState; bridge?: LogWindowBridge; initial?: LogViewState
+function Stream({ client, composition, connectionName, subject, active, focusEpoch, query, onServerFilter, toolbar, view, bridge, initial, windowButton, onWindowAction }: { client: Client; composition?:LogComposition; connectionName?: string; subject: Ref; active: boolean; focusEpoch?: number; query: LogQuery; onServerFilter: (filter: string) => void; toolbar: ReactNode; view: ViewState; bridge?: LogWindowBridge; initial?: LogViewState
   initialChannel?: string; windowButton?: ReactNode; onWindowAction?: () => void }) {
   const { showTime, setShowTime, wrap, setWrap, follow, setFollow, resizing, selecting, setSelecting, note, setNote } = view
   const { win, sources, status, reopen, clear } = useLogStream({ client, ref: subject, query, paused: selecting || resizing, frozen: !follow, bridge })
   const f = useLogFilter(win.entries, { initial })
-  const showSource = view.showSource ?? sources.size > 1
+  const showSource = !!composition || (view.showSource ?? sources.size > 1)
 
   const liveLabels = useMemo(() => {
     const list = [...sources.values()]
-    const short = shortLabels(list.map((s) => s.label))
+    const short = composition?list.map(s=>s.label):shortLabels(list.map((s) => s.label))
     const m = new Map<number, { label: string; color: string }>()
     list.forEach((s, i) => m.set(s.id, { label: short[i], color: sourceColor(s.key) }))
     return m
-  }, [sources])
+  }, [sources,composition])
   // While the user drag-selects, the prefix layout must not change under
   // the selection (a new source can change the short labels and widths).
   const [heldLabels, setHeldLabels] = useState(liveLabels)
   if (!selecting && !resizing && heldLabels !== liveLabels) setHeldLabels(liveLabels)
   const labels = selecting || resizing ? heldLabels : liveLabels
-  const width = Math.max(0, ...[...labels.values()].map((l) => l.label.length))
+  const width = Math.max(0, ...[...sources.values()].filter(s=>!composition||!s.key.startsWith('root/')).map(s=>labels.get(s.id)?.label.length??0))
   const rowOpts = useMemo<RowOpts>(
     () => ({ showTime, showSource, labelOf: (src) => (labels.get(src)?.label ?? '?').padEnd(width) }),
     [showTime, showSource, labels, width],
@@ -243,7 +249,7 @@ function Stream({ client, connectionName, subject, active, focusEpoch, query, on
     downloadController.current=controller
     downloadPending.current=true;setDownloading(true);setNote(null);setDownloadProgress({lines:0,bytes:0})
     try {
-      const result=await downloadLogHistory(client,subject,query.channel??'',!!query.previous,format,controller.signal,bridge?.id,value=>{if(mounted.current&&!controller.signal.aborted)setDownloadProgress(value)},()=>controller.abort(),chooseLocation)
+      const result=await downloadLogHistory(client,composition?{...subject,title:t('logs.composition.title')}:subject,query.channel??'',!!query.previous,format,controller.signal,bridge?.id,value=>{if(mounted.current&&!controller.signal.aborted)setDownloadProgress(value)},()=>controller.abort(),chooseLocation)
       if(mounted.current&&!controller.signal.aborted&&result)setNote(result.path?t('logs.saved',{path:result.path}):t('logs.historySaved',{lines:result.lines}))
     } catch (e) {
       if(mounted.current)setNote(controller.signal.aborted?t('logs.historyCancelled'):t('logs.saveFailed',{error:e instanceof Error?e.message:String(e)}))
@@ -305,6 +311,7 @@ function Stream({ client, connectionName, subject, active, focusEpoch, query, on
 
   return (
     <div ref={rootRef} className="flex h-full min-h-0 flex-col" onKeyDown={onKeyDown}>
+      {composition&&<details className="max-h-36 shrink-0 overflow-auto border-b border-line px-3 py-1 text-xs"><summary className="cursor-pointer">{t('logs.composition.count',{count:composition.refs.length})} · {t('logs.composition.memory')}</summary><ul>{composition.refs.map(r=>{const source=[...sources.values()].find(s=>s.key===`root/${r.scope}/${r.uid}`),state=source?.state;return <li key={`${r.scope}/${r.uid}`} className="break-words">{r.scope} · {r.kind}/{r.name} · UID: {r.uid} · <span className={state?.state==='error'?'text-danger':'text-fg-muted'}>{state?.state==='streaming'?t('logs.composition.observed'):t(`logs.state.${state?.state??'waiting'}` as MessageKey)}{state?.class&&` · ${classLabel(state.class)}`}{state?.msg&&` · ${state.msg}`}</span></li>})}</ul></details>}
       <div className="log-toolbar">
         <div role="group" aria-label={t('shell.logSource')} className="log-control-group">{toolbar}</div>
         <div role="group" aria-label={t('shell.logFilter')} className="log-control-group">
@@ -353,7 +360,7 @@ function Stream({ client, connectionName, subject, active, focusEpoch, query, on
         <Toggle on={showTime} onClick={() => setShowTime(!showTime)} label={t('logs.time')} description={t('logs.time.tooltip')}>
           <ActionIcon name="time"/>
         </Toggle>
-        <Toggle on={showSource} onClick={() => view.setShowSource(!showSource)} label={t('logs.source')} description={t('logs.source.tooltip')}>
+        <Toggle on={showSource} disabled={!!composition} onClick={() => view.setShowSource(!showSource)} label={t('logs.source')} description={t('logs.source.tooltip')}>
           <ActionIcon name="source"/>
         </Toggle>
         <Toggle on={wrap} onClick={() => setWrap(!wrap)} label={t('logs.wrap')} description={t('logs.wrap.tooltip')}>
@@ -373,7 +380,7 @@ function Stream({ client, connectionName, subject, active, focusEpoch, query, on
         {windowButton}
         </div>
       </div>
-      <LogContext subject={subject} connectionName={connectionName} loading={historyLoading} />
+      <LogContext subject={subject} composition={composition} connectionName={connectionName} loading={historyLoading} />
       {(problems.length > 0 || status.notice) && <Problems problems={problems} notice={status.notice} labels={labels} />}
       <LogViewport
         loading={historyLoading}

@@ -14,11 +14,13 @@ import (
 
 // memberPod is one pod of a log group with its observation box.
 type memberPod struct {
-	uid, name string
-	created   time.Time
-	rv        string
-	ctrs      []string // container names in kubectl order
-	box       *obsBox
+	uid, name  string
+	namespace  string
+	created    time.Time
+	rv         string
+	conflicted bool
+	ctrs       []string // container names in kubectl order
+	box        *obsBox
 }
 
 // groupTracker keeps the live set of a group's pods (a workload's, by
@@ -36,6 +38,7 @@ type groupTracker struct {
 
 	kick    chan struct{}
 	done    chan struct{}
+	joined  chan struct{}
 	release func()
 
 	mu      sync.Mutex
@@ -58,6 +61,7 @@ func (s *session) trackPod(ns, name string, uid types.UID) (*groupTracker, error
 
 func (s *session) startTracker(t *groupTracker, podsKey cacheKey, ns string) error {
 	t.kick, t.done = make(chan struct{}, 1), make(chan struct{})
+	t.joined = make(chan struct{})
 	t.members, t.changed = map[string]*memberPod{}, make(chan struct{})
 	var leased []*informerCache
 	t.release = func() {
@@ -112,12 +116,16 @@ func (t *groupTracker) poke() {
 
 func (t *groupTracker) stop() {
 	close(t.done)
+	if t.joined != nil {
+		<-t.joined
+	}
 	t.release()
 }
 
 // loop recomputes the member set on every kick, and checks the caches'
 // sync/transport state while they are not synced (local state only).
 func (t *groupTracker) loop() {
+	defer close(t.joined)
 	tick := time.NewTicker(100 * time.Millisecond)
 	defer tick.Stop()
 	var failingSince time.Time
@@ -212,7 +220,7 @@ func (t *groupTracker) recompute() {
 			continue
 		}
 		if m == nil {
-			m = &memberPod{uid: uid, name: o.GetName(), created: o.GetCreationTimestamp().Time, box: newObsBox()}
+			m = &memberPod{uid: uid, name: o.GetName(), namespace: o.GetNamespace(), created: o.GetCreationTimestamp().Time, box: newObsBox()}
 			if t.blind != "" {
 				m.box.setBlind(t.blind)
 			}

@@ -96,6 +96,11 @@ func (s *Service) OpenLogStream(ctx context.Context, req LogStreamRequest) (LogS
 // registerStream adds run for e's incarnation, unless e was closed (or
 // replaced) since the caller got it: same lock as closeSessionLocked.
 func (s *Service) registerStream(e *sessionEntry, run streams.Func) (string, error) {
+	return s.registerStreamChecked(e, nil, run)
+}
+
+// check runs under the same lock as session replacement and registration.
+func (s *Service) registerStreamChecked(e *sessionEntry, check func() error, run streams.Func) (string, error) {
 	var release func()
 	defer func() {
 		if release != nil {
@@ -106,6 +111,11 @@ func (s *Service) registerStream(e *sessionEntry, run streams.Func) (string, err
 	defer s.sessMu.Unlock()
 	if s.sessions[ownerKey(e.provider, e.target)] != e {
 		return "", coded(CodeGone, errors.New("the session was replaced while opening; retry"))
+	}
+	if check != nil {
+		if err := check(); err != nil {
+			return "", err
+		}
 	}
 	id, release, err := s.streams.Register(e.owner, run)
 	switch {
