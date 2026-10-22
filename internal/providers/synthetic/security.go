@@ -9,7 +9,7 @@ import (
 
 // Synthetic findings have selectable fixture references and no external scans.
 func (s *session) Security(ctx context.Context, scope core.ScopeSel, options core.SecurityOptions) (core.SecuritySnapshot, error) {
-	if options.IncludeClusterReports {
+	if options.IncludeClusterReports || options.PolicyReportAPI != "" {
 		return core.SecuritySnapshot{}, errors.New("cluster audit reports are not available in this synthetic fixture")
 	}
 	graph, err := s.Graph(ctx, scope)

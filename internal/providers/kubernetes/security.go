@@ -3,6 +3,7 @@ package kubernetes
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"slices"
 	"sort"
@@ -58,6 +59,8 @@ var securitySources = []securitySource{
 	{vulnerabilityReportGVR, "VulnerabilityReport", false},
 	{schema.GroupVersionResource{Group: "aquasecurity.github.io", Version: "v1alpha1", Resource: "clusterconfigauditreports"}, "ClusterConfigAuditReport", true},
 	{schema.GroupVersionResource{Group: "aquasecurity.github.io", Version: "v1alpha1", Resource: "clusterrbacassessmentreports"}, "ClusterRbacAssessmentReport", true},
+	{schema.GroupVersionResource{Group: "wgpolicyk8s.io", Version: "v1alpha2", Resource: "policyreports"}, "PolicyReport", false},
+	{schema.GroupVersionResource{Group: "openreports.io", Version: "v1alpha1", Resource: "reports"}, "Report", false},
 	{schema.GroupVersionResource{Group: "aquasecurity.github.io", Version: "v1alpha1", Resource: "configauditreports"}, "ConfigAuditReport", false},
 	{schema.GroupVersionResource{Group: "aquasecurity.github.io", Version: "v1alpha1", Resource: "rbacassessmentreports"}, "RbacAssessmentReport", false},
 }
@@ -65,6 +68,9 @@ var securitySources = []securitySource{
 // Security projects only declared risk fields. No Secret/ConfigMap resources,
 // token contents, image downloads, scanners or writes are requested.
 func (s *session) Security(parent context.Context, scope core.ScopeSel, options core.SecurityOptions) (core.SecuritySnapshot, error) {
+	if !options.Valid() {
+		return core.SecuritySnapshot{}, errors.New("unsupported policy report API selection")
+	}
 	ctx, release, err := s.inventoryContext(parent)
 	if err != nil {
 		return core.SecuritySnapshot{}, err
@@ -72,7 +78,7 @@ func (s *session) Security(parent context.Context, scope core.ScopeSel, options 
 	defer release()
 	out := core.SecuritySnapshot{Findings: []core.SecurityFinding{}, Problems: []core.GraphProblem{}, Discovery: s.cat.snap().state, CVEState: "empty", AuditSources: []core.SecurityAuditSource{}}
 	for _, source := range securitySources {
-		if source.audit() {
+		if source.external() {
 			out.AuditSources = append(out.AuditSources, core.SecurityAuditSource{Kind: source.kind, APIVersion: source.gvr.GroupVersion().String(), State: "not-requested", ClusterScoped: source.global})
 		}
 	}
@@ -110,6 +116,26 @@ func (s *session) Security(parent context.Context, scope core.ScopeSel, options 
 		out.Findings = append(out.Findings, f)
 	}
 	for _, source := range securitySources {
+		if source.policy() {
+			selection := "wgpolicy"
+			if source.gvr.Group == "openreports.io" {
+				selection = "openreports"
+			}
+			if options.PolicyReportAPI != selection {
+				continue
+			}
+			var state string
+			source, state = s.securityPolicySource(source)
+			for i := range out.AuditSources {
+				if out.AuditSources[i].Kind == source.kind {
+					out.AuditSources[i].APIVersion = source.gvr.GroupVersion().String()
+					out.AuditSources[i].State = state
+				}
+			}
+			if state != "" {
+				continue
+			}
+		}
 		if source.audit() && source.global && !options.IncludeClusterReports {
 			continue
 		}
@@ -146,7 +172,7 @@ func (s *session) Security(parent context.Context, scope core.ScopeSel, options 
 					class, _ := classify(err)
 					// An optional report API that is not installed is setup state,
 					// not failed coverage. A missing namespace is still a read error.
-					missingReportAPI := (source.gvr == vulnerabilityReportGVR || source.audit()) && apierrors.IsNotFound(err)
+					missingReportAPI := (source.gvr == vulnerabilityReportGVR || source.external()) && apierrors.IsNotFound(err)
 					if status, ok := err.(apierrors.APIStatus); ok && status.Status().Details != nil && status.Status().Details.Kind == "namespaces" {
 						missingReportAPI = false
 					}
@@ -174,7 +200,7 @@ func (s *session) Security(parent context.Context, scope core.ScopeSel, options 
 				for i := range list.Items {
 					u := &list.Items[i]
 					if u.GetUID() == "" || (!source.global && (!scope.Contains(u.GetNamespace()) || (ns != "" && u.GetNamespace() != ns))) {
-						if source.audit() {
+						if source.external() {
 							complete = false
 						}
 						continue
@@ -237,6 +263,11 @@ func (s *session) Security(parent context.Context, scope core.ScopeSel, options 
 					case "ConfigAuditReport", "RbacAssessmentReport", "ClusterConfigAuditReport", "ClusterRbacAssessmentReport":
 						audit.reports++
 						if !s.securityAuditReport(ref, source, u, emit, &out.Truncated) || len(out.Findings) >= securityFindingLimit {
+							complete = false
+						}
+					case "PolicyReport", "Report":
+						audit.reports++
+						if !s.securityPolicyReport(ref, source, u, emit, &out.Truncated) || len(out.Findings) >= securityFindingLimit {
 							complete = false
 						}
 					case "VulnerabilityReport":

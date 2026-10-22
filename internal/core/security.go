@@ -4,6 +4,11 @@ package core
 // selection alone never opts into cluster-scoped audit reports.
 type SecurityOptions struct {
 	IncludeClusterReports bool
+	PolicyReportAPI       string
+}
+
+func (o SecurityOptions) Valid() bool {
+	return o.PolicyReportAPI == "" || o.PolicyReportAPI == "wgpolicy" || o.PolicyReportAPI == "openreports"
 }
 
 // SecuritySnapshot contains declarations and scanner reports, not exploitability
@@ -48,6 +53,39 @@ type SecurityAuditCheck struct {
 	ResourceVersion string   `json:"resourceVersion"`
 	OwnerUID        string   `json:"ownerUid"`
 }
+
+// Policy subjects describe producer evidence only. They never authorize reads
+// or navigation; the finding Ref identifies the source report itself.
+type SecurityPolicySubject struct {
+	APIVersion string `json:"apiVersion"`
+	Kind       string `json:"kind"`
+	Namespace  string `json:"namespace"`
+	Name       string `json:"name"`
+	UID        string `json:"uid"`
+}
+
+type SecurityPolicyCheck struct {
+	Result          string                  `json:"result"`
+	NativeResult    string                  `json:"nativeResult"`
+	NativeSeverity  string                  `json:"nativeSeverity"`
+	Source          string                  `json:"source"`
+	Policy          string                  `json:"policy"`
+	Rule            string                  `json:"rule"`
+	Category        string                  `json:"category"`
+	Scored          *bool                   `json:"scored"`
+	Message         string                  `json:"message"`
+	Process         string                  `json:"process"`
+	Exceptions      string                  `json:"exceptions"`
+	APIVersion      string                  `json:"apiVersion"`
+	ResourceVersion string                  `json:"resourceVersion"`
+	Scope           *SecurityPolicySubject  `json:"scope"`
+	Subjects        []SecurityPolicySubject `json:"subjects"`
+	ScopeSelector   string                  `json:"scopeSelector"`
+	SubjectSelector string                  `json:"subjectSelector"`
+	MaxResults      *int64                  `json:"maxResults"`
+	StatusFilter    []string                `json:"statusFilter"`
+	Summary         map[string]int64        `json:"summary"`
+}
 type SecurityFinding struct {
 	ID        string `json:"id"`
 	Ref       Ref    `json:"ref"`
@@ -60,13 +98,14 @@ type SecurityFinding struct {
 	// Scanner text is external data. The report Ref is the navigation source
 	// when its kind is available in the current catalogue;
 	// owner metadata is descriptive only and does not establish image freshness.
-	Title     string              `json:"title,omitempty"`
-	Image     string              `json:"image,omitempty"`
-	Package   string              `json:"package,omitempty"`
-	Installed string              `json:"installed,omitempty"`
-	Fixed     string              `json:"fixed,omitempty"`
-	Scanner   string              `json:"scanner,omitempty"`
-	ScannedAt int64               `json:"scannedAt,omitempty"`
-	Workload  string              `json:"workload,omitempty"`
-	Audit     *SecurityAuditCheck `json:"audit,omitempty"`
+	Title     string               `json:"title,omitempty"`
+	Image     string               `json:"image,omitempty"`
+	Package   string               `json:"package,omitempty"`
+	Installed string               `json:"installed,omitempty"`
+	Fixed     string               `json:"fixed,omitempty"`
+	Scanner   string               `json:"scanner,omitempty"`
+	ScannedAt int64                `json:"scannedAt,omitempty"`
+	Workload  string               `json:"workload,omitempty"`
+	Audit     *SecurityAuditCheck  `json:"audit,omitempty"`
+	Policy    *SecurityPolicyCheck `json:"policy,omitempty"`
 }

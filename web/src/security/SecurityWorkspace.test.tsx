@@ -12,13 +12,43 @@ const props=()=>({client:fakeClient([]).client,target:{provider:'kubernetes',id:
 const obsolete:SecuritySnapshot={findings:[],problems:[],discovery:'ready',truncated:false,capturedAt:0,resources:0,reports:0,cveState:'empty',auditSources:[{kind:'OBSOLETE-CLUSTER-EVIDENCE',apiVersion:'test/v1',clusterScoped:true,state:'available',reports:1}]}
 it('starts without global consent, sends explicit opt-in, and cancels and hides an unchecked late response',async()=>{
  const p=props(),view=render(<SecurityWorkspace {...p}/>),read=vi.mocked(p.client.clusterSecurity)
- await waitFor(()=>expect(read).toHaveBeenCalledTimes(1));expect(read.mock.calls[0][0]).toEqual({provider:'kubernetes',target:'a',scope:p.scope,includeClusterReports:false})
+ await waitFor(()=>expect(read).toHaveBeenCalledTimes(1));expect(read.mock.calls[0][0]).toEqual({provider:'kubernetes',target:'a',scope:p.scope,includeClusterReports:false,policyReportAPI:''})
  let answer:(s:SecuritySnapshot)=>void=()=>{};let signal:AbortSignal|undefined
  read.mockImplementationOnce((_r,s)=>{signal=s;return new Promise(resolve=>{answer=resolve})})
  const checkbox=screen.getByRole('checkbox',{name:'Include cluster-wide reports'})
  fireEvent.click(checkbox);await waitFor(()=>expect(read).toHaveBeenCalledTimes(2));expect(read.mock.calls[1][0].includeClusterReports).toBe(true);expect(checkbox).toBeChecked()
  fireEvent.click(checkbox);await waitFor(()=>expect(read).toHaveBeenCalledTimes(3));expect(signal?.aborted).toBe(true);expect(read.mock.calls[2][0].includeClusterReports).toBe(false)
  await act(async()=>answer(obsolete));expect(view.container).not.toHaveTextContent('OBSOLETE-CLUSTER-EVIDENCE');expect(checkbox).not.toBeChecked()
+})
+
+it('selects exactly one namespaced policy API and fences the previous API response',async()=>{
+ const p=props(),view=render(<SecurityWorkspace {...p}/>),read=vi.mocked(p.client.clusterSecurity)
+ await waitFor(()=>expect(read).toHaveBeenCalledTimes(1));expect(read.mock.lastCall?.[0].policyReportAPI).toBe('')
+ let answer:(s:SecuritySnapshot)=>void=()=>{};let signal:AbortSignal|undefined
+ read.mockImplementationOnce((_r,s)=>{signal=s;return new Promise(resolve=>{answer=resolve})})
+ fireEvent.click(screen.getByRole('button',{name:'Namespaced policy reports'}));fireEvent.click(screen.getByRole('option',{name:'wgpolicyk8s.io · PolicyReport'}))
+ await waitFor(()=>expect(read.mock.lastCall?.[0].policyReportAPI).toBe('wgpolicy'))
+ fireEvent.click(screen.getByRole('button',{name:'Namespaced policy reports'}));fireEvent.click(screen.getByRole('option',{name:'openreports.io · Report'}))
+ await waitFor(()=>expect(read.mock.lastCall?.[0].policyReportAPI).toBe('openreports'));expect(signal?.aborted).toBe(true)
+ await act(async()=>answer(obsolete));expect(view.container).not.toHaveTextContent('OBSOLETE-CLUSTER-EVIDENCE')
+ fireEvent.click(screen.getByRole('button',{name:'Namespaced policy reports'}));fireEvent.click(screen.getByRole('option',{name:/^Off$/}))
+ await waitFor(()=>expect(read.mock.lastCall?.[0].policyReportAPI).toBe(''))
+})
+
+it.each(['client','target','connection'] as const)('resets namespaced policy selection on %s replacement and ignores stale evidence',async mode=>{
+ const p=props(),read=vi.mocked(p.client.clusterSecurity)
+ const wrap=(connection:string,extra:Partial<typeof p>={})=><ViewConnectionContext value={connection}><SecurityWorkspace {...p} {...extra}/></ViewConnectionContext>
+ const view=render(wrap('initial'));await waitFor(()=>expect(read).toHaveBeenCalledTimes(1))
+ let answer:(s:SecuritySnapshot)=>void=()=>{};let signal:AbortSignal|undefined
+ read.mockImplementationOnce((_r,s)=>{signal=s;return new Promise(resolve=>{answer=resolve})})
+ fireEvent.click(screen.getByRole('button',{name:'Namespaced policy reports'}));fireEvent.click(screen.getByRole('option',{name:'openreports.io · Report'}))
+ await waitFor(()=>expect(read.mock.lastCall?.[0].policyReportAPI).toBe('openreports'))
+ const client=mode==='client'?fakeClient([]).client:p.client
+ view.rerender(wrap(mode==='connection'?'replacement':'initial',{client,...(mode==='target'?{target:{provider:'kubernetes',id:'b'}}:{})}))
+ await waitFor(()=>expect(vi.mocked(client.clusterSecurity).mock.lastCall?.[0].policyReportAPI).toBe(''));expect(signal?.aborted).toBe(true)
+ await act(async()=>answer(obsolete));expect(view.container).not.toHaveTextContent('OBSOLETE-CLUSTER-EVIDENCE')
+ expect(screen.getByRole('button',{name:'Namespaced policy reports'})).toHaveTextContent('Off')
+ view.rerender(wrap('initial'));await waitFor(()=>expect(read.mock.lastCall?.[0].policyReportAPI).toBe(''))
 })
 it.each(['client','target','connection'] as const)('resets explicit global consent on %s replacement and rejects late evidence',async mode=>{
  const p=props(),read=vi.mocked(p.client.clusterSecurity)

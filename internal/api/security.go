@@ -10,6 +10,7 @@ import (
 
 type SecurityRequest struct {
 	IncludeClusterReports bool          `json:"includeClusterReports"`
+	PolicyReportAPI       string        `json:"policyReportAPI"`
 	Provider              string        `json:"provider"`
 	Target                string        `json:"target"`
 	Scope                 core.ScopeSel `json:"scope"`
@@ -26,6 +27,10 @@ func (s *Service) ClusterSecurity(ctx context.Context, req SecurityRequest) (cor
 	if !req.Scope.Valid() || req.Scope.Mode == core.ScopeNone {
 		return core.SecuritySnapshot{}, coded(CodeBadRequest, errors.New("invalid namespace selection"))
 	}
+	options := core.SecurityOptions{IncludeClusterReports: req.IncludeClusterReports, PolicyReportAPI: req.PolicyReportAPI}
+	if !options.Valid() {
+		return core.SecuritySnapshot{}, coded(CodeBadRequest, errors.New("unsupported policy report API selection"))
+	}
 	ctx, cancel := context.WithTimeout(ctx, 75*time.Second)
 	defer cancel()
 	e, err := s.sessionFor(ctx, req.Provider, req.Target)
@@ -36,7 +41,7 @@ func (s *Service) ClusterSecurity(ctx context.Context, req SecurityRequest) (cor
 	if !ok {
 		return core.SecuritySnapshot{}, coded(CodeUnsupported, errors.New("connection does not support security inspection"))
 	}
-	out, err := source.Security(ctx, req.Scope, core.SecurityOptions{IncludeClusterReports: req.IncludeClusterReports})
+	out, err := source.Security(ctx, req.Scope, options)
 	if err != nil {
 		return core.SecuritySnapshot{}, fromProvider(err)
 	}

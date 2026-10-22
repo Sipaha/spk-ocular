@@ -984,18 +984,24 @@ export interface ComparisonSide { ref: Ref; yaml: string; fullYAML: string; capt
 export interface ResourceComparison { left: ComparisonSide; right: ComparisonSide }
 export interface CompareRequest { left: CompareSelection; right: CompareSelection }
 
-export interface SecurityRequest {provider: string; target: string; scope: ScopeSel; includeClusterReports?: boolean}
+export interface SecurityRequest {provider: string; target: string; scope: ScopeSel; includeClusterReports?: boolean; policyReportAPI?: string}
 export interface SecuritySnapshot {
  findings: SecurityFinding[]; problems: ClusterGraph['problems']; discovery: string; truncated: boolean; capturedAt: number; resources: number; reports: number
- auditSources?: {kind: string; apiVersion: string; clusterScoped?: boolean; state: 'available'|'empty'|'missing'|'denied'|'error'|'partial'|'not-requested'; reports: number}[]
+ auditSources?: {kind: string; apiVersion: string; clusterScoped?: boolean; state: 'available'|'empty'|'missing'|'denied'|'error'|'partial'|'not-requested'|'unsupported'; reports: number}[]
  cveState: 'available' | 'empty' | 'missing' | 'denied' | 'error' | 'partial' | 'not-requested'
 }
 export interface SecurityAuditCheck {
  result: 'pass'|'fail'|'unknown'; nativeSeverity: string; category: string; description: string; messages: string[]; remediation: string; scopeType: string; scopeValue: string; scannerName: string; scannerVersion: string; scannerVendor: string; apiVersion: string; resourceVersion: string; ownerUid: string
 }
+export interface SecurityPolicySubject {apiVersion: string; kind: string; namespace: string; name: string; uid: string}
+export interface SecurityPolicyCheck {
+ result: 'pass'|'fail'|'warn'|'error'|'skip'|'unknown'; nativeResult: string; nativeSeverity: string; source: string; policy: string; rule: string; category: string; scored: boolean|null; message: string; process: string; exceptions: string; apiVersion: string; resourceVersion: string
+ scope: SecurityPolicySubject|null; subjects: SecurityPolicySubject[]; scopeSelector: string; subjectSelector: string; maxResults: number|null; statusFilter: string[]; summary: Partial<Record<'pass'|'fail'|'warn'|'error'|'skip',number>>|null
+}
 export interface SecurityFinding {
  audit?: SecurityAuditCheck
- id: string; ref: Ref; kindTitle: string; category: 'configuration' | 'network' | 'rbac' | 'cve' | 'audit'; severity: 'critical' | 'high' | 'medium' | 'low' | 'unknown'
+ policy?: SecurityPolicyCheck
+ id: string; ref: Ref; kindTitle: string; category: 'configuration' | 'network' | 'rbac' | 'cve' | 'audit' | 'policy'; severity: 'critical' | 'high' | 'medium' | 'low' | 'unknown'
  rule: string; container?: string; evidence: string; title?: string; image?: string; package?: string; installed?: string; fixed?: string; scanner?: string; scannedAt?: number; workload?: string
 }
 

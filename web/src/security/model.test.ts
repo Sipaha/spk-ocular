@@ -27,3 +27,11 @@ it('preserves external audit rule semantics and filters results without promotin
  expect(filterFindings([finding],'','','','unknown')).toEqual([])
  expect(filterFindings([audit],'plain <script>','','')).toEqual([audit])
 })
+
+it('keeps policy warn/error/skip distinct and searches native policy/exception evidence',()=>{
+ const policy:SecurityFinding={...finding,category:'policy',rule:'root',title:'Native policy',policy:{result:'skip',nativeResult:'skip',nativeSeverity:'info',source:'other-engine',policy:'native-policy',rule:'native-rule',category:'Operations',scored:null,message:'literal <script>',process:'background scan',exceptions:'declared-exception',apiVersion:'openreports.io/v1alpha1',resourceVersion:'9',scope:null,subjects:[],scopeSelector:'',subjectSelector:'',maxResults:null,statusFilter:[],summary:null}}
+ expect(findingTitle(policy)).toBe('Native policy');expect(recommendation(policy)).toBe('')
+ expect(filterFindings([policy],'other-engine native-rule declared-exception','policy','','skip')).toEqual([policy])
+ for(const result of ['pass','fail','warn','error','unknown'])expect(filterFindings([policy],'','','',result)).toEqual([])
+ for(const result of ['warn','error'] as const){const f={...policy,policy:{...policy.policy!,result,nativeResult:result}};expect(filterFindings([f],'','','',result)).toEqual([f])}
+})

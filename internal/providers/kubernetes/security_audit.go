@@ -13,6 +13,9 @@ func (s securitySource) audit() bool {
 	return s.kind == "ConfigAuditReport" || s.kind == "RbacAssessmentReport" || s.kind == "ClusterConfigAuditReport" || s.kind == "ClusterRbacAssessmentReport"
 }
 
+func (s securitySource) policy() bool   { return s.kind == "PolicyReport" || s.kind == "Report" }
+func (s securitySource) external() bool { return s.audit() || s.policy() }
+
 type securityAuditCoverage struct {
 	ok, incomplete bool
 	reports        int
@@ -33,7 +36,7 @@ func (c *securityAuditCoverage) readError(err error, missing bool) {
 	c.errors[state] = true
 }
 func (c *securityAuditCoverage) finish(source securitySource, out *core.SecuritySnapshot) {
-	if !source.audit() {
+	if !source.external() {
 		return
 	}
 	state := "empty"
