@@ -10,7 +10,7 @@ import (
 )
 
 func (s securitySource) audit() bool {
-	return s.kind == "ConfigAuditReport" || s.kind == "RbacAssessmentReport"
+	return s.kind == "ConfigAuditReport" || s.kind == "RbacAssessmentReport" || s.kind == "ClusterConfigAuditReport" || s.kind == "ClusterRbacAssessmentReport"
 }
 
 type securityAuditCoverage struct {
@@ -72,7 +72,7 @@ func (s *session) securityAuditReport(ref core.Ref, source securitySource, u *un
 		}
 		return value
 	}
-	if u.GetAPIVersion() != source.gvr.GroupVersion().String() || u.GetKind() != source.kind || u.GetResourceVersion() == "" || len(u.GetResourceVersion()) > 256 || u.GetName() == "" || len(u.GetName()) > 253 || u.GetUID() == "" || len(u.GetUID()) > 256 || u.GetNamespace() == "" || len(u.GetNamespace()) > 253 {
+	if u.GetAPIVersion() != source.gvr.GroupVersion().String() || u.GetKind() != source.kind || u.GetResourceVersion() == "" || len(u.GetResourceVersion()) > 256 || u.GetName() == "" || len(u.GetName()) > 253 || u.GetUID() == "" || len(u.GetUID()) > 256 || (!source.global && (u.GetNamespace() == "" || len(u.GetNamespace()) > 253)) || (source.global && u.GetNamespace() != "") {
 		return false
 	}
 	report := securityMap(u.Object, "report")

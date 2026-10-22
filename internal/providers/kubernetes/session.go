@@ -213,6 +213,9 @@ type session struct {
 	cat           *catalog
 	kindsListener atomic.Pointer[func(rev uint64)]
 	crdWatch      sync.Once
+	// CRD timings belong to this session and are immutable once its catalog starts.
+	crdDebounce time.Duration
+	crdMaxDelay time.Duration
 	// tables reads discovered kinds as server-side Tables (nil in tests:
 	// the plain format); schemas are their column epochs; crdDenied — no
 	// right to read CRDs (no provenance from them).
@@ -249,6 +252,7 @@ func newSession(target, hash string, dyn dynamic.Interface, watchList bool) *ses
 	ctx, cancel := context.WithCancel(context.Background())
 	s := &session{
 		graphGate: make(chan struct{}, 1), ctx: ctx, cancel: cancel, target: target, hash: hash, dyn: dyn, caches: newCacheManager(dyn, watchList), now: time.Now, problemSources: problemSources,
+		crdDebounce: crdDebounce, crdMaxDelay: crdMaxDelay,
 		conn:        newConn(&rest.Config{Host: "https://cluster.invalid"}, dyn, target, target, hash),
 		incarnation: randomHex(16), spent: spentGrants{byNonce: map[string]time.Time{}},
 	}

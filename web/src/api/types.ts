@@ -984,10 +984,10 @@ export interface ComparisonSide { ref: Ref; yaml: string; fullYAML: string; capt
 export interface ResourceComparison { left: ComparisonSide; right: ComparisonSide }
 export interface CompareRequest { left: CompareSelection; right: CompareSelection }
 
-export interface SecurityRequest {provider: string; target: string; scope: ScopeSel}
+export interface SecurityRequest {provider: string; target: string; scope: ScopeSel; includeClusterReports?: boolean}
 export interface SecuritySnapshot {
  findings: SecurityFinding[]; problems: ClusterGraph['problems']; discovery: string; truncated: boolean; capturedAt: number; resources: number; reports: number
- auditSources?: {kind: string; apiVersion: string; state: 'available'|'empty'|'missing'|'denied'|'error'|'partial'|'not-requested'; reports: number}[]
+ auditSources?: {kind: string; apiVersion: string; clusterScoped?: boolean; state: 'available'|'empty'|'missing'|'denied'|'error'|'partial'|'not-requested'; reports: number}[]
  cveState: 'available' | 'empty' | 'missing' | 'denied' | 'error' | 'partial' | 'not-requested'
 }
 export interface SecurityAuditCheck {

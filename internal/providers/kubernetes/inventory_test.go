@@ -45,7 +45,7 @@ func TestSnapshotCancellationWhileWaitingForInventoryGate(t *testing.T) {
 			return e
 		},
 		"security": func(s *session, c context.Context) error {
-			_, e := s.Security(c, core.ScopeSel{Mode: core.ScopeAll})
+			_, e := s.Security(c, core.ScopeSel{Mode: core.ScopeAll}, core.SecurityOptions{})
 			return e
 		},
 	}

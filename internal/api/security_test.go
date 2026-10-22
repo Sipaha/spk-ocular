@@ -49,7 +49,7 @@ func TestSecurityIsUIOnlyAndNeverImplicitlyConnects(t *testing.T) {
 
 type securityFenceProvider struct {
 	*argoTestProvider
-	onRead func(context.Context)
+	onRead func(context.Context, core.SecurityOptions)
 }
 
 func (p *securityFenceProvider) ID() string { return "kubernetes" }
@@ -63,11 +63,11 @@ func (p *securityFenceProvider) Open(ctx context.Context, target string) (provid
 
 type securityFenceSession struct {
 	*argoTestSession
-	onRead func(context.Context)
+	onRead func(context.Context, core.SecurityOptions)
 }
 
-func (s *securityFenceSession) Security(ctx context.Context, _ core.ScopeSel) (core.SecuritySnapshot, error) {
-	s.onRead(ctx)
+func (s *securityFenceSession) Security(ctx context.Context, _ core.ScopeSel, options core.SecurityOptions) (core.SecuritySnapshot, error) {
+	s.onRead(ctx, options)
 	return core.SecuritySnapshot{Findings: []core.SecurityFinding{{ID: "obsolete"}}}, nil
 }
 func TestSecurityRejectsCancelledAndReplacedSessionEvidence(t *testing.T) {
@@ -77,7 +77,7 @@ func TestSecurityRejectsCancelledAndReplacedSessionEvidence(t *testing.T) {
 			defer cancel()
 			p := &securityFenceProvider{argoTestProvider: &argoTestProvider{openable: newOpenable("a")}}
 			s, _ := newService(t, p)
-			p.onRead = func(c context.Context) {
+			p.onRead = func(c context.Context, _ core.SecurityOptions) {
 				deadline, ok := c.Deadline()
 				require.True(t, ok)
 				require.LessOrEqual(t, time.Until(deadline), 75*time.Second)
@@ -95,4 +95,24 @@ func TestSecurityRejectsCancelledAndReplacedSessionEvidence(t *testing.T) {
 			require.Empty(t, out.Findings)
 		})
 	}
+}
+
+func TestSecurityClusterReportOptionIsExplicitAndUIOnly(t *testing.T) {
+	seen := []core.SecurityOptions{}
+	p := &securityFenceProvider{argoTestProvider: &argoTestProvider{openable: newOpenable("a")}, onRead: func(_ context.Context, options core.SecurityOptions) { seen = append(seen, options) }}
+	s, _ := newService(t, p)
+	_, err := s.ConnectTarget(UIContext(t.Context()), "kubernetes", "a")
+	require.NoError(t, err)
+	awaitConnection(t, s, "connected")
+	req := SecurityRequest{Provider: "kubernetes", Target: "a", Scope: core.ScopeSel{Mode: core.ScopeOne, Name: "blue"}, IncludeClusterReports: true}
+	_, err = s.ClusterSecurity(t.Context(), req)
+	require.Error(t, err)
+	require.Empty(t, seen)
+	req.IncludeClusterReports = false
+	_, err = s.ClusterSecurity(UIContext(t.Context()), req)
+	require.NoError(t, err)
+	req.IncludeClusterReports = true
+	_, err = s.ClusterSecurity(UIContext(t.Context()), req)
+	require.NoError(t, err)
+	require.Equal(t, []core.SecurityOptions{{}, {IncludeClusterReports: true}}, seen)
 }

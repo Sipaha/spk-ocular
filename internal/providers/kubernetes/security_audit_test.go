@@ -42,7 +42,7 @@ func TestSecurityAuditTypedProvenanceResultsAndPrivacy(t *testing.T) {
 			u := auditFixture(kind)
 			s := newSession("t", "h", securityFake(u), false)
 			defer s.Close()
-			out, err := s.Security(context.Background(), core.ScopeSel{Mode: core.ScopeOne, Name: "blue"})
+			out, err := s.Security(context.Background(), core.ScopeSel{Mode: core.ScopeOne, Name: "blue"}, core.SecurityOptions{})
 			require.NoError(t, err)
 			require.Len(t, out.Findings, 2)
 			require.Equal(t, "available", auditState(out, kind))
@@ -162,7 +162,7 @@ func TestSecurityAuditSourceCoverageScopeAndNoGlobalReads(t *testing.T) {
 			})
 			s := newSession("t", "h", client, false)
 			defer s.Close()
-			out, err := s.Security(context.Background(), core.ScopeSel{Mode: core.ScopeSome, Names: []string{"blue", "green"}})
+			out, err := s.Security(context.Background(), core.ScopeSel{Mode: core.ScopeSome, Names: []string{"blue", "green"}}, core.SecurityOptions{})
 			require.NoError(t, err)
 			expected := mode
 			if mode == "namespace-missing" {
@@ -181,7 +181,7 @@ func TestSecurityAuditSourceCoverageScopeAndNoGlobalReads(t *testing.T) {
 				}
 			}
 			client.ClearActions()
-			out, err = s.Security(context.Background(), core.ScopeSel{Mode: core.ScopeSome, Names: []string{}})
+			out, err = s.Security(context.Background(), core.ScopeSel{Mode: core.ScopeSome, Names: []string{}}, core.SecurityOptions{})
 			require.NoError(t, err)
 			require.Empty(t, client.Actions())
 			require.Equal(t, "not-requested", auditState(out, "ConfigAuditReport"))
@@ -221,14 +221,17 @@ func TestSecurityAuditActualHTTPNamespacePaginationAndCancellation(t *testing.T)
 	require.NoError(t, err)
 	s := newSession("t", "h", d, false)
 	defer s.Close()
-	out, err := s.Security(context.Background(), core.ScopeSel{Mode: core.ScopeOne, Name: "blue"})
+	out, err := s.Security(context.Background(), core.ScopeSel{Mode: core.ScopeOne, Name: "blue"}, core.SecurityOptions{})
 	require.NoError(t, err)
 	require.Len(t, out.Findings, 2)
 	require.Equal(t, "available", auditState(out, "ConfigAuditReport"))
 	hold.Store(true)
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan error, 1)
-	go func() { _, e := s.Security(ctx, core.ScopeSel{Mode: core.ScopeOne, Name: "blue"}); done <- e }()
+	go func() {
+		_, e := s.Security(ctx, core.ScopeSel{Mode: core.ScopeOne, Name: "blue"}, core.SecurityOptions{})
+		done <- e
+	}()
 	select {
 	case <-held:
 	case <-time.After(5 * time.Second):
@@ -257,7 +260,7 @@ func TestSecurityAuditRepeatedCursorIsPartial(t *testing.T) {
 	})
 	s := newSession("t", "h", client, false)
 	defer s.Close()
-	out, err := s.Security(context.Background(), core.ScopeSel{Mode: core.ScopeOne, Name: "blue"})
+	out, err := s.Security(context.Background(), core.ScopeSel{Mode: core.ScopeOne, Name: "blue"}, core.SecurityOptions{})
 	require.NoError(t, err)
 	require.True(t, out.Truncated)
 	require.Equal(t, "partial", auditState(out, "ConfigAuditReport"))
@@ -290,7 +293,7 @@ func TestSecurityAuditFindingCheckAndMessageBudgets(t *testing.T) {
 	}
 	bounded := newSession("t", "h", securityFake(objects...), false)
 	defer bounded.Close()
-	out, err := bounded.Security(context.Background(), core.ScopeSel{Mode: core.ScopeOne, Name: "blue"})
+	out, err := bounded.Security(context.Background(), core.ScopeSel{Mode: core.ScopeOne, Name: "blue"}, core.SecurityOptions{})
 	require.NoError(t, err)
 	require.Len(t, out.Findings, 12000)
 	require.True(t, out.Truncated)

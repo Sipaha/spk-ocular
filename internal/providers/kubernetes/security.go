@@ -56,13 +56,15 @@ var securitySources = []securitySource{
 	{schema.GroupVersionResource{Group: "rbac.authorization.k8s.io", Version: "v1", Resource: "roles"}, "Role", false},
 	{schema.GroupVersionResource{Group: "rbac.authorization.k8s.io", Version: "v1", Resource: "clusterroles"}, "ClusterRole", true},
 	{vulnerabilityReportGVR, "VulnerabilityReport", false},
+	{schema.GroupVersionResource{Group: "aquasecurity.github.io", Version: "v1alpha1", Resource: "clusterconfigauditreports"}, "ClusterConfigAuditReport", true},
+	{schema.GroupVersionResource{Group: "aquasecurity.github.io", Version: "v1alpha1", Resource: "clusterrbacassessmentreports"}, "ClusterRbacAssessmentReport", true},
 	{schema.GroupVersionResource{Group: "aquasecurity.github.io", Version: "v1alpha1", Resource: "configauditreports"}, "ConfigAuditReport", false},
 	{schema.GroupVersionResource{Group: "aquasecurity.github.io", Version: "v1alpha1", Resource: "rbacassessmentreports"}, "RbacAssessmentReport", false},
 }
 
 // Security projects only declared risk fields. No Secret/ConfigMap resources,
 // token contents, image downloads, scanners or writes are requested.
-func (s *session) Security(parent context.Context, scope core.ScopeSel) (core.SecuritySnapshot, error) {
+func (s *session) Security(parent context.Context, scope core.ScopeSel, options core.SecurityOptions) (core.SecuritySnapshot, error) {
 	ctx, release, err := s.inventoryContext(parent)
 	if err != nil {
 		return core.SecuritySnapshot{}, err
@@ -71,7 +73,7 @@ func (s *session) Security(parent context.Context, scope core.ScopeSel) (core.Se
 	out := core.SecuritySnapshot{Findings: []core.SecurityFinding{}, Problems: []core.GraphProblem{}, Discovery: s.cat.snap().state, CVEState: "empty", AuditSources: []core.SecurityAuditSource{}}
 	for _, source := range securitySources {
 		if source.audit() {
-			out.AuditSources = append(out.AuditSources, core.SecurityAuditSource{Kind: source.kind, APIVersion: source.gvr.GroupVersion().String(), State: "not-requested"})
+			out.AuditSources = append(out.AuditSources, core.SecurityAuditSource{Kind: source.kind, APIVersion: source.gvr.GroupVersion().String(), State: "not-requested", ClusterScoped: source.global})
 		}
 	}
 	namespaces := []string{""}
@@ -108,8 +110,11 @@ func (s *session) Security(parent context.Context, scope core.ScopeSel) (core.Se
 		out.Findings = append(out.Findings, f)
 	}
 	for _, source := range securitySources {
+		if source.audit() && source.global && !options.IncludeClusterReports {
+			continue
+		}
 		audit := newSecurityAuditCoverage()
-		audit.incomplete = scopeTruncated
+		audit.incomplete = scopeTruncated && !source.global
 		sourceNamespaces := namespaces
 		if source.global {
 			sourceNamespaces = []string{""}
@@ -229,7 +234,7 @@ func (s *session) Security(parent context.Context, scope core.ScopeSel) (core.Se
 						policies = append(policies, securityPolicy{u.GetNamespace(), sel, ingress, egress})
 					case "Role", "ClusterRole":
 						s.securityRole(ref, source.kind, u, emit, &out.Truncated)
-					case "ConfigAuditReport", "RbacAssessmentReport":
+					case "ConfigAuditReport", "RbacAssessmentReport", "ClusterConfigAuditReport", "ClusterRbacAssessmentReport":
 						audit.reports++
 						if !s.securityAuditReport(ref, source, u, emit, &out.Truncated) || len(out.Findings) >= securityFindingLimit {
 							complete = false

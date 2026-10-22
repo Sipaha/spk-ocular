@@ -1,12 +1,13 @@
 import { WorkspaceToolbar } from '../components/WorkspaceToolbar'
 import { SnapshotBoundary } from '../components/SnapshotBoundary'
 import { ListRefreshProgress } from '../components/ListLoading'
+import { ViewConnectionContext } from '../views/useView'
 import { useSnapshotRequest } from '../views/useSnapshotRequest'
 import { errorDetail } from '../errors'
 import { isoDateTime, localDateTime } from '../dates'
 import { LocationStatus } from '../components/LocationStatus'
 import { RefreshButton } from '../components/RefreshButton'
-import { useCallback, useEffect, useState, type ComponentProps, type MouseEvent, type ReactNode } from 'react'
+import { useCallback, useContext, useEffect, useState, type ComponentProps, type MouseEvent, type ReactNode } from 'react'
 import type { Client } from '../api/client'
 import type { Column, Row, Ref, ScopeSel, SecurityFinding } from '../api/types'
 import { t } from '../i18n'
@@ -39,11 +40,17 @@ export default function SecurityWorkspace({client,target,scope,scopePicker,drawe
  const [selectedID,setSelectedID]=useState('')
  const [subject,setSubject]=useState<Ref|null>(null)
  const [mode,setMode]=useState<'desktop'|'browser'>('browser')
+ const connection=useContext(ViewConnectionContext)
+ const admissionKey=JSON.stringify([target.provider,target.id,connection])
+ const [clusterSelection,setClusterSelection]=useState({client,key:admissionKey,enabled:false})
+ const sameAdmission=clusterSelection.client===client&&clusterSelection.key===admissionKey
+ if(!sameAdmission)setClusterSelection({client,key:admissionKey,enabled:false})
+ const includeClusterReports=sameAdmission&&clusterSelection.enabled
  const scopeKey=JSON.stringify(scope)
- const key=target.provider+'/'+target.id+'/'+scopeKey
+ const key=target.provider+'/'+target.id+'/'+scopeKey+'/'+includeClusterReports
  const date=(at:number)=>at>0?localDateTime(at):t('security.unknown')
  useEffect(()=>{let live=true;client.appInfo().then(info=>{if(live)setMode(info.mode)},()=>{});return()=>{live=false}},[client])
- const load=useCallback((signal:AbortSignal)=>client.clusterSecurity({provider:target.provider,target:target.id,scope:JSON.parse(scopeKey)},signal),[client,target.provider,target.id,scopeKey])
+ const load=useCallback((signal:AbortSignal)=>client.clusterSecurity({provider:target.provider,target:target.id,scope:JSON.parse(scopeKey),includeClusterReports},signal),[client,target.provider,target.id,scopeKey,includeClusterReports])
  const request=useSnapshotRequest(load,key)
  const snapshot=request.value,busy=request.busy,error=request.error?errorDetail(request.error):''
  const rows=filterFindings(snapshot?.findings??[],query,category,severity,result)
@@ -104,6 +111,10 @@ export default function SecurityWorkspace({client,target,scope,scopePicker,drawe
    <RefreshButton data-resync busy={busy} onClick={request.refresh} />
    <span className="ml-auto text-xs text-fg-muted tabular-nums" title={snapshot?isoDateTime(snapshot.capturedAt):undefined}>{snapshot?t('security.snapshot',{time:date(snapshot.capturedAt)}):''}</span>
   </WorkspaceToolbar>
+  {target.provider==='kubernetes'&&<div className="shrink-0 border-b border-line px-3 py-2 text-xs">
+   <label className="flex items-center gap-2"><input type="checkbox" checked={includeClusterReports} onChange={event=>{const enabled=event.currentTarget.checked;mayLeave(()=>{setSubject(null);setSelectedID('');setClusterSelection({client,key:admissionKey,enabled})})}}/>{t('security.includeClusterReports')}</label>
+   <p className="mt-1 text-fg-muted">{t('security.clusterReportsNotice')}</p>
+  </div>}
   <SnapshotBoundary request={request}>
   <div className="relative flex min-h-0 min-w-0 flex-1">
    <div className="flex min-w-0 flex-1 flex-col">
@@ -116,7 +127,7 @@ export default function SecurityWorkspace({client,target,scope,scopePicker,drawe
     {!!snapshot?.auditSources?.length&&<details data-security-audit-status className="shrink-0 border-y border-line bg-panel px-3 py-2 text-xs">
      <summary>{t('security.auditCoverage')}</summary>
      <p className="mt-1 text-fg-muted">{t('security.auditFreshness')}</p>
-     {snapshot.auditSources.map(source=><p key={source.kind} className="mt-1 break-words">{source.kind} · {source.apiVersion} · {t(`security.auditState.${source.state}`)} · {source.reports}</p>)}
+     {snapshot.auditSources.map(source=><p key={source.kind} className="mt-1 break-words">{source.kind} · {source.apiVersion} · {source.clusterScoped?t('graph.clusterResources'):t('security.namespace')} · {t(`security.auditState.${source.state}`)} · {source.reports}</p>)}
     </details>}
     {snapshot&&snapshot.cveState!=='available'&&<div role="status" data-security-cve-status className="shrink-0 border-y border-line bg-panel px-3 py-2 text-xs">
      <p>{t('security.cve')}: {t(`security.cve.${snapshot.cveState}`)}</p>

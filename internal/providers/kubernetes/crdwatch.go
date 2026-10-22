@@ -24,8 +24,8 @@ import (
 
 const crdKindID = "apiextensions.k8s.io/customresourcedefinitions"
 
-// Package vars for tests.
-var (
+// Production defaults; tests configure each session before starting its catalog.
+const (
 	crdDebounce   = time.Second
 	crdMaxDelay   = 5 * time.Second
 	crdBackoffMax = 5 * time.Minute
@@ -35,11 +35,13 @@ var (
 // carries its generation: a callback already on its way when a newer
 // timer replaced it (or the trigger stopped) does nothing.
 type crdTrigger struct {
-	mu      sync.Mutex
-	timer   *time.Timer
-	gen     uint64
-	first   time.Time // the first change not yet refreshed for
-	refresh func()
+	mu       sync.Mutex
+	timer    *time.Timer
+	gen      uint64
+	first    time.Time // the first change not yet refreshed for
+	refresh  func()
+	debounce time.Duration
+	maxDelay time.Duration
 }
 
 func (t *crdTrigger) changed() {
@@ -53,7 +55,7 @@ func (t *crdTrigger) changed() {
 	}
 	t.gen++
 	gen := t.gen
-	delay := min(crdDebounce, t.first.Add(crdMaxDelay).Sub(now))
+	delay := min(t.debounce, t.first.Add(t.maxDelay).Sub(now))
 	t.timer = time.AfterFunc(max(delay, 0), func() { t.fire(gen) })
 }
 
@@ -80,7 +82,7 @@ func (t *crdTrigger) stop() {
 
 func (s *session) watchCRDs(gvr schema.GroupVersionResource) {
 	res := s.dyn.Resource(gvr)
-	trig := &crdTrigger{refresh: s.cat.refresh}
+	trig := &crdTrigger{refresh: s.cat.refresh, debounce: s.crdDebounce, maxDelay: s.crdMaxDelay}
 	defer trig.stop()
 	changed := trig.changed
 	backoff := time.Second

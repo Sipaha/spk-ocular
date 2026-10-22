@@ -9,9 +9,10 @@ import (
 )
 
 type SecurityRequest struct {
-	Provider string        `json:"provider"`
-	Target   string        `json:"target"`
-	Scope    core.ScopeSel `json:"scope"`
+	IncludeClusterReports bool          `json:"includeClusterReports"`
+	Provider              string        `json:"provider"`
+	Target                string        `json:"target"`
+	Scope                 core.ScopeSel `json:"scope"`
 }
 
 func securityKind() core.KindDescriptor {
@@ -35,7 +36,7 @@ func (s *Service) ClusterSecurity(ctx context.Context, req SecurityRequest) (cor
 	if !ok {
 		return core.SecuritySnapshot{}, coded(CodeUnsupported, errors.New("connection does not support security inspection"))
 	}
-	out, err := source.Security(ctx, req.Scope)
+	out, err := source.Security(ctx, req.Scope, core.SecurityOptions{IncludeClusterReports: req.IncludeClusterReports})
 	if err != nil {
 		return core.SecuritySnapshot{}, fromProvider(err)
 	}

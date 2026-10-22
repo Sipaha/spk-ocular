@@ -2,12 +2,16 @@ package synthetic
 
 import (
 	"context"
+	"errors"
 	"github.com/spk/spk-ocular/internal/core"
 	"time"
 )
 
 // Synthetic findings have selectable fixture references and no external scans.
-func (s *session) Security(ctx context.Context, scope core.ScopeSel) (core.SecuritySnapshot, error) {
+func (s *session) Security(ctx context.Context, scope core.ScopeSel, options core.SecurityOptions) (core.SecuritySnapshot, error) {
+	if options.IncludeClusterReports {
+		return core.SecuritySnapshot{}, errors.New("cluster audit reports are not available in this synthetic fixture")
+	}
 	graph, err := s.Graph(ctx, scope)
 	if err != nil {
 		return core.SecuritySnapshot{}, err

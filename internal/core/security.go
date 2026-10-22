@@ -1,5 +1,11 @@
 package core
 
+// SecurityOptions controls explicit additional report acquisition. Namespace
+// selection alone never opts into cluster-scoped audit reports.
+type SecurityOptions struct {
+	IncludeClusterReports bool
+}
+
 // SecuritySnapshot contains declarations and scanner reports, not exploitability
 // or a cluster certification. Raw workload values and Secret inventories are
 // excluded; admitted scanner text is untrusted producer data.
@@ -17,10 +23,11 @@ type SecuritySnapshot struct {
 
 // SecurityAuditSource describes acquisition, never a compliance verdict.
 type SecurityAuditSource struct {
-	Kind       string `json:"kind"`
-	APIVersion string `json:"apiVersion"`
-	State      string `json:"state"`
-	Reports    int    `json:"reports"`
+	Kind          string `json:"kind"`
+	ClusterScoped bool   `json:"clusterScoped"`
+	APIVersion    string `json:"apiVersion"`
+	State         string `json:"state"`
+	Reports       int    `json:"reports"`
 }
 
 // SecurityAuditCheck retains source-native evidence. Owner identity is descriptive

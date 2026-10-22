@@ -7,5 +7,5 @@ import (
 
 // SecuritySource is an optional read-only, UI-only snapshot source.
 type SecuritySource interface {
-	Security(context.Context, core.ScopeSel) (core.SecuritySnapshot, error)
+	Security(context.Context, core.ScopeSel, core.SecurityOptions) (core.SecuritySnapshot, error)
 }

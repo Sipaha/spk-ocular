@@ -495,15 +495,14 @@ func crd(name string) *unstructured.Unstructured {
 
 // A CRD created is the trigger of the next discovery (no timer).
 func TestACRDChangeTriggersDiscovery(t *testing.T) {
-	old := crdDebounce
-	crdDebounce = 10 * time.Millisecond
-	t.Cleanup(func() { crdDebounce = old })
+	t.Parallel()
 	api := &scriptedAPI{}
 	api.set("/api", coreDoc)
 	api.set("/apis", apisDoc(map[string][]v2ver{"apiextensions.k8s.io": {crdsV1}}, "apiextensions.k8s.io"))
 	client := catalogClient()
 	s := newSession("ctx", "h", client, false)
 	defer s.Close()
+	s.crdDebounce = 10 * time.Millisecond
 	s.startCatalog(api.get)
 	waitRev(t, s.cat, 2)
 	require.Eventually(t, func() bool {
@@ -632,17 +631,11 @@ func (r *deltaSink) status() *provider.ViewStatus {
 	return nil
 }
 
-func fastCRDTrigger(t *testing.T, debounce, maxDelay time.Duration) {
-	d, m := crdDebounce, crdMaxDelay
-	crdDebounce, crdMaxDelay = debounce, maxDelay
-	t.Cleanup(func() { crdDebounce, crdMaxDelay = d, m })
-}
-
 // Review 2026-09-30 (Codex, be73e99 P2-2): a CRD created between the
 // discovery and the watch's baseline has no event; the baseline is
 // followed by a discovery.
 func TestACRDCreatedBeforeTheWatchBaselineIsFound(t *testing.T) {
-	fastCRDTrigger(t, 10*time.Millisecond, 50*time.Millisecond)
+	t.Parallel()
 	api := &scriptedAPI{}
 	api.set("/api", coreDoc)
 	api.set("/apis", apisDoc(map[string][]v2ver{"apiextensions.k8s.io": {crdsV1}}, "apiextensions.k8s.io"))
@@ -656,6 +649,7 @@ func TestACRDCreatedBeforeTheWatchBaselineIsFound(t *testing.T) {
 	})
 	s := newSession("ctx", "h", client, false)
 	defer s.Close()
+	s.crdDebounce, s.crdMaxDelay = 10*time.Millisecond, 50*time.Millisecond
 	s.startCatalog(api.get)
 	require.Eventually(t, func() bool { return s.cat.snap().reg.byID["ocular.dev/widgets"] != nil }, 5*time.Second, 5*time.Millisecond)
 }
@@ -663,7 +657,7 @@ func TestACRDCreatedBeforeTheWatchBaselineIsFound(t *testing.T) {
 // Review 2026-09-30 (Codex, be73e99 P2-4): CRD changes that never pause
 // still refresh the catalog, within the bound.
 func TestContinuousCRDChangesStillRefreshWithinTheBound(t *testing.T) {
-	fastCRDTrigger(t, 200*time.Millisecond, 400*time.Millisecond)
+	t.Parallel()
 	api := &scriptedAPI{}
 	api.set("/api", coreDoc)
 	api.set("/apis", apisDoc(map[string][]v2ver{"apiextensions.k8s.io": {crdsV1}}, "apiextensions.k8s.io"))
@@ -672,6 +666,7 @@ func TestContinuousCRDChangesStillRefreshWithinTheBound(t *testing.T) {
 	client.PrependWatchReactor("customresourcedefinitions", func(k8stesting.Action) (bool, watch.Interface, error) { return true, fw, nil })
 	s := newSession("ctx", "h", client, false)
 	defer s.Close()
+	s.crdDebounce, s.crdMaxDelay = 200*time.Millisecond, 400*time.Millisecond
 	s.startCatalog(api.get)
 	waitRev(t, s.cat, 2)
 	require.Eventually(t, func() bool {
@@ -719,8 +714,9 @@ func TestADeniedCRDStreamStopsTheTrigger(t *testing.T) {
 // Review 2026-09-30 (Codex, fe1d532 P3): a timer callback already on its
 // way when a newer timer replaced it does not forget the newer one.
 func TestAnOldCRDTimerCallbackKeepsTheNewTimer(t *testing.T) {
+	t.Parallel()
 	var refreshes atomic.Int32
-	tr := &crdTrigger{refresh: func() { refreshes.Add(1) }}
+	tr := &crdTrigger{refresh: func() { refreshes.Add(1) }, debounce: crdDebounce, maxDelay: crdMaxDelay}
 	tr.changed()
 	tr.mu.Lock()
 	oldGen := tr.gen
