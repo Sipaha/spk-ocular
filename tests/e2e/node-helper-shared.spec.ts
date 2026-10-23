@@ -1,3 +1,4 @@
+import {returnWithWindowButton} from './synth'
 import {test,expect} from '@playwright/test'
 import {launchNodeTools} from './nodeToolsApp'
 import {stop} from './restartApp'
@@ -72,7 +73,7 @@ test('warm node Shell and Files skip launch confirmation and window transfer ret
   await tools.getByRole('button',{name:'Node Shell',exact:true}).click()
   await expect(page.getByRole('dialog',{name:'Node Shell worker-01',exact:true})).toHaveCount(0)
   await expect(page.locator('[data-terminal]')).toContainText('fixture node worker-01 (root)')
-  await popup.getByRole('button',{name:'Return to bottom panel',exact:true}).click();await expect.poll(()=>popup.isClosed()).toBe(true)
+  await returnWithWindowButton(popup,page);await expect.poll(()=>popup.isClosed()).toBe(true)
   await page.locator('[data-tab-kind=files] > button').first().click();await page.locator('[data-tab-kind=files][aria-selected=true]').getByRole('button',{name:'Close tab',exact:true}).click()
   expect(run.fixture.pods.size).toBe(1)
   expect([...run.fixture.pods.values()][0].metadata.uid).toBe(helper.metadata.uid)

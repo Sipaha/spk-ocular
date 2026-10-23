@@ -5,6 +5,7 @@ import {env,kubeconfig,writeAtomic,scratchRoot,selectConnection,connectSelected,
 import {start,stop,freePort} from './restartApp'
 import {compositionServer} from './log-composition-fixture'
 import {languages,languageNames} from '../../web/src/languages'
+import {returnWithWindowButton} from './synth'
 
 async function launch(browser:Browser){
  mkdirSync(scratchRoot,{recursive:true});const root=mkdtempSync(join(scratchRoot,'composed-')),e=env(root),fixture=await compositionServer()
@@ -48,7 +49,8 @@ test('composed source review is inert; overlap, filters, finite download and det
   await expect.poll(()=>popup.evaluate(()=>(window as unknown as {composedCommitted:boolean}).composedCommitted)).toBe(true)
   expect(await popup.evaluate(()=>(window as unknown as {composedText:string}).composedText)).toMatch(/blue\/web-a\/app +blue INFO second/)
   // Detached exports appear in the main window's Downloads history.
-  await popup.getByRole('button',{name:'Return to bottom panel',exact:true}).click();await expect(dock).toContainText('detached-live')
+  await returnWithWindowButton(popup,page)
+  await expect(dock.locator('[data-log-viewport]')).toBeVisible();await expect(dock).toContainText('detached-live')
   expect(fixture.requests.every(r=>r.method==='GET')).toBe(true)
  }finally{writeFileSync(test.info().outputPath('composition-wire.json'),JSON.stringify(fixture.requests,null,2));await f.close()}
 })

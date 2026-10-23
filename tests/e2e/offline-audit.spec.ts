@@ -25,7 +25,9 @@ test('offline Polaris import is explicit and bounded, retains only projection, n
  const f=await launch(browser),{page}=f
  try{
   let dialog=await open(page);const input=dialog.getByLabel('Choose JSON report');await expect(input).toBeDisabled();await dialog.getByRole('checkbox').check()
-  await dialog.getByRole('button',{name:'Choose JSON report'}).focus();const chooser=page.waitForEvent('filechooser');const activate=page.keyboard.press('Enter');await (await chooser).setFiles(data());await activate
+  const choose=dialog.getByRole('button',{name:'Choose JSON report',exact:true})
+  await expect(input).toBeEnabled();await expect(choose).toBeEnabled();await choose.focus();await expect(choose).toBeFocused()
+  const chooser=page.waitForEvent('filechooser');const activate=choose.press('Enter');await (await chooser).setFiles(data());await activate
   const evidence=dialog.getByRole('region',{name:'Imported evidence'});await expect(evidence).toContainText('Reported objects: 1 · Check occurrences: 3');await expect(evidence).toContainText('cpuRequestsMissing');await expect(evidence).toContainText('Reported failure');await expect(evidence).toContainText('Reported pass');await expect(evidence).toContainText('Coverage is unknown');await expect(dialog).not.toContainText('PRIVATE-');await expect(dialog.locator('a,script')).toHaveCount(0)
   const imports=()=>f.requests.filter(r=>r.command==='import').length;const before=imports();await input.setInputFiles({...data(),buffer:Buffer.alloc((1<<20)+1,32)});await expect(dialog.getByRole('alert')).toBeVisible();expect(imports()).toBe(before);await expect(dialog).not.toContainText('cpuRequestsMissing')
   await input.setInputFiles({...data(),buffer:Buffer.from('{"PRIVATE-error":')});await expect(dialog.getByRole('alert')).toBeVisible();await expect(dialog).not.toContainText('cpuRequestsMissing')

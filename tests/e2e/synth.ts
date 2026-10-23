@@ -1,4 +1,4 @@
-import { expect, type Page } from '@playwright/test'
+import { expect, type Locator, type Page } from '@playwright/test'
 import { connectSelected,selectConnection } from './fixtures'
 
 // Helpers of the specs against the synthetic provider (playwright.synth.config.ts).
@@ -63,4 +63,19 @@ export async function returnWithWindowShortcut(popup: Page) {
   await closed
   expect(popup.isClosed()).toBe(true)
   if(inputError&&!(inputError instanceof Error&&inputError.message==='keyboard.down: Target page, context or browser has been closed'))throw inputError
+}
+
+/** A real Return click can close its own page before CDP acknowledges input.
+ * Require the click, exact popup closure and a live owner; reject other errors. */
+export async function returnWithWindowButton(popup:Page,owner:Page,button:Locator=popup.getByRole('button',{name:'Return to bottom panel',exact:true})) {
+ let returnClicked=false
+ await popup.exposeFunction('ocularReturnClicked',()=>{returnClicked=true})
+ await button.evaluate(element=>element.addEventListener('click',()=>{
+  void (window as unknown as {ocularReturnClicked:()=>Promise<void>}).ocularReturnClicked().catch(()=>{})
+ },{capture:true,once:true}))
+ const closed=popup.waitForEvent('close')
+ const inputError=await button.click().then(()=>null,(error:unknown)=>error)
+ if(inputError&&!(inputError instanceof Error&&inputError.message.split('\n')[0]==='locator.click: Target page, context or browser has been closed'))throw inputError
+ await closed
+ expect(returnClicked).toBe(true);expect(popup.isClosed()).toBe(true);expect(owner.isClosed()).toBe(false)
 }

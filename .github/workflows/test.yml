@@ -4,7 +4,7 @@ on:
 permissions:
   contents: read
 jobs:
-  check:
+  core:
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     env:
@@ -19,25 +19,78 @@ jobs:
           go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.11.4
           go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
           go install golang.org/x/vuln/cmd/govulncheck@v1.1.4
-          pnpm --dir tests/e2e exec playwright install --with-deps chromium
-      - name: Full local and CI gate
+      - name: Core gate and both builds
         run: |
           set -o pipefail
           mkdir -p .agents/tmp/check
-          make check CHECK_PARALLEL=1 2>&1 | tee .agents/tmp/check/make-check.log
+          make check-core 2>&1 | tee .agents/tmp/check/make-check.log
       - name: Reachable Go vulnerabilities
         run: |
           set -o pipefail
           mkdir -p .agents/tmp/check
           govulncheck ./... 2>&1 | tee .agents/tmp/check/vulnerabilities.log
+      - name: Upload the checked browser binary
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: browser-test-binary
+          path: build/bin/spk-ocular
+          if-no-files-found: error
+          retention-days: 7
       - name: Upload failure diagnostics
         if: failure()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
-          name: test-diagnostics
+          name: test-diagnostics-core
           path: |
             .agents/tmp/check/*.log
             .agents/tmp/check-*/*.log
+            .agents/tmp/playwright-*
+          if-no-files-found: ignore
+          retention-days: 7
+  browser:
+    needs: core
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        suite: [targets, synth, memo]
+    env:
+      VITEST_MAX_WORKERS: '2'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: browser-test-binary
+          path: build/bin
+      - name: Verify browser binary source
+        shell: bash
+        run: |
+          chmod +x build/bin/spk-ocular
+          python3 - <<'PY'
+          import os, subprocess
+          metadata = subprocess.check_output(['go', 'version', '-m', 'build/bin/spk-ocular'], text=True)
+          assert 'vcs.revision=' + os.environ['GITHUB_SHA'] in metadata, metadata
+          PY
+      - name: Install browser runtime
+        run: pnpm --dir tests/e2e exec playwright install --with-deps chromium
+      - name: Browser suite
+        env:
+          BROWSER_SUITE: ${{ matrix.suite }}
+        run: |
+          set -o pipefail
+          mkdir -p .agents/tmp/check
+          make "test-e2e-$BROWSER_SUITE" 2>&1 | tee .agents/tmp/check/browser.log
+      - name: Upload failure diagnostics
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: test-diagnostics-${{ matrix.suite }}
+          path: |
+            .agents/tmp/check/*.log
             .agents/tmp/playwright-*
           if-no-files-found: ignore
           retention-days: 7

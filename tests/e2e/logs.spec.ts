@@ -1,4 +1,4 @@
-import {stats as lifecycleStats,returnWithWindowShortcut} from './synth'
+import {stats as lifecycleStats,returnWithWindowShortcut,returnWithWindowButton} from './synth'
 import { selectConnection, openAppMenu } from './fixtures'
 import { connectSelected } from './fixtures'
 import { expect, type Page } from '@playwright/test'
@@ -70,7 +70,7 @@ test('log context identifies the source without a duplicate period in all langua
  await expect(popup.locator('[data-log-context]')).toContainText('Connection: demo')
  await expect(popup.locator('[data-log-context] time')).toHaveCount(0)
  await popup.screenshot({path:join(scratchRoot,'log-context-detached.png')})
- await popup.getByRole('button',{name:'Return to bottom panel',exact:true}).click()
+ await returnWithWindowButton(popup,page)
  await expect(strip.locator('time')).toHaveCount(0)
  await panel.getByRole('button',{name:'Since',exact:true}).click()
  await page.getByRole('option',{name:'All time',exact:true}).click()
@@ -108,7 +108,7 @@ test('server filter precedes the buffer and local plain/regex search, including 
  await popup.getByLabel('Filter (*)',{exact:true}).fill('WARN');await changed
  await expect(popup.locator('[data-log-viewport] [data-index]')).toHaveCount(1)
  await expect(popup.getByLabel('matches')).toHaveText('1/1')
- await popup.getByRole('button',{name:'Return to bottom panel',exact:true}).click()
+ await returnWithWindowButton(popup,page)
  await expect(filter).toHaveValue('WARN')
  await expect(rows(panel)).toHaveCount(1)
  await filter.fill('ZZ-no-match')
@@ -992,10 +992,38 @@ test('detached logs use the screen work area in CSS pixels at multiple device sc
  }
 })
 
+test('a delayed log viewer preserves focus from a later resource selection',async({page})=>{
+ await openLogs(page,'api')
+ const grid=page.getByRole('grid',{name:'resources'})
+ let release!:()=>void,requested!:()=>void,workerRequests=0
+ const held=new Promise<void>(resolve=>release=resolve),seen=new Promise<void>(resolve=>requested=resolve)
+ await page.route('**/api/LogInfo',async route=>{
+  // The picker preflight completes first. Hold the already-open viewer's own
+  // metadata request so the next row click happens while its content loads.
+  if(route.request().postDataJSON().name==='workers'&&++workerRequests===2){requested();await held}
+  await route.continue()
+ })
+ await grid.getByRole('gridcell',{name:'workers',exact:true}).click();await page.keyboard.press('l')
+ await seen
+ await expect(page.getByRole('tab',{name:/services\/workers/})).toBeVisible()
+ await grid.getByRole('gridcell',{name:'api',exact:true}).click()
+ const table=grid.locator('[data-table-scroll]')
+ await expect(table).toBeFocused()
+ release()
+ await expect(page.locator('[role=tabpanel]:not([hidden]) [data-log-viewport]')).toContainText('worker-1')
+ await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))))
+ await expect(table).toBeFocused()
+ await page.screenshot({path:join(scratchRoot,'log-loading-preserves-resource-focus.png')})
+ await page.keyboard.press('s')
+ await expect(page.locator('.dock-tab')).toHaveCount(3)
+})
+
 test('dock tab context menus close by order, keep active survivors and clean up streams and detached windows',async({page,context})=>{
  await openLogs(page,'api')
  const grid=page.getByRole('grid',{name:'resources'})
  await grid.getByRole('gridcell',{name:'workers',exact:true}).click();await page.keyboard.press('l')
+ await expect(page.getByRole('tab',{name:/services\/workers/})).toBeVisible()
+ await expect(page.locator('[role=tabpanel]:not([hidden]) [data-log-viewport]')).toBeFocused()
  await grid.getByRole('gridcell',{name:'api',exact:true}).click();await page.keyboard.press('s')
  const tabs=page.locator('.dock-tab'),workers=page.getByRole('tab',{name:/services\/workers/}),api=page.getByRole('tab',{name:/services\/api/})
  await expect(tabs).toHaveCount(3)

@@ -64,8 +64,25 @@ test-go:
 test-web:
 	cd web && pnpm test
 
-test-e2e: build
-	cd tests/e2e && pnpm install --frozen-lockfile --silent && pnpm exec playwright install chromium && pnpm exec playwright test && pnpm exec playwright test -c playwright.synth.config.ts && pnpm exec playwright test -c playwright.memo.config.ts && rm -rf .run
+.PHONY: test-e2e-prepare test-e2e-targets test-e2e-synth test-e2e-memo check-core
+test-e2e: build test-e2e-targets test-e2e-synth test-e2e-memo
+
+# CI supplies the same browser binary to separate native jobs. Local check
+# still builds it first and runs every suite, with each suite's own fixtures.
+test-e2e-prepare:
+	cd tests/e2e && pnpm install --frozen-lockfile --silent && pnpm exec playwright install chromium
+
+test-e2e-targets: test-e2e-prepare
+	cd tests/e2e && pnpm exec playwright test -c playwright.config.ts && rm -rf .run
+
+test-e2e-synth: test-e2e-prepare
+	cd tests/e2e && pnpm exec playwright test -c playwright.synth.config.ts && rm -rf .run
+
+test-e2e-memo: test-e2e-prepare
+	cd tests/e2e && pnpm exec playwright test -c playwright.memo.config.ts && rm -rf .run
+
+# Together with all three prepared browser suites, this is the complete gate.
+check-core: lint test-go test-web test-packaging build build-desktop
 
 lint: lint-go lint-web lint-workflows
 

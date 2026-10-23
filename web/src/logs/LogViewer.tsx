@@ -7,7 +7,7 @@ import { ActionIconButton } from '../components/ActionIconButton'
 import { ActionIcon, WindowActionIcon } from '../components/icons'
 import type { LogViewState, LogWindowBridge } from './windowBridge'
 import { useLayoutResizing } from '../components/layoutResize'
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import type { Client } from '../api/client'
 import type { LogInfo, LogQuery, Ref } from '../api/types'
 import { Select as AppSelect, type SelectOption } from '../components/Select'
@@ -73,6 +73,21 @@ export default function LogViewer({ client: baseClient, composition, connectionN
   const [selecting, setSelecting] = useState(false)
   const resizing = useLayoutResizing()
   const [note, setNote] = useState<string | null>(null)
+  // Track intent before LogInfo resolves and the Stream mounts. A later user
+  // action owns focus even if this viewer's loading or activation frame is late.
+  const focusCancelled = useRef(false)
+  useEffect(() => {
+    focusCancelled.current = false
+    if (!active) return
+    const cancel = () => { focusCancelled.current = true }
+    document.addEventListener('pointerdown', cancel, true)
+    document.addEventListener('keydown', cancel, true)
+    return () => {
+      document.removeEventListener('pointerdown', cancel, true)
+      document.removeEventListener('keydown', cancel, true)
+    }
+  }, [active, focusEpoch])
+  const mayFocus = useCallback(() => !focusCancelled.current, [])
 
   useEffect(() => {
     let live = true
@@ -124,6 +139,7 @@ export default function LogViewer({ client: baseClient, composition, connectionN
       connectionName={connectionName}
       active={active}
       focusEpoch={focusEpoch}
+      mayFocus={mayFocus}
       query={query}
       onServerFilter={setServerFilter}
       bridge={bridge}
@@ -182,7 +198,7 @@ interface ViewState {
   setNote: (v: string | null) => void
 }
 
-function Stream({ client, composition, connectionName, subject, active, focusEpoch, query, onServerFilter, toolbar, view, bridge, initial, windowButton, onWindowAction }: { client: Client; composition?:LogComposition; connectionName?: string; subject: Ref; active: boolean; focusEpoch?: number; query: LogQuery; onServerFilter: (filter: string) => void; toolbar: ReactNode; view: ViewState; bridge?: LogWindowBridge; initial?: LogViewState
+function Stream({ client, composition, connectionName, subject, active, focusEpoch, mayFocus, query, onServerFilter, toolbar, view, bridge, initial, windowButton, onWindowAction }: { client: Client; composition?:LogComposition; connectionName?: string; subject: Ref; active: boolean; focusEpoch?: number; mayFocus: () => boolean; query: LogQuery; onServerFilter: (filter: string) => void; toolbar: ReactNode; view: ViewState; bridge?: LogWindowBridge; initial?: LogViewState
   initialChannel?: string; windowButton?: ReactNode; onWindowAction?: () => void }) {
   const { showTime, setShowTime, wrap, setWrap, follow, setFollow, resizing, selecting, setSelecting, note, setNote } = view
   const { win, sources, status, reopen, clear } = useLogStream({ client, ref: subject, query, paused: selecting || resizing, frozen: !follow, bridge })
@@ -225,10 +241,10 @@ function Stream({ client, composition, connectionName, subject, active, focusEpo
     if (!active) return
     // Run after a picker/dialog restores its opener and a lazy viewer mounts.
     const frame = requestAnimationFrame(() => {
-      if (!document.querySelector('[aria-modal="true"], [role="menu"]')) parentRef.current?.focus({ preventScroll: true })
+      if (mayFocus() && !document.querySelector('[aria-modal="true"], [role="menu"]')) parentRef.current?.focus({ preventScroll: true })
     })
     return () => cancelAnimationFrame(frame)
-  }, [active, focusEpoch])
+  }, [active, focusEpoch, mayFocus])
   const searchRef = useRef<HTMLInputElement>(null)
   const selectAllRef = useRef(false)
   const shownText = () => f.filtered.map((e) => rowText(e, rowOpts)).join('\n')

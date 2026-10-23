@@ -25,6 +25,25 @@ const pod: Ref = { provider: 'kubernetes', target: 'dev', scope: 'ns', kind: 'ap
 
 afterEach(() => { vi.unstubAllGlobals(); useStore.setState({ view: null }) })
 
+it.each(['pointer', 'keyboard'])('keeps later %s focus during LogInfo loading and honors a new explicit open',async(input)=>{
+ const {client}=fakeClient([k8s('dev')]),info=await client.logInfo(pod)
+ let ready!:(value:typeof info)=>void
+ client.logInfo=vi.fn(()=>new Promise<typeof info>(resolve=>ready=resolve))
+ vi.stubGlobal('fetch',vi.fn(async()=>stream().response))
+ const content=(epoch:number)=><><button>Another resource</button><LogViewer client={client} subject={pod} active focusEpoch={epoch}/></>
+ const view=render(content(1)),other=screen.getByRole('button',{name:'Another resource'})
+ if(input==='pointer')fireEvent.pointerDown(other)
+ else fireEvent.keyDown(other,{key:'ArrowDown'})
+ other.focus()
+ await act(async()=>ready(info))
+ const viewport=view.container.querySelector('[data-log-viewport]')!
+ expect(viewport).toBeInTheDocument()
+ await act(()=>new Promise<void>(resolve=>requestAnimationFrame(()=>requestAnimationFrame(()=>resolve()))))
+ expect(other).toHaveFocus()
+ view.rerender(content(2))
+ await waitFor(()=>expect(viewport).toHaveFocus())
+})
+
 describe('LogViewer', () => {
   it('shows atomic partial history with a reserved loader and replaces it before live appends', async () => {
     const { client: c } = fakeClient([k8s('dev')])
