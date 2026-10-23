@@ -11,6 +11,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/stretchr/testify/assert"
@@ -565,7 +566,57 @@ func TestCloseEndsEverythingAndRefusesLateStarts(t *testing.T) {
 	assert.EqualValues(t, 1, late.closed.Load())
 }
 
+// Timer deadlines do not guarantee scheduler service on a loaded host. Keep
+// exact cadence checks on the real notifier/timers inside a synctest clock;
+// the separate loopback test exercises its connection to actual tunnel I/O.
 func TestCountersAreThrottledStateChangesAreNot(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		var events atomic.Int32
+		notifier := newNotifier(func() { events.Add(1) }, 100*time.Millisecond, time.Now)
+		defer notifier.close()
+		notifier.changed(true)
+		require.EqualValues(t, 1, events.Load(), "initial state is synchronous")
+		events.Store(0)
+
+		for range 500 {
+			notifier.changed(false)
+			time.Sleep(time.Millisecond)
+			synctest.Wait()
+		}
+		time.Sleep(150 * time.Millisecond)
+		synctest.Wait()
+		got := events.Load()
+		assert.LessOrEqual(t, got, int32(7), "at most one per interval")
+		assert.GreaterOrEqual(t, got, int32(4), "counters still get through")
+		require.EqualValues(t, 5, got, "each 100ms deadline fires, including the trailing event")
+
+		// The next counter is queued, but a state change must flush at once
+		// and cancel that timer rather than duplicate the event later.
+		notifier.changed(true)
+		events.Store(0)
+		notifier.changed(false)
+		time.Sleep(99 * time.Millisecond)
+		synctest.Wait()
+		require.Zero(t, events.Load(), "counters do not fire before their interval")
+		notifier.changed(true)
+		require.EqualValues(t, 1, events.Load(), "a state change is synchronous with a pending counter")
+		time.Sleep(150 * time.Millisecond)
+		synctest.Wait()
+		require.EqualValues(t, 1, events.Load(), "the cancelled counter cannot emit a duplicate")
+
+		notifier.changed(true)
+		notifier.changed(false)
+		events.Store(0)
+		notifier.close()
+		time.Sleep(150 * time.Millisecond)
+		synctest.Wait()
+		notifier.changed(true)
+		notifier.changed(false)
+		require.Zero(t, events.Load(), "close suppresses queued and subsequent changes")
+	})
+}
+
+func TestTunnelTrafficNotifiesCountersAndStop(t *testing.T) {
 	be := newBackend(t, false)
 	var events atomic.Int32
 	m := newManager(t, Options{EventInterval: 100 * time.Millisecond, OnChange: func() { events.Add(1) }})
@@ -582,9 +633,10 @@ func TestCountersAreThrottledStateChangesAreNot(t *testing.T) {
 	got := events.Load()
 	assert.Greater(t, n, 50, "enough traffic to tell")
 	assert.LessOrEqual(t, got, int32(7), "at most one per interval")
-	assert.GreaterOrEqual(t, got, int32(4), "counters still get through")
+	assert.Positive(t, got, "real tunnel traffic notifies observers")
 	last := m.List()[0]
 	assert.EqualValues(t, 4*n, last.BytesIn)
+	assert.EqualValues(t, 4*n, last.BytesOut)
 
 	events.Store(0)
 	require.NoError(t, m.Stop(in.ID))
