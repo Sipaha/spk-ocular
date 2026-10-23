@@ -45,3 +45,52 @@ class NativeCaptureDiagnostics(unittest.TestCase):
             with patch.object(smoke, 'capture') as capture:
                 smoke.capture_failure('windows', child, Path(directory), RuntimeError('exited'))
                 capture.assert_not_called()
+
+
+class NativeShutdownDiagnostics(unittest.TestCase):
+    def test_failed_close_still_waits_and_reaps_only_owned_process(self):
+        child = Mock(pid=12345)
+        child.poll.return_value = None
+        child.wait.side_effect = [subprocess.TimeoutExpired('owned app', 15), 0]
+        primary = subprocess.CalledProcessError(1, 'graceful close')
+        with patch.object(smoke.subprocess, 'run', side_effect=[primary, Mock()]) as run:
+            with self.assertRaises(subprocess.CalledProcessError) as raised:
+                smoke.stop_child('windows', child)
+        self.assertIs(raised.exception, primary)
+        self.assertEqual(run.call_args_list[0].kwargs['timeout'], 15)
+        self.assertEqual(run.call_args_list[1].args[0], ['taskkill.exe', '/PID', '12345', '/T', '/F'])
+        self.assertEqual([call.kwargs['timeout'] for call in child.wait.call_args_list], [15, 5])
+
+    def test_cleanup_failure_cannot_replace_primary_readiness_failure(self):
+        with tempfile.TemporaryDirectory() as directory:
+            scratch = Path(directory)
+            primary = TimeoutError('readiness request timed out')
+            secondary = subprocess.TimeoutExpired('owned app shutdown', 15)
+            with patch.object(smoke, 'stop_child', side_effect=secondary):
+                with self.assertRaises(TimeoutError) as raised:
+                    try:
+                        raise primary
+                    finally:
+                        smoke.cleanup_child('windows', Mock(), scratch, primary)
+            self.assertIs(raised.exception, primary)
+            self.assertIn('owned app shutdown', (scratch / 'shutdown-failure.txt').read_text())
+
+    def test_cleanup_failure_after_success_still_fails_verification(self):
+        with tempfile.TemporaryDirectory() as directory:
+            secondary = subprocess.TimeoutExpired('owned app shutdown', 15)
+            with patch.object(smoke, 'stop_child', side_effect=secondary):
+                with self.assertRaises(subprocess.TimeoutExpired) as raised:
+                    smoke.cleanup_child('windows', Mock(), Path(directory), None)
+            self.assertIs(raised.exception, secondary)
+
+    def test_primary_traceback_identifies_request_phase(self):
+        with tempfile.TemporaryDirectory() as directory:
+            child = Mock()
+            child.poll.return_value = 1
+            try:
+                raise TimeoutError('readiness request timed out')
+            except TimeoutError as primary:
+                smoke.capture_failure('windows', child, Path(directory), primary)
+            trace = (Path(directory) / 'failure-traceback.txt').read_text()
+            self.assertIn('test_primary_traceback_identifies_request_phase', trace)
+            self.assertIn('TimeoutError: readiness request timed out', trace)
