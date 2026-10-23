@@ -24,7 +24,7 @@ jobs:
         run: |
           set -o pipefail
           mkdir -p .agents/tmp/check
-          make check 2>&1 | tee .agents/tmp/check/make-check.log
+          make check CHECK_PARALLEL=1 2>&1 | tee .agents/tmp/check/make-check.log
       - name: Reachable Go vulnerabilities
         run: |
           set -o pipefail
@@ -37,6 +37,7 @@ jobs:
           name: test-diagnostics
           path: |
             .agents/tmp/check/*.log
+            .agents/tmp/check-*/*.log
             .agents/tmp/playwright-*
           if-no-files-found: ignore
           retention-days: 7

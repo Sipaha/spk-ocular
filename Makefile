@@ -81,7 +81,12 @@ lint-web:
 	cd web && pnpm lint
 
 # The gate before every commit: lint (gofmt included), all tests, both builds.
+ifeq ($(CHECK_PARALLEL),1)
+check:
+	python3 scripts/check-parallel.py
+else
 check: lint test build-desktop
+endif
 
 fmt:
 	gofmt -w cmd internal

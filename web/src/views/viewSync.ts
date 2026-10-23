@@ -64,7 +64,8 @@ export class ViewSync {
     readonly provider: string,
     readonly target: string,
     readonly query: Query,
-    private timers: Timers = { setTimeout, clearTimeout },
+    // Native browser timer methods reject the facade object as their receiver.
+    private timers: Timers = { setTimeout: setTimeout.bind(globalThis), clearTimeout: clearTimeout.bind(globalThis) },
     private cancellation?: { connection: string; pending: () => Promise<void> | undefined; setPending: (p: Promise<void>) => void; has: () => boolean; remember: () => void; forget: () => void },
   ) {}
 

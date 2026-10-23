@@ -9,10 +9,11 @@ import {languages,languageNames} from '../../web/src/languages'
 const grid=(page:Page)=>page.getByRole('grid',{name:'resources'})
 // Metrics API collections also end in /pods; they are not core inventory.
 const corePods=(path:string)=>/^\/api\/v1\/(?:namespaces\/[^/]+\/)?pods$/.test(path)
-async function launch(browser:Browser){
+async function launch(browser:Browser,prepare?:(page:Page)=>Promise<void>){
  mkdirSync(scratchRoot,{recursive:true});const root=mkdtempSync(join(scratchRoot,'presets-')),e=env(root),fixture=await labelServer()
  writeAtomic(e.one,kubeconfig('labels-a','labels-a','labels-b').replace(/https:\/\/[^"\s]+/g,`http://127.0.0.1:${fixture.port}`).replace(/ns-labels-[ab]/g,'blue'))
  const port=await freePort(),url=`http://127.0.0.1:${port}`,page=await browser.newPage({viewport:{width:1440,height:1000}});let app:ChildProcess|undefined
+ await prepare?.(page)
  app=await start(port,e);await page.goto(url)
  const token=await page.locator('meta[name=spk-ocular-api-token]').getAttribute('content')
  const imported=await page.request.post(url+'/api/Configurations',{headers:{Authorization:`Bearer ${token}`,Origin:url},data:{command:'import',paths:[e.one]}});expect(imported.ok()).toBe(true)
@@ -58,6 +59,22 @@ test('exact label projections share inventory, sort/filter all rows and survive 
   await expect(grid(page).getByRole('columnheader',{name:/^app\.kubernetes\.io\/version/})).toBeVisible();await expect(grid(page).getByRole('columnheader',{name:/^Age$/})).toHaveCount(0)
   await page.screenshot({path:join(scratchRoot,'view-presets-restored.png')});expect(errors).toEqual([])
  }finally{writeFileSync(test.info().outputPath('wire-proof.json'),JSON.stringify({phases,views,requests:fixture.requests},null,2));await page.close();await stop(f.app);await fixture.close()}
+})
+test('a transient row-read failure retries with browser timers and reaches the complete inventory',async({browser})=>{
+ const errors:string[]=[];let failed=0,recovered=0
+ const f=await launch(browser,async page=>{
+  page.on('pageerror',error=>errors.push(error.stack??error.message))
+  await page.route('**/api/GetRows',async route=>{
+   if(!failed){failed++;await route.fulfill({status:503,json:{code:'internal',detail:'fixture transient read failure'}})}
+   else{recovered++;await route.continue()}
+  })
+ })
+ try{
+  expect(failed).toBe(1);expect(recovered).toBeGreaterThan(0)
+  await expect(grid(f.page).getByRole('gridcell',{name:'pod-0000',exact:true})).toBeVisible()
+  await expect(f.page.locator('[data-area=table]')).toHaveAttribute('aria-busy','false')
+  expect(errors).toEqual([])
+ }finally{await f.close()}
 })
 test('label configuration fits all eight locales at wide and narrow widths with literal preview',async({browser})=>{
  const f=await launch(browser),{page}=f
