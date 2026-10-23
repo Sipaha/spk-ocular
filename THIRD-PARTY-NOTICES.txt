@@ -13,7 +13,7 @@ Source: https://www.docker.com/static/Docker-Logos-1.zip (SVG/docker-mark-white.
 Brand reference: https://www.docker.com/company/newsroom/media-resources/
 
 ==============================================================================
-Go runtime and standard library (go1.26.9)
+Go runtime and standard library (go1.26.10)
 ==============================================================================
 
 --- LICENSE ---

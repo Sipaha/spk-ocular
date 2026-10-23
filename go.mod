@@ -1,6 +1,6 @@
 module github.com/spk/spk-ocular
 
-go 1.26.9
+go 1.26.10
 
 require (
 	github.com/DATA-DOG/go-sqlmock v1.5.2
