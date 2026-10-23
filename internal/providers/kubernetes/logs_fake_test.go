@@ -3,9 +3,11 @@ package kubernetes
 import (
 	"encoding/json"
 	"fmt"
+	"maps"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -301,16 +303,18 @@ func tailStart(recs []fakeRec, n int) int {
 
 // logRecorder collects what a source delivers.
 type logRecorder struct {
-	mu      sync.Mutex
-	lines   []provider.LogLine
-	lineSrc []string // the source key of each line
-	states  []provider.LogState
-	stateOf map[string]provider.LogState // latest per source key ("" = the stream)
-	ready   bool
-	readyAt int // lines delivered before Ready
-	sources []string
-	keys    map[int]string
-	changed chan struct{}
+	mu          sync.Mutex
+	lines       []provider.LogLine
+	lineSrc     []string // the source key of each line
+	states      []provider.LogState
+	stateOf     map[string]provider.LogState // latest per source key ("" = the stream)
+	ready       bool
+	readyAt     int // lines delivered before Ready
+	readyLines  []provider.LogLine
+	readyStates map[string]provider.LogState
+	sources     []string
+	keys        map[int]string
+	changed     chan struct{}
 }
 
 func newLogRecorder() *logRecorder {
@@ -356,8 +360,21 @@ func (s *logRecorder) Ready() error {
 	defer s.mu.Unlock()
 	s.ready = true
 	s.readyAt = len(s.lines)
+	s.readyLines = slices.Clone(s.lines)
+	s.readyStates = maps.Clone(s.stateOf)
 	s.bumpLocked()
 	return nil
+}
+
+// atReady preserves the backlog boundary even after live sources change state.
+func (s *logRecorder) atReady() ([]string, map[string]provider.LogState) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	texts := make([]string, len(s.readyLines))
+	for i, line := range s.readyLines {
+		texts[i] = line.Text
+	}
+	return texts, maps.Clone(s.readyStates)
 }
 
 func (s *logRecorder) texts() []string {

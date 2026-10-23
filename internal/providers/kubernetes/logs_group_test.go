@@ -272,9 +272,13 @@ func TestGroupSlowBacklogDoesNotHoldOthers(t *testing.T) {
 	g := startGroup(t, client, k, webRef(), provider.LogQuery{Follow: true, TailLines: 10})
 	g.sink.await(t, "ready", func() bool { g.sink.mu.Lock(); defer g.sink.mu.Unlock(); return g.sink.ready })
 	assert.Less(t, time.Since(start), 2*time.Second)
-	assert.Equal(t, []string{"fast"}, g.sink.texts())
-	assert.Contains(t, g.sink.state("pb/app").Message, "did not load in time")
 	g.sink.await(t, "the slow one live", func() bool { return len(g.linesOf("pb/app")) == 1 })
+	assert.Equal(t, provider.LogStreaming, g.sink.state("pb/app").State)
+	// Live recovery must not erase the evidence at the backlog boundary.
+	lines, states := g.sink.atReady()
+	assert.Equal(t, []string{"fast"}, lines)
+	assert.Equal(t, provider.LogError, states["pb/app"].State)
+	assert.Contains(t, states["pb/app"].Message, "did not load in time")
 }
 
 // Without follow (an agent's tail), the caller's deadline ends the backlog:
