@@ -1,4 +1,5 @@
 import {lazy, Suspense} from 'react'
+import {memoOf} from './pageMemo'
 import {useLearning} from '../learning/store'
 import {learn} from '../learning/content'
 import { BaselineControl } from '../compare/BaselineControl'
@@ -18,6 +19,14 @@ import { ConnectionSwitcher } from '../connections/ConnectionSwitcher'
 const OfflineAuditDialog = lazy(() => import('../offlineAudit/OfflineAuditDialog'))
 
 const KrrDialog = lazy(() => import('../krr/KrrDialog'))
+
+function krrNamespace(target:Target|null) {
+ if(!target)return undefined
+ const scope=memoOf(`${target.provider}/${target.id}`).ui?.scope
+ if(scope?.mode==='one')return scope.name
+ if(scope?.mode==='some'&&scope.names?.length===1)return scope.names[0]
+ return scope?undefined:target.defaultScope
+}
 
 /** Connection identity leads the workspace; app utilities stay in a quiet menu. */
 export function AppHeader({target,onHelp,onAbout,client,act,configRef}:{target:Target|null;onHelp:()=>void;onAbout:()=>void;client:Client;act:Actions;configRef:RefObject<ConfigurationActions|null>}){
@@ -49,6 +58,6 @@ export function AppHeader({target,onHelp,onAbout,client,act,configRef}:{target:T
    <button type="button" className="app-utility-action" onClick={()=>{close();onHelp()}}>{t('keys.title')}<kbd>?</kbd></button>
   </section></div>,document.body)}
   {auditOpen&&createPortal(<Suspense fallback={null}><OfflineAuditDialog client={client} target={target} onClose={()=>setAuditOpen(false)}/></Suspense>,document.body)}
-  {krrOpen&&createPortal(<Suspense fallback={null}><KrrDialog client={client} target={target} onClose={()=>{setKrrOpen(false);button.current?.focus()}}/></Suspense>,document.body)}
+  {krrOpen&&createPortal(<Suspense fallback={null}><KrrDialog client={client} target={target} namespace={krrNamespace(target)} onClose={()=>{setKrrOpen(false);button.current?.focus()}}/></Suspense>,document.body)}
  </header>
 }

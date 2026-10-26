@@ -9,11 +9,11 @@ export interface KrrRow {
 export interface KrrReport {rows: KrrRow[]; minimums?: Allocation[]; settings: {key: string; value: number | boolean}[]; errors: number}
 export interface KrrSummary {id: string; origin: string; version: string; createdAt: number; expiresAt: number; rows: number}
 export interface KrrStored {summary: KrrSummary; report: KrrReport}
-export interface KrrRequest {command: 'import' | 'status' | 'get' | 'forget' | 'review' | 'start' | 'cancel'; provider?: string; target?: string; options?: KrrRunOptions; review?: KrrReview; id?: string; version?: string; data?: string}
-export interface KrrResponse {reports: KrrSummary[]; selected?: KrrStored; runs?: KrrRun[]; review?: KrrReview; recovery?: KrrRecovery[]; recoveryUnknown?: boolean}
+export interface KrrRequest {command: 'setup' | 'import' | 'status' | 'get' | 'forget' | 'review' | 'start' | 'cancel'; provider?: string; target?: string; options?: KrrRunOptions; review?: KrrReview; id?: string; version?: string; data?: string}
+export interface KrrResponse {setup?: {sources: string[]; complete: boolean}; reports: KrrSummary[]; selected?: KrrStored; runs?: KrrRun[]; review?: KrrReview; recovery?: KrrRecovery[]; recoveryUnknown?: boolean}
 
 export interface KrrRunOptions {
- namespace: string; serviceAccount: string; source: string; label: string; cluster: string
+ automatic?: boolean; namespace: string; serviceAccount: string; source: string; label: string; cluster: string
  singleCluster: boolean; reviewedAccount: boolean; noSourceAuth: boolean
 }
 export interface KrrReview {

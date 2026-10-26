@@ -1,0 +1,63 @@
+{
+  "api": {
+    "/apis/apps/v1/namespaces/{namespace}/deployments": {
+      "apiVersion": "apps/v1",
+      "kind": "DeploymentList",
+      "items": [
+        {
+          "apiVersion": "apps/v1",
+          "kind": "Deployment",
+          "metadata": {
+            "name": "app",
+            "namespace": "blue"
+          },
+          "spec": {
+            "selector": {
+              "matchLabels": {
+                "app": "fixture"
+              }
+            },
+            "template": {
+              "spec": {
+                "containers": [
+                  {
+                    "name": "main",
+                    "resources": {
+                      "requests": {
+                        "cpu": "500m",
+                        "memory": "100Mi"
+                      },
+                      "limits": {
+                        "memory": "200Mi"
+                      }
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        }
+      ]
+    },
+    "/apis/apps/v1/namespaces/{namespace}/statefulsets": {
+      "apiVersion": "apps/v1",
+      "kind": "StatefulSetList",
+      "items": []
+    },
+    "/apis/apps/v1/namespaces/{namespace}/daemonsets": {
+      "apiVersion": "apps/v1",
+      "kind": "DaemonSetList",
+      "items": []
+    },
+    "/apis/autoscaling/v2/namespaces/{namespace}/horizontalpodautoscalers": {
+      "apiVersion": "autoscaling/v2",
+      "kind": "HorizontalPodAutoscalerList",
+      "items": []
+    }
+  },
+  "pods": {
+    "Deployment/app": [
+      "app-pod"
+    ]
+  }
+}

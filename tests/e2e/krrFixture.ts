@@ -28,7 +28,10 @@ export async function krrFixture(){
   if(url.searchParams.get('watch')==='true'){res.writeHead(200,{'Content-Type':'application/json'});res.flushHeaders();const timer=setInterval(()=>res.write('\n'),1000);res.on('close',()=>clearInterval(timer));return}
   if(path==='/api/v1/namespaces')return reply(res,{apiVersion:'v1',kind:'NamespaceList',metadata:{resourceVersion:'1'},items:[{apiVersion:'v1',kind:'Namespace',metadata:{name:'tools',uid:'ns-tools',resourceVersion:'1'}}]})
   if(path==='/api/v1/namespaces/tools')return reply(res,{apiVersion:'v1',kind:'Namespace',metadata:{name:'tools',uid:'ns-tools',resourceVersion:'1'}})
-  if(path==='/api/v1/namespaces/tools/serviceaccounts/reader')return reply(res,{apiVersion:'v1',kind:'ServiceAccount',metadata:{name:'reader',namespace:'tools',uid:'sa-reader',resourceVersion:'1'}})
+  if(path==='/api/v1/namespaces/tools/serviceaccounts/default'||path==='/api/v1/namespaces/tools/serviceaccounts/reader')return reply(res,{apiVersion:'v1',kind:'ServiceAccount',metadata:{name:'reader',namespace:'tools',uid:'sa-reader',resourceVersion:'1'}})
+  if(path==='/api/v1/services')return reply(res,{apiVersion:'v1',kind:'ServiceList',items:[{apiVersion:'v1',kind:'Service',metadata:{name:'prometheus',namespace:'tools',uid:'prometheus-service'},spec:{ports:[{name:'web',port:9090}]}}]})
+  if(/^\/apis\/apps\/v1\/namespaces\/tools\/(deployments|statefulsets|daemonsets)$/.test(path))return reply(res,{apiVersion:'apps/v1',kind:({deployments:'DeploymentList',statefulsets:'StatefulSetList',daemonsets:'DaemonSetList'} as Record<string,string>)[path.split('/').at(-1)!],items:[]})
+  if(path==='/apis/autoscaling/v2/namespaces/tools/horizontalpodautoscalers')return reply(res,{apiVersion:'autoscaling/v2',kind:'HorizontalPodAutoscalerList',items:[]})
   const jobMatch=path.match(/^\/apis\/batch\/v1\/(?:namespaces\/([^/]+)\/)?jobs(?:\/([^/]+))?$/)
   if(jobMatch){
    const [,ns,name]=jobMatch

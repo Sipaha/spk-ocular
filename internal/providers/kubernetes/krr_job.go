@@ -27,6 +27,7 @@ var krrAccounts = schema.GroupVersionResource{Version: "v1", Resource: "servicea
 var errKRRJob = errors.New("KRR execution contract or identity changed; review again")
 
 type krrGrant struct {
+	Snapshot     string         `json:"-"`
 	Options      krr.RunOptions `json:"options"`
 	NamespaceUID string         `json:"namespaceUID"`
 	AccountUID   string         `json:"accountUID"`
@@ -50,6 +51,9 @@ func (s *session) ReviewKRR(ctx context.Context, o krr.RunOptions) (krr.Review, 
 	if !o.Valid() {
 		return krr.Review{}, errKRRJob
 	}
+	if o.Automatic {
+		o.ServiceAccount = "default"
+	}
 	ns, e := s.dyn.Resource(namespaceGV).Get(ctx, o.Namespace, metav1.GetOptions{})
 	if e != nil {
 		return krr.Review{}, errKRRJob
@@ -64,6 +68,11 @@ func (s *session) ReviewKRR(ctx context.Context, o krr.RunOptions) (krr.Review, 
 	g := krrGrant{Options: o, NamespaceUID: string(ns.GetUID()), AccountUID: string(sa.GetUID()), Name: "ocular-krr-" + randomHex(8), Nonce: randomHex(16), Inc: s.incarnation, Exp: s.now().Add(runGrantTTL).UnixMilli()}
 	if e = s.krrRights(ctx, g.Options.Namespace, g.Name); e != nil {
 		return krr.Review{}, e
+	}
+	if o.Automatic {
+		if _, e = s.krrSnapshot(ctx, o.Namespace); e != nil {
+			return krr.Review{}, e
+		}
 	}
 	return krr.Review{Options: o, Expect: g.token(), Image: krr.Image, NamespaceUID: g.NamespaceUID, ServiceAccountUID: g.AccountUID, Name: g.Name, DeadlineSeconds: 600}, nil
 }
@@ -100,6 +109,15 @@ func (s *session) PrepareKRR(ctx context.Context, r krr.Review, j provider.Helpe
 	if e = s.spent.spend(runGrant{Nonce: g.Nonce, Exp: g.Exp}, s.now); e != nil {
 		return nil, e
 	}
+	if g.Options.Automatic {
+		g.Snapshot, e = s.krrSnapshot(ctx, g.Options.Namespace)
+		if e != nil {
+			return nil, e
+		}
+		if e = s.validateKRR(ctx, g); e != nil {
+			return nil, e
+		}
+	}
 	w := s.writer
 	if w == nil {
 		w = dynWriter{s.dyn}
@@ -110,7 +128,7 @@ func (g krrGrant) identity() core.OwnedHelper {
 	return core.OwnedHelper{Kind: "krr-job", ContractSHA: krrContractSHA(g.podSpec()), ID: g.Nonce, Provider: ProviderID, Target: "", Namespace: g.Options.Namespace, NamespaceUID: g.NamespaceUID, ServiceAccount: g.Options.ServiceAccount, ServiceAccountUID: g.AccountUID, Name: g.Name}
 }
 func (g krrGrant) podSpec() map[string]any {
-	return map[string]any{
+	spec := map[string]any{
 		"nodeSelector": map[string]any{"kubernetes.io/os": "linux"}, "enableServiceLinks": false,
 		"serviceAccountName": g.Options.ServiceAccount, "automountServiceAccountToken": false, "restartPolicy": "Never", "activeDeadlineSeconds": int64(600), "terminationGracePeriodSeconds": int64(0),
 		"securityContext": map[string]any{"runAsNonRoot": true, "runAsUser": int64(65532), "runAsGroup": int64(65532), "fsGroup": int64(65532), "seccompProfile": map[string]any{"type": "RuntimeDefault"}},
@@ -133,6 +151,13 @@ func (g krrGrant) podSpec() map[string]any {
 			"resources": map[string]any{"requests": map[string]any{"cpu": "100m", "memory": "256Mi"}, "limits": map[string]any{"cpu": "1", "memory": "1Gi"}},
 		}},
 	}
+	if g.Options.Automatic {
+		spec["volumes"] = []any{map[string]any{"name": "work", "emptyDir": map[string]any{"medium": "Memory", "sizeLimit": "64Mi"}}}
+		c := spec["containers"].([]any)[0].(map[string]any)
+		c["volumeMounts"] = []any{map[string]any{"name": "work", "mountPath": "/tmp"}}
+		c["command"] = append(c["command"].([]any), g.Snapshot)
+	}
+	return spec
 }
 func (g krrGrant) job() *unstructured.Unstructured {
 	return &unstructured.Unstructured{Object: map[string]any{"apiVersion": "batch/v1", "kind": "Job", "metadata": map[string]any{"name": g.Name, "namespace": g.Options.Namespace, "labels": map[string]any{krrJobLabel: g.Nonce}, "ownerReferences": []any{map[string]any{"apiVersion": "v1", "kind": "Namespace", "name": g.Options.Namespace, "uid": g.NamespaceUID}}}, "spec": map[string]any{"suspend": true, "backoffLimit": int64(0), "activeDeadlineSeconds": int64(600), "ttlSecondsAfterFinished": int64(300), "parallelism": int64(1), "completions": int64(1), "template": map[string]any{"metadata": map[string]any{"labels": map[string]any{krrJobLabel: g.Nonce}}, "spec": g.podSpec()}}}}

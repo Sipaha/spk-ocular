@@ -18,9 +18,8 @@ async function launch(browser:Browser){
  }catch(error){await page.close();await stop(app);await fixture.close();throw error}
 }
 async function prepare(dialog:Locator){
- await dialog.getByLabel('Namespace',{exact:true}).fill('tools');await dialog.getByLabel('Existing ServiceAccount').fill('reader');await dialog.getByLabel('Prometheus base URL (no credentials)').fill('http://metrics.tools.svc:9090')
- await dialog.getByLabel(/I confirm this Prometheus/).check();await dialog.getByLabel(/I reviewed this ServiceAccount/).check();await dialog.getByLabel(/This source requires no extra/).check()
- await dialog.getByRole('button',{name:'Review Job',exact:true}).click();await expect(dialog.getByRole('button',{name:'Start reviewed Job'})).toBeVisible();await expect(dialog).toContainText('namespace UID: ns-tools');await expect(dialog).toContainText('ServiceAccount UID: sa-reader')
+ await expect(dialog.getByLabel('Namespace',{exact:true})).toHaveValue('tools');await expect(dialog.getByLabel('Prometheus base URL (no credentials)')).toHaveValue('http://prometheus.tools.svc:9090')
+ await dialog.getByRole('button',{name:'Review Job',exact:true}).click();await expect(dialog.getByRole('button',{name:'Start reviewed Job'})).toBeVisible();await expect(dialog).toContainText('namespace UID: ns-tools');await expect(dialog).toContainText('Kubernetes reads use your current connection.')
 }
 test('reviewed KRR Job returns a backend report, cleans owned UIDs and survives panel/reload',async({browser})=>{
  const f=await launch(browser),{page,fixture}=f
@@ -39,7 +38,7 @@ test('reviewed KRR Job returns a backend report, cleans owned UIDs and survives 
 test('KRR continues after panel close and explicit cancel cleans the active Job and Pod',async({browser})=>{
  const f=await launch(browser),{page,fixture}=f;fixture.complete(false)
  try{
-  let dialog=await f.open();await prepare(dialog);await dialog.getByRole('button',{name:'Start reviewed Job'}).click();await expect(dialog.getByRole('button',{name:'Cancel run'})).toBeVisible()
+  let dialog=await f.open();await prepare(dialog);await dialog.getByRole('button',{name:'Start reviewed Job'}).click();await expect(dialog.getByRole('button',{name:'Cancel run'})).toBeVisible();await expect.poll(()=>fixture.remaining()).toEqual({jobs:1,pods:1})
   await page.keyboard.press('Escape');expect(f.commands.filter(c=>c==='cancel')).toHaveLength(0);expect(fixture.remaining()).toEqual({jobs:1,pods:1})
   await page.reload();dialog=await f.open();await expect(dialog.getByRole('button',{name:'Cancel run'})).toBeVisible();await dialog.getByRole('button',{name:'Cancel run'}).click();await expect(dialog).toContainText('Run cancelled');await expect.poll(()=>fixture.remaining()).toEqual({jobs:0,pods:0});expect(f.commands.filter(c=>c==='start')).toHaveLength(1);expect(f.commands.filter(c=>c==='cancel')).toHaveLength(1)
  }finally{writeFileSync(test.info().outputPath('krr-cancel-wire.json'),JSON.stringify({requests:fixture.requests,commands:f.commands,remaining:fixture.remaining(),protocolFixtureOnly:true},null,2));await f.close()}

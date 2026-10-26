@@ -179,3 +179,37 @@ func TestKRRAdmissionCountsDurableIntentsAndNotYetJournaledRuns(t *testing.T) {
 	_, e = s.KRR(ctx, KRRRequest{Command: "start", Provider: "kubernetes", Target: "a", Review: response.Review})
 	require.ErrorContains(t, e, "outstanding helper intents")
 }
+
+func (s *krrAPISession) SetupKRR(context.Context) (krr.Setup, error) {
+	return krr.Setup{Sources: []string{"http://prometheus.tools.svc:9090"}, Complete: true}, nil
+}
+func TestKRRSetupRequiresUIAndAdmittedConnection(t *testing.T) {
+	p := &krrAPIProvider{openable: newOpenable("a")}
+	s, _ := newService(t, p)
+	request := KRRRequest{Command: "setup", Provider: "kubernetes", Target: "a"}
+	_, e := s.KRR(t.Context(), request)
+	require.Error(t, e)
+	require.Empty(t, p.opened)
+	ctx := UIContext(t.Context())
+	_, e = s.ListTargets(ctx)
+	require.NoError(t, e)
+	_, e = s.KRR(ctx, request)
+	require.Error(t, e)
+	require.Empty(t, p.opened)
+	_, e = s.ConnectTarget(ctx, "kubernetes", "a")
+	require.NoError(t, e)
+	awaitConnection(t, s, "connected")
+	response, e := s.KRR(ctx, request)
+	require.NoError(t, e)
+	require.NotNil(t, response.Setup)
+	require.True(t, response.Setup.Complete)
+	require.Equal(t, []string{"http://prometheus.tools.svc:9090"}, response.Setup.Sources)
+	require.Zero(t, p.starts.Load())
+	request.Options = &krr.RunOptions{Namespace: "tools"}
+	_, e = s.KRR(ctx, request)
+	require.Error(t, e)
+	request.Options = nil
+	request.Review = &krr.Review{}
+	_, e = s.KRR(ctx, request)
+	require.Error(t, e)
+}

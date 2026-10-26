@@ -25,6 +25,7 @@ type KRRRecovery struct {
 	Name      string `json:"name"`
 }
 type KRRResponse struct {
+	Setup           *krr.Setup    `json:"setup,omitempty"`
 	Recovery        []KRRRecovery `json:"recovery"`
 	RecoveryUnknown bool          `json:"recoveryUnknown"`
 	Runs            []krr.Run     `json:"runs"`
@@ -40,7 +41,7 @@ func (s *Service) KRR(ctx context.Context, r KRRRequest) (KRRResponse, error) {
 	if len(r.ID) > 32 || len(r.Version) > 16 || len(r.Data) > krr.MaxBytes {
 		return KRRResponse{}, coded(CodeBadRequest, krr.ErrInvalid)
 	}
-	if r.Command == "review" || r.Command == "start" {
+	if r.Command == "setup" || r.Command == "review" || r.Command == "start" {
 		return s.krrExecution(ctx, r)
 	}
 	if r.Provider != "" || r.Target != "" || r.Options != nil || r.Review != nil {
@@ -95,6 +96,30 @@ func (s *Service) krrExecution(ctx context.Context, r KRRRequest) (KRRResponse, 
 	}
 	ctx, stop := context.WithTimeout(ctx, 30*time.Second)
 	defer stop()
+	if r.Command == "setup" {
+		if r.Options != nil || r.Review != nil {
+			return KRRResponse{}, coded(CodeBadRequest, krr.ErrInvalid)
+		}
+		e, err := s.sessionFor(ctx, r.Provider, r.Target)
+		if err != nil {
+			return KRRResponse{}, err
+		}
+		source, ok := e.sess.(provider.KRRSetupSource)
+		if !ok {
+			return KRRResponse{}, coded(CodeUnsupported, krr.ErrInvalid)
+		}
+		setup, err := source.SetupKRR(ctx)
+		if err != nil {
+			return KRRResponse{}, coded(CodeBadRequest, err)
+		}
+		current, err := s.sessionFor(ctx, r.Provider, r.Target)
+		if err != nil || current != e {
+			return KRRResponse{}, coded(CodeGone, krr.ErrGone)
+		}
+		out := s.krrStatus(ctx)
+		out.Setup = &setup
+		return out, nil
+	}
 	if r.Command == "review" {
 		if r.Options == nil || r.Review != nil || !r.Options.Valid() {
 			return KRRResponse{}, coded(CodeBadRequest, krr.ErrInvalid)

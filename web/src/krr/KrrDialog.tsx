@@ -7,7 +7,7 @@ import type {Target} from '../api/types'
 import type {KrrResponse,KrrRun,KrrRecovery} from './model'
 import {KrrRunner} from './KrrRunner'
 
-type DialogProps={onClose:()=>void;client:Client;target?:Target|null}
+type DialogProps={onClose:()=>void;client:Client;target?:Target|null;namespace?:string}
 /** Replace renderer state on client changes; backend retention is independent. */
 export default function KrrDialog(props:DialogProps) {
  const [owner,setOwner]=useState({client:props.client,generation:0})
@@ -15,13 +15,14 @@ export default function KrrDialog(props:DialogProps) {
  return <KrrDialogBody key={owner.generation} {...props}/>
 }
 /** The backend owns reports; this panel only selects files and renders projections. */
-function KrrDialogBody({onClose, client, target}:DialogProps) {
+function KrrDialogBody({onClose, client, target,namespace}:DialogProps) {
   const title = useId(), box = useRef<HTMLElement>(null), close = useRef<HTMLButtonElement>(null)
   const keyboard = useModalFocus(box, onClose, close)
   const [confirmed, setConfirmed] = useState(false), [stored, setStored] = useState<KrrStored | null>(null)
   const [busy, setBusy] = useState(false), [error, setError] = useState(false)
   const [reports,setReports] = useState<KrrSummary[]>([])
   const [runs,setRuns]=useState<KrrRun[]>([]),[recovery,setRecovery]=useState<KrrRecovery[]>([]),[recoveryUnknown,setRecoveryUnknown]=useState(false)
+  const [mode,setMode]=useState((target?.provider==='kubernetes'&&target.connection?.state==='connected'?'run':'import') as 'run'|'import')
   const report = stored?.report
   const acceptStatus=useCallback((r:KrrResponse)=>{listRevision.current++;setReports(r.reports);setRuns(r.runs??[]);setRecovery(r.recovery??[]);setRecoveryUnknown(r.recoveryUnknown??false)},[])
   const listRevision = useRef(0)
@@ -41,6 +42,10 @@ function KrrDialogBody({onClose, client, target}:DialogProps) {
     void refresh()
     return () => {controller.abort();if(timer)clearTimeout(timer);invalidate()}
   },[client,invalidate])
+  function changeMode(next:'run'|'import') {
+    if(next===mode)return
+    invalidate();setBusy(false);setError(false);setMode(next)
+  }
   async function request(req:KrrRequest) {
     invalidate();if(req.command!=='cancel')setStored(null);setError(false);setBusy(true)
     const generation=epoch.current,controller=new AbortController();pending.current=controller
@@ -74,12 +79,15 @@ function KrrDialogBody({onClose, client, target}:DialogProps) {
       className="flex max-h-[92vh] w-[min(960px,94%)] min-w-0 flex-col rounded-lg border border-line bg-panel p-4 text-sm shadow-2xl">
       <header className="mb-3 flex shrink-0 items-start gap-3"><h2 id={title} className="flex-1 text-lg font-semibold">{t('krr.title')}</h2><ModalCloseButton ref={close} label={t('action.close')} onClick={onClose}/></header>
       <div className="min-h-0 space-y-3 overflow-y-auto break-words [overflow-wrap:anywhere]">
+        <div className="flex gap-2" role="group" aria-label={t('krr.title')}><button className={`rounded border border-line px-2 py-1 ${mode==='run'?'bg-hover font-semibold':'text-fg-muted'}`} aria-pressed={mode==='run'} onClick={()=>changeMode('run')}>{t('krr.runner')}</button><button className={`rounded border border-line px-2 py-1 ${mode==='import'?'bg-hover font-semibold':'text-fg-muted'}`} aria-pressed={mode==='import'} onClick={()=>changeMode('import')}>{t('krr.importMode')}</button></div>
+        {mode==='run'&&<KrrRunner key={`${target?.provider??''}/${target?.id??''}/${target?.configRev??''}/${target?.connection?.state??''}/${target?.connection?.id??''}`} client={client} target={target} namespace={namespace} onUpdate={acceptStatus} onSettled={()=>close.current?.focus()}/>}
+        <div hidden={mode!=='import'}>
         <p className="text-fg-muted">{t('krr.offline')}</p>
-        <KrrRunner key={`${target?.provider??''}/${target?.id??''}/${target?.configRev??''}/${target?.connection?.state??''}/${target?.connection?.id??''}`} client={client} target={target} onUpdate={acceptStatus} onSettled={()=>close.current?.focus()}/>
         <p className="text-warning">{t('krr.identity')}</p>
         <label className="flex items-start gap-2"><input type="checkbox" checked={confirmed} onChange={e => { invalidate(); setConfirmed(e.target.checked); setStored(null); setBusy(false); setError(false) }}/><span>{t('krr.confirm')}</span></label>
         <div><button type="button" className="rounded border border-line px-2 py-1 disabled:opacity-50" disabled={!confirmed} onClick={()=>fileInput.current?.click()}>{t('krr.choose')}</button><input ref={fileInput} type="file" hidden aria-label={t('krr.choose')} accept=".json,application/json" disabled={!confirmed} onChange={e => {const file=e.target.files?.[0];e.target.value='';load(file)}}/></div>
         <p className="text-xs text-fg-subtle">{t('krr.bounds')}</p>
+        </div>
         {reports.length>0 && <section aria-label={t('krr.retained')} className="space-y-1"><p>{t('krr.retained')}</p>{reports.map(r=><div key={r.id} className="flex flex-wrap items-center gap-2 text-xs"><span>KRR v{r.version} · {r.rows} · {r.id.slice(0,8)}</span><button className="rounded border border-line px-2 py-1" disabled={busy} onClick={()=>void request({command:'get',id:r.id})}>{t('krr.open')}</button><button className="rounded border border-line px-2 py-1" disabled={busy} onClick={()=>void request({command:'forget',id:r.id})}>{t('krr.clear')}</button></div>)}</section>}
         {runs.length>0&&<section aria-label={t('krr.runs')} className="space-y-2 border-t border-line pt-3"><h3 className="font-semibold">{t('krr.runs')}</h3>{runs.map(run=><article key={run.id} className="space-y-1 text-xs"><p className="font-mono">{run.target} · {run.namespace}/{run.name}</p><p>{t(`krr.run.${run.state}`)}</p>{run.cleanupPending&&<p className="text-danger">{t('krr.cleanupPending')}</p>}{(run.state==='running'||run.state==='cancelling')&&<button className="rounded border border-line px-2 py-1" disabled={busy||run.state==='cancelling'} onClick={()=>void request({command:'cancel',id:run.id})}>{t('krr.cancelRun')}</button>}{run.reportID&&<button className="rounded border border-line px-2 py-1" disabled={busy} onClick={()=>void request({command:'get',id:run.reportID})}>{t('krr.open')}</button>}</article>)}</section>}
         {(recovery.length>0||recoveryUnknown)&&<section role="status" className="space-y-1 text-xs text-danger"><p>{t('krr.recovery')}</p>{recovery.map((r,i)=><p key={i} className="font-mono">{r.target} · {r.namespace}/{r.name}</p>)}{recoveryUnknown&&<p>{t('krr.recoveryUnknown')}</p>}</section>}

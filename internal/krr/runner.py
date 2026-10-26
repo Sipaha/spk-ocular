@@ -15,7 +15,8 @@ from urllib.parse import urlsplit
 
 def run():
     sys.path.insert(0, "/app")
-    namespace, source, label, cluster = sys.argv[1:]
+    namespace, source, label, cluster = sys.argv[1:5]
+    snapshot = json.loads(sys.argv[5]) if len(sys.argv) == 6 else None
     allowed_api = {
         "/apis/apps/v1/namespaces/{namespace}/deployments",
         "/apis/apps/v1/namespaces/{namespace}/statefulsets",
@@ -27,6 +28,7 @@ def run():
     with open(os.devnull, "w") as sink, contextlib.redirect_stdout(sink), contextlib.redirect_stderr(sink):
         import requests
         from kubernetes.client import ApiClient
+        from robusta_krr.core.models.objects import PodData
         from robusta_krr import formatters, strategies  # register the pinned engine
         from robusta_krr.core.models.config import Config
         from robusta_krr.core.runner import Runner
@@ -42,12 +44,30 @@ def run():
                 failures.append("api_scope")
                 raise RuntimeError("unsupported API request")
             try:
+                if snapshot is not None:
+                    from types import SimpleNamespace
+                    if path not in snapshot["api"]:
+                        raise RuntimeError("missing snapshot route")
+                    response_type = kwargs.get("response_type", args[5] if len(args) > 5 else None)
+                    result = self.deserialize(SimpleNamespace(data=json.dumps(snapshot["api"][path])), response_type)
+                    if kwargs.get("_return_http_data_only", False):
+                        return result
+                    return result, 200, {}
                 return api_call(self, path, method, path_params, *args, **kwargs)
             except Exception:
                 failures.append("api_unavailable")
                 raise
 
         ApiClient.call_api = guarded_api
+        if snapshot is not None:
+            async def snapshot_pods(self, obj):
+                key = obj.kind + "/" + obj.name
+                if key not in snapshot["pods"]:
+                    failures.append("missing_pod_membership")
+                    raise RuntimeError("missing pod membership")
+                return [PodData(name=name, deleted=False) for name in snapshot["pods"][key]]
+
+            ClusterLoader.list_pods = snapshot_pods
         # Upstream catches HPA denial and assumes none. Here denial fails the run.
         ClusterLoader._try_list_hpa = ClusterLoader._ClusterLoader__list_hpa
 
@@ -82,9 +102,18 @@ def run():
             if 300 <= response.status_code < 400:
                 failures.append("redirect")
                 raise RuntimeError("metrics redirect rejected")
+            if response.status_code >= 400:
+                failures.append("source_unavailable")
+                raise RuntimeError("metrics source unavailable")
             return response
 
         requests.sessions.Session.request = guarded_http
+        if snapshot is not None and not label:
+            # Reject an observed shared source; a single/absent label still does
+            # not authenticate this cluster or its historical workload identity.
+            probe = requests.get(source.rstrip("/") + "/api/v1/label/cluster/values").json()
+            if probe.get("status") != "success" or not isinstance(probe.get("data"), list) or len(probe["data"]) > 1:
+                raise RuntimeError("metrics scope needs an exact filter")
         settings = dict(cpu_percentile=95, memory_buffer_percentage=15, points_required=100,
                         allow_hpa=False, use_oomkill_data=False, oom_memory_buffer_percentage=25,
                         history_duration=336, timeframe_duration=1.25)
@@ -96,7 +125,10 @@ def run():
                         quiet=True, log_to_stderr=True, show_cluster_name=False)
         Config.set_config(config)
         logging.disable(logging.CRITICAL)
-        config.load_kubeconfig()
+        if snapshot is None:
+            config.load_kubeconfig()
+        else:
+            config.inside_cluster = True
         async def unknown_history(self, cluster):
             self.errors.append({"name": "HistoryRangeUnknown"})
 

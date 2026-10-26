@@ -11,3 +11,8 @@ type KRRRunner interface {
 	ReviewKRR(context.Context, krr.RunOptions) (krr.Review, error)
 	PrepareKRR(context.Context, krr.Review, HelperJournal) (krr.Execution, error)
 }
+
+// KRRSetupSource performs read-only discovery through an admitted connection.
+type KRRSetupSource interface {
+	SetupKRR(context.Context) (krr.Setup, error)
+}
