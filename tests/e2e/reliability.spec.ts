@@ -16,7 +16,7 @@ async function launch(browser:Browser){
  const nav=page.getByRole('navigation',{name:'resources'});await nav.getByRole('textbox',{name:'Filter resources'}).fill('Deployments');await nav.getByRole('button',{name:'Deployments',exact:true}).click()
  let detailReads=0;page.on('response',response=>{if(response.url().endsWith('/api/GetResource')&&response.request().postDataJSON()?.name==='web')detailReads++})
  const grid=page.getByRole('grid',{name:'resources'});await grid.getByRole('gridcell',{name:'web',exact:true}).click()
- const drawer=page.locator('[data-resource-drawer]'),panel=drawer.locator('[data-resource-reliability]');await expect(panel).toBeVisible();await expect.poll(()=>detailReads).toBeGreaterThanOrEqual(2)
+ const drawer=page.locator('[data-resource-drawer]'),panel=drawer.locator('[data-resource-reliability]');await drawer.getByText('Checks for this resource',{exact:true}).click();await expect(panel).toBeVisible();await expect.poll(()=>detailReads).toBeGreaterThanOrEqual(2)
  return {page,fixture,drawer,panel,close:async()=>{await page.close();await stop(app);await fixture.close()}}
  } catch(error) {await page.close();await stop(app);await fixture.close();throw error}
 }
@@ -49,5 +49,43 @@ test('reliability inspection retains a held YAML draft through the ordinary leav
   await drawer.getByRole('tab',{name:'YAML',exact:true}).click();await drawer.getByRole('button',{name:'Edit',exact:true}).click();await drawer.locator('.cm-content').click();await page.keyboard.press('Control+End');await page.keyboard.type('\n# retained reliability draft')
   await drawer.getByRole('tab',{name:'Details',exact:true}).click();const prompt=page.getByRole('alertdialog',{name:'Discard edits?',exact:true});await expect(prompt).toBeVisible();await prompt.getByRole('button',{name:'Keep editing',exact:true}).click();await expect(drawer.locator('.cm-content')).toContainText('retained reliability draft');await expect(drawer.getByRole('heading',{name:'web',exact:true})).toBeVisible()
   expect(f.fixture.requests.every(r=>r.method==='GET')).toBe(true)
+ }finally{await f.close()}
+})
+
+test('namespace checks are explicit, namespace-scoped and drill down to pinned resources',async({browser})=>{
+ const f=await launch(browser),{page,fixture}=f
+ try{
+  const nav=page.getByRole('navigation',{name:'resources'})
+  await nav.getByRole('textbox',{name:'Filter resources'}).fill('Namespace checks')
+  await nav.getByRole('button',{name:'Namespace checks',exact:true}).click()
+  const workspace=page.getByRole('region',{name:'Namespace checks',exact:true})
+  await workspace.getByRole('button',{name:'Namespace',exact:true}).click()
+  await page.getByRole('option',{name:'All namespaces',exact:true}).click()
+  await expect(workspace.getByText('Select one namespace to run checks.')).toBeVisible()
+  await expect(workspace.getByRole('button',{name:'Load configuration checks'})).toBeDisabled()
+  await workspace.getByRole('button',{name:'Namespace',exact:true}).click()
+  await page.getByRole('option',{name:'blue',exact:true}).click()
+  await page.keyboard.press('Escape')
+  const start=fixture.requests.length
+  await workspace.getByRole('button',{name:'Load configuration checks'}).click()
+  await expect(workspace.getByText('Resources checked: 3')).toBeVisible()
+  await expect(workspace.getByText('apps/deployments/web',{exact:true})).toBeVisible()
+  await expect(workspace.getByText(/Some sources or resources/)).toBeVisible()
+  const reads=fixture.requests.slice(start)
+  expect(reads.every(r=>r.method==='GET')).toBe(true)
+  expect(reads.filter(r=>/\/(deployments|statefulsets|daemonsets|pods|poddisruptionbudgets|horizontalpodautoscalers)(?:\/|$)/.test(r.path)).every(r=>r.path.includes('/namespaces/blue/'))).toBe(true)
+  for(const code of languages){
+   await openAppMenu(page);await page.locator('.language-menu button').click();await page.getByRole('option',{name:languageNames[code],exact:true}).click();await expect(page.locator('html')).toHaveAttribute('lang',code)
+   for(const width of [1440,860]){
+    await page.setViewportSize({width,height:1000})
+    expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true)
+    await page.screenshot({path:join(scratchRoot,`namespace-checks-${code}-${width}.png`)})
+   }
+  }
+  await page.setViewportSize({width:1440,height:1000})
+  await openAppMenu(page);await page.locator('.language-menu button').click();await page.getByRole('option',{name:'English',exact:true}).click();await expect(page.locator('html')).toHaveAttribute('lang','en')
+  await workspace.locator('li').filter({has:page.getByText('apps/deployments/web',{exact:true})}).getByRole('button',{name:'Open resource'}).click()
+  const drawer=page.locator('[data-resource-drawer]');await expect(drawer.getByRole('heading',{name:'web',exact:true})).toBeVisible()
+  await drawer.getByRole('tab',{name:'YAML',exact:true}).click();await expect(drawer).toContainText('deploy-web')
  }finally{await f.close()}
 })

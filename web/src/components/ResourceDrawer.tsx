@@ -529,12 +529,16 @@ function Details(props: { snapshotKey:unknown;revision?:string; onDiagnosisLogs:
       </dl>
       {r.metricsHistoryAvailable&&<RetainedSection pending={pending}><ResourceMetricsHistory client={client} subject={r.ref} snapshotKey={props.snapshotKey} revision={props.revision}/></RetainedSection>}
       {r.gatekeeperAuditAvailable&&<RetainedSection pending={pending}><ResourceGatekeeper client={client} subject={r.ref} snapshotKey={props.snapshotKey} revision={props.revision}/></RetainedSection>}
+      {(r.vpaAvailable||r.reliabilityAvailable||r.diagnosisAvailable)&&<details className="min-w-0 space-y-3 border-t border-line pt-3" data-resource-checks>
+       <summary className="cursor-pointer text-sm font-semibold focus-visible:outline-2 focus-visible:outline-accent">{t('assessment.resourceChecks')}</summary>
+       <p className="text-xs text-fg-muted">{t('assessment.resourceHint')}</p>
       {r.vpaAvailable&&<RetainedSection pending={pending}><ResourceVPA client={client} subject={r.ref} snapshotKey={props.snapshotKey} revision={props.revision} onGo={onGo}/></RetainedSection>}
-      {r.nodeCapacityAvailable&&<RetainedSection pending={pending}><ResourceCapacity client={client} subject={r.ref} snapshotKey={props.snapshotKey} revision={props.revision} onGo={onGo}/></RetainedSection>}
       {r.reliabilityAvailable&&<RetainedSection pending={pending}><ResourceReliability client={client} subject={r.ref} snapshotKey={props.snapshotKey} revision={props.revision} onGo={onGo}/></RetainedSection>}
+      {r.diagnosisAvailable&&<RetainedSection pending={pending}><ResourceDiagnosis client={client} subject={r.ref} onGo={onGo} onLogs={props.onDiagnosisLogs}/></RetainedSection>}
+      </details>}
+      {r.nodeCapacityAvailable&&<RetainedSection pending={pending}><ResourceCapacity client={client} subject={r.ref} snapshotKey={props.snapshotKey} revision={props.revision} onGo={onGo}/></RetainedSection>}
       {r.certificateStatusAvailable&&<RetainedSection pending={pending}><ResourceCertificate client={client} subject={r.ref} onGo={onGo}/></RetainedSection>}
       {r.networkPathAvailable&&<RetainedSection pending={pending}><ResourceNetworkPath client={client} subject={r.ref} onGo={onGo}/></RetainedSection>}
-      {r.diagnosisAvailable&&<RetainedSection pending={pending}><ResourceDiagnosis client={client} subject={r.ref} onGo={onGo} onLogs={props.onDiagnosisLogs}/></RetainedSection>}
       {r.fluxTracking&&<RetainedSection pending={pending}><FluxManagedBy client={client} resource={r} scope={argoScope} onGo={onFluxResource??onGo}/></RetainedSection>}
       {r.argoTracking&&<RetainedSection pending={pending}><ArgoManagedBy client={client} resource={r} scope={argoScope} onGo={onArgoApplication??onGo}/></RetainedSection>}
       <PodContainers groups={containerFacts.groups} />

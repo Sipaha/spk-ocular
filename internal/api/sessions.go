@@ -389,6 +389,9 @@ func (s *Service) ListKinds(ctx context.Context, providerID, target string) (Kin
 				}
 			}
 		}
+		if _, ok := e.sess.(provider.NamespaceAssessmentSource); ok {
+			catalog.Kinds = append(append([]core.KindDescriptor(nil), catalog.Kinds...), assessmentKind())
+		}
 		if _, ok := e.sess.(provider.SecuritySource); ok {
 			catalog.Kinds = append(append([]core.KindDescriptor(nil), catalog.Kinds...), securityKind())
 		}

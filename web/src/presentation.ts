@@ -91,6 +91,7 @@ export function kindLabel(provider: string, kind: KindDescriptor): string {
  if(kind.workspace === 'argocd-repositories') return t('argo.repositories')
  if(kind.workspace === 'argocd-clusters') return t('argo.clusters')
  if(kind.workspace === 'rbac') return t('rbac.title')
+ if(kind.workspace === 'assessment') return t('assessment.title')
  if(kind.workspace === 'security') return t('security.title')
  if(kind.workspace === 'timeline') return t('timeline.title')
  if(kind.workspace === 'graph') return t('graph.title')

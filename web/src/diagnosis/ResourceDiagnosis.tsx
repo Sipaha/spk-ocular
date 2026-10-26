@@ -1,3 +1,4 @@
+import {AssessmentIntro} from '../components/AssessmentIntro'
 import {useCallback,useContext,useEffect,useRef,useState} from 'react'
 import type {Client} from '../api/client'
 import type {Ref} from '../api/types'
@@ -24,9 +25,9 @@ function Panel({client,subject,onGo,onLogs}:{client:Client;subject:Ref;onGo:(ref
  },[client,refJSON])
  const request=useSnapshotRequest(load,identity(subject),{enabled})
  const snapshot=request.value
- return <section aria-label={t('diagnosis.title')} className="min-w-0 space-y-2">
+ return <section aria-label={t('diagnosis.title')} className="min-w-0 space-y-3 rounded-md border border-line p-3">
   <h3 className="text-sm font-semibold">{t('diagnosis.title')}</h3>
-  <p className="text-xs text-fg-muted">{t('diagnosis.notice')}</p>
+  <AssessmentIntro purpose="diagnosis.purpose" notice="diagnosis.notice"/>
   <div className="flex gap-2"><button className={button} disabled={request.busy} onClick={()=>enabled?request.refresh():setEnabled(true)}>{request.busy?t('app.loading'):t('diagnosis.run')}</button>{request.busy&&<button className={button} onClick={request.cancel}>{t('view.loadCancel')}</button>}</div>
   {request.error!=null&&<p role="alert" className="text-xs text-danger">{errorDetail(request.error)}</p>}
   {request.cancelled&&<p className="text-xs text-fg-muted">{t('view.loadCancelled')}</p>}

@@ -161,6 +161,9 @@ func (h *HTTP) routes() {
 	h.mux.Handle("POST /api/NodeCapacity", noStore(handle(func(ctx context.Context, req *core.NodeCapacityRequest) (any, error) {
 		return h.api.NodeCapacity(ctx, *req)
 	})))
+	h.mux.Handle("POST /api/AssessNamespace", noStore(handle(func(ctx context.Context, req *core.NamespaceAssessmentRequest) (any, error) {
+		return h.api.AssessNamespace(ctx, *req)
+	})))
 	h.mux.Handle("POST /api/ResourceReliability", noStore(handle(func(ctx context.Context, ref *core.Ref) (any, error) { return h.api.ResourceReliability(ctx, *ref) })))
 	h.mux.Handle("POST /api/GatekeeperAudit", noStore(handle(func(ctx context.Context, ref *core.Ref) (any, error) { return h.api.GatekeeperAudit(ctx, *ref) })))
 	h.mux.Handle("POST /api/CertificateStatus", noStore(handle(func(ctx context.Context, ref *core.Ref) (any, error) { return h.api.CertificateStatus(ctx, *ref) })))

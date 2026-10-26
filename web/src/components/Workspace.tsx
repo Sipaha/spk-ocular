@@ -14,6 +14,7 @@ import { lazy, Suspense } from 'react'
 const RbacWorkspace = lazy(() => import('../rbac/RbacWorkspace'))
 const FluxWorkspace=lazy(()=>import('../fluxcd/FluxWorkspace'))
 const ArgoWorkspace = lazy(() => import('../argocd/ArgoWorkspace'))
+const AssessmentWorkspace=lazy(()=>import('../assessment/AssessmentWorkspace'))
 const SecurityWorkspace = lazy(() => import('../security/SecurityWorkspace'))
 const TimelineWorkspace = lazy(() => import('../timeline/TimelineWorkspace'))
 const GraphWorkspace = lazy(() => import('../graph/GraphWorkspace'))
@@ -453,6 +454,11 @@ export function Workspace({ client, hub, target, onFavorite, onMoveFavorite, onN
           /></Suspense>
         ) : page.kind.workspace === 'rbac' ? (
           <Suspense fallback={<LoadingState />}><RbacWorkspace key={page.key} client={client} target={target} scope={scope}
+            scopePicker={<WorkspaceScopePicker client={client} hub={hub} target={target} scope={scope} scopes={scopes} scopeMenu={scopeMenu} onScope={setScope} />}
+            drawer={{client,hub,target,argoScope:scope,onArgoApplication:openArgoApplication,onFluxResource:openFluxResource,hasLogs,onLogs:openLogs,hasExec,onTerminal:openTerminal,hasForward,actionsOf,onAction:openAction,eventsKindOf,editableOf,valuesOf,kindTitleOf}}
+          /></Suspense>
+        ) : page.kind.workspace === 'assessment' ? (
+          <Suspense fallback={<LoadingState />}><AssessmentWorkspace key={page.key} client={client} target={target} scope={scope}
             scopePicker={<WorkspaceScopePicker client={client} hub={hub} target={target} scope={scope} scopes={scopes} scopeMenu={scopeMenu} onScope={setScope} />}
             drawer={{client,hub,target,argoScope:scope,onArgoApplication:openArgoApplication,onFluxResource:openFluxResource,hasLogs,onLogs:openLogs,hasExec,onTerminal:openTerminal,hasForward,actionsOf,onAction:openAction,eventsKindOf,editableOf,valuesOf,kindTitleOf}}
           /></Suspense>

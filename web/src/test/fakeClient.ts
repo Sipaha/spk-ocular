@@ -54,6 +54,7 @@ export function fakeClient(targets: Target[], connected = false) {
  resourceMetricsHistory:vi.fn(async(req)=>({ref:req.ref,resourceVersion:"1",source:"https://fixture.invalid",scope:"dedicated-asserted",capturedAt:0,requestedStart:0,start:0,end:0,step:60,metrics:[],declarations:[]})),
  resourceVPA:vi.fn(async(ref)=>({ref,resourceVersion:"1",capturedAt:0,state:"not-discovered",hpaState:"not-checked",sources:[],declarations:[],hpaMetrics:[]})),
  nodeCapacity:vi.fn(async(req)=>({ref:req.ref,namespace:req.namespace,resourceVersion:"1",capturedAt:0,allocatable:{cpu:{state:"unknown"},memory:{state:"unknown"}},requests:{cpu:{state:"unknown"},memory:{state:"unknown"}},pods:[],coverage:"unknown",excludedTerminal:0,unverified:0})),
+ assessNamespace:vi.fn(async(req)=>({namespace:req.namespace,check:req.check,capturedAt:0,partial:false,resources:[],coverage:[]})),
  resourceReliability:vi.fn(async(ref)=>({ref,resourceVersion:"1",capturedAt:0,observations:[],pdbState:"unknown",hpaState:"unknown",partial:false})),
  offlineAudit: async()=>({reports:[]}),
  krr: async()=>({reports:[]}),

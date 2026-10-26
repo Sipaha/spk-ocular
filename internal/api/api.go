@@ -29,6 +29,7 @@ type API interface {
 	ResourceVPA(context.Context, core.Ref) (core.VPAInspection, error)
 	NodeCapacity(context.Context, core.NodeCapacityRequest) (core.NodeCapacity, error)
 	ResourceReliability(context.Context, core.Ref) (core.Reliability, error)
+	AssessNamespace(context.Context, core.NamespaceAssessmentRequest) (core.NamespaceAssessment, error)
 	ArgoCD(context.Context, ArgoRequest) (core.ArgoSnapshot, error)
 	FluxCD(context.Context, FluxRequest) (core.FluxSnapshot, error)
 	RBACSnapshot(context.Context, RBACRequest) (core.RBACSnapshot, error)

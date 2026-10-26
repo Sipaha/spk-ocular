@@ -1,3 +1,4 @@
+import {AssessmentIntro} from '../components/AssessmentIntro'
 import {useCallback,useContext,useState} from 'react'
 import type {Client} from '../api/client'
 import type {Ref} from '../api/types'
@@ -27,11 +28,11 @@ function Panel({client,subject,onGo}:{client:Client;subject:Ref;onGo:(ref:Ref)=>
  const snapshot=enabled&&!request.busy&&!request.cancelled&&!request.error?request.value:null
  const source=(ref:Ref,revision:string)=>{
   const local=ref.provider===subject.provider&&ref.target===subject.target&&ref.scope===subject.scope&&ref.uid
-  return <div className="min-w-0 space-y-1"><p>{local?<button type="button" className={button+' max-w-full break-all text-left'} onClick={()=>onGo(ref)}>{ref.kind}/{ref.name}</button>:<span>{ref.kind}/{ref.name}</span>}</p><p className="break-all text-fg-muted"><code>{ref.uid}</code> · resourceVersion <code>{revision}</code></p></div>
+  return <div className="min-w-0 space-y-1"><p>{local?<button type="button" className={button+' max-w-full break-all text-left'} onClick={()=>onGo(ref)}>{ref.kind}/{ref.name}</button>:<span>{ref.kind}/{ref.name}</span>}</p><details className="text-fg-muted"><summary className="cursor-pointer">{t('assessment.evidence')}</summary><p className="mt-2 break-all"><code>{ref.uid}</code> · resourceVersion <code>{revision}</code></p></details></div>
  }
- return <section data-resource-vpa aria-label={t('vpa.title')} className="min-w-0 space-y-2 wrap-anywhere">
+ return <section data-resource-vpa aria-label={t('vpa.title')} className="min-w-0 space-y-3 rounded-md border border-line p-3 wrap-anywhere">
   <h3 className="text-sm font-semibold">{t('vpa.title')}</h3>
-  <p className="text-xs text-fg-muted">{t('vpa.notice')}</p>
+  <AssessmentIntro purpose="vpa.purpose" notice="vpa.notice"/>
   <button type="button" className={button} disabled={request.busy} onClick={()=>enabled?request.refresh():setEnabled(true)}>{request.busy?t('app.loading'):t('vpa.load')}</button>
   {request.busy&&<button type="button" className={button+' ml-2'} onClick={request.cancel}>{t('view.loadCancel')}</button>}
   {request.error!=null&&<p role="alert" className="text-xs text-danger">{errorDetail(request.error)}</p>}
@@ -50,7 +51,7 @@ function Panel({client,subject,onGo}:{client:Client;subject:Ref;onGo:(ref:Ref)=>
     {s.partial&&<p className="text-warning">{t('vpa.partial')}</p>}
     <p className="text-fg-muted">{t('vpa.timeNotice')}</p>
     {s.conditions.map(c=><p key={c.type} className="break-all"><code>{c.type}: {c.status}</code> · {state(c.freshness)}{c.transitionTime&&<> · {t('vpa.transition')}: <DateText value={c.transitionTime}/></>}</p>)}
-    {s.recommendations.map(r=><div key={r.container} data-vpa-recommendation className="min-w-0 space-y-1"><h5 className="font-mono font-semibold">{r.container}</h5><Quantities rows={[["target",r.target],["lowerBound",r.lowerBound],["upperBound",r.upperBound],["uncappedTarget",r.uncappedTarget]]}/></div>)}
+    {s.recommendations.map(r=><div key={r.container} data-vpa-recommendation className="min-w-0 space-y-1"><h5 className="font-mono font-semibold">{r.container}</h5><Quantities rows={[[t('vpa.target'),r.target],[t('vpa.lowerBound'),r.lowerBound],[t('vpa.upperBound'),r.upperBound],[t('vpa.uncappedTarget'),r.uncappedTarget]]}/></div>)}
     <h5 className="font-semibold">{t('vpa.policy')}</h5><p className="text-fg-muted">{t('vpa.policyNotice')}</p>
     {s.policies.length===0&&<p>{t('vpa.unknown')}</p>}
     {s.policies.map((p,i)=><div key={i} className="min-w-0 space-y-1"><p className="font-mono">{p.container}</p><p>mode: {p.mode==='unknown'?t('vpa.unknown'):p.mode} · controlledValues: {p.controlledValues==='unknown'?t('vpa.unknown'):p.controlledValues}</p><p>controlledResources: {p.controlledResourcesKnown?(p.controlledResources.join(', ')||'∅'):t('vpa.unknown')}</p><Quantities rows={[["minAllowed",p.minAllowed],["maxAllowed",p.maxAllowed]]}/></div>)}
@@ -66,3 +67,5 @@ function Quantities({rows}:{rows:[string,VPAResources][]}){
 }
 const states:Record<string,MessageKey>={complete:'vpa.complete','no-matches':'vpa.noMatches','not-discovered':'vpa.notDiscovered','unsupported-version':'vpa.unsupportedVersion',forbidden:'vpa.denied',not_found:'vpa.notDiscovered',scope_limit:'vpa.partial',partial:'vpa.partial',ambiguous:'vpa.ambiguous',unknown:'vpa.unknown','not-checked':'vpa.notChecked',reported:'vpa.reported','no-recommendation':'vpa.noRecommendation','low-confidence':'vpa.lowConfidence','fetching-history':'vpa.fetchingHistory','no-pods':'vpa.noPods','config-unsupported':'vpa.configUnsupported',invalid:'vpa.invalid',stale:'vpa.stale',current:'vpa.currentGeneration'}
 function state(value:string){return t(states[value]??'vpa.unknown')}
+
+export function vpaState(value:string){return state(value)}

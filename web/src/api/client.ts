@@ -1,3 +1,4 @@
+import type {AssessmentRequest,AssessmentSnapshot} from '../assessment/types'
 import type {LogComposition} from './types'
 import type {AuditRequest,AuditResponse} from '../offlineAudit/types'
 import type {NodeCapacity,NodeCapacityRequest} from '../capacity/types'
@@ -41,6 +42,7 @@ export interface Client {
  resourceMetricsHistory(req:HistoryRequest,signal?:AbortSignal):Promise<MetricsHistory>
  resourceVPA(ref:Ref,signal?:AbortSignal):Promise<VPAInspection>
  nodeCapacity(req:NodeCapacityRequest,signal?:AbortSignal):Promise<NodeCapacity>
+ assessNamespace(req:AssessmentRequest,signal?:AbortSignal):Promise<AssessmentSnapshot>
  resourceReliability(ref:Ref,signal?:AbortSignal):Promise<Reliability>
  offlineAudit(req:AuditRequest,signal?:AbortSignal):Promise<AuditResponse>
  krr(req:KrrRequest,signal?:AbortSignal):Promise<KrrResponse>
@@ -209,6 +211,7 @@ export const httpClient: Client = {
  resourceMetricsHistory:(req,signal)=>post('ResourceMetricsHistory',req,signal),
  resourceVPA:(ref,signal)=>post('ResourceVPA',ref,signal),
  nodeCapacity:(req,signal)=>post('NodeCapacity',req,signal),
+ assessNamespace:(req,signal)=>post('AssessNamespace',req,signal),
  resourceReliability:(ref,signal)=>post('ResourceReliability',ref,signal),
  offlineAudit:(req,signal)=>post('OfflineAudit',req,signal),
  krr:(req,signal)=>post('KRR',req,signal),
@@ -365,6 +368,7 @@ export const wailsClient: Client = {
  resourceMetricsHistory:(req,signal)=>wcallAbortable(signal,'ResourceMetricsHistory',req),
  resourceVPA:(ref,signal)=>wcallAbortable(signal,'ResourceVPA',ref),
  nodeCapacity:(req,signal)=>wcallAbortable(signal,'NodeCapacity',req),
+ assessNamespace:(req,signal)=>wcallAbortable(signal,'AssessNamespace',req),
  resourceReliability:(ref,signal)=>wcallAbortable(signal,'ResourceReliability',ref),
  offlineAudit:(req,signal)=>wcallAbortable(signal,'OfflineAudit',req),
  krr:(req,signal)=>wcallAbortable(signal,'KRR',req),

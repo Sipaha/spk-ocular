@@ -301,3 +301,7 @@ func (w *API) OpenComposedLogStream(req api.ComposedLogStreamRequest) (api.LogSt
 func (w *API) OpenComposedLogHistory(req api.LogComposition) (api.LogStreamInfo, error) {
 	return w.a.OpenComposedLogHistory(api.UIContext(context.Background()), req)
 }
+
+func (w *API) AssessNamespace(ctx context.Context, req core.NamespaceAssessmentRequest) (core.NamespaceAssessment, error) {
+	return w.a.AssessNamespace(api.UIContext(ctx), req)
+}

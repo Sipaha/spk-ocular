@@ -16,7 +16,7 @@ async function launch(browser:Browser){
  const nav=page.getByRole('navigation',{name:'resources'});await nav.getByRole('textbox',{name:'Filter resources'}).fill('Deployments');await nav.getByRole('button',{name:'Deployments',exact:true}).click()
  let detailReads=0;page.on('response',response=>{if(response.url().endsWith('/api/GetResource')&&response.request().postDataJSON()?.name==='web')detailReads++})
  const grid=page.getByRole('grid',{name:'resources'});await grid.getByRole('gridcell',{name:'web',exact:true}).click()
- const drawer=page.locator('[data-resource-drawer]'),panel=drawer.locator('[data-resource-vpa]');await expect(panel).toBeVisible();await expect.poll(()=>detailReads).toBeGreaterThanOrEqual(2)
+ const drawer=page.locator('[data-resource-drawer]'),panel=drawer.locator('[data-resource-vpa]');await drawer.getByText('Checks for this resource',{exact:true}).click();await expect(panel).toBeVisible();await expect.poll(()=>detailReads).toBeGreaterThanOrEqual(2)
  return {page,fixture,drawer,panel,close:async()=>{await page.close();await stop(app);await fixture.close()}}
  } catch(error) {await page.close();await stop(app);await fixture.close();throw error}
 }

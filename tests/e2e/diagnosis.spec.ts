@@ -19,7 +19,7 @@ async function open(page:Page){
  await page.goto('/');await selectConnection(page,/^demo\b/);await connectSelected(page)
  await page.getByRole('navigation',{name:'resources'}).getByRole('button',{name:'Problems',exact:true}).click()
  await page.getByRole('grid',{name:'resources'}).getByRole('gridcell',{name:'api',exact:true}).click()
- const drawer=page.locator('[data-resource-drawer]');await expect(drawer.getByLabel('Diagnosis',{exact:true})).toBeVisible();return drawer
+ const drawer=page.locator('[data-resource-drawer]');await drawer.getByText('Checks for this resource',{exact:true}).click();await expect(drawer.getByLabel('Diagnosis',{exact:true})).toBeVisible();return drawer
 }
 test('explicit diagnosis retains separate observations, coverage and guarded resource navigation',async({page})=>{
  let reads=0
