@@ -8,7 +8,7 @@ import type {KrrResponse, KrrReview, KrrRunOptions} from './model'
 export function KrrRunner({client,target,namespace,onUpdate,onSettled}:{client:Client;target?:Target|null;namespace?:string;onUpdate:(response:KrrResponse)=>void;onSettled?:()=>void}) {
  const [options,setOptions]=useState<KrrRunOptions>({automatic:true,namespace:namespace??'',serviceAccount:'',source:'',label:'',cluster:'',singleCluster:false,reviewedAccount:false,noSourceAuth:false})
  const [review,setReview]=useState<KrrReview|null>(null),[busy,setBusy]=useState(false),[error,setError]=useState(false)
- const sourceList=useId(),[sources,setSources]=useState<string[]>([]),[discoveryIncomplete,setDiscoveryIncomplete]=useState(false)
+ const sourceList=useId(),[sources,setSources]=useState<string[]>([]),[discoveryIncomplete,setDiscoveryIncomplete]=useState(false),[discoveryEmpty,setDiscoveryEmpty]=useState(false)
  const epoch=useRef(0),pending=useRef<AbortController|null>(null)
  const connected=target?.provider==='kubernetes'&&target.connection?.state==='connected'
  const identity=`${target?.provider??''}/${target?.id??''}/${target?.configRev??''}/${target?.connection?.state??''}/${target?.connection?.id??''}`
@@ -29,11 +29,11 @@ export function KrrRunner({client,target,namespace,onUpdate,onSettled}:{client:C
  const provider=target?.provider,targetID=target?.id
  const discover=useCallback(async()=>{
   if(!connected||!provider||!targetID||!identity)return
-  invalidate();const generation=epoch.current,controller=new AbortController();pending.current=controller;setBusy(true);setReview(null);setError(false)
+  invalidate();const generation=epoch.current,controller=new AbortController();pending.current=controller;setBusy(true);setReview(null);setError(false);setDiscoveryEmpty(false)
   try{
    const response=await client.krr({command:'setup',provider,target:targetID},controller.signal)
    if(epoch.current!==generation)return
-   const found=response.setup?.sources??[];setSources(found);setDiscoveryIncomplete(!response.setup?.complete)
+   const found=response.setup?.sources??[];setSources(found);setDiscoveryIncomplete(!response.setup?.complete);setDiscoveryEmpty(response.setup?.complete===true&&found.length===0)
    if(response.setup?.complete&&found.length===1)setOptions(o=>({...o,source:found[0]}))
   }catch{if(epoch.current===generation)setDiscoveryIncomplete(true)}
   finally{if(epoch.current===generation){setBusy(false);pending.current=null}}
@@ -50,6 +50,7 @@ export function KrrRunner({client,target,namespace,onUpdate,onSettled}:{client:C
    </div>
    <button className="rounded border border-line px-2 py-1 disabled:opacity-50" disabled={busy} onClick={()=>void discover()}>{t('krr.discover')}</button>
    {discoveryIncomplete&&<p role="status" className="text-xs text-warning">{t('krr.discoveryIncomplete')}</p>}
+   {discoveryEmpty&&<p role="status" className="text-xs text-fg-muted">{t('krr.discoveryEmpty')}</p>}
    {sources.length>1&&<p className="text-xs">{t('krr.chooseSource')}</p>}
    <details className="text-xs"><summary className="cursor-pointer">{t('krr.advanced')}</summary><p>{t('krr.sourceScope')}</p><div className="grid gap-2 sm:grid-cols-2">{(['label','cluster'] as const).map(field=><label key={field} className="flex min-w-0 flex-col gap-1">{t(`krr.${field}`)}<input className="min-w-0 rounded border border-line bg-panel px-2 py-1" value={options[field]} maxLength={128} autoComplete="off" spellCheck={false} onChange={e=>update({[field]:e.target.value})}/></label>)}</div></details>
    <button className="rounded border border-line px-2 py-1 disabled:opacity-50" disabled={busy||!options.namespace||!options.source||Boolean(options.label)!==Boolean(options.cluster)} onClick={()=>void perform(false)}>{t('krr.review')}</button>

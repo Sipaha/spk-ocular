@@ -63,6 +63,7 @@
     "krr.pinnedEngine": "Moteur externe fixé",
     "krr.runner": "Exécuter KRR dans un Job temporaire",
     "krr.discover": "Rechercher Prometheus",
+    "krr.discoveryEmpty": "Prometheus n’a pas été trouvé automatiquement. Si vous connaissez son URL, saisissez-la manuellement.",
     "krr.discoveryIncomplete": "La recherche des sources est incomplète ou indisponible. Saisissez manuellement une URL Prometheus accessible.",
     "krr.chooseSource": "Plusieurs sources trouvées. Choisissez l’URL de ce cluster.",
     "krr.advanced": "Paramètres avancés",

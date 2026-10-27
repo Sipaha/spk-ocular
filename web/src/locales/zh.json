@@ -63,6 +63,7 @@
     "krr.pinnedEngine": "固定的外部引擎",
     "krr.runner": "在临时 Job 中运行 KRR",
     "krr.discover": "查找 Prometheus",
+    "krr.discoveryEmpty": "未自动找到 Prometheus 来源。如果知道其 URL，请手动输入。",
     "krr.discoveryIncomplete": "来源发现不完整或不可用。请手动输入可访问的 Prometheus URL。",
     "krr.chooseSource": "找到多个来源。请选择此集群的 URL。",
     "krr.advanced": "高级设置",

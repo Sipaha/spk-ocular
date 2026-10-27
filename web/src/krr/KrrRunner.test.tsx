@@ -81,3 +81,18 @@ it('requires both optional label fields and invalidates the review when a source
  fireEvent.change(screen.getByLabelText('Prometheus base URL (no credentials)'),{target:{value:'http://changed.svc:9090'}})
  expect(screen.queryByRole('button',{name:'Start reviewed Job'})).not.toBeInTheDocument()
 })
+it('reports successful empty discovery, retains manual input and clears the notice during retry',async()=>{
+ const message='No Prometheus source found automatically. Enter the URL manually if you know it.'
+ const client=fakeClient([]).client;let finish!:(r:KrrResponse)=>void;let calls=0
+ client.krr=vi.fn(req=>req.command==='setup'?(++calls===1?Promise.resolve({reports:[],setup:{sources:[],complete:true}}):new Promise<KrrResponse>(resolve=>{finish=resolve})):Promise.resolve({reports:[]}))
+ render(<KrrDialog client={client} target={target} namespace="tools" onClose={vi.fn()}/>);
+ expect(screen.queryByText(message)).not.toBeInTheDocument()
+ await waitFor(()=>expect(screen.getByText(message)).toBeVisible())
+ expect(screen.getByLabelText('Prometheus base URL (no credentials)')).toHaveValue('');expect(screen.getByRole('button',{name:'Review Job'})).toBeDisabled()
+ fireEvent.change(screen.getByLabelText('Prometheus base URL (no credentials)'),{target:{value:'http://manual.svc:9090'}})
+ expect(screen.getByRole('button',{name:'Review Job'})).toBeEnabled()
+ fireEvent.click(screen.getByRole('button',{name:'Find Prometheus'}));expect(screen.queryByText(message)).not.toBeInTheDocument()
+ await act(async()=>finish({reports:[],setup:{sources:[],complete:false}}))
+ expect(screen.getByText(/Source discovery is incomplete/u)).toBeVisible();expect(screen.queryByText(message)).not.toBeInTheDocument()
+ expect(screen.getByLabelText('Prometheus base URL (no credentials)')).toHaveValue('http://manual.svc:9090')
+})

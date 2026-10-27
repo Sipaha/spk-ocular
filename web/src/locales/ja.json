@@ -63,6 +63,7 @@
     "krr.pinnedEngine": "固定した外部エンジン",
     "krr.runner": "一時 Job で KRR を実行",
     "krr.discover": "Prometheus を検索",
+    "krr.discoveryEmpty": "Prometheus を自動検出できませんでした。URL が分かる場合は手動で入力してください。",
     "krr.discoveryIncomplete": "ソース検索は不完全または利用できません。到達可能な Prometheus URL を手動で入力してください。",
     "krr.chooseSource": "複数のソースが見つかりました。このクラスターの URL を選択してください。",
     "krr.advanced": "詳細設定",
