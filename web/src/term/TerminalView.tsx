@@ -187,6 +187,10 @@ export default function TerminalView({ client, tab, active, mode, bridge, detach
       theme: terminalTheme(),
       fontFamily: FONT,
       fontSize: 14,
+      // The DOM renderer clips every row. Its default font-height box can
+      // cut off underscore ink after browser/WebKit pixel rounding. Give the
+      // glyphs leading through xterm so fitting, selection and cursor agree.
+      lineHeight: 1.2,
       cursorBlink: true,
       allowProposedApi: false,
       // Links in the output are never opened (untrusted data).
@@ -422,7 +426,11 @@ export default function TerminalView({ client, tab, active, mode, bridge, detach
           </button>
         </div>
       )}
-      <div ref={hostRef} className="min-h-0 flex-1 overflow-hidden bg-app py-1 pl-2" data-terminal-host />
+      {/* FitAddon reads its parent's height without subtracting parent padding.
+          Keep the inset outside that measured box so the final row fits too. */}
+      <div className="min-h-0 flex-1 overflow-hidden bg-app py-1 pl-2">
+        <div ref={hostRef} className="h-full overflow-hidden" data-terminal-host />
+      </div>
     </div>
   )
 }

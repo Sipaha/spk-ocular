@@ -1,3 +1,5 @@
+import {expectUnderscorePixels} from './terminal-pixels'
+import {returnWithWindowButton} from './synth'
 import {selectConnection} from './fixtures'
 import { expect, type Page } from '@playwright/test'
 import { test, scratchRoot } from './fixtures'
@@ -271,4 +273,130 @@ test('instance details remain readable in quick and setup pickers after a narrow
   await page.getByRole('option',{name:'worker-2',exact:true}).click()
   await dialog.getByRole('button',{name:'Open',exact:true}).click()
   await expectScreen(page,'synthetic terminal on worker-2')
+})
+
+test('literal underscores paint in typed text and output across rows, fitting and window transfer', async ({page}) => {
+  await page.setViewportSize({width: 1440, height: 1000})
+  await openShell(page)
+  let text = ''
+  const matchingRow = () => screen(page).locator(':scope > div').filter({hasText: text}).last()
+  const fitted = () => screen(page).evaluate(el => {
+      const host = el.closest('[data-terminal-host]')!.getBoundingClientRect()
+      const width = el.getBoundingClientRect().width
+      const cell = el.querySelector('.xterm-cursor')!.getBoundingClientRect().width
+      const scrollbar = el.closest('.xterm')!.querySelector('.scrollbar.vertical')!.getBoundingClientRect().width
+      return {cols: Math.round(width / cell), rows: el.children.length, gap: host.width - width - scrollbar, cell}
+    })
+  for (const zoom of [1, 0.75, 1.25]) {
+    text = `A_B_ g_jpqy Ж_я ┌─┐ ${zoom} _____`
+    await page.evaluate(zoom => { document.documentElement.style.zoom = String(zoom) }, zoom)
+    // Zoom/resize can print a provider size notice. Wait for the final fit and
+    // that actual notice before typing, so it cannot move the input cursor.
+    await expect.poll(async () => { const g = await fitted(); return g.gap >= 0 && g.gap < g.cell + 1 }).toBe(true)
+    const fit = await fitted()
+    await expect.poll(async () => (await sizes(page)).at(-1)).toEqual({cols: fit.cols, rows: fit.rows})
+    await focusTerminal(page)
+    await page.keyboard.insertText(text)
+    await expectUnderscorePixels(page, matchingRow())
+    const endpoint = await matchingRow().evaluate(el => {
+      const nodes = document.createTreeWalker(el, NodeFilter.SHOW_TEXT)
+      let node: Node | null
+      while ((node = nodes.nextNode())) {
+        const start = node.textContent!.indexOf('_____')
+        if (start < 0) continue
+        const range = document.createRange()
+        range.setStart(node, start); range.setEnd(node, start + 5)
+        return {right: range.getBoundingClientRect().right, top: el.getBoundingClientRect().top}
+      }
+      throw new Error('Input endpoint missing')
+    })
+    const cursor = (await screen(page).locator('.xterm-cursor').boundingBox())!
+    expect(Math.abs(cursor.x - endpoint.right)).toBeLessThan(1)
+    expect(cursor.y).toBe(endpoint.top)
+    await page.keyboard.press('Enter')
+    await expectScreen(page, 'you said: ' + text)
+    await expect.poll(() => screen(page).evaluate((el, text) => {
+      const rows = [...el.children]
+      const echo = rows.findIndex(row => row.textContent?.includes('you said: ' + text))
+      const cursor = rows.findIndex(row => row.querySelector('.xterm-cursor'))
+      return echo >= 0 && cursor > echo
+    }, text)).toBe(true)
+    await expectUnderscorePixels(page, matchingRow())
+    // A different number of rows must use the same metrics for fitting and
+    // painting, including fractional row origins in the dock layout.
+    await page.setViewportSize({width: 1379, height: 941})
+    await expect.poll(async () => { const g = await fitted(); return g.gap >= 0 && g.gap < g.cell + 1 }).toBe(true)
+    const resized = await fitted()
+    await expect.poll(async () => (await sizes(page)).at(-1)).toEqual({cols: resized.cols, rows: resized.rows})
+    const measure = () => screen(page).evaluate(el => {
+      const rows = [...el.children].map(row => row.getBoundingClientRect())
+      const host = el.closest('[data-terminal-host]')!.getBoundingClientRect()
+      return {rows: rows.length, step: rows[1].top - rows[0].top, height: rows[0].height, bottom: rows.at(-1)!.bottom, hostBottom: host.bottom}
+    })
+    await expect.poll(async () => { const g = await measure(); return g.bottom <= g.hostBottom }).toBe(true)
+    const geometry = await measure()
+    await expectUnderscorePixels(page, matchingRow())
+    expect(geometry.step).toBeCloseTo(geometry.height, 1)
+    expect(geometry.bottom).toBeLessThanOrEqual(geometry.hostBottom)
+    await expect.poll(async () => (await sizes(page)).at(-1)!.rows).toBe(geometry.rows)
+    await page.setViewportSize({width: 1440, height: 1000})
+  }
+  await page.evaluate(() => { document.documentElement.style.zoom = '1' })
+  await expect.poll(async () => { const g = await fitted(); return g.gap >= 0 && g.gap < g.cell + 1 }).toBe(true)
+  const popupWait = page.waitForEvent('popup')
+  await page.getByRole('button', {name: 'Open in window', exact: true}).click()
+  const popup = await popupWait
+  await expectUnderscorePixels(popup, popup.locator('.xterm-rows > div').filter({hasText: text}).last())
+  await returnWithWindowButton(popup, page)
+  await expect.poll(async () => { const g = await fitted(); return g.gap >= 0 && g.gap < g.cell + 1 }).toBe(true)
+  const returned = await fitted()
+  await expect.poll(async () => (await sizes(page)).at(-1)).toEqual({cols: returned.cols, rows: returned.rows})
+  await expectUnderscorePixels(page, matchingRow())
+  await page.screenshot({path: join(scratchRoot, 'terminal-underscore-pixels.png')})
+})
+
+test('underscores paint on first and last rows, beside the cursor, with ANSI and selection', async ({page}) => {
+  let rows = 0, painted = false
+  await page.routeWebSocket(/\/term\//, socket => {
+    const server = socket.connectToServer()
+    server.onMessage(message => {
+      if (typeof message === 'string') { socket.send(message); return }
+      const bytes = Buffer.from(message), marker = Buffer.from('you said: PAINT' + '.'.repeat(128))
+      const start = bytes.indexOf(marker)
+      if (start >= 0) {
+        // Only the owned echo fixture injects this raw screen. Preserve byte
+        // count and the production stream's output-credit accounting.
+        const output = Buffer.from(`\x1b[2J\x1b[H_____ A_B g_jpqy Ж_я ┌─┐\r\n\x1b[31m_____\x1b[0m\x1b[${rows};1H_____\x1b[3;1H`)
+        expect(output.length).toBeLessThan(marker.length)
+        Buffer.concat([output, Buffer.alloc(marker.length - output.length, 0)]).copy(bytes, start)
+        painted = true
+      }
+      socket.send(bytes)
+    })
+  })
+  await page.setViewportSize({width: 1440, height: 1000})
+  await openShell(page)
+  rows = await screen(page).locator(':scope > div').count()
+  await run(page, 'PAINT' + '.'.repeat(128))
+  await expect.poll(() => painted).toBe(true)
+  const lines = screen(page).locator(':scope > div')
+  // Leave the shell's trailing prompt near the top so the last row stays put.
+  await expectUnderscorePixels(page, lines.filter({hasText: '_____ A_B'}).first())
+  const red = lines.filter({has: page.locator('.xterm-fg-1')}).first()
+  await expectUnderscorePixels(page, red)
+  const last = lines.filter({hasText: /^_____$/}).last()
+  await expectUnderscorePixels(page, last)
+  const cursor = screen(page).locator('.xterm-cursor')
+  await expect(cursor).toHaveCount(1)
+  const first = lines.filter({hasText: '_____ A_B'}).first()
+  const box = (await first.boundingBox())!
+  const cell = await first.locator('span').first().evaluate(el => el.getBoundingClientRect().width / (el.textContent?.length || 1))
+  await page.mouse.move(box.x + 1, box.y + box.height / 2)
+  await page.mouse.down()
+  await page.mouse.move(box.x + cell * 5, box.y + box.height / 2)
+  await page.mouse.up()
+  await page.keyboard.press('Control+Shift+C')
+  expect(await page.evaluate(() => navigator.clipboard.readText())).toBe('_____')
+  await expectUnderscorePixels(page, first)
+  await page.screenshot({path: join(scratchRoot, 'terminal-underscore-selected-ansi.png')})
 })
